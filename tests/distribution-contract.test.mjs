@@ -1,0 +1,98 @@
+import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
+import path from 'node:path'
+import test from 'node:test'
+import { fileURLToPath } from 'node:url'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const read = (name) => readFile(path.join(root, name), 'utf8')
+
+test('runtime dependency boundary contains official DSH only', async () => {
+  const runtime = JSON.parse(await read('app/package.json'))
+  assert.deepEqual(runtime.dependencies, { '@deepseek-ai/dsh': '0.1.0-rc.6' })
+  const serialized = JSON.stringify(runtime)
+  for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
+    assert.equal(serialized.includes(forbidden), false, forbidden)
+  }
+  assert.deepEqual(runtime.allowScripts, {
+    '@deepseek-ai/dsh-subprocess-local@0.1.0-rc.6': true,
+    '@google/genai@1.52.0': true,
+    'koffi@3.1.5': true,
+    'node-pty@1.1.0': true,
+    'protobufjs@7.6.5': true,
+  })
+})
+
+test('upstream lock pins independently verifiable DSH and Node artifacts', async () => {
+  const lock = JSON.parse(await read('upstream.lock.json'))
+  assert.equal(lock.dsh.package, '@deepseek-ai/dsh')
+  assert.match(lock.dsh.version, /^0\.1\.0-rc\.\d+$/)
+  assert.match(lock.dsh.integrity, /^sha512-/)
+  assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
+  assert.match(lock.node.sha256, /^[0-9a-f]{64}$/)
+  assert.match(lock.node.archive, /^node-v\d+\.\d+\.\d+-win-x64\.zip$/)
+})
+
+test('committed npm lock resolves the exact reviewed DSH artifact', async () => {
+  const upstream = JSON.parse(await read('upstream.lock.json'))
+  const lockfile = JSON.parse(await read('app/package-lock.json'))
+  const rootPackage = lockfile.packages['']
+  assert.deepEqual(rootPackage.dependencies, { '@deepseek-ai/dsh': upstream.dsh.version })
+  const dsh = lockfile.packages['node_modules/@deepseek-ai/dsh']
+  assert.equal(dsh.version, upstream.dsh.version)
+  assert.equal(dsh.integrity, upstream.dsh.integrity)
+})
+
+test('build script verifies downloads and emits ZIP plus checksum', async () => {
+  const script = await read('scripts/build-portable.ps1')
+  assert.match(script, /Get-FileHash/)
+  assert.match(script, /upstream\.lock\.json/)
+  assert.match(script, /NpmCli.+\bci\b/s)
+  assert.match(script, /\.sha256/)
+  assert.match(script, /PriorPath/)
+  assert.match(script, /env:PATH\s*=\s*\$NodeFolder/)
+  assert.match(script, /tar\.exe/)
+  assert.doesNotMatch(script, /Compress-Archive/)
+  assert.match(script, /NewGuid/)
+  assert.doesNotMatch(script, /Remove-Item[^\n]+-Recurse/)
+  assert.match(script, /FileShare\]::None/)
+  assert.match(script, /ZipCandidate/)
+  assert.match(script, /ZipBackup/)
+  assert.match(script, /File\]::Replace/)
+  assert.doesNotMatch(script, /File\]::Replace\([^\n]+\$null/)
+  assert.match(script, /UTF8Encoding\]::new\(\$false\)/)
+})
+
+test('one-click launchers resolve everything from their own folder', async () => {
+  const start = await read('templates/DeepSeek Harness.cmd')
+  const stop = await read('templates/Stop DeepSeek Harness.cmd')
+  for (const content of [start, stop]) {
+    assert.match(content, /%~dp0/)
+    assert.match(content, /runtime\\node\\node\.exe/)
+    assert.doesNotMatch(content, /AppData|Program Files|USERPROFILE/i)
+  }
+  assert.match(start, /start %\*/)
+})
+
+test('build executes a native runtime smoke check', async () => {
+  const build = await read('scripts/build-portable.ps1')
+  const verifier = await read('scripts/verify-runtime.mjs')
+  assert.match(build, /verify-runtime\.mjs/)
+  for (const dependency of ['node-pty', 'koffi', 'protobufjs', '@deepseek-ai/dsh-subprocess-local']) {
+    assert.match(verifier, new RegExp(dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+  assert.match(verifier, /bin\.js/)
+})
+
+test('stop path preserves the official DSH graceful shutdown before escalation', async () => {
+  const build = await read('scripts/build-portable.ps1')
+  const launcher = await read('launcher/portable-cli.mjs')
+  const host = await read('launcher/portable-host.mjs')
+  assert.match(build, /portable-host\.mjs/)
+  assert.match(host, /process\.emit\('SIGTERM'\)/)
+  assert.match(host, /timingSafeEqual/)
+  const signalIndex = launcher.indexOf('requestGracefulShutdown')
+  const forceIndex = launcher.indexOf("'/F'")
+  assert.notEqual(signalIndex, -1)
+  assert.ok(signalIndex < forceIndex)
+})
