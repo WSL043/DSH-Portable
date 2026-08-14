@@ -2,7 +2,7 @@ name: Build and smoke test
 
 on:
   push:
-    branches: [main, 'agent/**']
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
