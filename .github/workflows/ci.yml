@@ -1,8 +1,8 @@
-name: CI
+name: Build and smoke test
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'agent/**']
   pull_request:
   workflow_dispatch:
 
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  portable-contracts:
+  windows-x64:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +20,65 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm test
+      - name: Install pinned Inno Setup compiler
+        shell: powershell
+        run: choco install innosetup --version=6.7.1 --no-progress --yes
+      - name: Build Windows portable and installer packages
+        shell: powershell
+        run: ./scripts/build-windows.ps1 -BuildInstaller
+      - name: Extract and smoke test Windows package
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-portable-smoke'
+          Expand-Archive -LiteralPath artifacts/DSH-Portable-windows-x64.zip -DestinationPath $Root
+          node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
+      - name: Install, run, stop, and uninstall Windows setup
+        shell: powershell
+        run: ./scripts/smoke-windows-installer.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Portable-windows-x64-all
+          path: |
+            artifacts/DSH-Portable-windows-x64.zip
+            artifacts/DSH-Portable-windows-x64.zip.sha256
+            artifacts/DeepSeek-Herness-Setup.exe
+            artifacts/DeepSeek-Herness-Setup.exe.sha256
+          if-no-files-found: error
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: npm test
+      - name: Build macOS portable package
+        run: bash scripts/build-macos.sh "${{ matrix.arch }}"
+      - name: Extract and smoke test macOS package
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-portable-smoke"
+          mkdir -p "$ROOT"
+          ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
+          node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
+      - name: Mount, install, run, stop, and remove macOS DMG
+        run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSH-Portable-macos-${{ matrix.arch }}-all
+          path: |
+            artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip
+            artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip.sha256
+            artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg
+            artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg.sha256
+          if-no-files-found: error

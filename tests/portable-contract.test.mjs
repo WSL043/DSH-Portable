@@ -21,9 +21,9 @@ import {
 const usbRoot = path.win32.resolve('R:\\AI Tools\\深度求索 Harness')
 
 test('all durable application paths stay under the movable root', () => {
-  const layout = layoutForRoot(usbRoot)
+  const layout = layoutForRoot(usbRoot, 'win32')
   for (const [name, value] of Object.entries(layout)) {
-    if (name === 'root') continue
+    if (name === 'root' || name === 'platform') continue
     const relative = path.win32.relative(usbRoot, value)
     assert.equal(path.win32.isAbsolute(relative), false, name)
     assert.equal(relative.startsWith('..'), false, `${name}: ${relative}`)
@@ -31,6 +31,28 @@ test('all durable application paths stay under the movable root', () => {
   assert.equal(layout.dshHome, path.win32.join(usbRoot, 'data', 'dsh-home'))
   assert.equal(layout.browserProfile, path.win32.join(usbRoot, 'data', 'browser'))
   assert.equal(layout.workspace, path.win32.join(usbRoot, 'workspace'))
+})
+
+test('macOS layout keeps its runtime and state inside the movable root', () => {
+  const macRoot = '/Volumes/Portable Disk/DSH-Portable'
+  const layout = layoutForRoot(macRoot, 'darwin')
+  assert.equal(layout.nodeExe, path.posix.join(macRoot, 'runtime', 'node', 'bin', 'node'))
+  assert.equal(layout.dshHome, path.posix.join(macRoot, 'data', 'dsh-home'))
+  assert.equal(layout.browserProfile, path.posix.join(macRoot, 'data', 'browser'))
+  assert.equal(layout.workspace, path.posix.join(macRoot, 'workspace'))
+})
+
+test('installed mode keeps executable files separate from durable user state', () => {
+  const layout = layoutForRoot(
+    '/Applications/DeepSeek-Herness.app/Contents/Resources',
+    'darwin',
+    '/Users/example/Library/Application Support/DeepSeek-Herness',
+  )
+  assert.equal(layout.nodeExe, '/Applications/DeepSeek-Herness.app/Contents/Resources/runtime/node/bin/node')
+  assert.equal(layout.dshBin, '/Applications/DeepSeek-Herness.app/Contents/Resources/app/node_modules/@deepseek-ai/dsh/lib/bin.js')
+  assert.equal(layout.dataDir, '/Users/example/Library/Application Support/DeepSeek-Herness/data')
+  assert.equal(layout.workspace, '/Users/example/Library/Application Support/DeepSeek-Herness/workspace')
+  assert.equal(layout.stateRoot, '/Users/example/Library/Application Support/DeepSeek-Herness')
 })
 
 test('DSH receives only root-relative state and the official runtime entry', () => {
@@ -65,14 +87,24 @@ test('CLI defaults to start and supports bounded automation flags', () => {
 })
 
 test('a stale or recycled PID is never treated as our DSH host', () => {
-  const layout = layoutForRoot(usbRoot)
+  const layout = layoutForRoot(usbRoot, 'win32')
   const expected = {
     executablePath: layout.nodeExe,
-    commandLine: `\"${layout.nodeExe}\" \"${layout.dshBin}\" web --host 127.0.0.1 --port 31234`,
+    commandLine: `\"${layout.nodeExe}\" \"${layout.hostBin}\" \"${layout.dshBin}\" web --host 127.0.0.1 --port 31234`,
   }
   assert.equal(isOwnedDshProcess(expected, layout, 31234), true)
   assert.equal(isOwnedDshProcess({ ...expected, executablePath: 'C:\\Windows\\System32\\notepad.exe' }, layout, 31234), false)
   assert.equal(isOwnedDshProcess({ ...expected, commandLine: 'node unrelated.js' }, layout, 31234), false)
+})
+
+test('macOS ownership uses the complete portable host command, not PID existence alone', () => {
+  const layout = layoutForRoot('/Volumes/USB/DSH-Portable', 'darwin')
+  const expected = {
+    executablePath: layout.nodeExe,
+    commandLine: `${layout.nodeExe} ${layout.hostBin} ${layout.dshBin} web --host 127.0.0.1 --port 31234`,
+  }
+  assert.equal(isOwnedDshProcess(expected, layout, 31234), true)
+  assert.equal(isOwnedDshProcess({ ...expected, commandLine: `${layout.nodeExe} unrelated.mjs --port 31234` }, layout, 31234), false)
 })
 
 test('Windows process inspection preserves Unicode command-line paths', { skip: process.platform !== 'win32' }, async (t) => {

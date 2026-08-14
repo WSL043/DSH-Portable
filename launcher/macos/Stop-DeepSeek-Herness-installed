@@ -1,0 +1,26 @@
+#!/bin/zsh
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+STOP_APP="$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)"
+APP_PARENT="$(dirname -- "$STOP_APP")"
+
+for APP in \
+  "$APP_PARENT/DeepSeek-Herness.app" \
+  "/Applications/DeepSeek-Herness.app" \
+  "$HOME/Applications/DeepSeek-Herness.app"
+do
+  RESOURCES="$APP/Contents/Resources"
+  NODE="$RESOURCES/runtime/node/bin/node"
+  CLI="$RESOURCES/launcher/portable-cli.mjs"
+  if [[ -x "$NODE" && -f "$CLI" ]]; then
+    if [[ -z "${DSH_PORTABLE_STATE_ROOT:-}" ]]; then
+      export DSH_PORTABLE_STATE_ROOT="$HOME/Library/Application Support/DeepSeek-Herness"
+    fi
+    exec "$NODE" "$CLI" stop
+  fi
+done
+
+export DSH_PORTABLE_ERROR="DeepSeek-Herness.app was not found. Keep both apps together or move both to Applications."
+/usr/bin/osascript -e 'display dialog (system attribute "DSH_PORTABLE_ERROR") with title "Stop DeepSeek-Herness" buttons {"Close"} default button "Close" with icon stop'
+exit 1

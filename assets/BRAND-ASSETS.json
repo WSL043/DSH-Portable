@@ -1,0 +1,10 @@
+{
+  "source": {
+    "repository": "https://github.com/deepseek-ai/deepseek-harness",
+    "commit": "47f943859bef60e4160492346772ded9b24f765a",
+    "path": "apps/web/public/favicon.svg",
+    "gitBlob": "c92f15d43b4e12aafac4e09728db9696384b6b99"
+  },
+  "appIconColor": "#4D6BFE",
+  "derivation": "The official favicon geometry is retained and rendered in the official DSH fallback brand blue documented by upstream."
+}

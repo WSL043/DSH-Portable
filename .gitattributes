@@ -6,6 +6,15 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.md text eol=lf
+*.sh text eol=lf
+*.command text eol=lf
+*.plist text eol=lf
+launcher/macos/DSH-Portable text eol=lf
+launcher/macos/DeepSeek-Herness-installed text eol=lf
+launcher/macos/Stop-DeepSeek-Herness-installed text eol=lf
 .gitattributes text eol=lf
 .gitignore text eol=lf
 LICENSE text eol=lf
+*.ico binary
+*.icns binary
+*.png binary

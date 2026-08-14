@@ -29,8 +29,10 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   assert.match(lock.dsh.version, /^0\.1\.0-rc\.\d+$/)
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
-  assert.match(lock.node.sha256, /^[0-9a-f]{64}$/)
-  assert.match(lock.node.archive, /^node-v\d+\.\d+\.\d+-win-x64\.zip$/)
+  for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
+    assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
+    assert.match(runtime.archive, /^node-v\d+\.\d+\.\d+-(win-x64\.zip|darwin-(arm64|x64)\.tar\.gz)$/, key)
+  }
 })
 
 test('committed npm lock resolves the exact reviewed DSH artifact', async () => {
@@ -44,7 +46,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {
-  const script = await read('scripts/build-portable.ps1')
+  const script = await read('scripts/build-windows.ps1')
   assert.match(script, /Get-FileHash/)
   assert.match(script, /upstream\.lock\.json/)
   assert.match(script, /NpmCli.+\bci\b/s)
@@ -64,18 +66,17 @@ test('build script verifies downloads and emits ZIP plus checksum', async () => 
 })
 
 test('one-click launchers resolve everything from their own folder', async () => {
-  const start = await read('templates/DeepSeek Harness.cmd')
-  const stop = await read('templates/Stop DeepSeek Harness.cmd')
-  for (const content of [start, stop]) {
-    assert.match(content, /%~dp0/)
-    assert.match(content, /runtime\\node\\node\.exe/)
-    assert.doesNotMatch(content, /AppData|Program Files|USERPROFILE/i)
-  }
-  assert.match(start, /start %\*/)
+  const windows = await read('launcher/windows/DSH-Portable.cs')
+  const macos = await read('launcher/macos/DSH-Portable')
+  assert.match(windows, /Application\.ExecutablePath/)
+  assert.match(windows, /runtime.+node.+node\.exe/s)
+  assert.doesNotMatch(windows, /AppData|Program Files|USERPROFILE/i)
+  assert.match(macos, /SCRIPT_DIR/)
+  assert.match(macos, /runtime\/node\/bin\/node/)
 })
 
 test('build executes a native runtime smoke check', async () => {
-  const build = await read('scripts/build-portable.ps1')
+  const build = await read('scripts/build-windows.ps1')
   const verifier = await read('scripts/verify-runtime.mjs')
   assert.match(build, /verify-runtime\.mjs/)
   for (const dependency of ['node-pty', 'koffi', 'protobufjs', '@deepseek-ai/dsh-subprocess-local']) {
@@ -85,7 +86,7 @@ test('build executes a native runtime smoke check', async () => {
 })
 
 test('stop path preserves the official DSH graceful shutdown before escalation', async () => {
-  const build = await read('scripts/build-portable.ps1')
+  const build = await read('scripts/build-windows.ps1')
   const launcher = await read('launcher/portable-cli.mjs')
   const host = await read('launcher/portable-host.mjs')
   assert.match(build, /portable-host\.mjs/)

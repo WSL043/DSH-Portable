@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
+import { chmodSync, rmSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -17,6 +18,10 @@ function tokenMatches(header) {
 }
 
 let shutdownAccepted = false
+function cleanupControlSocket() {
+  if (process.platform !== 'win32' && controlPipe) rmSync(controlPipe, { force: true })
+}
+
 const control = http.createServer((request, response) => {
   if (request.method !== 'POST' || request.url !== '/shutdown') {
     response.writeHead(404).end()
@@ -35,10 +40,13 @@ const control = http.createServer((request, response) => {
   })
 })
 control.on('clientError', (_error, socket) => socket.destroy())
+control.on('close', cleanupControlSocket)
+process.on('exit', cleanupControlSocket)
 
 await new Promise((resolve, reject) => {
   control.once('error', reject)
   control.listen(controlPipe, () => {
+    if (process.platform !== 'win32') chmodSync(controlPipe, 0o600)
     control.off('error', reject)
     resolve()
   })
