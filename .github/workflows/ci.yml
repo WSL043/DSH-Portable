@@ -36,6 +36,7 @@ jobs:
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
       - name: Install, run, stop, and uninstall Windows setup
         shell: powershell
+        timeout-minutes: 15
         run: ./scripts/smoke-windows-installer.ps1
       - uses: actions/upload-artifact@v6
         with:

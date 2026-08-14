@@ -24,12 +24,15 @@ namespace DshPortable
         private readonly Button closeButton;
         private readonly string root;
         private readonly string[] launcherArgs;
+        private readonly bool nonInteractive;
         private bool operationRunning = true;
 
         internal LauncherWindow(string[] args)
         {
             root = Path.GetDirectoryName(Application.ExecutablePath);
             launcherArgs = ResolveArguments(args);
+            nonInteractive = Array.Exists(launcherArgs, item =>
+                string.Equals(item, "--json", StringComparison.OrdinalIgnoreCase));
 
             Text = "DeepSeek-Herness";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
@@ -37,7 +40,8 @@ namespace DshPortable
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ShowInTaskbar = true;
+            ShowInTaskbar = !nonInteractive;
+            if (nonInteractive) Opacity = 0;
             ClientSize = new Size(440, 138);
             BackColor = Color.White;
             Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
@@ -121,12 +125,26 @@ namespace DshPortable
                     Close();
                     return;
                 }
-                ShowFailure(result.Item2.Length > 0 ? result.Item2 : "DeepSeek-Herness could not complete the requested action.");
+                HandleFailure(result.Item1, result.Item2.Length > 0
+                    ? result.Item2
+                    : "DeepSeek-Herness could not complete the requested action.");
             }
             catch (Exception error)
             {
-                ShowFailure(error.Message);
+                HandleFailure(1, error.Message);
             }
+        }
+
+        private void HandleFailure(int exitCode, string message)
+        {
+            operationRunning = false;
+            if (nonInteractive)
+            {
+                Environment.ExitCode = exitCode != 0 ? exitCode : 1;
+                Close();
+                return;
+            }
+            ShowFailure(message);
         }
 
         private Tuple<int, string> InvokePortableCli()

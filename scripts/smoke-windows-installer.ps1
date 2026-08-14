@@ -7,6 +7,44 @@ $ErrorActionPreference = 'Stop'
 $Installer = [System.IO.Path]::GetFullPath($Installer)
 if (-not (Test-Path -LiteralPath $Installer)) { throw "Installer is missing: $Installer" }
 
+function Invoke-BoundedProcess {
+    param(
+        [Parameter(Mandatory = $true)][string]$FilePath,
+        [string[]]$ArgumentList = @(),
+        [Parameter(Mandatory = $true)][string]$Stage,
+        [Parameter(Mandatory = $true)][int]$TimeoutSeconds
+    )
+
+    Write-Host "::group::$Stage"
+    Write-Host "Starting: $FilePath"
+    $StartParameters = @{ FilePath = $FilePath; PassThru = $true }
+    if ($ArgumentList.Count -gt 0) { $StartParameters.ArgumentList = $ArgumentList }
+    $Process = Start-Process @StartParameters
+    try {
+        if (-not $Process.WaitForExit($TimeoutSeconds * 1000)) {
+            Write-Host "$Stage exceeded $TimeoutSeconds seconds; terminating process tree $($Process.Id)."
+            & taskkill.exe /PID $Process.Id /T /F 2>&1 | ForEach-Object { Write-Host $_ }
+            $Process.WaitForExit(10000) | Out-Null
+            throw "$Stage timed out after $TimeoutSeconds seconds"
+        }
+        $Process.Refresh()
+        Write-Host "$Stage completed with exit code $($Process.ExitCode)."
+        return $Process
+    } finally {
+        Write-Host "::endgroup::"
+    }
+}
+
+function Write-RuntimeDiagnostics {
+    foreach ($LogName in @('dsh.stderr.log', 'dsh.stdout.log')) {
+        $Log = Join-Path $StateRoot ("logs\$LogName")
+        if (Test-Path -LiteralPath $Log) {
+            Write-Host "--- $LogName ---"
+            Get-Content -LiteralPath $Log -Tail 160 | ForEach-Object { Write-Host $_ }
+        }
+    }
+}
+
 $TestId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $TempRoot = [System.IO.Path]::GetTempPath()
 $InstallRoot = Join-Path $TempRoot ("dsh-i-$TestId")
@@ -16,10 +54,10 @@ $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
 
 try {
     $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
-    $Setup = Start-Process -FilePath $Installer -ArgumentList @(
-        '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
-        "/DIR=$InstallRoot", "/LOG=$SetupLog"
-    ) -PassThru -Wait
+    $Setup = Invoke-BoundedProcess -Stage 'Install package' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
+            '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
+            "/DIR=$InstallRoot", "/LOG=$SetupLog"
+        )
     if ($Setup.ExitCode -ne 0) {
         Write-Host "Inno Setup exited with code $($Setup.ExitCode). Setup log follows:"
         if (Test-Path -LiteralPath $SetupLog) {
@@ -34,8 +72,12 @@ try {
         if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $Name))) { throw "installed file is missing: $Name" }
     }
 
-    $Started = Start-Process -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json') -PassThru -Wait
-    if ($Started.ExitCode -ne 0) { throw "installed launcher exited with code $($Started.ExitCode)" }
+    $Started = Invoke-BoundedProcess -Stage 'Start installed runtime' -TimeoutSeconds 90 `
+        -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
+    if ($Started.ExitCode -ne 0) {
+        Write-RuntimeDiagnostics
+        throw "installed launcher exited with code $($Started.ExitCode)"
+    }
     $Node = Join-Path $InstallRoot 'runtime\node\node.exe'
     $Cli = Join-Path $InstallRoot 'launcher\portable-cli.mjs'
     $Status = (& $Node $Cli status --json | ConvertFrom-Json)
@@ -43,12 +85,18 @@ try {
     $Response = Invoke-WebRequest -UseBasicParsing -Uri $Status.url -TimeoutSec 10
     if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 500) { throw "installed Web returned $($Response.StatusCode)" }
 
-    $Stopped = Start-Process -FilePath (Join-Path $InstallRoot 'Stop DeepSeek-Herness.exe') -PassThru -Wait
-    if ($Stopped.ExitCode -ne 0) { throw "installed stop entry exited with code $($Stopped.ExitCode)" }
+    $Stopped = Invoke-BoundedProcess -Stage 'Stop installed runtime' -TimeoutSeconds 60 `
+        -FilePath (Join-Path $InstallRoot 'Stop DeepSeek-Herness.exe')
+    if ($Stopped.ExitCode -ne 0) {
+        Write-RuntimeDiagnostics
+        throw "installed stop entry exited with code $($Stopped.ExitCode)"
+    }
     if ((& $Node $Cli status --json | ConvertFrom-Json).status -ne 'stopped') { throw 'installed runtime did not stop' }
     if (-not (Test-Path -LiteralPath (Join-Path $StateRoot 'data\portable.json'))) { throw 'installed state was not written outside the app' }
 
-    $Uninstall = Start-Process -FilePath (Join-Path $InstallRoot 'unins000.exe') -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART') -PassThru -Wait
+    $Uninstall = Invoke-BoundedProcess -Stage 'Uninstall package' -TimeoutSeconds 300 `
+        -FilePath (Join-Path $InstallRoot 'unins000.exe') `
+        -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
     if ($Uninstall.ExitCode -ne 0) { throw "uninstaller exited with code $($Uninstall.ExitCode)" }
     if (Test-Path -LiteralPath (Join-Path $InstallRoot 'DeepSeek-Herness.exe')) { throw 'uninstaller retained application binaries' }
     if (-not (Test-Path -LiteralPath $StateRoot)) { throw 'uninstaller deleted user state' }

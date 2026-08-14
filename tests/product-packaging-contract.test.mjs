@@ -47,6 +47,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(source, /Application\.ExecutablePath/)
   assert.match(source, /portable-cli\.mjs/)
   assert.match(source, /Icon\.ExtractAssociatedIcon/)
+  assert.match(source, /nonInteractive/)
+  assert.match(source, /Environment\.ExitCode/)
   assert.doesNotMatch(source, /AppData|Program Files|USERPROFILE/i)
   assert.match(manifest, /requestedExecutionLevel level="asInvoker"/)
   assert.match(manifest, /longPathAware[^>]*>true</)
@@ -83,6 +85,11 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /\/LOG=/)
   assert.match(smoke, /Get-Content[\s\S]+SetupLog/)
   assert.match(smoke, /dsh-i-/)
+  assert.match(smoke, /Invoke-BoundedProcess/)
+  assert.match(smoke, /WaitForExit/)
+  for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Uninstall package']) {
+    assert.match(smoke, new RegExp(stage))
+  }
 })
 
 test('macOS package is a movable signed app shell for both supported architectures', async () => {
