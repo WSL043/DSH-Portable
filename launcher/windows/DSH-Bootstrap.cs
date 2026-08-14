@@ -1,7 +1,10 @@
 using System;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Net;
 using System.Net.Http;
 using System.Runtime.Serialization;
@@ -12,14 +15,15 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using Microsoft.Win32.SafeHandles;
 
 [assembly: System.Reflection.AssemblyTitle("DSH-Portable")]
 [assembly: System.Reflection.AssemblyDescription("Lightweight downloader for DSH-Portable")]
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.1.0.4")]
-[assembly: System.Reflection.AssemblyFileVersion("0.1.0.4")]
+[assembly: System.Reflection.AssemblyVersion("0.1.0.5")]
+[assembly: System.Reflection.AssemblyFileVersion("0.1.0.5")]
 
 namespace DshPortableBootstrap
 {
@@ -118,6 +122,20 @@ namespace DshPortableBootstrap
 
     internal sealed class BootstrapInstaller
     {
+        private const uint GenericWrite = 0x40000000;
+        private const uint FileShareRead = 0x00000001;
+        private const uint CreateAlways = 2;
+        private const uint FileAttributeNormal = 0x00000080;
+        private const uint FileAttributeDirectory = 0x00000010;
+        private const uint FileAttributeReadOnly = 0x00000001;
+        private const uint FileAttributeReparsePoint = 0x00000400;
+        private const uint InvalidFileAttributes = 0xffffffff;
+        private const int ErrorFileNotFound = 2;
+        private const int ErrorPathNotFound = 3;
+        private const int ErrorNoMoreFiles = 18;
+        private const int ErrorAlreadyExists = 183;
+        private static readonly IntPtr InvalidFindHandle = new IntPtr(-1);
+
         private readonly BootstrapOptions options;
         private readonly Action<string> reportStatus;
         private readonly Action<long, long> reportProgress;
@@ -168,8 +186,8 @@ namespace DshPortableBootstrap
                     throw new InvalidDataException("下载内容校验失败；没有修改目标目录。请重新运行下载器。");
 
                 reportStatus("正在准备可移动文件夹…");
-                Directory.CreateDirectory(stagingRoot);
-                ExtractWithWindowsTar(temporaryArchive, stagingRoot);
+                EnsureDirectory(stagingRoot);
+                ExtractZipArchive(temporaryArchive, stagingRoot);
                 string extracted = Path.Combine(stagingRoot, "DSH-Portable");
                 if (!IsCompletePortable(extracted))
                     throw new InvalidDataException("下载包缺少启动器或运行环境；没有修改目标目录。");
@@ -315,30 +333,153 @@ namespace DshPortableBootstrap
             }
         }
 
-        private static void ExtractWithWindowsTar(string archive, string destination)
+        private static void ExtractZipArchive(string archive, string destination)
         {
-            string tar = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe");
-            if (!File.Exists(tar)) throw new PlatformNotSupportedException("Windows tar.exe 不可用，请改用离线完整包。");
-            ProcessStartInfo start = new ProcessStartInfo
+            using (FileStream archiveStream = File.OpenRead(archive))
+            using (ZipArchive zip = new ZipArchive(archiveStream, ZipArchiveMode.Read, false))
             {
-                FileName = tar,
-                Arguments = "-x -f " + Quote(archive) + " -C " + Quote(destination),
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                RedirectStandardError = true,
-            };
-            using (Process process = Process.Start(start))
-            {
-                string error = process.StandardError.ReadToEnd();
-                process.WaitForExit();
-                if (process.ExitCode != 0) throw new InvalidDataException("无法解压下载包：" + error.Trim());
+                foreach (ZipArchiveEntry entry in zip.Entries)
+                {
+                    string relativePath = SafeEntryPath(entry.FullName);
+                    if (String.IsNullOrEmpty(relativePath)) continue;
+                    string target = destination.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                        + Path.DirectorySeparatorChar + relativePath;
+
+                    if (entry.FullName.EndsWith("/", StringComparison.Ordinal)
+                        || entry.FullName.EndsWith("\\", StringComparison.Ordinal))
+                    {
+                        EnsureDirectory(target);
+                        continue;
+                    }
+
+                    string parent = ParentDirectory(target);
+                    if (!String.IsNullOrEmpty(parent)) EnsureDirectory(parent);
+                    using (Stream input = entry.Open())
+                    using (FileStream output = CreateOutputFile(target))
+                    {
+                        input.CopyTo(output);
+                    }
+                }
             }
         }
 
-        private static string Quote(string value)
+        private static string SafeEntryPath(string value)
         {
-            return "\"" + value.Replace("\"", "\\\"") + "\"";
+            string normalized = (value ?? String.Empty).Replace('\\', '/');
+            if (normalized.StartsWith("/", StringComparison.Ordinal) || normalized.IndexOf('\0') >= 0)
+                throw new InvalidDataException("下载包包含不安全的路径；没有修改目标目录。");
+
+            string safe = String.Empty;
+            foreach (string segment in normalized.Split('/'))
+            {
+                if (segment.Length == 0 || segment == ".") continue;
+                if (segment == ".." || segment.IndexOf(':') >= 0)
+                    throw new InvalidDataException("下载包包含不安全的路径；没有修改目标目录。");
+                safe = safe.Length == 0 ? segment : safe + Path.DirectorySeparatorChar + segment;
+            }
+            return safe;
         }
+
+        private static void EnsureDirectory(string value)
+        {
+            string fullPath = IsAbsolutePath(value) ? value : Path.GetFullPath(value);
+            string extendedPath = ToExtendedPath(fullPath);
+            uint attributes = GetFileAttributesW(extendedPath);
+            if (attributes != InvalidFileAttributes)
+            {
+                if ((attributes & FileAttributeDirectory) != 0) return;
+                throw new IOException("目标路径中存在同名文件：" + fullPath);
+            }
+
+            string parent = ParentDirectory(fullPath);
+            if (!String.IsNullOrEmpty(parent) && !String.Equals(parent, fullPath, StringComparison.OrdinalIgnoreCase))
+                EnsureDirectory(parent);
+
+            if (CreateDirectoryW(extendedPath, IntPtr.Zero)) return;
+            int error = Marshal.GetLastWin32Error();
+            if (error == ErrorAlreadyExists && (GetFileAttributesW(extendedPath) & FileAttributeDirectory) != 0) return;
+            throw new IOException("无法创建目录：" + fullPath, new Win32Exception(error));
+        }
+
+        private static FileStream CreateOutputFile(string value)
+        {
+            string fullPath = IsAbsolutePath(value) ? value : Path.GetFullPath(value);
+            SafeFileHandle handle = CreateFileW(
+                ToExtendedPath(fullPath),
+                GenericWrite,
+                FileShareRead,
+                IntPtr.Zero,
+                CreateAlways,
+                FileAttributeNormal,
+                IntPtr.Zero);
+            if (handle.IsInvalid)
+            {
+                int error = Marshal.GetLastWin32Error();
+                handle.Dispose();
+                throw new IOException("无法写入下载包中的文件：" + fullPath, new Win32Exception(error));
+            }
+            return new FileStream(handle, FileAccess.Write, 1024 * 128, false);
+        }
+
+        private static string ParentDirectory(string value)
+        {
+            if (String.IsNullOrEmpty(value)) return null;
+            string trimmed = value.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            int rootLength = RootLength(value);
+            if (rootLength > 0 && trimmed.Length <= rootLength) return null;
+
+            int slash = Math.Max(trimmed.LastIndexOf(Path.DirectorySeparatorChar), trimmed.LastIndexOf(Path.AltDirectorySeparatorChar));
+            if (slash < 0) return null;
+            if (rootLength > 0 && slash < rootLength) return value.Substring(0, rootLength);
+            return trimmed.Substring(0, slash);
+        }
+
+        private static bool IsAbsolutePath(string value)
+        {
+            if (String.IsNullOrEmpty(value)) return false;
+            if (value.StartsWith("\\\\", StringComparison.Ordinal)) return true;
+            return value.Length >= 3 && Char.IsLetter(value[0]) && value[1] == ':'
+                && (value[2] == Path.DirectorySeparatorChar || value[2] == Path.AltDirectorySeparatorChar);
+        }
+
+        private static int RootLength(string value)
+        {
+            if (String.IsNullOrEmpty(value)) return 0;
+            if (value.Length >= 3 && Char.IsLetter(value[0]) && value[1] == ':'
+                && (value[2] == Path.DirectorySeparatorChar || value[2] == Path.AltDirectorySeparatorChar))
+                return 3;
+            if (!value.StartsWith("\\\\", StringComparison.Ordinal)) return 0;
+
+            int serverEnd = value.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, 2);
+            if (serverEnd < 0) return value.Length;
+            int shareEnd = value.IndexOfAny(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar }, serverEnd + 1);
+            return shareEnd < 0 ? value.Length : shareEnd + 1;
+        }
+
+        private static string ToExtendedPath(string value)
+        {
+            string fullPath = IsAbsolutePath(value) ? value : Path.GetFullPath(value);
+            if (fullPath.StartsWith("\\\\?\\", StringComparison.Ordinal)) return fullPath;
+            if (fullPath.StartsWith("\\\\", StringComparison.Ordinal)) return "\\\\?\\UNC\\" + fullPath.Substring(2);
+            return "\\\\?\\" + fullPath;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateDirectoryW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateDirectoryW(string path, IntPtr securityAttributes);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "GetFileAttributesW")]
+        private static extern uint GetFileAttributesW(string path);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "CreateFileW")]
+        private static extern SafeFileHandle CreateFileW(
+            string filename,
+            uint desiredAccess,
+            uint shareMode,
+            IntPtr securityAttributes,
+            uint creationDisposition,
+            uint flagsAndAttributes,
+            IntPtr templateFile);
 
         private static string FriendlyMessage(Exception error)
         {
@@ -355,8 +496,125 @@ namespace DshPortableBootstrap
 
         private static void TryDeleteDirectory(string directory)
         {
-            try { if (Directory.Exists(directory)) Directory.Delete(directory, true); } catch { }
+            try
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, true);
+                    return;
+                }
+            }
+            catch { }
+
+            try { DeleteDirectoryTreeExtended(ToExtendedPath(directory)); } catch { }
         }
+
+        private static void DeleteDirectoryTreeExtended(string extendedDirectory)
+        {
+            string directory = extendedDirectory.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            uint directoryAttributes = GetFileAttributesW(directory);
+            if (directoryAttributes == InvalidFileAttributes)
+            {
+                int missingError = Marshal.GetLastWin32Error();
+                if (missingError == ErrorFileNotFound || missingError == ErrorPathNotFound) return;
+                throw new Win32Exception(missingError);
+            }
+
+            Win32FindData data;
+            IntPtr findHandle = FindFirstFileW(directory + "\\*", out data);
+            if (findHandle != InvalidFindHandle)
+            {
+                try
+                {
+                    while (true)
+                    {
+                        string name = data.FileName;
+                        if (!String.Equals(name, ".", StringComparison.Ordinal)
+                            && !String.Equals(name, "..", StringComparison.Ordinal))
+                        {
+                            string child = directory + "\\" + name;
+                            bool isDirectory = (data.FileAttributes & FileAttributeDirectory) != 0;
+                            bool isReparsePoint = (data.FileAttributes & FileAttributeReparsePoint) != 0;
+                            if (isDirectory && !isReparsePoint)
+                            {
+                                DeleteDirectoryTreeExtended(child);
+                            }
+                            else if (isDirectory)
+                            {
+                                if (!RemoveDirectoryW(child)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                            }
+                            else
+                            {
+                                if ((data.FileAttributes & FileAttributeReadOnly) != 0)
+                                    SetFileAttributesW(child, FileAttributeNormal);
+                                if (!DeleteFileW(child)) throw new Win32Exception(Marshal.GetLastWin32Error());
+                            }
+                        }
+
+                        if (FindNextFileW(findHandle, out data)) continue;
+                        int nextError = Marshal.GetLastWin32Error();
+                        if (nextError != ErrorNoMoreFiles) throw new Win32Exception(nextError);
+                        break;
+                    }
+                }
+                finally
+                {
+                    FindClose(findHandle);
+                }
+            }
+            else
+            {
+                int findError = Marshal.GetLastWin32Error();
+                if (findError != ErrorFileNotFound) throw new Win32Exception(findError);
+            }
+
+            if (!RemoveDirectoryW(directory))
+            {
+                int removeError = Marshal.GetLastWin32Error();
+                if (removeError != ErrorFileNotFound && removeError != ErrorPathNotFound)
+                    throw new Win32Exception(removeError);
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct Win32FindData
+        {
+            internal uint FileAttributes;
+            internal System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+            internal System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+            internal System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+            internal uint FileSizeHigh;
+            internal uint FileSizeLow;
+            internal uint Reserved0;
+            internal uint Reserved1;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            internal string FileName;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 14)]
+            internal string AlternateFileName;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "FindFirstFileW")]
+        private static extern IntPtr FindFirstFileW(string filename, out Win32FindData data);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "FindNextFileW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool FindNextFileW(IntPtr findHandle, out Win32FindData data);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool FindClose(IntPtr findHandle);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "DeleteFileW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DeleteFileW(string filename);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "RemoveDirectoryW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool RemoveDirectoryW(string path);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true, EntryPoint = "SetFileAttributesW")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetFileAttributesW(string filename, uint attributes);
     }
 
     internal sealed class BootstrapWindow : Form

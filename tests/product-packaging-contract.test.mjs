@@ -86,6 +86,7 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
 
 test('Windows package exposes real GUI executables with matching icon and no path install', async () => {
   const source = await read('launcher/windows/DSH-Portable.cs')
+  const bootstrap = await read('launcher/windows/DSH-Bootstrap.cs')
   const manifest = await read('launcher/windows/DSH-Portable.manifest')
   const build = await read('scripts/build-windows.ps1')
 
@@ -112,6 +113,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /DSH-Portable-windows-x64-offline\.zip/)
   assert.match(build, /DSH-Bootstrap\.cs/)
   assert.match(build, /portable-manifest\.json/)
+  assert.match(bootstrap, /ZipArchive/)
+  assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
 })
 
@@ -240,10 +243,12 @@ test('macOS DMG carries a self-contained app and keeps installed data outside it
 
 test('CI executes contracts and real package smoke tests on Windows and both Mac architectures', async () => {
   const workflow = await read('.github/workflows/ci.yml')
+  const bootstrapSmoke = await read('scripts/smoke-windows-bootstrap.mjs')
   for (const runner of ['windows-latest', 'macos-15', 'macos-15-intel']) assert.match(workflow, new RegExp(runner))
   assert.match(workflow, /build-windows\.ps1/)
   assert.match(workflow, /build-macos\.sh/)
   assert.match(workflow, /smoke-portable\.mjs/)
+  assert.match(workflow, /smoke-windows-bootstrap\.mjs/)
   assert.match(workflow, /tar\.exe -x -f artifacts\/DSH-Portable-windows-x64-offline\.zip/)
   assert.doesNotMatch(workflow, /Expand-Archive/)
   assert.match(workflow, /actions\/checkout@v6/)
@@ -257,6 +262,9 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.doesNotMatch(workflow, /choco install innosetup/)
   assert.match(workflow, /compression-level:\s*0/)
   assert.match(workflow, /if:\s*\$\{\{ always\(\) \}\}/)
+  assert.match(bootstrapSmoke, /DSH-Portable-windows-x64\.exe/)
+  assert.match(bootstrapSmoke, /中文 空格/)
+  assert.match(bootstrapSmoke, /\.dsh-portable-install-/)
 })
 
 test('Node runtime lock covers Windows and both Mac CPU families', async () => {

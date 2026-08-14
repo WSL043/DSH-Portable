@@ -38,6 +38,8 @@ jobs:
       - name: Build Windows portable and installer packages
         shell: powershell
         run: ./scripts/build-windows.ps1 -BuildInstaller -IsccPath $env:ISCC_PATH
+      - name: Download, extract, move, and reuse the lightweight Windows bootstrap
+        run: node scripts/smoke-windows-bootstrap.mjs
       - name: Extract and smoke test Windows package
         shell: powershell
         run: |

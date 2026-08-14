@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -23,20 +23,41 @@ async function compileBootstrap(output) {
     '/reference:System.dll', '/reference:System.Core.dll',
     '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
     '/reference:System.Net.Http.dll', '/reference:System.Runtime.Serialization.dll',
+    '/reference:System.IO.Compression.dll',
     `/out:${output}`,
     source,
   ])
 }
 
-async function makeFixture(root) {
+async function execBootstrap(executable, args, resultFile) {
+  try {
+    return await execFileAsync(executable, args)
+  } catch (error) {
+    const result = await readFile(resultFile, 'utf8').catch(() => '')
+    if (result) error.message += `\nBootstrap result: ${result}`
+    throw error
+  }
+}
+
+async function makeFixture(root, { omitRuntime = false } = {}) {
   const packageRoot = path.join(root, 'payload', 'DSH-Portable')
+  const longRelative = path.join(
+    'app',
+    'node_modules',
+    `package-${'a'.repeat(72)}`,
+    'dist',
+    `feature-${'b'.repeat(72)}`,
+    'runtime.json',
+  )
   await mkdir(path.join(packageRoot, 'runtime', 'node'), { recursive: true })
   await mkdir(path.join(packageRoot, 'app'), { recursive: true })
   await mkdir(path.join(packageRoot, 'data'), { recursive: true })
   await mkdir(path.join(packageRoot, 'workspace'), { recursive: true })
   await writeFile(path.join(packageRoot, 'DeepSeek-Herness.exe'), 'fixture launcher')
-  await writeFile(path.join(packageRoot, 'runtime', 'node', 'node.exe'), 'fixture node')
+  if (!omitRuntime) await writeFile(path.join(packageRoot, 'runtime', 'node', 'node.exe'), 'fixture node')
   await writeFile(path.join(packageRoot, 'app', 'package.json'), '{"name":"fixture"}\n')
+  await mkdir(path.dirname(path.join(packageRoot, longRelative)), { recursive: true })
+  await writeFile(path.join(packageRoot, longRelative), '{"longPath":true}\n')
   await writeFile(path.join(packageRoot, 'data', 'README.txt'), 'portable data')
   const archive = path.join(root, 'payload.zip')
   await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
@@ -44,6 +65,7 @@ async function makeFixture(root) {
   return {
     archive,
     bytes,
+    longRelative,
     sha256: createHash('sha256').update(bytes).digest('hex'),
   }
 }
@@ -107,33 +129,39 @@ test('bootstrap installs atomically, verifies the payload, and reuses it offline
   try {
     const executable = path.join(root, 'bootstrap.exe')
     const resultFile = path.join(root, 'result.json')
-    const destination = path.join(root, 'chosen-parent', 'DSH-Portable')
+    const destination = path.join(root, 'chosen 父目录', 'DSH-Portable')
     const fixture = await makeFixture(root)
     await compileBootstrap(executable)
 
     await withFixtureServer(fixture, async ({ archiveRequests, manifestUrl }) => {
-      await execFileAsync(executable, [
+      await execBootstrap(executable, [
         '--manifest', manifestUrl,
         '--destination', destination,
         '--allow-http',
         '--no-launch',
         '--result', resultFile,
-      ])
+      ], resultFile)
       assert.equal(archiveRequests(), 1)
       const result = JSON.parse(await readFile(resultFile, 'utf8'))
       assert.equal(result.status, 'installed')
       assert.equal(result.version, 'test-portable')
       assert.equal(await readFile(path.join(destination, 'data', 'README.txt'), 'utf8'), 'portable data')
       assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"fixture"}\n')
+      assert.equal(await readFile(path.join(destination, fixture.longRelative), 'utf8'), '{"longPath":true}\n')
+      assert.deepEqual(
+        (await readdir(path.dirname(destination))).filter((name) => name.startsWith('.dsh-portable-install-')),
+        [],
+        'successful installation must not leave its staging directory behind',
+      )
 
       await rm(fixture.archive, { force: true })
-      await execFileAsync(executable, [
+      await execBootstrap(executable, [
         '--manifest', 'http://127.0.0.1:1/unreachable.json',
         '--destination', destination,
         '--allow-http',
         '--no-launch',
         '--result', resultFile,
-      ])
+      ], resultFile)
       const reused = JSON.parse(await readFile(resultFile, 'utf8'))
       assert.equal(reused.status, 'ready')
       assert.equal(archiveRequests(), 1, 'an installed portable folder must not need the network')
@@ -164,6 +192,37 @@ test('bootstrap never commits a payload whose digest is wrong', { skip: process.
       const failed = JSON.parse(await readFile(resultFile, 'utf8'))
       assert.equal(failed.status, 'failed')
       await assert.rejects(stat(destination))
+    })
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('bootstrap removes a rejected long-path payload without leaving staging data', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-reject-'))
+  try {
+    const executable = path.join(root, 'bootstrap.exe')
+    const resultFile = path.join(root, 'result.json')
+    const destination = path.join(root, `parent-${'c'.repeat(150)}`, '中文 parent', 'DSH-Portable')
+    const fixture = await makeFixture(root, { omitRuntime: true })
+    await compileBootstrap(executable)
+
+    await withFixtureServer(fixture, async ({ manifestUrl }) => {
+      await assert.rejects(execBootstrap(executable, [
+        '--manifest', manifestUrl,
+        '--destination', destination,
+        '--allow-http',
+        '--no-launch',
+        '--result', resultFile,
+      ], resultFile))
+      const failed = JSON.parse(await readFile(resultFile, 'utf8'))
+      assert.equal(failed.status, 'failed')
+      await assert.rejects(stat(destination))
+      assert.deepEqual(
+        (await readdir(path.dirname(destination))).filter((name) => name.startsWith('.dsh-portable-install-')),
+        [],
+        'rejected payloads must not leave long-path staging data behind',
+      )
     })
   } finally {
     await rm(root, { recursive: true, force: true })

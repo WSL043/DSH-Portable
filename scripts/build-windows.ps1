@@ -213,7 +213,7 @@ try {
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
         '/reference:System.Windows.Forms.dll', '/reference:System.Net.Http.dll',
-        '/reference:System.Runtime.Serialization.dll',
+        '/reference:System.Runtime.Serialization.dll', '/reference:System.IO.Compression.dll',
         "/out:$BootstrapCandidate",
         (Join-Path $ProjectRoot 'launcher\windows\DSH-Bootstrap.cs')
     )
