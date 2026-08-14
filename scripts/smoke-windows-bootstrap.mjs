@@ -26,6 +26,7 @@ assert.equal(
   sourcePayload.sha256,
   'manifest payload digest does not match the built ZIP',
 )
+console.log('[bootstrap-smoke] built payload verified')
 
 let manifestBody = null
 const server = createServer((request, response) => {
@@ -59,6 +60,7 @@ const resultFile = path.join(root, 'result.json')
 
 try {
   await mkdir(parent, { recursive: true })
+  console.log('[bootstrap-smoke] installing through the lightweight launcher')
   await execFileAsync(bootstrap, [
     '--manifest', `${origin}/portable-manifest.json`,
     '--destination', destination,
@@ -76,7 +78,9 @@ try {
     'the product bootstrap left a staging directory behind',
   )
   assert.ok((await stat(path.join(destination, 'DeepSeek-Herness.exe'))).isFile())
+  console.log('[bootstrap-smoke] Unicode and long-path installation passed')
 
+  console.log('[bootstrap-smoke] checking offline reuse')
   await execFileAsync(bootstrap, [
     '--manifest', 'http://127.0.0.1:1/unreachable.json',
     '--destination', destination,
@@ -86,11 +90,14 @@ try {
   ], { timeout: 60 * 1000, windowsHide: true })
   const reused = JSON.parse(await readFile(resultFile, 'utf8'))
   assert.equal(reused.status, 'ready')
+  console.log('[bootstrap-smoke] offline reuse passed')
 
+  console.log('[bootstrap-smoke] running and moving the installed product')
   await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {
     timeout: 10 * 60 * 1000,
     windowsHide: true,
   })
+  console.log('[bootstrap-smoke] product runtime smoke passed')
 
   console.log(JSON.stringify({
     status: 'passed',
@@ -100,5 +107,9 @@ try {
   }))
 } finally {
   await new Promise((resolve) => server.close(resolve))
-  await rm(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 100 })
+  if (process.env.CI) {
+    console.log('[bootstrap-smoke] temporary product tree is owned by the ephemeral CI runner')
+  } else {
+    await rm(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 100 })
+  }
 }
