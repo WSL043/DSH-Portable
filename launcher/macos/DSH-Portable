@@ -1,0 +1,28 @@
+#!/bin/zsh
+set -u
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+if [[ "$SCRIPT_DIR" != */Contents/MacOS ]]; then
+  exit 1
+fi
+PORTABLE_ROOT="$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)"
+NODE="$PORTABLE_ROOT/runtime/node/bin/node"
+CLI="$PORTABLE_ROOT/launcher/portable-cli.mjs"
+
+if [[ ! -x "$NODE" || ! -f "$CLI" ]]; then
+  export DSH_PORTABLE_ERROR="This DSH-Portable folder is incomplete. Extract the entire package before starting it."
+  /usr/bin/osascript -e 'display dialog (system attribute "DSH_PORTABLE_ERROR") with title "DSH-Portable" buttons {"Close"} default button "Close" with icon stop'
+  exit 1
+fi
+
+CLI_ARGS=(start)
+if [[ "${DSH_PORTABLE_NO_BROWSER:-0}" == "1" ]]; then
+  CLI_ARGS+=(--no-browser --json)
+fi
+OUTPUT="$($NODE "$CLI" "${CLI_ARGS[@]}" 2>&1)"
+STATUS=$?
+if [[ $STATUS -ne 0 ]]; then
+  export DSH_PORTABLE_ERROR="$OUTPUT"
+  /usr/bin/osascript -e 'display dialog (system attribute "DSH_PORTABLE_ERROR") with title "DSH-Portable" buttons {"Close"} default button "Close" with icon stop'
+fi
+exit $STATUS

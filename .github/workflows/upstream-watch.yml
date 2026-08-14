@@ -1,0 +1,49 @@
+name: Watch official DSH
+
+on:
+  schedule:
+    - cron: '23 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.19.0
+      - id: upstream
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-upstream.mjs
+      - name: Open or refresh the upstream review issue
+        if: steps.upstream.outputs.changed == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = 'Review available DeepSeek Harness upstream update'
+            const body = [
+              'The scheduled DSH-Portable monitor found an upstream change.',
+              '',
+              `- Official master: \`${{ steps.upstream.outputs.commit }}\``,
+              `- Published npm tags: \`${{ steps.upstream.outputs.package_tags }}\``,
+              '',
+              'Review the official diff, update the pinned lock deliberately, and publish only after Windows plus both macOS smoke jobs pass.',
+            ].join('\n')
+            const { data } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            })
+            const existing = data.find(issue => issue.title === title)
+            if (existing) {
+              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body })
+            } else {
+              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body })
+            }

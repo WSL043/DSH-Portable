@@ -2,7 +2,7 @@
   "name": "deepseek-harness-portable-runtime",
   "version": "0.1.0-rc.6",
   "private": true,
-  "description": "Pinned official DeepSeek Harness runtime for the Windows Portable distribution.",
+  "description": "Pinned official DeepSeek Harness runtime for DSH-Portable.",
   "license": "MIT",
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.6"

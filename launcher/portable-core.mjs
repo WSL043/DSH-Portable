@@ -7,31 +7,35 @@ import path from 'node:path'
 const DEFAULT_PORT = 3080
 const MAX_PORT = 3180
 
-export function layoutForRoot(root) {
-  const portableRoot = path.resolve(root)
-  const dataDir = path.join(portableRoot, 'data')
-  const runtimeDir = path.join(portableRoot, 'runtime')
-  const nodeDir = path.join(runtimeDir, 'node')
-  const appDir = path.join(portableRoot, 'app')
-  const stateDir = path.join(dataDir, 'runtime')
+export function layoutForRoot(root, platform = process.platform, stateRoot = root) {
+  const paths = platform === 'win32' ? path.win32 : path.posix
+  const portableRoot = paths.resolve(root)
+  const durableRoot = paths.resolve(stateRoot)
+  const dataDir = paths.join(durableRoot, 'data')
+  const runtimeDir = paths.join(portableRoot, 'runtime')
+  const nodeDir = paths.join(runtimeDir, 'node')
+  const appDir = paths.join(portableRoot, 'app')
+  const stateDir = paths.join(dataDir, 'runtime')
   return {
     root: portableRoot,
     appDir,
-    browserProfile: path.join(dataDir, 'browser'),
+    browserProfile: paths.join(dataDir, 'browser'),
     dataDir,
-    dshBin: path.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
-    dshHome: path.join(dataDir, 'dsh-home'),
-    hostBin: path.join(portableRoot, 'launcher', 'portable-host.mjs'),
-    launchLock: path.join(stateDir, 'launcher.lock'),
-    logsDir: path.join(dataDir, 'logs'),
+    dshBin: paths.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
+    dshHome: paths.join(dataDir, 'dsh-home'),
+    hostBin: paths.join(portableRoot, 'launcher', 'portable-host.mjs'),
+    launchLock: paths.join(stateDir, 'launcher.lock'),
+    logsDir: paths.join(dataDir, 'logs'),
     nodeDir,
-    nodeExe: path.join(nodeDir, 'node.exe'),
-    portableCli: path.join(portableRoot, 'launcher', 'portable-cli.mjs'),
-    portableMeta: path.join(dataDir, 'portable.json'),
-    processState: path.join(stateDir, 'process.json'),
+    nodeExe: platform === 'win32' ? paths.join(nodeDir, 'node.exe') : paths.join(nodeDir, 'bin', 'node'),
+    platform,
+    portableCli: paths.join(portableRoot, 'launcher', 'portable-cli.mjs'),
+    portableMeta: paths.join(dataDir, 'portable.json'),
+    processState: paths.join(stateDir, 'process.json'),
     runtimeDir,
+    stateRoot: durableRoot,
     stateDir,
-    workspace: path.join(portableRoot, 'workspace'),
+    workspace: paths.join(durableRoot, 'workspace'),
   }
 }
 
@@ -41,7 +45,7 @@ export function buildDshEnv(layout, source = process.env) {
     DSH_HOME: layout.dshHome,
     DSH_PORTABLE: '1',
     DSH_TELEMETRY_MODE: 'DISABLED',
-    PATH: `${layout.nodeDir}${path.delimiter}${source.PATH ?? ''}`,
+    PATH: `${path.dirname(layout.nodeExe)}${path.delimiter}${source.PATH ?? ''}`,
   }
 }
 
@@ -75,21 +79,34 @@ export function parseCli(argv) {
   return { command, noBrowser, json }
 }
 
-function comparable(value) {
-  return path.resolve(String(value ?? '')).replaceAll('/', '\\').toLowerCase()
+function comparable(value, platform = process.platform) {
+  const source = String(value ?? '')
+  if (platform === 'win32') return path.win32.resolve(source).replaceAll('/', '\\').toLowerCase()
+  return path.posix.resolve(source.replaceAll('\\', '/'))
 }
 
 export function isOwnedDshProcess(processInfo, layout, port) {
   if (!processInfo) return false
-  if (comparable(processInfo.executablePath) !== comparable(layout.nodeExe)) return false
-  const commandLine = String(processInfo.commandLine ?? '').replaceAll('/', '\\').toLowerCase()
-  return commandLine.includes(comparable(layout.dshBin)) && commandLine.includes(`--port ${Number(port)}`)
+  const platform = layout.platform ?? process.platform
+  const commandLine = platform === 'win32'
+    ? String(processInfo.commandLine ?? '').replaceAll('/', '\\').toLowerCase()
+    : String(processInfo.commandLine ?? '').replaceAll('\\', '/')
+  if (processInfo.executablePath && comparable(processInfo.executablePath, platform) !== comparable(layout.nodeExe, platform)) return false
+  return commandLine.includes(comparable(layout.nodeExe, platform))
+    && commandLine.includes(comparable(layout.hostBin, platform))
+    && commandLine.includes(comparable(layout.dshBin, platform))
+    && commandLine.includes(`--port ${Number(port)}`)
 }
 
 export function isOwnedLauncherProcess(processInfo, layout) {
   if (!processInfo) return false
-  if (comparable(processInfo.executablePath) !== comparable(layout.nodeExe)) return false
-  return String(processInfo.commandLine ?? '').replaceAll('/', '\\').toLowerCase().includes(comparable(layout.portableCli))
+  const platform = layout.platform ?? process.platform
+  const commandLine = platform === 'win32'
+    ? String(processInfo.commandLine ?? '').replaceAll('/', '\\').toLowerCase()
+    : String(processInfo.commandLine ?? '').replaceAll('\\', '/')
+  if (processInfo.executablePath && comparable(processInfo.executablePath, platform) !== comparable(layout.nodeExe, platform)) return false
+  return commandLine.includes(comparable(layout.nodeExe, platform))
+    && commandLine.includes(comparable(layout.portableCli, platform))
 }
 
 export function queryWindowsProcess(pid) {
@@ -112,6 +129,22 @@ export function queryWindowsProcess(pid) {
   } catch {
     return null
   }
+}
+
+export function queryPosixProcess(pid) {
+  if (!Number.isSafeInteger(Number(pid)) || Number(pid) <= 0) return null
+  try {
+    const commandLine = execFileSync('ps', ['-ww', '-p', String(Number(pid)), '-o', 'command='], {
+      encoding: 'utf8',
+    }).trim()
+    return commandLine ? { executablePath: '', commandLine } : null
+  } catch {
+    return null
+  }
+}
+
+export function queryProcess(pid, platform = process.platform) {
+  return platform === 'win32' ? queryWindowsProcess(pid) : queryPosixProcess(pid)
 }
 
 export function projectKey(cwd) {
@@ -137,7 +170,7 @@ export function projectKey(cwd) {
 
 async function atomicWrite(filename, bytes) {
   const temporary = `${filename}.portable-${process.pid}.tmp`
-  await writeFile(temporary, bytes)
+  await writeFile(temporary, bytes, { mode: 0o600 })
   await rename(temporary, filename)
 }
 
@@ -233,7 +266,7 @@ export async function migratePortableRoot(layout) {
     return { moved: false, sessionCount: 0, storageCount: 0 }
   }
 
-  const oldWorkspace = path.join(previous.lastRoot, 'workspace')
+  const oldWorkspace = previous.workspace || path.join(previous.lastRoot, 'workspace')
   const storageCount = await migrateStorageJson(layout.dshHome, oldWorkspace, layout.workspace)
   const sessionCount = await migrateSessionDirectory(layout.dshHome, oldWorkspace, layout.workspace)
   await writeJsonAtomic(layout.portableMeta, current)
@@ -262,7 +295,7 @@ function processExists(pid) {
 
 export async function acquireLaunchLock(layout, adapters = {}) {
   await mkdir(layout.stateDir, { recursive: true })
-  const processQuery = adapters.processQuery ?? queryWindowsProcess
+  const processQuery = adapters.processQuery ?? ((pid) => queryProcess(pid, layout.platform))
   const pidExists = adapters.pidExists ?? processExists
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
