@@ -12,8 +12,8 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.1.0.2")]
-[assembly: AssemblyFileVersion("0.1.0.2")]
+[assembly: AssemblyVersion("0.1.0.4")]
+[assembly: AssemblyFileVersion("0.1.0.4")]
 
 namespace DshPortable
 {
@@ -21,6 +21,8 @@ namespace DshPortable
     {
         private readonly Label statusLabel;
         private readonly ProgressBar progress;
+        private readonly TextBox detailsBox;
+        private readonly Button copyButton;
         private readonly Button closeButton;
         private readonly string root;
         private readonly string[] launcherArgs;
@@ -58,15 +60,47 @@ namespace DshPortable
             progress.Style = ProgressBarStyle.Marquee;
             progress.MarqueeAnimationSpeed = 24;
 
+            detailsBox = new TextBox();
+            detailsBox.Location = new Point(28, 64);
+            detailsBox.Size = new Size(544, 164);
+            detailsBox.Multiline = true;
+            detailsBox.ReadOnly = true;
+            detailsBox.ScrollBars = ScrollBars.Vertical;
+            detailsBox.WordWrap = true;
+            detailsBox.BackColor = Color.White;
+            detailsBox.Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point);
+            detailsBox.Visible = false;
+
+            copyButton = new Button();
+            copyButton.Text = "Copy details";
+            copyButton.Size = new Size(116, 32);
+            copyButton.Location = new Point(332, 244);
+            copyButton.Visible = false;
+            copyButton.Click += delegate
+            {
+                if (string.IsNullOrEmpty(detailsBox.Text)) return;
+                try
+                {
+                    Clipboard.SetText(detailsBox.Text);
+                }
+                catch
+                {
+                    copyButton.Text = "Copy failed";
+                }
+            };
+
             closeButton = new Button();
             closeButton.Text = "Close";
             closeButton.Size = new Size(92, 32);
             closeButton.Location = new Point(320, 88);
             closeButton.Visible = false;
             closeButton.Click += delegate { Close(); };
+            CancelButton = closeButton;
 
             Controls.Add(statusLabel);
             Controls.Add(progress);
+            Controls.Add(detailsBox);
+            Controls.Add(copyButton);
             Controls.Add(closeButton);
             Shown += async delegate { await RunLauncherAsync(); };
             FormClosing += delegate(object sender, FormClosingEventArgs eventArgs)
@@ -180,6 +214,8 @@ namespace DshPortable
             start.CreateNoWindow = true;
             start.RedirectStandardOutput = true;
             start.RedirectStandardError = true;
+            start.StandardOutputEncoding = Encoding.UTF8;
+            start.StandardErrorEncoding = Encoding.UTF8;
             if (File.Exists(Path.Combine(root, "installed-mode.json")) &&
                 string.IsNullOrEmpty(start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"]))
             {
@@ -205,9 +241,18 @@ namespace DshPortable
         {
             operationRunning = false;
             progress.Visible = false;
-            statusLabel.Text = message;
+            ClientSize = new Size(600, 300);
+            statusLabel.AutoEllipsis = false;
+            statusLabel.Location = new Point(28, 24);
+            statusLabel.Size = new Size(544, 28);
+            statusLabel.Text = IsStopCommand(launcherArgs)
+                ? "DeepSeek-Herness could not stop."
+                : "DeepSeek-Herness could not start.";
             statusLabel.ForeColor = Color.FromArgb(178, 38, 38);
-            statusLabel.Size = new Size(384, 62);
+            detailsBox.Text = message ?? string.Empty;
+            detailsBox.Visible = true;
+            copyButton.Visible = true;
+            closeButton.Location = new Point(480, 244);
             closeButton.Visible = true;
             AcceptButton = closeButton;
             ActiveControl = closeButton;

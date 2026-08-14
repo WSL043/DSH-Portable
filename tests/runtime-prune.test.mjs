@@ -42,8 +42,13 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, 'example-package/dist/index.js.map')
   await fixtureFile(appDir, 'example-package/dist/index.d.mts')
   await fixtureFile(appDir, 'example-package/docs/runtime.js', 'export default true')
+  await fixtureFile(appDir, 'example-package/test/runtime.js', 'export default true')
+  await fixtureFile(appDir, 'example-package/tests/runtime.js', 'export default true')
+  await fixtureFile(appDir, 'example-package/example/runtime.js', 'export default true')
   await fixtureFile(appDir, '@earendil-works/pi-ai/dist/providers/data/amazon-bedrock.json', '{"runtime":true}')
   await fixtureFile(appDir, 'example-package/examples/example.js')
+  await fixtureFile(appDir, 'example-package/benchmark/runtime.js', 'export default true')
+  await fixtureFile(appDir, 'yaml/dist/doc/directives.js', 'module.exports = true')
   await fixtureFile(appDir, 'example-package/CHANGELOG.md')
   await fixtureFile(appDir, 'example-package/NOTICE.md', 'must remain too')
 
@@ -62,6 +67,12 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'example-package/dist/index.js',
     'example-package/.github/runtime.js',
     'example-package/docs/runtime.js',
+    'example-package/test/runtime.js',
+    'example-package/tests/runtime.js',
+    'example-package/example/runtime.js',
+    'example-package/examples/example.js',
+    'example-package/benchmark/runtime.js',
+    'yaml/dist/doc/directives.js',
     '@earendil-works/pi-ai/dist/providers/data/amazon-bedrock.json',
     'example-package/NOTICE.md',
   ]) {
@@ -78,7 +89,6 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     '@types/example',
     'example-package/dist/index.js.map',
     'example-package/dist/index.d.mts',
-    'example-package/examples',
     'example-package/CHANGELOG.md',
   ]) {
     assert.equal(await exists(path.join(appDir, 'node_modules', ...relative.split('/'))), false, relative)
