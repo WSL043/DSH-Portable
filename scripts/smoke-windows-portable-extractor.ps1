@@ -15,10 +15,11 @@ $SetupLog = Join-Path $TestParent 'extractor.log'
 New-Item -ItemType Directory -Force -Path $TestParent | Out-Null
 
 Write-Host '::group::Extract portable package'
-$Process = Start-Process -FilePath $Extractor -ArgumentList @(
-    '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
-    "/DIR=$ExtractRoot", "/LOG=$SetupLog"
-) -PassThru
+# Windows PowerShell 5.1 joins an ArgumentList array into one command line and
+# does not preserve the element boundary around values containing spaces. Inno
+# Setup requires the quotes to be part of that final command line.
+$ExtractorArguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /CURRENTUSER /DIR="{0}" /LOG="{1}"' -f $ExtractRoot, $SetupLog
+$Process = Start-Process -FilePath $Extractor -ArgumentList $ExtractorArguments -PassThru
 try {
     if (-not $Process.WaitForExit(300000)) {
         & taskkill.exe /PID $Process.Id /T /F 2>&1 | ForEach-Object { Write-Host $_ }
