@@ -21,6 +21,12 @@ import {
   queryProcess,
   writeJsonAtomic,
 } from './portable-core.mjs'
+import {
+  checkForUpdate,
+  deferUpdate,
+  installAvailableAppUpdate,
+  rollbackPendingAppUpdate,
+} from './update-core.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
@@ -278,6 +284,68 @@ async function openExisting() {
   return { ...current, browser: openBrowser(current.url) }
 }
 
+async function checkUpdate(options) {
+  requireRuntime()
+  await ensurePortableDirectories(layout)
+  await migratePortableRoot(layout)
+  return checkForUpdate({
+    layout,
+    manifestUrl: options.updateManifest || undefined,
+    allowHttp: options.allowHttp,
+    force: options.force,
+  })
+}
+
+async function update(options) {
+  requireRuntime()
+  await ensurePortableDirectories(layout)
+  await migratePortableRoot(layout)
+  const available = await checkForUpdate({
+    layout,
+    manifestUrl: options.updateManifest || undefined,
+    allowHttp: options.allowHttp,
+    force: true,
+  })
+  if (available.status !== 'available') return available
+
+  const prior = readProcessState()
+  if (ownedState(prior)) await stop()
+  try {
+    const applied = await installAvailableAppUpdate({
+      layout,
+      update: available,
+      allowHttp: options.allowHttp,
+      healthCheck: async (metadata) => {
+        const version = execFileSync(layout.nodeExe, [layout.dshBin, '--version'], {
+          cwd: layout.workspace,
+          env: buildDshEnv(layout),
+          encoding: 'utf8',
+          windowsHide: true,
+        }).trim()
+        if (version !== metadata.dshVersion) throw new Error(`Updated DSH reported ${version || 'no version'} instead of ${metadata.dshVersion}.`)
+        await start(true)
+        return true
+      },
+      beforeRollback: async () => {
+        const current = readProcessState()
+        if (ownedState(current)) await stop()
+      },
+    })
+    const running = await status()
+    const browser = !options.noBrowser && running.status === 'running' ? openBrowser(running.url) : null
+    return { ...applied, running, browser }
+  } catch (error) {
+    await deferUpdate(layout).catch(() => {})
+    let recovery = null
+    try {
+      recovery = await start(options.noBrowser)
+    } catch (recoveryError) {
+      throw new Error(`${error?.message ?? error}\nThe previous version was restored but could not restart: ${recoveryError?.message ?? recoveryError}`, { cause: error })
+    }
+    throw new Error(`${error?.message ?? error}\nThe previous version was restored and restarted.`, { cause: error, recovery })
+  }
+}
+
 function print(result, json) {
   if (json) console.log(JSON.stringify(result))
   else if (result.url) console.log(`DeepSeek Harness ${result.status}: ${result.url}`)
@@ -290,13 +358,24 @@ async function main() {
   const options = parseCli(process.argv.slice(2))
   const release = await acquireLaunchLock(layout)
   try {
-    const result = options.command === 'start'
-      ? await start(options.noBrowser)
-      : options.command === 'stop'
-        ? await stop()
-        : options.command === 'status'
-          ? await status()
-          : await openExisting()
+    await ensurePortableDirectories(layout)
+    if (existsSync(layout.updateJournal)) {
+      await rollbackPendingAppUpdate(layout, {
+        beforeRestore: async () => {
+          const current = readProcessState()
+          if (ownedState(current)) await stop()
+        },
+      })
+    }
+    let result
+    if (options.command === 'start') result = await start(options.noBrowser)
+    else if (options.command === 'stop') result = await stop()
+    else if (options.command === 'status') result = await status()
+    else if (options.command === 'open') result = await openExisting()
+    else if (options.command === 'check-update') result = await checkUpdate(options)
+    else if (options.command === 'defer-update') result = await deferUpdate(layout)
+    else if (options.command === 'update') result = await update(options)
+    else throw new Error(`Unsupported command: ${options.command}`)
     print(result, options.json)
   } finally {
     await release()

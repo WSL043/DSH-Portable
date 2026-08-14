@@ -35,6 +35,9 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     runtimeDir,
     stateRoot: durableRoot,
     stateDir,
+    updateCheckCache: paths.join(stateDir, 'update-check.json'),
+    updateDir: paths.join(portableRoot, '.dsh-portable-update'),
+    updateJournal: paths.join(stateDir, 'update.json'),
     workspace: paths.join(durableRoot, 'workspace'),
   }
 }
@@ -66,17 +69,28 @@ export function parseCli(argv) {
   let commandSeen = false
   let noBrowser = false
   let json = false
-  for (const arg of argv) {
+  let allowHttp = false
+  let force = false
+  let updateManifest = ''
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
     if (arg === '--no-browser') noBrowser = true
     else if (arg === '--json') json = true
-    else if (['start', 'stop', 'status', 'open'].includes(arg)) {
+    else if (arg === '--allow-http') allowHttp = true
+    else if (arg === '--force') force = true
+    else if (arg === '--update-manifest') {
+      if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--update-manifest requires a value.')
+      updateManifest = argv[index + 1]
+      index += 1
+    }
+    else if (['start', 'stop', 'status', 'open', 'check-update', 'defer-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
     }
     else throw new Error(`Unknown command or option: ${arg}`)
   }
-  return { command, noBrowser, json }
+  return { command, noBrowser, json, allowHttp, force, updateManifest }
 }
 
 function comparable(value, platform = process.platform) {

@@ -38,7 +38,7 @@ function Copy-PortableSources([string]$Target) {
     }
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs')) {
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.txt') (Join-Path $Target 'README.txt')
@@ -124,6 +124,8 @@ try {
         dshCommit = $Lock.dsh.reviewedCommit
         nodeVersion = $Lock.node.version
         nodeSha256 = $Runtime.sha256
+        updaterSchema = 1
+        shellSchema = 1
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -147,6 +149,17 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $LauncherExe)) { throw 'Windows launcher compilation failed.' }
     Copy-Item $LauncherExe (Join-Path $Stage 'Stop DeepSeek-Herness.exe')
 
+    $UpdateExtractor = Join-Path $Stage 'launcher\DSH-UpdateExtractor.exe'
+    $UpdateExtractorCompilerArgs = @(
+        '/nologo', '/target:exe', '/platform:x64', '/optimize+',
+        '/reference:System.dll', '/reference:System.Core.dll',
+        '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
+        "/out:$UpdateExtractor",
+        (Join-Path $ProjectRoot 'launcher\windows\DSH-UpdateExtractor.cs')
+    )
+    & $Csc $UpdateExtractorCompilerArgs
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UpdateExtractor)) { throw 'Windows update extractor compilation failed.' }
+
     Add-Type -AssemblyName System.Drawing
     $ExtractedIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($LauncherExe)
     if ($null -eq $ExtractedIcon) { throw 'The Windows launcher has no embedded application icon.' }
@@ -154,6 +167,60 @@ try {
 
     $UnexpectedData = Get-ChildItem -Recurse -Force -File (Join-Path $Stage 'data') | Where-Object Name -ne 'README.txt'
     if ($UnexpectedData) { throw "Portable data is not clean: $($UnexpectedData.FullName -join ', ')" }
+
+    $UpdateComponent = Join-Path $OutputDir 'DSH-Portable-update-windows-x64.zip'
+    $UpdateComponentCandidate = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.zip")
+    $UpdateComponentBackup = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.previous.zip")
+    $ComponentMetadata = Join-Path $Stage 'component.json'
+    [System.IO.File]::WriteAllText(
+        $ComponentMetadata,
+        (([ordered]@{
+            schemaVersion = 1
+            kind = 'dsh-app'
+            portableVersion = $PortableVersion
+            dshVersion = $Lock.dsh.version
+            dshCommit = $Lock.dsh.reviewedCommit
+        } | ConvertTo-Json -Depth 4) + [Environment]::NewLine),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    try {
+        & tar.exe -a -c -f $UpdateComponentCandidate -C $Stage `
+            'component.json' 'app' 'licenses/COMPONENTS.json' `
+            'licenses/DeepSeek-Harness-LICENSE.txt' 'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md'
+        if ($LASTEXITCODE -ne 0) { throw "update component creation failed with exit code $LASTEXITCODE" }
+    } finally {
+        Remove-Item -LiteralPath $ComponentMetadata -Force -ErrorAction SilentlyContinue
+    }
+    if (Test-Path -LiteralPath $UpdateComponent) {
+        [System.IO.File]::Replace($UpdateComponentCandidate, $UpdateComponent, $UpdateComponentBackup, $true)
+    } else {
+        [System.IO.File]::Move($UpdateComponentCandidate, $UpdateComponent)
+    }
+    if (Test-Path -LiteralPath $UpdateComponentBackup) { Remove-Item -LiteralPath $UpdateComponentBackup -Force }
+    $UpdateComponentHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $UpdateComponent).Hash.ToLowerInvariant()
+    "$UpdateComponentHash  DSH-Portable-update-windows-x64.zip" | Set-Content -LiteralPath ($UpdateComponent + '.sha256') -Encoding ascii -NoNewline
+
+    $UpdateManifest = Join-Path $OutputDir 'portable-update-windows-x64.json'
+    [System.IO.File]::WriteAllText(
+        $UpdateManifest,
+        (([ordered]@{
+            schemaVersion = 1
+            portableVersion = $PortableVersion
+            platform = 'windows-x64'
+            minimumUpdaterSchema = 1
+            requiredShellSchema = 1
+            component = [ordered]@{
+                kind = 'dsh-app'
+                dshVersion = $Lock.dsh.version
+                dshCommit = $Lock.dsh.reviewedCommit
+                requiredNodeVersion = $Lock.node.version
+                bytes = (Get-Item -LiteralPath $UpdateComponent).Length
+                sha256 = $UpdateComponentHash
+                urls = @('https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-update-windows-x64.zip')
+            }
+        } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
+        [System.Text.UTF8Encoding]::new($false)
+    )
 
     $Zip = Join-Path $OutputDir 'DSH-Portable-windows-x64-offline.zip'
     $ZipCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-offline-$BuildId.zip")
@@ -356,6 +423,9 @@ try {
         Bootstrap = $Bootstrap
         BootstrapSha256 = $BootstrapHash
         Manifest = $Manifest
+        UpdateComponent = $UpdateComponent
+        UpdateComponentSha256 = $UpdateComponentHash
+        UpdateManifest = $UpdateManifest
         PortableExtractor = $PortableExtractor
         PortableExtractorSha256 = $PortableExtractorHash
         Installer = $Installer

@@ -33,6 +33,7 @@ NODE_CACHE="$CACHE_DIR/node-$NODE_VERSION-$RUNTIME_KEY"
 NODE_FOLDER="$NODE_CACHE/node-v$NODE_VERSION-darwin-$ARCH"
 BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dsh-portable-macos.XXXXXX")"
 STAGE="$BUILD_ROOT/DSH-Portable"
+trap 'rm -rf "$BUILD_ROOT"' EXIT
 
 mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node/bin,licenses,data,workspace}
 
@@ -60,6 +61,7 @@ cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
 cp "$PROJECT_ROOT/launcher/portable-core.mjs" "$STAGE/launcher/portable-core.mjs"
 cp "$PROJECT_ROOT/launcher/portable-cli.mjs" "$STAGE/launcher/portable-cli.mjs"
 cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs"
+cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
 cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
 cp "$PROJECT_ROOT/templates/DATA-README.txt" "$STAGE/data/README.txt"
 cp "$PROJECT_ROOT/templates/WORKSPACE-README.txt" "$STAGE/workspace/README.txt"
@@ -94,7 +96,9 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT",
   "nodeVersion": "$NODE_VERSION",
-  "nodeSha256": "$NODE_SHA256"
+  "nodeSha256": "$NODE_SHA256",
+  "updaterSchema": 1,
+  "shellSchema": 1
 }
 EOF
 
@@ -115,6 +119,49 @@ if find "$STAGE/data" -type f ! -name README.txt -print -quit | grep -q .; then
   echo "Portable data is not clean" >&2
   exit 1
 fi
+
+UPDATE_COMPONENT_ROOT="$BUILD_ROOT/update-component"
+UPDATE_COMPONENT="$OUTPUT_DIR/DSH-Portable-update-macos-$ARCH.zip"
+UPDATE_MANIFEST="$OUTPUT_DIR/portable-update-macos-$ARCH.json"
+mkdir -p "$UPDATE_COMPONENT_ROOT/licenses"
+ditto "$STAGE/app" "$UPDATE_COMPONENT_ROOT/app"
+cp "$STAGE/licenses/COMPONENTS.json" "$UPDATE_COMPONENT_ROOT/licenses/COMPONENTS.json"
+cp "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt" "$UPDATE_COMPONENT_ROOT/licenses/DeepSeek-Harness-LICENSE.txt"
+cp "$STAGE/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md" "$UPDATE_COMPONENT_ROOT/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md"
+cat > "$UPDATE_COMPONENT_ROOT/component.json" <<EOF
+{
+  "schemaVersion": 1,
+  "kind": "dsh-app",
+  "portableVersion": "$PORTABLE_VERSION",
+  "dshVersion": "$DSH_VERSION",
+  "dshCommit": "$DSH_COMMIT"
+}
+EOF
+rm -f "$UPDATE_COMPONENT" "$UPDATE_COMPONENT.sha256"
+ditto -c -k --norsrc "$UPDATE_COMPONENT_ROOT" "$UPDATE_COMPONENT"
+UPDATE_COMPONENT_HASH="$(shasum -a 256 "$UPDATE_COMPONENT" | awk '{print $1}')"
+UPDATE_COMPONENT_BYTES="$(stat -f '%z' "$UPDATE_COMPONENT")"
+printf '%s  %s\n' "$UPDATE_COMPONENT_HASH" "$(basename "$UPDATE_COMPONENT")" > "$UPDATE_COMPONENT.sha256"
+cat > "$UPDATE_MANIFEST" <<EOF
+{
+  "schemaVersion": 1,
+  "portableVersion": "$PORTABLE_VERSION",
+  "platform": "macos-$ARCH",
+  "minimumUpdaterSchema": 1,
+  "requiredShellSchema": 1,
+  "component": {
+    "kind": "dsh-app",
+    "dshVersion": "$DSH_VERSION",
+    "dshCommit": "$DSH_COMMIT",
+    "requiredNodeVersion": "$NODE_VERSION",
+    "bytes": $UPDATE_COMPONENT_BYTES,
+    "sha256": "$UPDATE_COMPONENT_HASH",
+    "urls": [
+      "https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-update-macos-$ARCH.zip"
+    ]
+  }
+}
+EOF
 
 ZIP="$OUTPUT_DIR/DSH-Portable-macos-$ARCH.zip"
 rm -f "$ZIP" "$ZIP.sha256"
@@ -175,5 +222,5 @@ done
 DMG_HASH="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 printf '%s  %s\n' "$DMG_HASH" "$(basename "$DMG")" > "$DMG.sha256"
 
-printf '{"archive":"%s","sha256":"%s","dmg":"%s","dmgSha256":"%s","stage":"%s","architecture":"%s"}\n' \
-  "$ZIP" "$HASH" "$DMG" "$DMG_HASH" "$STAGE" "$ARCH"
+printf '{"archive":"%s","sha256":"%s","dmg":"%s","dmgSha256":"%s","updateComponent":"%s","updateComponentSha256":"%s","updateManifest":"%s","architecture":"%s"}\n' \
+  "$ZIP" "$HASH" "$DMG" "$DMG_HASH" "$UPDATE_COMPONENT" "$UPDATE_COMPONENT_HASH" "$UPDATE_MANIFEST" "$ARCH"

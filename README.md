@@ -88,11 +88,15 @@ macOS 包采用临时签名，没有经过 Apple 公证。首次打开若被阻�
 
 ## 更新
 
-DSH-Portable 不是 GitHub Fork。自动任务会检查
-[DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)
-和 npm 包。发现上游新版本后，会先审查差异；Windows、Apple Silicon、Intel
-三组真实成品全部通过运行测试后才发布。正式 Release 的 tag 会指向经过测试的
-`main` 精确提交，不再出现发布版本落后主线的情况。
+DSH-Portable 会在启动时检查更新，并先询问是否安装。一般更新只下载已经变化的
+DSH 应用组件，不会重复下载 Node.js、启动器或整套离线包；会话、设置、凭据和工作区
+都会原地保留。下载完成后会先验证文件，再替换应用；若新版不能正常启动，
+会自动恢复到更新前的版本。
+
+只有 Node.js 或便携外壳等兼容性变化时，才会提示下载完整安装包。可以选择
+“稍后”，启动器不会静默切换版本。DSH-Portable 不是 GitHub Fork；发布任务会
+跟踪 [DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)
+和 npm 包，并只向用户提供通过对应系统成品测试的版本。
 
 ## 安全
 
