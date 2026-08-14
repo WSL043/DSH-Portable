@@ -98,7 +98,7 @@ test('platform update keys are explicit and unsupported targets fail closed', ()
 test('update checks read installed metadata and cache a successful result', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-check-'))
   const layout = layoutForRoot(root)
-  const manifest = updateManifest()
+  const manifest = updateManifest({ platform: platformUpdateKey(process.platform, process.arch) })
   let requests = 0
   const server = http.createServer((_request, response) => {
     requests += 1
@@ -131,7 +131,7 @@ test('update checks read installed metadata and cache a successful result', asyn
 test('choosing later suppresses automatic prompts but never hides a forced check', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-defer-'))
   const layout = layoutForRoot(root)
-  const manifest = updateManifest()
+  const manifest = updateManifest({ platform: platformUpdateKey(process.platform, process.arch) })
   let requests = 0
   const server = http.createServer((_request, response) => {
     requests += 1
