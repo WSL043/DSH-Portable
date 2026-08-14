@@ -132,7 +132,13 @@ try {
         Status = 'passed'
     }
 } finally {
-    & $PortableNode $PortableCli stop --json 2>$null | Out-Null
-    Stop-BrowserProfileFixture -Profile $BrowserProfile
-    Stop-BrowserProfileFixture -Profile $DecoyProfile
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'SilentlyContinue'
+        & $PortableNode $PortableCli stop --json *> $null
+        Stop-BrowserProfileFixture -Profile $BrowserProfile
+        Stop-BrowserProfileFixture -Profile $DecoyProfile
+    } finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
 }

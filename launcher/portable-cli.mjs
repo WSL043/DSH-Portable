@@ -32,6 +32,8 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
+const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
+const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
 function requireRuntime() {
   for (const filename of [layout.nodeExe, layout.dshBin, layout.hostBin]) {
@@ -207,7 +209,7 @@ async function stopPortableBrowser() {
       // A parent browser process may already have closed the rest of its tree.
     }
   }
-  let deadline = Date.now() + 5000
+  let deadline = Date.now() + BROWSER_GRACEFUL_SHUTDOWN_MS
   let remaining = ownedBrowserProcesses()
   while (remaining.length && Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, 100))
@@ -215,16 +217,22 @@ async function stopPortableBrowser() {
   }
   if (remaining.length) {
     forced = true
-    for (const item of browserProcessRoots(remaining)) {
-      try {
-        terminateBrowserProcess(item, true)
-      } catch {
-        // Re-query below before deciding whether shutdown failed.
+    deadline = Date.now() + BROWSER_FORCE_SHUTDOWN_MS
+    while (remaining.length && Date.now() < deadline) {
+      for (const item of browserProcessRoots(remaining)) {
+        try {
+          terminateBrowserProcess(item, true)
+        } catch {
+          // taskkill can report a tree failure while its parent is already
+          // exiting. A direct same-user PID termination handles the newly
+          // orphaned root; ownership is re-checked before every retry.
+          if (layout.platform === 'win32') {
+            try { process.kill(Number(item.pid), 'SIGTERM') } catch {}
+          }
+        }
       }
-    }
-    deadline = Date.now() + 5000
-    while ((remaining = ownedBrowserProcesses()).length && Date.now() < deadline) {
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      remaining = ownedBrowserProcesses()
     }
   }
   remaining = ownedBrowserProcesses()

@@ -159,6 +159,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   const cli = await read('launcher/portable-cli.mjs')
   assert.match(cli, /rollbackPendingAppUpdate\(layout,\s*\{[\s\S]+beforeRestore:[\s\S]+ownedState\(current\)[\s\S]+await stop\(\)/)
   assert.match(cli, /catch \(error\) \{[\s\S]+await deferUpdate\(layout\)\.catch/)
+  assert.match(cli, /BROWSER_FORCE_SHUTDOWN_MS\s*=\s*15000/)
+  assert.match(cli, /terminateBrowserProcess\(item, true\)[\s\S]+process\.kill\(Number\(item\.pid\)/)
 })
 
 test('Windows setup is a per-user offline installer with durable data outside the app', async () => {
