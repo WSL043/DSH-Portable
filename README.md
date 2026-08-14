@@ -6,6 +6,7 @@ desktop install.
 
 | Download | Use case | Supported CPU |
 |---|---|---|
+| `DSH-Portable-windows-x64.exe` | Smallest offline Windows download; extract to any folder and move it freely | Windows x64 |
 | `DSH-Portable-windows-x64.zip` | Fully movable folder; start with `DeepSeek-Herness.exe` | Windows x64 |
 | `DeepSeek-Herness-Setup.exe` | Per-user Start menu/desktop installation | Windows x64 |
 | `DSH-Portable-macos-arm64.zip` | Fully movable folder | Apple Silicon |
@@ -24,13 +25,17 @@ to the app and provides native launch entries.
 
 ### Which package should I choose?
 
-- Choose the ZIP when the whole folder must move between disks or computers.
+- Choose the Windows portable EXE for the smallest offline download. It only
+  extracts the same movable folder and does not register an installation.
+- Choose the ZIP when you prefer a standard archive or cannot run a
+  self-extractor. Both Windows portable downloads produce the same folder.
 - Choose the Windows setup or macOS DMG for a conventional application. In
   installed mode, app updates do not overwrite local settings or conversations.
 
 ### Windows
 
-1. Download and completely extract `DSH-Portable-windows-x64.zip`.
+1. Run `DSH-Portable-windows-x64.exe` and choose a folder, or completely
+   extract `DSH-Portable-windows-x64.zip`.
 2. Double-click `DeepSeek-Herness.exe`.
 3. Use `Stop DeepSeek-Herness.exe` before moving the folder or unplugging a drive.
 
@@ -113,7 +118,7 @@ Local Windows build:
 
 ```powershell
 ./scripts/build-windows.ps1
-# Installer too (requires Inno Setup 6):
+# Portable self-extractor and installer too (requires Inno Setup 7):
 ./scripts/build-windows.ps1 -BuildInstaller
 ```
 
