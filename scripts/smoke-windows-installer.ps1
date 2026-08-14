@@ -45,6 +45,28 @@ function Write-RuntimeDiagnostics {
     }
 }
 
+function Assert-ProductShortcut {
+    param(
+        [Parameter(Mandatory = $true)][string]$ShortcutPath,
+        [Parameter(Mandatory = $true)][string]$ExpectedTarget
+    )
+
+    if (-not (Test-Path -LiteralPath $ShortcutPath)) { throw "installed shortcut is missing: $ShortcutPath" }
+    $Shell = New-Object -ComObject WScript.Shell
+    $Shortcut = $Shell.CreateShortcut($ShortcutPath)
+    $ActualTarget = [System.IO.Path]::GetFullPath($Shortcut.TargetPath)
+    $ExpectedTarget = [System.IO.Path]::GetFullPath($ExpectedTarget)
+    if (-not $ActualTarget.Equals($ExpectedTarget, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "shortcut target mismatch: $ShortcutPath -> $ActualTarget"
+    }
+    $IconPath = (($Shortcut.IconLocation -split ',', 2)[0]).Trim('"')
+    if (-not $IconPath) { throw "shortcut icon is not explicit: $ShortcutPath" }
+    $ActualIcon = [System.IO.Path]::GetFullPath($IconPath)
+    if (-not $ActualIcon.Equals($ExpectedTarget, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "shortcut icon mismatch: $ShortcutPath -> $($Shortcut.IconLocation)"
+    }
+}
+
 $TestId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $TempRoot = [System.IO.Path]::GetTempPath()
 $InstallRoot = Join-Path $TempRoot ("dsh-i-$TestId")
@@ -80,6 +102,14 @@ try {
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $Name))) { throw "installed file is missing: $Name" }
     }
+
+    $ProgramGroup = Join-Path ([Environment]::GetFolderPath('Programs')) 'DeepSeek-Herness'
+    Assert-ProductShortcut `
+        -ShortcutPath (Join-Path $ProgramGroup 'DeepSeek-Herness.lnk') `
+        -ExpectedTarget (Join-Path $InstallRoot 'DeepSeek-Herness.exe')
+    Assert-ProductShortcut `
+        -ShortcutPath (Join-Path $ProgramGroup 'Stop DeepSeek-Herness.lnk') `
+        -ExpectedTarget (Join-Path $InstallRoot 'Stop DeepSeek-Herness.exe')
 
     $Started = Invoke-BoundedProcess -Stage 'Start installed runtime' -TimeoutSeconds 90 `
         -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')

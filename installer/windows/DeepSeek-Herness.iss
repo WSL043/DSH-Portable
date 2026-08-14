@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.1.0-rc.6-portable.3"
+  #define AppVersion "0.1.0-rc.6-portable.4"
 #endif
 
 [Setup]
@@ -34,7 +34,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.1.0.3
+VersionInfoVersion=0.1.0.4
 VersionInfoProductName=DeepSeek-Herness
 VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043
@@ -43,9 +43,9 @@ VersionInfoCompany=WSL043
 Source: "{#Stage}\*"; DestDir: "{app}"; Excludes: "\data\*,\workspace\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"
-Name: "{autoprograms}\Stop DeepSeek-Herness"; Filename: "{app}\Stop DeepSeek-Herness.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{group}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\DeepSeek-Herness.exe"
+Name: "{group}\Stop DeepSeek-Herness"; Filename: "{app}\Stop DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\Stop DeepSeek-Herness.exe"
+Name: "{autodesktop}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\DeepSeek-Herness.exe"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked

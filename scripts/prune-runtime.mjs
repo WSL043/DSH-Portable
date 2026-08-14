@@ -38,17 +38,6 @@ async function treeStats(root) {
   return result
 }
 
-const removableDirectories = new Set([
-  '.yarn',
-  '__tests__',
-  'benchmark',
-  'benchmarks',
-  'coverage',
-  'example',
-  'examples',
-  'test',
-  'tests',
-])
 const removableDocument = /^(?:readme|changelog|changes|history|contributing|code_of_conduct)(?:\..*)?$/i
 const removableBuildArtifact = /(?:\.map|\.d\.(?:ts|mts|cts)|\.tsbuildinfo)$/i
 const removed = { bytes: 0, files: 0, directories: 0 }
@@ -65,10 +54,6 @@ async function prunePackagePayload(root) {
   for (const entry of await readdir(root, { withFileTypes: true })) {
     const filename = path.join(root, entry.name)
     if (entry.isDirectory()) {
-      if (removableDirectories.has(entry.name.toLowerCase())) {
-        await removeTree(filename)
-        continue
-      }
       await prunePackagePayload(filename)
       continue
     }
@@ -95,7 +80,7 @@ await removeDebugSymbols(path.join(prebuildRoot, target))
 // npm install has already selected and validated the target prebuild. These
 // directories contain only build inputs or TypeScript declarations and are not
 // read by node-pty's runtime loader.
-for (const name of ['build', 'deps', 'scripts', 'src', 'third_party', 'typings']) {
+for (const name of ['benchmark', 'benchmarks', 'build', 'deps', 'examples', 'scripts', 'src', 'test', 'tests', 'third_party', 'typings']) {
   const filename = path.join(ptyRoot, name)
   try {
     await removeTree(filename)
@@ -105,10 +90,11 @@ for (const name of ['build', 'deps', 'scripts', 'src', 'third_party', 'typings']
 }
 await rm(path.join(ptyRoot, 'binding.gyp'), { force: true })
 
-// Production does not consume package source maps, TypeScript declarations,
-// test suites, examples, or package-site documents. A directory called `doc`
-// is not safe to remove: yaml uses dist/doc as executable runtime code. Keep
-// executable code, package manifests, assets, and all legal notice files.
+// Package directory names are not a runtime contract. Some dependencies load
+// JavaScript or data from folders named `doc`, `test`, or `examples`, so never
+// remove a directory across all of node_modules merely because its name looks
+// like development material. Only remove file formats that Node cannot execute
+// at runtime, plus the package-specific node-pty build inputs above.
 await prunePackagePayload(nodeModules)
 const typePackages = path.join(nodeModules, '@types')
 try {

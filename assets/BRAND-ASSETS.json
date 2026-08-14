@@ -5,6 +5,9 @@
     "path": "apps/web/public/favicon.svg",
     "gitBlob": "c92f15d43b4e12aafac4e09728db9696384b6b99"
   },
-  "appIconColor": "#4D6BFE",
-  "derivation": "The official favicon geometry is retained and rendered in the official DSH fallback brand blue documented by upstream."
+  "appIconTheme": {
+    "light": "#000000",
+    "dark": "#FFFFFF"
+  },
+  "derivation": "The official application favicon geometry and adaptive theme are used: black in light mode and white in dark mode. Static desktop icon containers render the black whale on a white surface so it stays visible in both operating-system themes, without the website's blue fallback mark."
 }

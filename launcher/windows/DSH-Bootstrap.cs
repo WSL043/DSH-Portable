@@ -18,8 +18,8 @@ using System.Windows.Forms;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.1.0.3")]
-[assembly: System.Reflection.AssemblyFileVersion("0.1.0.3")]
+[assembly: System.Reflection.AssemblyVersion("0.1.0.4")]
+[assembly: System.Reflection.AssemblyFileVersion("0.1.0.4")]
 
 namespace DshPortableBootstrap
 {

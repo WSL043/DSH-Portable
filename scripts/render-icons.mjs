@@ -15,6 +15,7 @@ await mkdir(path.resolve(outputDir), { recursive: true })
 async function png(size) {
   return sharp(svg, { density: 512 })
     .resize(size, size, { fit: 'contain' })
+    .flatten({ background: '#fff' })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer()
 }
