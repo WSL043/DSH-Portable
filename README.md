@@ -118,7 +118,7 @@ Local Windows build:
 
 ```powershell
 ./scripts/build-windows.ps1
-# Portable self-extractor and installer too (requires Inno Setup 6):
+# Portable self-extractor and installer too (requires Inno Setup 7):
 ./scripts/build-windows.ps1 -BuildInstaller
 ```
 

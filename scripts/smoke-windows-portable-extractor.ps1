@@ -9,8 +9,9 @@ if (-not (Test-Path -LiteralPath $Extractor)) { throw "Portable self-extractor i
 
 $TestId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $TestParent = Join-Path ([System.IO.Path]::GetTempPath()) ("dsh-portable-extractor-$TestId")
-$ExtractRoot = Join-Path $TestParent 'DSH Portable extracted ü'
-$MovedRoot = "$ExtractRoot moved ü"
+$UnicodeMarker = [char]0x00FC
+$ExtractRoot = Join-Path $TestParent ("DSH Portable extracted $UnicodeMarker")
+$MovedRoot = "$ExtractRoot moved $UnicodeMarker"
 $SetupLog = Join-Path $TestParent 'extractor.log'
 New-Item -ItemType Directory -Force -Path $TestParent | Out-Null
 
@@ -29,7 +30,10 @@ try {
     $Process.Refresh()
     if ($Process.ExitCode -ne 0) {
         if (Test-Path -LiteralPath $SetupLog) {
-            Get-Content -LiteralPath $SetupLog -Tail 240 | ForEach-Object { Write-Host $_ }
+            Get-Content -LiteralPath $SetupLog |
+                Where-Object { $_ -notmatch '^\d{4}-\d{2}-\d{2} .+\s+Deleting (?:file|directory):' } |
+                Select-Object -Last 400 |
+                ForEach-Object { Write-Host $_ }
         }
         throw "portable extraction exited with code $($Process.ExitCode)"
     }
@@ -40,6 +44,7 @@ try {
 foreach ($Name in @(
     'DeepSeek-Herness.exe',
     'Stop DeepSeek-Herness.exe',
+    'runtime\node\node.exe',
     'data\README.txt',
     'workspace\README.txt',
     'app\node_modules\@earendil-works\pi-ai\dist\providers\data\amazon-bedrock.json'
@@ -55,7 +60,8 @@ if (Get-ChildItem -LiteralPath $ExtractRoot -Filter 'unins*.exe' -File) {
 
 Write-Host '::group::Run movable portable smoke test'
 try {
-    & node (Join-Path $PSScriptRoot 'smoke-portable.mjs') $ExtractRoot
+    $PortableNode = Join-Path $ExtractRoot 'runtime\node\node.exe'
+    & $PortableNode (Join-Path $PSScriptRoot 'smoke-portable.mjs') $ExtractRoot
     if ($LASTEXITCODE -ne 0) { throw "portable smoke test failed with exit code $LASTEXITCODE" }
 } finally {
     Write-Host '::endgroup::'

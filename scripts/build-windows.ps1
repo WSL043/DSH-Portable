@@ -189,8 +189,8 @@ try {
         }
         if (-not $IsccPath) {
             foreach ($Candidate in @(
-                (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'),
-                (Join-Path $env:ProgramFiles 'Inno Setup 6\ISCC.exe')
+                (Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'),
+                (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
             )) {
                 if ($Candidate -and (Test-Path -LiteralPath $Candidate)) {
                     $IsccPath = $Candidate
@@ -199,7 +199,12 @@ try {
             }
         }
         if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath)) {
-            throw 'BuildInstaller requires Inno Setup 6 (ISCC.exe).'
+            throw 'BuildInstaller requires Inno Setup 7 or newer (ISCC.exe).'
+        }
+        $IsccVersion = [string]((& $IsccPath '--version' | Select-Object -First 1))
+        $IsccVersionMatch = [regex]::Match($IsccVersion.Trim(), '^(?<major>\d+)\.')
+        if ($LASTEXITCODE -ne 0 -or -not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
+            throw "BuildInstaller requires Inno Setup 7 or newer; found '$IsccVersion'."
         }
 
         $PortableExtractorBuildDir = Join-Path $StageParent 'portable-extractor-output'

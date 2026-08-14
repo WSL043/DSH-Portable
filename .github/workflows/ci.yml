@@ -20,12 +20,24 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm test
-      - name: Install pinned Inno Setup compiler
+      - name: Install pinned Inno Setup 7 compiler
         shell: powershell
-        run: choco install innosetup --version=6.7.1 --no-progress --yes
+        run: |
+          $Installer = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.0-x64.exe'
+          $CompilerRoot = Join-Path $env:RUNNER_TEMP 'is7'
+          $ExpectedSha256 = '0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe' -OutFile $Installer
+          $ActualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Installer).Hash.ToLowerInvariant()
+          if ($ActualSha256 -ne $ExpectedSha256) { throw "Inno Setup SHA-256 mismatch: $ActualSha256" }
+          $Arguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /PORTABLE=1 /DIR="{0}"' -f $CompilerRoot
+          $Process = Start-Process -FilePath $Installer -ArgumentList $Arguments -Wait -PassThru
+          if ($Process.ExitCode -ne 0) { throw "Inno Setup installation failed with code $($Process.ExitCode)" }
+          $Iscc = Join-Path $CompilerRoot 'ISCC.exe'
+          if (-not (Test-Path -LiteralPath $Iscc)) { throw "ISCC.exe is missing: $Iscc" }
+          "ISCC_PATH=$Iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
       - name: Build Windows portable and installer packages
         shell: powershell
-        run: ./scripts/build-windows.ps1 -BuildInstaller
+        run: ./scripts/build-windows.ps1 -BuildInstaller -IsccPath $env:ISCC_PATH
       - name: Extract and smoke test Windows package
         shell: powershell
         run: |
