@@ -52,7 +52,16 @@ function Invoke-Launcher {
         [string[]]$Arguments = @(),
         [int]$TimeoutMilliseconds = 90000
     )
-    $Process = Start-Process -FilePath $FilePath -ArgumentList $Arguments -WorkingDirectory $Root -WindowStyle Hidden -PassThru
+    $StartParameters = @{
+        FilePath = $FilePath
+        WorkingDirectory = $Root
+        WindowStyle = 'Hidden'
+        PassThru = $true
+    }
+    # Windows PowerShell 5.1 rejects an explicitly empty -ArgumentList even
+    # though PowerShell 7 accepts the same call.
+    if ($Arguments.Count -gt 0) { $StartParameters.ArgumentList = $Arguments }
+    $Process = Start-Process @StartParameters
     if (-not $Process.WaitForExit($TimeoutMilliseconds)) {
         & taskkill.exe /PID $Process.Id /T /F 2>&1 | ForEach-Object { Write-Host $_ }
         $Process.WaitForExit(10000) | Out-Null
@@ -72,14 +81,14 @@ try {
     if ((Get-PortableBrowserProcesses).Count -ne 0) { throw 'browser lifecycle smoke started with an owned browser already running' }
 
     Invoke-Launcher -FilePath $StartExe -Arguments @('start', '--json')
+    $BrowserState = Join-Path $Root 'data\runtime\browser.json'
     $Deadline = [DateTime]::UtcNow.AddSeconds(45)
     do {
         $OwnedBrowsers = @(Get-PortableBrowserProcesses)
-        if ($OwnedBrowsers.Count -gt 0) { break }
+        if ($OwnedBrowsers.Count -gt 0 -and (Test-Path -LiteralPath $BrowserState)) { break }
         Start-Sleep -Milliseconds 250
     } while ([DateTime]::UtcNow -lt $Deadline)
     if ($OwnedBrowsers.Count -eq 0) { throw 'DeepSeek-Herness.exe did not launch a browser with the portable profile' }
-    $BrowserState = Join-Path $Root 'data\runtime\browser.json'
     if (-not (Test-Path -LiteralPath $BrowserState)) { throw 'portable browser ownership state was not recorded' }
 
     $BrowserExecutable = $OwnedBrowsers[0].ExecutablePath

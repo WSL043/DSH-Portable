@@ -48,7 +48,7 @@ jobs:
       - run: npm test
 
   windows-build:
-    name: Build Windows artifacts
+    name: Build Windows base artifacts
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,6 +57,46 @@ jobs:
           node-version: 24.19.0
           cache: npm
           cache-dependency-path: app/package-lock.json
+      - name: Build Windows portable base
+        shell: powershell
+        run: ./scripts/build-windows.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-x64-build
+          path: |
+            artifacts/DSH-Portable-windows-x64-offline.zip
+            artifacts/DSH-Portable-windows-x64-offline.zip.sha256
+            artifacts/DSH-Portable-windows-x64.exe
+            artifacts/DSH-Portable-windows-x64.exe.sha256
+            artifacts/portable-manifest.json
+            artifacts/DSH-Portable-update-windows-x64.zip
+            artifacts/DSH-Portable-update-windows-x64.zip.sha256
+            artifacts/portable-update-windows-x64.json
+          if-no-files-found: error
+          compression-level: 0
+
+  windows-inno-build:
+    name: Build Windows ${{ matrix.label }}
+    needs: windows-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - kind: portable
+            label: portable self-extractor
+            artifact: windows-x64-extractor
+            filename: DSH-Portable-windows-x64-offline.exe
+          - kind: installer
+            label: installer
+            artifact: windows-x64-installer
+            filename: DeepSeek-Herness-Setup.exe
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
       - name: Install pinned Inno Setup 7 compiler
         shell: powershell
         run: |
@@ -72,25 +112,15 @@ jobs:
           $Iscc = Join-Path $CompilerRoot 'ISCC.exe'
           if (-not (Test-Path -LiteralPath $Iscc)) { throw "ISCC.exe is missing: $Iscc" }
           "ISCC_PATH=$Iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Build Windows portable and installer packages
+      - name: Build ${{ matrix.label }} from the verified base archive
         shell: powershell
-        run: ./scripts/build-windows.ps1 -BuildInstaller -IsccPath $env:ISCC_PATH
+        run: ./scripts/build-windows-inno.ps1 -Kind '${{ matrix.kind }}' -Archive 'artifacts/DSH-Portable-windows-x64-offline.zip' -OutputDir 'artifacts' -IsccPath $env:ISCC_PATH
       - uses: actions/upload-artifact@v7
         with:
-          name: windows-x64-build
+          name: ${{ matrix.artifact }}
           path: |
-            artifacts/DSH-Portable-windows-x64-offline.zip
-            artifacts/DSH-Portable-windows-x64-offline.zip.sha256
-            artifacts/DSH-Portable-windows-x64.exe
-            artifacts/DSH-Portable-windows-x64.exe.sha256
-            artifacts/DSH-Portable-windows-x64-offline.exe
-            artifacts/DSH-Portable-windows-x64-offline.exe.sha256
-            artifacts/portable-manifest.json
-            artifacts/DSH-Portable-update-windows-x64.zip
-            artifacts/DSH-Portable-update-windows-x64.zip.sha256
-            artifacts/portable-update-windows-x64.json
-            artifacts/DeepSeek-Herness-Setup.exe
-            artifacts/DeepSeek-Herness-Setup.exe.sha256
+            artifacts/${{ matrix.filename }}
+            artifacts/${{ matrix.filename }}.sha256
           if-no-files-found: error
           compression-level: 0
 
@@ -177,28 +207,28 @@ jobs:
 
   windows-extractor-smoke:
     name: Windows self-extractor
-    needs: windows-build
+    needs: windows-inno-build
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: windows-x64-build
+          name: windows-x64-extractor
           path: artifacts
       - shell: powershell
         run: ./scripts/smoke-windows-portable-extractor.ps1
 
   windows-installer-smoke:
     name: Windows installer
-    needs: windows-build
+    needs: windows-inno-build
     runs-on: windows-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: windows-x64-build
+          name: windows-x64-installer
           path: artifacts
       - shell: powershell
         run: ./scripts/smoke-windows-installer.ps1

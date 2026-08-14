@@ -245,7 +245,7 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.match(workflow, /smoke-windows-portable-extractor\.ps1/)
   assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe/)
   assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe\.sha256/)
-  assert.match(workflow, /artifacts\/DSH-Portable-windows-x64-offline\.exe/)
+  assert.match(workflow, /filename:\s*DSH-Portable-windows-x64-offline\.exe/)
   assert.match(workflow, /artifacts\/portable-manifest\.json/)
   assert.match(workflow, /artifacts\/DSH-Portable-update-windows-x64\.zip/)
   assert.match(workflow, /artifacts\/portable-update-windows-x64\.json/)
@@ -345,6 +345,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
     'workflow-lint:',
     'contracts:',
     'windows-build:',
+    'windows-inno-build:',
     'windows-portable-smoke:',
     'windows-browser-lifecycle:',
     'windows-extractor-smoke:',
@@ -359,12 +360,21 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /\.\/actionlint/)
   assert.match(workflow, /windows-browser-lifecycle:[\s\S]+needs:\s*windows-build/)
   assert.match(workflow, /smoke-windows-browser-lifecycle\.ps1/)
+  const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
+  const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
+  assert.doesNotMatch(windowsBaseJob, /BuildInstaller|ISCC|Inno Setup/)
+  assert.match(windowsInnoJob, /needs:\s*windows-build/)
+  assert.match(windowsInnoJob, /strategy:[\s\S]+matrix:[\s\S]+kind:\s*portable[\s\S]+kind:\s*installer/)
+  assert.match(windowsInnoJob, /build-windows-inno\.ps1/)
+  assert.match(workflow, /windows-extractor-smoke:[\s\S]+needs:\s*windows-inno-build[\s\S]+name:\s*windows-x64-extractor/)
+  assert.match(workflow, /windows-installer-smoke:[\s\S]+needs:\s*windows-inno-build[\s\S]+name:\s*windows-x64-installer/)
   assert.match(browserLifecycleSmoke, /DeepSeek-Herness\.exe/)
   assert.match(browserLifecycleSmoke, /Stop DeepSeek-Herness\.exe/)
   assert.match(browserLifecycleSmoke, /data\\browser/)
   assert.match(browserLifecycleSmoke, /Get-CimInstance Win32_Process/)
   assert.match(browserLifecycleSmoke, /browser-decoy/)
   assert.match(browserLifecycleSmoke, /terminated an unrelated browser profile/)
+  assert.match(browserLifecycleSmoke, /if \(\$Arguments\.Count -gt 0\)/)
   assert.doesNotMatch(browserLifecycleSmoke, /--no-browser/)
   assert.match(workflow, /macos-browser-lifecycle:[\s\S]+needs:\s*macos-build/)
   assert.match(workflow, /smoke-macos-browser-lifecycle\.sh/)
