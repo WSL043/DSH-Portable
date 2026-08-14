@@ -5,100 +5,109 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  无需安装 Node.js，下载一个文件即可启动官方 DeepSeek Harness。<br>
-  One-click, self-contained DeepSeek Harness packages for Windows and macOS.
+  Run the official DeepSeek Harness without setting up Node.js.<br>
+  Start small, keep everything local, and move the finished folder anywhere.
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>下载 Windows x64 便携版（推荐）</strong></a>
+  <strong>English</strong> · <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=4D6BFE" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-171717?style=flat-square" alt="Windows and macOS">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2F855A?style=flat-square" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>Download for Windows x64</strong></a>
   &nbsp;·&nbsp;
-  <a href="#其他下载--other-downloads">其他下载</a>
+  <a href="#other-downloads">Other downloads</a>
 </p>
 
 <p align="center">
   <img src="assets/dsh-interface.png" width="960" alt="DSH-Portable running the official DeepSeek Harness interface">
 </p>
 
-## 三步启动 / Start in 3 steps
-
-1. 下载 [**Windows x64 便携版**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)。普通 Windows 电脑选这个就可以。
-2. 运行下载的文件并选择解压目录，然后双击文件夹里的 `DeepSeek-Herness.exe`。
-3. 要移动整个文件夹或拔出 U 盘前，先运行 `Stop DeepSeek-Herness.exe`。
-
-不需要 Node.js，也不会注册系统服务或开机启动项。首次打开后，按 DSH
-界面提示配置模型即可。
-
 > [!NOTE]
-> DeepSeek Harness 目前仍是开发者预览版。DSH-Portable 只负责打包和便携运行，
-> 不是 DeepSeek 官方桌面版，也不会修改官方 DSH 运行时。
+> DeepSeek Harness is currently a developer preview. DSH-Portable is an independent
+> community distribution, not an official DeepSeek desktop application.
 
-## 你会得到什么
+## Start in 3 steps
 
-- 官方、未修改的 `@deepseek-ai/dsh` Web 界面和完整运行环境；
-- Windows 原生启动器，以及可随文件夹一起移动的设置、会话和工作区；
-- 仅绑定本机 `127.0.0.1` 的服务，便携外壳默认关闭遥测；
-- 不预装 Codex、Zen Free 或其他第三方模型插件。
+1. Download the small [**Windows launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).
+2. Run it once. It downloads the pinned runtime into a `DSH-Portable` folder next
+   to the launcher, verifies the download automatically, and opens DSH.
+3. Configure a model in the DSH interface. Future launches work from the completed
+   folder without downloading the runtime again.
 
-## 其他下载 / Other downloads
+No Node.js setup, system service, or startup task is required. To move the app or
+put it on a USB drive, stop DSH first and copy the entire `DSH-Portable` folder.
+
+## What makes this distribution different
+
+| | DSH-Portable behavior |
+| --- | --- |
+| **Small first download** | The recommended Windows file is a lightweight bootstrap. The larger runtime is downloaded only once. |
+| **Actually portable** | Sessions, settings, browser data, workspace, runtime, and launchers stay under one movable folder. |
+| **Offline option** | A complete self-extracting package is available when the target machine cannot download on first launch. |
+| **Pinned and tested** | Each release fixes the DSH and Node versions, then starts, stops, moves, restarts, installs, and uninstalls the built packages in CI. |
+| **Unmodified DSH** | The runtime is the official `@deepseek-ai/dsh` package. Codex, Zen Free, and other third-party providers are not bundled. |
+
+## Other downloads
 
 <details>
-<summary><strong>Windows：安装版或普通 ZIP</strong></summary>
+<summary><strong>Windows: offline package, ZIP, or installed app</strong></summary>
 
-- [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe)：写入开始菜单，提供标准卸载入口；用户数据不会随卸载删除。
-- [Windows 便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.zip)：内容与推荐便携版相同，适合不能运行自解压文件的环境。
+- [Offline self-extractor](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — includes Node.js and DSH; no first-run download.
+- [Offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — the same movable folder in a standard archive.
+- [Windows installer](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — Start menu shortcut and a normal uninstaller; user data is kept separately.
 
 </details>
 
 <details>
-<summary><strong>macOS：Apple Silicon 或 Intel</strong></summary>
+<summary><strong>macOS: Apple Silicon or Intel</strong></summary>
 
-- Apple Silicon（M1/M2/M3/M4）：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [安装 DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
-- Intel Mac：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [安装 DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
+- Apple Silicon (M1–M4): [portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
+- Intel Mac: [portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
 
-不知道自己的型号？打开 Apple 菜单 → **关于本机**：看到 Apple M 系列就选
-Apple Silicon，看到 Intel 就选 Intel。macOS 包采用临时签名而非 Apple 公证，
-首次打开可能需要按住 Control 点按应用，再选择 **打开**。
+The macOS builds are ad-hoc signed rather than Apple-notarized. On first launch,
+Control-click the app and choose **Open** if macOS blocks it.
 
 </details>
 
-## 便携数据与安全
+## Portable data
 
-便携版把 DSH 自己的数据保存在程序文件夹内：
+The portable folder keeps its state in predictable locations:
 
-- `data/dsh-home/`：设置、模型凭据和会话；
-- `data/browser/`：独立浏览器资料；
-- `workspace/`：默认工作区；
-- `data/logs/`：本地日志。
+- `data/dsh-home/` — DSH settings, provider credentials, and sessions;
+- `data/browser/` — the isolated browser profile;
+- `workspace/` — the default working directory;
+- `data/logs/` — local service logs.
 
-移动整个文件夹后，DSH-Portable 会在下次启动时更新自己管理的路径；外部项目仍
-保留原路径。
+After the folder is moved, the launcher migrates paths it owns on the next start.
+External projects keep their original paths.
 
-> [!IMPORTANT]
-> `data` 可能包含 API 凭据和私人会话，请像保管带密码的 U 盘一样保管整个目录。
-> Windows 移动盘优先使用 NTFS；FAT/exFAT 无法提供同等级的权限边界。
+## Updates
 
-## 更新与来源
+DSH-Portable is not a GitHub fork. An automated check watches the official
+[DeepSeek Harness repository](https://github.com/deepseek-ai/deepseek-harness)
+and npm package. A new upstream version is released only after its changes are
+reviewed and the Windows, Apple Silicon, and Intel packages pass their runtime
+smoke tests. Release tags are created from the exact tested `main` revision.
 
-本仓库是独立分发项目，不是 GitHub Fork。每日任务会检查
-[DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)
-和 npm 版本；发现更新后先创建审查事项，只有官方差异经过检查且 Windows、
-Apple Silicon、Intel 三组真实包冒烟测试通过后才会更新固定版本。
+## Security
+
+DSH is an agent runtime with local code-execution capability. Use trusted models,
+plugins, and projects only. The service binds to `127.0.0.1`, and the portable
+shell disables DSH telemetry by default.
+
+The `data` directory can contain API credentials and private conversations. Treat
+the whole portable folder like a password-protected drive. NTFS is preferred for
+Windows removable media; FAT and exFAT do not provide equivalent permissions.
 
 <details>
-<summary><strong>高级：完整性、固定版本与本地构建</strong></summary>
-
-Release 只提供一份集中校验文件
-[SHA256SUMS.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/SHA256SUMS.txt)，
-不再为每个下载重复展示校验码。
-
-当前包固定并验证：
-
-- `@deepseek-ai/dsh@0.1.0-rc.6`；
-- 官方 DSH 源码提交 `47f943859bef60e4160492346772ded9b24f765a`；
-- Node.js `24.19.0`（Windows x64、macOS arm64、macOS x64）；
-- 官方 DSH fish mark 派生的原生 `.ico` 和 `.icns`。
-
-每个包内的 `licenses/` 都包含许可证、第三方声明和精确组件版本。
+<summary><strong>Build from source</strong></summary>
 
 ```powershell
 ./scripts/build-windows.ps1
@@ -109,10 +118,11 @@ Release 只提供一份集中校验文件
 bash scripts/build-macos.sh arm64   # or x64
 ```
 
-CI 会实际启动打包后的 DSH、检查本机页面、停止进程、移动完整文件夹并再次启动；
-macOS DMG 还会完成挂载、安装、启动、停止和移除验证。
+The dependency lock, component notices, package tests, and release manifest live
+in this repository. Download verification is automatic; beginners do not need to
+copy or compare checksum strings manually.
 
 </details>
 
-DeepSeek Harness 和 DeepSeek 的名称与标志归 DeepSeek 所有。DSH-Portable 由
-WSL043 独立维护，未获 DeepSeek 背书。
+DeepSeek Harness and the DeepSeek name and mark belong to DeepSeek. DSH-Portable
+is maintained independently by WSL043 and is not endorsed by DeepSeek.

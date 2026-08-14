@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Extractor = (Join-Path (Join-Path $PSScriptRoot '..') 'artifacts\DSH-Portable-windows-x64.exe')
+    [string]$Extractor = (Join-Path (Join-Path $PSScriptRoot '..') 'artifacts\DSH-Portable-windows-x64-offline.exe')
 )
 
 $ErrorActionPreference = 'Stop'

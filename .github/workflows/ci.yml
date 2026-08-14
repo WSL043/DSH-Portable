@@ -43,7 +43,7 @@ jobs:
         run: |
           $Root = Join-Path $env:RUNNER_TEMP 'dsh-portable-smoke'
           New-Item -ItemType Directory -Force -Path $Root | Out-Null
-          tar.exe -x -f artifacts/DSH-Portable-windows-x64.zip -C $Root
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
       - name: Extract, run, move, and stop Windows portable self-extractor
@@ -59,10 +59,13 @@ jobs:
         with:
           name: DSH-Portable-windows-x64-all
           path: |
-            artifacts/DSH-Portable-windows-x64.zip
-            artifacts/DSH-Portable-windows-x64.zip.sha256
+            artifacts/DSH-Portable-windows-x64-offline.zip
+            artifacts/DSH-Portable-windows-x64-offline.zip.sha256
             artifacts/DSH-Portable-windows-x64.exe
             artifacts/DSH-Portable-windows-x64.exe.sha256
+            artifacts/DSH-Portable-windows-x64-offline.exe
+            artifacts/DSH-Portable-windows-x64-offline.exe.sha256
+            artifacts/portable-manifest.json
             artifacts/DeepSeek-Herness-Setup.exe
             artifacts/DeepSeek-Herness-Setup.exe.sha256
           if-no-files-found: error

@@ -155,16 +155,16 @@ try {
     $UnexpectedData = Get-ChildItem -Recurse -Force -File (Join-Path $Stage 'data') | Where-Object Name -ne 'README.txt'
     if ($UnexpectedData) { throw "Portable data is not clean: $($UnexpectedData.FullName -join ', ')" }
 
-    $Zip = Join-Path $OutputDir 'DSH-Portable-windows-x64.zip'
-    $ZipCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.zip")
-    $ZipBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.previous.zip")
+    $Zip = Join-Path $OutputDir 'DSH-Portable-windows-x64-offline.zip'
+    $ZipCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-offline-$BuildId.zip")
+    $ZipBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-offline-$BuildId.previous.zip")
     $Sha = $Zip + '.sha256'
     $ShaCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.sha256")
     $ShaBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.previous.sha256")
     & tar.exe -a -c -f $ZipCandidate -C $StageParent 'DSH-Portable'
     if ($LASTEXITCODE -ne 0) { throw "archive creation failed with exit code $LASTEXITCODE" }
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ZipCandidate).Hash.ToLowerInvariant()
-    "$Hash  DSH-Portable-windows-x64.zip" | Set-Content -LiteralPath $ShaCandidate -Encoding ascii -NoNewline
+    "$Hash  DSH-Portable-windows-x64-offline.zip" | Set-Content -LiteralPath $ShaCandidate -Encoding ascii -NoNewline
     if (Test-Path -LiteralPath $Zip) {
         [System.IO.File]::Replace($ZipCandidate, $Zip, $ZipBackup, $true)
     } else {
@@ -177,6 +177,58 @@ try {
     }
     if (Test-Path -LiteralPath $ZipBackup) { Remove-Item -LiteralPath $ZipBackup -Force }
     if (Test-Path -LiteralPath $ShaBackup) { Remove-Item -LiteralPath $ShaBackup -Force }
+
+    $Manifest = Join-Path $OutputDir 'portable-manifest.json'
+    $ManifestCandidate = Join-Path $OutputDir (".portable-manifest-$BuildId.json")
+    $ManifestBody = [ordered]@{
+        schemaVersion = 1
+        version = $PortableVersion
+        payloads = [ordered]@{
+            windowsX64 = [ordered]@{
+                filename = 'DSH-Portable-windows-x64-offline.zip'
+                url = 'https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip'
+                sha256 = $Hash
+                bytes = (Get-Item -LiteralPath $Zip).Length
+            }
+        }
+    }
+    [System.IO.File]::WriteAllText(
+        $ManifestCandidate,
+        (($ManifestBody | ConvertTo-Json -Depth 6) + [Environment]::NewLine),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    if (Test-Path -LiteralPath $Manifest) {
+        $ManifestBackup = Join-Path $OutputDir (".portable-manifest-$BuildId.previous.json")
+        [System.IO.File]::Replace($ManifestCandidate, $Manifest, $ManifestBackup, $true)
+        if (Test-Path -LiteralPath $ManifestBackup) { Remove-Item -LiteralPath $ManifestBackup -Force }
+    } else {
+        [System.IO.File]::Move($ManifestCandidate, $Manifest)
+    }
+
+    $Bootstrap = Join-Path $OutputDir 'DSH-Portable-windows-x64.exe'
+    $BootstrapCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-bootstrap-$BuildId.exe")
+    $BootstrapCompilerArgs = @(
+        '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
+        "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
+        "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
+        '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
+        '/reference:System.Windows.Forms.dll', '/reference:System.Net.Http.dll',
+        '/reference:System.Runtime.Serialization.dll',
+        "/out:$BootstrapCandidate",
+        (Join-Path $ProjectRoot 'launcher\windows\DSH-Bootstrap.cs')
+    )
+    & $Csc $BootstrapCompilerArgs
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $BootstrapCandidate)) { throw 'Windows bootstrap compilation failed.' }
+    if ((Get-Item -LiteralPath $BootstrapCandidate).Length -ge 1MB) { throw 'Windows bootstrap exceeded the 1 MiB product budget.' }
+    if (Test-Path -LiteralPath $Bootstrap) {
+        $BootstrapBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-bootstrap-$BuildId.previous.exe")
+        [System.IO.File]::Replace($BootstrapCandidate, $Bootstrap, $BootstrapBackup, $true)
+        if (Test-Path -LiteralPath $BootstrapBackup) { Remove-Item -LiteralPath $BootstrapBackup -Force }
+    } else {
+        [System.IO.File]::Move($BootstrapCandidate, $Bootstrap)
+    }
+    $BootstrapHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Bootstrap).Hash.ToLowerInvariant()
+    "$BootstrapHash  DSH-Portable-windows-x64.exe" | Set-Content -LiteralPath ($Bootstrap + '.sha256') -Encoding ascii -NoNewline
 
     $PortableExtractor = $null
     $PortableExtractorHash = $null
@@ -271,10 +323,10 @@ try {
             }
         }
 
-        $PortableExtractorCandidate = Join-Path $PortableExtractorBuildDir 'DSH-Portable-windows-x64.exe'
-        if (-not (Test-Path -LiteralPath $PortableExtractorCandidate)) { throw 'Inno Setup did not produce DSH-Portable-windows-x64.exe.' }
-        $PortableExtractor = Join-Path $OutputDir 'DSH-Portable-windows-x64.exe'
-        $PortableExtractorBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.previous.exe")
+        $PortableExtractorCandidate = Join-Path $PortableExtractorBuildDir 'DSH-Portable-windows-x64-offline.exe'
+        if (-not (Test-Path -LiteralPath $PortableExtractorCandidate)) { throw 'Inno Setup did not produce DSH-Portable-windows-x64-offline.exe.' }
+        $PortableExtractor = Join-Path $OutputDir 'DSH-Portable-windows-x64-offline.exe'
+        $PortableExtractorBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-offline-$BuildId.previous.exe")
         if (Test-Path -LiteralPath $PortableExtractor) {
             [System.IO.File]::Replace($PortableExtractorCandidate, $PortableExtractor, $PortableExtractorBackup, $true)
         } else {
@@ -282,7 +334,7 @@ try {
         }
         if (Test-Path -LiteralPath $PortableExtractorBackup) { Remove-Item -LiteralPath $PortableExtractorBackup -Force }
         $PortableExtractorHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $PortableExtractor).Hash.ToLowerInvariant()
-        "$PortableExtractorHash  DSH-Portable-windows-x64.exe" | Set-Content -LiteralPath ($PortableExtractor + '.sha256') -Encoding ascii -NoNewline
+        "$PortableExtractorHash  DSH-Portable-windows-x64-offline.exe" | Set-Content -LiteralPath ($PortableExtractor + '.sha256') -Encoding ascii -NoNewline
 
         $InstallerCandidate = Join-Path $InstallerBuildDir 'DeepSeek-Herness-Setup.exe'
         if (-not (Test-Path -LiteralPath $InstallerCandidate)) { throw 'Inno Setup did not produce DeepSeek-Herness-Setup.exe.' }
@@ -301,6 +353,9 @@ try {
     [pscustomobject]@{
         Archive = $Zip
         Sha256 = $Hash
+        Bootstrap = $Bootstrap
+        BootstrapSha256 = $BootstrapHash
+        Manifest = $Manifest
         PortableExtractor = $PortableExtractor
         PortableExtractorSha256 = $PortableExtractorHash
         Installer = $Installer

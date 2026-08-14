@@ -1,47 +1,38 @@
-> Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`). DSH-Portable is an independent community distribution.
+> 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-## 下载 / Download
+## Windows x64（推荐）
 
-### Windows x64（推荐）
+[**下载轻量启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)
 
-[**下载便携版 EXE（40.3 MB）**](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DSH-Portable-windows-x64.exe)
-
-运行一个文件并选择目录，然后双击 `DeepSeek-Herness.exe`。整个解压目录可以
-连同设置和会话一起移动或复制到 U 盘；无需安装 Node.js。
+下载器不到 1 MB。运行一次后，它会把完整环境下载到旁边的 `DSH-Portable`
+文件夹并直接启动；以后可以离线使用，也可以连同会话和设置一起移动。
 
 <details>
-<summary><strong>Windows 其他版本 / Alternatives</strong></summary>
+<summary><strong>Windows 其他版本</strong></summary>
 
-- [安装版（40.3 MB）](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DeepSeek-Herness-Setup.exe) — 开始菜单入口和标准卸载程序。
-- [便携 ZIP（70.4 MB）](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DSH-Portable-windows-x64.zip) — 与推荐版相同，只是使用普通 ZIP 压缩。
+- [离线自解压版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — 首次使用也不需要联网。
+- [离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — 与离线自解压版内容相同。
+- [安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — 开始菜单入口和标准卸载程序。
 
 </details>
 
 <details>
-<summary><strong>macOS 下载 / Downloads</strong></summary>
+<summary><strong>macOS 下载</strong></summary>
 
-- Apple Silicon（M1–M4）：[便携 ZIP（72.5 MB）](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DSH-Portable-macos-arm64.zip) · [安装 DMG（123.1 MB）](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DeepSeek-Herness-macos-arm64.dmg)
-- Intel Mac：[便携 ZIP（74.5 MB）](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DSH-Portable-macos-x64.zip) · [安装 DMG（101.8 MB）](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/DeepSeek-Herness-macos-x64.dmg)
+- Apple Silicon（M1–M4）：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
+- Intel Mac：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
 
-macOS 应用采用临时签名而非 Apple 公证；首次启动可能需要按住 Control 点按应用，
-再选择 **打开**。
+macOS 包采用临时签名，没有经过 Apple 公证。首次启动可能需要按住 Control
+点按应用，再选择 **打开**。
 
 </details>
 
-## 三步启动 / Start in 3 steps
+## 使用方法
 
-1. 只下载一个适合自己系统的包。
-2. 解压或安装，然后打开包内的启动器。
+1. 下载适合自己系统的一个文件。
+2. 运行启动器、解压包或安装应用。
 3. 按 DSH 界面提示配置模型。
 
-所有包都包含官方、未修改的 DSH 运行时、固定版本的 Node.js、原生模块和所需
-许可证；不包含 Codex 订阅、Zen Free 或其他模型插件。
-
-<details>
-<summary><strong>高级校验 / Advanced verification</strong></summary>
-
-七个安装包的校验值只集中放在
-[SHA256SUMS.txt](https://github.com/WSL043/DSH-Portable/releases/download/dsh-0.1.0-rc.6-portable.2/SHA256SUMS.txt).
-GitHub 也会为每个上传文件显示 digest。
-
-</details>
+轻量启动器会自动验证首次下载；普通用户不需要手动处理校验文件。离线完整包
+包含官方、未修改的 DSH 运行时、固定版本 Node.js、原生模块和所需许可证。
+本项目不包含 Codex 订阅、Zen Free 或其他模型插件。
