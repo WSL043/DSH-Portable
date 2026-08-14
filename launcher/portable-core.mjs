@@ -20,6 +20,7 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     root: portableRoot,
     appDir,
     browserProfile: paths.join(dataDir, 'browser'),
+    browserState: paths.join(stateDir, 'browser.json'),
     dataDir,
     dshBin: paths.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
     dshHome: paths.join(dataDir, 'dsh-home'),
@@ -121,6 +122,60 @@ function commandIncludesComparablePath(commandLine, expected, platform = process
   return [...comparableAliases(expected, platform)].some((alias) => commandLine.includes(alias))
 }
 
+function commandHasExactPathArgument(commandLine, flag, expected, platform = process.platform) {
+  const source = platform === 'win32'
+    ? String(commandLine ?? '').replaceAll('/', '\\').toLowerCase()
+    : String(commandLine ?? '').replaceAll('\\', '/')
+  for (const alias of comparableAliases(expected, platform)) {
+    for (const prefix of [`${flag}=`, `"${flag}=`, `'${flag}=`]) {
+      for (const value of [alias, `"${alias}`, `'${alias}`]) {
+        const needle = `${prefix}${value}`
+        let index = source.indexOf(needle)
+        while (index >= 0) {
+          const next = source[index + needle.length]
+          if (!next || /[\s"']/.test(next)) return true
+          index = source.indexOf(needle, index + 1)
+        }
+      }
+    }
+  }
+  return false
+}
+
+function supportedBrowserExecutable(filename, platform = process.platform) {
+  if (!filename) return false
+  const paths = platform === 'win32' ? path.win32 : path.posix
+  const name = paths.basename(String(filename)).toLowerCase()
+  if (platform === 'win32') return name === 'chrome.exe' || name === 'msedge.exe'
+  return name === 'google chrome' || name === 'microsoft edge'
+}
+
+function supportedBrowserCommandLine(commandLine, platform = process.platform) {
+  if (platform === 'win32') return false
+  const source = String(commandLine ?? '').toLowerCase()
+  return source.includes('/google chrome.app/contents/macos/google chrome')
+    || source.includes('/microsoft edge.app/contents/macos/microsoft edge')
+}
+
+export function isOwnedPortableBrowserProcess(processInfo, layout, executable = '') {
+  if (!processInfo) return false
+  const platform = layout.platform ?? process.platform
+  const commandLine = String(processInfo.commandLine ?? '')
+  if (!commandHasExactPathArgument(commandLine, '--user-data-dir', layout.browserProfile, platform)) return false
+  if (executable) {
+    if (platform === 'win32' && processInfo.executablePath && !sameComparablePath(processInfo.executablePath, executable, platform)) return false
+    if ((platform !== 'win32' || !processInfo.executablePath) && !commandIncludesComparablePath(
+      platform === 'win32' ? commandLine.replaceAll('/', '\\').toLowerCase() : commandLine.replaceAll('\\', '/'),
+      executable,
+      platform,
+    )) return false
+    return supportedBrowserExecutable(executable, platform)
+  }
+  return supportedBrowserExecutable(processInfo.executablePath, platform)
+    || supportedBrowserExecutable(processInfo.processName, platform)
+    || supportedBrowserCommandLine(commandLine, platform)
+}
+
 export function isOwnedDshProcess(processInfo, layout, port) {
   if (!processInfo) return false
   const platform = layout.platform ?? process.platform
@@ -165,6 +220,55 @@ export function queryWindowsProcess(pid) {
   } catch {
     return null
   }
+}
+
+export function queryWindowsBrowserProcesses(adapters = {}) {
+  const script = [
+    '$utf8 = New-Object System.Text.UTF8Encoding($false)',
+    '[Console]::OutputEncoding = $utf8',
+    '$OutputEncoding = $utf8',
+    '$items = @(Get-CimInstance Win32_Process -Filter "Name = \'chrome.exe\' OR Name = \'msedge.exe\'" -ErrorAction SilentlyContinue | ForEach-Object {',
+    '  [pscustomobject]@{ pid=[int]$_.ProcessId; parentPid=[int]$_.ParentProcessId; processName=$_.Name; executablePath=$_.ExecutablePath; commandLine=$_.CommandLine }',
+    '})',
+    '$items | ConvertTo-Json -Compress',
+  ].join('; ')
+  try {
+    const execute = adapters.execute ?? execFileSync
+    const output = execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      encoding: 'utf8',
+      windowsHide: true,
+    }).trim()
+    const parsed = output ? JSON.parse(output) : []
+    return Array.isArray(parsed) ? parsed : [parsed]
+  } catch (error) {
+    throw new Error('Could not inspect browser processes on Windows.', { cause: error })
+  }
+}
+
+export function queryPosixBrowserProcesses(adapters = {}) {
+  try {
+    const execute = adapters.execute ?? execFileSync
+    const output = execute('ps', ['-ww', '-A', '-o', 'pid=,ppid=,pgid=,command='], { encoding: 'utf8' })
+    return output.split(/\r?\n/).map((line) => {
+      const match = line.match(/^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+)$/)
+      if (!match) return null
+      const commandLine = match[4]
+      const executablePath = commandLine.match(/^(?:"([^"]+)"|'([^']+)'|(\S+))/)?.slice(1).find(Boolean) ?? ''
+      return {
+        pid: Number(match[1]),
+        parentPid: Number(match[2]),
+        processGroupId: Number(match[3]),
+        executablePath,
+        commandLine,
+      }
+    }).filter(Boolean)
+  } catch (error) {
+    throw new Error('Could not inspect browser processes on macOS.', { cause: error })
+  }
+}
+
+export function queryBrowserProcesses(platform = process.platform, adapters = {}) {
+  return platform === 'win32' ? queryWindowsBrowserProcesses(adapters) : queryPosixBrowserProcesses(adapters)
 }
 
 export function queryPosixProcess(pid) {

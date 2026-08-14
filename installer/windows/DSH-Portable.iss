@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.1.0-rc.6-portable.6"
+  #define AppVersion "0.1.0-rc.6-portable.7"
 #endif
 
 [Setup]
@@ -36,7 +36,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.1.0.6
+VersionInfoVersion=0.1.0.7
 VersionInfoProductName=DSH-Portable
 VersionInfoDescription=DSH-Portable offline self-extractor
 VersionInfoCompany=WSL043

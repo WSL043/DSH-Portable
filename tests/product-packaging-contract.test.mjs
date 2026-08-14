@@ -11,7 +11,7 @@ const exists = async (name) => access(path.join(root, name)).then(() => true, ()
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.match(manifest.version, /^0\.1\.0-rc\.6-portable\.\d+$/)
+  assert.equal(manifest.version, '0.1.0-rc.6-portable.7')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -71,7 +71,7 @@ test('update guidance describes the component update path without exposing inter
   assert.match(userReadme, /只下载.+DSH.+组件/s)
   assert.match(userReadme, /English[\s\S]+downloads only\s+the changed DSH application component/i)
   assert.match(releaseNotes, /启动时检查更新/)
-  assert.match(releaseNotes, /旧版本.+手动下载本版本一次.+后续.+启动器/s)
+  assert.match(releaseNotes, /本次更新.+完整包.+后续.+DSH 应用组件/s)
   assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
 })
 
@@ -149,6 +149,9 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
+  assert.match(build, /shellSchema\s*=\s*2/)
+  assert.match(build, /requiredShellSchema\s*=\s*2/)
+  assert.match(source, /AssemblyFileVersion\("0\.1\.0\.7"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -265,6 +268,9 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
+  assert.match(build, /"shellSchema": 2/)
+  assert.match(build, /"requiredShellSchema": 2/)
+  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>7<\/string>/s)
   assert.match(app, /check-update/)
   assert.match(app, /defer-update/)
   assert.doesNotMatch(app, /\$\(\$NODE\b/)
@@ -291,6 +297,9 @@ test('macOS DMG carries a self-contained app and keeps installed data outside it
 
 test('CI executes contracts and real package smoke tests on Windows and both Mac architectures', async () => {
   const workflow = await read('.github/workflows/ci.yml')
+  const upstreamWorkflow = await read('.github/workflows/upstream-watch.yml')
+  const browserLifecycleSmoke = await read('scripts/smoke-windows-browser-lifecycle.ps1')
+  const macBrowserLifecycleSmoke = await read('scripts/smoke-macos-browser-lifecycle.sh')
   const bootstrapSmoke = await read('scripts/smoke-windows-bootstrap.mjs')
   const updateSmoke = await read('scripts/smoke-update-artifact.mjs')
   for (const runner of ['windows-latest', 'macos-15', 'macos-15-intel']) assert.match(workflow, new RegExp(runner))
@@ -300,9 +309,14 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /smoke-windows-bootstrap\.mjs/)
   assert.match(workflow, /tar\.exe -x -f artifacts\/DSH-Portable-windows-x64-offline\.zip/)
   assert.doesNotMatch(workflow, /Expand-Archive/)
-  assert.match(workflow, /actions\/checkout@v6/)
-  assert.match(workflow, /actions\/setup-node@v6/)
-  assert.match(workflow, /actions\/upload-artifact@v6/)
+  assert.match(workflow, /actions\/checkout@v7/)
+  assert.match(workflow, /actions\/setup-node@v7/)
+  assert.match(workflow, /actions\/upload-artifact@v7/)
+  assert.match(workflow, /actions\/download-artifact@v8/)
+  assert.match(upstreamWorkflow, /actions\/checkout@v7/)
+  assert.match(upstreamWorkflow, /actions\/setup-node@v7/)
+  assert.match(upstreamWorkflow, /actions\/github-script@v9/)
+  assert.doesNotMatch(`${workflow}\n${upstreamWorkflow}`, /actions\/(?:checkout|setup-node|upload-artifact|download-artifact|github-script)@v[1-6]\b/)
   assert.match(workflow, /innosetup-7\.1\.0-x64\.exe/)
   assert.match(workflow, /0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f/)
   assert.match(workflow, /Get-FileHash[\s\S]+SHA256/)
@@ -310,7 +324,6 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /-IsccPath \$env:ISCC_PATH/)
   assert.doesNotMatch(workflow, /choco install innosetup/)
   assert.match(workflow, /compression-level:\s*0/)
-  assert.match(workflow, /if:\s*\$\{\{ always\(\) \}\}/)
   assert.match(bootstrapSmoke, /DSH-Portable-windows-x64\.exe/)
   assert.match(bootstrapSmoke, /中文 空格/)
   assert.match(bootstrapSmoke, /\.dsh-portable-install-/)
@@ -326,6 +339,39 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
     workflow.indexOf('node scripts/smoke-update-artifact.mjs') < workflow.indexOf('node scripts/smoke-portable.mjs'),
     'the update smoke must run before the movable-root smoke renames the package',
   )
+  for (const job of [
+    'workflow-lint:',
+    'contracts:',
+    'windows-build:',
+    'windows-portable-smoke:',
+    'windows-browser-lifecycle:',
+    'windows-extractor-smoke:',
+    'windows-installer-smoke:',
+    'macos-build:',
+    'macos-portable-smoke:',
+    'macos-browser-lifecycle:',
+    'macos-dmg-smoke:',
+  ]) assert.match(workflow, new RegExp(`^  ${job.replace(':', '\\:')}`, 'm'))
+  assert.match(workflow, /actionlint_1\.7\.12_linux_amd64\.tar\.gz/)
+  assert.match(workflow, /8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8/)
+  assert.match(workflow, /\.\/actionlint/)
+  assert.match(workflow, /windows-browser-lifecycle:[\s\S]+needs:\s*windows-build/)
+  assert.match(workflow, /smoke-windows-browser-lifecycle\.ps1/)
+  assert.match(browserLifecycleSmoke, /DeepSeek-Herness\.exe/)
+  assert.match(browserLifecycleSmoke, /Stop DeepSeek-Herness\.exe/)
+  assert.match(browserLifecycleSmoke, /data\\browser/)
+  assert.match(browserLifecycleSmoke, /Get-CimInstance Win32_Process/)
+  assert.match(browserLifecycleSmoke, /browser-decoy/)
+  assert.match(browserLifecycleSmoke, /terminated an unrelated browser profile/)
+  assert.doesNotMatch(browserLifecycleSmoke, /--no-browser/)
+  assert.match(workflow, /macos-browser-lifecycle:[\s\S]+needs:\s*macos-build/)
+  assert.match(workflow, /smoke-macos-browser-lifecycle\.sh/)
+  assert.match(macBrowserLifecycleSmoke, /DSH-Portable\.app\/Contents\/MacOS\/DSH-Portable/)
+  assert.match(macBrowserLifecycleSmoke, /Stop DSH-Portable\.command/)
+  assert.match(macBrowserLifecycleSmoke, /data\/browser/)
+  assert.match(macBrowserLifecycleSmoke, /browser-decoy/)
+  assert.match(macBrowserLifecycleSmoke, /terminated an unrelated browser profile/)
+  assert.doesNotMatch(macBrowserLifecycleSmoke, /DSH_PORTABLE_NO_BROWSER|--no-browser/)
 })
 
 test('Node runtime lock covers Windows and both Mac CPU families', async () => {

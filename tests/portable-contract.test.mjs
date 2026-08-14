@@ -11,12 +11,15 @@ import {
   acquireLaunchLock,
   browserLaunchSpec,
   buildDshEnv,
+  isOwnedPortableBrowserProcess,
   isOwnedDshProcess,
   isOwnedLauncherProcess,
   layoutForRoot,
   migratePortableRoot,
   parseCli,
   projectKey,
+  queryPosixBrowserProcesses,
+  queryWindowsBrowserProcesses,
   queryWindowsProcess,
 } from '../launcher/portable-core.mjs'
 
@@ -32,6 +35,7 @@ test('all durable application paths stay under the movable root', () => {
   }
   assert.equal(layout.dshHome, path.win32.join(usbRoot, 'data', 'dsh-home'))
   assert.equal(layout.browserProfile, path.win32.join(usbRoot, 'data', 'browser'))
+  assert.equal(layout.browserState, path.win32.join(usbRoot, 'data', 'runtime', 'browser.json'))
   assert.equal(layout.workspace, path.win32.join(usbRoot, 'workspace'))
 })
 
@@ -75,6 +79,69 @@ test('browser app profile moves with the portable folder', () => {
   assert.ok(spec.args.includes('--app=http://127.0.0.1:3080'))
   assert.ok(spec.args.includes(`--user-data-dir=${layout.browserProfile}`))
   assert.ok(spec.args.includes('--no-first-run'))
+})
+
+test('browser ownership requires both a supported executable and the exact portable profile', () => {
+  const layout = layoutForRoot(usbRoot, 'win32')
+  const executable = path.win32.join('C:\\Program Files', 'Google', 'Chrome', 'Application', 'chrome.exe')
+  const owned = {
+    pid: 4100,
+    executablePath: executable,
+    commandLine: `"${executable}" --app=http://127.0.0.1:3080 "--user-data-dir=${layout.browserProfile}" --no-first-run`,
+  }
+  assert.equal(isOwnedPortableBrowserProcess(owned, layout, executable), true)
+  assert.equal(isOwnedPortableBrowserProcess({
+    ...owned,
+    commandLine: `"${executable}" --app=http://127.0.0.1:3080 "--user-data-dir=${layout.browserProfile}-other"`,
+  }, layout, executable), false)
+  assert.equal(isOwnedPortableBrowserProcess({
+    ...owned,
+    executablePath: 'C:\\Windows\\System32\\notepad.exe',
+  }, layout, executable), false)
+  assert.equal(isOwnedPortableBrowserProcess({
+    ...owned,
+    executablePath: 'C:\\Program Files\\PowerShell\\7\\pwsh.exe',
+    commandLine: `pwsh.exe -Command "inspect ${layout.browserProfile}"`,
+  }, layout), false)
+  assert.equal(isOwnedPortableBrowserProcess({
+    ...owned,
+    executablePath: '',
+    processName: 'chrome.exe',
+  }, layout), true)
+  assert.equal(isOwnedPortableBrowserProcess({
+    ...owned,
+    executablePath: '',
+    processName: 'pwsh.exe',
+  }, layout), false)
+})
+
+test('macOS browser ownership accepts the unquoted application command reported by ps', () => {
+  const layout = layoutForRoot('/Volumes/Portable Disk/DSH-Portable', 'darwin')
+  const executable = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+  const commandLine = `${executable} --app=http://127.0.0.1:3080 --user-data-dir=${layout.browserProfile}`
+  assert.equal(isOwnedPortableBrowserProcess({
+    pid: 4200,
+    executablePath: '/Applications/Google',
+    commandLine,
+  }, layout, executable), true)
+  assert.equal(isOwnedPortableBrowserProcess({
+    pid: 4201,
+    executablePath: '/Applications/Google',
+    commandLine: commandLine.replace(layout.browserProfile, `${layout.browserProfile}-other`),
+  }, layout, executable), false)
+})
+
+test('macOS browser inspection records process groups for safe tree shutdown', () => {
+  const rows = queryPosixBrowserProcesses({
+    execute() {
+      return ' 4200  1 4200 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome --user-data-dir=/tmp/owned\n'
+        + ' 4201 4200 4200 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper --type=renderer\n'
+    },
+  })
+  assert.deepEqual(rows.map(({ pid, parentPid, processGroupId }) => ({ pid, parentPid, processGroupId })), [
+    { pid: 4200, parentPid: 1, processGroupId: 4200 },
+    { pid: 4201, parentPid: 4200, processGroupId: 4200 },
+  ])
 })
 
 test('CLI defaults to start and supports bounded automation flags', () => {
@@ -143,6 +210,12 @@ test('Windows process inspection preserves Unicode command-line paths', { skip: 
   const info = queryWindowsProcess(child.pid)
   assert.ok(info)
   assert.match(info.commandLine, new RegExp(marker))
+})
+
+test('browser process inspection fails closed when the operating-system query fails', () => {
+  assert.throws(() => queryWindowsBrowserProcesses({
+    execute() { throw new Error('CIM unavailable') },
+  }), /could not inspect browser processes/i)
 })
 
 test('Windows process ownership treats short and long path aliases as the same files', { skip: process.platform !== 'win32' }, () => {

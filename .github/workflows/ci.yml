@@ -9,17 +9,54 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  windows-x64:
+  workflow-lint:
+    name: GitHub Actions syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate workflow semantics with actionlint
+        run: |
+          curl --fail --location --retry 3 --output actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz
+          echo '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8  actionlint.tar.gz' | sha256sum --check
+          tar -xzf actionlint.tar.gz actionlint
+          ./actionlint
+
+  contracts:
+    name: Contracts (${{ matrix.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            label: windows-x64
+          - runner: macos-15
+            label: macos-arm64
+          - runner: macos-15-intel
+            label: macos-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - run: npm test
+
+  windows-build:
+    name: Build Windows artifacts
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - run: npm test
       - name: Install pinned Inno Setup 7 compiler
         shell: powershell
         run: |
@@ -38,31 +75,9 @@ jobs:
       - name: Build Windows portable and installer packages
         shell: powershell
         run: ./scripts/build-windows.ps1 -BuildInstaller -IsccPath $env:ISCC_PATH
-      - name: Verify Windows component update artifact
-        run: node scripts/verify-update-artifact.mjs artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
-      - name: Download, extract, move, and reuse the lightweight Windows bootstrap
-        run: node scripts/smoke-windows-bootstrap.mjs
-      - name: Extract and smoke test Windows package
-        shell: powershell
-        run: |
-          $Root = Join-Path $env:RUNNER_TEMP 'dsh-portable-smoke'
-          New-Item -ItemType Directory -Force -Path $Root | Out-Null
-          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
-          if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
-          node scripts/smoke-update-artifact.mjs (Join-Path $Root 'DSH-Portable') artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
-          node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
-      - name: Extract, run, move, and stop Windows portable self-extractor
-        shell: powershell
-        timeout-minutes: 15
-        run: ./scripts/smoke-windows-portable-extractor.ps1
-      - name: Install, run, stop, and uninstall Windows setup
-        shell: powershell
-        timeout-minutes: 15
-        run: ./scripts/smoke-windows-installer.ps1
-      - uses: actions/upload-artifact@v6
-        if: ${{ always() }}
+      - uses: actions/upload-artifact@v7
         with:
-          name: DSH-Portable-windows-x64-all
+          name: windows-x64-build
           path: |
             artifacts/DSH-Portable-windows-x64-offline.zip
             artifacts/DSH-Portable-windows-x64-offline.zip.sha256
@@ -79,7 +94,117 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  macos:
+  windows-update-smoke:
+    name: Windows component update
+    needs: windows-build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - run: node scripts/verify-update-artifact.mjs artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
+      - name: Apply and roll back component update
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-update-smoke'
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          node scripts/smoke-update-artifact.mjs (Join-Path $Root 'DSH-Portable') artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
+
+  windows-portable-smoke:
+    name: Windows movable ZIP
+    needs: windows-build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - name: Extract, run, move, and stop portable ZIP
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-portable-smoke'
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
+
+  windows-browser-lifecycle:
+    name: Windows browser ownership and Stop EXE
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - name: Start the real portable browser and close only its owned profile
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-browser-lifecycle'
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          ./scripts/smoke-windows-browser-lifecycle.ps1 -Root (Join-Path $Root 'DSH-Portable')
+
+  windows-bootstrap-smoke:
+    name: Windows lightweight bootstrap
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - run: node scripts/smoke-windows-bootstrap.mjs
+
+  windows-extractor-smoke:
+    name: Windows self-extractor
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - shell: powershell
+        run: ./scripts/smoke-windows-portable-extractor.ps1
+
+  windows-installer-smoke:
+    name: Windows installer
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - shell: powershell
+        run: ./scripts/smoke-windows-installer.ps1
+
+  macos-build:
+    name: Build macOS (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -90,30 +215,16 @@ jobs:
             arch: x64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - run: npm test
-      - name: Build macOS portable package
-        run: bash scripts/build-macos.sh "${{ matrix.arch }}"
-      - name: Verify macOS component update artifact
-        run: node scripts/verify-update-artifact.mjs "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
-      - name: Extract and smoke test macOS package
-        run: |
-          ROOT="$RUNNER_TEMP/dsh-portable-smoke"
-          mkdir -p "$ROOT"
-          ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
-          node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
-          node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
-      - name: Mount, install, run, stop, and remove macOS DMG
-        run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
-      - uses: actions/upload-artifact@v6
-        if: ${{ always() }}
+      - run: bash scripts/build-macos.sh "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v7
         with:
-          name: DSH-Portable-macos-${{ matrix.arch }}-all
+          name: macos-${{ matrix.arch }}-build
           path: |
             artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip
             artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip.sha256
@@ -124,3 +235,79 @@ jobs:
             artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg.sha256
           if-no-files-found: error
           compression-level: 0
+
+  macos-portable-smoke:
+    name: macOS portable (${{ matrix.arch }})
+    needs: macos-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: macos-${{ matrix.arch }}-build
+          path: artifacts
+      - run: node scripts/verify-update-artifact.mjs "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
+      - name: Extract, update, run, move, and stop portable ZIP
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-portable-smoke"
+          mkdir -p "$ROOT"
+          ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
+          node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
+          node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
+
+  macos-browser-lifecycle:
+    name: macOS browser ownership and Stop (${{ matrix.arch }})
+    needs: macos-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: macos-${{ matrix.arch }}-build
+          path: artifacts
+      - name: Start the real portable browser and close only its owned profile
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-browser-lifecycle"
+          mkdir -p "$ROOT"
+          ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
+          bash scripts/smoke-macos-browser-lifecycle.sh "$ROOT/DSH-Portable"
+
+  macos-dmg-smoke:
+    name: macOS DMG (${{ matrix.arch }})
+    needs: macos-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: macos-${{ matrix.arch }}-build
+          path: artifacts
+      - run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"

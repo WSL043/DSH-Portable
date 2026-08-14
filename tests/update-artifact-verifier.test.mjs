@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 
-async function buildFixture(root, { componentsOverrides = {} } = {}) {
+async function buildFixture(root, { componentsOverrides = {}, requiredShellSchema = 1 } = {}) {
   const source = path.join(root, 'source')
   const archive = path.join(root, 'DSH-Portable-update-windows-x64.zip')
   await mkdir(path.join(source, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib'), { recursive: true })
@@ -32,7 +32,7 @@ async function buildFixture(root, { componentsOverrides = {} } = {}) {
     platform: 'windows-x64',
     nodeVersion: '24.19.0',
     updaterSchema: 1,
-    shellSchema: 1,
+    shellSchema: requiredShellSchema,
     ...componentsOverrides,
   })}\n`)
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'license\n')
@@ -46,7 +46,7 @@ async function buildFixture(root, { componentsOverrides = {} } = {}) {
     portableVersion: metadata.portableVersion,
     platform: 'windows-x64',
     minimumUpdaterSchema: 1,
-    requiredShellSchema: 1,
+    requiredShellSchema,
     component: {
       kind: metadata.kind,
       dshVersion: metadata.dshVersion,
@@ -90,6 +90,21 @@ test('release update verifier proves the exact component archive matches its man
       mismatched.manifest,
       mismatched.archive,
     ]), /metadata/i)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('release update verifier accepts a newer positive shell compatibility boundary', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-shell-schema-'))
+  try {
+    const fixture = await buildFixture(root, { requiredShellSchema: 2 })
+    const result = await execFileAsync(process.execPath, [
+      path.join(projectRoot, 'scripts', 'verify-update-artifact.mjs'),
+      fixture.manifest,
+      fixture.archive,
+    ])
+    assert.equal(JSON.parse(result.stdout).status, 'verified')
   } finally {
     await rm(root, { recursive: true, force: true })
   }

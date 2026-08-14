@@ -125,7 +125,7 @@ try {
         nodeVersion = $Lock.node.version
         nodeSha256 = $Runtime.sha256
         updaterSchema = 1
-        shellSchema = 1
+        shellSchema = 2
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -208,7 +208,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 1
+            requiredShellSchema = 2
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
