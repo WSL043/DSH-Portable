@@ -210,15 +210,42 @@ try {
         $InstallerBuildDir = Join-Path $StageParent 'installer-output'
         New-Item -ItemType Directory -Force -Path $InstallerBuildDir | Out-Null
         $SetupScript = Join-Path $ProjectRoot 'installer\windows\DeepSeek-Herness.iss'
-        $IsccArguments = @(
-            "/DStage=$Stage",
-            "/DOutputDir=$InstallerBuildDir",
-            "/DProjectRoot=$ProjectRoot",
-            "/DAppVersion=$PortableVersion",
-            $SetupScript
-        )
-        & $IsccPath $IsccArguments
-        if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+        $InstallerDrive = $null
+        $InstallerDriveMounted = $false
+        try {
+            foreach ($Letter in @('R', 'Q', 'P', 'O', 'N', 'M')) {
+                $CandidateDrive = "${Letter}:"
+                if (-not (Test-Path -LiteralPath ($CandidateDrive + '\'))) {
+                    $InstallerDrive = $CandidateDrive
+                    break
+                }
+            }
+            if (-not $InstallerDrive) { throw 'No unused drive letter is available for the installer build.' }
+
+            # Inno Setup still encounters legacy source-path limits while walking
+            # deeply nested node_modules. Map only this private staging root to a
+            # short temporary drive and always release it below.
+            & subst.exe $InstallerDrive $StageParent
+            if ($LASTEXITCODE -ne 0) { throw "Could not map the installer staging drive ($InstallerDrive)." }
+            $InstallerDriveMounted = $true
+            $InstallerDriveRoot = $InstallerDrive + '\'
+            $ShortStage = Join-Path $InstallerDriveRoot 'DSH-Portable'
+            $ShortOutputDir = Join-Path $InstallerDriveRoot 'installer-output'
+            $IsccArguments = @(
+                "/DStage=$ShortStage",
+                "/DOutputDir=$ShortOutputDir",
+                "/DProjectRoot=$ProjectRoot",
+                "/DAppVersion=$PortableVersion",
+                $SetupScript
+            )
+            & $IsccPath $IsccArguments
+            if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+        } finally {
+            if ($InstallerDriveMounted) {
+                & subst.exe $InstallerDrive /D
+                if ($LASTEXITCODE -ne 0) { Write-Warning "Could not release temporary installer drive $InstallerDrive" }
+            }
+        }
 
         $InstallerCandidate = Join-Path $InstallerBuildDir 'DeepSeek-Herness-Setup.exe'
         if (-not (Test-Path -LiteralPath $InstallerCandidate)) { throw 'Inno Setup did not produce DeepSeek-Herness-Setup.exe.' }
