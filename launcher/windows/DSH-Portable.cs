@@ -140,11 +140,26 @@ namespace DshPortable
             operationRunning = false;
             if (nonInteractive)
             {
+                WriteNonInteractiveDiagnostic(message);
                 Environment.ExitCode = exitCode != 0 ? exitCode : 1;
                 Close();
                 return;
             }
             ShowFailure(message);
+        }
+
+        private static void WriteNonInteractiveDiagnostic(string message)
+        {
+            string filename = Environment.GetEnvironmentVariable("DSH_PORTABLE_LAUNCHER_DIAGNOSTIC");
+            if (string.IsNullOrEmpty(filename)) return;
+            try
+            {
+                File.WriteAllText(filename, message ?? string.Empty, Encoding.UTF8);
+            }
+            catch
+            {
+                // Diagnostics must never replace the launcher failure itself.
+            }
         }
 
         private Tuple<int, string> InvokePortableCli()

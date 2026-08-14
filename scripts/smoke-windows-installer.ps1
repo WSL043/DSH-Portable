@@ -50,10 +50,13 @@ $TempRoot = [System.IO.Path]::GetTempPath()
 $InstallRoot = Join-Path $TempRoot ("dsh-i-$TestId")
 $StateRoot = Join-Path $TempRoot ("dsh-s-$TestId")
 $SetupLog = Join-Path $TempRoot ("dsh-setup-$TestId.log")
+$LauncherDiagnostic = Join-Path $TempRoot ("dsh-launcher-$TestId.log")
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
+$PriorLauncherDiagnostic = $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC
 
 try {
     $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
+    $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $LauncherDiagnostic
     $Setup = Invoke-BoundedProcess -Stage 'Install package' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
             '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
             "/DIR=$InstallRoot", "/LOG=$SetupLog"
@@ -75,6 +78,10 @@ try {
     $Started = Invoke-BoundedProcess -Stage 'Start installed runtime' -TimeoutSeconds 90 `
         -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
     if ($Started.ExitCode -ne 0) {
+        if (Test-Path -LiteralPath $LauncherDiagnostic) {
+            Write-Host '--- launcher diagnostic ---'
+            Get-Content -LiteralPath $LauncherDiagnostic -Tail 240 | ForEach-Object { Write-Host $_ }
+        }
         Write-RuntimeDiagnostics
         throw "installed launcher exited with code $($Started.ExitCode)"
     }
@@ -104,4 +111,5 @@ try {
     [pscustomobject]@{ Installer = $Installer; InstallRoot = $InstallRoot; StateRoot = $StateRoot; Status = 'passed' }
 } finally {
     $env:DSH_PORTABLE_STATE_ROOT = $PriorStateRoot
+    $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $PriorLauncherDiagnostic
 }

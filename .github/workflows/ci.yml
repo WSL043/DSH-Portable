@@ -39,6 +39,7 @@ jobs:
         timeout-minutes: 15
         run: ./scripts/smoke-windows-installer.ps1
       - uses: actions/upload-artifact@v6
+        if: ${{ always() }}
         with:
           name: DSH-Portable-windows-x64-all
           path: |
@@ -78,6 +79,7 @@ jobs:
       - name: Mount, install, run, stop, and remove macOS DMG
         run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
       - uses: actions/upload-artifact@v6
+        if: ${{ always() }}
         with:
           name: DSH-Portable-macos-${{ matrix.arch }}-all
           path: |

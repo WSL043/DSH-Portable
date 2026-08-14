@@ -49,6 +49,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(source, /Icon\.ExtractAssociatedIcon/)
   assert.match(source, /nonInteractive/)
   assert.match(source, /Environment\.ExitCode/)
+  assert.match(source, /DSH_PORTABLE_LAUNCHER_DIAGNOSTIC/)
   assert.doesNotMatch(source, /AppData|Program Files|USERPROFILE/i)
   assert.match(manifest, /requestedExecutionLevel level="asInvoker"/)
   assert.match(manifest, /longPathAware[^>]*>true</)
@@ -87,6 +88,7 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /dsh-i-/)
   assert.match(smoke, /Invoke-BoundedProcess/)
   assert.match(smoke, /WaitForExit/)
+  assert.match(smoke, /LauncherDiagnostic/)
   for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Uninstall package']) {
     assert.match(smoke, new RegExp(stage))
   }
@@ -138,6 +140,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /actions\/setup-node@v6/)
   assert.match(workflow, /actions\/upload-artifact@v6/)
   assert.match(workflow, /compression-level:\s*0/)
+  assert.match(workflow, /if:\s*\$\{\{ always\(\) \}\}/)
 })
 
 test('Node runtime lock covers Windows and both Mac CPU families', async () => {
