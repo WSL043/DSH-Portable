@@ -16,10 +16,32 @@ test('the public product identity is DSH-Portable everywhere users see it', asyn
   const readme = await read('README.md')
   const userReadme = await read('templates/USER-README.txt')
   const combined = `${readme}\n${userReadme}`
-  assert.match(readme, /^# DSH-Portable/m)
+  assert.match(readme, /<h1 align="center">DSH-Portable<\/h1>/)
   assert.match(userReadme, /^DSH-Portable$/m)
   assert.doesNotMatch(combined, /DeepSeek Harness Windows Portable|community\.1|Unofficial community packaging/i)
   assert.doesNotMatch(userReadme, /reviewed commit|build script|npm lock|promotion|development history/i)
+})
+
+test('the GitHub landing page gives beginners one obvious download path', async () => {
+  const readme = await read('README.md')
+  const recommendedUrl = 'https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe'
+
+  assert.match(readme, /<img[^>]+assets\/DSH-Portable\.svg[^>]+alt="DeepSeek Harness"/i)
+  assert.match(readme, /(?:三步启动|3 steps)/i)
+  assert.match(readme, new RegExp(recommendedUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.ok(readme.indexOf(recommendedUrl) < readme.indexOf('<details>'), 'the recommended download must appear before advanced choices')
+  assert.doesNotMatch(readme.slice(0, readme.indexOf('<details>')), /\|\s*Download\s*\|\s*Use case\s*\|/i)
+  assert.doesNotMatch(readme, /Each release includes a `\.sha256` file/i)
+})
+
+test('release notes prioritize downloads and keep verification optional', async () => {
+  const notes = await read('templates/RELEASE-NOTES.md')
+  assert.match(notes, /^>\s+Packages the official DeepSeek Harness preview/m)
+  assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
+  assert.match(notes, /DSH-Portable-windows-x64\.exe/)
+  assert.ok(notes.indexOf('DSH-Portable-windows-x64.exe') < notes.indexOf('<details>'))
+  assert.doesNotMatch(notes, /\b[a-f0-9]{64}\b/i)
+  assert.equal((notes.match(/\[SHA256SUMS\.txt\]\(/g) || []).length, 1)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
