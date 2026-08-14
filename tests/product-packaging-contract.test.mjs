@@ -116,6 +116,8 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /build-windows\.ps1/)
   assert.match(workflow, /build-macos\.sh/)
   assert.match(workflow, /smoke-portable\.mjs/)
+  assert.match(workflow, /tar\.exe -x -f artifacts\/DSH-Portable-windows-x64\.zip/)
+  assert.doesNotMatch(workflow, /Expand-Archive/)
   assert.match(workflow, /actions\/upload-artifact@v4/)
 })
 

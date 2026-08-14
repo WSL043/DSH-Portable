@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { access, readFile, rename } from 'node:fs/promises'
+import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
+
+import { renameWithRetry } from './smoke-helpers.mjs'
 
 const originalRoot = path.resolve(process.argv[2] ?? '')
 if (!originalRoot) throw new Error('usage: node smoke-portable.mjs <extracted-DSH-Portable-root>')
@@ -81,7 +83,7 @@ if (process.platform === 'win32') {
 assert.equal((await cli(originalRoot, 'status', '--json')).status, 'stopped')
 
 const movedRoot = `${originalRoot} moved ü`
-await rename(originalRoot, movedRoot)
+await renameWithRetry(originalRoot, movedRoot)
 const moved = await cli(movedRoot, 'start', '--no-browser', '--json')
 assert.equal(moved.status, 'started')
 assert.equal(moved.migration?.moved, true)

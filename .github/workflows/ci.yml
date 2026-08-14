@@ -30,7 +30,9 @@ jobs:
         shell: powershell
         run: |
           $Root = Join-Path $env:RUNNER_TEMP 'dsh-portable-smoke'
-          Expand-Archive -LiteralPath artifacts/DSH-Portable-windows-x64.zip -DestinationPath $Root
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
       - name: Install, run, stop, and uninstall Windows setup
         shell: powershell
