@@ -39,7 +39,12 @@ async function main() {
 
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   if (manifest.schemaVersion !== 1 || !manifest.portableVersion || !manifest.platform) fail('Update manifest is incomplete.')
-  if (manifest.minimumUpdaterSchema !== 1 || manifest.requiredShellSchema !== 1) fail('Update compatibility metadata is incomplete.')
+  const minimumUpdaterSchema = Number(manifest.minimumUpdaterSchema)
+  const requiredShellSchema = Number(manifest.requiredShellSchema)
+  if (!Number.isSafeInteger(minimumUpdaterSchema) || minimumUpdaterSchema < 1
+    || !Number.isSafeInteger(requiredShellSchema) || requiredShellSchema < 1) {
+    fail('Update compatibility metadata is incomplete.')
+  }
   const component = manifest.component
   if (!component || component.kind !== 'dsh-app' || !component.requiredNodeVersion) fail('Update component metadata is incomplete.')
 

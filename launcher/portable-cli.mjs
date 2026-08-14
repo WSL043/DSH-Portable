@@ -15,9 +15,11 @@ import {
   buildDshEnv,
   ensurePortableDirectories,
   isOwnedDshProcess,
+  isOwnedPortableBrowserProcess,
   layoutForRoot,
   migratePortableRoot,
   parseCli,
+  queryBrowserProcesses,
   queryProcess,
   writeJsonAtomic,
 } from './portable-core.mjs'
@@ -30,6 +32,8 @@ import {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
+const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
+const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
 function requireRuntime() {
   for (const filename of [layout.nodeExe, layout.dshBin, layout.hostBin]) {
@@ -40,6 +44,14 @@ function requireRuntime() {
 function readProcessState() {
   try {
     return JSON.parse(readFileSync(layout.processState, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+function readBrowserState() {
+  try {
+    return JSON.parse(readFileSync(layout.browserState, 'utf8'))
   } catch {
     return null
   }
@@ -131,18 +143,102 @@ function findBrowser() {
   return candidates.find((candidate) => candidate && existsSync(candidate)) ?? null
 }
 
-function openBrowser(url) {
+async function openBrowser(url) {
   const executable = findBrowser()
   if (!executable) {
     const fallback = process.platform === 'darwin'
       ? { command: 'open', args: [url] }
       : { command: 'cmd.exe', args: ['/d', '/s', '/c', 'start', '', url] }
     spawn(fallback.command, fallback.args, { detached: true, stdio: 'ignore', windowsHide: true }).unref()
+    rmSync(layout.browserState, { force: true })
     return { portableProfile: false, executable: 'default-browser' }
   }
   const spec = browserLaunchSpec(executable, url, layout)
-  spawn(spec.command, spec.args, { detached: true, stdio: 'ignore', windowsHide: false }).unref()
-  return { portableProfile: true, executable }
+  const child = spawn(spec.command, spec.args, { detached: true, stdio: 'ignore', windowsHide: false })
+  await new Promise((resolve, reject) => {
+    child.once('spawn', resolve)
+    child.once('error', reject)
+  })
+  child.unref()
+  await writeJsonAtomic(layout.browserState, {
+    schemaVersion: 1,
+    pid: child.pid,
+    executable,
+    profile: layout.browserProfile,
+    url,
+    startedAt: new Date().toISOString(),
+  })
+  return { portableProfile: true, executable, pid: child.pid }
+}
+
+function ownedBrowserProcesses() {
+  return queryBrowserProcesses(layout.platform).filter((item) => (
+    isOwnedPortableBrowserProcess(item, layout)
+  ))
+}
+
+function browserProcessRoots(items) {
+  const owned = new Set(items.map((item) => Number(item.pid)))
+  const roots = items.filter((item) => !owned.has(Number(item.parentPid)))
+  return roots.length ? roots : items.slice(0, 1)
+}
+
+function terminateBrowserProcess(processInfo, force) {
+  const pid = Number(processInfo.pid)
+  if (layout.platform === 'win32') {
+    const args = ['/PID', String(pid), '/T']
+    if (force) args.push('/F')
+    execFileSync('taskkill.exe', args, { encoding: 'utf8', windowsHide: true })
+  } else {
+    const processGroupId = Number(processInfo.processGroupId)
+    const target = Number.isSafeInteger(processGroupId) && processGroupId > 0 && processGroupId === pid
+      ? -processGroupId
+      : pid
+    process.kill(target, force ? 'SIGKILL' : 'SIGTERM')
+  }
+}
+
+async function stopPortableBrowser() {
+  const recorded = Boolean(readBrowserState())
+  const initial = ownedBrowserProcesses()
+  let forced = false
+  for (const item of browserProcessRoots(initial)) {
+    try {
+      terminateBrowserProcess(item, false)
+    } catch {
+      // A parent browser process may already have closed the rest of its tree.
+    }
+  }
+  let deadline = Date.now() + BROWSER_GRACEFUL_SHUTDOWN_MS
+  let remaining = ownedBrowserProcesses()
+  while (remaining.length && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    remaining = ownedBrowserProcesses()
+  }
+  if (remaining.length) {
+    forced = true
+    deadline = Date.now() + BROWSER_FORCE_SHUTDOWN_MS
+    while (remaining.length && Date.now() < deadline) {
+      for (const item of browserProcessRoots(remaining)) {
+        try {
+          terminateBrowserProcess(item, true)
+        } catch {
+          // taskkill can report a tree failure while its parent is already
+          // exiting. A direct same-user PID termination handles the newly
+          // orphaned root; ownership is re-checked before every retry.
+          if (layout.platform === 'win32') {
+            try { process.kill(Number(item.pid), 'SIGTERM') } catch {}
+          }
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      remaining = ownedBrowserProcesses()
+    }
+  }
+  remaining = ownedBrowserProcesses()
+  if (remaining.length) throw new Error(`Portable browser processes did not stop: ${remaining.map((item) => item.pid).join(', ')}`)
+  rmSync(layout.browserState, { force: true })
+  return { found: initial.length, stopped: initial.length, forced, recorded }
 }
 
 function logSize(filename) {
@@ -170,7 +266,7 @@ async function start(noBrowser) {
   const prior = readProcessState()
   if (ownedState(prior) && await httpReady(prior.port)) {
     const url = `http://127.0.0.1:${prior.port}`
-    const browser = noBrowser ? null : openBrowser(url)
+    const browser = noBrowser ? null : await openBrowser(url)
     return { status: 'already-running', pid: prior.pid, port: prior.port, url, browser, migration }
   }
   if (prior) {
@@ -234,15 +330,23 @@ async function start(noBrowser) {
   }
 
   const url = `http://127.0.0.1:${port}`
-  const browser = noBrowser ? null : openBrowser(url)
+  const browser = noBrowser ? null : await openBrowser(url)
   return { status: 'started', pid: child.pid, port, url, browser, migration }
 }
 
 async function stop() {
+  let browser = null
+  let browserError = null
+  try {
+    browser = await stopPortableBrowser()
+  } catch (error) {
+    browserError = error
+  }
   const state = readProcessState()
   if (!ownedState(state)) {
     rmSync(layout.processState, { force: true })
-    return { status: 'not-running' }
+    if (browserError) throw browserError
+    return { status: browser?.stopped ? 'stopped' : 'not-running', browser }
   }
   let gracefulRequested = false
   gracefulRequested = await requestGracefulShutdown(state)
@@ -263,7 +367,8 @@ async function stop() {
   if (ownedState(state)) throw new Error(`DSH process ${state.pid} did not stop.`)
   rmSync(layout.processState, { force: true })
   if (process.platform !== 'win32' && state.controlPipe) rmSync(state.controlPipe, { force: true })
-  return { status: 'stopped', pid: state.pid, port: state.port, graceful: gracefulRequested && !forced, forced }
+  if (browserError) throw browserError
+  return { status: 'stopped', pid: state.pid, port: state.port, graceful: gracefulRequested && !forced, forced, browser }
 }
 
 async function status() {
@@ -281,7 +386,7 @@ async function status() {
 async function openExisting() {
   const current = await status()
   if (current.status !== 'running') return start(false)
-  return { ...current, browser: openBrowser(current.url) }
+  return { ...current, browser: await openBrowser(current.url) }
 }
 
 async function checkUpdate(options) {
@@ -332,7 +437,7 @@ async function update(options) {
       },
     })
     const running = await status()
-    const browser = !options.noBrowser && running.status === 'running' ? openBrowser(running.url) : null
+    const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null
     return { ...applied, running, browser }
   } catch (error) {
     await deferUpdate(layout).catch(() => {})

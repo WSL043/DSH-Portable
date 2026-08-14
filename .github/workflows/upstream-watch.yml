@@ -13,8 +13,8 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
       - id: upstream
@@ -23,7 +23,7 @@ jobs:
         run: node scripts/check-upstream.mjs
       - name: Open or refresh the upstream review issue
         if: steps.upstream.outputs.changed == 'true'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const title = 'Review available DeepSeek Harness upstream update'
