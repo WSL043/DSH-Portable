@@ -14,9 +14,11 @@ test('the public product identity is DSH-Portable everywhere users see it', asyn
   assert.match(manifest.version, /^0\.1\.0-rc\.6-portable\.\d+$/)
 
   const readme = await read('README.md')
+  const chineseReadme = await read('README.zh-CN.md')
   const userReadme = await read('templates/USER-README.txt')
-  const combined = `${readme}\n${userReadme}`
+  const combined = `${readme}\n${chineseReadme}\n${userReadme}`
   assert.match(readme, /<h1 align="center">DSH-Portable<\/h1>/)
+  assert.match(chineseReadme, /<h1 align="center">DSH-Portable<\/h1>/)
   assert.match(userReadme, /^DSH-Portable$/m)
   assert.doesNotMatch(combined, /DeepSeek Harness Windows Portable|community\.1|Unofficial community packaging/i)
   assert.doesNotMatch(userReadme, /reviewed commit|build script|npm lock|promotion|development history/i)
@@ -24,24 +26,39 @@ test('the public product identity is DSH-Portable everywhere users see it', asyn
 
 test('the GitHub landing page gives beginners one obvious download path', async () => {
   const readme = await read('README.md')
+  const chineseReadme = await read('README.zh-CN.md')
   const recommendedUrl = 'https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe'
 
   assert.match(readme, /<img[^>]+assets\/DSH-Portable\.svg[^>]+alt="DeepSeek Harness"/i)
-  assert.match(readme, /(?:三步启动|3 steps)/i)
+  assert.match(readme, /Start in 3 steps/i)
+  assert.match(chineseReadme, /三步启动/)
   assert.match(readme, new RegExp(recommendedUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  assert.match(chineseReadme, new RegExp(recommendedUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   assert.ok(readme.indexOf(recommendedUrl) < readme.indexOf('<details>'), 'the recommended download must appear before advanced choices')
   assert.doesNotMatch(readme.slice(0, readme.indexOf('<details>')), /\|\s*Download\s*\|\s*Use case\s*\|/i)
   assert.doesNotMatch(readme, /Each release includes a `\.sha256` file/i)
 })
 
+test('English and Simplified Chinese documentation are complete peers', async () => {
+  const english = await read('README.md')
+  const chinese = await read('README.zh-CN.md')
+  assert.match(english.slice(0, 1400), /<strong>English<\/strong>.+README\.zh-CN\.md/s)
+  assert.match(chinese.slice(0, 1400), /README\.md.+<strong>简体中文<\/strong>/s)
+  assert.equal((english.match(/assets\/dsh-interface\.png/g) || []).length, 1)
+  assert.equal((chinese.match(/assets\/dsh-interface\.png/g) || []).length, 1)
+  for (const heading of ['Start in 3 steps', 'Portable data', 'Updates', 'Security']) assert.match(english, new RegExp(`## ${heading}`, 'i'))
+  for (const heading of ['三步启动', '便携数据', '更新', '安全']) assert.match(chinese, new RegExp(`## ${heading}`))
+  assert.doesNotMatch(english, /三步启动|下载 Windows|便携数据与安全/)
+})
+
 test('release notes prioritize downloads and keep verification optional', async () => {
   const notes = await read('templates/RELEASE-NOTES.md')
-  assert.match(notes, /^>\s+Packages the official DeepSeek Harness preview/m)
+  assert.match(notes, /^>\s+打包官方 DeepSeek Harness 预览版/m)
   assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
   assert.match(notes, /DSH-Portable-windows-x64\.exe/)
   assert.ok(notes.indexOf('DSH-Portable-windows-x64.exe') < notes.indexOf('<details>'))
   assert.doesNotMatch(notes, /\b[a-f0-9]{64}\b/i)
-  assert.equal((notes.match(/\[SHA256SUMS\.txt\]\(/g) || []).length, 1)
+  assert.equal((notes.match(/SHA256SUMS|\b[a-f0-9]{64}\b/gi) || []).length, 0)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
@@ -79,7 +96,9 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /win32icon/i)
   assert.match(build, /DeepSeek-Herness\.exe/)
   assert.match(build, /Stop DeepSeek-Herness\.exe/)
-  assert.match(build, /DSH-Portable-windows-x64\.zip/)
+  assert.match(build, /DSH-Portable-windows-x64-offline\.zip/)
+  assert.match(build, /DSH-Bootstrap\.cs/)
+  assert.match(build, /portable-manifest\.json/)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
 })
 
@@ -128,7 +147,7 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   const workflow = await read('.github/workflows/ci.yml')
 
   assert.match(extractor, /AppName=DSH-Portable/)
-  assert.match(extractor, /OutputBaseFilename=DSH-Portable-windows-x64/)
+  assert.match(extractor, /OutputBaseFilename=DSH-Portable-windows-x64-offline/)
   assert.match(extractor, /DefaultDirName=\{src\}\\DSH-Portable/)
   assert.match(extractor, /UsePreviousAppDir=no/)
   assert.match(extractor, /Uninstallable=no/)
@@ -139,13 +158,13 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.doesNotMatch(extractor, /Excludes:/)
   assert.doesNotMatch(extractor, /\[Icons\]|\[Registry\]|installed-mode\.json/i)
 
-  assert.match(build, /DSH-Portable-windows-x64\.exe/)
+  assert.match(build, /DSH-Portable-windows-x64-offline\.exe/)
   assert.match(build, /PortableExtractorSha256/)
   assert.match(build, /installer\\windows\\DSH-Portable\.iss/)
   assert.match(build, /--version/)
   assert.match(build, /Inno Setup 7 or newer/)
   assert.doesNotMatch(build, /Inno Setup 6/)
-  assert.match(smoke, /DSH-Portable-windows-x64\.exe/)
+  assert.match(smoke, /DSH-Portable-windows-x64-offline\.exe/)
   assert.match(smoke, /\/DIR=/)
   assert.match(smoke, /\/DIR="\{0\}"/)
   assert.match(smoke, /\/LOG="\{1\}"/)
@@ -160,6 +179,8 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.match(workflow, /smoke-windows-portable-extractor\.ps1/)
   assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe/)
   assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe\.sha256/)
+  assert.match(workflow, /artifacts\/DSH-Portable-windows-x64-offline\.exe/)
+  assert.match(workflow, /artifacts\/portable-manifest\.json/)
 })
 
 test('macOS package is a movable signed app shell for both supported architectures', async () => {
@@ -205,7 +226,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /build-windows\.ps1/)
   assert.match(workflow, /build-macos\.sh/)
   assert.match(workflow, /smoke-portable\.mjs/)
-  assert.match(workflow, /tar\.exe -x -f artifacts\/DSH-Portable-windows-x64\.zip/)
+  assert.match(workflow, /tar\.exe -x -f artifacts\/DSH-Portable-windows-x64-offline\.zip/)
   assert.doesNotMatch(workflow, /Expand-Archive/)
   assert.match(workflow, /actions\/checkout@v6/)
   assert.match(workflow, /actions\/setup-node@v6/)
