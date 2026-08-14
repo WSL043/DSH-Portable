@@ -265,6 +265,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(bootstrapSmoke, /DSH-Portable-windows-x64\.exe/)
   assert.match(bootstrapSmoke, /中文 空格/)
   assert.match(bootstrapSmoke, /\.dsh-portable-install-/)
+  assert.match(bootstrapSmoke, /maxRetries:\s*40/)
 })
 
 test('Node runtime lock covers Windows and both Mac CPU families', async () => {
