@@ -89,6 +89,8 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(app, /runtime\/node\/bin\/node/)
   assert.match(stop, /portable-cli\.mjs" stop/)
   assert.match(build, /darwin-\$ARCH/)
+  assert.match(build, /cd "\$STAGE\/app"/)
+  assert.doesNotMatch(build, /npm[^\n]+ci --prefix/)
   assert.match(build, /codesign --force --deep --sign -/)
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
 })

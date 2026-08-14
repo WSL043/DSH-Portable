@@ -69,8 +69,11 @@ chmod 755 "$STAGE/runtime/node/bin/node"
 cp "$NODE_FOLDER/LICENSE" "$STAGE/licenses/Node.js-LICENSE.txt"
 
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-lock.mjs" "$PROJECT_ROOT/app/package-lock.json" "$LOCK_FILE"
-PATH="$NODE_FOLDER/bin:$PATH" npm_config_cache="$CACHE_DIR/npm" \
-  "$NODE_EXE" "$NPM_CLI" ci --prefix "$STAGE/app" --omit=dev --no-audit --no-fund
+(
+  cd "$STAGE/app"
+  PATH="$NODE_FOLDER/bin:$PATH" npm_config_cache="$CACHE_DIR/npm" \
+    "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund
+)
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" darwin "$ARCH"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 
