@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { spawn } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
+import { realpathSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -11,6 +12,7 @@ import {
   browserLaunchSpec,
   buildDshEnv,
   isOwnedDshProcess,
+  isOwnedLauncherProcess,
   layoutForRoot,
   migratePortableRoot,
   parseCli,
@@ -121,6 +123,39 @@ test('Windows process inspection preserves Unicode command-line paths', { skip: 
   const info = queryWindowsProcess(child.pid)
   assert.ok(info)
   assert.match(info.commandLine, new RegExp(marker))
+})
+
+test('Windows process ownership treats short and long path aliases as the same files', { skip: process.platform !== 'win32' }, () => {
+  const projectRoot = path.resolve(import.meta.dirname, '..')
+  const longPaths = {
+    nodeExe: realpathSync.native(process.execPath),
+    hostBin: realpathSync.native(path.join(projectRoot, 'launcher', 'portable-host.mjs')),
+    dshBin: realpathSync.native(path.join(projectRoot, 'package.json')),
+    portableCli: realpathSync.native(path.join(projectRoot, 'launcher', 'portable-cli.mjs')),
+  }
+  const shortPath = (filename) => execFileSync('cmd.exe', [
+    '/d', '/c', `for %I in ("${filename}") do @echo %~sI`,
+  ], { encoding: 'utf8', windowsHide: true, windowsVerbatimArguments: true }).trim()
+  const layout = {
+    platform: 'win32',
+    nodeExe: shortPath(longPaths.nodeExe),
+    hostBin: shortPath(longPaths.hostBin),
+    dshBin: shortPath(longPaths.dshBin),
+    portableCli: shortPath(longPaths.portableCli),
+  }
+  assert.ok(Object.keys(longPaths).some((name) => layout[name].toLowerCase() !== longPaths[name].toLowerCase()))
+  assert.equal(isOwnedDshProcess({
+    executablePath: longPaths.nodeExe,
+    commandLine: `"${longPaths.nodeExe}" "${longPaths.hostBin}" "${longPaths.dshBin}" web --port 31234`,
+  }, layout, 31234), true)
+  assert.equal(isOwnedLauncherProcess({
+    executablePath: longPaths.nodeExe,
+    commandLine: `"${longPaths.nodeExe}" "${longPaths.portableCli}" start`,
+  }, layout), true)
+  assert.equal(isOwnedLauncherProcess({
+    executablePath: longPaths.nodeExe,
+    commandLine: `"${longPaths.nodeExe}" "${longPaths.portableCli}" start`,
+  }, { ...layout, portableCli: '' }), false)
 })
 
 test('launcher reclaims a dead lock but never bypasses a live owned launcher', async () => {

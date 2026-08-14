@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { existsSync, realpathSync } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import path from 'node:path'
@@ -85,16 +85,38 @@ function comparable(value, platform = process.platform) {
   return path.posix.resolve(source.replaceAll('\\', '/'))
 }
 
+function comparableAliases(value, platform = process.platform) {
+  const aliases = new Set([comparable(value, platform)])
+  if (platform !== 'win32' || !value) return aliases
+  try {
+    aliases.add(comparable(realpathSync.native(String(value)), platform))
+  } catch {
+    // A missing path cannot have a filesystem alias; retain the normalized input.
+  }
+  return aliases
+}
+
+function sameComparablePath(left, right, platform = process.platform) {
+  if (!left || !right) return false
+  const leftAliases = comparableAliases(left, platform)
+  return [...comparableAliases(right, platform)].some((alias) => leftAliases.has(alias))
+}
+
+function commandIncludesComparablePath(commandLine, expected, platform = process.platform) {
+  if (!expected) return false
+  return [...comparableAliases(expected, platform)].some((alias) => commandLine.includes(alias))
+}
+
 export function isOwnedDshProcess(processInfo, layout, port) {
   if (!processInfo) return false
   const platform = layout.platform ?? process.platform
   const commandLine = platform === 'win32'
     ? String(processInfo.commandLine ?? '').replaceAll('/', '\\').toLowerCase()
     : String(processInfo.commandLine ?? '').replaceAll('\\', '/')
-  if (processInfo.executablePath && comparable(processInfo.executablePath, platform) !== comparable(layout.nodeExe, platform)) return false
-  return commandLine.includes(comparable(layout.nodeExe, platform))
-    && commandLine.includes(comparable(layout.hostBin, platform))
-    && commandLine.includes(comparable(layout.dshBin, platform))
+  if (processInfo.executablePath && !sameComparablePath(processInfo.executablePath, layout.nodeExe, platform)) return false
+  return commandIncludesComparablePath(commandLine, layout.nodeExe, platform)
+    && commandIncludesComparablePath(commandLine, layout.hostBin, platform)
+    && commandIncludesComparablePath(commandLine, layout.dshBin, platform)
     && commandLine.includes(`--port ${Number(port)}`)
 }
 
@@ -104,9 +126,9 @@ export function isOwnedLauncherProcess(processInfo, layout) {
   const commandLine = platform === 'win32'
     ? String(processInfo.commandLine ?? '').replaceAll('/', '\\').toLowerCase()
     : String(processInfo.commandLine ?? '').replaceAll('\\', '/')
-  if (processInfo.executablePath && comparable(processInfo.executablePath, platform) !== comparable(layout.nodeExe, platform)) return false
-  return commandLine.includes(comparable(layout.nodeExe, platform))
-    && commandLine.includes(comparable(layout.portableCli, platform))
+  if (processInfo.executablePath && !sameComparablePath(processInfo.executablePath, layout.nodeExe, platform)) return false
+  return commandIncludesComparablePath(commandLine, layout.nodeExe, platform)
+    && commandIncludesComparablePath(commandLine, layout.portableCli, platform)
 }
 
 export function queryWindowsProcess(pid) {
