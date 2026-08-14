@@ -71,7 +71,13 @@ try {
         throw "installer exited with code $($Setup.ExitCode)"
     }
 
-    foreach ($Name in @('DeepSeek-Herness.exe', 'Stop DeepSeek-Herness.exe', 'installed-mode.json', 'unins000.exe')) {
+    foreach ($Name in @(
+        'DeepSeek-Herness.exe',
+        'Stop DeepSeek-Herness.exe',
+        'installed-mode.json',
+        'unins000.exe',
+        'app\node_modules\@earendil-works\pi-ai\dist\providers\data\amazon-bedrock.json'
+    )) {
         if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $Name))) { throw "installed file is missing: $Name" }
     }
 

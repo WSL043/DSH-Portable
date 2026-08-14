@@ -52,8 +52,19 @@ loaded.push('node-pty-spawn')
 const dshManifestPath = requireFromApp.resolve('@deepseek-ai/dsh/package.json')
 const dshManifest = JSON.parse(readFileSync(dshManifestPath, 'utf8'))
 const dshBin = path.join(path.dirname(dshManifestPath), 'lib', 'bin.js')
+const piAiProviderData = path.join(
+  appDir,
+  'node_modules',
+  '@earendil-works',
+  'pi-ai',
+  'dist',
+  'providers',
+  'data',
+  'amazon-bedrock.json',
+)
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
 assert.equal(existsSync(dshBin), true, `official DSH CLI is missing: ${dshBin}`)
+assert.equal(existsSync(piAiProviderData), true, `pi-ai provider data is missing: ${piAiProviderData}`)
 
 await new Promise((resolve) => {
   process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, loaded })}\n`, resolve)

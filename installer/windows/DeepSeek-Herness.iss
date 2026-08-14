@@ -40,7 +40,7 @@ VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043
 
 [Files]
-Source: "{#Stage}\*"; DestDir: "{app}"; Excludes: "data\*,workspace\*"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Stage}\*"; DestDir: "{app}"; Excludes: "\data\*,\workspace\*"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"

@@ -42,6 +42,7 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, 'example-package/dist/index.js.map')
   await fixtureFile(appDir, 'example-package/dist/index.d.mts')
   await fixtureFile(appDir, 'example-package/docs/runtime.js', 'export default true')
+  await fixtureFile(appDir, '@earendil-works/pi-ai/dist/providers/data/amazon-bedrock.json', '{"runtime":true}')
   await fixtureFile(appDir, 'example-package/examples/example.js')
   await fixtureFile(appDir, 'example-package/CHANGELOG.md')
   await fixtureFile(appDir, 'example-package/NOTICE.md', 'must remain too')
@@ -61,6 +62,7 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'example-package/dist/index.js',
     'example-package/.github/runtime.js',
     'example-package/docs/runtime.js',
+    '@earendil-works/pi-ai/dist/providers/data/amazon-bedrock.json',
     'example-package/NOTICE.md',
   ]) {
     assert.equal(await exists(path.join(appDir, 'node_modules', ...relative.split('/'))), true, relative)

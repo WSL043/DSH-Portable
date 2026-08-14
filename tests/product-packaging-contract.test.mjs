@@ -65,6 +65,7 @@ test('Windows setup is a per-user offline installer with durable data outside th
   const setup = await read('installer/windows/DeepSeek-Herness.iss')
   const build = await read('scripts/build-windows.ps1')
   const smoke = await read('scripts/smoke-windows-installer.ps1')
+  const verifyRuntime = await read('scripts/verify-runtime.mjs')
   assert.match(setup, /AppId=\{[^}]+\}/)
   assert.match(setup, /OutputBaseFilename=DeepSeek-Herness-Setup/)
   assert.match(setup, /DefaultDirName=\{localappdata\}\\Programs\\DeepSeek-Herness/)
@@ -72,6 +73,8 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(setup, /SetupIconFile=.*DSH-Portable\.ico/)
   assert.match(setup, /Compression=lzma2\/ultra64/)
   assert.match(setup, /Stop DeepSeek-Herness\.exe/)
+  assert.match(setup, /Excludes:\s*"\\data\\\*,\\workspace\\\*"/)
+  assert.doesNotMatch(setup, /Excludes:\s*"data\\\*,workspace\\\*"/)
   assert.match(setup, /RunOnceId:\s*"StopDeepSeekHerness"/)
   assert.match(build, /BuildInstaller/)
   assert.match(build, /ISCC/)
@@ -89,6 +92,8 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /Invoke-BoundedProcess/)
   assert.match(smoke, /WaitForExit/)
   assert.match(smoke, /LauncherDiagnostic/)
+  assert.match(smoke, /amazon-bedrock\.json/)
+  assert.match(verifyRuntime, /amazon-bedrock\.json/)
   for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Uninstall package']) {
     assert.match(smoke, new RegExp(stage))
   }
