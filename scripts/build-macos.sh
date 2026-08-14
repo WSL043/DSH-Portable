@@ -160,7 +160,7 @@ DMG_CREATE_ATTEMPTS=4
 DMG_CREATED=0
 for ((attempt = 1; attempt <= DMG_CREATE_ATTEMPTS; attempt++)); do
   rm -f "$DMG"
-  if hdiutil create -volname "DeepSeek-Herness" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null; then
+  if hdiutil create -volname "DeepSeek-Herness" -srcfolder "$DMG_ROOT" -ov -format ULMO "$DMG" >/dev/null; then
     DMG_CREATED=1
     break
   fi
