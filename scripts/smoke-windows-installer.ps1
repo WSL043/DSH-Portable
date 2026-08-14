@@ -7,17 +7,28 @@ $ErrorActionPreference = 'Stop'
 $Installer = [System.IO.Path]::GetFullPath($Installer)
 if (-not (Test-Path -LiteralPath $Installer)) { throw "Installer is missing: $Installer" }
 
-$TestId = [Guid]::NewGuid().ToString('N')
-$InstallRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("DeepSeek-Herness-installed-$TestId")
-$StateRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("DeepSeek-Herness-state-$TestId")
+$TestId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
+$TempRoot = [System.IO.Path]::GetTempPath()
+$InstallRoot = Join-Path $TempRoot ("dsh-i-$TestId")
+$StateRoot = Join-Path $TempRoot ("dsh-s-$TestId")
+$SetupLog = Join-Path $TempRoot ("dsh-setup-$TestId.log")
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
 
 try {
     $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
     $Setup = Start-Process -FilePath $Installer -ArgumentList @(
-        '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/DIR=$InstallRoot"
+        '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
+        "/DIR=$InstallRoot", "/LOG=$SetupLog"
     ) -PassThru -Wait
-    if ($Setup.ExitCode -ne 0) { throw "installer exited with code $($Setup.ExitCode)" }
+    if ($Setup.ExitCode -ne 0) {
+        Write-Host "Inno Setup exited with code $($Setup.ExitCode). Setup log follows:"
+        if (Test-Path -LiteralPath $SetupLog) {
+            Get-Content -LiteralPath $SetupLog -Tail 240 | ForEach-Object { Write-Host $_ }
+        } else {
+            Write-Host "Setup log was not created: $SetupLog"
+        }
+        throw "installer exited with code $($Setup.ExitCode)"
+    }
 
     foreach ($Name in @('DeepSeek-Herness.exe', 'Stop DeepSeek-Herness.exe', 'installed-mode.json', 'unins000.exe')) {
         if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $Name))) { throw "installed file is missing: $Name" }

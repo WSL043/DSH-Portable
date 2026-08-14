@@ -13,8 +13,8 @@ jobs:
   windows-x64:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
           cache: npm
@@ -37,7 +37,7 @@ jobs:
       - name: Install, run, stop, and uninstall Windows setup
         shell: powershell
         run: ./scripts/smoke-windows-installer.ps1
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: DSH-Portable-windows-x64-all
           path: |
@@ -46,6 +46,7 @@ jobs:
             artifacts/DeepSeek-Herness-Setup.exe
             artifacts/DeepSeek-Herness-Setup.exe.sha256
           if-no-files-found: error
+          compression-level: 0
 
   macos:
     strategy:
@@ -58,8 +59,8 @@ jobs:
             arch: x64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 24.19.0
           cache: npm
@@ -75,7 +76,7 @@ jobs:
           node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
       - name: Mount, install, run, stop, and remove macOS DMG
         run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: DSH-Portable-macos-${{ matrix.arch }}-all
           path: |
@@ -84,3 +85,4 @@ jobs:
             artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg
             artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg.sha256
           if-no-files-found: error
+          compression-level: 0

@@ -156,7 +156,22 @@ ln -s /Applications "$DMG_ROOT/Applications"
 
 DMG="$OUTPUT_DIR/DeepSeek-Herness-macos-$ARCH.dmg"
 rm -f "$DMG" "$DMG.sha256"
-hdiutil create -volname "DeepSeek-Herness" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null
+DMG_CREATE_ATTEMPTS=4
+DMG_CREATED=0
+for ((attempt = 1; attempt <= DMG_CREATE_ATTEMPTS; attempt++)); do
+  rm -f "$DMG"
+  if hdiutil create -volname "DeepSeek-Herness" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG" >/dev/null; then
+    DMG_CREATED=1
+    break
+  fi
+  if [[ "$attempt" -eq "$DMG_CREATE_ATTEMPTS" ]]; then
+    echo "hdiutil could not create the DMG after $DMG_CREATE_ATTEMPTS attempts" >&2
+    exit 1
+  fi
+  echo "hdiutil was temporarily unavailable; retrying DMG creation ($attempt/$DMG_CREATE_ATTEMPTS)" >&2
+  sleep $((attempt * 2))
+done
+[[ "$DMG_CREATED" -eq 1 && -f "$DMG" ]] || { echo "DMG was not created" >&2; exit 1; }
 DMG_HASH="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 printf '%s  %s\n' "$DMG_HASH" "$(basename "$DMG")" > "$DMG.sha256"
 

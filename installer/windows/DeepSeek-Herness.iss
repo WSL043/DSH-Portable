@@ -54,7 +54,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Filename: "{app}\DeepSeek-Herness.exe"; Description: "Start DeepSeek-Herness"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\Stop DeepSeek-Herness.exe"; Flags: runhidden waituntilterminated skipifdoesntexist
+Filename: "{app}\Stop DeepSeek-Herness.exe"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

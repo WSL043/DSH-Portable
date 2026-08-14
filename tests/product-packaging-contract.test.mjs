@@ -69,6 +69,7 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(setup, /SetupIconFile=.*DSH-Portable\.ico/)
   assert.match(setup, /Compression=lzma2\/ultra64/)
   assert.match(setup, /Stop DeepSeek-Herness\.exe/)
+  assert.match(setup, /RunOnceId:\s*"StopDeepSeekHerness"/)
   assert.match(build, /BuildInstaller/)
   assert.match(build, /ISCC/)
   assert.match(build, /subst\.exe/)
@@ -77,6 +78,11 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /DeepSeek-Herness-Setup\.exe/)
   assert.match(smoke, /DSH_PORTABLE_STATE_ROOT/)
   assert.match(smoke, /unins000\.exe/)
+  assert.match(smoke, /\/SP-/)
+  assert.match(smoke, /\/NOCANCEL/)
+  assert.match(smoke, /\/LOG=/)
+  assert.match(smoke, /Get-Content[\s\S]+SetupLog/)
+  assert.match(smoke, /dsh-i-/)
 })
 
 test('macOS package is a movable signed app shell for both supported architectures', async () => {
@@ -105,6 +111,9 @@ test('macOS DMG carries a self-contained app and keeps installed data outside it
   assert.match(installedApp, /Library\/Application Support\/DeepSeek-Herness/)
   assert.match(installedApp, /DSH_PORTABLE_STATE_ROOT/)
   assert.match(build, /hdiutil create/)
+  assert.match(build, /DMG_CREATE_ATTEMPTS/)
+  assert.match(build, /for \(\(attempt = 1;/)
+  assert.match(build, /rm -f "\$DMG"/)
   assert.match(build, /DeepSeek-Herness-macos-\$ARCH\.dmg/)
   assert.match(build, /Applications/)
   assert.match(build, /codesign --verify --deep --strict/)
@@ -118,7 +127,10 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /smoke-portable\.mjs/)
   assert.match(workflow, /tar\.exe -x -f artifacts\/DSH-Portable-windows-x64\.zip/)
   assert.doesNotMatch(workflow, /Expand-Archive/)
-  assert.match(workflow, /actions\/upload-artifact@v4/)
+  assert.match(workflow, /actions\/checkout@v6/)
+  assert.match(workflow, /actions\/setup-node@v6/)
+  assert.match(workflow, /actions\/upload-artifact@v6/)
+  assert.match(workflow, /compression-level:\s*0/)
 })
 
 test('Node runtime lock covers Windows and both Mac CPU families', async () => {
