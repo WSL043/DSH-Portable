@@ -109,12 +109,15 @@ test('macOS ownership uses the complete portable host command, not PID existence
 
 test('Windows process inspection preserves Unicode command-line paths', { skip: process.platform !== 'win32' }, async (t) => {
   const marker = 'USB 移动 后 DSH'
-  const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 10000)', marker], {
+  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 60000)', marker], {
     stdio: 'ignore',
     windowsHide: true,
   })
   t.after(() => child.kill())
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  await new Promise((resolve, reject) => {
+    child.once('spawn', resolve)
+    child.once('error', reject)
+  })
   const info = queryWindowsProcess(child.pid)
   assert.ok(info)
   assert.match(info.commandLine, new RegExp(marker))
