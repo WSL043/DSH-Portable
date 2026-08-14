@@ -34,6 +34,10 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
+      - name: Extract, run, move, and stop Windows portable self-extractor
+        shell: powershell
+        timeout-minutes: 15
+        run: ./scripts/smoke-windows-portable-extractor.ps1
       - name: Install, run, stop, and uninstall Windows setup
         shell: powershell
         timeout-minutes: 15
@@ -45,6 +49,8 @@ jobs:
           path: |
             artifacts/DSH-Portable-windows-x64.zip
             artifacts/DSH-Portable-windows-x64.zip.sha256
+            artifacts/DSH-Portable-windows-x64.exe
+            artifacts/DSH-Portable-windows-x64.exe.sha256
             artifacts/DeepSeek-Herness-Setup.exe
             artifacts/DeepSeek-Herness-Setup.exe.sha256
           if-no-files-found: error

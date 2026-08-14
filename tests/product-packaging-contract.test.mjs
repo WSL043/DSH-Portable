@@ -99,6 +99,39 @@ test('Windows setup is a per-user offline installer with durable data outside th
   }
 })
 
+test('Windows portable self-extractor stays offline, movable, and registration-free', async () => {
+  const extractor = await read('installer/windows/DSH-Portable.iss')
+  const build = await read('scripts/build-windows.ps1')
+  const smoke = await read('scripts/smoke-windows-portable-extractor.ps1')
+  const workflow = await read('.github/workflows/ci.yml')
+
+  assert.match(extractor, /AppName=DSH-Portable/)
+  assert.match(extractor, /OutputBaseFilename=DSH-Portable-windows-x64/)
+  assert.match(extractor, /DefaultDirName=\{src\}\\DSH-Portable/)
+  assert.match(extractor, /UsePreviousAppDir=no/)
+  assert.match(extractor, /Uninstallable=no/)
+  assert.match(extractor, /CreateUninstallRegKey=no/)
+  assert.match(extractor, /PrivilegesRequired=lowest/)
+  assert.match(extractor, /Compression=lzma2\/ultra64/)
+  assert.match(extractor, /Source:\s*"\{#Stage\}\\\*";\s*DestDir:\s*"\{app\}"/)
+  assert.doesNotMatch(extractor, /Excludes:/)
+  assert.doesNotMatch(extractor, /\[Icons\]|\[Registry\]|installed-mode\.json/i)
+
+  assert.match(build, /DSH-Portable-windows-x64\.exe/)
+  assert.match(build, /PortableExtractorSha256/)
+  assert.match(build, /installer\\windows\\DSH-Portable\.iss/)
+  assert.match(smoke, /DSH-Portable-windows-x64\.exe/)
+  assert.match(smoke, /\/DIR=/)
+  assert.match(smoke, /DSH Portable extracted ü/)
+  assert.match(smoke, /installed-mode\.json/)
+  assert.match(smoke, /unins\*\.exe/)
+  assert.match(smoke, /amazon-bedrock\.json/)
+  assert.match(smoke, /smoke-portable\.mjs/)
+  assert.match(workflow, /smoke-windows-portable-extractor\.ps1/)
+  assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe/)
+  assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe\.sha256/)
+})
+
 test('macOS package is a movable signed app shell for both supported architectures', async () => {
   const plist = await read('launcher/macos/Info.plist')
   const app = await read('launcher/macos/DSH-Portable')
