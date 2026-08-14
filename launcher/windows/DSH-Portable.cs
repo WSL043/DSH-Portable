@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -12,8 +13,8 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.1.0.5")]
-[assembly: AssemblyFileVersion("0.1.0.5")]
+[assembly: AssemblyVersion("0.1.0.6")]
+[assembly: AssemblyFileVersion("0.1.0.6")]
 
 namespace DshPortable
 {
@@ -22,11 +23,15 @@ namespace DshPortable
         private readonly Label statusLabel;
         private readonly ProgressBar progress;
         private readonly TextBox detailsBox;
+        private readonly Label updateDescription;
+        private readonly Button updateButton;
+        private readonly Button laterButton;
         private readonly Button copyButton;
         private readonly Button closeButton;
         private readonly string root;
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
+        private TaskCompletionSource<bool> updateChoice;
         private bool operationRunning = true;
 
         internal LauncherWindow(string[] args)
@@ -52,13 +57,33 @@ namespace DshPortable
             statusLabel.AutoEllipsis = true;
             statusLabel.Location = new Point(28, 26);
             statusLabel.Size = new Size(384, 48);
-            statusLabel.Text = IsStopCommand(launcherArgs) ? "Stopping DeepSeek-Herness…" : "Starting DeepSeek-Herness…";
+            statusLabel.Text = IsStopCommand(launcherArgs) ? "正在停止 DeepSeek Harness…" : "正在启动 DeepSeek Harness…";
 
             progress = new ProgressBar();
             progress.Location = new Point(28, 83);
             progress.Size = new Size(384, 8);
             progress.Style = ProgressBarStyle.Marquee;
             progress.MarqueeAnimationSpeed = 24;
+
+            updateDescription = new Label();
+            updateDescription.Location = new Point(28, 72);
+            updateDescription.Size = new Size(464, 48);
+            updateDescription.ForeColor = Color.FromArgb(80, 80, 80);
+            updateDescription.Visible = false;
+
+            updateButton = new Button();
+            updateButton.Text = "现在更新";
+            updateButton.Size = new Size(112, 34);
+            updateButton.Location = new Point(268, 132);
+            updateButton.Visible = false;
+            updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(true); };
+
+            laterButton = new Button();
+            laterButton.Text = "稍后";
+            laterButton.Size = new Size(96, 34);
+            laterButton.Location = new Point(392, 132);
+            laterButton.Visible = false;
+            laterButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(false); };
 
             detailsBox = new TextBox();
             detailsBox.Location = new Point(28, 64);
@@ -72,7 +97,7 @@ namespace DshPortable
             detailsBox.Visible = false;
 
             copyButton = new Button();
-            copyButton.Text = "Copy details";
+            copyButton.Text = "复制详情";
             copyButton.Size = new Size(116, 32);
             copyButton.Location = new Point(332, 244);
             copyButton.Visible = false;
@@ -85,12 +110,12 @@ namespace DshPortable
                 }
                 catch
                 {
-                    copyButton.Text = "Copy failed";
+                    copyButton.Text = "复制失败";
                 }
             };
 
             closeButton = new Button();
-            closeButton.Text = "Close";
+            closeButton.Text = "关闭";
             closeButton.Size = new Size(92, 32);
             closeButton.Location = new Point(320, 88);
             closeButton.Visible = false;
@@ -99,6 +124,9 @@ namespace DshPortable
 
             Controls.Add(statusLabel);
             Controls.Add(progress);
+            Controls.Add(updateDescription);
+            Controls.Add(updateButton);
+            Controls.Add(laterButton);
             Controls.Add(detailsBox);
             Controls.Add(copyButton);
             Controls.Add(closeButton);
@@ -121,6 +149,11 @@ namespace DshPortable
         private static bool IsStopCommand(string[] args)
         {
             return args.Length > 0 && string.Equals(args[0], "stop", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool IsStartCommand(string[] args)
+        {
+            return args.Length > 0 && string.Equals(args[0], "start", StringComparison.OrdinalIgnoreCase);
         }
 
         private static string QuoteArgument(string value)
@@ -152,7 +185,46 @@ namespace DshPortable
         {
             try
             {
-                Tuple<int, string> result = await Task.Run(() => InvokePortableCli());
+                string[] action = launcherArgs;
+                if (!nonInteractive && IsStartCommand(launcherArgs))
+                {
+                    statusLabel.Text = "正在检查更新…";
+                    Tuple<int, string> check = await Task.Run(() => InvokePortableCli(new[] { "check-update", "--json" }));
+                    if (check.Item1 == 0)
+                    {
+                        string updateStatus = JsonString(check.Item2, "status");
+                        string latest = JsonString(check.Item2, "latest");
+                        if (updateStatus == "available")
+                        {
+                            bool accepted = await ShowUpdateChoiceAsync(latest, false);
+                            if (accepted)
+                            {
+                                statusLabel.Text = "正在安全更新 DeepSeek Harness…";
+                                progress.Visible = true;
+                                action = new[] { "update", "--json" };
+                            }
+                            else
+                            {
+                                await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
+                                ResetOperationUi();
+                            }
+                        }
+                        else if (updateStatus == "full-package-required")
+                        {
+                            bool openDownload = await ShowUpdateChoiceAsync(latest, true);
+                            await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
+                            if (openDownload)
+                            {
+                                Process.Start(new ProcessStartInfo("https://github.com/WSL043/DSH-Portable/releases/latest") { UseShellExecute = true });
+                            }
+                            ResetOperationUi();
+                        }
+                        else ResetOperationUi();
+                    }
+                    else ResetOperationUi();
+                }
+
+                Tuple<int, string> result = await Task.Run(() => InvokePortableCli(action));
                 if (result.Item1 == 0)
                 {
                     operationRunning = false;
@@ -161,12 +233,53 @@ namespace DshPortable
                 }
                 HandleFailure(result.Item1, result.Item2.Length > 0
                     ? result.Item2
-                    : "DeepSeek-Herness could not complete the requested action.");
+                    : "DeepSeek Harness 无法完成请求的操作。");
             }
             catch (Exception error)
             {
                 HandleFailure(1, error.Message);
             }
+        }
+
+        private Task<bool> ShowUpdateChoiceAsync(string latest, bool fullPackage)
+        {
+            progress.Visible = false;
+            ClientSize = new Size(520, 190);
+            statusLabel.AutoEllipsis = false;
+            statusLabel.Size = new Size(464, 42);
+            statusLabel.Text = fullPackage
+                ? "此版本需要完整升级" + (String.IsNullOrEmpty(latest) ? "" : " · " + latest)
+                : "发现新版" + (String.IsNullOrEmpty(latest) ? "" : " · " + latest);
+            updateDescription.Text = fullPackage
+                ? "运行环境或启动器兼容边界已变化。当前版本仍可继续使用。"
+                : "仅下载已变更的 DSH 应用组件；设置、会话和工作区保持原位。";
+            updateDescription.Visible = true;
+            updateButton.Text = fullPackage ? "打开下载页" : "现在更新";
+            updateButton.Visible = true;
+            laterButton.Visible = true;
+            updateChoice = new TaskCompletionSource<bool>();
+            updateButton.Focus();
+            return updateChoice.Task;
+        }
+
+        private void ResetOperationUi()
+        {
+            updateChoice = null;
+            ClientSize = new Size(440, 138);
+            statusLabel.AutoEllipsis = true;
+            statusLabel.Location = new Point(28, 26);
+            statusLabel.Size = new Size(384, 48);
+            statusLabel.Text = IsStopCommand(launcherArgs) ? "正在停止 DeepSeek Harness…" : "正在启动 DeepSeek Harness…";
+            updateDescription.Visible = false;
+            updateButton.Visible = false;
+            laterButton.Visible = false;
+            progress.Visible = true;
+        }
+
+        private static string JsonString(string json, string name)
+        {
+            Match match = Regex.Match(json ?? String.Empty, "\\\"" + Regex.Escape(name) + "\\\"\\s*:\\s*\\\"(?<value>(?:\\\\.|[^\\\"])*)\\\"");
+            return match.Success ? Regex.Unescape(match.Groups["value"].Value) : String.Empty;
         }
 
         private void HandleFailure(int exitCode, string message)
@@ -196,7 +309,7 @@ namespace DshPortable
             }
         }
 
-        private Tuple<int, string> InvokePortableCli()
+        private Tuple<int, string> InvokePortableCli(string[] actionArgs)
         {
             string node = Path.Combine(root, "runtime", "node", "node.exe");
             string cli = Path.Combine(root, "launcher", "portable-cli.mjs");
@@ -204,7 +317,7 @@ namespace DshPortable
                 throw new InvalidOperationException("This DSH-Portable folder is incomplete. Extract the entire package before starting it.");
 
             StringBuilder arguments = new StringBuilder(QuoteArgument(cli));
-            foreach (string item in launcherArgs) arguments.Append(" ").Append(QuoteArgument(item));
+            foreach (string item in actionArgs) arguments.Append(" ").Append(QuoteArgument(item));
 
             ProcessStartInfo start = new ProcessStartInfo();
             start.FileName = node;
@@ -246,8 +359,8 @@ namespace DshPortable
             statusLabel.Location = new Point(28, 24);
             statusLabel.Size = new Size(544, 28);
             statusLabel.Text = IsStopCommand(launcherArgs)
-                ? "DeepSeek-Herness could not stop."
-                : "DeepSeek-Herness could not start.";
+                ? "DeepSeek Harness 停止失败。"
+                : "DeepSeek Harness 启动失败。";
             statusLabel.ForeColor = Color.FromArgb(178, 38, 38);
             detailsBox.Text = message ?? string.Empty;
             detailsBox.Visible = true;

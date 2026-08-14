@@ -38,6 +38,8 @@ jobs:
       - name: Build Windows portable and installer packages
         shell: powershell
         run: ./scripts/build-windows.ps1 -BuildInstaller -IsccPath $env:ISCC_PATH
+      - name: Verify Windows component update artifact
+        run: node scripts/verify-update-artifact.mjs artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
       - name: Download, extract, move, and reuse the lightweight Windows bootstrap
         run: node scripts/smoke-windows-bootstrap.mjs
       - name: Extract and smoke test Windows package
@@ -47,6 +49,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $Root | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          node scripts/smoke-update-artifact.mjs (Join-Path $Root 'DSH-Portable') artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
       - name: Extract, run, move, and stop Windows portable self-extractor
         shell: powershell
@@ -68,6 +71,9 @@ jobs:
             artifacts/DSH-Portable-windows-x64-offline.exe
             artifacts/DSH-Portable-windows-x64-offline.exe.sha256
             artifacts/portable-manifest.json
+            artifacts/DSH-Portable-update-windows-x64.zip
+            artifacts/DSH-Portable-update-windows-x64.zip.sha256
+            artifacts/portable-update-windows-x64.json
             artifacts/DeepSeek-Herness-Setup.exe
             artifacts/DeepSeek-Herness-Setup.exe.sha256
           if-no-files-found: error
@@ -93,11 +99,14 @@ jobs:
       - run: npm test
       - name: Build macOS portable package
         run: bash scripts/build-macos.sh "${{ matrix.arch }}"
+      - name: Verify macOS component update artifact
+        run: node scripts/verify-update-artifact.mjs "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
       - name: Extract and smoke test macOS package
         run: |
           ROOT="$RUNNER_TEMP/dsh-portable-smoke"
           mkdir -p "$ROOT"
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
+          node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
           node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
       - name: Mount, install, run, stop, and remove macOS DMG
         run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
@@ -108,6 +117,9 @@ jobs:
           path: |
             artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip
             artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip.sha256
+            artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip
+            artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip.sha256
+            artifacts/portable-update-macos-${{ matrix.arch }}.json
             artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg
             artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg.sha256
           if-no-files-found: error

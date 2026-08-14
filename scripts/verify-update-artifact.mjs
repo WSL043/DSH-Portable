@@ -1,0 +1,103 @@
+import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { createReadStream } from 'node:fs'
+import { readFile, stat } from 'node:fs/promises'
+import path from 'node:path'
+import { promisify } from 'node:util'
+
+import { validateArchiveEntries } from '../launcher/update-core.mjs'
+
+const execFileAsync = promisify(execFile)
+
+function fail(message) {
+  throw new Error(message)
+}
+
+function normalizedEntry(value) {
+  return String(value).replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '')
+}
+
+async function sha256(filename) {
+  const digest = createHash('sha256')
+  for await (const chunk of createReadStream(filename)) digest.update(chunk)
+  return digest.digest('hex')
+}
+
+async function archiveText(archive, rawEntry) {
+  const tar = process.platform === 'win32' ? 'tar.exe' : 'tar'
+  const result = await execFileAsync(tar, ['-x', '-O', '-f', archive, rawEntry], {
+    encoding: 'utf8',
+    maxBuffer: 4 * 1024 * 1024,
+    windowsHide: true,
+  })
+  return result.stdout
+}
+
+async function main() {
+  const [manifestFile, archive] = process.argv.slice(2)
+  if (!manifestFile || !archive) fail('Usage: node scripts/verify-update-artifact.mjs <manifest.json> <component.zip>')
+
+  const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+  if (manifest.schemaVersion !== 1 || !manifest.portableVersion || !manifest.platform) fail('Update manifest is incomplete.')
+  if (manifest.minimumUpdaterSchema !== 1 || manifest.requiredShellSchema !== 1) fail('Update compatibility metadata is incomplete.')
+  const component = manifest.component
+  if (!component || component.kind !== 'dsh-app' || !component.requiredNodeVersion) fail('Update component metadata is incomplete.')
+
+  const archiveInfo = await stat(archive)
+  if (archiveInfo.size !== Number(component.bytes)) fail(`component size mismatch: expected ${component.bytes}, received ${archiveInfo.size}`)
+  const actualDigest = await sha256(archive)
+  if (actualDigest !== String(component.sha256).toLowerCase()) fail(`component digest mismatch: expected ${component.sha256}, received ${actualDigest}`)
+
+  const archiveName = path.basename(archive)
+  const declaredNames = (component.urls ?? []).map((value) => path.basename(new URL(value).pathname))
+  if (!declaredNames.includes(archiveName)) fail(`Update manifest does not publish ${archiveName}.`)
+
+  const tar = process.platform === 'win32' ? 'tar.exe' : 'tar'
+  const listed = await execFileAsync(tar, ['-t', '-f', archive], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, windowsHide: true })
+  const rawEntries = listed.stdout.split(/\r?\n/).filter(Boolean)
+  validateArchiveEntries(rawEntries)
+  const entryMap = new Map(rawEntries.map((entry) => [normalizedEntry(entry), entry]))
+  for (const required of [
+    'component.json',
+    'app/package.json',
+    'licenses/COMPONENTS.json',
+    'licenses/DeepSeek-Harness-LICENSE.txt',
+    'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+  ]) {
+    if (!entryMap.has(required)) fail(`Update archive is missing ${required}.`)
+  }
+  if (![...entryMap.keys()].some((entry) => entry.startsWith('app/node_modules/@deepseek-ai/dsh/'))) {
+    fail('Update archive contains no DeepSeek Harness runtime.')
+  }
+
+  const embedded = JSON.parse(await archiveText(archive, entryMap.get('component.json')))
+  const components = JSON.parse(await archiveText(archive, entryMap.get('licenses/COMPONENTS.json')))
+  for (const [field, expected] of Object.entries({
+    kind: component.kind,
+    portableVersion: manifest.portableVersion,
+    dshVersion: component.dshVersion,
+    dshCommit: component.dshCommit,
+  })) {
+    if (embedded[field] !== expected) fail(`Embedded component ${field} does not match the manifest.`)
+  }
+  if (components.portableVersion !== manifest.portableVersion
+    || components.dshVersion !== component.dshVersion
+    || components.dshCommit !== component.dshCommit
+    || components.platform !== manifest.platform
+    || components.nodeVersion !== component.requiredNodeVersion
+    || Number(components.updaterSchema) < Number(manifest.minimumUpdaterSchema)
+    || Number(components.shellSchema) < Number(manifest.requiredShellSchema)) {
+    fail('Installed component metadata does not match the update manifest.')
+  }
+
+  process.stdout.write(`${JSON.stringify({
+    status: 'verified',
+    platform: manifest.platform,
+    portableVersion: manifest.portableVersion,
+    dshVersion: component.dshVersion,
+    bytes: archiveInfo.size,
+    sha256: actualDigest,
+  })}\n`)
+}
+
+await main()

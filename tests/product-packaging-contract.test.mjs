@@ -52,6 +52,29 @@ test('Simplified Chinese is the default GitHub landing page and English is a com
   assert.doesNotMatch(english, /三步启动|下载 Windows|便携数据与安全/)
 })
 
+test('update guidance describes the component update path without exposing internals', async () => {
+  const chinese = await read('README.md')
+  const english = await read('README.en.md')
+  const userReadme = await read('templates/USER-README.txt')
+  const releaseNotes = await read('templates/RELEASE-NOTES.md')
+
+  assert.match(chinese, /启动时检查更新/)
+  assert.match(chinese, /只下载.+DSH.+组件/s)
+  assert.match(chinese, /会话、设置、凭据和工作区.+保留/s)
+  assert.match(chinese, /兼容性变化.+完整安装包/s)
+  assert.match(english, /checks for updates when it starts/i)
+  assert.match(english, /downloads only the changed DSH application component/i)
+  assert.match(english, /sessions, settings, credentials, and workspace remain in place/i)
+  assert.match(english, /compatibility boundary changes.+complete package/is)
+
+  assert.match(userReadme, /^DSH-Portable\r?\n=+\r?\n\r?\n中文/m)
+  assert.match(userReadme, /只下载.+DSH.+组件/s)
+  assert.match(userReadme, /English[\s\S]+downloads only\s+the changed DSH application component/i)
+  assert.match(releaseNotes, /启动时检查更新/)
+  assert.match(releaseNotes, /旧版本.+手动下载本版本一次.+后续.+启动器/s)
+  assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
+})
+
 test('release notes prioritize downloads and keep verification optional', async () => {
   const notes = await read('templates/RELEASE-NOTES.md')
   assert.match(notes, /^>\s+打包官方 DeepSeek Harness 预览版/m)
@@ -101,8 +124,15 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(source, /new TextBox\(\)/)
   assert.match(source, /ScrollBars\.Vertical/)
   assert.match(source, /try\s*\{\s*Clipboard\.SetText/s)
-  assert.match(source, /IsStopCommand\(launcherArgs\)[\s\S]+could not stop[\s\S]+could not start/)
+  assert.match(source, /IsStopCommand\(launcherArgs\)[\s\S]+停止失败[\s\S]+启动失败/)
   assert.match(source, /CancelButton\s*=\s*closeButton/)
+  assert.match(source, /check-update/)
+  assert.match(source, /defer-update/)
+  assert.match(source, /现在更新/)
+  assert.match(source, /稍后/)
+  assert.match(source, /仅下载已变更的 DSH 应用组件/)
+  assert.match(source, /full-package-required/)
+  assert.ok(source.indexOf('check-update') < source.indexOf('new[] { "update"'), 'the launcher must check before it can request an update')
   assert.doesNotMatch(source, /AppData|Program Files|USERPROFILE/i)
   assert.match(manifest, /requestedExecutionLevel level="asInvoker"/)
   assert.match(manifest, /longPathAware[^>]*>true</)
@@ -113,9 +143,19 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /DSH-Portable-windows-x64-offline\.zip/)
   assert.match(build, /DSH-Bootstrap\.cs/)
   assert.match(build, /portable-manifest\.json/)
+  assert.match(build, /update-core\.mjs/)
+  assert.match(build, /DSH-UpdateExtractor\.cs/)
+  assert.match(build, /DSH-Portable-update-windows-x64\.zip/)
+  assert.match(build, /portable-update-windows-x64\.json/)
+  assert.match(build, /updaterSchema/)
+  assert.match(build, /shellSchema/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
+
+  const cli = await read('launcher/portable-cli.mjs')
+  assert.match(cli, /rollbackPendingAppUpdate\(layout,\s*\{[\s\S]+beforeRestore:[\s\S]+ownedState\(current\)[\s\S]+await stop\(\)/)
+  assert.match(cli, /catch \(error\) \{[\s\S]+await deferUpdate\(layout\)\.catch/)
 })
 
 test('Windows setup is a per-user offline installer with durable data outside the app', async () => {
@@ -202,6 +242,8 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.match(workflow, /artifacts\/DSH-Portable-windows-x64\.exe\.sha256/)
   assert.match(workflow, /artifacts\/DSH-Portable-windows-x64-offline\.exe/)
   assert.match(workflow, /artifacts\/portable-manifest\.json/)
+  assert.match(workflow, /artifacts\/DSH-Portable-update-windows-x64\.zip/)
+  assert.match(workflow, /artifacts\/portable-update-windows-x64\.json/)
 })
 
 test('macOS package is a movable signed app shell for both supported architectures', async () => {
@@ -221,6 +263,11 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.doesNotMatch(build, /npm[^\n]+ci --prefix/)
   assert.match(build, /codesign --force --deep --sign -/)
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
+  assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
+  assert.match(build, /portable-update-macos-\$ARCH\.json/)
+  assert.match(app, /check-update/)
+  assert.match(app, /defer-update/)
+  assert.doesNotMatch(app, /\$\(\$NODE\b/)
 })
 
 test('macOS DMG carries a self-contained app and keeps installed data outside its signature', async () => {
@@ -229,6 +276,7 @@ test('macOS DMG carries a self-contained app and keeps installed data outside it
   assert.match(installedApp, /Contents\/Resources/)
   assert.match(installedApp, /Library\/Application Support\/DeepSeek-Herness/)
   assert.match(installedApp, /DSH_PORTABLE_STATE_ROOT/)
+  assert.doesNotMatch(installedApp, /\$\(\$NODE\b/)
   assert.match(build, /hdiutil create/)
   assert.match(build, /-format ULMO/)
   assert.doesNotMatch(build, /-format ULFO/)
@@ -244,6 +292,7 @@ test('macOS DMG carries a self-contained app and keeps installed data outside it
 test('CI executes contracts and real package smoke tests on Windows and both Mac architectures', async () => {
   const workflow = await read('.github/workflows/ci.yml')
   const bootstrapSmoke = await read('scripts/smoke-windows-bootstrap.mjs')
+  const updateSmoke = await read('scripts/smoke-update-artifact.mjs')
   for (const runner of ['windows-latest', 'macos-15', 'macos-15-intel']) assert.match(workflow, new RegExp(runner))
   assert.match(workflow, /build-windows\.ps1/)
   assert.match(workflow, /build-macos\.sh/)
@@ -267,6 +316,16 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(bootstrapSmoke, /\.dsh-portable-install-/)
   assert.match(bootstrapSmoke, /maxRetries:\s*40/)
   assert.match(bootstrapSmoke, /process\.env\.CI/)
+  assert.match(workflow, /DSH-Portable-update-macos-\$\{\{ matrix\.arch \}\}\.zip/)
+  assert.match(workflow, /portable-update-macos-\$\{\{ matrix\.arch \}\}\.json/)
+  assert.match(workflow, /verify-update-artifact\.mjs/)
+  assert.match(workflow, /smoke-update-artifact\.mjs/)
+  assert.match(updateSmoke, /rollbackVerified/)
+  assert.match(updateSmoke, /Update failed and was rolled back|rolled back/i)
+  assert.ok(
+    workflow.indexOf('node scripts/smoke-update-artifact.mjs') < workflow.indexOf('node scripts/smoke-portable.mjs'),
+    'the update smoke must run before the movable-root smoke renames the package',
+  )
 })
 
 test('Node runtime lock covers Windows and both Mac CPU families', async () => {

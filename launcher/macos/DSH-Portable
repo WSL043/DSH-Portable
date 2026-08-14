@@ -15,11 +15,53 @@ if [[ ! -x "$NODE" || ! -f "$CLI" ]]; then
   exit 1
 fi
 
+json_value() {
+  "$NODE" -e 'try { const value = JSON.parse(process.argv[1])[process.argv[2]]; if (value != null) process.stdout.write(String(value)); } catch {}' "$1" "$2"
+}
+
+choose_update() {
+  export DSH_UPDATE_BODY="$1"
+  export DSH_UPDATE_ACCEPT="$2"
+  /usr/bin/osascript <<'APPLESCRIPT'
+try
+  set response to display dialog (system attribute "DSH_UPDATE_BODY") with title "DSH-Portable 更新" buttons {"稍后", (system attribute "DSH_UPDATE_ACCEPT")} default button (system attribute "DSH_UPDATE_ACCEPT") cancel button "稍后"
+  return button returned of response
+on error number -128
+  return "稍后"
+end try
+APPLESCRIPT
+}
+
+if [[ "${DSH_PORTABLE_NO_BROWSER:-0}" != "1" ]]; then
+  CHECK_OUTPUT="$("$NODE" "$CLI" check-update --json 2>/dev/null || true)"
+  UPDATE_STATUS="$(json_value "$CHECK_OUTPUT" status)"
+  UPDATE_VERSION="$(json_value "$CHECK_OUTPUT" latest)"
+  if [[ "$UPDATE_STATUS" == "available" ]]; then
+    CHOICE="$(choose_update "发现 DSH-Portable $UPDATE_VERSION。只下载已变化的 DeepSeek Harness 应用组件；设置、会话和工作区保持原位。" "现在更新")"
+    if [[ "$CHOICE" == "现在更新" ]]; then
+      OUTPUT="$("$NODE" "$CLI" update 2>&1)"
+      STATUS=$?
+      if [[ $STATUS -ne 0 ]]; then
+        export DSH_PORTABLE_ERROR="$OUTPUT"
+        /usr/bin/osascript -e 'display dialog (system attribute "DSH_PORTABLE_ERROR") with title "DSH-Portable 更新失败" buttons {"关闭"} default button "关闭" with icon stop'
+      fi
+      exit $STATUS
+    fi
+    "$NODE" "$CLI" defer-update --json >/dev/null 2>&1 || true
+  elif [[ "$UPDATE_STATUS" == "full-package-required" ]]; then
+    CHOICE="$(choose_update "发现 DSH-Portable $UPDATE_VERSION，但运行环境或启动器兼容边界已变化。当前版本仍可继续使用。" "打开下载页")"
+    "$NODE" "$CLI" defer-update --json >/dev/null 2>&1 || true
+    if [[ "$CHOICE" == "打开下载页" ]]; then
+      /usr/bin/open "https://github.com/WSL043/DSH-Portable/releases/latest"
+    fi
+  fi
+fi
+
 CLI_ARGS=(start)
 if [[ "${DSH_PORTABLE_NO_BROWSER:-0}" == "1" ]]; then
   CLI_ARGS+=(--no-browser --json)
 fi
-OUTPUT="$($NODE "$CLI" "${CLI_ARGS[@]}" 2>&1)"
+OUTPUT="$("$NODE" "$CLI" "${CLI_ARGS[@]}" 2>&1)"
 STATUS=$?
 if [[ $STATUS -ne 0 ]]; then
   export DSH_PORTABLE_ERROR="$OUTPUT"

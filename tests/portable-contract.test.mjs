@@ -78,14 +78,34 @@ test('browser app profile moves with the portable folder', () => {
 })
 
 test('CLI defaults to start and supports bounded automation flags', () => {
-  assert.deepEqual(parseCli([]), { command: 'start', noBrowser: false, json: false })
+  assert.deepEqual(parseCli([]), {
+    command: 'start',
+    noBrowser: false,
+    json: false,
+    allowHttp: false,
+    force: false,
+    updateManifest: '',
+  })
   assert.deepEqual(parseCli(['start', '--no-browser', '--json']), {
     command: 'start',
     noBrowser: true,
     json: true,
+    allowHttp: false,
+    force: false,
+    updateManifest: '',
   })
+  assert.deepEqual(parseCli(['check-update', '--json', '--force', '--allow-http', '--update-manifest', 'http://127.0.0.1/update.json']), {
+    command: 'check-update',
+    noBrowser: false,
+    json: true,
+    allowHttp: true,
+    force: true,
+    updateManifest: 'http://127.0.0.1/update.json',
+  })
+  assert.equal(parseCli(['defer-update', '--json']).command, 'defer-update')
   assert.throws(() => parseCli(['start', 'stop']), /more than one command/)
   assert.throws(() => parseCli(['erase-data']), /Unknown command/)
+  assert.throws(() => parseCli(['--update-manifest']), /requires a value/)
 })
 
 test('a stale or recycled PID is never treated as our DSH host', () => {

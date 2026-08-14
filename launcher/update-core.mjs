@@ -1,0 +1,468 @@
+import { execFile } from 'node:child_process'
+import { createHash, randomUUID } from 'node:crypto'
+import { createWriteStream, existsSync } from 'node:fs'
+import { mkdir, readFile, rename, rm } from 'node:fs/promises'
+import path from 'node:path'
+import { Readable, Transform } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
+import { promisify } from 'node:util'
+
+import { writeJsonAtomic } from './portable-core.mjs'
+
+export const UPDATE_SCHEMA_VERSION = 1
+export const UPDATE_CHECK_TTL_MS = 12 * 60 * 60 * 1000
+export const UPDATE_FAILURE_TTL_MS = 60 * 60 * 1000
+const execFileAsync = promisify(execFile)
+const UPDATE_LICENSE_FILES = [
+  'COMPONENTS.json',
+  'DeepSeek-Harness-LICENSE.txt',
+  'DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+]
+
+export function platformUpdateKey(platform = process.platform, arch = process.arch) {
+  if (platform === 'win32' && arch === 'x64') return 'windows-x64'
+  if (platform === 'darwin' && ['arm64', 'x64'].includes(arch)) return `macos-${arch}`
+  throw new Error(`Unsupported update platform: ${platform}-${arch}`)
+}
+
+export function defaultUpdateManifestUrl(platform = process.platform, arch = process.arch) {
+  return `https://github.com/WSL043/DSH-Portable/releases/latest/download/portable-update-${platformUpdateKey(platform, arch)}.json`
+}
+
+function parseSemanticVersion(value) {
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(String(value ?? ''))
+  if (!match) throw new Error(`${value} is not a valid semantic version.`)
+  const portablePreview = /^rc\.(\d+)-portable\.(\d+)$/.exec(match[4] ?? '')
+  return {
+    core: match.slice(1, 4).map(Number),
+    prerelease: portablePreview
+      ? ['rc', portablePreview[1], 'portable', portablePreview[2]]
+      : match[4] ? match[4].split('.') : null,
+  }
+}
+
+function compareIdentifier(left, right) {
+  const leftNumeric = /^\d+$/.test(left)
+  const rightNumeric = /^\d+$/.test(right)
+  if (leftNumeric && rightNumeric) return Number(left) === Number(right) ? 0 : Number(left) < Number(right) ? -1 : 1
+  if (leftNumeric !== rightNumeric) return leftNumeric ? -1 : 1
+  return left === right ? 0 : left < right ? -1 : 1
+}
+
+export function comparePortableVersions(leftValue, rightValue) {
+  const left = parseSemanticVersion(leftValue)
+  const right = parseSemanticVersion(rightValue)
+  for (let index = 0; index < 3; index += 1) {
+    if (left.core[index] !== right.core[index]) return left.core[index] < right.core[index] ? -1 : 1
+  }
+  if (!left.prerelease || !right.prerelease) {
+    if (!left.prerelease && !right.prerelease) return 0
+    return left.prerelease ? -1 : 1
+  }
+  const length = Math.max(left.prerelease.length, right.prerelease.length)
+  for (let index = 0; index < length; index += 1) {
+    if (left.prerelease[index] === undefined) return -1
+    if (right.prerelease[index] === undefined) return 1
+    const compared = compareIdentifier(left.prerelease[index], right.prerelease[index])
+    if (compared) return compared
+  }
+  return 0
+}
+
+function assertManifestShape(manifest) {
+  if (!manifest || manifest.schemaVersion !== UPDATE_SCHEMA_VERSION) throw new Error('Unsupported update manifest schema.')
+  if (!manifest.portableVersion || !manifest.platform) throw new Error('Update manifest is incomplete.')
+  if (!Number.isSafeInteger(Number(manifest.minimumUpdaterSchema)) || Number(manifest.minimumUpdaterSchema) < 1
+    || !Number.isSafeInteger(Number(manifest.requiredShellSchema)) || Number(manifest.requiredShellSchema) < 1) {
+    throw new Error('Update manifest compatibility metadata is invalid.')
+  }
+  parseSemanticVersion(manifest.portableVersion)
+}
+
+export function evaluateUpdate(manifest, installed, platform) {
+  assertManifestShape(manifest)
+  if (manifest.platform !== platform) return { status: 'wrong-platform', current: installed.portableVersion, latest: manifest.portableVersion }
+  if (comparePortableVersions(installed.portableVersion, manifest.portableVersion) >= 0) {
+    return { status: 'current', current: installed.portableVersion, latest: manifest.portableVersion }
+  }
+  if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0) || manifest.component?.kind !== 'dsh-app') {
+    return { status: 'full-package-required', current: installed.portableVersion, latest: manifest.portableVersion }
+  }
+  const component = manifest.component
+  if (
+    Number(manifest.requiredShellSchema ?? 0) > Number(installed.shellSchema ?? 0)
+    || !component.requiredNodeVersion
+    || component.requiredNodeVersion !== installed.nodeVersion
+  ) {
+    return { status: 'full-package-required', current: installed.portableVersion, latest: manifest.portableVersion }
+  }
+  if (!component.dshVersion || !Array.isArray(component.urls) || component.urls.length === 0) throw new Error('Update component is incomplete.')
+  if (!Number.isSafeInteger(Number(component.bytes)) || Number(component.bytes) <= 0) throw new Error('Update component size is invalid.')
+  if (!/^[a-f0-9]{64}$/i.test(String(component.sha256 ?? ''))) throw new Error('Update component digest is invalid.')
+  return {
+    status: 'available',
+    current: installed.portableVersion,
+    latest: manifest.portableVersion,
+    platform: manifest.platform,
+    minimumUpdaterSchema: Number(manifest.minimumUpdaterSchema),
+    requiredShellSchema: Number(manifest.requiredShellSchema),
+    component,
+  }
+}
+
+function validateRemoteUrl(value, allowHttp) {
+  const url = new URL(value)
+  if (url.protocol === 'https:') return url
+  if (allowHttp && url.protocol === 'http:') return url
+  throw new Error(`Update URL must use HTTPS: ${url}`)
+}
+
+export async function downloadVerifiedComponent({
+  urls,
+  destination,
+  bytes,
+  sha256,
+  allowHttp = false,
+  fetchImpl = fetch,
+  timeoutMs = 120000,
+}) {
+  if (!Array.isArray(urls) || urls.length === 0) throw new Error('No update download routes are available.')
+  await mkdir(path.dirname(destination), { recursive: true })
+  const failures = []
+  for (let index = 0; index < urls.length; index += 1) {
+    const url = validateRemoteUrl(urls[index], allowHttp)
+    const temporary = `${destination}.route-${process.pid}-${index}.part`
+    await rm(temporary, { force: true })
+    const controller = new AbortController()
+    let timer
+    const armInactivityTimeout = () => {
+      clearTimeout(timer)
+      timer = setTimeout(() => controller.abort(), timeoutMs)
+    }
+    armInactivityTimeout()
+    try {
+      const response = await fetchImpl(url, { signal: controller.signal, redirect: 'follow' })
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
+      const digest = createHash('sha256')
+      let received = 0
+      const meter = new Transform({
+        transform(chunk, _encoding, callback) {
+          armInactivityTimeout()
+          received += chunk.length
+          if (received > Number(bytes)) {
+            callback(new Error(`component size exceeds the declared ${bytes} bytes`))
+            return
+          }
+          digest.update(chunk)
+          callback(null, chunk)
+        },
+      })
+      await pipeline(Readable.fromWeb(response.body), meter, createWriteStream(temporary, { flags: 'wx' }))
+      if (received !== Number(bytes)) throw new Error(`component size mismatch: expected ${bytes}, received ${received}`)
+      const actual = digest.digest('hex')
+      if (actual !== String(sha256).toLowerCase()) throw new Error(`component digest mismatch: expected ${sha256}, received ${actual}`)
+      await rm(destination, { force: true })
+      await rename(temporary, destination)
+      return { bytes: received, sha256: actual, url: url.toString() }
+    } catch (error) {
+      failures.push(`${url}: ${error?.message ?? error}`)
+      await rm(temporary, { force: true }).catch(() => {})
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  throw new Error(`Update download failed: ${failures.join(' | ')}`)
+}
+
+export function validateArchiveEntries(entries) {
+  const allowedLicenses = new Set([
+    'licenses/COMPONENTS.json',
+    'licenses/DeepSeek-Harness-LICENSE.txt',
+    'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+  ])
+  for (const rawEntry of entries) {
+    const source = String(rawEntry ?? '').replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '')
+    if (!source || source === '.') continue
+    const segments = source.split('/')
+    if (source.startsWith('/') || /^[A-Za-z]:/.test(source) || segments.includes('..') || source.includes('\0')) {
+      throw new Error(`Unsafe update archive entry: ${rawEntry}`)
+    }
+    if (source === 'component.json' || source === 'app' || source.startsWith('app/') || source === 'licenses' || allowedLicenses.has(source)) continue
+    throw new Error(`Update archive entry is not allowed: ${rawEntry}`)
+  }
+}
+
+export async function extractUpdateArchive(archive, stagedRoot, {
+  platform = process.platform,
+  exec = execFileAsync,
+  windowsExtractor = path.join(import.meta.dirname, 'DSH-UpdateExtractor.exe'),
+} = {}) {
+  if (platform === 'win32') {
+    if (!existsSync(windowsExtractor)) throw new Error('Windows update extractor is missing.')
+    await exec(windowsExtractor, [archive, stagedRoot], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true })
+    return stagedRoot
+  }
+  const listed = await exec('tar', ['-t', '-f', archive], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+  validateArchiveEntries(String(listed.stdout ?? listed).split(/\r?\n/))
+  await mkdir(path.dirname(stagedRoot), { recursive: true })
+  await exec('ditto', ['-x', '-k', archive, stagedRoot], { encoding: 'utf8' })
+  return stagedRoot
+}
+
+async function readJson(filename, fallback = null) {
+  try {
+    return JSON.parse(await readFile(filename, 'utf8'))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return fallback
+    throw error
+  }
+}
+
+async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs }) {
+  const url = validateRemoteUrl(urlValue, allowHttp)
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const response = await fetchImpl(url, { signal: controller.signal, redirect: 'follow' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    const declared = Number(response.headers.get('content-length') ?? 0)
+    if (declared > 256 * 1024) throw new Error('Update manifest is too large.')
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length > 256 * 1024) throw new Error('Update manifest is too large.')
+    return JSON.parse(bytes.toString('utf8'))
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+export async function readInstalledUpdateState(layout) {
+  const components = await readJson(path.join(layout.root, 'licenses', 'COMPONENTS.json'), null)
+  if (!components?.portableVersion || !components?.dshVersion) throw new Error('Installed component metadata is missing or incomplete.')
+  return {
+    portableVersion: components.portableVersion,
+    dshVersion: components.dshVersion,
+    updaterSchema: Number(components.updaterSchema ?? 0),
+    shellSchema: Number(components.shellSchema ?? 0),
+    nodeVersion: components.nodeVersion ?? '',
+  }
+}
+
+export async function checkForUpdate({
+  layout,
+  manifestUrl = defaultUpdateManifestUrl(layout.platform),
+  allowHttp = false,
+  force = false,
+  fetchImpl = fetch,
+  timeoutMs = 5000,
+  now = Date.now(),
+}) {
+  const installed = await readInstalledUpdateState(layout)
+  const platform = platformUpdateKey(layout.platform, process.arch)
+  const cached = await readJson(layout.updateCheckCache, null)
+  if (!force && cached?.manifestUrl === manifestUrl && cached?.retryAfter > now) {
+    return { status: 'unavailable', current: installed.portableVersion, cached: true, checkedAt: cached.checkedAt, message: cached.error }
+  }
+  if (!force && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
+    const evaluated = evaluateUpdate(cached.manifest, installed, platform)
+    if (evaluated.status === 'available' && cached.deferredUntil > now) {
+      return { ...evaluated, status: 'deferred', cached: true, checkedAt: cached.checkedAt, deferredUntil: cached.deferredUntil }
+    }
+    return { ...evaluated, cached: true, checkedAt: cached.checkedAt }
+  }
+  try {
+    const manifest = await fetchJson(manifestUrl, { allowHttp, fetchImpl, timeoutMs })
+    const result = evaluateUpdate(manifest, installed, platform)
+    const deferredUntil = cached?.manifest?.portableVersion === manifest.portableVersion ? Number(cached.deferredUntil ?? 0) : 0
+    await writeJsonAtomic(layout.updateCheckCache, { schemaVersion: 1, checkedAt: now, manifestUrl, manifest, deferredUntil })
+    if (!force && result.status === 'available' && deferredUntil > now) {
+      return { ...result, status: 'deferred', cached: false, checkedAt: now, deferredUntil }
+    }
+    return { ...result, cached: false, checkedAt: now }
+  } catch (error) {
+    const message = error?.message ?? String(error)
+    await writeJsonAtomic(layout.updateCheckCache, {
+      schemaVersion: 1,
+      checkedAt: now,
+      manifestUrl,
+      error: message,
+      retryAfter: now + UPDATE_FAILURE_TTL_MS,
+    }).catch(() => {})
+    return {
+      status: 'unavailable',
+      current: installed.portableVersion,
+      cached: false,
+      checkedAt: now,
+      message,
+    }
+  }
+}
+
+export async function deferUpdate(layout, { now = Date.now(), durationMs = 24 * 60 * 60 * 1000 } = {}) {
+  const cached = await readJson(layout.updateCheckCache, null)
+  if (!cached?.manifest) return { status: 'none' }
+  const deferredUntil = now + Math.max(60 * 1000, Number(durationMs) || 0)
+  await writeJsonAtomic(layout.updateCheckCache, { ...cached, deferredUntil })
+  return { status: 'deferred', latest: cached.manifest.portableVersion, deferredUntil }
+}
+
+function operationFromStage(layout, stagedRoot) {
+  const operationRoot = path.dirname(path.resolve(stagedRoot))
+  const relative = path.relative(path.resolve(layout.updateDir), operationRoot)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative) || relative.includes(path.sep)) {
+    throw new Error('Update staging directory is outside the product update area.')
+  }
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(relative)) throw new Error('Update operation identifier is invalid.')
+  return { operationId: relative, operationRoot }
+}
+
+function transactionPaths(layout, operationId) {
+  const operationRoot = path.join(layout.updateDir, operationId)
+  const backupRoot = path.join(operationRoot, 'backup')
+  return {
+    operationRoot,
+    backupApp: path.join(backupRoot, 'app'),
+    backupLicenses: path.join(backupRoot, 'licenses'),
+    rootLicenses: path.join(layout.root, 'licenses'),
+  }
+}
+
+async function writeJournal(layout, value) {
+  await writeJsonAtomic(layout.updateJournal, { schemaVersion: UPDATE_SCHEMA_VERSION, ...value })
+}
+
+export async function rollbackPendingAppUpdate(layout, { beforeRestore = async () => {} } = {}) {
+  const journal = await readJson(layout.updateJournal, null)
+  if (!journal) return { status: 'none' }
+  if (journal.schemaVersion !== UPDATE_SCHEMA_VERSION || !/^[A-Za-z0-9._-]{1,100}$/.test(String(journal.operationId ?? ''))) {
+    throw new Error('Update recovery journal is invalid.')
+  }
+  const paths = transactionPaths(layout, journal.operationId)
+  if (journal.phase === 'committed') {
+    await rm(paths.operationRoot, { recursive: true, force: true })
+    await rm(layout.updateJournal, { force: true })
+    return { status: 'committed-cleaned', operationId: journal.operationId }
+  }
+  await beforeRestore(journal)
+  if (existsSync(paths.backupApp)) {
+    await rm(layout.appDir, { recursive: true, force: true })
+    await rename(paths.backupApp, layout.appDir)
+  }
+  const hadLicenses = new Set(Array.isArray(journal.hadLicenses)
+    ? journal.hadLicenses
+    : journal.hadComponents ? ['COMPONENTS.json'] : [])
+  await mkdir(paths.rootLicenses, { recursive: true })
+  for (const name of UPDATE_LICENSE_FILES) {
+    const rootFile = path.join(paths.rootLicenses, name)
+    const backupFile = path.join(paths.backupLicenses, name)
+    if (existsSync(backupFile)) {
+      await rm(rootFile, { force: true })
+      await rename(backupFile, rootFile)
+    } else if (!hadLicenses.has(name)) {
+      await rm(rootFile, { force: true })
+    }
+  }
+  await rm(paths.operationRoot, { recursive: true, force: true })
+  await rm(layout.updateJournal, { force: true })
+  return { status: 'rolled-back', operationId: journal.operationId }
+}
+
+export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {} }) {
+  if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
+  const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
+  if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-app') throw new Error('Staged update metadata is invalid.')
+  const stagedApp = path.join(stagedRoot, 'app')
+  const stagedDsh = path.join(stagedApp, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  const stagedLicenses = path.join(stagedRoot, 'licenses')
+  const stagedComponents = await readJson(path.join(stagedLicenses, 'COMPONENTS.json'), null)
+  if (!stagedComponents
+    || stagedComponents.portableVersion !== metadata.portableVersion
+    || stagedComponents.dshVersion !== metadata.dshVersion
+    || (metadata.dshCommit && stagedComponents.dshCommit !== metadata.dshCommit)) {
+    throw new Error('Staged component metadata does not agree with its application payload.')
+  }
+  if (!existsSync(stagedDsh) || UPDATE_LICENSE_FILES.some((name) => !existsSync(path.join(stagedLicenses, name)))) {
+    throw new Error('Staged update is incomplete.')
+  }
+  if (!existsSync(layout.appDir)) throw new Error('The current DSH application is missing.')
+
+  const { operationId, operationRoot } = operationFromStage(layout, stagedRoot)
+  const paths = transactionPaths(layout, operationId)
+  const hadLicenses = UPDATE_LICENSE_FILES.filter((name) => existsSync(path.join(paths.rootLicenses, name)))
+  await mkdir(path.dirname(paths.backupApp), { recursive: true })
+  await mkdir(paths.backupLicenses, { recursive: true })
+  await writeJournal(layout, { operationId, phase: 'prepared', hadLicenses })
+
+  try {
+    await rename(layout.appDir, paths.backupApp)
+    await writeJournal(layout, { operationId, phase: 'app-backed-up', hadLicenses })
+    await rename(stagedApp, layout.appDir)
+    await mkdir(paths.rootLicenses, { recursive: true })
+    for (const name of UPDATE_LICENSE_FILES) {
+      const rootFile = path.join(paths.rootLicenses, name)
+      if (existsSync(rootFile)) await rename(rootFile, path.join(paths.backupLicenses, name))
+      await rename(path.join(stagedLicenses, name), rootFile)
+    }
+    await writeJournal(layout, { operationId, phase: 'testing', hadLicenses })
+
+    const healthy = await healthCheck(metadata)
+    if (!healthy) throw new Error('The updated DSH runtime did not pass its health check.')
+    await writeJournal(layout, { operationId, phase: 'committed', hadLicenses })
+  } catch (error) {
+    if (error?.leavePending) throw error
+    await beforeRollback(error)
+    await rollbackPendingAppUpdate(layout)
+    throw new Error(`Update failed and was rolled back: ${error?.message ?? error}`, { cause: error })
+  }
+  let cleanupPending = false
+  try {
+    await rm(operationRoot, { recursive: true, force: true })
+    await rm(layout.updateJournal, { force: true })
+  } catch {
+    cleanupPending = true
+  }
+  return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
+}
+
+export async function installAvailableAppUpdate({
+  layout,
+  update,
+  allowHttp = false,
+  healthCheck,
+  beforeRollback,
+  download = downloadVerifiedComponent,
+  extract = extractUpdateArchive,
+}) {
+  if (update?.status !== 'available' || update.component?.kind !== 'dsh-app') throw new Error('No compatible application update is available.')
+  if (typeof healthCheck !== 'function') throw new Error('Update health check is required.')
+  const operationId = randomUUID()
+  const operationRoot = path.join(layout.updateDir, operationId)
+  const archive = path.join(operationRoot, 'component.zip')
+  const stagedRoot = path.join(operationRoot, 'staged')
+  await mkdir(operationRoot, { recursive: true })
+  try {
+    await download({
+      urls: update.component.urls,
+      destination: archive,
+      bytes: update.component.bytes,
+      sha256: update.component.sha256,
+      allowHttp,
+    })
+    await extract(archive, stagedRoot)
+    const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
+    const components = await readJson(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), null)
+    if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-app') throw new Error('Downloaded update metadata is invalid.')
+    if (metadata.portableVersion !== update.latest || metadata.dshVersion !== update.component.dshVersion) throw new Error('Downloaded update version does not match its manifest.')
+    if (update.component.dshCommit && metadata.dshCommit !== update.component.dshCommit) throw new Error('Downloaded update commit does not match its manifest.')
+    if (!components
+      || components.nodeVersion !== update.component.requiredNodeVersion
+      || components.platform !== update.platform
+      || Number(components.updaterSchema) < Number(update.minimumUpdaterSchema)
+      || Number(components.shellSchema) < Number(update.requiredShellSchema)) {
+      throw new Error('Downloaded component compatibility metadata does not match its manifest.')
+    }
+    return await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
+  } catch (error) {
+    if (!await readJson(layout.updateJournal, null)) await rm(operationRoot, { recursive: true, force: true })
+    throw error
+  }
+}

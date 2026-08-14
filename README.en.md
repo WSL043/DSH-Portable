@@ -90,11 +90,19 @@ External projects keep their original paths.
 
 ## Updates
 
-DSH-Portable is not a GitHub fork. An automated check watches the official
-[DeepSeek Harness repository](https://github.com/deepseek-ai/deepseek-harness)
-and npm package. A new upstream version is released only after its changes are
-reviewed and the Windows, Apple Silicon, and Intel packages pass their runtime
-smoke tests. Release tags are created from the exact tested `main` revision.
+DSH-Portable checks for updates when it starts and asks before installing one.
+A normal update downloads only the changed DSH application component instead of
+downloading Node.js, the launcher, or the complete offline package again.
+Sessions, settings, credentials, and workspace remain in place. The download is
+verified before the application is replaced; if the new version cannot start,
+the launcher restores the previous version.
+
+When a Node.js or portable-shell compatibility boundary changes, DSH-Portable
+offers the complete package instead. You can choose **Later**, and versions are
+never switched silently. DSH-Portable is not a GitHub fork: its release process
+watches the official [DeepSeek Harness repository](https://github.com/deepseek-ai/deepseek-harness)
+and npm package, then publishes only packages that pass the corresponding
+Windows or macOS product checks.
 
 ## Security
 
