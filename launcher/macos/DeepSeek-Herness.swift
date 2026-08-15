@@ -150,7 +150,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     private func checkAndApplyUpdate() throws {
-        if ProcessInfo.processInfo.environment["DSH_PORTABLE_SKIP_UPDATE_CHECK"] == "1" { return }
+        if ProcessInfo.processInfo.environment["DSH_PORTABLE_SKIP_UPDATE_CHECK"] == "1"
+            || CommandLine.arguments.contains("--skip-update-check") { return }
         guard let update = try? runCLI(["check-update", "--json"]),
               let status = update["status"] as? String,
               status == "available" || status == "full-package-required" else { return }

@@ -88,6 +88,13 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(macSmoke, /WKWebView|WebKit/)
   assert.match(macSmoke, /CGWindowListCopyWindowInfo/)
   assert.match(macSmoke, /kCGWindowOwnerPID/)
+  assert.match(macSmoke, /case "\$\(uname -m\)" in/)
+  assert.match(macSmoke, /arm64\)/)
+  assert.match(macSmoke, /x86_64\)/)
+  assert.match(macSmoke, /\/usr\/bin\/open -n -W "\$APP" --args --skip-update-check/)
+  assert.match(macSmoke, /"\$START" --skip-update-check/)
+  assert.match(macSmoke, /pgrep -f/)
+  assert.doesNotMatch(macSmoke, /DSH_PORTABLE_SKIP_UPDATE_CHECK=1 "\$START"/)
   assert.doesNotMatch(macSmoke, /System Events/)
 })
 
