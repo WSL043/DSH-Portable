@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/dsh-interface.png" width="960" alt="DSH-Portable 中运行的官方 DeepSeek Harness 界面">
+  <img src="assets/dsh-interface-zh.png" width="960" alt="DSH-Portable 中运行的中文 DeepSeek Harness 工作台">
 </p>
 
 > [!NOTE]
@@ -42,6 +42,9 @@
 默认点击右上角关闭按钮会收进系统托盘，正在执行的任务继续运行。要完全退出，
 右键托盘图标选择 **退出 DeepSeek Harness**；也可以在托盘菜单的 **关闭窗口时**
 改成直接退出。
+
+Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工作台也可以在
+**设置**中切换语言，选择会自动保存。
 
 ## 为什么适合便携使用
 
