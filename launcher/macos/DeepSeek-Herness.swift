@@ -281,7 +281,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 }
 
 let application = NSApplication.shared
-let delegate = AppDelegate()
+private let delegate = AppDelegate()
 application.delegate = delegate
 application.setActivationPolicy(.regular)
 application.run()
