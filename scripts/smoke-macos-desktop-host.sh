@@ -51,35 +51,31 @@ WORKSPACE_HASH="$(shasum -a 256 "$WORKSPACE_MARKER" | awk '{print $1}')"
 HOME_HASH="$(shasum -a 256 "$HOME_MARKER" | awk '{print $1}')"
 
 case "$(uname -m)" in
-  arm64)
-    /usr/bin/open -n -W "$APP" --args --skip-update-check >/tmp/dsh-portable-native-host.log 2>&1 &
-    LAUNCH_PID=$!
-    deadline=$((SECONDS + 30))
-    while (( SECONDS < deadline )); do
-      HOST_PID="$(pgrep -f "$START" | head -n 1 || true)"
-      [[ -n "$HOST_PID" ]] && break
-      kill -0 "$LAUNCH_PID" 2>/dev/null || {
-        cat /tmp/dsh-portable-native-host.log >&2
-        echo 'LaunchServices exited before the native host appeared.' >&2
-        exit 1
-      }
-      sleep 0.25
-    done
-    [[ -n "${HOST_PID:-}" ]] || {
-      cat /tmp/dsh-portable-native-host.log >&2
-      echo 'LaunchServices did not start the native host.' >&2
-      exit 1
-    }
-    ;;
-  x86_64)
-    "$START" --skip-update-check >/tmp/dsh-portable-native-host.log 2>&1 &
-    HOST_PID=$!
+  arm64|x86_64)
     ;;
   *)
     echo "Unsupported macOS architecture: $(uname -m)" >&2
     exit 1
     ;;
 esac
+/usr/bin/open -n -W "$APP" --args --skip-update-check >/tmp/dsh-portable-native-host.log 2>&1 &
+LAUNCH_PID=$!
+deadline=$((SECONDS + 30))
+while (( SECONDS < deadline )); do
+  HOST_PID="$(pgrep -f "$START" | head -n 1 || true)"
+  [[ -n "$HOST_PID" ]] && break
+  kill -0 "$LAUNCH_PID" 2>/dev/null || {
+    cat /tmp/dsh-portable-native-host.log >&2
+    echo 'LaunchServices exited before the native host appeared.' >&2
+    exit 1
+  }
+  sleep 0.25
+done
+[[ -n "${HOST_PID:-}" ]] || {
+  cat /tmp/dsh-portable-native-host.log >&2
+  echo 'LaunchServices did not start the native host.' >&2
+  exit 1
+}
 deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
   kill -0 "$HOST_PID" 2>/dev/null || { cat /tmp/dsh-portable-native-host.log >&2; echo 'Native host exited before ready.' >&2; exit 1; }
