@@ -67,3 +67,18 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(macSmoke, /kCGWindowOwnerPID/)
   assert.doesNotMatch(macSmoke, /System Events/)
 })
+
+test('macOS package smokes treat the native app as a long-lived desktop process', async () => {
+  const [portableSmoke, dmgSmoke] = await Promise.all([
+    read('scripts/smoke-portable.mjs'),
+    read('scripts/smoke-macos-dmg.sh'),
+  ])
+
+  assert.match(portableSmoke, /startNativeHost/)
+  assert.match(portableSmoke, /waitForPortableStatus/)
+  assert.match(portableSmoke, /requestMacAppQuit/)
+  assert.match(dmgSmoke, /HOST_PID=\$!/)
+  assert.match(dmgSmoke, /status --json/)
+  assert.match(dmgSmoke, /tell application id "io\.github\.wsl043\.dsh-portable\.installed" to quit/)
+  assert.doesNotMatch(dmgSmoke, /^"\$APP\/Contents\/MacOS\/DeepSeek-Herness"$/m)
+})

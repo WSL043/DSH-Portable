@@ -31,6 +31,58 @@ function run(command, args, options = {}) {
   })
 }
 
+function startNativeHost(command, options = {}) {
+  const child = spawn(command, [], {
+    cwd: options.cwd,
+    env: options.env ?? process.env,
+    windowsHide: true,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let stdout = ''
+  let stderr = ''
+  child.stdout.on('data', (chunk) => { stdout += chunk })
+  child.stderr.on('data', (chunk) => { stderr += chunk })
+  const completion = new Promise((resolve, reject) => {
+    child.once('error', reject)
+    child.once('exit', (code, signal) => resolve({ code, signal, stdout, stderr }))
+  })
+  return { child, completion }
+}
+
+const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+
+async function waitForPortableStatus(root, expected, nativeHost, timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs
+  let latest = null
+  while (Date.now() < deadline) {
+    if (nativeHost?.child.exitCode !== null) {
+      const result = await nativeHost.completion
+      assert.fail(result.stderr || result.stdout || `native host exited early with code ${result.code}`)
+    }
+    latest = await cli(root, 'status', '--json')
+    if (latest?.status === expected) return latest
+    await delay(250)
+  }
+  assert.fail(`portable status did not become ${expected}; latest=${JSON.stringify(latest)}`)
+}
+
+async function requestMacAppQuit(nativeHost) {
+  const result = await run('/usr/bin/osascript', [
+    '-e',
+    'tell application id "io.github.wsl043.dsh-portable" to quit',
+  ])
+  assert.equal(result.code, 0, result.stderr || result.stdout)
+  const closed = await Promise.race([
+    nativeHost.completion,
+    delay(45_000).then(() => null),
+  ])
+  if (!closed) {
+    nativeHost.child.kill('SIGTERM')
+    assert.fail('native macOS host did not exit after the quit request')
+  }
+  assert.equal(closed.code, 0, closed.stderr || closed.stdout)
+}
+
 async function cli(root, ...args) {
   const result = await run(nodeFor(root), [cliFor(root), ...args], { cwd: root })
   assert.equal(result.code, 0, result.stderr || result.stdout)
@@ -50,6 +102,8 @@ for (const filename of [nodeFor(originalRoot), cliFor(originalRoot), path.join(o
 }
 assert.doesNotMatch(await readFile(path.join(originalRoot, 'README.txt'), 'utf8'), /build script|development history|community\.1/i)
 
+let nativeHost = null
+
 if (process.platform === 'win32') {
   for (const name of ['DeepSeek-Herness.exe', 'Stop DeepSeek-Herness.exe']) {
     assert.equal(await exists(path.join(originalRoot, name)), true, `missing Windows entry: ${name}`)
@@ -60,16 +114,17 @@ if (process.platform === 'win32') {
   const app = path.join(originalRoot, 'DSH-Portable.app')
   const executable = path.join(app, 'Contents', 'MacOS', 'DSH-Portable')
   assert.equal(await exists(path.join(app, 'Contents', 'Resources', 'DSH-Portable.icns')), true)
-  const launched = await run(executable, [], {
+  nativeHost = startNativeHost(executable, {
     cwd: originalRoot,
-    env: { ...process.env, DSH_PORTABLE_NO_BROWSER: '1' },
+    env: { ...process.env, DSH_PORTABLE_NO_BROWSER: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
   })
-  assert.equal(launched.code, 0, launched.stderr || launched.stdout)
 } else {
   throw new Error(`unsupported smoke-test platform: ${process.platform}`)
 }
 
-const running = await cli(originalRoot, 'status', '--json')
+const running = process.platform === 'darwin'
+  ? await waitForPortableStatus(originalRoot, 'running', nativeHost)
+  : await cli(originalRoot, 'status', '--json')
 assert.equal(running.status, 'running')
 await assertWebReady(running.url)
 
@@ -81,6 +136,7 @@ if (process.platform === 'win32') {
   assert.equal(stopped.code, 0, stopped.stderr || stopped.stdout)
 }
 assert.equal((await cli(originalRoot, 'status', '--json')).status, 'stopped')
+if (nativeHost) await requestMacAppQuit(nativeHost)
 
 const movedRoot = `${originalRoot} moved ü`
 await renameWithRetry(originalRoot, movedRoot)
