@@ -77,6 +77,37 @@ $HomeDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash
 $Process = $null
 $StopProcess = $null
 
+function Get-ProductStatus {
+    param([int]$TimeoutSeconds = 15)
+
+    $Deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        # The native host deliberately keeps launcher.lock until its graceful
+        # shutdown has completely committed. Treat that short overlap as a
+        # transient state instead of turning it into a false lifecycle failure.
+        $PreviousErrorActionPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $Lines = @(& $PortableNode $PortableCli status --json 2>&1 | ForEach-Object { [string]$_ })
+            $ExitCode = $LASTEXITCODE
+        } finally {
+            $ErrorActionPreference = $PreviousErrorActionPreference
+        }
+        $Raw = ($Lines -join [Environment]::NewLine).Trim()
+        if ($ExitCode -eq 0) {
+            return [pscustomobject]@{
+                ExitCode = 0
+                Raw = $Raw
+                Status = ($Raw | ConvertFrom-Json).status
+            }
+        }
+        if ($Raw -notmatch 'Another portable launcher is already starting or stopping DSH' -or [DateTime]::UtcNow -ge $Deadline) {
+            return [pscustomobject]@{ ExitCode = $ExitCode; Raw = $Raw; Status = '' }
+        }
+        Start-Sleep -Milliseconds 100
+    } while ($true)
+}
+
 try {
     $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $StartInfo.FileName = $StartExe
@@ -97,11 +128,10 @@ try {
         )
     } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $EmbeddedRenderers.Count -eq 0 -or (Test-Path -LiteralPath $LaunchLock)) -and [DateTime]::UtcNow -lt $Deadline)
 
-    $StatusJson = & $PortableNode $PortableCli status --json
-    $Status = if ($LASTEXITCODE -eq 0) { $StatusJson | ConvertFrom-Json } else { $null }
+    $Status = Get-ProductStatus
 
     if ($Process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'DeepSeek-Herness.exe did not create a native top-level window.' }
-    if ($Status.status -ne 'running') { throw 'DeepSeek Harness did not become ready behind the desktop host.' }
+    if ($Status.Status -ne 'running') { throw 'DeepSeek Harness did not become ready behind the desktop host.' }
     if ($Process.MainWindowTitle -notlike 'DeepSeek-Herness*') { throw "Unexpected native window title: $($Process.MainWindowTitle)" }
 
     $AppId = [WindowAppIdentity]::GetAppUserModelId($Process.MainWindowHandle)
@@ -120,11 +150,9 @@ try {
     if (-not $Process.CloseMainWindow()) { throw 'CloseMainWindow could not request a graceful desktop close.' }
     if (-not $Process.WaitForExit(45000)) { throw 'The native desktop host did not exit after closing its window.' }
 
-    $StoppedJson = & $PortableNode $PortableCli status --json
-    $StoppedExitCode = $LASTEXITCODE
-    $StoppedStatus = if ($StoppedExitCode -eq 0) { ($StoppedJson | ConvertFrom-Json).status } else { '' }
-    if ($StoppedExitCode -ne 0 -or $StoppedStatus -ne 'stopped') {
-        throw "Closing the native desktop window did not stop DeepSeek Harness (exit=$StoppedExitCode, status=$StoppedStatus, output=$StoppedJson)."
+    $Stopped = Get-ProductStatus
+    if ($Stopped.ExitCode -ne 0 -or $Stopped.Status -ne 'stopped') {
+        throw "Closing the native desktop window did not stop DeepSeek Harness (exit=$($Stopped.ExitCode), status=$($Stopped.Status), output=$($Stopped.Raw))."
     }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker).Hash -ne $WorkspaceDigest) { throw 'Workspace data changed during native host shutdown.' }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash -ne $HomeDigest) { throw 'DSH_HOME data changed during native host shutdown.' }
@@ -135,8 +163,7 @@ try {
         Start-Sleep -Milliseconds 250
         $Process.Refresh()
         if ($Process.HasExited) { throw "DeepSeek-Herness.exe exited before the Stop launcher test: $($Process.ExitCode)" }
-        $RunningJson = & $PortableNode $PortableCli status --json
-        $RunningStatus = if ($LASTEXITCODE -eq 0) { ($RunningJson | ConvertFrom-Json).status } else { '' }
+        $RunningStatus = (Get-ProductStatus).Status
     } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $RunningStatus -ne 'running') -and [DateTime]::UtcNow -lt $StopDeadline)
     if ($Process.MainWindowHandle -eq [IntPtr]::Zero -or $RunningStatus -ne 'running') {
         throw 'The second native desktop instance did not become ready for the Stop launcher test.'
@@ -148,8 +175,7 @@ try {
     $StopProcess = [System.Diagnostics.Process]::Start($StopStartInfo)
     if (-not $StopProcess.WaitForExit(60000)) { throw 'Stop DeepSeek-Herness.exe did not exit within 60 seconds.' }
     if (-not $Process.WaitForExit(45000)) { throw 'Stop DeepSeek-Herness.exe left the native desktop host running.' }
-    $StoppedByLauncherJson = & $PortableNode $PortableCli status --json
-    $StoppedByLauncher = if ($LASTEXITCODE -eq 0) { ($StoppedByLauncherJson | ConvertFrom-Json).status } else { '' }
+    $StoppedByLauncher = (Get-ProductStatus).Status
     if ($StoppedByLauncher -ne 'stopped') { throw 'Stop DeepSeek-Herness.exe left the DSH backend running.' }
 
     [pscustomobject]@{

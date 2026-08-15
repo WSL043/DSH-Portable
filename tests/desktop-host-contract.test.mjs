@@ -65,6 +65,8 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(windowsSmoke, /msedge\.exe|chrome\.exe/)
   assert.match(windowsSmoke, /browser\.json/)
   assert.match(windowsSmoke, /CloseMainWindow/)
+  assert.match(windowsSmoke, /function Get-ProductStatus/)
+  assert.match(windowsSmoke, /Another portable launcher is already starting or stopping DSH/)
   assert.match(macSmoke, /DSH-Portable\.app/)
   assert.match(macSmoke, /WKWebView|WebKit/)
   assert.match(macSmoke, /CGWindowListCopyWindowInfo/)
