@@ -42,9 +42,20 @@ $LauncherDiagnostic = Join-Path $ExpectedStateRoot 'data\logs\plugin-smoke-launc
 
 function Invoke-Dsh {
     param([Parameter(Mandatory = $true)][string[]]$Arguments)
-    $Lines = @(& $Dsh @Arguments 2>&1 | ForEach-Object { [string]$_ })
-    if ($LASTEXITCODE -ne 0) {
-        throw "dsh.exe failed ($LASTEXITCODE): dsh $($Arguments -join ' ')`n$($Lines -join [Environment]::NewLine)"
+    # Windows PowerShell 5 wraps native stderr as NativeCommandError when the
+    # script-wide preference is Stop. DSH legitimately writes first-run status
+    # messages to stderr, so capture both streams locally and trust the process
+    # exit code without weakening error handling for the rest of the smoke.
+    $PreviousErrorActionPreference = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = 'Continue'
+        $Lines = @(& $Dsh @Arguments 2>&1 | ForEach-Object { [string]$_ })
+        $ExitCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $PreviousErrorActionPreference
+    }
+    if ($ExitCode -ne 0) {
+        throw "dsh.exe failed ($ExitCode): dsh $($Arguments -join ' ')`n$($Lines -join [Environment]::NewLine)"
     }
     return ($Lines -join [Environment]::NewLine)
 }
