@@ -77,15 +77,18 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.3')
+  assert.equal(manifest.version, '0.2.0-rc.4')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
   const userReadme = await read('templates/USER-README.txt')
-  const combined = `${chineseReadme}\n${englishReadme}\n${userReadme}`
+  const installedReadme = await read('templates/INSTALLED-README.txt')
+  const combined = `${chineseReadme}\n${englishReadme}\n${userReadme}\n${installedReadme}`
   assert.match(chineseReadme, /<h1 align="center">DSH-Portable<\/h1>/)
   assert.match(englishReadme, /<h1 align="center">DSH-Portable<\/h1>/)
   assert.match(userReadme, /^DSH-Portable$/m)
+  assert.match(installedReadme.slice(0, 1000), /中文[\s\S]+关闭窗口[\s\S]+系统托盘/)
+  assert.match(installedReadme, /English[\s\S]+system tray/i)
   assert.doesNotMatch(combined, /DeepSeek Harness Windows Portable|community\.1|Unofficial community packaging/i)
   assert.doesNotMatch(userReadme, /reviewed commit|build script|npm lock|promotion|development history/i)
 })
@@ -103,6 +106,10 @@ test('the GitHub landing page gives beginners one obvious download path', async 
   assert.ok(chineseReadme.indexOf(recommendedUrl) < chineseReadme.indexOf('<details>'), 'the recommended download must appear before advanced choices')
   assert.doesNotMatch(englishReadme.slice(0, englishReadme.indexOf('<details>')), /\|\s*Download\s*\|\s*Use case\s*\|/i)
   assert.doesNotMatch(englishReadme, /Each release includes a `\.sha256` file/i)
+  assert.doesNotMatch(chineseReadme, /不用配置 Node\.js|不需要安装 Node\.js/)
+  assert.match(chineseReadme, /会话、设置、插件和工作区/)
+  assert.match(chineseReadme, /U 盘|移动硬盘/)
+  assert.match(chineseReadme, /WSL043\/dsh-codex-subscription/)
 })
 
 test('Simplified Chinese is the default GitHub landing page and English is a complete peer', async () => {
@@ -149,6 +156,49 @@ test('release notes prioritize downloads and keep verification optional', async 
   assert.ok(notes.indexOf('DSH-Portable-windows-x64.exe') < notes.indexOf('<details>'))
   assert.doesNotMatch(notes, /\b[a-f0-9]{64}\b/i)
   assert.equal((notes.match(/SHA256SUMS|\b[a-f0-9]{64}\b/gi) || []).length, 0)
+})
+
+test('publishing separates beginner downloads from machine update assets', async () => {
+  const [workflow, staging, windowsBuild, macBuild, updateCore, bootstrap] = await Promise.all([
+    read('.github/workflows/publish.yml'),
+    read('scripts/stage-release-assets.mjs'),
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('launcher/update-core.mjs'),
+    read('launcher/windows/DSH-Bootstrap.cs'),
+  ])
+
+  assert.match(workflow, /workflow_dispatch:/)
+  assert.match(workflow, /prerelease:[\s\S]+default:\s*false/)
+  assert.match(workflow, /actions\/download-artifact@v8/)
+  assert.match(workflow, /update-channel-stable/)
+  assert.match(workflow, /stage-release-assets\.mjs/)
+  assert.match(staging, /user-assets/)
+  assert.match(staging, /update-assets/)
+  assert.match(staging, /checksums\.txt/)
+  assert.doesNotMatch(staging, /\.sha256['"`]/)
+  assert.match(updateCore, /releases\/download\/update-channel-stable\/portable-update-/)
+  assert.match(bootstrap, /releases\/download\/update-channel-stable\/portable-manifest\.json/)
+  assert.match(windowsBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-windows-x64\.zip/)
+  assert.match(macBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-macos-\$ARCH\.zip/)
+})
+
+test('official preview updates become tested candidate pull requests instead of manual issues', async () => {
+  const [workflow, updater] = await Promise.all([
+    read('.github/workflows/upstream-watch.yml'),
+    read('scripts/update-upstream.mjs'),
+  ])
+
+  assert.match(workflow, /pull-requests:\s*write/)
+  assert.match(workflow, /node scripts\/update-upstream\.mjs/)
+  assert.match(workflow, /npm test/)
+  assert.match(workflow, /gh pr (?:create|edit)/)
+  assert.doesNotMatch(workflow, /issues:\s*write/)
+  assert.match(updater, /registry\.npmjs\.org/)
+  assert.match(updater, /dist-tags/)
+  assert.match(updater, /integrity/)
+  assert.match(updater, /package-lock-only/)
+  assert.match(updater, /upstream\.lock\.json/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
@@ -214,7 +264,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /target:winexe/i)
   assert.match(build, /win32icon/i)
   assert.match(build, /DeepSeek-Herness\.exe/)
-  assert.match(build, /Stop DeepSeek-Herness\.exe/)
+  assert.doesNotMatch(build, /Stop DeepSeek-Herness\.exe/)
   assert.match(build, /DSH-Portable-windows-x64-offline\.zip/)
   assert.match(build, /DSH-Bootstrap\.cs/)
   assert.match(build, /portable-manifest\.json/)
@@ -224,9 +274,9 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*4/)
-  assert.match(build, /requiredShellSchema\s*=\s*4/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.3"\)/)
+  assert.match(build, /shellSchema\s*=\s*5/)
+  assert.match(build, /requiredShellSchema\s*=\s*5/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.4"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -249,12 +299,12 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(setup, /PrivilegesRequired=lowest/)
   assert.match(setup, /SetupIconFile=.*DSH-Portable\.ico/)
   assert.match(setup, /Name:\s*"\{group\}\\DeepSeek-Herness";[^\n]+IconFilename:\s*"\{app\}\\DeepSeek-Herness\.exe"/)
-  assert.match(setup, /Name:\s*"\{group\}\\Stop DeepSeek-Herness";[^\n]+IconFilename:\s*"\{app\}\\Stop DeepSeek-Herness\.exe"/)
+  assert.doesNotMatch(setup, /Name:\s*"\{group\}\\Stop DeepSeek-Herness"/)
   assert.match(setup, /Compression=lzma2\/ultra64/)
-  assert.match(setup, /Stop DeepSeek-Herness\.exe/)
+  assert.doesNotMatch(setup, /Stop DeepSeek-Herness\.exe/)
   assert.match(setup, /Excludes:\s*"\\data\\\*,\\workspace\\\*"/)
   assert.doesNotMatch(setup, /Excludes:\s*"data\\\*,workspace\\\*"/)
-  assert.match(setup, /RunOnceId:\s*"StopDeepSeekHerness"/)
+  assert.match(setup, /DeepSeek-Herness\.exe";\s*Parameters:\s*"stop/)
   assert.match(build, /BuildInstaller/)
   assert.match(build, /ISCC/)
   assert.match(build, /subst\.exe/)
@@ -297,7 +347,9 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(chinese, /\.\\dsh\.exe --profile web --dump-config/)
   assert.match(english, /\.\\dsh\.exe plugin --profile web add <plugin>/i)
   assert.match(docs, /不会自动重启|never restarts/i)
-  assert.doesNotMatch(docs, /dsh-codex-subscription|openai-codex|codex|zen\s*free/i)
+  assert.match(chinese, /github\.com\/WSL043\/dsh-codex-subscription/)
+  assert.match(english, /github\.com\/WSL043\/dsh-codex-subscription/)
+  assert.doesNotMatch(docs, /openai-codex|zen\s*free/i)
 
   assert.match(workflow, /^  windows-plugin-smoke:/m)
   assert.match(workflow, /smoke-windows-plugins\.ps1/)
@@ -385,8 +437,8 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 4/)
-  assert.match(build, /"requiredShellSchema": 4/)
+  assert.match(build, /"shellSchema": 5/)
+  assert.match(build, /"requiredShellSchema": 5/)
   assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>2<\/string>/s)
   assert.match(app, /check-update/)
   assert.match(app, /defer-update/)
@@ -432,7 +484,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /actions\/download-artifact@v8/)
   assert.match(upstreamWorkflow, /actions\/checkout@v7/)
   assert.match(upstreamWorkflow, /actions\/setup-node@v7/)
-  assert.match(upstreamWorkflow, /actions\/github-script@v9/)
+  assert.match(upstreamWorkflow, /node scripts\/update-upstream\.mjs/)
   assert.doesNotMatch(`${workflow}\n${upstreamWorkflow}`, /actions\/(?:checkout|setup-node|upload-artifact|download-artifact|github-script)@v[1-6]\b/)
   assert.match(workflow, /innosetup-7\.1\.0-x64\.exe/)
   assert.match(workflow, /0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f/)

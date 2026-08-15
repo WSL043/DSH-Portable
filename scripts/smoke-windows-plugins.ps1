@@ -15,8 +15,7 @@ $Dsh = Join-Path $Root 'dsh.exe'
 $Node = Join-Path $Root 'runtime\node\node.exe'
 $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
 $Launcher = Join-Path $Root 'DeepSeek-Herness.exe'
-$StopLauncher = Join-Path $Root 'Stop DeepSeek-Herness.exe'
-foreach ($Required in @($Dsh, $Node, $PortableCli, $Launcher, $StopLauncher, (Join-Path $Root 'app\node_modules\pnpm\bin\pnpm.mjs'))) {
+foreach ($Required in @($Dsh, $Node, $PortableCli, $Launcher, (Join-Path $Root 'app\node_modules\pnpm\bin\pnpm.mjs'))) {
     if (-not (Test-Path -LiteralPath $Required -PathType Leaf)) { throw "plugin smoke prerequisite is missing: $Required" }
 }
 if (-not (Test-Path -LiteralPath $Fixture -PathType Container)) { throw "plugin fixture is missing: $Fixture" }
@@ -103,7 +102,7 @@ function Start-Product {
 function Stop-Product {
     $Stdout = Join-Path $TestRoot 'stop.stdout.log'
     $Stderr = Join-Path $TestRoot 'stop.stderr.log'
-    $Process = Start-Process -FilePath $StopLauncher -PassThru -NoNewWindow `
+    $Process = Start-Process -FilePath $Launcher -ArgumentList @('stop', '--no-browser', '--json') -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
@@ -241,7 +240,6 @@ try {
         $Node = Join-Path $Root 'runtime\node\node.exe'
         $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
         $Launcher = Join-Path $Root 'DeepSeek-Herness.exe'
-        $StopLauncher = Join-Path $Root 'Stop DeepSeek-Herness.exe'
         $MovedRemoteList = Invoke-Dsh @('plugin', '--profile', $Profile, 'list', '--depth', '0', '--json')
         if ($MovedRemoteList -notmatch $PackageName) { throw 'cached remote plugin failed after moving the portable folder' }
         if ((Invoke-Dsh @('--profile', $Profile, '--dump-config')) -notmatch 'dsh-portable-smoke-v1') {

@@ -97,7 +97,6 @@ try {
 
     foreach ($Name in @(
         'DeepSeek-Herness.exe',
-        'Stop DeepSeek-Herness.exe',
         'installed-mode.json',
         'unins000.exe',
         'app\node_modules\@earendil-works\pi-ai\dist\providers\data\amazon-bedrock.json'
@@ -109,9 +108,9 @@ try {
     Assert-ProductShortcut `
         -ShortcutPath (Join-Path $ProgramGroup 'DeepSeek-Herness.lnk') `
         -ExpectedTarget (Join-Path $InstallRoot 'DeepSeek-Herness.exe')
-    Assert-ProductShortcut `
-        -ShortcutPath (Join-Path $ProgramGroup 'Stop DeepSeek-Herness.lnk') `
-        -ExpectedTarget (Join-Path $InstallRoot 'Stop DeepSeek-Herness.exe')
+    if (Test-Path -LiteralPath (Join-Path $ProgramGroup 'Stop DeepSeek-Herness.lnk')) {
+        throw 'installer exposed a redundant Stop shortcut'
+    }
 
     $env:LOCALAPPDATA = $LocalAppData
     $env:DSH_PORTABLE_STATE_ROOT = $null
@@ -141,7 +140,8 @@ try {
     if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 500) { throw "installed Web returned $($Response.StatusCode)" }
 
     $Stopped = Invoke-BoundedProcess -Stage 'Stop installed runtime' -TimeoutSeconds 60 `
-        -FilePath (Join-Path $InstallRoot 'Stop DeepSeek-Herness.exe')
+        -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') `
+        -ArgumentList @('stop', '--no-browser', '--json')
     if ($Stopped.ExitCode -ne 0) {
         Write-RuntimeDiagnostics
         throw "installed stop entry exited with code $($Stopped.ExitCode)"

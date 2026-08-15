@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-rc.3"
+  #define AppVersion "0.2.0-rc.4"
 #endif
 
 [Setup]
@@ -34,7 +34,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.2.0.3
+VersionInfoVersion=0.2.0.4
 VersionInfoProductName=DeepSeek-Herness
 VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043
@@ -44,7 +44,6 @@ Source: "{#Stage}\*"; DestDir: "{app}"; Excludes: "\data\*,\workspace\*"; Flags:
 
 [Icons]
 Name: "{group}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\DeepSeek-Herness.exe"
-Name: "{group}\Stop DeepSeek-Herness"; Filename: "{app}\Stop DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\Stop DeepSeek-Herness.exe"
 Name: "{autodesktop}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\DeepSeek-Herness.exe"; Tasks: desktopicon
 
 [Tasks]
@@ -54,7 +53,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Filename: "{app}\DeepSeek-Herness.exe"; Description: "Start DeepSeek-Herness"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\Stop DeepSeek-Herness.exe"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
+Filename: "{app}\DeepSeek-Herness.exe"; Parameters: "stop --no-browser --json"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -63,10 +62,10 @@ var
   StopEntry: String;
 begin
   Result := '';
-  StopEntry := ExpandConstant('{app}\Stop DeepSeek-Herness.exe');
+  StopEntry := ExpandConstant('{app}\DeepSeek-Herness.exe');
   if FileExists(StopEntry) then
   begin
-    if not Exec(StopEntry, '', ExpandConstant('{app}'), SW_HIDE,
+    if not Exec(StopEntry, 'stop --no-browser --json', ExpandConstant('{app}'), SW_HIDE,
       ewWaitUntilTerminated, ResultCode) then
       Result := 'The existing DeepSeek-Herness process could not be stopped.'
     else if ResultCode <> 0 then

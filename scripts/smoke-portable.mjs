@@ -122,7 +122,7 @@ assert.doesNotMatch(await readFile(path.join(originalRoot, 'README.txt'), 'utf8'
 let nativeHost = null
 
 if (process.platform === 'win32') {
-  for (const name of ['DeepSeek-Herness.exe', 'Stop DeepSeek-Herness.exe']) {
+  for (const name of ['DeepSeek-Herness.exe']) {
     assert.equal(await exists(path.join(originalRoot, name)), true, `missing Windows entry: ${name}`)
   }
   const launched = await run(path.join(originalRoot, 'DeepSeek-Herness.exe'), ['--no-browser', '--json'], { cwd: originalRoot })
@@ -146,7 +146,7 @@ assert.equal(running.status, 'running')
 await assertWebReady(running.url)
 
 if (process.platform === 'win32') {
-  const stopped = await run(path.join(originalRoot, 'Stop DeepSeek-Herness.exe'), [], { cwd: originalRoot })
+  const stopped = await run(path.join(originalRoot, 'DeepSeek-Herness.exe'), ['stop', '--no-browser', '--json'], { cwd: originalRoot })
   assert.equal(stopped.code, 0, stopped.stderr || stopped.stdout)
 } else {
   const stopped = await run(path.join(originalRoot, 'Stop DSH-Portable.command'), [], { cwd: originalRoot })

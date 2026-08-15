@@ -104,7 +104,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 4
+  "shellSchema": 5
 }
 EOF
 
@@ -160,7 +160,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 4,
+  "requiredShellSchema": 5,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",
@@ -169,7 +169,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
     "bytes": $UPDATE_COMPONENT_BYTES,
     "sha256": "$UPDATE_COMPONENT_HASH",
     "urls": [
-      "https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-update-macos-$ARCH.zip"
+      "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/DSH-Portable-update-macos-$ARCH.zip"
     ]
   }
 }

@@ -7,7 +7,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root = [System.IO.Path]::GetFullPath($Root)
 $StartExe = Join-Path $Root 'DeepSeek-Herness.exe'
-$StopExe = Join-Path $Root 'Stop DeepSeek-Herness.exe'
 $PortableNode = Join-Path $Root 'runtime\node\node.exe'
 $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
 $BrowserState = Join-Path $Root 'data\runtime\browser.json'
@@ -16,7 +15,6 @@ $HomeMarker = Join-Path $Root 'data\dsh-home\desktop-host-smoke.txt'
 
 foreach ($File in @(
     $StartExe,
-    $StopExe,
     $PortableNode,
     $PortableCli,
     (Join-Path $Root 'Microsoft.Web.WebView2.Core.dll'),
@@ -31,6 +29,15 @@ using System;
 using System.Runtime.InteropServices;
 
 public static class WindowAppIdentity {
+    [StructLayout(LayoutKind.Sequential)]
+    public struct Rect { public int Left; public int Top; public int Right; public int Bottom; }
+
+    [DllImport("user32.dll")]
+    public static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
+
+    [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr hwnd);
+
     [DllImport("shell32.dll", PreserveSig = true)]
     private static extern int SHGetPropertyStoreForWindow(IntPtr hwnd, ref Guid iid, out IntPtr propertyStore);
 
@@ -76,6 +83,7 @@ $WorkspaceDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker
 $HomeDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash
 $Process = $null
 $StopProcess = $null
+$RestoreProcess = $null
 
 function Get-ProductStatus {
     param([int]$TimeoutSeconds = 15)
@@ -114,19 +122,40 @@ try {
     $StartInfo.WorkingDirectory = $Root
     $StartInfo.UseShellExecute = $false
     $StartInfo.EnvironmentVariables['DSH_PORTABLE_SKIP_UPDATE_CHECK'] = '1'
+    $StartInfo.EnvironmentVariables['DSH_PORTABLE_STARTUP_HOLD_MS'] = '1200'
     $Process = [System.Diagnostics.Process]::Start($StartInfo)
+
+    $StartupDeadline = [DateTime]::UtcNow.AddSeconds(20)
+    do {
+        Start-Sleep -Milliseconds 50
+        $Process.Refresh()
+        if ($Process.HasExited) { throw "DeepSeek-Herness.exe exited during the native loading view: $($Process.ExitCode)" }
+    } while ($Process.MainWindowHandle -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $StartupDeadline)
+    if ($Process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'The native loading window did not appear.' }
+    $StartupRect = [WindowAppIdentity+Rect]::new()
+    if (-not [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$StartupRect)) { throw 'Could not measure the native loading window.' }
+    $StartupWidth = $StartupRect.Right - $StartupRect.Left
+    $StartupHeight = $StartupRect.Bottom - $StartupRect.Top
+    if ($StartupWidth -gt 700 -or $StartupHeight -gt 420) {
+        throw "The native loading view contains excessive blank space: ${StartupWidth}x${StartupHeight}"
+    }
 
     $Deadline = [DateTime]::UtcNow.AddSeconds(90)
     do {
         Start-Sleep -Milliseconds 250
         $Process.Refresh()
         if ($Process.HasExited) { throw "DeepSeek-Herness.exe exited before its desktop window appeared: $($Process.ExitCode)" }
+        $DesktopRect = [WindowAppIdentity+Rect]::new()
+        $DesktopWidth = 0
+        if ($Process.MainWindowHandle -ne [IntPtr]::Zero -and [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$DesktopRect)) {
+            $DesktopWidth = $DesktopRect.Right - $DesktopRect.Left
+        }
         $LaunchLock = Join-Path $Root 'data\runtime\launcher.lock'
         $EmbeddedRenderers = @(
             Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
                 Where-Object { $_.CommandLine -match '(?i)--embedded-browser-webview=1' -and $_.CommandLine -match '(?i)--webview-exe-name=DeepSeek-Herness\.exe' }
         )
-    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $EmbeddedRenderers.Count -eq 0 -or (Test-Path -LiteralPath $LaunchLock)) -and [DateTime]::UtcNow -lt $Deadline)
+    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $DesktopWidth -lt 900 -or $EmbeddedRenderers.Count -eq 0 -or (Test-Path -LiteralPath $LaunchLock)) -and [DateTime]::UtcNow -lt $Deadline)
 
     $Status = Get-ProductStatus
 
@@ -147,36 +176,71 @@ try {
     }
     if ($EmbeddedRenderers.Count -eq 0) { throw 'The native window did not initialize its embedded WebView2 renderer.' }
 
-    if (-not $Process.CloseMainWindow()) { throw 'CloseMainWindow could not request a graceful desktop close.' }
-    if (-not $Process.WaitForExit(45000)) { throw 'The native desktop host did not exit after closing its window.' }
-
-    $Stopped = Get-ProductStatus
-    if ($Stopped.ExitCode -ne 0 -or $Stopped.Status -ne 'stopped') {
-        throw "Closing the native desktop window did not stop DeepSeek Harness (exit=$($Stopped.ExitCode), status=$($Stopped.Status), output=$($Stopped.Raw))."
-    }
+    # Default close behavior is minimized to tray: closing the window must keep
+    # the native host and running task alive until the user explicitly exits.
+    $DesktopHandle = $Process.MainWindowHandle
+    if (-not $Process.CloseMainWindow()) { throw 'CloseMainWindow could not request the default tray close.' }
+    Start-Sleep -Seconds 2
+    $Process.Refresh()
+    if ($Process.HasExited) { throw 'Default window close exited instead of minimizing to tray.' }
+    if ([WindowAppIdentity]::IsWindowVisible($DesktopHandle)) { throw 'Default window close left the desktop window visible.' }
+    $StillRunning = Get-ProductStatus
+    if ($StillRunning.Status -ne 'running') { throw 'Minimizing to tray stopped the DSH backend.' }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker).Hash -ne $WorkspaceDigest) { throw 'Workspace data changed during native host shutdown.' }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash -ne $HomeDigest) { throw 'DSH_HOME data changed during native host shutdown.' }
 
-    $Process = [System.Diagnostics.Process]::Start($StartInfo)
-    $StopDeadline = [DateTime]::UtcNow.AddSeconds(90)
+    # Starting the same executable again restores the existing tray instance;
+    # it must not create a second long-running desktop host.
+    $RestoreProcess = [System.Diagnostics.Process]::Start($StartInfo)
+    if (-not $RestoreProcess.WaitForExit(15000)) { throw 'Second launch did not hand off to the existing tray instance.' }
+    if ($RestoreProcess.ExitCode -ne 0) { throw "Second launch failed to restore the tray instance: $($RestoreProcess.ExitCode)" }
+    $RestoreDeadline = [DateTime]::UtcNow.AddSeconds(10)
     do {
-        Start-Sleep -Milliseconds 250
+        Start-Sleep -Milliseconds 100
         $Process.Refresh()
-        if ($Process.HasExited) { throw "DeepSeek-Herness.exe exited before the Stop launcher test: $($Process.ExitCode)" }
-        $RunningStatus = (Get-ProductStatus).Status
-    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $RunningStatus -ne 'running') -and [DateTime]::UtcNow -lt $StopDeadline)
-    if ($Process.MainWindowHandle -eq [IntPtr]::Zero -or $RunningStatus -ne 'running') {
-        throw 'The second native desktop instance did not become ready for the Stop launcher test.'
-    }
+        $RestoredHandle = $Process.MainWindowHandle
+    } while (($RestoredHandle -eq [IntPtr]::Zero -or -not [WindowAppIdentity]::IsWindowVisible($RestoredHandle)) -and [DateTime]::UtcNow -lt $RestoreDeadline)
+    if ($RestoredHandle -eq [IntPtr]::Zero -or -not [WindowAppIdentity]::IsWindowVisible($RestoredHandle)) { throw 'Second launch did not restore the existing desktop window.' }
+    $OwnedHosts = @(
+        Get-CimInstance Win32_Process -Filter "Name = 'DeepSeek-Herness.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { [System.IO.Path]::GetFullPath($_.ExecutablePath) -eq $StartExe }
+    )
+    if ($OwnedHosts.Count -ne 1) { throw "Second launch left $($OwnedHosts.Count) owned desktop hosts running." }
+    if (-not $Process.CloseMainWindow()) { throw 'Restored window could not return to the tray.' }
+    Start-Sleep -Milliseconds 500
+    if ([WindowAppIdentity]::IsWindowVisible($RestoredHandle)) { throw 'Restored window remained visible after closing to tray.' }
+
+    # The same executable owns explicit exit; there is no redundant Stop EXE.
     $StopStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $StopStartInfo.FileName = $StopExe
+    $StopStartInfo.FileName = $StartExe
+    $StopStartInfo.Arguments = 'stop --no-browser --json'
     $StopStartInfo.WorkingDirectory = $Root
     $StopStartInfo.UseShellExecute = $false
     $StopProcess = [System.Diagnostics.Process]::Start($StopStartInfo)
-    if (-not $StopProcess.WaitForExit(60000)) { throw 'Stop DeepSeek-Herness.exe did not exit within 60 seconds.' }
-    if (-not $Process.WaitForExit(45000)) { throw 'Stop DeepSeek-Herness.exe left the native desktop host running.' }
+    if (-not $StopProcess.WaitForExit(60000)) { throw 'Explicit exit command did not finish within 60 seconds.' }
+    if (-not $Process.WaitForExit(45000)) { throw 'Explicit exit left the native desktop host running.' }
     $StoppedByLauncher = (Get-ProductStatus).Status
-    if ($StoppedByLauncher -ne 'stopped') { throw 'Stop DeepSeek-Herness.exe left the DSH backend running.' }
+    if ($StoppedByLauncher -ne 'stopped') { throw 'Explicit exit left the DSH backend running.' }
+
+    # The persisted setting can opt into close-to-exit without changing system settings.
+    $LauncherSettings = Join-Path $Root 'data\launcher-settings.json'
+    [System.IO.File]::WriteAllText($LauncherSettings, '{"schemaVersion":1,"closeBehavior":"exit"}', [System.Text.UTF8Encoding]::new($false))
+    $Process = [System.Diagnostics.Process]::Start($StartInfo)
+    $ExitDeadline = [DateTime]::UtcNow.AddSeconds(90)
+    do {
+        Start-Sleep -Milliseconds 250
+        $Process.Refresh()
+        if ($Process.HasExited) { throw "Close-to-exit host ended before becoming ready: $($Process.ExitCode)" }
+        $ExitReady = (Get-ProductStatus).Status
+        $ExitRect = [WindowAppIdentity+Rect]::new()
+        $ExitWidth = 0
+        if ($Process.MainWindowHandle -ne [IntPtr]::Zero -and [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$ExitRect)) {
+            $ExitWidth = $ExitRect.Right - $ExitRect.Left
+        }
+    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $ExitWidth -lt 900 -or $ExitReady -ne 'running') -and [DateTime]::UtcNow -lt $ExitDeadline)
+    if (-not $Process.CloseMainWindow()) { throw 'Close-to-exit could not request a native close.' }
+    if (-not $Process.WaitForExit(45000)) { throw 'Close-to-exit setting left the host running.' }
+    if ((Get-ProductStatus).Status -ne 'stopped') { throw 'Close-to-exit setting left the backend running.' }
 
     [pscustomobject]@{
         Root = $Root
@@ -192,6 +256,7 @@ try {
         & $PortableNode $PortableCli stop --no-browser --json *> $null
         if ($Process -and -not $Process.HasExited) { & taskkill.exe /PID $Process.Id /T /F *> $null }
         if ($StopProcess -and -not $StopProcess.HasExited) { & taskkill.exe /PID $StopProcess.Id /T /F *> $null }
+        if ($RestoreProcess -and -not $RestoreProcess.HasExited) { & taskkill.exe /PID $RestoreProcess.Id /T /F *> $null }
     } finally {
         $ErrorActionPreference = $PreviousErrorActionPreference
     }

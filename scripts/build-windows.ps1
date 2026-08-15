@@ -157,7 +157,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 4
+        shellSchema = 5
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -180,8 +180,6 @@ try {
     )
     & $Csc $CompilerArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $LauncherExe)) { throw 'Windows launcher compilation failed.' }
-    Copy-Item $LauncherExe (Join-Path $Stage 'Stop DeepSeek-Herness.exe')
-
     $CommandExe = Join-Path $Stage 'dsh.exe'
     $CommandCompilerArgs = @(
         '/nologo', '/target:exe', '/platform:x64', '/optimize+',
@@ -254,7 +252,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 4
+            requiredShellSchema = 5
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
@@ -262,7 +260,7 @@ try {
                 requiredNodeVersion = $Lock.node.version
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
                 sha256 = $UpdateComponentHash
-                urls = @('https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-update-windows-x64.zip')
+                urls = @('https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/DSH-Portable-update-windows-x64.zip')
             }
         } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
         [System.Text.UTF8Encoding]::new($false)
@@ -299,7 +297,7 @@ try {
         payloads = [ordered]@{
             windowsX64 = [ordered]@{
                 filename = 'DSH-Portable-windows-x64-offline.zip'
-                url = 'https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip'
+                url = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/DSH-Portable-windows-x64-offline.zip'
                 sha256 = $Hash
                 bytes = (Get-Item -LiteralPath $Zip).Length
             }

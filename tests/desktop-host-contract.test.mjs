@@ -16,10 +16,23 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /SetCurrentProcessExplicitAppUserModelID\("io\.github\.wsl043\.dsh-portable"\)/)
   assert.match(host, /start["']\s*,\s*["']--no-browser["']\s*,\s*["']--json/)
   assert.match(host, /FormBorderStyle\.Sizable/)
-  assert.match(host, /FormClosing[\s\S]+InvokePortableCli[\s\S]+stop/)
+  assert.match(host, /NotifyIcon/)
+  assert.match(host, /launcher-settings\.json/)
+  assert.match(host, /关闭窗口时/)
+  assert.match(host, /最小化到托盘/)
+  assert.match(host, /退出 DeepSeek Harness/)
+  assert.match(host, /WmPortableRestore/)
+  assert.match(host, /SignalExistingDesktopHost/)
+  assert.match(host, /NavigationCompleted/)
+  assert.match(host, /TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>/)
+  assert.ok(
+    host.indexOf('NavigationCompleted') < host.indexOf('launchPanel.Visible = false'),
+    'the native loading view must remain until the embedded app finishes navigating',
+  )
+  assert.doesNotMatch(host.slice(0, host.indexOf('ShowDesktopAsync')), /MinimumSize\s*=\s*desktopStart\s*\?\s*new Size\(900,\s*620\)/)
   assert.match(host, /CloseOwnedDesktopHost/)
   assert.match(host, /Path\.GetFullPath\(process\.MainModule\.FileName\)/)
-  assert.match(host, /process\.CloseMainWindow\(\)/)
+  assert.match(host, /PostMessage\(window, WmPortableExit/)
   assert.match(host, /process\.WaitForExit\(45000\)/)
   assert.doesNotMatch(host, /--app=/)
 
@@ -30,6 +43,7 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(build, /Microsoft\.Web\.WebView2\.WinForms\.dll/)
   assert.match(build, /WebView2Loader\.dll/)
   assert.match(build, /WebView2-LICENSE\.txt/)
+  assert.doesNotMatch(build, /Copy-Item\s+\$LauncherExe\s+\(Join-Path\s+\$Stage\s+'Stop DeepSeek-Herness\.exe'\)/)
 })
 
 test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher', async () => {
@@ -65,6 +79,9 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(windowsSmoke, /msedge\.exe|chrome\.exe/)
   assert.match(windowsSmoke, /browser\.json/)
   assert.match(windowsSmoke, /CloseMainWindow/)
+  assert.match(windowsSmoke, /minimiz(?:e|ed).+tray|托盘/is)
+  assert.match(windowsSmoke, /launcher-settings\.json/)
+  assert.doesNotMatch(windowsSmoke, /Stop DeepSeek-Herness\.exe/)
   assert.match(windowsSmoke, /function Get-ProductStatus/)
   assert.match(windowsSmoke, /Another portable launcher is already starting or stopping DSH/)
   assert.match(macSmoke, /DSH-Portable\.app/)

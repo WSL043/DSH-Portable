@@ -27,7 +27,7 @@ export function platformUpdateKey(platform = process.platform, arch = process.ar
 }
 
 export function defaultUpdateManifestUrl(platform = process.platform, arch = process.arch) {
-  return `https://github.com/WSL043/DSH-Portable/releases/latest/download/portable-update-${platformUpdateKey(platform, arch)}.json`
+  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-${platformUpdateKey(platform, arch)}.json`
 }
 
 function parseSemanticVersion(value) {

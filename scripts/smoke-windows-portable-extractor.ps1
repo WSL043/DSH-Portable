@@ -43,7 +43,6 @@ try {
 
 foreach ($Name in @(
     'DeepSeek-Herness.exe',
-    'Stop DeepSeek-Herness.exe',
     'runtime\node\node.exe',
     'data\README.txt',
     'workspace\README.txt',

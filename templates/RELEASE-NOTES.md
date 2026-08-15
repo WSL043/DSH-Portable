@@ -1,64 +1,27 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-本次更新把 DSH 改为真正的原生桌面窗口。正常启动不再打开 Edge 或 Chrome；
-Windows 任务栏固定的是 DeepSeek-Herness 自己的窗口和图标，关闭窗口会安全停止
-对应的本地 DSH 服务。macOS 同步改为 WKWebView 原生应用窗口。
+本次更新统一了桌面启动与后台运行体验：启动过程保持一个紧凑的原生加载窗口，
+工作台准备完成后再一次切换，不再出现大面积空白和重复加载。Windows 关闭窗口默认
+收进系统托盘，任务继续运行；托盘菜单可以重新打开、完全退出或更改关闭行为。
 
-Windows 便携版与安装版继续自带固定版本 pnpm；不安装系统 Node.js、不修改 PATH，
-也能用 `dsh.exe` 管理任意 DSH 插件。会话、插件和工作区仍按原位置保留。
+便携目录继续完整保留会话、设置、插件和工作区。启动时检查更新，一般只下载变化的
+DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新继续只下载变化的 DSH 应用组件。
 
 ## Windows x64（推荐）
 
-[**下载轻量启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)
+[**下载便携版**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)
 
-下载器不到 1 MB。运行一次后，它会把完整环境下载到旁边的 `DSH-Portable`
-文件夹并直接启动；以后可以离线使用，也可以连同会话和设置一起移动。
-
-<details>
-<summary><strong>Windows 其他版本</strong></summary>
-
-- [离线自解压版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — 首次使用也不需要联网。
-- [离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — 与离线自解压版内容相同。
-- [安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — 开始菜单入口和标准卸载程序。
-
-</details>
+双击后会在旁边准备可移动的 `DSH-Portable` 文件夹。以后直接运行文件夹中的
+`DeepSeek-Herness.exe`。
 
 <details>
-<summary><strong>macOS 下载</strong></summary>
+<summary><strong>其他下载</strong></summary>
 
-- Apple Silicon（M1–M4）：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
+- [Windows 便携完整 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)
+- [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe)
+- Apple Silicon：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
 - Intel Mac：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
 
-macOS 包采用临时签名，没有经过 Apple 公证。首次启动可能需要按住 Control
-点按应用，再选择 **打开**。
-
 </details>
 
-## 使用方法
-
-1. 下载适合自己系统的一个文件。
-2. 运行启动器、解压包或安装应用。
-3. 按 DSH 界面提示配置模型。
-
-Windows 用户可在应用目录打开 PowerShell：
-
-```powershell
-.\dsh.exe plugin --profile web add <插件>
-.\dsh.exe plugin --profile web list --depth 0
-.\dsh.exe plugin --profile web update <插件包名>
-.\dsh.exe plugin --profile web remove <插件包名>
-```
-
-变更插件后，请先保存任务，再手动停止并重新启动 DSH。
-
-## 更新方式
-
-启动器会在启动时检查更新并先征求确认。一般更新只下载变化的 DSH 应用组件，
-保留会话、设置、凭据和工作区；只有运行环境发生兼容性变化时才提示下载完整包。
-新版无法正常启动时会自动恢复更新前的版本。
-
-本次更新增加了新的插件命令入口，已有版本会提示下载一次完整包；安装本版本后，
-后续兼容更新仍可由启动器只下载变化的 DSH 应用组件。
-
-轻量启动器会自动验证首次下载；普通用户不需要手动处理校验文件。离线完整包
-包含官方、未修改的 DSH 运行时、固定版本 Node.js、原生模块和所需许可证。
+普通用户只需选择与系统对应的一个下载。`checksums.txt` 仅供需要独立校验下载的用户。

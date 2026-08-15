@@ -1,0 +1,67 @@
+name: Publish tested release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Build and smoke test run ID for main
+        required: true
+        type: string
+      tag:
+        description: Release tag, for example v0.2.0-rc.4
+        required: true
+        type: string
+      prerelease:
+        description: Mark the user release as a prerelease
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Require a successful main build for this commit and version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .conclusion)" = success
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_branch)" = main
+          test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_sha)" = "$GITHUB_SHA"
+          test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
+      - uses: actions/download-artifact@v8
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: artifacts
+      - name: Stage a small user release and a separate update channel
+        run: node scripts/stage-release-assets.mjs artifacts release-staging
+      - name: Publish machine-readable update channel
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view update-channel-stable >/dev/null 2>&1 || \
+            gh release create update-channel-stable --prerelease --title "DSH-Portable update channel" --notes "Machine-readable update assets used by tested DSH-Portable builds."
+          gh release upload update-channel-stable release-staging/update-assets/* --clobber
+      - name: Publish curated user downloads
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          FLAGS=()
+          if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file templates/RELEASE-NOTES.md "${FLAGS[@]}"
+          gh release upload "$RELEASE_TAG" release-staging/user-assets/* release-staging/compat-assets/* --clobber

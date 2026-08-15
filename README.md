@@ -5,8 +5,8 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  不用配置 Node.js，也能运行官方 DeepSeek Harness。<br>
-  首次下载更小，运行数据留在本地，完成后的文件夹可以随处移动。
+  把 DeepSeek Harness、会话、设置、插件和工作区带在身边。<br>
+  复制整个文件夹，就能放进 U 盘、移动硬盘或另一台电脑继续使用。
 </p>
 
 <p align="center">
@@ -20,9 +20,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>下载 Windows x64 版</strong></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>下载 Windows 便携版（推荐）</strong></a>
   &nbsp;·&nbsp;
-  <a href="#其他下载">其他下载</a>
+  <a href="#其他下载">选择其他系统或安装方式</a>
 </p>
 
 <p align="center">
@@ -35,63 +35,55 @@
 
 ## 三步启动
 
-1. 下载体积很小的 [**Windows 启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)。
-2. 运行一次。启动器会把固定版本的完整运行环境下载到旁边的
-   `DSH-Portable` 文件夹，自动检查下载是否完整，然后打开 DSH。
-3. 按 DSH 界面提示配置模型。以后直接使用完成后的文件夹，不会重复下载运行环境。
+1. 下载 [**Windows 便携版**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)。
+2. 双击运行。它会在旁边准备一个完整的 `DSH-Portable` 文件夹并打开桌面窗口。
+3. 按界面提示连接模型。以后直接双击文件夹里的 `DeepSeek-Herness.exe`。
 
-不需要安装 Node.js，不会注册系统服务，也不会创建开机启动项。要移动到其他目录
-或 U 盘时，先停止 DSH，再复制整个 `DSH-Portable` 文件夹。
+默认点击右上角关闭按钮会收进系统托盘，正在执行的任务继续运行。要完全退出，
+右键托盘图标选择 **退出 DeepSeek Harness**；也可以在托盘菜单的 **关闭窗口时**
+改成直接退出。
 
-## 这个版本有什么不同
+## 为什么适合便携使用
 
-| | DSH-Portable 的实现 |
-| --- | --- |
-| **首次下载更小** | 推荐的 Windows 文件只是轻量启动器，完整运行环境只在首次使用时下载一次。 |
-| **原生桌面窗口** | DSH 在自己的应用窗口中运行；正常启动不会打开 Edge 或 Chrome，任务栏也保持 DSH-Portable 的应用身份。 |
-| **真正可移动** | 会话、设置、桌面 Web 数据、工作区、运行环境和启动器都在同一个文件夹内。 |
-| **保留离线方案** | 目标电脑无法在首次启动时联网，可以改用包含全部内容的离线完整包。 |
-| **固定版本并真实测试** | 每次发布都会固定 DSH 与 Node 版本，并在 CI 中实际启动、停止、移动、重启、安装和卸载成品。 |
-| **不修改 DSH** | 运行时来自官方 `@deepseek-ai/dsh`；不会预装第三方模型渠道或插件。 |
+- **一个文件夹就是完整工作环境**：会话、设置、插件、默认工作区和桌面数据一起移动。
+- **换位置继续工作**：复制到另一块硬盘、U 盘或另一台 Windows 电脑，打开后继续使用。
+- **备份简单**：退出应用后复制整个文件夹，不用分别寻找配置和插件目录。
+- **原生桌面体验**：使用独立应用窗口、任务栏身份和系统托盘，不会把浏览器窗口当成应用。
+- **更新不打散数据**：经过测试的更新会保留本地会话、凭据、插件和工作区。
+- **在线与离线都能准备**：日常使用轻量便携启动器；受限网络可直接下载完整 ZIP。
+
+## 迁移、备份与同步
+
+1. 从系统托盘选择 **退出 DeepSeek Harness**，等窗口和托盘图标都消失。
+2. 复制整个 `DSH-Portable` 文件夹。
+3. 在新位置双击 `DeepSeek-Herness.exe`。
+
+启动器会自动修正它管理的旧路径；你主动打开的外部项目仍保留原位置。需要在两台
+电脑之间同步时，也同步整个文件夹，并确保两边都已退出，避免同时改写会话文件。
 
 ## 其他下载
 
-<details>
-<summary><strong>Windows：离线完整包、ZIP 或安装版</strong></summary>
+### Windows
 
-- [离线自解压版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — 已包含 Node.js 和 DSH，首次使用也不用下载。
-- [离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — 与离线自解压版内容相同，使用普通压缩包。
-- [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — 写入开始菜单并提供标准卸载程序；用户数据单独保留。
+| 你想怎么用 | 下载 |
+| --- | --- |
+| **便携使用（推荐）** | [便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) — 首次运行后得到可移动文件夹 |
+| **目标电脑首次准备时无法联网** | [便携完整 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — 解压后直接使用 |
+| **像普通软件一样安装** | [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — 开始菜单、桌面快捷方式和标准卸载 |
 
-</details>
+### macOS
 
-<details>
-<summary><strong>macOS：Apple Silicon 或 Intel</strong></summary>
-
-- Apple Silicon（M1–M4）：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
-- Intel Mac：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
+| 电脑 | 便携 ZIP | 安装镜像 |
+| --- | --- | --- |
+| Apple Silicon（M1–M4） | [下载 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) | [下载 DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg) |
+| Intel Mac | [下载 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) | [下载 DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg) |
 
 macOS 包采用临时签名，没有经过 Apple 公证。首次打开若被阻止，请按住 Control
 点按应用，再选择 **打开**。
 
-</details>
-
-## 便携数据
-
-便携文件夹会把数据保存在这些固定位置：
-
-- `data/dsh-home/`：DSH 设置、模型凭据和会话；
-- `data/webview2/`：Windows 原生桌面窗口的 Web 数据；
-- `workspace/`：默认工作区；
-- `data/logs/`：本地服务日志。
-
-移动整个文件夹后，启动器会在下次启动时迁移自己管理的路径；外部项目仍保留原路径。
-
 ## 插件管理
 
-Windows 成品自带 DSH 所需的 Node.js 与固定版本 pnpm，不需要安装系统 Node.js、
-pnpm，也不会修改系统 PATH。在 DSH-Portable 文件夹中打开 PowerShell，使用通用
-`dsh.exe` 入口管理任意 DSH 插件：
+Windows 成品已经准备好插件命令。在 DSH-Portable 文件夹中打开 PowerShell：
 
 ```powershell
 .\dsh.exe plugin --profile web add <插件>
@@ -101,45 +93,54 @@ pnpm，也不会修改系统 PATH。在 DSH-Portable 文件夹中打开 PowerShe
 .\dsh.exe --profile web --dump-config
 ```
 
-`<插件>` 可以是 pnpm 支持的包名、Git 地址、本地目录或压缩包。安装版使用相同
-命令，插件和配置写入独立的用户数据目录；卸载或更新应用不会删除它们。插件变更
-不会自动重启正在运行的 DSH，请先保存任务，再手动停止并重新启动。只安装你信任
-的插件，因为插件可以在本机执行代码。
+`<插件>` 可以是包名、Git 地址、本地目录或压缩包。插件和设置都保存在便携数据中，
+会随整个文件夹迁移。插件变更不会自动打断正在运行的任务；保存工作并手动退出、
+重新打开后生效。只安装你信任的插件。
+
+想使用 ChatGPT / Codex 订阅模型，可按独立插件仓库说明安装：
+[**WSL043/dsh-codex-subscription**](https://github.com/WSL043/dsh-codex-subscription)。
+它不是 DSH-Portable 的内置组件，可以按需安装或移除。
 
 ## 更新
 
-DSH-Portable 会在启动时检查更新，并先询问是否安装。一般更新只下载已经变化的
-DSH 应用组件，不会重复下载 Node.js、启动器或整套离线包；会话、设置、凭据和工作区
-都会原地保留。下载完成后会先验证文件，再替换应用；若新版不能正常启动，
-会自动恢复到更新前的版本。
+DSH-Portable 会在启动时检查更新，并先询问是否安装。一般更新只下载变化的 DSH
+应用组件；会话、设置、凭据和工作区都会保留。下载完成后会先验证再替换，若新版
+不能正常启动，会自动恢复到更新前版本。
 
-只有 Node.js 或便携外壳等兼容性变化时，才会提示下载完整安装包。可以选择
-“稍后”，启动器不会静默切换版本。DSH-Portable 不是 GitHub Fork；发布任务会
-跟踪 [DeepSeek Harness 官方仓库](https://github.com/deepseek-ai/deepseek-harness)
-和 npm 包，并只向用户提供通过对应系统成品测试的版本。
+只有运行环境或启动器出现兼容性变化时，才会提示下载完整安装包。官方预览版更新
+会先生成候选版本，经过 Windows 与 macOS 成品测试后才进入启动器更新通道，不会把
+未经验证的官方提交直接装到你的工作环境。
+
+## 便携数据
+
+- `data/dsh-home/`：设置、模型凭据、会话和插件；
+- `data/webview2/`：Windows 桌面窗口数据；
+- `workspace/`：默认工作区；
+- `data/logs/`：本地服务日志。
+
+安装版把相同数据放在 `%LOCALAPPDATA%\DeepSeek-Herness`，卸载应用时不会自动删除。
 
 ## 安全
 
 DSH 是具备本地代码执行能力的 Agent 运行环境，请只使用可信模型、插件和项目。
 服务只绑定 `127.0.0.1`，便携外壳默认关闭 DSH 遥测。
 
-`data` 目录可能包含 API 凭据和私人会话，请像保管带密码的移动硬盘一样保管整个
-文件夹。Windows 移动盘优先使用 NTFS；FAT 和 exFAT 无法提供同等级权限保护。
+`data` 目录可能包含 API 凭据和私人会话，请妥善保管。Windows 移动盘优先使用
+NTFS；FAT 和 exFAT 无法提供同等级权限保护。
 
 <details>
 <summary><strong>从源码构建</strong></summary>
 
 ```powershell
 ./scripts/build-windows.ps1
-./scripts/build-windows.ps1 -BuildInstaller
 ```
 
 ```bash
 bash scripts/build-macos.sh arm64   # 或 x64
 ```
 
-依赖锁定、组件声明、成品测试和发布清单都保存在本仓库。下载完整性由启动器自动
-处理，普通用户不需要手动复制或比对一长串校验值。
+依赖版本、发布内容和成品测试都由仓库固定。下载完整性由启动器处理，普通用户无需
+手动比对校验值。
 
 </details>
 

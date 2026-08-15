@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-rc.3"
+  #define AppVersion "0.2.0-rc.4"
 #endif
 
 [Setup]
@@ -36,7 +36,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.2.0.3
+VersionInfoVersion=0.2.0.4
 VersionInfoProductName=DSH-Portable
 VersionInfoDescription=DSH-Portable offline self-extractor
 VersionInfoCompany=WSL043
@@ -54,10 +54,10 @@ var
   StopEntry: String;
 begin
   Result := '';
-  StopEntry := ExpandConstant('{app}\Stop DeepSeek-Herness.exe');
+  StopEntry := ExpandConstant('{app}\DeepSeek-Herness.exe');
   if FileExists(StopEntry) then
   begin
-    if not Exec(StopEntry, '', ExpandConstant('{app}'), SW_HIDE,
+    if not Exec(StopEntry, 'stop --no-browser --json', ExpandConstant('{app}'), SW_HIDE,
       ewWaitUntilTerminated, ResultCode) then
       Result := 'The existing DeepSeek-Herness process could not be stopped.'
     else if ResultCode <> 0 then

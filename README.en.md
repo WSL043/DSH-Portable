@@ -5,8 +5,8 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  Run the official DeepSeek Harness without setting up Node.js.<br>
-  Start small, keep everything local, and move the finished folder anywhere.
+  Carry DeepSeek Harness, sessions, settings, plugins, and workspace together.<br>
+  Copy one folder to another drive, USB device, or PC and continue working.
 </p>
 
 <p align="center">
@@ -20,81 +20,70 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>Download for Windows x64</strong></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><strong>Download Windows portable (recommended)</strong></a>
   &nbsp;·&nbsp;
-  <a href="#other-downloads">Other downloads</a>
+  <a href="#other-downloads">Other platforms and install modes</a>
 </p>
 
 <p align="center">
-  <img src="assets/dsh-interface.png" width="960" alt="DSH-Portable running the official DeepSeek Harness interface">
+  <img src="assets/dsh-interface.png" width="960" alt="Official DeepSeek Harness running inside DSH-Portable">
 </p>
 
 > [!NOTE]
-> DeepSeek Harness is currently a developer preview. DSH-Portable is an independent
-> community distribution, not an official DeepSeek desktop application.
+> DeepSeek Harness is currently a developer preview. DSH-Portable is an
+> independent community distribution, not an official DeepSeek desktop app.
 
 ## Start in 3 steps
 
-1. Download the small [**Windows launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).
-2. Run it once. It downloads the pinned runtime into a `DSH-Portable` folder next
-   to the launcher, verifies the download automatically, and opens DSH.
-3. Configure a model in the DSH interface. Future launches work from the completed
-   folder without downloading the runtime again.
+1. Download the [**Windows portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).
+2. Run it once. It prepares a complete `DSH-Portable` folder beside itself and opens the desktop app.
+3. Connect a model in the interface. Next time, run `DeepSeek-Herness.exe` in that folder.
 
-No Node.js setup, system service, or startup task is required. To move the app or
-put it on a USB drive, stop DSH first and copy the entire `DSH-Portable` folder.
+Closing the window sends the app to the system tray by default, so active tasks keep running.
+Use **Exit DeepSeek Harness** in the tray menu to stop everything, or change **When closing the
+window** to exit directly.
 
-## What makes this distribution different
+## Built for portable use
 
-| | DSH-Portable behavior |
-| --- | --- |
-| **Small first download** | The recommended Windows file is a lightweight bootstrap. The larger runtime is downloaded only once. |
-| **Native desktop window** | DSH runs inside its own app window. Normal startup does not open Edge or Chrome, and the taskbar keeps the DSH-Portable identity. |
-| **Actually portable** | Sessions, settings, desktop web data, workspace, runtime, and launchers stay under one movable folder. |
-| **Offline option** | A complete self-extracting package is available when the target machine cannot download on first launch. |
-| **Pinned and tested** | Each release fixes the DSH and Node versions, then starts, stops, moves, restarts, installs, and uninstalls the built packages in CI. |
-| **Unmodified DSH** | The runtime is the official `@deepseek-ai/dsh` package. Third-party providers and plugins are not bundled. |
+- **One complete work environment**: sessions, settings, plugins, default workspace, and desktop data move together.
+- **Continue from a new location**: copy the folder to another drive, USB device, or Windows PC.
+- **Simple backup**: exit the app, then copy one folder instead of finding separate data directories.
+- **Native desktop ownership**: a dedicated window, taskbar identity, and system tray replace browser app-mode windows.
+- **Data-safe updates**: tested releases preserve local sessions, credentials, plugins, and workspace.
+- **Online or offline preparation**: use the small launcher normally or the complete ZIP on a restricted network.
+
+## Moving, backing up, and syncing
+
+1. Choose **Exit DeepSeek Harness** from the system tray and wait for its icon to disappear.
+2. Copy the entire `DSH-Portable` folder.
+3. Run `DeepSeek-Herness.exe` from the new location.
+
+Managed paths are repaired automatically after a move. External projects keep their original paths.
+When syncing between two computers, exit the app on both before syncing the whole folder.
 
 ## Other downloads
 
-<details>
-<summary><strong>Windows: offline package, ZIP, or installed app</strong></summary>
+### Windows
 
-- [Offline self-extractor](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — includes Node.js and DSH; no first-run download.
-- [Offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — the same movable folder in a standard archive.
-- [Windows installer](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — Start menu shortcut and a normal uninstaller; user data is kept separately.
+| Use case | Download |
+| --- | --- |
+| **Portable use (recommended)** | [Portable launcher](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) — creates a movable folder on first run |
+| **First setup must work offline** | [Complete portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| **Install like a normal app** | [Windows installer](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — Start menu, shortcut, and standard uninstall |
 
-</details>
+### macOS
 
-<details>
-<summary><strong>macOS: Apple Silicon or Intel</strong></summary>
+| Mac | Portable ZIP | Disk image |
+| --- | --- | --- |
+| Apple Silicon (M1–M4) | [ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) | [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg) |
+| Intel | [ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) | [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg) |
 
-- Apple Silicon (M1–M4): [portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
-- Intel Mac: [portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
-
-The macOS builds are ad-hoc signed rather than Apple-notarized. On first launch,
-Control-click the app and choose **Open** if macOS blocks it.
-
-</details>
-
-## Portable data
-
-The portable folder keeps its state in predictable locations:
-
-- `data/dsh-home/` — DSH settings, provider credentials, and sessions;
-- `data/webview2/` — Web data for the native Windows desktop window;
-- `workspace/` — the default working directory;
-- `data/logs/` — local service logs.
-
-After the folder is moved, the launcher migrates paths it owns on the next start.
-External projects keep their original paths.
+The macOS packages are ad-hoc signed, not notarized by Apple. If first launch is blocked,
+Control-click the app and choose **Open**.
 
 ## Plugin management
 
-The Windows packages include the Node.js runtime and a fixed pnpm version required
-by DSH. You do not need a system Node.js or pnpm installation, and DSH-Portable does
-not change the system PATH. Open PowerShell in the DSH-Portable folder and use the
-generic command entry for any DSH plugin:
+The Windows product includes its plugin command. Open PowerShell in the DSH-Portable folder:
 
 ```powershell
 .\dsh.exe plugin --profile web add <plugin>
@@ -104,55 +93,56 @@ generic command entry for any DSH plugin:
 .\dsh.exe --profile web --dump-config
 ```
 
-`<plugin>` can be any package, Git URL, local directory, or archive accepted by
-pnpm. The installed edition uses the same commands while keeping plugins and
-configuration in its external user-data directory. Plugin changes never restart a
-running DSH process: save your task, stop DSH, and start it again when convenient.
-Install only plugins you trust because a plugin can execute code on this computer.
+Plugins and settings travel with the portable data. Plugin changes never restart a running task;
+save your work and restart the app when convenient. Install only plugins you trust.
+
+To use ChatGPT / Codex subscription models, follow the optional plugin repository:
+[**WSL043/dsh-codex-subscription**](https://github.com/WSL043/dsh-codex-subscription).
+It is not bundled with DSH-Portable and can be installed or removed independently.
 
 ## Updates
 
-DSH-Portable checks for updates when it starts and asks before installing one.
-A normal update downloads only the changed DSH application component instead of
-downloading Node.js, the launcher, or the complete offline package again.
-Sessions, settings, credentials, and workspace remain in place. The download is
-verified before the application is replaced; if the new version cannot start,
-the launcher restores the previous version.
+DSH-Portable checks for updates when it starts and asks before installing one. A normal update
+downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place. Files are verified before replacement, and a failed launch restores
+the previous version.
 
-When a Node.js or portable-shell compatibility boundary changes, DSH-Portable
-offers the complete package instead. You can choose **Later**, and versions are
-never switched silently. DSH-Portable is not a GitHub fork: its release process
-watches the official [DeepSeek Harness repository](https://github.com/deepseek-ai/deepseek-harness)
-and npm package, then publishes only packages that pass the corresponding
-Windows or macOS product checks.
+When the runtime compatibility boundary changes, DSH-Portable requests a complete package. Official
+preview updates first become candidate builds and must pass Windows and macOS finished-product
+tests before they enter the launcher update channel.
+
+## Portable data
+
+- `data/dsh-home/`: settings, credentials, sessions, and plugins;
+- `data/webview2/`: Windows desktop web data;
+- `workspace/`: default workspace;
+- `data/logs/`: local service logs.
+
+The installed edition keeps the same data under `%LOCALAPPDATA%\DeepSeek-Herness` and does not
+delete it during uninstall.
 
 ## Security
 
-DSH is an agent runtime with local code-execution capability. Use trusted models,
-plugins, and projects only. The service binds to `127.0.0.1`, and the portable
-shell disables DSH telemetry by default.
+DSH is an agent environment with local code-execution capability. Use trusted models, plugins,
+and projects. The service binds only to `127.0.0.1`, and this shell disables DSH telemetry by default.
 
-The `data` directory can contain API credentials and private conversations. Treat
-the whole portable folder like a password-protected drive. NTFS is preferred for
-Windows removable media; FAT and exFAT do not provide equivalent permissions.
+The `data` directory can contain API credentials and private conversations. Protect it accordingly.
+Use NTFS for removable Windows drives when possible; FAT and exFAT do not provide equivalent permissions.
 
 <details>
 <summary><strong>Build from source</strong></summary>
 
 ```powershell
 ./scripts/build-windows.ps1
-./scripts/build-windows.ps1 -BuildInstaller
 ```
 
 ```bash
 bash scripts/build-macos.sh arm64   # or x64
 ```
 
-The dependency lock, component notices, package tests, and release manifest live
-in this repository. Download verification is automatic; beginners do not need to
-copy or compare checksum strings manually.
+The repository pins dependencies, release contents, and finished-product tests. The launcher handles
+download verification, so normal users do not need to compare checksums manually.
 
 </details>
 
-DeepSeek Harness and the DeepSeek name and mark belong to DeepSeek. DSH-Portable
-is maintained independently by WSL043 and is not endorsed by DeepSeek.
+DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is maintained
+independently by WSL043 and is not endorsed by DeepSeek.

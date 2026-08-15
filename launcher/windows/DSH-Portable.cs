@@ -16,14 +16,21 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.3")]
-[assembly: AssemblyFileVersion("0.2.0.3")]
+[assembly: AssemblyVersion("0.2.0.4")]
+[assembly: AssemblyFileVersion("0.2.0.4")]
 
 namespace DshPortable
 {
     internal sealed class LauncherWindow : Form
     {
+        internal const int WmPortableExit = 0x8043;
+        internal const int WmPortableRestore = 0x8044;
+        private enum WindowCloseBehavior { Tray, Exit }
+
         private readonly Panel launchPanel;
+        private readonly Panel launchContent;
+        private readonly PictureBox productIcon;
+        private readonly Label productLabel;
         private readonly Label statusLabel;
         private readonly ProgressBar progress;
         private readonly TextBox detailsBox;
@@ -33,6 +40,9 @@ namespace DshPortable
         private readonly Button copyButton;
         private readonly Button closeButton;
         private readonly WebView2 webView;
+        private readonly NotifyIcon trayIcon;
+        private readonly ToolStripMenuItem closeToTrayItem;
+        private readonly ToolStripMenuItem closeToExitItem;
         private readonly string root;
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
@@ -43,6 +53,8 @@ namespace DshPortable
         private bool shutdownRunning;
         private bool allowClose;
         private bool backendStarted;
+        private bool trayNoticeShown;
+        private WindowCloseBehavior closeBehavior;
         private Uri applicationUri;
 
         internal LauncherWindow(string[] args)
@@ -56,35 +68,53 @@ namespace DshPortable
             Text = "DeepSeek-Herness";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedDialog;
-            MaximizeBox = desktopStart;
+            FormBorderStyle = FormBorderStyle.FixedSingle;
+            MaximizeBox = false;
             MinimizeBox = desktopStart;
             ShowInTaskbar = !nonInteractive;
             if (nonInteractive) Opacity = 0;
-            ClientSize = desktopStart ? new Size(520, 176) : new Size(440, 138);
-            MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
-            BackColor = Color.White;
+            ClientSize = desktopStart ? new Size(560, 220) : new Size(440, 160);
+            MinimumSize = Size.Empty;
+            BackColor = SystemColors.Window;
             Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
 
-            launchPanel = new Panel { Dock = DockStyle.Fill, BackColor = Color.White };
+            launchPanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+            launchContent = new Panel { Size = new Size(504, 144), BackColor = SystemColors.Window };
+            launchPanel.Resize += delegate { CenterLaunchContent(); };
+            productIcon = new PictureBox
+            {
+                Location = new Point(24, 20),
+                Size = new Size(40, 40),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = Icon == null ? null : Icon.ToBitmap(),
+            };
+            productLabel = new Label
+            {
+                AutoSize = false,
+                Location = new Point(80, 18),
+                Size = new Size(400, 30),
+                Text = "DeepSeek Harness",
+                Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point),
+            };
             statusLabel = new Label
             {
                 AutoEllipsis = true,
-                Location = new Point(28, 28),
-                Size = new Size(464, 48),
+                Location = new Point(80, 53),
+                Size = new Size(400, 36),
+                ForeColor = Color.FromArgb(72, 72, 72),
                 Text = IsStopCommand(launcherArgs) ? "正在停止 DeepSeek Harness…" : "正在启动 DeepSeek Harness…",
             };
             progress = new ProgressBar
             {
-                Location = new Point(28, 92),
-                Size = new Size(464, 8),
+                Location = new Point(24, 108),
+                Size = new Size(456, 6),
                 Style = ProgressBarStyle.Marquee,
                 MarqueeAnimationSpeed = 24,
             };
             updateDescription = new Label
             {
-                Location = new Point(28, 72),
-                Size = new Size(464, 48),
+                Location = new Point(24, 91),
+                Size = new Size(456, 48),
                 ForeColor = Color.FromArgb(80, 80, 80),
                 Visible = false,
             };
@@ -92,7 +122,7 @@ namespace DshPortable
             {
                 Text = "现在更新",
                 Size = new Size(112, 34),
-                Location = new Point(268, 132),
+                Location = new Point(264, 154),
                 Visible = false,
             };
             updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(true); };
@@ -100,20 +130,20 @@ namespace DshPortable
             {
                 Text = "稍后",
                 Size = new Size(96, 34),
-                Location = new Point(392, 132),
+                Location = new Point(388, 154),
                 Visible = false,
             };
             laterButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(false); };
 
             detailsBox = new TextBox
             {
-                Location = new Point(28, 64),
-                Size = new Size(544, 164),
+                Location = new Point(24, 92),
+                Size = new Size(536, 150),
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
                 WordWrap = true,
-                BackColor = Color.White,
+                BackColor = SystemColors.Window,
                 Font = new Font("Consolas", 9F, FontStyle.Regular, GraphicsUnit.Point),
                 Visible = false,
             };
@@ -121,7 +151,7 @@ namespace DshPortable
             {
                 Text = "复制详情",
                 Size = new Size(116, 32),
-                Location = new Point(332, 244),
+                Location = new Point(320, 252),
                 Visible = false,
             };
             copyButton.Click += delegate
@@ -134,24 +164,51 @@ namespace DshPortable
             {
                 Text = "关闭",
                 Size = new Size(92, 32),
-                Location = new Point(320, 88),
+                Location = new Point(412, 252),
                 Visible = false,
             };
             closeButton.Click += delegate { allowClose = true; Close(); };
             CancelButton = closeButton;
 
-            launchPanel.Controls.Add(statusLabel);
-            launchPanel.Controls.Add(progress);
-            launchPanel.Controls.Add(updateDescription);
-            launchPanel.Controls.Add(updateButton);
-            launchPanel.Controls.Add(laterButton);
-            launchPanel.Controls.Add(detailsBox);
-            launchPanel.Controls.Add(copyButton);
-            launchPanel.Controls.Add(closeButton);
+            launchContent.Controls.Add(productIcon);
+            launchContent.Controls.Add(productLabel);
+            launchContent.Controls.Add(statusLabel);
+            launchContent.Controls.Add(progress);
+            launchContent.Controls.Add(updateDescription);
+            launchContent.Controls.Add(updateButton);
+            launchContent.Controls.Add(laterButton);
+            launchContent.Controls.Add(detailsBox);
+            launchContent.Controls.Add(copyButton);
+            launchContent.Controls.Add(closeButton);
+            launchPanel.Controls.Add(launchContent);
+
+            closeBehavior = LoadCloseBehavior();
+            closeToTrayItem = new ToolStripMenuItem("最小化到托盘") { Checked = closeBehavior == WindowCloseBehavior.Tray };
+            closeToExitItem = new ToolStripMenuItem("退出程序") { Checked = closeBehavior == WindowCloseBehavior.Exit };
+            closeToTrayItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Tray); };
+            closeToExitItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Exit); };
+            ToolStripMenuItem closeBehaviorMenu = new ToolStripMenuItem("关闭窗口时");
+            closeBehaviorMenu.DropDownItems.Add(closeToTrayItem);
+            closeBehaviorMenu.DropDownItems.Add(closeToExitItem);
+            ContextMenuStrip trayMenu = new ContextMenuStrip();
+            trayMenu.Items.Add("打开 DeepSeek Harness", null, delegate { RestoreFromTray(); });
+            trayMenu.Items.Add(new ToolStripSeparator());
+            trayMenu.Items.Add(closeBehaviorMenu);
+            trayMenu.Items.Add(new ToolStripSeparator());
+            trayMenu.Items.Add("退出 DeepSeek Harness", null, delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
+            trayIcon = new NotifyIcon
+            {
+                Icon = Icon,
+                Text = "DeepSeek Harness",
+                ContextMenuStrip = trayMenu,
+                Visible = false,
+            };
+            trayIcon.DoubleClick += delegate { RestoreFromTray(); };
 
             webView = new WebView2 { Dock = DockStyle.Fill, Visible = false };
             Controls.Add(webView);
             Controls.Add(launchPanel);
+            CenterLaunchContent();
             Shown += async delegate { await RunLauncherAsync(); };
         }
 
@@ -160,7 +217,8 @@ namespace DshPortable
             if (desktopReady && !allowClose && eventArgs.CloseReason != CloseReason.WindowsShutDown)
             {
                 eventArgs.Cancel = true;
-                if (!shutdownRunning) BeginDesktopShutdown();
+                if (closeBehavior == WindowCloseBehavior.Tray) HideToTray();
+                else if (!shutdownRunning) BeginDesktopShutdown();
                 return;
             }
             if (operationRunning && !allowClose && eventArgs.CloseReason == CloseReason.UserClosing)
@@ -171,15 +229,122 @@ namespace DshPortable
             base.OnFormClosing(eventArgs);
         }
 
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == WmPortableExit)
+            {
+                backendStarted = false;
+                allowClose = true;
+                DisposeTrayIcon();
+                Close();
+                return;
+            }
+            if (message.Msg == WmPortableRestore)
+            {
+                RestoreFromTray();
+                return;
+            }
+            base.WndProc(ref message);
+        }
+
+        private void CenterLaunchContent()
+        {
+            launchContent.Location = new Point(
+                Math.Max(0, (launchPanel.ClientSize.Width - launchContent.Width) / 2),
+                Math.Max(0, (launchPanel.ClientSize.Height - launchContent.Height) / 2));
+        }
+
+        private void HideToTray()
+        {
+            Hide();
+            ShowInTaskbar = false;
+            trayIcon.Visible = true;
+            if (!trayNoticeShown)
+            {
+                trayNoticeShown = true;
+                trayIcon.ShowBalloonTip(3000, "DeepSeek Harness 仍在运行", "正在执行的任务会继续。右键托盘图标可以打开或退出。", ToolTipIcon.Info);
+            }
+        }
+
+        private void RestoreFromTray()
+        {
+            if (!desktopReady) return;
+            ShowInTaskbar = true;
+            Show();
+            WindowState = FormWindowState.Normal;
+            Activate();
+        }
+
+        private void DisposeTrayIcon()
+        {
+            trayIcon.Visible = false;
+        }
+
+        private string ResolveProductDataRoot()
+        {
+            if (File.Exists(Path.Combine(root, "installed-mode.json")))
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data");
+            return Path.Combine(root, "data");
+        }
+
+        private string LauncherSettingsPath()
+        {
+            return Path.Combine(ResolveProductDataRoot(), "launcher-settings.json");
+        }
+
+        private WindowCloseBehavior LoadCloseBehavior()
+        {
+            try
+            {
+                string source = File.ReadAllText(LauncherSettingsPath(), Encoding.UTF8);
+                return Regex.IsMatch(source, "\\\"closeBehavior\\\"\\s*:\\s*\\\"exit\\\"", RegexOptions.IgnoreCase)
+                    ? WindowCloseBehavior.Exit
+                    : WindowCloseBehavior.Tray;
+            }
+            catch { return WindowCloseBehavior.Tray; }
+        }
+
+        private void SaveCloseBehavior(WindowCloseBehavior behavior)
+        {
+            closeBehavior = behavior;
+            closeToTrayItem.Checked = behavior == WindowCloseBehavior.Tray;
+            closeToExitItem.Checked = behavior == WindowCloseBehavior.Exit;
+            string filename = LauncherSettingsPath();
+            string temporary = filename + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            File.WriteAllText(temporary, behavior == WindowCloseBehavior.Exit
+                ? "{\"schemaVersion\":1,\"closeBehavior\":\"exit\"}\r\n"
+                : "{\"schemaVersion\":1,\"closeBehavior\":\"tray\"}\r\n", new UTF8Encoding(false));
+            if (File.Exists(filename))
+            {
+                try { File.Replace(temporary, filename, filename + ".bak", true); }
+                catch
+                {
+                    File.Copy(temporary, filename, true);
+                    File.Delete(temporary);
+                }
+            }
+            else File.Move(temporary, filename);
+            try { File.Delete(filename + ".bak"); } catch { }
+        }
+
         protected override void OnHandleCreated(EventArgs eventArgs)
         {
             base.OnHandleCreated(eventArgs);
             TaskbarIdentity.Apply(Handle, "io.github.wsl043.dsh-portable");
         }
 
+        protected override void OnFormClosed(FormClosedEventArgs eventArgs)
+        {
+            DisposeTrayIcon();
+            trayIcon.Dispose();
+            base.OnFormClosed(eventArgs);
+        }
+
         private void BeginDesktopShutdown()
         {
             shutdownRunning = true;
+            trayIcon.Visible = true;
             webView.Enabled = false;
             Text = "DeepSeek-Herness · 正在关闭";
             Task.Run(() => InvokePortableCli(new[] { "stop", "--no-browser", "--json" })).ContinueWith(task =>
@@ -193,6 +358,7 @@ namespace DshPortable
                     {
                         backendStarted = false;
                         allowClose = true;
+                        DisposeTrayIcon();
                         Close();
                         return;
                     }
@@ -234,12 +400,59 @@ namespace DshPortable
                     try { candidate = Path.GetFullPath(process.MainModule.FileName); }
                     catch { continue; }
                     if (!string.Equals(candidate, expected, StringComparison.OrdinalIgnoreCase)) continue;
-                    if (!process.CloseMainWindow())
-                        throw new InvalidOperationException("DeepSeek-Herness 原生窗口无法接收正常关闭请求。");
+                    bool signaled = false;
+                    EnumWindows(delegate(IntPtr window, IntPtr value)
+                    {
+                        uint processId;
+                        GetWindowThreadProcessId(window, out processId);
+                        if (processId != (uint)process.Id) return true;
+                        signaled = PostMessage(window, WmPortableExit, IntPtr.Zero, IntPtr.Zero) || signaled;
+                        return true;
+                    }, IntPtr.Zero);
+                    if (!signaled)
+                        throw new InvalidOperationException("DeepSeek-Herness 原生窗口无法接收退出请求。");
                     if (!process.WaitForExit(45000))
                         throw new TimeoutException("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。");
                 }
             }
+        }
+
+        private delegate bool EnumWindowsCallback(IntPtr window, IntPtr value);
+
+        [DllImport("user32.dll")]
+        private static extern bool EnumWindows(EnumWindowsCallback callback, IntPtr value);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        internal static bool SignalExistingDesktopHost(int message)
+        {
+            string expected = Path.GetFullPath(Application.ExecutablePath);
+            int currentProcessId = Process.GetCurrentProcess().Id;
+            bool signaled = false;
+            foreach (Process process in Process.GetProcessesByName("DeepSeek-Herness"))
+            {
+                using (process)
+                {
+                    if (process.Id == currentProcessId) continue;
+                    string candidate;
+                    try { candidate = Path.GetFullPath(process.MainModule.FileName); }
+                    catch { continue; }
+                    if (!string.Equals(candidate, expected, StringComparison.OrdinalIgnoreCase)) continue;
+                    EnumWindows(delegate(IntPtr window, IntPtr value)
+                    {
+                        uint processId;
+                        GetWindowThreadProcessId(window, out processId);
+                        if (processId == (uint)process.Id)
+                            signaled = PostMessage(window, message, IntPtr.Zero, IntPtr.Zero) || signaled;
+                        return true;
+                    }, IntPtr.Zero);
+                }
+            }
+            return signaled;
         }
 
         private static string QuoteArgument(string value)
@@ -281,6 +494,10 @@ namespace DshPortable
                         HandleFailure(1, "DeepSeek Harness 返回了无效的本地地址。\r\n" + started.Item2);
                         return;
                     }
+                    int startupHold;
+                    if (Int32.TryParse(Environment.GetEnvironmentVariable("DSH_PORTABLE_STARTUP_HOLD_MS"), out startupHold)
+                        && startupHold > 0)
+                        await Task.Delay(Math.Min(startupHold, 10000));
                     await ShowDesktopAsync(url);
                     return;
                 }
@@ -353,7 +570,7 @@ namespace DshPortable
 
         private async Task ShowDesktopAsync(string url)
         {
-            statusLabel.Text = "正在准备桌面窗口…";
+            statusLabel.Text = "正在打开工作台…";
             string userData = ResolveWebViewDataRoot();
             Directory.CreateDirectory(userData);
             try
@@ -372,19 +589,37 @@ namespace DshPortable
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
+            TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
+                new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
+            EventHandler<CoreWebView2NavigationCompletedEventArgs> navigationCompleted = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
+            {
+                navigation.TrySetResult(eventArgs);
+            };
+            webView.CoreWebView2.NavigationCompleted += navigationCompleted;
             webView.Source = applicationUri;
 
-            launchPanel.Visible = false;
-            webView.Visible = true;
-            webView.BringToFront();
+            Task completed = await Task.WhenAny(navigation.Task, Task.Delay(30000));
+            webView.CoreWebView2.NavigationCompleted -= navigationCompleted;
+            if (completed != navigation.Task)
+                throw new TimeoutException("DeepSeek Harness 工作台未能在 30 秒内打开。");
+            CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
+            if (!result.IsSuccess)
+                throw new InvalidOperationException("DeepSeek Harness 工作台加载失败：" + result.WebErrorStatus);
+
+            SuspendLayout();
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = true;
             MinimizeBox = true;
             ClientSize = new Size(1280, 820);
             MinimumSize = new Size(900, 620);
             CenterToScreen();
+            webView.Visible = true;
+            webView.BringToFront();
+            launchPanel.Visible = false;
+            ResumeLayout(true);
             operationRunning = false;
             desktopReady = true;
+            trayIcon.Visible = true;
         }
 
         private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs eventArgs)
@@ -428,9 +663,11 @@ namespace DshPortable
         private Task<bool> ShowUpdateChoiceAsync(string latest, bool fullPackage)
         {
             progress.Visible = false;
-            ClientSize = new Size(520, 190);
+            ClientSize = new Size(560, 260);
+            launchContent.Size = new Size(504, 208);
+            CenterLaunchContent();
             statusLabel.AutoEllipsis = false;
-            statusLabel.Size = new Size(464, 42);
+            statusLabel.Size = new Size(400, 34);
             statusLabel.Text = fullPackage
                 ? "此版本需要完整升级" + (String.IsNullOrEmpty(latest) ? "" : " · " + latest)
                 : "发现新版" + (String.IsNullOrEmpty(latest) ? "" : " · " + latest);
@@ -449,10 +686,13 @@ namespace DshPortable
         private void ResetOperationUi()
         {
             updateChoice = null;
-            ClientSize = new Size(520, 176);
+            ClientSize = new Size(560, 220);
+            launchContent.Size = new Size(504, 144);
+            CenterLaunchContent();
             statusLabel.AutoEllipsis = true;
-            statusLabel.Location = new Point(28, 28);
-            statusLabel.Size = new Size(464, 48);
+            statusLabel.Location = new Point(80, 53);
+            statusLabel.Size = new Size(400, 36);
+            statusLabel.ForeColor = Color.FromArgb(72, 72, 72);
             statusLabel.Text = IsStopCommand(launcherArgs) ? "正在停止 DeepSeek Harness…" : "正在启动 DeepSeek Harness…";
             updateDescription.Visible = false;
             updateButton.Visible = false;
@@ -532,20 +772,22 @@ namespace DshPortable
             launchPanel.Visible = true;
             webView.Visible = false;
             progress.Visible = false;
-            ClientSize = new Size(600, 300);
+            ClientSize = new Size(640, 360);
+            launchContent.Size = new Size(584, 304);
+            CenterLaunchContent();
             MinimumSize = Size.Empty;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
             statusLabel.AutoEllipsis = false;
-            statusLabel.Location = new Point(28, 24);
-            statusLabel.Size = new Size(544, 28);
+            statusLabel.Location = new Point(80, 53);
+            statusLabel.Size = new Size(480, 28);
             statusLabel.Text = IsStopCommand(launcherArgs) ? "DeepSeek Harness 停止失败。" : "DeepSeek Harness 启动失败。";
             statusLabel.ForeColor = Color.FromArgb(178, 38, 38);
             detailsBox.Text = message ?? string.Empty;
             detailsBox.Visible = true;
             copyButton.Visible = true;
-            closeButton.Location = new Point(480, 244);
+            closeButton.Location = new Point(468, 252);
             closeButton.Visible = true;
             AcceptButton = closeButton;
             ActiveControl = closeButton;
@@ -628,6 +870,8 @@ namespace DshPortable
             SetCurrentProcessExplicitAppUserModelID("io.github.wsl043.dsh-portable");
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if ((args == null || args.Length == 0) && LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableRestore))
+                return;
             Application.Run(new LauncherWindow(args));
         }
     }

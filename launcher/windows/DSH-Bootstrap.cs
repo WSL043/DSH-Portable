@@ -22,8 +22,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.2.0.3")]
-[assembly: System.Reflection.AssemblyFileVersion("0.2.0.3")]
+[assembly: System.Reflection.AssemblyVersion("0.2.0.4")]
+[assembly: System.Reflection.AssemblyFileVersion("0.2.0.4")]
 
 namespace DshPortableBootstrap
 {
@@ -81,7 +81,7 @@ namespace DshPortableBootstrap
 
     internal sealed class BootstrapOptions
     {
-        internal const string DefaultManifestUrl = "https://github.com/WSL043/DSH-Portable/releases/latest/download/portable-manifest.json";
+        internal const string DefaultManifestUrl = "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-manifest.json";
         internal const string OfflineDownloadUrl = "https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe";
 
         internal string ManifestUrl = DefaultManifestUrl;

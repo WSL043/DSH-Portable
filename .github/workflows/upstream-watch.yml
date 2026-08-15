@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
-  issues: write
+  contents: write
+  pull-requests: write
 
 jobs:
   check:
@@ -20,30 +20,32 @@ jobs:
       - id: upstream
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/check-upstream.mjs
-      - name: Open or refresh the upstream review issue
+        run: node scripts/update-upstream.mjs
+      - name: Run the complete repository contract before proposing an update
         if: steps.upstream.outputs.changed == 'true'
-        uses: actions/github-script@v9
-        with:
-          script: |
-            const title = 'Review available DeepSeek Harness upstream update'
-            const body = [
-              'The scheduled DSH-Portable monitor found an upstream change.',
-              '',
-              `- Official master: \`${{ steps.upstream.outputs.commit }}\``,
-              `- Published npm tags: \`${{ steps.upstream.outputs.package_tags }}\``,
-              '',
-              'Review the official diff, update the pinned lock deliberately, and publish only after Windows plus both macOS smoke jobs pass.',
-            ].join('\n')
-            const { data } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              per_page: 100,
-            })
-            const existing = data.find(issue => issue.title === title)
-            if (existing) {
-              await github.rest.issues.update({ owner: context.repo.owner, repo: context.repo.repo, issue_number: existing.number, body })
-            } else {
-              await github.rest.issues.create({ owner: context.repo.owner, repo: context.repo.repo, title, body })
-            }
+        continue-on-error: true
+        run: npm test
+      - name: Create or refresh the tested candidate pull request
+        if: steps.upstream.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.upstream.outputs.version }}
+          COMMIT: ${{ steps.upstream.outputs.commit }}
+        run: |
+          BRANCH=automation/dsh-upstream
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -C "$BRANCH"
+          git add app/package.json app/package-lock.json upstream.lock.json
+          git commit -m "chore: test official DSH ${VERSION} candidate"
+          git push --force origin "HEAD:refs/heads/${BRANCH}"
+          BODY=$(mktemp)
+          printf '%s\n' \
+            'Automated candidate from the official DeepSeek Harness preview channel.' \
+            '' "- npm package: \`${VERSION}\`" "- official master: \`${COMMIT}\`" \
+            '' 'This pull request is not auto-merged or auto-released. The normal Windows and macOS product CI remains the release gate.' > "$BODY"
+          if gh pr view "$BRANCH" >/dev/null 2>&1; then
+            gh pr edit "$BRANCH" --title "chore: test official DSH ${VERSION} candidate" --body-file "$BODY"
+          else
+            gh pr create --head "$BRANCH" --base main --title "chore: test official DSH ${VERSION} candidate" --body-file "$BODY"
+          fi
