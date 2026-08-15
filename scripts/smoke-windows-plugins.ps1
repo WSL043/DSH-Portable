@@ -1,12 +1,14 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$Root,
-    [string]$Fixture = (Join-Path (Join-Path $PSScriptRoot '..') 'tests\fixtures\dsh-portable-smoke-plugin'),
+    [string]$Fixture,
     [string]$ExpectedStateRoot,
     [switch]$InstalledMode
 )
 
 $ErrorActionPreference = 'Stop'
+$ProjectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
+if (-not $Fixture) { $Fixture = Join-Path $ProjectRoot 'tests\fixtures\dsh-portable-smoke-plugin' }
 $Root = [System.IO.Path]::GetFullPath($Root)
 $Fixture = [System.IO.Path]::GetFullPath($Fixture)
 $Dsh = Join-Path $Root 'dsh.exe'
@@ -24,6 +26,7 @@ if (-not $ExpectedStateRoot) {
 }
 $ExpectedStateRoot = [System.IO.Path]::GetFullPath($ExpectedStateRoot)
 $Profile = 'web'
+$PackageName = 'dsh-portable-smoke-plugin'
 $ProfileRoot = Join-Path $ExpectedStateRoot "data\dsh-home\profiles\$Profile"
 $TestRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("dsh-plugin-smoke-" + [Guid]::NewGuid().ToString('N'))
 $PackageParent = Join-Path $TestRoot 'package source'
@@ -212,8 +215,22 @@ try {
     if ((Product-Status).pid -ne $Restarted.pid) { throw 'plugin removal restarted or replaced the running DSH process' }
     Stop-Product
 
+    Write-Host '[plugin-smoke] direct release archive repeat add/remove/re-add'
+    $DirectArchive = "$Registry/$PackageName/-/$PackageName-1.0.0.tgz"
+    Invoke-Dsh @('plugin', '--profile', $Profile, 'add', $DirectArchive) | Out-Null
+    Invoke-Dsh @('plugin', '--profile', $Profile, 'add', $DirectArchive) | Out-Null
+    Invoke-Dsh @('plugin', '--profile', $Profile, 'remove', $PackageName) | Out-Null
+    Invoke-Dsh @('plugin', '--profile', $Profile, 'add', $DirectArchive) | Out-Null
+    $DirectManifest = Get-Content -Raw -LiteralPath (Join-Path $ProfileRoot 'package.json') | ConvertFrom-Json
+    if ($DirectManifest.dependencies.$PackageName -notmatch '^file:\.dsh-portable-archives[\\/]sha512-[a-f0-9]{128}\.tgz$') {
+        throw 'remote plugin archive was not stored as a movable content-addressed profile file'
+    }
+    if ((Invoke-Dsh @('--profile', $Profile, '--dump-config')) -notmatch 'dsh-portable-smoke-v1') {
+        throw 'reinstalled direct archive did not compose the plugin bundle'
+    }
+
     if (-not $InstalledMode) {
-        Write-Host '[plugin-smoke] move folder and repeat local archive add/list/remove'
+        Write-Host '[plugin-smoke] move folder, load cached remote archive, then repeat local archive add/list/remove'
         $MovedRoot = "$Root-plugin-moved"
         if (Test-Path -LiteralPath $MovedRoot) { throw "plugin move target already exists: $MovedRoot" }
         Move-Item -LiteralPath $Root -Destination $MovedRoot
@@ -225,10 +242,18 @@ try {
         $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
         $Launcher = Join-Path $Root 'DeepSeek-Herness.exe'
         $StopLauncher = Join-Path $Root 'Stop DeepSeek-Herness.exe'
+        $MovedRemoteList = Invoke-Dsh @('plugin', '--profile', $Profile, 'list', '--depth', '0', '--json')
+        if ($MovedRemoteList -notmatch $PackageName) { throw 'cached remote plugin failed after moving the portable folder' }
+        if ((Invoke-Dsh @('--profile', $Profile, '--dump-config')) -notmatch 'dsh-portable-smoke-v1') {
+            throw 'cached remote plugin bundle failed after moving the portable folder'
+        }
+        Invoke-Dsh @('plugin', '--profile', $Profile, 'remove', $PackageName) | Out-Null
         Invoke-Dsh @('plugin', '--profile', $Profile, 'add', $PluginArchive) | Out-Null
         $MovedList = Invoke-Dsh @('plugin', '--profile', $Profile, 'list', '--depth', '0', '--json')
         if ($MovedList -notmatch 'dsh-portable-smoke-plugin') { throw 'plugin management failed after moving the portable folder' }
         Invoke-Dsh @('plugin', '--profile', $Profile, 'remove', 'dsh-portable-smoke-plugin') | Out-Null
+    } else {
+        Invoke-Dsh @('plugin', '--profile', $Profile, 'remove', $PackageName) | Out-Null
     }
 
     [pscustomobject]@{

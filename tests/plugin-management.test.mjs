@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import {
   buildPluginCliSpec,
+  materializeRemotePluginArchives,
   normalizeDshArgvForWindowsShell,
   profileNeedsRelink,
   resolveProductStateRoot,
@@ -99,6 +101,34 @@ test('Windows plugin forwarding preserves a local path with spaces through the o
     normalizeDshArgvForWindowsShell(['plugin', '--profile', 'web', 'list', '--depth', '0'], 'C:\\Work'),
     ['plugin', '--profile', 'web', 'list', '--depth', '0'],
   )
+})
+
+test('remote plugin archives become content-addressed profile files that survive repeat installs and moves', async (t) => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-remote-plugin-'))
+  t.after(() => rm(stateRoot, { recursive: true, force: true }))
+  const archive = Buffer.from('independent plugin archive fixture')
+  let fetchCount = 0
+  const fetch = async (url) => {
+    fetchCount += 1
+    assert.equal(url, 'https://downloads.example.test/dsh-plugin.tgz')
+    return {
+      ok: true,
+      status: 200,
+      headers: { get: (name) => name.toLowerCase() === 'content-length' ? String(archive.length) : null },
+      arrayBuffer: async () => archive,
+    }
+  }
+  const argv = ['plugin', '--profile', 'web', 'add', 'https://downloads.example.test/dsh-plugin.tgz']
+  const first = await materializeRemotePluginArchives(argv, stateRoot, process.platform, { fetch })
+  const second = await materializeRemotePluginArchives(argv, stateRoot, process.platform, { fetch })
+
+  assert.equal(fetchCount, 2, 'repeat add checks the current remote bytes instead of trusting a mutable URL')
+  assert.deepEqual(first, second)
+  assert.match(first.at(-1), /^file:\.dsh-portable-archives\/sha512-[a-f0-9]{128}\.tgz$/)
+  const relative = first.at(-1).slice('file:'.length)
+  const profileRoot = path.join(stateRoot, 'data', 'dsh-home', 'profiles', 'web')
+  assert.deepEqual(await readFile(path.join(profileRoot, relative)), archive)
+  assert.equal(first.some((argument) => argument.includes('downloads.example.test')), false)
 })
 
 test('the product locks and packages the official pnpm required by arbitrary DSH plugins', async () => {

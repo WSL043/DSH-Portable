@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, open, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -110,6 +111,70 @@ function requestedProfile(argv) {
   return argv[index + 1]
 }
 
+const MAX_REMOTE_PLUGIN_ARCHIVE_BYTES = 256 * 1024 * 1024
+
+function remotePluginArchive(argument) {
+  try {
+    const url = new URL(argument)
+    if (!['http:', 'https:'].includes(url.protocol)) return false
+    return /\.(?:tgz|tar\.gz)$/i.test(url.pathname)
+  } catch {
+    return false
+  }
+}
+
+export async function materializeRemotePluginArchives(argv, stateRoot, platform = process.platform, adapters = {}) {
+  const output = [...argv]
+  const pluginIndex = output.indexOf('plugin')
+  const profile = requestedProfile(output)
+  if (pluginIndex < 0 || !profile) return output
+  const operation = output.slice(pluginIndex + 1).find((argument) => !['--profile', profile].includes(argument))
+  if (!['add', 'install'].includes(operation)) return output
+
+  const paths = platformPaths(platform)
+  const profilesRoot = paths.join(paths.resolve(stateRoot), 'data', 'dsh-home', 'profiles')
+  const profileRoot = paths.resolve(profilesRoot, profile)
+  if (!isInsidePath(profileRoot, profilesRoot, platform)) {
+    throw new Error('DSH profile name resolves outside the product profile directory.')
+  }
+  const fetchArchive = adapters.fetch ?? globalThis.fetch
+  if (typeof fetchArchive !== 'function') throw new Error('This Node.js runtime cannot download remote plugin archives.')
+  const makeDirectory = adapters.mkdir ?? mkdir
+  const save = adapters.writeFile ?? writeFile
+  const move = adapters.rename ?? rename
+  const remove = adapters.rm ?? rm
+  const cacheRoot = paths.join(profileRoot, '.dsh-portable-archives')
+
+  for (let index = 0; index < output.length; index += 1) {
+    const source = output[index]
+    if (!remotePluginArchive(source)) continue
+    const response = await fetchArchive(source, { redirect: 'follow' })
+    if (!response?.ok) throw new Error(`Remote plugin archive download failed (HTTP ${response?.status ?? 'unknown'}).`)
+    const declaredLength = Number(response.headers?.get?.('content-length'))
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REMOTE_PLUGIN_ARCHIVE_BYTES) {
+      throw new Error('Remote plugin archive exceeds the 256 MiB safety limit.')
+    }
+    const bytes = Buffer.from(await response.arrayBuffer())
+    if (bytes.length === 0) throw new Error('Remote plugin archive is empty.')
+    if (bytes.length > MAX_REMOTE_PLUGIN_ARCHIVE_BYTES) throw new Error('Remote plugin archive exceeds the 256 MiB safety limit.')
+    const digest = createHash('sha512').update(bytes).digest('hex')
+    const filename = paths.join(cacheRoot, `sha512-${digest}.tgz`)
+    if (!existsSync(filename)) {
+      await makeDirectory(cacheRoot, { recursive: true })
+      const temporary = paths.join(cacheRoot, `.download-${process.pid}-${Date.now()}-${index}.tmp`)
+      try {
+        await save(temporary, bytes, { flag: 'wx' })
+        await move(temporary, filename)
+      } finally {
+        await remove(temporary, { force: true }).catch(() => {})
+      }
+    }
+    const relative = paths.relative(profileRoot, filename).replaceAll('\\', '/')
+    output[index] = `file:${relative}`
+  }
+  return output
+}
+
 export function profileNeedsRelink(profileRoot, storeRoot, modules, platform = process.platform) {
   if (!modules || typeof modules !== 'object') return true
   const paths = platformPaths(platform)
@@ -203,7 +268,7 @@ function isMutatingPluginCommand(argv) {
 export async function main(argv = process.argv.slice(2), source = process.env) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const stateRoot = await resolveProductStateRoot(root, process.platform, source)
-  const spec = buildPluginCliSpec(root, stateRoot, argv, process.platform, source)
+  let spec = buildPluginCliSpec(root, stateRoot, argv, process.platform, source)
   for (const [label, filename] of [
     ['bundled Node.js', spec.command],
     ['official DSH CLI', spec.layout.dshBin],
@@ -214,7 +279,9 @@ export async function main(argv = process.argv.slice(2), source = process.env) {
 
   const release = await acquirePluginLock(spec.layout)
   try {
-    await relinkMovedProfileIfNeeded(spec, argv)
+    const materializedArgv = await materializeRemotePluginArchives(argv, stateRoot, process.platform)
+    spec = buildPluginCliSpec(root, stateRoot, materializedArgv, process.platform, source)
+    await relinkMovedProfileIfNeeded(spec, materializedArgv)
 
     const result = spawnSync(spec.command, spec.args, {
       cwd: spec.cwd,

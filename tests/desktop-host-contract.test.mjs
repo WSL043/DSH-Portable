@@ -17,6 +17,10 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /start["']\s*,\s*["']--no-browser["']\s*,\s*["']--json/)
   assert.match(host, /FormBorderStyle\.Sizable/)
   assert.match(host, /FormClosing[\s\S]+InvokePortableCli[\s\S]+stop/)
+  assert.match(host, /CloseOwnedDesktopHost/)
+  assert.match(host, /Path\.GetFullPath\(process\.MainModule\.FileName\)/)
+  assert.match(host, /process\.CloseMainWindow\(\)/)
+  assert.match(host, /process\.WaitForExit\(45000\)/)
   assert.doesNotMatch(host, /--app=/)
 
   assert.equal(lock.webview2.package, 'Microsoft.Web.WebView2')

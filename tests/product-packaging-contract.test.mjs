@@ -3,15 +3,81 @@ import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { inflateSync } from 'node:zlib'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 const exists = async (name) => access(path.join(root, name)).then(() => true, () => false)
 
+function pngCornerAlphas(png) {
+  assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
+  let width = 0
+  let height = 0
+  let bitDepth = 0
+  let colorType = 0
+  const idat = []
+  for (let offset = 8; offset < png.length;) {
+    const length = png.readUInt32BE(offset)
+    const type = png.subarray(offset + 4, offset + 8).toString('ascii')
+    const data = png.subarray(offset + 8, offset + 8 + length)
+    if (type === 'IHDR') {
+      width = data.readUInt32BE(0)
+      height = data.readUInt32BE(4)
+      bitDepth = data[8]
+      colorType = data[9]
+    } else if (type === 'IDAT') {
+      idat.push(data)
+    }
+    offset += 12 + length
+  }
+  assert.equal(bitDepth, 8, 'icon PNGs must use 8-bit channels')
+  assert.equal(colorType, 6, 'icon PNGs must retain an RGBA alpha channel')
+  const bytesPerPixel = 4
+  const stride = width * bytesPerPixel
+  const compressed = inflateSync(Buffer.concat(idat))
+  const rows = Buffer.alloc(height * stride)
+  for (let y = 0, inputOffset = 0; y < height; y += 1) {
+    const filter = compressed[inputOffset]
+    inputOffset += 1
+    for (let x = 0; x < stride; x += 1) {
+      const raw = compressed[inputOffset + x]
+      const left = x >= bytesPerPixel ? rows[y * stride + x - bytesPerPixel] : 0
+      const up = y > 0 ? rows[(y - 1) * stride + x] : 0
+      const upperLeft = y > 0 && x >= bytesPerPixel ? rows[(y - 1) * stride + x - bytesPerPixel] : 0
+      let value = raw
+      if (filter === 1) value = raw + left
+      else if (filter === 2) value = raw + up
+      else if (filter === 3) value = raw + Math.floor((left + up) / 2)
+      else if (filter === 4) {
+        const p = left + up - upperLeft
+        const pa = Math.abs(p - left)
+        const pb = Math.abs(p - up)
+        const pc = Math.abs(p - upperLeft)
+        value = raw + (pa <= pb && pa <= pc ? left : pb <= pc ? up : upperLeft)
+      } else assert.equal(filter, 0, `unsupported PNG filter ${filter}`)
+      rows[y * stride + x] = value & 0xff
+    }
+    inputOffset += stride
+  }
+  const alphaAt = (x, y) => rows[y * stride + x * bytesPerPixel + 3]
+  return [alphaAt(0, 0), alphaAt(width - 1, 0), alphaAt(0, height - 1), alphaAt(width - 1, height - 1)]
+}
+
+function icoPngFrames(ico) {
+  assert.equal(ico.readUInt16LE(2), 1)
+  const count = ico.readUInt16LE(4)
+  return Array.from({ length: count }, (_, index) => {
+    const entry = 6 + index * 16
+    const length = ico.readUInt32LE(entry + 8)
+    const offset = ico.readUInt32LE(entry + 12)
+    return ico.subarray(offset, offset + length)
+  })
+}
+
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.2')
+  assert.equal(manifest.version, '0.2.0-rc.3')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -102,9 +168,16 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   assert.match(svg, /path\s*\{\s*fill:\s*#fff;/)
   assert.match(svg, /fill="#000"/)
   assert.doesNotMatch(svg, /#4D6BFE/i)
-  assert.match(renderer, /flatten\(\{\s*background:\s*['"]#fff['"]\s*\}\)/)
+  assert.doesNotMatch(renderer, /\.flatten\(/, 'icon rendering must not replace transparency with a white square')
   assert.equal(await exists('assets/DSH-Portable.ico'), true)
   assert.equal(await exists('assets/DSH-Portable.icns'), true)
+
+  const png = await readFile(path.join(root, 'assets/DSH-Portable-512.png'))
+  assert.deepEqual(pngCornerAlphas(png), [0, 0, 0, 0], 'the user-visible PNG must have transparent corners')
+  const ico = await readFile(path.join(root, 'assets/DSH-Portable.ico'))
+  for (const frame of icoPngFrames(ico)) {
+    assert.deepEqual(pngCornerAlphas(frame), [0, 0, 0, 0], 'every Windows icon size must have transparent corners')
+  }
 })
 
 test('Windows package exposes real GUI executables with matching icon and no path install', async () => {
@@ -153,7 +226,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /shellSchema/)
   assert.match(build, /shellSchema\s*=\s*4/)
   assert.match(build, /requiredShellSchema\s*=\s*4/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.2"\)/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.3"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)

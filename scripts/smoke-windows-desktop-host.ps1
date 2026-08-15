@@ -7,6 +7,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $Root = [System.IO.Path]::GetFullPath($Root)
 $StartExe = Join-Path $Root 'DeepSeek-Herness.exe'
+$StopExe = Join-Path $Root 'Stop DeepSeek-Herness.exe'
 $PortableNode = Join-Path $Root 'runtime\node\node.exe'
 $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
 $BrowserState = Join-Path $Root 'data\runtime\browser.json'
@@ -15,6 +16,7 @@ $HomeMarker = Join-Path $Root 'data\dsh-home\desktop-host-smoke.txt'
 
 foreach ($File in @(
     $StartExe,
+    $StopExe,
     $PortableNode,
     $PortableCli,
     (Join-Path $Root 'Microsoft.Web.WebView2.Core.dll'),
@@ -73,6 +75,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $WorkspaceMarker),
 $WorkspaceDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker).Hash
 $HomeDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash
 $Process = $null
+$StopProcess = $null
 
 try {
     $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
@@ -126,6 +129,29 @@ try {
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker).Hash -ne $WorkspaceDigest) { throw 'Workspace data changed during native host shutdown.' }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash -ne $HomeDigest) { throw 'DSH_HOME data changed during native host shutdown.' }
 
+    $Process = [System.Diagnostics.Process]::Start($StartInfo)
+    $StopDeadline = [DateTime]::UtcNow.AddSeconds(90)
+    do {
+        Start-Sleep -Milliseconds 250
+        $Process.Refresh()
+        if ($Process.HasExited) { throw "DeepSeek-Herness.exe exited before the Stop launcher test: $($Process.ExitCode)" }
+        $RunningJson = & $PortableNode $PortableCli status --json
+        $RunningStatus = if ($LASTEXITCODE -eq 0) { ($RunningJson | ConvertFrom-Json).status } else { '' }
+    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $RunningStatus -ne 'running') -and [DateTime]::UtcNow -lt $StopDeadline)
+    if ($Process.MainWindowHandle -eq [IntPtr]::Zero -or $RunningStatus -ne 'running') {
+        throw 'The second native desktop instance did not become ready for the Stop launcher test.'
+    }
+    $StopStartInfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $StopStartInfo.FileName = $StopExe
+    $StopStartInfo.WorkingDirectory = $Root
+    $StopStartInfo.UseShellExecute = $false
+    $StopProcess = [System.Diagnostics.Process]::Start($StopStartInfo)
+    if (-not $StopProcess.WaitForExit(60000)) { throw 'Stop DeepSeek-Herness.exe did not exit within 60 seconds.' }
+    if (-not $Process.WaitForExit(45000)) { throw 'Stop DeepSeek-Herness.exe left the native desktop host running.' }
+    $StoppedByLauncherJson = & $PortableNode $PortableCli status --json
+    $StoppedByLauncher = if ($LASTEXITCODE -eq 0) { ($StoppedByLauncherJson | ConvertFrom-Json).status } else { '' }
+    if ($StoppedByLauncher -ne 'stopped') { throw 'Stop DeepSeek-Herness.exe left the DSH backend running.' }
+
     [pscustomobject]@{
         Root = $Root
         AppUserModelID = $AppId
@@ -139,6 +165,7 @@ try {
         $ErrorActionPreference = 'SilentlyContinue'
         & $PortableNode $PortableCli stop --no-browser --json *> $null
         if ($Process -and -not $Process.HasExited) { & taskkill.exe /PID $Process.Id /T /F *> $null }
+        if ($StopProcess -and -not $StopProcess.HasExited) { & taskkill.exe /PID $StopProcess.Id /T /F *> $null }
     } finally {
         $ErrorActionPreference = $PreviousErrorActionPreference
     }

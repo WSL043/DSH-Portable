@@ -16,8 +16,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.2")]
-[assembly: AssemblyFileVersion("0.2.0.2")]
+[assembly: AssemblyVersion("0.2.0.3")]
+[assembly: AssemblyFileVersion("0.2.0.3")]
 
 namespace DshPortable
 {
@@ -221,6 +221,27 @@ namespace DshPortable
             return args.Length > 0 && string.Equals(args[0], "start", StringComparison.OrdinalIgnoreCase);
         }
 
+        private void CloseOwnedDesktopHost()
+        {
+            string expected = Path.GetFullPath(Path.Combine(root, "DeepSeek-Herness.exe"));
+            int currentProcessId = Process.GetCurrentProcess().Id;
+            foreach (Process process in Process.GetProcessesByName("DeepSeek-Herness"))
+            {
+                using (process)
+                {
+                    if (process.Id == currentProcessId) continue;
+                    string candidate;
+                    try { candidate = Path.GetFullPath(process.MainModule.FileName); }
+                    catch { continue; }
+                    if (!string.Equals(candidate, expected, StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!process.CloseMainWindow())
+                        throw new InvalidOperationException("DeepSeek-Herness 原生窗口无法接收正常关闭请求。");
+                    if (!process.WaitForExit(45000))
+                        throw new TimeoutException("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。");
+                }
+            }
+        }
+
         private static string QuoteArgument(string value)
         {
             if (string.IsNullOrEmpty(value)) return "\"\"";
@@ -274,6 +295,7 @@ namespace DshPortable
                 Tuple<int, string> result = await Task.Run(() => InvokePortableCli(command));
                 if (result.Item1 == 0)
                 {
+                    if (IsStopCommand(command)) await Task.Run(() => CloseOwnedDesktopHost());
                     operationRunning = false;
                     allowClose = true;
                     Close();
