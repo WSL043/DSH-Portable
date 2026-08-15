@@ -83,14 +83,17 @@ function Start-Product {
     }
     $Raw = ((Get-Content -Raw -LiteralPath $Stdout -ErrorAction SilentlyContinue) + [Environment]::NewLine +
         (Get-Content -Raw -LiteralPath $Stderr -ErrorAction SilentlyContinue)).Trim()
-    if ($Process.ExitCode -ne 0) {
+    # Windows PowerShell 5 can expose a null ExitCode for a completed GUI
+    # process returned by Start-Process. The runtime status endpoint is the
+    # authoritative product outcome; a non-null native failure still fails.
+    $ProcessExitCode = $Process.ExitCode
+    $Status = Product-Status
+    if (($null -ne $ProcessExitCode -and $ProcessExitCode -ne 0) -or $Status.status -ne 'running') {
         $Diagnostic = if (Test-Path -LiteralPath $LauncherDiagnostic) {
             Get-Content -Raw -LiteralPath $LauncherDiagnostic
         } else { '(launcher diagnostic was not created)' }
-        throw "product start failed: $Raw`n$Diagnostic"
+        throw "product start failed (exit=$ProcessExitCode, status=$($Status.status)): $Raw`n$Diagnostic"
     }
-    $Status = Product-Status
-    if ($Status.status -ne 'running') { throw "product status after start is $($Status.status)" }
     return $Status
 }
 
@@ -105,8 +108,11 @@ function Stop-Product {
     }
     $Raw = ((Get-Content -Raw -LiteralPath $Stdout -ErrorAction SilentlyContinue) + [Environment]::NewLine +
         (Get-Content -Raw -LiteralPath $Stderr -ErrorAction SilentlyContinue)).Trim()
-    if ($Process.ExitCode -ne 0) { throw "product stop failed: $Raw" }
-    if ((Product-Status).status -ne 'stopped') { throw 'product did not stop' }
+    $ProcessExitCode = $Process.ExitCode
+    $Status = Product-Status
+    if (($null -ne $ProcessExitCode -and $ProcessExitCode -ne 0) -or $Status.status -ne 'stopped') {
+        throw "product stop failed (exit=$ProcessExitCode, status=$($Status.status)): $Raw"
+    }
 }
 
 try {

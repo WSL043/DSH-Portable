@@ -238,6 +238,8 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(smoke, /PreviousErrorActionPreference/)
   assert.match(smoke, /\$ErrorActionPreference\s*=\s*'Continue'/)
   assert.match(smoke, /\$ExitCode\s*=\s*\$LASTEXITCODE/)
+  assert.match(smoke, /\$null\s+-ne\s+\$ProcessExitCode/)
+  assert.match(smoke, /Product-Status/)
   assert.doesNotMatch(smoke, /where\.exe/i)
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
