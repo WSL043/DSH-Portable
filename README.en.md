@@ -49,7 +49,8 @@ put it on a USB drive, stop DSH first and copy the entire `DSH-Portable` folder.
 | | DSH-Portable behavior |
 | --- | --- |
 | **Small first download** | The recommended Windows file is a lightweight bootstrap. The larger runtime is downloaded only once. |
-| **Actually portable** | Sessions, settings, browser data, workspace, runtime, and launchers stay under one movable folder. |
+| **Native desktop window** | DSH runs inside its own app window. Normal startup does not open Edge or Chrome, and the taskbar keeps the DSH-Portable identity. |
+| **Actually portable** | Sessions, settings, desktop web data, workspace, runtime, and launchers stay under one movable folder. |
 | **Offline option** | A complete self-extracting package is available when the target machine cannot download on first launch. |
 | **Pinned and tested** | Each release fixes the DSH and Node versions, then starts, stops, moves, restarts, installs, and uninstalls the built packages in CI. |
 | **Unmodified DSH** | The runtime is the official `@deepseek-ai/dsh` package. Third-party providers and plugins are not bundled. |
@@ -81,7 +82,7 @@ Control-click the app and choose **Open** if macOS blocks it.
 The portable folder keeps its state in predictable locations:
 
 - `data/dsh-home/` — DSH settings, provider credentials, and sessions;
-- `data/browser/` — the isolated browser profile;
+- `data/webview2/` — Web data for the native Windows desktop window;
 - `workspace/` — the default working directory;
 - `data/logs/` — local service logs.
 

@@ -12,6 +12,12 @@
     "version": "11.7.0",
     "integrity": "sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA=="
   },
+  "webview2": {
+    "package": "Microsoft.Web.WebView2",
+    "version": "1.0.4078.44",
+    "url": "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/1.0.4078.44",
+    "sha256": "dc4d1d9168df26b830398303e50210b6e1729f6ce5a7ac69d2c766852f489962"
+  },
   "node": {
     "version": "24.19.0",
     "baseUrl": "https://nodejs.org/dist/v24.19.0",

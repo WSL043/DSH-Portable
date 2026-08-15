@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-rc.1"
+  #define AppVersion "0.2.0-rc.2"
 #endif
 
 [Setup]
@@ -34,7 +34,7 @@ SolidCompression=yes
 WizardStyle=modern
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.2.0.1
+VersionInfoVersion=0.2.0.2
 VersionInfoProductName=DeepSeek-Herness
 VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043
