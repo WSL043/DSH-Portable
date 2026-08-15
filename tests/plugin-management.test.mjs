@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
-import os from 'node:os'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -39,16 +38,19 @@ test('portable plugin CLI uses bundled Node, pnpm, and portable DSH_HOME without
 })
 
 test('installed plugin CLI expands installed-mode stateRoot and keeps the profile outside the app', async () => {
-  const temp = await mkdtemp(path.join(os.tmpdir(), 'dsh-plugin-installed-'))
-  const root = path.join(temp, 'Program Files', 'DeepSeek-Herness')
-  await mkdir(root, { recursive: true })
-  await writeFile(path.join(root, 'installed-mode.json'), JSON.stringify({
+  const root = 'C:\\Program Files\\DeepSeek-Herness'
+  const installedMode = JSON.stringify({
     schemaVersion: 1,
     stateRoot: '%LOCALAPPDATA%\\DeepSeek-Herness',
-  }))
+  })
 
-  const localAppData = path.join(temp, 'User Data', 'Local')
-  const stateRoot = await resolveProductStateRoot(root, 'win32', { LOCALAPPDATA: localAppData }, {})
+  const localAppData = 'C:\\Users\\Portable Test\\AppData\\Local'
+  const stateRoot = await resolveProductStateRoot(root, 'win32', { LOCALAPPDATA: localAppData }, {
+    readFile: async (filename) => {
+      assert.equal(filename, path.win32.join(root, 'installed-mode.json'))
+      return installedMode
+    },
+  })
   const spec = buildPluginCliSpec(root, stateRoot, ['--profile', 'default', '--dump-config'], 'win32', {
     PATH: 'C:\\Windows\\System32',
   })
