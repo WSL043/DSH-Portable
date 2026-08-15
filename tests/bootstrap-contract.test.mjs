@@ -12,6 +12,12 @@ const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const source = path.join(projectRoot, 'launcher', 'windows', 'DSH-Bootstrap.cs')
 
+test('bootstrap failure help opens the offline package that is actually published', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  assert.match(bootstrap, /OfflineDownloadUrl\s*=\s*"[^"]+DSH-Portable-windows-x64-offline\.zip"/)
+  assert.doesNotMatch(bootstrap, /OfflineDownloadUrl\s*=\s*"[^"]+DSH-Portable-windows-x64-offline\.exe"/)
+})
+
 function cscPath() {
   const windows = process.env.WINDIR || 'C:\\Windows'
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')

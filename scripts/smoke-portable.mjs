@@ -31,8 +31,8 @@ function run(command, args, options = {}) {
   })
 }
 
-function startNativeHost(command, options = {}) {
-  const child = spawn(command, [], {
+function startNativeHost(command, args = [], options = {}) {
+  const child = spawn(command, args, {
     cwd: options.cwd,
     env: options.env ?? process.env,
     windowsHide: true,
@@ -130,8 +130,9 @@ if (process.platform === 'win32') {
 } else if (process.platform === 'darwin') {
   const app = path.join(originalRoot, 'DSH-Portable.app')
   const executable = path.join(app, 'Contents', 'MacOS', 'DSH-Portable')
+  assert.equal(await exists(executable), true, `missing macOS entry: ${executable}`)
   assert.equal(await exists(path.join(app, 'Contents', 'Resources', 'DSH-Portable.icns')), true)
-  nativeHost = startNativeHost(executable, {
+  nativeHost = startNativeHost('/usr/bin/open', ['-n', '-W', app, '--args', '--skip-update-check'], {
     cwd: originalRoot,
     env: { ...process.env, DSH_PORTABLE_NO_BROWSER: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
   })
