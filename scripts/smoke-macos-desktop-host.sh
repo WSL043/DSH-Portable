@@ -50,24 +50,36 @@ printf 'home survives native host shutdown\n' > "$HOME_MARKER"
 WORKSPACE_HASH="$(shasum -a 256 "$WORKSPACE_MARKER" | awk '{print $1}')"
 HOME_HASH="$(shasum -a 256 "$HOME_MARKER" | awk '{print $1}')"
 
-/usr/bin/open -n -W "$APP" --args --skip-update-check >/tmp/dsh-portable-native-host.log 2>&1 &
-LAUNCH_PID=$!
-deadline=$((SECONDS + 30))
-while (( SECONDS < deadline )); do
-  HOST_PID="$(pgrep -f "$START" | head -n 1 || true)"
-  [[ -n "$HOST_PID" ]] && break
-  kill -0 "$LAUNCH_PID" 2>/dev/null || {
-    cat /tmp/dsh-portable-native-host.log >&2
-    echo 'LaunchServices exited before the native host appeared.' >&2
+case "$(uname -m)" in
+  arm64)
+    /usr/bin/open -n -W "$APP" --args --skip-update-check >/tmp/dsh-portable-native-host.log 2>&1 &
+    LAUNCH_PID=$!
+    deadline=$((SECONDS + 30))
+    while (( SECONDS < deadline )); do
+      HOST_PID="$(pgrep -f "$START" | head -n 1 || true)"
+      [[ -n "$HOST_PID" ]] && break
+      kill -0 "$LAUNCH_PID" 2>/dev/null || {
+        cat /tmp/dsh-portable-native-host.log >&2
+        echo 'LaunchServices exited before the native host appeared.' >&2
+        exit 1
+      }
+      sleep 0.25
+    done
+    [[ -n "${HOST_PID:-}" ]] || {
+      cat /tmp/dsh-portable-native-host.log >&2
+      echo 'LaunchServices did not start the native host.' >&2
+      exit 1
+    }
+    ;;
+  x86_64)
+    "$START" --skip-update-check >/tmp/dsh-portable-native-host.log 2>&1 &
+    HOST_PID=$!
+    ;;
+  *)
+    echo "Unsupported macOS architecture: $(uname -m)" >&2
     exit 1
-  }
-  sleep 0.25
-done
-[[ -n "${HOST_PID:-}" ]] || {
-  cat /tmp/dsh-portable-native-host.log >&2
-  echo 'LaunchServices did not start the native host.' >&2
-  exit 1
-}
+    ;;
+esac
 deadline=$((SECONDS + 90))
 while (( SECONDS < deadline )); do
   kill -0 "$HOST_PID" 2>/dev/null || { cat /tmp/dsh-portable-native-host.log >&2; echo 'Native host exited before ready.' >&2; exit 1; }
@@ -96,8 +108,12 @@ fi
 deadline=$((SECONDS + 45))
 while kill -0 "$HOST_PID" 2>/dev/null && (( SECONDS < deadline )); do sleep 0.25; done
 kill -0 "$HOST_PID" 2>/dev/null && { echo 'Native host did not exit after the app quit request.' >&2; exit 1; }
-wait "$LAUNCH_PID"
-LAUNCH_PID=''
+if [[ -n "${LAUNCH_PID:-}" ]]; then
+  wait "$LAUNCH_PID"
+  LAUNCH_PID=''
+else
+  wait "$HOST_PID"
+fi
 STATUS="$($NODE "$CLI" status --json)"
 printf '%s' "$STATUS" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{if(JSON.parse(s).status!=="stopped")process.exit(1)})'
 [[ "$(shasum -a 256 "$WORKSPACE_MARKER" | awk '{print $1}')" == "$WORKSPACE_HASH" ]]
