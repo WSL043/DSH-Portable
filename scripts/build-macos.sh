@@ -36,6 +36,7 @@ STAGE="$BUILD_ROOT/DSH-Portable"
 trap 'rm -rf "$BUILD_ROOT"' EXIT
 
 mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node/bin,licenses,data,workspace}
+cp -R "$PROJECT_ROOT/desktop-bridge" "$STAGE/desktop-bridge"
 
 if [[ ! -f "$ARCHIVE" ]]; then
   echo "Downloading pinned Node.js runtime: $NODE_BASE_URL/$NODE_ARCHIVE"
@@ -77,8 +78,9 @@ cp "$NODE_FOLDER/LICENSE" "$STAGE/licenses/Node.js-LICENSE.txt"
 (
   cd "$STAGE/app"
   PATH="$NODE_FOLDER/bin:$PATH" npm_config_cache="$CACHE_DIR/npm" \
-    "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund
+    "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund --install-links
 )
+rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" darwin "$ARCH"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 
@@ -104,7 +106,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 5
+  "shellSchema": 6
 }
 EOF
 
@@ -160,7 +162,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 5,
+  "requiredShellSchema": 6,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

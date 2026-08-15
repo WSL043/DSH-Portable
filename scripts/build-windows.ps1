@@ -42,6 +42,7 @@ function Copy-PortableSources([string]$Target) {
     foreach ($Directory in @('app', 'launcher', 'runtime\node', 'licenses', 'data', 'workspace')) {
         New-Item -ItemType Directory -Force -Path (Join-Path $Target $Directory) | Out-Null
     }
+    Copy-Item -Recurse (Join-Path $ProjectRoot 'desktop-bridge') (Join-Path $Target 'desktop-bridge')
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
     foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs')) {
@@ -117,12 +118,13 @@ try {
     try {
         $env:npm_config_cache = Join-Path $CacheDir 'npm'
         $env:PATH = $NodeFolder + [System.IO.Path]::PathSeparator + $PriorPath
-        & $NodeExe $NpmCli ci --prefix (Join-Path $Stage 'app') --omit=dev --no-audit --no-fund
+        & $NodeExe $NpmCli ci --prefix (Join-Path $Stage 'app') --omit=dev --no-audit --no-fund --install-links
         if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
     } finally {
         $env:npm_config_cache = $PriorNpmCache
         $env:PATH = $PriorPath
     }
+    [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
 
     & $NodeExe (Join-Path $ProjectRoot 'scripts\prune-runtime.mjs') (Join-Path $Stage 'app') win32 x64
     if ($LASTEXITCODE -ne 0) { throw "runtime pruning failed with exit code $LASTEXITCODE" }
@@ -157,7 +159,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 5
+        shellSchema = 6
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -174,6 +176,7 @@ try {
         "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+        '/reference:System.Web.Extensions.dll',
         "/reference:$WebView2Core", "/reference:$WebView2WinForms",
         "/out:$LauncherExe",
         (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs')
@@ -252,7 +255,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 5
+            requiredShellSchema = 6
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version

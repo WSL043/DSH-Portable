@@ -1,14 +1,17 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Web.Script.Serialization;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 
@@ -17,21 +20,73 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.6")]
-[assembly: AssemblyFileVersion("0.2.0.6")]
+[assembly: AssemblyVersion("0.2.0.7")]
+[assembly: AssemblyFileVersion("0.2.0.7")]
 
 namespace DshPortable
 {
+    internal sealed class TrayBridgeSession
+    {
+        public string id { get; set; }
+        public string title { get; set; }
+        public long updatedAt { get; set; }
+        public bool running { get; set; }
+        public string pendingInteraction { get; set; }
+        public string agentPreset { get; set; }
+    }
+
+    internal sealed class TrayBridgeState
+    {
+        public string type { get; set; }
+        public int schemaVersion { get; set; }
+        public string locale { get; set; }
+        public string theme { get; set; }
+        public string currentSessionId { get; set; }
+        public List<TrayBridgeSession> sessions { get; set; }
+    }
+
+    internal sealed class DshMenuColorTable : ProfessionalColorTable
+    {
+        private readonly bool dark;
+
+        internal DshMenuColorTable(bool isDark)
+        {
+            dark = isDark;
+            UseSystemColors = false;
+        }
+
+        private Color Surface { get { return dark ? Color.FromArgb(35, 35, 36) : Color.White; } }
+        private Color Selected { get { return dark ? Color.FromArgb(44, 44, 46) : Color.FromArgb(233, 236, 242); } }
+        private Color Border { get { return dark ? Color.FromArgb(70, 70, 72) : Color.FromArgb(210, 213, 218); } }
+        internal Color TextColor { get { return dark ? Color.FromArgb(249, 250, 251) : Color.FromArgb(15, 17, 21); } }
+
+        public override Color ToolStripDropDownBackground { get { return Surface; } }
+        public override Color ImageMarginGradientBegin { get { return Surface; } }
+        public override Color ImageMarginGradientMiddle { get { return Surface; } }
+        public override Color ImageMarginGradientEnd { get { return Surface; } }
+        public override Color MenuBorder { get { return Border; } }
+        public override Color MenuItemBorder { get { return Selected; } }
+        public override Color MenuItemSelected { get { return Selected; } }
+        public override Color MenuItemSelectedGradientBegin { get { return Selected; } }
+        public override Color MenuItemSelectedGradientEnd { get { return Selected; } }
+        public override Color MenuItemPressedGradientBegin { get { return Selected; } }
+        public override Color MenuItemPressedGradientMiddle { get { return Selected; } }
+        public override Color MenuItemPressedGradientEnd { get { return Selected; } }
+        public override Color SeparatorDark { get { return Border; } }
+        public override Color SeparatorLight { get { return Surface; } }
+    }
+
     internal sealed class LauncherWindow : Form
     {
         internal const int WmPortableExit = 0x8043;
         internal const int WmPortableRestore = 0x8044;
         private enum WindowCloseBehavior { Tray, Exit }
 
+        private static string uiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+
         private static string L(string chinese, string english)
         {
-            return CultureInfo.InstalledUICulture.TwoLetterISOLanguageName.Equals(
-                "zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
+            return uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
         }
 
         private static string UiLanguageTag
@@ -53,8 +108,11 @@ namespace DshPortable
         private readonly Button closeButton;
         private readonly WebView2 webView;
         private readonly NotifyIcon trayIcon;
+        private readonly ContextMenuStrip trayMenu;
+        private readonly ToolStripMenuItem closeBehaviorMenu;
         private readonly ToolStripMenuItem closeToTrayItem;
         private readonly ToolStripMenuItem closeToExitItem;
+        private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly string root;
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
@@ -66,7 +124,12 @@ namespace DshPortable
         private bool allowClose;
         private bool backendStarted;
         private bool trayNoticeShown;
+        private bool trayBridgeReady;
+        private bool trayMenuOpen;
+        private bool trayMenuRefreshPending;
         private WindowCloseBehavior closeBehavior;
+        private TrayBridgeState trayState;
+        private string trayTheme = "light";
         private Uri applicationUri;
 
         internal LauncherWindow(string[] args)
@@ -201,15 +264,26 @@ namespace DshPortable
             closeToExitItem = new ToolStripMenuItem(L("退出程序", "Exit application")) { Checked = closeBehavior == WindowCloseBehavior.Exit };
             closeToTrayItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Tray); };
             closeToExitItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Exit); };
-            ToolStripMenuItem closeBehaviorMenu = new ToolStripMenuItem(L("关闭窗口时", "When closing the window"));
+            closeBehaviorMenu = new ToolStripMenuItem(L("关闭窗口时", "When closing the window"));
             closeBehaviorMenu.DropDownItems.Add(closeToTrayItem);
             closeBehaviorMenu.DropDownItems.Add(closeToExitItem);
-            ContextMenuStrip trayMenu = new ContextMenuStrip();
-            trayMenu.Items.Add(L("打开 DeepSeek Harness", "Open DeepSeek Harness"), null, delegate { RestoreFromTray(); });
-            trayMenu.Items.Add(new ToolStripSeparator());
-            trayMenu.Items.Add(closeBehaviorMenu);
-            trayMenu.Items.Add(new ToolStripSeparator());
-            trayMenu.Items.Add(L("退出 DeepSeek Harness", "Exit DeepSeek Harness"), null, delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
+            trayMenu = new ContextMenuStrip
+            {
+                ShowImageMargin = false,
+                ShowCheckMargin = true,
+                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point),
+            };
+            trayMenu.Opening += delegate { trayMenuOpen = true; };
+            trayMenu.Closed += delegate
+            {
+                trayMenuOpen = false;
+                if (trayMenuRefreshPending)
+                {
+                    trayMenuRefreshPending = false;
+                    RebuildTrayMenu();
+                }
+            };
+            RebuildTrayMenu();
             trayIcon = new NotifyIcon
             {
                 Icon = Icon,
@@ -290,6 +364,170 @@ namespace DshPortable
             Show();
             WindowState = FormWindowState.Normal;
             Activate();
+        }
+
+        private static string MenuTitle(string value)
+        {
+            string text = String.IsNullOrWhiteSpace(value) ? L("未命名会话", "Untitled session") : value.Trim();
+            if (text.Length > 52) text = text.Substring(0, 51) + "…";
+            return text.Replace("&", "&&");
+        }
+
+        private string SessionHint(TrayBridgeSession session)
+        {
+            if (!String.IsNullOrEmpty(session.pendingInteraction)) return L("待回复", "Needs input");
+            if (session.running) return L("运行中", "Running");
+            return String.IsNullOrWhiteSpace(session.agentPreset) ? "" : session.agentPreset.Trim();
+        }
+
+        private ToolStripMenuItem CreateSessionMenuItem(TrayBridgeSession session)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(MenuTitle(session.title))
+            {
+                AutoToolTip = false,
+                ShowShortcutKeys = true,
+                ShortcutKeyDisplayString = SessionHint(session),
+                Tag = session.id,
+            };
+            if (trayState != null && String.Equals(trayState.currentSessionId, session.id, StringComparison.Ordinal))
+                item.Checked = true;
+            item.Click += delegate
+            {
+                RestoreFromTray();
+                PostBridgeAction("open-session", session.id);
+            };
+            return item;
+        }
+
+        private ToolStripMenuItem CreateOpenItem()
+        {
+            return new ToolStripMenuItem(L("打开 DeepSeek Harness", "Open DeepSeek Harness"), null, delegate { RestoreFromTray(); });
+        }
+
+        private ToolStripMenuItem CreateExitItem()
+        {
+            return new ToolStripMenuItem(L("退出 DeepSeek Harness", "Exit DeepSeek Harness"), null, delegate
+            {
+                if (!shutdownRunning) BeginDesktopShutdown();
+            });
+        }
+
+        private void RebuildTrayMenu()
+        {
+            if (trayMenuOpen)
+            {
+                trayMenuRefreshPending = true;
+                return;
+            }
+
+            closeBehaviorMenu.Text = L("关闭窗口时", "When closing the window");
+            closeToTrayItem.Text = L("最小化到托盘", "Minimize to tray");
+            closeToExitItem.Text = L("退出程序", "Exit application");
+            trayMenu.Items.Clear();
+
+            List<TrayBridgeSession> sessions = trayBridgeReady && trayState != null && trayState.sessions != null
+                ? trayState.sessions.Where(item => item != null && !String.IsNullOrWhiteSpace(item.id)).Take(10).ToList()
+                : new List<TrayBridgeSession>();
+
+            if (!trayBridgeReady)
+            {
+                trayMenu.Items.Add(CreateOpenItem());
+                trayMenu.Items.Add(new ToolStripSeparator());
+                trayMenu.Items.Add(closeBehaviorMenu);
+            }
+            else
+            {
+                foreach (TrayBridgeSession session in sessions.Take(3))
+                    trayMenu.Items.Add(CreateSessionMenuItem(session));
+
+                ToolStripMenuItem more = new ToolStripMenuItem(L("更多", "More"));
+                foreach (TrayBridgeSession session in sessions.Skip(3).Take(7))
+                    more.DropDownItems.Add(CreateSessionMenuItem(session));
+                if (more.DropDownItems.Count > 0) more.DropDownItems.Add(new ToolStripSeparator());
+                more.DropDownItems.Add(CreateOpenItem());
+                more.DropDownItems.Add(closeBehaviorMenu);
+                trayMenu.Items.Add(more);
+
+                ToolStripMenuItem fresh = new ToolStripMenuItem(L("新会话", "New session"));
+                fresh.Click += delegate
+                {
+                    RestoreFromTray();
+                    PostBridgeAction("new-session", null);
+                };
+                trayMenu.Items.Add(fresh);
+            }
+
+            trayMenu.Items.Add(new ToolStripSeparator());
+            trayMenu.Items.Add(CreateExitItem());
+            ApplyTrayTheme();
+        }
+
+        private void ApplyTrayTheme()
+        {
+            bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
+            DshMenuColorTable colors = new DshMenuColorTable(dark);
+            trayMenu.Renderer = new ToolStripProfessionalRenderer(colors);
+            trayMenu.BackColor = dark ? Color.FromArgb(35, 35, 36) : Color.White;
+            trayMenu.ForeColor = colors.TextColor;
+            trayMenu.Padding = new Padding(4, 4, 4, 4);
+            ApplyTrayItemTheme(trayMenu.Items, colors.TextColor, trayMenu.BackColor);
+        }
+
+        private static void ApplyTrayItemTheme(ToolStripItemCollection items, Color foreground, Color background)
+        {
+            foreach (ToolStripItem item in items)
+            {
+                item.ForeColor = foreground;
+                item.BackColor = background;
+                item.Padding = item is ToolStripSeparator ? Padding.Empty : new Padding(4, 3, 4, 3);
+                ToolStripMenuItem menuItem = item as ToolStripMenuItem;
+                if (menuItem == null) continue;
+                menuItem.DropDown.BackColor = background;
+                menuItem.DropDown.ForeColor = foreground;
+                if (menuItem.DropDownItems.Count > 0)
+                    ApplyTrayItemTheme(menuItem.DropDownItems, foreground, background);
+            }
+        }
+
+        private void PostBridgeAction(string action, string sessionId)
+        {
+            if (!trayBridgeReady || webView.CoreWebView2 == null) return;
+            Dictionary<string, object> message = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/action" },
+                { "action", action },
+            };
+            if (!String.IsNullOrEmpty(sessionId)) message["sessionId"] = sessionId;
+            try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
+            catch { trayBridgeReady = false; RebuildTrayMenu(); }
+        }
+
+        private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
+        {
+            Uri source;
+            if (applicationUri == null
+                || !Uri.TryCreate(eventArgs.Source, UriKind.Absolute, out source)
+                || !source.IsLoopback
+                || source.Port != applicationUri.Port) return;
+            try
+            {
+                TrayBridgeState state = json.Deserialize<TrayBridgeState>(eventArgs.WebMessageAsJson);
+                if (state == null || state.type != "dsh-portable/state" || state.schemaVersion != 1) return;
+                if (state.sessions == null) state.sessions = new List<TrayBridgeSession>();
+                if (state.sessions.Count > 10) state.sessions = state.sessions.Take(10).ToList();
+                BeginInvoke((MethodInvoker)delegate
+                {
+                    trayState = state;
+                    trayBridgeReady = true;
+                    uiLanguage = String.Equals(state.locale, "zh", StringComparison.OrdinalIgnoreCase) ? "zh" : "en";
+                    trayTheme = String.Equals(state.theme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light";
+                    RebuildTrayMenu();
+                });
+            }
+            catch
+            {
+                // A malformed or future bridge payload cannot remove the native Open/Exit fallback.
+            }
         }
 
         private void DisposeTrayIcon()
@@ -612,6 +850,7 @@ namespace DshPortable
             applicationUri = new Uri(url);
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =

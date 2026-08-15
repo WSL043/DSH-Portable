@@ -5,6 +5,7 @@
   "description": "Pinned official DeepSeek Harness runtime for DSH-Portable.",
   "license": "MIT",
   "dependencies": {
+    "@wsl043/dsh-portable-desktop-bridge": "file:../desktop-bridge",
     "@deepseek-ai/dsh": "0.1.0-rc.6",
     "pnpm": "11.7.0"
   },

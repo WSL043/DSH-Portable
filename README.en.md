@@ -41,7 +41,8 @@
 
 Closing the window sends the app to the system tray by default, so active tasks keep running.
 Use **Exit DeepSeek Harness** in the tray menu to stop everything, or change **When closing the
-window** to exit directly.
+window** to exit directly. The tray follows the DSH language and light/dark appearance, and can
+open a recent session or start a new one directly.
 
 The Windows launcher and installer follow the system UI language in Chinese or English. The DSH
 workspace language can also be changed in **Settings**, and that choice is remembered.

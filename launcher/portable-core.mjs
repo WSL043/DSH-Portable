@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, realpathSync } from 'node:fs'
-import { mkdir, open, readFile, readdir, rename, rm, rmdir, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import path from 'node:path'
 
@@ -17,6 +17,7 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
   const appDir = paths.join(portableRoot, 'app')
   const appBinDir = paths.join(appDir, 'node_modules', '.bin')
   const stateDir = paths.join(dataDir, 'runtime')
+  const dshHome = paths.join(dataDir, 'dsh-home')
   return {
     root: portableRoot,
     appDir,
@@ -24,8 +25,22 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     browserProfile: paths.join(dataDir, 'browser'),
     browserState: paths.join(stateDir, 'browser.json'),
     dataDir,
+    desktopBridgePatch: paths.join(
+      appDir,
+      'node_modules',
+      '@wsl043',
+      'dsh-portable-desktop-bridge',
+      'cordis.patch.yml',
+    ),
+    desktopBridgeFallback: paths.join(
+      dshHome,
+      'profiles',
+      'node_modules',
+      '@wsl043',
+      'dsh-portable-desktop-bridge',
+    ),
     dshBin: paths.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
-    dshHome: paths.join(dataDir, 'dsh-home'),
+    dshHome,
     hostBin: paths.join(portableRoot, 'launcher', 'portable-host.mjs'),
     launchLock: paths.join(stateDir, 'launcher.lock'),
     logsDir: paths.join(dataDir, 'logs'),
@@ -47,6 +62,37 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     updateJournal: paths.join(stateDir, 'update.json'),
     workspace: paths.join(durableRoot, 'workspace'),
   }
+}
+
+export async function ensureDesktopBridgeFallback(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const target = paths.dirname(layout.desktopBridgePatch)
+  const fallback = layout.desktopBridgeFallback
+  const packageFile = paths.join(target, 'package.json')
+  if (!existsSync(packageFile)) throw new Error(`Portable desktop bridge is missing: ${packageFile}`)
+
+  await mkdir(paths.dirname(fallback), { recursive: true })
+  let current = null
+  try {
+    current = await lstat(fallback)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+
+  if (current) {
+    if (!current.isSymbolicLink()) {
+      throw new Error(`Portable desktop bridge fallback is occupied by another file: ${fallback}`)
+    }
+    try {
+      if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) return false
+    } catch {
+      // A moved portable directory leaves a broken link. Replace only this owned link.
+    }
+    await unlink(fallback)
+  }
+
+  await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
+  return true
 }
 
 export function buildDshEnv(layout, source = process.env) {
