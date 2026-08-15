@@ -5,7 +5,8 @@
   "description": "Pinned official DeepSeek Harness runtime for DSH-Portable.",
   "license": "MIT",
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.0-rc.6"
+    "@deepseek-ai/dsh": "0.1.0-rc.6",
+    "pnpm": "11.7.0"
   },
   "allowScripts": {
     "@deepseek-ai/dsh-subprocess-local@0.1.0-rc.6": true,

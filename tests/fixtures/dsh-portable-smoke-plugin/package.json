@@ -1,0 +1,11 @@
+{
+  "name": "dsh-portable-smoke-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "license": "MIT",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  }
+}

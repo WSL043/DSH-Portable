@@ -15,11 +15,19 @@ const [lockfile, upstream] = await Promise.all([
 
 assert.equal(lockfile.lockfileVersion, 3, 'npm lockfile version must be 3')
 const root = lockfile.packages?.['']
-assert.deepEqual(root?.dependencies, { [upstream.dsh.package]: upstream.dsh.version })
+assert.deepEqual(root?.dependencies, {
+  [upstream.dsh.package]: upstream.dsh.version,
+  [upstream.pnpm.package]: upstream.pnpm.version,
+})
 const installed = lockfile.packages?.[`node_modules/${upstream.dsh.package}`]
 assert.equal(installed?.version, upstream.dsh.version, 'pinned DSH version')
 assert.equal(installed?.integrity, upstream.dsh.integrity, 'pinned DSH integrity')
 assert.equal(installed?.license, 'MIT', 'DSH npm license')
+const packageManager = lockfile.packages?.[`node_modules/${upstream.pnpm.package}`]
+assert.equal(packageManager?.version, upstream.pnpm.version, 'pinned pnpm version')
+assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm integrity')
+assert.equal(packageManager?.license, 'MIT', 'pnpm npm license')
+assert.equal(packageManager?.bin?.pnpm, 'bin/pnpm.mjs', 'pnpm executable entry')
 
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
@@ -28,6 +36,7 @@ for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent
 
 console.log(JSON.stringify({
   dshVersion: installed.version,
+  pnpmVersion: packageManager.version,
   integrity: installed.integrity,
   packages: Object.keys(lockfile.packages).length,
 }))

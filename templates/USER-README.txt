@@ -20,6 +20,16 @@ data/dsh-home 保存配置、凭据和会话，data/browser 保存独立浏览�
 是随文件夹移动的默认工作区。data 可能包含私人信息，请像保管带密码的移动硬盘
 一样保管整个文件夹，并安全弹出移动盘。
 
+Windows 插件管理不需要另外安装 Node.js 或 pnpm。在本文件夹打开 PowerShell：
+
+  .\dsh.exe plugin --profile web add <插件>
+  .\dsh.exe plugin --profile web list --depth 0
+  .\dsh.exe plugin --profile web update <插件包名>
+  .\dsh.exe plugin --profile web remove <插件包名>
+  .\dsh.exe --profile web --dump-config
+
+插件变更不会自动重启 DSH。请先保存任务，再手动停止并重新启动。
+
 English
 -------
 
@@ -35,6 +45,17 @@ The launcher asks before installing an update. A normal update downloads only
 the changed DSH application component and keeps sessions, settings, credentials,
 and workspace in place. It requests the complete package only across a runtime
 compatibility change and restores the old version if the new one cannot start.
+
+On Windows, manage plugins without installing Node.js or pnpm separately:
+
+  .\dsh.exe plugin --profile web add <plugin>
+  .\dsh.exe plugin --profile web list --depth 0
+  .\dsh.exe plugin --profile web update <package-name>
+  .\dsh.exe plugin --profile web remove <package-name>
+  .\dsh.exe --profile web --dump-config
+
+Plugin changes never restart DSH automatically. Save your task, then stop and
+start DSH manually when convenient.
 
 DSH binds only to 127.0.0.1. This package contains the official DeepSeek Harness
 runtime plus an independent portable launcher; it is not an official DeepSeek

@@ -38,7 +38,7 @@ function Copy-PortableSources([string]$Target) {
     }
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs')) {
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.txt') (Join-Path $Target 'README.txt')
@@ -108,6 +108,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "runtime verification failed with exit code $LASTEXITCODE" }
 
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
+    Copy-Item (Join-Path $Stage 'app\node_modules\pnpm\LICENSE') (Join-Path $Stage 'licenses\pnpm-LICENSE.txt')
     $Notices = Join-Path $Downloads ("DeepSeek-Harness-THIRD_PARTY_NOTICES-$($Lock.dsh.reviewedCommit).md")
     if (-not (Test-Path -LiteralPath $Notices)) {
         Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$($Lock.dsh.reviewedCommit)/THIRD_PARTY_NOTICES.md" -OutFile $Notices
@@ -122,10 +123,12 @@ try {
         dshPackage = $Lock.dsh.package
         dshVersion = $Lock.dsh.version
         dshCommit = $Lock.dsh.reviewedCommit
+        pnpmVersion = $Lock.pnpm.version
+        pnpmIntegrity = $Lock.pnpm.integrity
         nodeVersion = $Lock.node.version
         nodeSha256 = $Runtime.sha256
         updaterSchema = 1
-        shellSchema = 2
+        shellSchema = 3
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -148,6 +151,18 @@ try {
     & $Csc $CompilerArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $LauncherExe)) { throw 'Windows launcher compilation failed.' }
     Copy-Item $LauncherExe (Join-Path $Stage 'Stop DeepSeek-Herness.exe')
+
+    $CommandExe = Join-Path $Stage 'dsh.exe'
+    $CommandCompilerArgs = @(
+        '/nologo', '/target:exe', '/platform:x64', '/optimize+',
+        "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
+        "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
+        '/reference:System.dll', '/reference:System.Core.dll',
+        "/out:$CommandExe",
+        (Join-Path $ProjectRoot 'launcher\windows\DSH-Command.cs')
+    )
+    & $Csc $CommandCompilerArgs
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $CommandExe)) { throw 'Windows command launcher compilation failed.' }
 
     $UpdateExtractor = Join-Path $Stage 'launcher\DSH-UpdateExtractor.exe'
     $UpdateExtractorCompilerArgs = @(
@@ -186,7 +201,8 @@ try {
     try {
         & tar.exe -a -c -f $UpdateComponentCandidate -C $Stage `
             'component.json' 'app' 'licenses/COMPONENTS.json' `
-            'licenses/DeepSeek-Harness-LICENSE.txt' 'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md'
+            'licenses/DeepSeek-Harness-LICENSE.txt' 'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md' `
+            'licenses/pnpm-LICENSE.txt'
         if ($LASTEXITCODE -ne 0) { throw "update component creation failed with exit code $LASTEXITCODE" }
     } finally {
         Remove-Item -LiteralPath $ComponentMetadata -Force -ErrorAction SilentlyContinue
@@ -208,7 +224,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 2
+            requiredShellSchema = 3
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
@@ -322,7 +338,7 @@ try {
         }
         $IsccVersion = [string]((& $IsccPath '--version' | Select-Object -First 1))
         $IsccVersionMatch = [regex]::Match($IsccVersion.Trim(), '^(?<major>\d+)\.')
-        if ($LASTEXITCODE -ne 0 -or -not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
+        if (-not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
             throw "BuildInstaller requires Inno Setup 7 or newer; found '$IsccVersion'."
         }
 
@@ -362,7 +378,10 @@ try {
                 $PortableSetupScript
             )
             & $IsccPath $PortableIsccArguments
-            if ($LASTEXITCODE -ne 0) { throw "Portable self-extractor build failed with exit code $LASTEXITCODE" }
+            $PortableIsccExitCode = $LASTEXITCODE
+            if ($null -ne $PortableIsccExitCode -and $PortableIsccExitCode -ne 0) {
+                throw "Portable self-extractor build failed with exit code $PortableIsccExitCode"
+            }
 
             # Only the installed package receives an external state root. The
             # portable self-extractor above is compiled from the clean movable
@@ -382,7 +401,10 @@ try {
                 $SetupScript
             )
             & $IsccPath $IsccArguments
-            if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit code $LASTEXITCODE" }
+            $InstallerIsccExitCode = $LASTEXITCODE
+            if ($null -ne $InstallerIsccExitCode -and $InstallerIsccExitCode -ne 0) {
+                throw "Inno Setup failed with exit code $InstallerIsccExitCode"
+            }
         } finally {
             if ($InstallerDriveMounted) {
                 & subst.exe $InstallerDrive /D

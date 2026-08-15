@@ -1,8 +1,8 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-本次更新修复了停止入口只关闭后台服务、却留下便携浏览器运行的问题。Windows 的
-`Stop DeepSeek-Herness.exe` 与 macOS 的 `Stop DSH-Portable.command` 现在会同时关闭
-本文件夹专属的浏览器窗口，且不会影响其他 Chrome 或 Edge 窗口。
+本次更新加入正式的 DSH 插件管理入口。Windows 便携版与安装版现在自带固定版本
+pnpm；不安装系统 Node.js、不修改 PATH，也能用 `dsh.exe` 管理任意 DSH 插件。
+插件配置保存在对应的用户数据目录，插件变更不会自动重启正在运行的任务。
 
 ## Windows x64（推荐）
 
@@ -37,15 +37,25 @@ macOS 包采用临时签名，没有经过 Apple 公证。首次启动可能需�
 2. 运行启动器、解压包或安装应用。
 3. 按 DSH 界面提示配置模型。
 
+Windows 用户可在应用目录打开 PowerShell：
+
+```powershell
+.\dsh.exe plugin --profile web add <插件>
+.\dsh.exe plugin --profile web list --depth 0
+.\dsh.exe plugin --profile web update <插件包名>
+.\dsh.exe plugin --profile web remove <插件包名>
+```
+
+变更插件后，请先保存任务，再手动停止并重新启动 DSH。
+
 ## 更新方式
 
 启动器会在启动时检查更新并先征求确认。一般更新只下载变化的 DSH 应用组件，
 保留会话、设置、凭据和工作区；只有运行环境发生兼容性变化时才提示下载完整包。
 新版无法正常启动时会自动恢复更新前的版本。
 
-本次更新包含便携启动器修复，已有版本会提示下载一次完整包；安装本版本后，
+本次更新增加了新的插件命令入口，已有版本会提示下载一次完整包；安装本版本后，
 后续兼容更新仍可由启动器只下载变化的 DSH 应用组件。
 
 轻量启动器会自动验证首次下载；普通用户不需要手动处理校验文件。离线完整包
 包含官方、未修改的 DSH 运行时、固定版本 Node.js、原生模块和所需许可证。
-本项目不包含 Codex 订阅、Zen Free 或其他模型插件。

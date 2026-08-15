@@ -70,11 +70,13 @@ function Assert-ProductShortcut {
 $TestId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $TempRoot = [System.IO.Path]::GetTempPath()
 $InstallRoot = Join-Path $TempRoot ("dsh-i-$TestId")
-$StateRoot = Join-Path $TempRoot ("dsh-s-$TestId")
+$LocalAppData = Join-Path $TempRoot ("dsh-la-$TestId")
+$StateRoot = Join-Path $LocalAppData 'DeepSeek-Herness'
 $SetupLog = Join-Path $TempRoot ("dsh-setup-$TestId.log")
 $LauncherDiagnostic = Join-Path $TempRoot ("dsh-launcher-$TestId.log")
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
 $PriorLauncherDiagnostic = $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC
+$PriorLocalAppData = $env:LOCALAPPDATA
 
 try {
     $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
@@ -110,6 +112,16 @@ try {
     Assert-ProductShortcut `
         -ShortcutPath (Join-Path $ProgramGroup 'Stop DeepSeek-Herness.lnk') `
         -ExpectedTarget (Join-Path $InstallRoot 'Stop DeepSeek-Herness.exe')
+
+    $env:LOCALAPPDATA = $LocalAppData
+    $env:DSH_PORTABLE_STATE_ROOT = $null
+    & (Join-Path $PSScriptRoot 'smoke-windows-plugins.ps1') `
+        -Root $InstallRoot `
+        -Fixture (Join-Path (Join-Path $PSScriptRoot '..') 'tests\fixtures\dsh-portable-smoke-plugin') `
+        -ExpectedStateRoot $StateRoot `
+        -InstalledMode
+    if ($LASTEXITCODE -ne 0) { throw "installed plugin management smoke failed with exit code $LASTEXITCODE" }
+    $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
 
     $Started = Invoke-BoundedProcess -Stage 'Start installed runtime' -TimeoutSeconds 90 `
         -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
@@ -148,4 +160,5 @@ try {
 } finally {
     $env:DSH_PORTABLE_STATE_ROOT = $PriorStateRoot
     $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $PriorLauncherDiagnostic
+    $env:LOCALAPPDATA = $PriorLocalAppData
 }

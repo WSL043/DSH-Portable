@@ -1,0 +1,88 @@
+import { createHash } from 'node:crypto'
+import { readFileSync, writeFileSync } from 'node:fs'
+import http from 'node:http'
+import path from 'node:path'
+
+const [v1Archive, v2Archive, channelFile, readyFile] = process.argv.slice(2)
+if (!v1Archive || !v2Archive || !channelFile || !readyFile) {
+  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json>')
+}
+
+const packageName = 'dsh-portable-smoke-plugin'
+const releases = new Map([
+  ['1.0.0', archiveRelease('1.0.0', v1Archive)],
+  ['1.0.1', archiveRelease('1.0.1', v2Archive)],
+])
+
+function archiveRelease(version, filename) {
+  const body = readFileSync(filename)
+  return {
+    version,
+    filename: path.resolve(filename),
+    body,
+    shasum: createHash('sha1').update(body).digest('hex'),
+    integrity: `sha512-${createHash('sha512').update(body).digest('base64')}`,
+  }
+}
+
+function currentVersion() {
+  const selected = readFileSync(channelFile, 'utf8').trim()
+  if (!releases.has(selected)) throw new Error(`unsupported fixture channel: ${selected}`)
+  return selected
+}
+
+function metadata(origin) {
+  const latest = currentVersion()
+  return {
+    _id: packageName,
+    name: packageName,
+    'dist-tags': { latest },
+    versions: Object.fromEntries([...releases].map(([version, release]) => [version, {
+      name: packageName,
+      version,
+      private: false,
+      license: 'MIT',
+      dist: {
+        tarball: `${origin}/${packageName}/-/${packageName}-${version}.tgz`,
+        shasum: release.shasum,
+        integrity: release.integrity,
+      },
+    }])),
+  }
+}
+
+const server = http.createServer((request, response) => {
+  const origin = `http://127.0.0.1:${server.address().port}`
+  const pathname = new URL(request.url, origin).pathname
+  if (request.method === 'GET' && pathname === `/${packageName}`) {
+    const body = Buffer.from(JSON.stringify(metadata(origin)), 'utf8')
+    response.writeHead(200, {
+      'content-type': 'application/json',
+      'content-length': body.length,
+      'cache-control': 'no-store',
+    }).end(body)
+    return
+  }
+  const match = pathname.match(new RegExp(`^/${packageName}/-/${packageName}-(1\\.0\\.[01])\\.tgz$`))
+  if (request.method === 'GET' && match) {
+    const release = releases.get(match[1])
+    response.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-length': release.body.length,
+      'cache-control': 'no-store',
+    }).end(release.body)
+    return
+  }
+  response.writeHead(404, { 'content-type': 'text/plain' }).end('not found')
+})
+
+server.listen(0, '127.0.0.1', () => {
+  const payload = `${JSON.stringify({ port: server.address().port })}\n`
+  writeFileSync(readyFile, payload, 'utf8')
+})
+
+function close() {
+  server.close(() => process.exit(0))
+}
+process.on('SIGINT', close)
+process.on('SIGTERM', close)

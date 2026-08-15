@@ -13,8 +13,8 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.1.0.7")]
-[assembly: AssemblyFileVersion("0.1.0.7")]
+[assembly: AssemblyVersion("0.2.0.1")]
+[assembly: AssemblyFileVersion("0.2.0.1")]
 
 namespace DshPortable
 {

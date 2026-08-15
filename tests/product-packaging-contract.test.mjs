@@ -11,7 +11,7 @@ const exists = async (name) => access(path.join(root, name)).then(() => true, ()
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.1.0-rc.6-portable.7')
+  assert.equal(manifest.version, '0.2.0-rc.1')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -149,9 +149,9 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*2/)
-  assert.match(build, /requiredShellSchema\s*=\s*2/)
-  assert.match(source, /AssemblyFileVersion\("0\.1\.0\.7"\)/)
+  assert.match(build, /shellSchema\s*=\s*3/)
+  assert.match(build, /requiredShellSchema\s*=\s*3/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.1"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -204,6 +204,37 @@ test('Windows setup is a per-user offline installer with durable data outside th
   for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Uninstall package']) {
     assert.match(smoke, new RegExp(stage))
   }
+})
+
+test('plugin management is a generic finished-product capability and release gate', async () => {
+  const [chinese, english, userReadme, releaseNotes, workflow, smoke, installerSmoke] = await Promise.all([
+    read('README.md'),
+    read('README.en.md'),
+    read('templates/USER-README.txt'),
+    read('templates/RELEASE-NOTES.md'),
+    read('.github/workflows/ci.yml'),
+    read('scripts/smoke-windows-plugins.ps1'),
+    read('scripts/smoke-windows-installer.ps1'),
+  ])
+  const docs = `${chinese}\n${english}\n${userReadme}\n${releaseNotes}`
+  assert.match(chinese, /\.\\dsh\.exe plugin --profile web add <插件>/)
+  assert.match(chinese, /\.\\dsh\.exe plugin --profile web (?:list|remove|update)/)
+  assert.match(chinese, /\.\\dsh\.exe --profile web --dump-config/)
+  assert.match(english, /\.\\dsh\.exe plugin --profile web add <plugin>/i)
+  assert.match(docs, /不会自动重启|never restarts/i)
+  assert.doesNotMatch(docs, /dsh-codex-subscription|openai-codex|codex|zen\s*free/i)
+
+  assert.match(workflow, /^  windows-plugin-smoke:/m)
+  assert.match(workflow, /smoke-windows-plugins\.ps1/)
+  assert.match(workflow, /tests\\fixtures\\dsh-portable-smoke-plugin|tests\/fixtures\/dsh-portable-smoke-plugin/)
+  assert.match(installerSmoke, /smoke-windows-plugins\.ps1/)
+  assert.match(smoke, /plugin.+add/s)
+  assert.match(smoke, /plugin.+list/s)
+  assert.match(smoke, /plugin.+update/s)
+  assert.match(smoke, /plugin.+remove/s)
+  assert.match(smoke, /--dump-config/)
+  assert.match(smoke, /isolated PATH/i)
+  assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
 
 test('Windows portable self-extractor stays offline, movable, and registration-free', async () => {
@@ -270,9 +301,9 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 2/)
-  assert.match(build, /"requiredShellSchema": 2/)
-  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>7<\/string>/s)
+  assert.match(build, /"shellSchema": 3/)
+  assert.match(build, /"requiredShellSchema": 3/)
+  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>1<\/string>/s)
   assert.match(app, /check-update/)
   assert.match(app, /defer-update/)
   assert.doesNotMatch(app, /\$\(\$NODE\b/)
@@ -347,6 +378,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
     'windows-build:',
     'windows-inno-build:',
     'windows-portable-smoke:',
+    'windows-plugin-smoke:',
     'windows-browser-lifecycle:',
     'windows-extractor-smoke:',
     'windows-installer-smoke:',

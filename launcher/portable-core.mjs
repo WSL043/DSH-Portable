@@ -15,10 +15,12 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
   const runtimeDir = paths.join(portableRoot, 'runtime')
   const nodeDir = paths.join(runtimeDir, 'node')
   const appDir = paths.join(portableRoot, 'app')
+  const appBinDir = paths.join(appDir, 'node_modules', '.bin')
   const stateDir = paths.join(dataDir, 'runtime')
   return {
     root: portableRoot,
     appDir,
+    appBinDir,
     browserProfile: paths.join(dataDir, 'browser'),
     browserState: paths.join(stateDir, 'browser.json'),
     dataDir,
@@ -29,6 +31,10 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     logsDir: paths.join(dataDir, 'logs'),
     nodeDir,
     nodeExe: platform === 'win32' ? paths.join(nodeDir, 'node.exe') : paths.join(nodeDir, 'bin', 'node'),
+    packageManagerStore: paths.join(dataDir, 'pnpm-store'),
+    packageManagerBin: platform === 'win32'
+      ? paths.join(appBinDir, 'pnpm.cmd')
+      : paths.join(appBinDir, 'pnpm'),
     platform,
     portableCli: paths.join(portableRoot, 'launcher', 'portable-cli.mjs'),
     portableMeta: paths.join(dataDir, 'portable.json'),
@@ -44,13 +50,20 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
 }
 
 export function buildDshEnv(layout, source = process.env) {
-  return {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const separator = layout.platform === 'win32' ? ';' : ':'
+  const environment = {
     ...source,
     DSH_HOME: layout.dshHome,
     DSH_PORTABLE: '1',
     DSH_TELEMETRY_MODE: 'DISABLED',
-    PATH: `${path.dirname(layout.nodeExe)}${path.delimiter}${source.PATH ?? ''}`,
+    PATH: [paths.dirname(layout.nodeExe), layout.appBinDir, source.PATH ?? ''].filter(Boolean).join(separator),
   }
+  for (const key of Object.keys(environment)) {
+    if (key.toLowerCase() === 'pnpm_config_store_dir') delete environment[key]
+  }
+  environment.pnpm_config_store_dir = layout.packageManagerStore
+  return environment
 }
 
 export function browserLaunchSpec(executable, url, layout) {

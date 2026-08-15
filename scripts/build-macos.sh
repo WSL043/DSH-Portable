@@ -62,6 +62,9 @@ cp "$PROJECT_ROOT/launcher/portable-core.mjs" "$STAGE/launcher/portable-core.mjs
 cp "$PROJECT_ROOT/launcher/portable-cli.mjs" "$STAGE/launcher/portable-cli.mjs"
 cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs"
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
+cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
+cp "$PROJECT_ROOT/launcher/macos/dsh" "$STAGE/dsh"
+chmod 755 "$STAGE/dsh"
 cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
 cp "$PROJECT_ROOT/templates/DATA-README.txt" "$STAGE/data/README.txt"
 cp "$PROJECT_ROOT/templates/WORKSPACE-README.txt" "$STAGE/workspace/README.txt"
@@ -80,6 +83,7 @@ cp "$NODE_FOLDER/LICENSE" "$STAGE/licenses/Node.js-LICENSE.txt"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 
 cp "$STAGE/app/node_modules/@deepseek-ai/dsh/LICENSE" "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt"
+cp "$STAGE/app/node_modules/pnpm/LICENSE" "$STAGE/licenses/pnpm-LICENSE.txt"
 NOTICES="$DOWNLOAD_DIR/DeepSeek-Harness-THIRD_PARTY_NOTICES-$DSH_COMMIT.md"
 if [[ ! -f "$NOTICES" ]]; then
   curl --fail --location --retry 3 --output "$NOTICES" "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$DSH_COMMIT/THIRD_PARTY_NOTICES.md"
@@ -95,10 +99,12 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "dshPackage": "@deepseek-ai/dsh",
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT",
+  "pnpmVersion": "$(lock_value pnpm.version)",
+  "pnpmIntegrity": "$(lock_value pnpm.integrity)",
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 2
+  "shellSchema": 3
 }
 EOF
 
@@ -128,6 +134,7 @@ ditto "$STAGE/app" "$UPDATE_COMPONENT_ROOT/app"
 cp "$STAGE/licenses/COMPONENTS.json" "$UPDATE_COMPONENT_ROOT/licenses/COMPONENTS.json"
 cp "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt" "$UPDATE_COMPONENT_ROOT/licenses/DeepSeek-Harness-LICENSE.txt"
 cp "$STAGE/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md" "$UPDATE_COMPONENT_ROOT/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md"
+cp "$STAGE/licenses/pnpm-LICENSE.txt" "$UPDATE_COMPONENT_ROOT/licenses/pnpm-LICENSE.txt"
 cat > "$UPDATE_COMPONENT_ROOT/component.json" <<EOF
 {
   "schemaVersion": 1,
@@ -148,7 +155,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 2,
+  "requiredShellSchema": 3,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

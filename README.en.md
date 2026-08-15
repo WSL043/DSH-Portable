@@ -52,7 +52,7 @@ put it on a USB drive, stop DSH first and copy the entire `DSH-Portable` folder.
 | **Actually portable** | Sessions, settings, browser data, workspace, runtime, and launchers stay under one movable folder. |
 | **Offline option** | A complete self-extracting package is available when the target machine cannot download on first launch. |
 | **Pinned and tested** | Each release fixes the DSH and Node versions, then starts, stops, moves, restarts, installs, and uninstalls the built packages in CI. |
-| **Unmodified DSH** | The runtime is the official `@deepseek-ai/dsh` package. Codex, Zen Free, and other third-party providers are not bundled. |
+| **Unmodified DSH** | The runtime is the official `@deepseek-ai/dsh` package. Third-party providers and plugins are not bundled. |
 
 ## Other downloads
 
@@ -87,6 +87,27 @@ The portable folder keeps its state in predictable locations:
 
 After the folder is moved, the launcher migrates paths it owns on the next start.
 External projects keep their original paths.
+
+## Plugin management
+
+The Windows packages include the Node.js runtime and a fixed pnpm version required
+by DSH. You do not need a system Node.js or pnpm installation, and DSH-Portable does
+not change the system PATH. Open PowerShell in the DSH-Portable folder and use the
+generic command entry for any DSH plugin:
+
+```powershell
+.\dsh.exe plugin --profile web add <plugin>
+.\dsh.exe plugin --profile web list --depth 0
+.\dsh.exe plugin --profile web update <package-name>
+.\dsh.exe plugin --profile web remove <package-name>
+.\dsh.exe --profile web --dump-config
+```
+
+`<plugin>` can be any package, Git URL, local directory, or archive accepted by
+pnpm. The installed edition uses the same commands while keeping plugins and
+configuration in its external user-data directory. Plugin changes never restart a
+running DSH process: save your task, stop DSH, and start it again when convenient.
+Install only plugins you trust because a plugin can execute code on this computer.
 
 ## Updates
 

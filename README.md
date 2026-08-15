@@ -51,7 +51,7 @@
 | **真正可移动** | 会话、设置、浏览器数据、工作区、运行环境和启动器都在同一个文件夹内。 |
 | **保留离线方案** | 目标电脑无法在首次启动时联网，可以改用包含全部内容的离线完整包。 |
 | **固定版本并真实测试** | 每次发布都会固定 DSH 与 Node 版本，并在 CI 中实际启动、停止、移动、重启、安装和卸载成品。 |
-| **不修改 DSH** | 运行时来自官方 `@deepseek-ai/dsh`；不会预装 Codex、Zen Free 或其他第三方模型渠道。 |
+| **不修改 DSH** | 运行时来自官方 `@deepseek-ai/dsh`；不会预装第三方模型渠道或插件。 |
 
 ## 其他下载
 
@@ -85,6 +85,25 @@ macOS 包采用临时签名，没有经过 Apple 公证。首次打开若被阻�
 - `data/logs/`：本地服务日志。
 
 移动整个文件夹后，启动器会在下次启动时迁移自己管理的路径；外部项目仍保留原路径。
+
+## 插件管理
+
+Windows 成品自带 DSH 所需的 Node.js 与固定版本 pnpm，不需要安装系统 Node.js、
+pnpm，也不会修改系统 PATH。在 DSH-Portable 文件夹中打开 PowerShell，使用通用
+`dsh.exe` 入口管理任意 DSH 插件：
+
+```powershell
+.\dsh.exe plugin --profile web add <插件>
+.\dsh.exe plugin --profile web list --depth 0
+.\dsh.exe plugin --profile web update <插件包名>
+.\dsh.exe plugin --profile web remove <插件包名>
+.\dsh.exe --profile web --dump-config
+```
+
+`<插件>` 可以是 pnpm 支持的包名、Git 地址、本地目录或压缩包。安装版使用相同
+命令，插件和配置写入独立的用户数据目录；卸载或更新应用不会删除它们。插件变更
+不会自动重启正在运行的 DSH，请先保存任务，再手动停止并重新启动。只安装你信任
+的插件，因为插件可以在本机执行代码。
 
 ## 更新
 

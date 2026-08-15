@@ -39,7 +39,7 @@ if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath -PathType Leaf)) {
 }
 $IsccVersion = [string]((& $IsccPath '--version' | Select-Object -First 1))
 $IsccVersionMatch = [regex]::Match($IsccVersion.Trim(), '^(?<major>\d+)\.')
-if ($LASTEXITCODE -ne 0 -or -not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
+if (-not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
     throw "Inno Setup 7 or newer is required; found '$IsccVersion'."
 }
 
@@ -103,7 +103,10 @@ try {
         $SetupScript
     )
     & $IsccPath $Arguments
-    if ($LASTEXITCODE -ne 0) { throw "Inno Setup $Kind build failed with exit code $LASTEXITCODE" }
+    $CompilerExitCode = $LASTEXITCODE
+    if ($null -ne $CompilerExitCode -and $CompilerExitCode -ne 0) {
+        throw "Inno Setup $Kind build failed with exit code $CompilerExitCode"
+    }
 
     $Candidate = Join-Path $CompilerOutput $OutputName
     if (-not (Test-Path -LiteralPath $Candidate -PathType Leaf)) { throw "Inno Setup did not produce $OutputName." }

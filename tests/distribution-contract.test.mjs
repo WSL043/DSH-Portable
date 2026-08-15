@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 
-test('runtime dependency boundary contains official DSH only', async () => {
+test('runtime dependency boundary contains official DSH and its pinned package manager only', async () => {
   const runtime = JSON.parse(await read('app/package.json'))
-  assert.deepEqual(runtime.dependencies, { '@deepseek-ai/dsh': '0.1.0-rc.6' })
+  assert.deepEqual(runtime.dependencies, { '@deepseek-ai/dsh': '0.1.0-rc.6', pnpm: '11.7.0' })
   const serialized = JSON.stringify(runtime)
   for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
     assert.equal(serialized.includes(forbidden), false, forbidden)
@@ -29,6 +29,11 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   assert.match(lock.dsh.version, /^0\.1\.0-rc\.\d+$/)
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
+  assert.deepEqual(lock.pnpm, {
+    package: 'pnpm',
+    version: '11.7.0',
+    integrity: 'sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA==',
+  })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
     assert.match(runtime.archive, /^node-v\d+\.\d+\.\d+-(win-x64\.zip|darwin-(arm64|x64)\.tar\.gz)$/, key)
@@ -39,10 +44,16 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const upstream = JSON.parse(await read('upstream.lock.json'))
   const lockfile = JSON.parse(await read('app/package-lock.json'))
   const rootPackage = lockfile.packages['']
-  assert.deepEqual(rootPackage.dependencies, { '@deepseek-ai/dsh': upstream.dsh.version })
+  assert.deepEqual(rootPackage.dependencies, {
+    '@deepseek-ai/dsh': upstream.dsh.version,
+    pnpm: upstream.pnpm.version,
+  })
   const dsh = lockfile.packages['node_modules/@deepseek-ai/dsh']
   assert.equal(dsh.version, upstream.dsh.version)
   assert.equal(dsh.integrity, upstream.dsh.integrity)
+  const pnpm = lockfile.packages['node_modules/pnpm']
+  assert.equal(pnpm.version, upstream.pnpm.version)
+  assert.equal(pnpm.integrity, upstream.pnpm.integrity)
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {

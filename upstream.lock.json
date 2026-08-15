@@ -7,6 +7,11 @@
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
     "reviewedCommit": "47f943859bef60e4160492346772ded9b24f765a"
   },
+  "pnpm": {
+    "package": "pnpm",
+    "version": "11.7.0",
+    "integrity": "sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA=="
+  },
   "node": {
     "version": "24.19.0",
     "baseUrl": "https://nodejs.org/dist/v24.19.0",

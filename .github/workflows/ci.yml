@@ -169,6 +169,28 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
 
+  windows-plugin-smoke:
+    name: Windows bundled plugin management
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - name: Add, list, update, restart, remove, and move with no system Node or pnpm
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-plugin-product-smoke'
+          New-Item -ItemType Directory -Force -Path $Root | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          ./scripts/smoke-windows-plugins.ps1 `
+            -Root (Join-Path $Root 'DSH-Portable') `
+            -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
+
   windows-browser-lifecycle:
     name: Windows browser ownership and Stop EXE
     needs: windows-build

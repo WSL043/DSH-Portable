@@ -1,0 +1,4 @@
+- insert:
+    - id: dsh-portable-smoke-v1
+      name: '@deepseek-ai/cordis-plugin-timer'
+      disabled: true

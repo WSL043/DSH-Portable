@@ -52,6 +52,9 @@ loaded.push('node-pty-spawn')
 const dshManifestPath = requireFromApp.resolve('@deepseek-ai/dsh/package.json')
 const dshManifest = JSON.parse(readFileSync(dshManifestPath, 'utf8'))
 const dshBin = path.join(path.dirname(dshManifestPath), 'lib', 'bin.js')
+const pnpmManifestPath = path.join(appDir, 'node_modules', 'pnpm', 'package.json')
+const pnpmManifest = JSON.parse(readFileSync(pnpmManifestPath, 'utf8'))
+const pnpmBin = path.join(appDir, 'node_modules', '.bin', process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm')
 const piAiProviderData = path.join(
   appDir,
   'node_modules',
@@ -64,10 +67,12 @@ const piAiProviderData = path.join(
 )
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
 assert.equal(existsSync(dshBin), true, `official DSH CLI is missing: ${dshBin}`)
+assert.equal(pnpmManifest.version, '11.7.0', 'bundled pnpm version')
+assert.equal(existsSync(pnpmBin), true, `bundled pnpm command is missing: ${pnpmBin}`)
 assert.equal(existsSync(piAiProviderData), true, `pi-ai provider data is missing: ${piAiProviderData}`)
 
 await new Promise((resolve) => {
-  process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, loaded })}\n`, resolve)
+  process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, pnpmVersion: pnpmManifest.version, pnpmBin, loaded })}\n`, resolve)
 })
 // node-pty keeps a ConPTY handle referenced on some headless Windows hosts even
 // after the child has emitted its marker. This script is a one-shot build gate,
