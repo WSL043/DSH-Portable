@@ -63,5 +63,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(windowsSmoke, /CloseMainWindow/)
   assert.match(macSmoke, /DSH-Portable\.app/)
   assert.match(macSmoke, /WKWebView|WebKit/)
-  assert.match(macSmoke, /osascript/)
+  assert.match(macSmoke, /CGWindowListCopyWindowInfo/)
+  assert.match(macSmoke, /kCGWindowOwnerPID/)
+  assert.doesNotMatch(macSmoke, /System Events/)
 })
