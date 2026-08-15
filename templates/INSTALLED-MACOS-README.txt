@@ -7,7 +7,7 @@ Drag both applications into Applications. Open DeepSeek-Herness to start or
 reopen the interface. Open Stop DeepSeek-Herness before updating or removing
 the application.
 
-Settings, credentials, sessions, browser state, and the default workspace are
+Settings, credentials, sessions, desktop web state, and the default workspace are
 stored outside the signed app bundle in:
 
   ~/Library/Application Support/DeepSeek-Herness

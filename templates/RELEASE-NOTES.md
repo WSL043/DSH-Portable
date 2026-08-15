@@ -1,8 +1,11 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-本次更新加入正式的 DSH 插件管理入口。Windows 便携版与安装版现在自带固定版本
-pnpm；不安装系统 Node.js、不修改 PATH，也能用 `dsh.exe` 管理任意 DSH 插件。
-插件配置保存在对应的用户数据目录，插件变更不会自动重启正在运行的任务。
+本次更新把 DSH 改为真正的原生桌面窗口。正常启动不再打开 Edge 或 Chrome；
+Windows 任务栏固定的是 DeepSeek-Herness 自己的窗口和图标，关闭窗口会安全停止
+对应的本地 DSH 服务。macOS 同步改为 WKWebView 原生应用窗口。
+
+Windows 便携版与安装版继续自带固定版本 pnpm；不安装系统 Node.js、不修改 PATH，
+也能用 `dsh.exe` 管理任意 DSH 插件。会话、插件和工作区仍按原位置保留。
 
 ## Windows x64（推荐）
 

@@ -4,7 +4,7 @@ DSH-Portable
 中文
 ----
 
-这个文件夹可以直接移动，设置、会话、浏览器资料和默认工作区都会随它保留。
+这个文件夹可以直接移动，设置、会话、桌面 Web 数据和默认工作区都会随它保留。
 
 Windows：解压完整后双击 DeepSeek-Herness.exe。移动文件夹或拔出移动盘前，先
 运行 Stop DeepSeek-Herness.exe。
@@ -16,7 +16,7 @@ macOS：解压完整后双击 DSH-Portable.app。首次被系统拦截时，按�
 整套运行环境；会话、设置、凭据和工作区不会被覆盖。兼容性变化时才会提示下载
 完整包，新版启动失败则自动恢复旧版。
 
-data/dsh-home 保存配置、凭据和会话，data/browser 保存独立浏览器资料，workspace
+data/dsh-home 保存配置、凭据和会话，data/webview2 保存 Windows 桌面 Web 数据，workspace
 是随文件夹移动的默认工作区。data 可能包含私人信息，请像保管带密码的移动硬盘
 一样保管整个文件夹，并安全弹出移动盘。
 
@@ -33,7 +33,7 @@ Windows 插件管理不需要另外安装 Node.js 或 pnpm。在本文件夹打�
 English
 -------
 
-Keep this folder together. Settings, sessions, browser data, and the default
+Keep this folder together. Settings, sessions, desktop web data, and the default
 workspace move with it.
 
 On Windows, extract the archive completely and run DeepSeek-Herness.exe. On

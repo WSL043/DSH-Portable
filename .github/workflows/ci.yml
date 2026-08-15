@@ -191,8 +191,8 @@ jobs:
             -Root (Join-Path $Root 'DSH-Portable') `
             -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
 
-  windows-browser-lifecycle:
-    name: Windows browser ownership and Stop EXE
+  windows-desktop-host:
+    name: Windows native desktop identity and lifecycle
     needs: windows-build
     runs-on: windows-latest
     timeout-minutes: 15
@@ -202,14 +202,14 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Start the real portable browser and close only its owned profile
+      - name: Verify the real native window, taskbar identity, and graceful close
         shell: powershell
         run: |
-          $Root = Join-Path $env:RUNNER_TEMP 'dsh-browser-lifecycle'
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-desktop-host'
           New-Item -ItemType Directory -Force -Path $Root | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
-          ./scripts/smoke-windows-browser-lifecycle.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          ./scripts/smoke-windows-desktop-host.ps1 -Root (Join-Path $Root 'DSH-Portable')
 
   windows-bootstrap-smoke:
     name: Windows lightweight bootstrap
@@ -318,8 +318,8 @@ jobs:
           node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
           node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
 
-  macos-browser-lifecycle:
-    name: macOS browser ownership and Stop (${{ matrix.arch }})
+  macos-desktop-host:
+    name: macOS native desktop identity and lifecycle (${{ matrix.arch }})
     needs: macos-build
     strategy:
       fail-fast: false
@@ -337,12 +337,12 @@ jobs:
         with:
           name: macos-${{ matrix.arch }}-build
           path: artifacts
-      - name: Start the real portable browser and close only its owned profile
+      - name: Verify the real WKWebView app and graceful close
         run: |
-          ROOT="$RUNNER_TEMP/dsh-browser-lifecycle"
+          ROOT="$RUNNER_TEMP/dsh-desktop-host"
           mkdir -p "$ROOT"
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
-          bash scripts/smoke-macos-browser-lifecycle.sh "$ROOT/DSH-Portable"
+          bash scripts/smoke-macos-desktop-host.sh "$ROOT/DSH-Portable"
 
   macos-dmg-smoke:
     name: macOS DMG (${{ matrix.arch }})

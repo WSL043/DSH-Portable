@@ -24,6 +24,12 @@ $Downloads = Join-Path $CacheDir 'downloads'
 $Archive = Join-Path $Downloads $Runtime.archive
 $Extracted = Join-Path $CacheDir ("node-$($Lock.node.version)-win-x64")
 $NodeFolder = Join-Path $Extracted ("node-v$($Lock.node.version)-win-x64")
+$WebView2Archive = Join-Path $Downloads ("Microsoft.Web.WebView2.$($Lock.webview2.version).nupkg")
+$WebView2Extracted = Join-Path $CacheDir ("Microsoft.Web.WebView2-$($Lock.webview2.version)")
+$WebView2Core = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.Core.dll'
+$WebView2WinForms = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.WinForms.dll'
+$WebView2Loader = Join-Path $WebView2Extracted 'runtimes\win-x64\native\WebView2Loader.dll'
+$WebView2License = Join-Path $WebView2Extracted 'LICENSE.txt'
 
 function Assert-Sha256([string]$Filename, [string]$Expected) {
     $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Filename).Hash.ToLowerInvariant()
@@ -61,6 +67,22 @@ try {
 }
 
 try {
+    if (-not (Test-Path -LiteralPath $WebView2Archive)) {
+        Write-Host "Downloading pinned Microsoft WebView2 SDK: $($Lock.webview2.version)"
+        Invoke-WebRequest -UseBasicParsing -Uri $Lock.webview2.url -OutFile $WebView2Archive
+    }
+    Assert-Sha256 $WebView2Archive $Lock.webview2.sha256
+    if (-not (Test-Path -LiteralPath $WebView2Extracted)) {
+        New-Item -ItemType Directory -Force -Path $WebView2Extracted | Out-Null
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [System.IO.Compression.ZipFile]::ExtractToDirectory($WebView2Archive, $WebView2Extracted)
+    }
+    foreach ($RequiredWebView2File in @($WebView2Core, $WebView2WinForms, $WebView2Loader, $WebView2License)) {
+        if (-not (Test-Path -LiteralPath $RequiredWebView2File)) {
+            throw "Pinned WebView2 SDK cache is incomplete: $RequiredWebView2File"
+        }
+    }
+
     if (-not (Test-Path -LiteralPath $Archive)) {
         $Uri = "$($Lock.node.baseUrl)/$($Runtime.archive)"
         Write-Host "Downloading pinned Node.js runtime: $Uri"
@@ -109,6 +131,10 @@ try {
 
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\pnpm\LICENSE') (Join-Path $Stage 'licenses\pnpm-LICENSE.txt')
+    Copy-Item $WebView2Core (Join-Path $Stage 'Microsoft.Web.WebView2.Core.dll')
+    Copy-Item $WebView2WinForms (Join-Path $Stage 'Microsoft.Web.WebView2.WinForms.dll')
+    Copy-Item $WebView2Loader (Join-Path $Stage 'WebView2Loader.dll')
+    Copy-Item $WebView2License (Join-Path $Stage 'licenses\WebView2-LICENSE.txt')
     $Notices = Join-Path $Downloads ("DeepSeek-Harness-THIRD_PARTY_NOTICES-$($Lock.dsh.reviewedCommit).md")
     if (-not (Test-Path -LiteralPath $Notices)) {
         Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$($Lock.dsh.reviewedCommit)/THIRD_PARTY_NOTICES.md" -OutFile $Notices
@@ -127,8 +153,11 @@ try {
         pnpmIntegrity = $Lock.pnpm.integrity
         nodeVersion = $Lock.node.version
         nodeSha256 = $Runtime.sha256
+        webView2Package = $Lock.webview2.package
+        webView2Version = $Lock.webview2.version
+        webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 3
+        shellSchema = 4
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -145,6 +174,7 @@ try {
         "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+        "/reference:$WebView2Core", "/reference:$WebView2WinForms",
         "/out:$LauncherExe",
         (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs')
     )
@@ -224,7 +254,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 3
+            requiredShellSchema = 4
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version

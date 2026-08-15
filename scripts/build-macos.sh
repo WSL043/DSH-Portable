@@ -104,14 +104,19 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 3
+  "shellSchema": 4
 }
 EOF
+
+NATIVE_HOST="$BUILD_ROOT/DeepSeek-Herness"
+xcrun swiftc -O -framework AppKit -framework WebKit \
+  "$PROJECT_ROOT/launcher/macos/DeepSeek-Herness.swift" \
+  -o "$NATIVE_HOST"
 
 APP="$STAGE/DSH-Portable.app"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$PROJECT_ROOT/launcher/macos/Info.plist" "$APP/Contents/Info.plist"
-cp "$PROJECT_ROOT/launcher/macos/DSH-Portable" "$APP/Contents/MacOS/DSH-Portable"
+cp "$NATIVE_HOST" "$APP/Contents/MacOS/DSH-Portable"
 cp "$PROJECT_ROOT/assets/DSH-Portable.icns" "$APP/Contents/Resources/DSH-Portable.icns"
 chmod 755 "$APP/Contents/MacOS/DSH-Portable"
 cp "$PROJECT_ROOT/launcher/macos/Stop DSH-Portable.command" "$STAGE/Stop DSH-Portable.command"
@@ -155,7 +160,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 3,
+  "requiredShellSchema": 4,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",
@@ -192,7 +197,7 @@ ditto "$STAGE/runtime" "$INSTALLED_RESOURCES/runtime"
 ditto "$STAGE/licenses" "$INSTALLED_RESOURCES/licenses"
 cp "$PROJECT_ROOT/templates/INSTALLED-MACOS-README.txt" "$DMG_ROOT/README.txt"
 cp "$PROJECT_ROOT/launcher/macos/Info-installed.plist" "$INSTALLED_APP/Contents/Info.plist"
-cp "$PROJECT_ROOT/launcher/macos/DeepSeek-Herness-installed" "$INSTALLED_APP/Contents/MacOS/DeepSeek-Herness"
+cp "$NATIVE_HOST" "$INSTALLED_APP/Contents/MacOS/DeepSeek-Herness"
 cp "$PROJECT_ROOT/assets/DSH-Portable.icns" "$INSTALLED_RESOURCES/DSH-Portable.icns"
 chmod 755 "$INSTALLED_APP/Contents/MacOS/DeepSeek-Herness" "$INSTALLED_RESOURCES/runtime/node/bin/node"
 

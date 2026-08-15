@@ -7,7 +7,7 @@ Start it from the Start menu or desktop shortcut. Use the Stop DeepSeek-Herness
 shortcut before restarting, updating, or removing the application.
 
 Application files are installed for the current Windows user. Settings,
-credentials, sessions, browser state, and the default workspace are stored in:
+credentials, sessions, desktop web state, and the default workspace are stored in:
 
   %LOCALAPPDATA%\DeepSeek-Herness
 
