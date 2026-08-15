@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-rc.4"
+  #define AppVersion "0.2.0-rc.5"
 #endif
 
 [Setup]
@@ -32,12 +32,30 @@ ArchitecturesInstallIn64BitMode=x64compatible
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
+LanguageDetectionMethod=uilanguage
+ShowLanguageDialog=auto
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.2.0.4
+VersionInfoVersion=0.2.0.5
 VersionInfoProductName=DeepSeek-Herness
 VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+
+[CustomMessages]
+english.CreateDesktopShortcut=Create a desktop shortcut
+chinesesimplified.CreateDesktopShortcut=创建桌面快捷方式
+english.ShortcutGroup=Shortcuts:
+chinesesimplified.ShortcutGroup=快捷方式：
+english.StartApp=Start DeepSeek-Herness
+chinesesimplified.StartApp=启动 DeepSeek-Herness
+english.ExistingProcessStopFailed=The existing DeepSeek-Herness process could not be stopped.
+chinesesimplified.ExistingProcessStopFailed=无法停止正在运行的 DeepSeek-Herness。
+english.AppStillRunning=DeepSeek-Herness is still running. Stop it before updating.
+chinesesimplified.AppStillRunning=DeepSeek-Herness 仍在运行。请先退出程序再更新。
 
 [Files]
 Source: "{#Stage}\*"; DestDir: "{app}"; Excludes: "\data\*,\workspace\*"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -47,10 +65,10 @@ Name: "{group}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; Workin
 Name: "{autodesktop}\DeepSeek-Herness"; Filename: "{app}\DeepSeek-Herness.exe"; WorkingDir: "{app}"; IconFilename: "{app}\DeepSeek-Herness.exe"; Tasks: desktopicon
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Shortcuts:"; Flags: unchecked
+Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:ShortcutGroup}"; Flags: unchecked
 
 [Run]
-Filename: "{app}\DeepSeek-Herness.exe"; Description: "Start DeepSeek-Herness"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\DeepSeek-Herness.exe"; Description: "{cm:StartApp}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "{app}\DeepSeek-Herness.exe"; Parameters: "stop --no-browser --json"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
@@ -67,8 +85,8 @@ begin
   begin
     if not Exec(StopEntry, 'stop --no-browser --json', ExpandConstant('{app}'), SW_HIDE,
       ewWaitUntilTerminated, ResultCode) then
-      Result := 'The existing DeepSeek-Herness process could not be stopped.'
+      Result := ExpandConstant('{cm:ExistingProcessStopFailed}')
     else if ResultCode <> 0 then
-      Result := 'DeepSeek-Herness is still running. Stop it before updating.';
+      Result := ExpandConstant('{cm:AppStillRunning}');
   end;
 end;

@@ -26,7 +26,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/dsh-interface.png" width="960" alt="Official DeepSeek Harness running inside DSH-Portable">
+  <img src="assets/dsh-interface-en.png" width="960" alt="DeepSeek Harness in English running inside DSH-Portable">
 </p>
 
 > [!NOTE]
@@ -42,6 +42,9 @@
 Closing the window sends the app to the system tray by default, so active tasks keep running.
 Use **Exit DeepSeek Harness** in the tray menu to stop everything, or change **When closing the
 window** to exit directly.
+
+The Windows launcher and installer follow the system UI language in Chinese or English. The DSH
+workspace language can also be changed in **Settings**, and that choice is remembered.
 
 ## Built for portable use
 

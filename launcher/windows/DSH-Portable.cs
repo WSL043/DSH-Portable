@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -16,8 +17,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.4")]
-[assembly: AssemblyFileVersion("0.2.0.4")]
+[assembly: AssemblyVersion("0.2.0.5")]
+[assembly: AssemblyFileVersion("0.2.0.5")]
 
 namespace DshPortable
 {
@@ -26,6 +27,17 @@ namespace DshPortable
         internal const int WmPortableExit = 0x8043;
         internal const int WmPortableRestore = 0x8044;
         private enum WindowCloseBehavior { Tray, Exit }
+
+        private static string L(string chinese, string english)
+        {
+            return CultureInfo.InstalledUICulture.TwoLetterISOLanguageName.Equals(
+                "zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
+        }
+
+        private static string UiLanguageTag
+        {
+            get { return L("zh-CN", "en-US"); }
+        }
 
         private readonly Panel launchPanel;
         private readonly Panel launchContent;
@@ -102,7 +114,9 @@ namespace DshPortable
                 Location = new Point(80, 53),
                 Size = new Size(400, 36),
                 ForeColor = Color.FromArgb(72, 72, 72),
-                Text = IsStopCommand(launcherArgs) ? "正在停止 DeepSeek Harness…" : "正在启动 DeepSeek Harness…",
+                Text = IsStopCommand(launcherArgs)
+                    ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
+                    : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…"),
             };
             progress = new ProgressBar
             {
@@ -120,7 +134,7 @@ namespace DshPortable
             };
             updateButton = new Button
             {
-                Text = "现在更新",
+                Text = L("现在更新", "Update now"),
                 Size = new Size(112, 34),
                 Location = new Point(264, 154),
                 Visible = false,
@@ -128,7 +142,7 @@ namespace DshPortable
             updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(true); };
             laterButton = new Button
             {
-                Text = "稍后",
+                Text = L("稍后", "Later"),
                 Size = new Size(96, 34),
                 Location = new Point(388, 154),
                 Visible = false,
@@ -149,7 +163,7 @@ namespace DshPortable
             };
             copyButton = new Button
             {
-                Text = "复制详情",
+                Text = L("复制详情", "Copy details"),
                 Size = new Size(116, 32),
                 Location = new Point(320, 252),
                 Visible = false,
@@ -158,11 +172,11 @@ namespace DshPortable
             {
                 if (string.IsNullOrEmpty(detailsBox.Text)) return;
                 try { Clipboard.SetText(detailsBox.Text); }
-                catch { copyButton.Text = "复制失败"; }
+                catch { copyButton.Text = L("复制失败", "Copy failed"); }
             };
             closeButton = new Button
             {
-                Text = "关闭",
+                Text = L("关闭", "Close"),
                 Size = new Size(92, 32),
                 Location = new Point(412, 252),
                 Visible = false,
@@ -183,19 +197,19 @@ namespace DshPortable
             launchPanel.Controls.Add(launchContent);
 
             closeBehavior = LoadCloseBehavior();
-            closeToTrayItem = new ToolStripMenuItem("最小化到托盘") { Checked = closeBehavior == WindowCloseBehavior.Tray };
-            closeToExitItem = new ToolStripMenuItem("退出程序") { Checked = closeBehavior == WindowCloseBehavior.Exit };
+            closeToTrayItem = new ToolStripMenuItem(L("最小化到托盘", "Minimize to tray")) { Checked = closeBehavior == WindowCloseBehavior.Tray };
+            closeToExitItem = new ToolStripMenuItem(L("退出程序", "Exit application")) { Checked = closeBehavior == WindowCloseBehavior.Exit };
             closeToTrayItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Tray); };
             closeToExitItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Exit); };
-            ToolStripMenuItem closeBehaviorMenu = new ToolStripMenuItem("关闭窗口时");
+            ToolStripMenuItem closeBehaviorMenu = new ToolStripMenuItem(L("关闭窗口时", "When closing the window"));
             closeBehaviorMenu.DropDownItems.Add(closeToTrayItem);
             closeBehaviorMenu.DropDownItems.Add(closeToExitItem);
             ContextMenuStrip trayMenu = new ContextMenuStrip();
-            trayMenu.Items.Add("打开 DeepSeek Harness", null, delegate { RestoreFromTray(); });
+            trayMenu.Items.Add(L("打开 DeepSeek Harness", "Open DeepSeek Harness"), null, delegate { RestoreFromTray(); });
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add(closeBehaviorMenu);
             trayMenu.Items.Add(new ToolStripSeparator());
-            trayMenu.Items.Add("退出 DeepSeek Harness", null, delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
+            trayMenu.Items.Add(L("退出 DeepSeek Harness", "Exit DeepSeek Harness"), null, delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
             trayIcon = new NotifyIcon
             {
                 Icon = Icon,
@@ -262,7 +276,10 @@ namespace DshPortable
             if (!trayNoticeShown)
             {
                 trayNoticeShown = true;
-                trayIcon.ShowBalloonTip(3000, "DeepSeek Harness 仍在运行", "正在执行的任务会继续。右键托盘图标可以打开或退出。", ToolTipIcon.Info);
+                trayIcon.ShowBalloonTip(3000,
+                    L("DeepSeek Harness 仍在运行", "DeepSeek Harness is still running"),
+                    L("正在执行的任务会继续。右键托盘图标可以打开或退出。", "Active tasks will continue. Right-click the tray icon to open or exit."),
+                    ToolTipIcon.Info);
             }
         }
 
@@ -346,13 +363,13 @@ namespace DshPortable
             shutdownRunning = true;
             trayIcon.Visible = true;
             webView.Enabled = false;
-            Text = "DeepSeek-Herness · 正在关闭";
+            Text = L("DeepSeek-Herness · 正在关闭", "DeepSeek-Herness · Closing");
             Task.Run(() => InvokePortableCli(new[] { "stop", "--no-browser", "--json" })).ContinueWith(task =>
             {
                 BeginInvoke((MethodInvoker)delegate
                 {
                     Tuple<int, string> result = task.IsFaulted
-                        ? Tuple.Create(1, task.Exception == null ? "停止失败。" : task.Exception.GetBaseException().Message)
+                        ? Tuple.Create(1, task.Exception == null ? L("停止失败。", "Could not stop the application.") : task.Exception.GetBaseException().Message)
                         : task.Result;
                     if (result.Item1 == 0)
                     {
@@ -365,7 +382,7 @@ namespace DshPortable
                     shutdownRunning = false;
                     webView.Enabled = true;
                     Text = "DeepSeek-Herness";
-                    MessageBox.Show(this, result.Item2, "DeepSeek Harness 停止失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show(this, result.Item2, L("DeepSeek Harness 停止失败", "DeepSeek Harness could not stop"), MessageBoxButtons.OK, MessageBoxIcon.Error);
                 });
             });
         }
@@ -410,9 +427,9 @@ namespace DshPortable
                         return true;
                     }, IntPtr.Zero);
                     if (!signaled)
-                        throw new InvalidOperationException("DeepSeek-Herness 原生窗口无法接收退出请求。");
+                        throw new InvalidOperationException(L("DeepSeek-Herness 原生窗口无法接收退出请求。", "The DeepSeek-Herness window could not receive the exit request."));
                     if (!process.WaitForExit(45000))
-                        throw new TimeoutException("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。");
+                        throw new TimeoutException(L("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。", "DeepSeek-Herness did not exit within 45 seconds."));
                 }
             }
         }
@@ -484,14 +501,14 @@ namespace DshPortable
                 if (desktopStart)
                 {
                     await CheckAndApplyUpdateAsync();
-                    statusLabel.Text = "正在启动 DeepSeek Harness…";
+                    statusLabel.Text = L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
                     Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json" }));
                     if (started.Item1 != 0) { HandleFailure(started.Item1, started.Item2); return; }
                     backendStarted = true;
                     string url = JsonString(started.Item2, "url");
                     if (!IsTrustedLoopbackUrl(url))
                     {
-                        HandleFailure(1, "DeepSeek Harness 返回了无效的本地地址。\r\n" + started.Item2);
+                        HandleFailure(1, L("DeepSeek Harness 返回了无效的本地地址。\r\n", "DeepSeek Harness returned an invalid local address.\r\n") + started.Item2);
                         return;
                     }
                     int startupHold;
@@ -518,7 +535,9 @@ namespace DshPortable
                     Close();
                     return;
                 }
-                HandleFailure(result.Item1, result.Item2.Length > 0 ? result.Item2 : "DeepSeek Harness 无法完成请求的操作。");
+                HandleFailure(result.Item1, result.Item2.Length > 0
+                    ? result.Item2
+                    : L("DeepSeek Harness 无法完成请求的操作。", "DeepSeek Harness could not complete the requested operation."));
             }
             catch (Exception error) { launchError = error; }
 
@@ -541,7 +560,7 @@ namespace DshPortable
                 ResetOperationUi();
                 return;
             }
-            statusLabel.Text = "正在检查更新…";
+            statusLabel.Text = L("正在检查更新…", "Checking for updates…");
             Tuple<int, string> check = await Task.Run(() => InvokePortableCli(new[] { "check-update", "--json" }));
             if (check.Item1 != 0) { ResetOperationUi(); return; }
             string updateStatus = JsonString(check.Item2, "status");
@@ -551,7 +570,7 @@ namespace DshPortable
                 bool accepted = await ShowUpdateChoiceAsync(latest, false);
                 if (accepted)
                 {
-                    statusLabel.Text = "正在安全更新 DeepSeek Harness…";
+                    statusLabel.Text = L("正在安全更新 DeepSeek Harness…", "Updating DeepSeek Harness safely…");
                     progress.Visible = true;
                     Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(new[] { "update", "--no-browser", "--json" }));
                     if (updated.Item1 != 0) throw new InvalidOperationException(updated.Item2);
@@ -570,18 +589,24 @@ namespace DshPortable
 
         private async Task ShowDesktopAsync(string url)
         {
-            statusLabel.Text = "正在打开工作台…";
+            statusLabel.Text = L("正在打开工作台…", "Opening the workspace…");
             string userData = ResolveWebViewDataRoot();
             Directory.CreateDirectory(userData);
             try
             {
-                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, userData);
+                CoreWebView2EnvironmentOptions options = new CoreWebView2EnvironmentOptions
+                {
+                    Language = UiLanguageTag,
+                };
+                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, userData, options);
                 await webView.EnsureCoreWebView2Async(environment);
             }
             catch (WebView2RuntimeNotFoundException)
             {
                 throw new InvalidOperationException(
-                    "此电脑缺少 Microsoft Edge WebView2 Runtime。\r\n请安装官方 Evergreen Runtime 后重新打开：\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703");
+                    L(
+                        "此电脑缺少 Microsoft Edge WebView2 Runtime。\r\n请安装官方 Evergreen Runtime 后重新打开：\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                        "Microsoft Edge WebView2 Runtime is missing.\r\nInstall the official Evergreen Runtime, then open the app again:\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703"));
             }
 
             applicationUri = new Uri(url);
@@ -601,10 +626,10 @@ namespace DshPortable
             Task completed = await Task.WhenAny(navigation.Task, Task.Delay(30000));
             webView.CoreWebView2.NavigationCompleted -= navigationCompleted;
             if (completed != navigation.Task)
-                throw new TimeoutException("DeepSeek Harness 工作台未能在 30 秒内打开。");
+                throw new TimeoutException(L("DeepSeek Harness 工作台未能在 30 秒内打开。", "The DeepSeek Harness workspace did not open within 30 seconds."));
             CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
             if (!result.IsSuccess)
-                throw new InvalidOperationException("DeepSeek Harness 工作台加载失败：" + result.WebErrorStatus);
+                throw new InvalidOperationException(L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: ") + result.WebErrorStatus);
 
             SuspendLayout();
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -669,13 +694,13 @@ namespace DshPortable
             statusLabel.AutoEllipsis = false;
             statusLabel.Size = new Size(400, 34);
             statusLabel.Text = fullPackage
-                ? "此版本需要完整升级" + (String.IsNullOrEmpty(latest) ? "" : " · " + latest)
-                : "发现新版" + (String.IsNullOrEmpty(latest) ? "" : " · " + latest);
+                ? L("此版本需要完整升级", "A complete package is required") + (String.IsNullOrEmpty(latest) ? "" : " · " + latest)
+                : L("发现新版", "Update available") + (String.IsNullOrEmpty(latest) ? "" : " · " + latest);
             updateDescription.Text = fullPackage
-                ? "运行环境或启动器兼容边界已变化。当前版本仍可继续使用。"
-                : "仅下载已变更的 DSH 应用组件；设置、会话和工作区保持原位。";
+                ? L("运行环境或启动器兼容边界已变化。当前版本仍可继续使用。", "The runtime or launcher compatibility boundary changed. You can keep using this version.")
+                : L("仅下载已变更的 DSH 应用组件；设置、会话和工作区保持原位。", "Only the changed DSH application component is downloaded. Settings, sessions, and workspace stay in place.");
             updateDescription.Visible = true;
-            updateButton.Text = fullPackage ? "打开下载页" : "现在更新";
+            updateButton.Text = fullPackage ? L("打开下载页", "Open download page") : L("现在更新", "Update now");
             updateButton.Visible = true;
             laterButton.Visible = true;
             updateChoice = new TaskCompletionSource<bool>();
@@ -693,7 +718,9 @@ namespace DshPortable
             statusLabel.Location = new Point(80, 53);
             statusLabel.Size = new Size(400, 36);
             statusLabel.ForeColor = Color.FromArgb(72, 72, 72);
-            statusLabel.Text = IsStopCommand(launcherArgs) ? "正在停止 DeepSeek Harness…" : "正在启动 DeepSeek Harness…";
+            statusLabel.Text = IsStopCommand(launcherArgs)
+                ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
+                : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
             updateDescription.Visible = false;
             updateButton.Visible = false;
             laterButton.Visible = false;
@@ -733,7 +760,9 @@ namespace DshPortable
             string node = Path.Combine(root, "runtime", "node", "node.exe");
             string cli = Path.Combine(root, "launcher", "portable-cli.mjs");
             if (!File.Exists(node) || !File.Exists(cli))
-                throw new InvalidOperationException("This DSH-Portable folder is incomplete. Extract the entire package before starting it.");
+                throw new InvalidOperationException(L(
+                    "DSH-Portable 文件夹不完整。请完整解压后再启动。",
+                    "This DSH-Portable folder is incomplete. Extract the entire package before starting it."));
 
             StringBuilder arguments = new StringBuilder(QuoteArgument(cli));
             foreach (string item in actionArgs) arguments.Append(" ").Append(QuoteArgument(item));
@@ -782,7 +811,9 @@ namespace DshPortable
             statusLabel.AutoEllipsis = false;
             statusLabel.Location = new Point(80, 53);
             statusLabel.Size = new Size(480, 28);
-            statusLabel.Text = IsStopCommand(launcherArgs) ? "DeepSeek Harness 停止失败。" : "DeepSeek Harness 启动失败。";
+            statusLabel.Text = IsStopCommand(launcherArgs)
+                ? L("DeepSeek Harness 停止失败。", "DeepSeek Harness could not stop.")
+                : L("DeepSeek Harness 启动失败。", "DeepSeek Harness could not start.");
             statusLabel.ForeColor = Color.FromArgb(178, 38, 38);
             detailsBox.Text = message ?? string.Empty;
             detailsBox.Visible = true;
