@@ -234,6 +234,8 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(smoke, /plugin.+remove/s)
   assert.match(smoke, /--dump-config/)
   assert.match(smoke, /isolated PATH/i)
+  assert.match(smoke, /Get-Command.+-CommandType\s+Application/s)
+  assert.doesNotMatch(smoke, /where\.exe/i)
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
 

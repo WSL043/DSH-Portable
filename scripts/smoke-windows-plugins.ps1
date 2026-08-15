@@ -117,8 +117,9 @@ try {
     $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $LauncherDiagnostic
 
     foreach ($Tool in @('node.exe', 'npm.cmd', 'npx.cmd', 'pnpm.cmd', 'dsh.exe')) {
-        & "$env:SystemRoot\System32\where.exe" $Tool 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { throw "isolated PATH unexpectedly exposes $Tool" }
+        if (Get-Command -Name $Tool -CommandType Application -ErrorAction SilentlyContinue) {
+            throw "isolated PATH unexpectedly exposes $Tool"
+        }
     }
 
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\tests\fixtures\dsh-plugin-registry.mjs') -Destination $RegistryScript

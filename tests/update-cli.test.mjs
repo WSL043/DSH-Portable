@@ -61,6 +61,7 @@ async function makeComponentArchive(root, version, portableVersion) {
   })}\n`)
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'updated license\n')
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'updated notices\n')
+  await writeFile(path.join(source, 'licenses', 'pnpm-LICENSE.txt'), 'updated pnpm license\n')
   await writeFile(path.join(source, 'component.json'), `${JSON.stringify({
     schemaVersion: 1,
     kind: 'dsh-app',

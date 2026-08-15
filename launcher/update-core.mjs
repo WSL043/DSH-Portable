@@ -17,6 +17,7 @@ const UPDATE_LICENSE_FILES = [
   'COMPONENTS.json',
   'DeepSeek-Harness-LICENSE.txt',
   'DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+  'pnpm-LICENSE.txt',
 ]
 
 export function platformUpdateKey(platform = process.platform, arch = process.arch) {
@@ -179,6 +180,7 @@ export function validateArchiveEntries(entries) {
     'licenses/COMPONENTS.json',
     'licenses/DeepSeek-Harness-LICENSE.txt',
     'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+    'licenses/pnpm-LICENSE.txt',
   ])
   for (const rawEntry of entries) {
     const source = String(rawEntry ?? '').replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/$/, '')
