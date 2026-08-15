@@ -6,6 +6,7 @@
 
 便携目录继续完整保留会话、设置、插件和工作区。启动时检查更新，一般只下载变化的
 DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新继续只下载变化的 DSH 应用组件。
+推荐下载器无法联网时会打开实际发布的离线 ZIP；普通下载列表不再混入机器更新文件。
 
 ## Windows x64（推荐）
 
@@ -41,6 +42,8 @@ continue running.
 Portable sessions, settings, plugins, and workspace remain in the same folder. Startup update checks
 normally download only the changed DSH application component. This release requires one complete
 package download; later compatible updates return to component-only downloads.
+If the recommended downloader cannot connect, its offline option now opens the published ZIP.
+Machine update files no longer appear in the normal download list.
 
 ### Windows x64 (recommended)
 

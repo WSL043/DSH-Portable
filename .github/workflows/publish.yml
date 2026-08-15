@@ -64,4 +64,4 @@ jobs:
           if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file templates/RELEASE-NOTES.md "${FLAGS[@]}"
-          gh release upload "$RELEASE_TAG" release-staging/user-assets/* release-staging/compat-assets/* --clobber
+          gh release upload "$RELEASE_TAG" release-staging/user-assets/* --clobber

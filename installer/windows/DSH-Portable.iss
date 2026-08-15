@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.0-rc.5"
+  #define AppVersion "0.2.0-rc.6"
 #endif
 
 [Setup]
@@ -38,7 +38,7 @@ LanguageDetectionMethod=uilanguage
 ShowLanguageDialog=auto
 CloseApplications=no
 RestartApplications=no
-VersionInfoVersion=0.2.0.5
+VersionInfoVersion=0.2.0.6
 VersionInfoProductName=DSH-Portable
 VersionInfoDescription=DSH-Portable offline self-extractor
 VersionInfoCompany=WSL043

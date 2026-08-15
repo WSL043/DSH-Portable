@@ -77,7 +77,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.5')
+  assert.equal(manifest.version, '0.2.0-rc.6')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -180,6 +180,8 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.match(workflow, /stage-release-assets\.mjs/)
   assert.match(staging, /user-assets/)
   assert.match(staging, /update-assets/)
+  assert.doesNotMatch(staging, /compat-assets|compatibilityAssets/)
+  assert.doesNotMatch(workflow, /compat-assets/)
   assert.match(staging, /checksums\.txt/)
   assert.doesNotMatch(staging, /\.sha256['"`]/)
   assert.match(updateCore, /releases\/download\/update-channel-stable\/portable-update-/)
@@ -290,7 +292,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /shellSchema/)
   assert.match(build, /shellSchema\s*=\s*5/)
   assert.match(build, /requiredShellSchema\s*=\s*5/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.5"\)/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.6"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
