@@ -76,6 +76,7 @@ test('macOS package smokes treat the native app as a long-lived desktop process'
 
   assert.match(portableSmoke, /startNativeHost/)
   assert.match(portableSmoke, /waitForPortableStatus/)
+  assert.match(portableSmoke, /Another portable launcher is already starting or stopping DSH/)
   assert.match(portableSmoke, /requestMacAppQuit/)
   assert.match(dmgSmoke, /HOST_PID=\$!/)
   assert.match(dmgSmoke, /status --json/)

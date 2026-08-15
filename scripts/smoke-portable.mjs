@@ -59,7 +59,16 @@ async function waitForPortableStatus(root, expected, nativeHost, timeoutMs = 90_
       const result = await nativeHost.completion
       assert.fail(result.stderr || result.stdout || `native host exited early with code ${result.code}`)
     }
-    latest = await cli(root, 'status', '--json')
+    const result = await invokeCli(root, 'status', '--json')
+    if (result.code !== 0) {
+      const details = `${result.stderr}\n${result.stdout}`
+      if (details.includes('Another portable launcher is already starting or stopping DSH')) {
+        await delay(250)
+        continue
+      }
+      assert.fail(details)
+    }
+    latest = parseCliJson(result.stdout)
     if (latest?.status === expected) return latest
     await delay(250)
   }
@@ -83,11 +92,19 @@ async function requestMacAppQuit(nativeHost) {
   assert.equal(closed.code, 0, closed.stderr || closed.stdout)
 }
 
-async function cli(root, ...args) {
-  const result = await run(nodeFor(root), [cliFor(root), ...args], { cwd: root })
-  assert.equal(result.code, 0, result.stderr || result.stdout)
-  const line = result.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1)
+async function invokeCli(root, ...args) {
+  return run(nodeFor(root), [cliFor(root), ...args], { cwd: root })
+}
+
+function parseCliJson(stdout) {
+  const line = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1)
   return line ? JSON.parse(line) : null
+}
+
+async function cli(root, ...args) {
+  const result = await invokeCli(root, ...args)
+  assert.equal(result.code, 0, result.stderr || result.stdout)
+  return parseCliJson(result.stdout)
 }
 
 async function assertWebReady(url) {
