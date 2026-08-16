@@ -145,7 +145,7 @@ export function parseCli(argv) {
       updateManifest = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'check-update', 'defer-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true

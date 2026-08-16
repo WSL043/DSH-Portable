@@ -159,7 +159,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 8
+        shellSchema = 9
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -205,6 +205,21 @@ try {
     )
     & $Csc $UpdateExtractorCompilerArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UpdateExtractor)) { throw 'Windows update extractor compilation failed.' }
+
+    $FullUpdater = Join-Path $Stage 'launcher\DSH-FullUpdater.exe'
+    $FullUpdaterCompilerArgs = @(
+        '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
+        "/win32icon:$ProjectRoot\assets\DSH-Portable.ico",
+        "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
+        '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll',
+        '/reference:System.Windows.Forms.dll', '/reference:System.Net.Http.dll',
+        '/reference:System.Runtime.Serialization.dll', '/reference:System.IO.Compression.dll',
+        "/out:$FullUpdater",
+        (Join-Path $ProjectRoot 'launcher\windows\DSH-Bootstrap.cs')
+    )
+    & $Csc $FullUpdaterCompilerArgs
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $FullUpdater)) { throw 'Windows full updater compilation failed.' }
+    if ((Get-Item -LiteralPath $FullUpdater).Length -ge 1MB) { throw 'Windows full updater exceeded the 1 MiB product budget.' }
 
     Add-Type -AssemblyName System.Drawing
     $ExtractedIcon = [System.Drawing.Icon]::ExtractAssociatedIcon($LauncherExe)
@@ -255,7 +270,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 8
+            requiredShellSchema = 9
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version

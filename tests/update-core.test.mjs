@@ -17,6 +17,7 @@ import {
   downloadVerifiedComponent,
   evaluateUpdate,
   extractUpdateArchive,
+  ignoreUpdate,
   installAvailableAppUpdate,
   platformUpdateKey,
   rollbackPendingAppUpdate,
@@ -154,6 +155,41 @@ test('choosing later suppresses automatic prompts but never hides a forced check
     assert.equal(deferred.status, 'deferred')
     assert.equal(forced.status, 'available')
     assert.equal(requests, 2)
+  } finally {
+    await new Promise((resolve) => server.close(resolve))
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('skipping one version suppresses only that automatic prompt', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-ignore-'))
+  const layout = layoutForRoot(root)
+  const manifest = updateManifest({ platform: platformUpdateKey(process.platform, process.arch) })
+  let activeManifest = manifest
+  const server = http.createServer((_request, response) => {
+    const body = Buffer.from(JSON.stringify(activeManifest))
+    response.writeHead(200, { 'content-length': body.length }).end(body)
+  })
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
+  try {
+    await mkdir(path.join(root, 'licenses'), { recursive: true })
+    await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+      portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.6', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+    })}\n`)
+    const url = `http://127.0.0.1:${server.address().port}/update.json`
+    await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, force: true, now: 1000 })
+    await ignoreUpdate(layout, manifest.portableVersion)
+    const ignored = await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, now: 1100 })
+    const forced = await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, force: true, now: 1200 })
+    assert.equal(ignored.status, 'ignored')
+    assert.equal(ignored.latest, manifest.portableVersion)
+    assert.equal(forced.status, 'available')
+
+    activeManifest = { ...manifest, portableVersion: '0.1.0-rc.7-portable.2' }
+    const next = await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, force: true, now: 1300 })
+    assert.equal(next.status, 'available')
+    const nextAutomatic = await checkForUpdate({ layout, manifestUrl: url, allowHttp: true, now: 1400 })
+    assert.equal(nextAutomatic.status, 'available')
   } finally {
     await new Promise((resolve) => server.close(resolve))
     await rm(root, { recursive: true, force: true })

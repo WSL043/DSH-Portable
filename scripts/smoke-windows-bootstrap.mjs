@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { createReadStream } from 'node:fs'
-import { mkdtemp, mkdir, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -91,6 +91,26 @@ try {
   const reused = JSON.parse(await readFile(resultFile, 'utf8'))
   assert.equal(reused.status, 'ready')
   console.log('[bootstrap-smoke] offline reuse passed')
+
+  console.log('[bootstrap-smoke] upgrading through the updater shipped inside the finished product')
+  const dataMarker = path.join(destination, 'data', 'finished-product-session.json')
+  const workspaceMarker = path.join(destination, 'workspace', 'finished-product-project.txt')
+  await writeFile(dataMarker, '{"keep":true}\n')
+  await writeFile(workspaceMarker, 'keep workspace\n')
+  await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+    '--upgrade-existing',
+    '--manifest', `${origin}/portable-manifest.json`,
+    '--destination', destination,
+    '--allow-http',
+    '--no-launch',
+    '--result', resultFile,
+  ], { timeout: 10 * 60 * 1000, windowsHide: true })
+  const upgraded = JSON.parse(await readFile(resultFile, 'utf8'))
+  assert.equal(upgraded.status, 'updated')
+  assert.equal(await readFile(dataMarker, 'utf8'), '{"keep":true}\n')
+  assert.equal(await readFile(workspaceMarker, 'utf8'), 'keep workspace\n')
+  assert.ok((await stat(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'))).isFile())
+  console.log('[bootstrap-smoke] packaged full updater and durable-data preservation passed')
 
   console.log('[bootstrap-smoke] running and moving the installed product')
   await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {

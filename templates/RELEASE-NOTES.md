@@ -4,9 +4,10 @@
 桌面窗口与系统托盘，不会在启动时拉起外部浏览器。会话、设置、插件和工作区随便携数据
 一起移动，插件命令使用包内运行环境，不要求修改系统 PATH。
 
-Linux 成品和现有 Windows、macOS 成品使用同一套组件更新通道。发现新版时先询问是否更新，
-普通更新只替换 DSH 应用组件并保留用户数据；运行中的任务不会被自动更新中断。
-可以从托盘或应用菜单手动检查，也可以关闭启动时检查更新。
+发现新版时可以立即更新、稍后处理或跳过当前版本；关闭启动时检查更新后不会主动提醒，
+手动检查仍然可用。Windows 遇到运行环境或启动器变化时会直接下载完整版本、保留
+`data` 与 `workspace` 并原地更新，不再跳转下载页。运行中的任务不会被自动更新中断。
+普通更新只替换 DSH 应用组件并保留用户数据。
 
 ## Windows x64（推荐）
 
@@ -41,10 +42,10 @@ complete portable folder. The native desktop window and system tray do not launc
 browser at startup. Sessions, settings, plugins, and workspace move with the portable data, and
 plugin commands use the bundled runtime without changing the system PATH.
 
-Linux joins the existing Windows and macOS component update channel. The app asks before installing
-an update, replaces only the DSH application component during compatible updates, and keeps user
-data in place. A running task is never interrupted automatically.
-Use the tray or app menu to check manually or turn off update checks at startup.
+Choose Update now, Later, or Skip this version when a release is available. Turning off startup
+checks suppresses automatic prompts while manual checks remain available. On Windows, a runtime or
+launcher change now downloads the verified complete package and replaces the program in place while
+keeping `data` and `workspace`. A running task is never interrupted automatically.
 
 ### Windows x64 (recommended)
 

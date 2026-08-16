@@ -197,8 +197,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             alert.informativeText = L("要现在打开下载页吗？", "Open the download page now?")
             alert.addButton(withTitle: L("打开下载页", "Open Download Page"))
             alert.addButton(withTitle: L("稍后", "Later"))
-            if alert.runModal() == .alertFirstButtonReturn {
+            alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
+            let choice = alert.runModal()
+            if choice == .alertFirstButtonReturn {
                 NSWorkspace.shared.open(URL(string: "https://github.com/WSL043/DSH-Portable/releases/latest")!)
+            } else if choice == .alertThirdButtonReturn {
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--json"]) }
             } else {
                 DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["defer-update", "--json"]) }
             }
@@ -329,7 +333,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
               let status = update["status"] as? String,
               status == "available" || status == "full-package-required" else { return }
         let latest = update["latest"] as? String ?? ""
-        let accepted: Bool = DispatchQueue.main.sync {
+        let choice: NSApplication.ModalResponse = DispatchQueue.main.sync {
             let alert = NSAlert()
             alert.messageText = status == "available" && !installedMode
                 ? L("发现新版 \(latest)", "Update available \(latest)")
@@ -342,13 +346,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             alert.addButton(withTitle: status == "available" && !installedMode
                 ? L("现在更新", "Update Now") : L("打开下载页", "Open Download Page"))
             alert.addButton(withTitle: L("稍后", "Later"))
-            return alert.runModal() == .alertFirstButtonReturn
+            alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
+            return alert.runModal()
         }
-        if accepted && status == "available" && !installedMode {
+        if choice == .alertFirstButtonReturn && status == "available" && !installedMode {
             _ = try runCLI(["update", "--no-browser", "--json"])
+        } else if choice == .alertThirdButtonReturn {
+            _ = try? runCLI(["ignore-update", "--json"])
         } else {
             _ = try? runCLI(["defer-update", "--json"])
-            if accepted {
+            if choice == .alertFirstButtonReturn {
                 DispatchQueue.main.async {
                     NSWorkspace.shared.open(URL(string: "https://github.com/WSL043/DSH-Portable/releases/latest")!)
                 }

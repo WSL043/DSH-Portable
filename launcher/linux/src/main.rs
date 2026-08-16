@@ -363,7 +363,7 @@ fn check_updates(app: tauri::AppHandle, interactive: bool) {
                         &format!("Version {latest} is available. The update keeps sessions, settings, plugins, and the workspace."),
                     ))
                     .set_level(MessageLevel::Info)
-                    .set_buttons(MessageButtons::YesNo)
+                    .set_buttons(MessageButtons::YesNoCancel)
                     .show();
                 if choice == MessageDialogResult::Yes {
                     match run_portable_cli(&layout, &["update", "--json", "--no-browser"])
@@ -388,6 +388,8 @@ fn check_updates(app: tauri::AppHandle, interactive: bool) {
                         }
                         Err(error) => dialog(PRODUCT_NAME, &error, MessageLevel::Error),
                     }
+                } else if choice == MessageDialogResult::Cancel {
+                    let _ = run_portable_cli(&layout, &["ignore-update", "--json"]);
                 } else {
                     let _ = run_portable_cli(&layout, &["defer-update", "--json"]);
                 }
@@ -405,15 +407,24 @@ fn check_updates(app: tauri::AppHandle, interactive: bool) {
             Ok(value)
                 if value.get("status").and_then(Value::as_str) == Some("full-package-required") =>
             {
-                dialog(
-                    PRODUCT_NAME,
-                    &text(
+                let latest = value.get("latest").and_then(Value::as_str).unwrap_or("new");
+                let choice = MessageDialog::new()
+                    .set_title(text(&layout, "DSH-Portable 更新", "DSH-Portable update"))
+                    .set_description(text(
                         &layout,
-                        &format!("这次需要下载完整 Linux 包：{RELEASE_URL}"),
-                        &format!("This update needs a new Linux package: {RELEASE_URL}"),
-                    ),
-                    MessageLevel::Info,
-                );
+                        &format!("版本 {latest} 需要完整升级。当前版本可以继续使用。"),
+                        &format!("Version {latest} requires a complete upgrade. You can keep using this version."),
+                    ))
+                    .set_level(MessageLevel::Info)
+                    .set_buttons(MessageButtons::YesNoCancel)
+                    .show();
+                if choice == MessageDialogResult::Cancel {
+                    let _ = run_portable_cli(&layout, &["ignore-update", "--json"]);
+                } else if choice == MessageDialogResult::No {
+                    let _ = run_portable_cli(&layout, &["defer-update", "--json"]);
+                } else {
+                    dialog(PRODUCT_NAME, RELEASE_URL, MessageLevel::Info);
+                }
             }
             Ok(_) => {}
             Err(error) if interactive => dialog(PRODUCT_NAME, &error, MessageLevel::Error),

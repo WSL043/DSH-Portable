@@ -177,6 +177,51 @@ test('bootstrap installs atomically, verifies the payload, and reuses it offline
   }
 })
 
+test('bootstrap upgrades an existing portable folder in place without replacing user data', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-upgrade-'))
+  try {
+    const executable = path.join(root, 'full-updater.exe')
+    const resultFile = path.join(root, 'result.json')
+    const destination = path.join(root, '移动目录', 'DSH-Portable')
+    const fixture = await makeFixture(root)
+    await compileBootstrap(executable)
+    await mkdir(path.join(destination, 'runtime', 'node'), { recursive: true })
+    await mkdir(path.join(destination, 'app'), { recursive: true })
+    await mkdir(path.join(destination, 'data'), { recursive: true })
+    await mkdir(path.join(destination, 'workspace'), { recursive: true })
+    await writeFile(path.join(destination, 'DeepSeek-Herness.exe'), 'old launcher')
+    await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
+    await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
+    await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
+    await writeFile(path.join(destination, 'workspace', 'project.txt'), 'keep workspace\n')
+
+    await withFixtureServer(fixture, async ({ manifestUrl }) => {
+      await execBootstrap(executable, [
+        '--upgrade-existing',
+        '--manifest', manifestUrl,
+        '--destination', destination,
+        '--allow-http',
+        '--no-launch',
+        '--result', resultFile,
+      ], resultFile)
+    })
+
+    const result = JSON.parse(await readFile(resultFile, 'utf8'))
+    assert.equal(result.status, 'updated')
+    assert.equal(result.version, 'test-portable')
+    assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"fixture"}\n')
+    assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
+    assert.equal(await readFile(path.join(destination, 'workspace', 'project.txt'), 'utf8'), 'keep workspace\n')
+    assert.deepEqual(
+      (await readdir(path.dirname(destination))).filter((name) => name.startsWith('.dsh-portable-')),
+      [],
+      'successful upgrades must remove staging and backup directories',
+    )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('bootstrap never commits a payload whose digest is wrong', { skip: process.platform !== 'win32' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-digest-'))
   try {

@@ -27,6 +27,7 @@ import {
 import {
   checkForUpdate,
   deferUpdate,
+  ignoreUpdate,
   installAvailableAppUpdate,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
@@ -489,6 +490,7 @@ async function main() {
     else if (options.command === 'open') result = await openExisting()
     else if (options.command === 'check-update') result = await checkUpdate(options)
     else if (options.command === 'defer-update') result = await deferUpdate(layout)
+    else if (options.command === 'ignore-update') result = await ignoreUpdate(layout)
     else if (options.command === 'update') result = await update(options)
     else throw new Error(`Unsupported command: ${options.command}`)
     print(result, options.json)

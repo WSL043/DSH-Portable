@@ -170,6 +170,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     updateManifest: 'http://127.0.0.1/update.json',
   })
   assert.equal(parseCli(['defer-update', '--json']).command, 'defer-update')
+  assert.equal(parseCli(['ignore-update', '--json']).command, 'ignore-update')
   assert.throws(() => parseCli(['start', 'stop']), /more than one command/)
   assert.throws(() => parseCli(['erase-data']), /Unknown command/)
   assert.throws(() => parseCli(['--update-manifest']), /requires a value/)

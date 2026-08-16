@@ -22,8 +22,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.2.0.10")]
-[assembly: System.Reflection.AssemblyFileVersion("0.2.0.10")]
+[assembly: System.Reflection.AssemblyVersion("0.2.0.11")]
+[assembly: System.Reflection.AssemblyFileVersion("0.2.0.11")]
 
 namespace DshPortableBootstrap
 {
@@ -89,6 +89,7 @@ namespace DshPortableBootstrap
         internal string ResultFile;
         internal bool AllowHttp;
         internal bool NoLaunch;
+        internal bool UpgradeExisting;
 
         internal static BootstrapOptions Parse(string[] args)
         {
@@ -101,6 +102,7 @@ namespace DshPortableBootstrap
                 string argument = args[index];
                 if (argument == "--allow-http") options.AllowHttp = true;
                 else if (argument == "--no-launch") options.NoLaunch = true;
+                else if (argument == "--upgrade-existing") options.UpgradeExisting = true;
                 else if (argument == "--manifest") options.ManifestUrl = RequireValue(args, ref index, argument);
                 else if (argument == "--destination") options.Destination = RequireValue(args, ref index, argument);
                 else if (argument == "--result") options.ResultFile = RequireValue(args, ref index, argument);
@@ -149,14 +151,14 @@ namespace DshPortableBootstrap
 
         internal async Task<BootstrapResult> ExecuteAsync(CancellationToken cancellationToken)
         {
-            if (IsCompletePortable(options.Destination))
+            if (IsCompletePortable(options.Destination) && !options.UpgradeExisting)
             {
                 reportStatus("DSH-Portable 已就绪，正在启动…");
                 LaunchIfRequested();
                 return Result("ready", null, null);
             }
 
-            if (Directory.Exists(options.Destination))
+            if (Directory.Exists(options.Destination) && !options.UpgradeExisting)
                 throw new InvalidOperationException("目标目录已经存在但内容不完整。为避免覆盖数据，请删除该空目录或把下载器移到其他位置后重试。");
 
             ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
@@ -191,14 +193,25 @@ namespace DshPortableBootstrap
                 string extracted = Path.Combine(stagingRoot, "DSH-Portable");
                 if (!IsCompletePortable(extracted))
                     throw new InvalidDataException("下载包缺少启动器或运行环境；没有修改目标目录。");
-                if (Directory.Exists(options.Destination))
-                    throw new IOException("目标目录在安装过程中被创建；为避免覆盖数据，操作已停止。");
-
-                Directory.Move(extracted, options.Destination);
+                if (options.UpgradeExisting)
+                {
+                    if (!IsCompletePortable(options.Destination))
+                        throw new InvalidOperationException("现有 DSH-Portable 目录不完整；没有修改任何文件。");
+                    reportStatus("正在停止当前版本…");
+                    StopRunningPortable();
+                    reportStatus("正在安装新版本并保留个人数据…");
+                    ReplacePortableTransactionally(extracted, Path.Combine(destinationParent, ".dsh-portable-backup-" + operationId));
+                }
+                else
+                {
+                    if (Directory.Exists(options.Destination))
+                        throw new IOException("目标目录在安装过程中被创建；为避免覆盖数据，操作已停止。");
+                    Directory.Move(extracted, options.Destination);
+                }
                 reportProgress(payload.Bytes, payload.Bytes);
-                reportStatus("DSH-Portable 已准备完成。");
+                reportStatus(options.UpgradeExisting ? "DSH-Portable 已更新完成。" : "DSH-Portable 已准备完成。");
                 LaunchIfRequested();
-                return Result("installed", manifest.Version, null);
+                return Result(options.UpgradeExisting ? "updated" : "installed", manifest.Version, null);
             }
             finally
             {
@@ -239,6 +252,97 @@ namespace DshPortableBootstrap
                 WorkingDirectory = options.Destination,
                 UseShellExecute = true,
             });
+        }
+
+        private void StopRunningPortable()
+        {
+            string stateFile = Path.Combine(options.Destination, "data", "runtime", "process.json");
+            string launcher = Path.Combine(options.Destination, "DeepSeek-Herness.exe");
+            bool shouldStop = File.Exists(stateFile) || HasRunningLauncher(launcher);
+            if (!shouldStop) return;
+            using (Process process = Process.Start(new ProcessStartInfo
+            {
+                FileName = launcher,
+                Arguments = "stop --no-browser --json",
+                WorkingDirectory = options.Destination,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden,
+            }))
+            {
+                if (process == null || !process.WaitForExit(30000) || process.ExitCode != 0)
+                    throw new InvalidOperationException("当前 DSH 服务未能安全停止；没有替换程序文件。");
+            }
+            DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+            while (HasRunningLauncher(launcher) && DateTime.UtcNow < deadline) Thread.Sleep(100);
+            if (HasRunningLauncher(launcher))
+                throw new InvalidOperationException("DSH-Portable 仍在运行；请关闭窗口后重试更新。");
+        }
+
+        private static bool HasRunningLauncher(string launcher)
+        {
+            string expected = Path.GetFullPath(launcher);
+            foreach (Process process in Process.GetProcessesByName("DeepSeek-Herness"))
+            {
+                try
+                {
+                    if (String.Equals(Path.GetFullPath(process.MainModule.FileName), expected, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch { }
+                finally { process.Dispose(); }
+            }
+            return false;
+        }
+
+        private void ReplacePortableTransactionally(string extracted, string backupRoot)
+        {
+            string[] preserved = new[] { "data", "workspace", "installed-mode.json" };
+            Directory.CreateDirectory(backupRoot);
+            System.Collections.Generic.List<string> movedOld = new System.Collections.Generic.List<string>();
+            System.Collections.Generic.List<string> movedNew = new System.Collections.Generic.List<string>();
+            try
+            {
+                foreach (string item in Directory.GetFileSystemEntries(options.Destination))
+                {
+                    string name = Path.GetFileName(item);
+                    if (Array.Exists(preserved, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase))) continue;
+                    MoveEntry(item, Path.Combine(backupRoot, name));
+                    movedOld.Add(name);
+                }
+                foreach (string item in Directory.GetFileSystemEntries(extracted))
+                {
+                    string name = Path.GetFileName(item);
+                    string target = Path.Combine(options.Destination, name);
+                    if (Array.Exists(preserved, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase))
+                        && (Directory.Exists(target) || File.Exists(target))) continue;
+                    MoveEntry(item, target);
+                    movedNew.Add(name);
+                }
+                if (!IsCompletePortable(options.Destination)) throw new InvalidDataException("新版本安装后缺少必要文件。");
+                TryDeleteDirectory(backupRoot);
+            }
+            catch
+            {
+                for (int index = movedNew.Count - 1; index >= 0; index -= 1) DeleteEntry(Path.Combine(options.Destination, movedNew[index]));
+                for (int index = movedOld.Count - 1; index >= 0; index -= 1)
+                {
+                    string backup = Path.Combine(backupRoot, movedOld[index]);
+                    if (Directory.Exists(backup) || File.Exists(backup)) MoveEntry(backup, Path.Combine(options.Destination, movedOld[index]));
+                }
+                throw;
+            }
+        }
+
+        private static void MoveEntry(string source, string destination)
+        {
+            if (Directory.Exists(source)) Directory.Move(source, destination);
+            else File.Move(source, destination);
+        }
+
+        private static void DeleteEntry(string value)
+        {
+            if (Directory.Exists(value)) TryDeleteDirectory(value);
+            else TryDeleteFile(value);
         }
 
         private static async Task<PortableManifest> DownloadManifestAsync(string url, CancellationToken cancellationToken)

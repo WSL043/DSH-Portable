@@ -142,10 +142,12 @@ the previous version.
 
 On Windows and Linux, you can **Check for updates** from the system tray; on macOS, use the application menu.
 Turn off **Check for updates at startup** from the same menu if you do not want automatic prompts.
-The manual check remains available. When an update is available, choose **Update now** or **Later**.
+The manual check remains available. When an update is available, choose **Update now**, **Later**,
+or **Skip this version**. Skipping affects only that release; a later release can still be offered.
 A running task is never interrupted for an update.
 
-When the runtime compatibility boundary changes, DSH-Portable requests a complete package. Official
+When the runtime compatibility boundary changes, Windows downloads the verified complete package,
+keeps `data` and `workspace`, and replaces the program in place instead of sending you to a download page. Official
 preview updates first become candidate builds and must pass Windows, macOS, and Linux x64/ARM64 finished-product
 tests before they enter the launcher update channel.
 

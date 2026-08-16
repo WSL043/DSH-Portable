@@ -20,8 +20,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.10")]
-[assembly: AssemblyFileVersion("0.2.0.10")]
+[assembly: AssemblyVersion("0.2.0.11")]
+[assembly: AssemblyFileVersion("0.2.0.11")]
 
 namespace DshPortable
 {
@@ -114,6 +114,7 @@ namespace DshPortable
         private readonly TextBox detailsBox;
         private readonly Label updateDescription;
         private readonly Button updateButton;
+        private readonly Button skipUpdateButton;
         private readonly Button laterButton;
         private readonly Button copyButton;
         private readonly Button closeButton;
@@ -131,7 +132,7 @@ namespace DshPortable
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
         private readonly bool desktopStart;
-        private TaskCompletionSource<bool> updateChoice;
+        private TaskCompletionSource<int> updateChoice;
         private bool operationRunning = true;
         private bool desktopReady;
         private bool shutdownRunning;
@@ -215,19 +216,27 @@ namespace DshPortable
             updateButton = new Button
             {
                 Text = L("现在更新", "Update now"),
-                Size = new Size(112, 34),
-                Location = new Point(264, 154),
+                Size = new Size(108, 34),
+                Location = new Point(184, 154),
                 Visible = false,
             };
-            updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(true); };
+            updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(1); };
+            skipUpdateButton = new Button
+            {
+                Text = L("跳过此版本", "Skip this version"),
+                Size = new Size(108, 34),
+                Location = new Point(304, 154),
+                Visible = false,
+            };
+            skipUpdateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(-1); };
             laterButton = new Button
             {
                 Text = L("稍后", "Later"),
-                Size = new Size(96, 34),
-                Location = new Point(388, 154),
+                Size = new Size(80, 34),
+                Location = new Point(424, 154),
                 Visible = false,
             };
-            laterButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(false); };
+            laterButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(0); };
 
             detailsBox = new TextBox
             {
@@ -270,6 +279,7 @@ namespace DshPortable
             launchContent.Controls.Add(progress);
             launchContent.Controls.Add(updateDescription);
             launchContent.Controls.Add(updateButton);
+            launchContent.Controls.Add(skipUpdateButton);
             launchContent.Controls.Add(laterButton);
             launchContent.Controls.Add(detailsBox);
             launchContent.Controls.Add(copyButton);
@@ -961,22 +971,23 @@ namespace DshPortable
             string latest = JsonString(check.Item2, "latest");
             if (updateStatus == "available")
             {
-                bool accepted = await ShowUpdateChoiceAsync(latest, false);
-                if (accepted)
+                int choice = await ShowUpdateChoiceAsync(latest, false);
+                if (choice == 1)
                 {
                     statusLabel.Text = L("正在安全更新 DeepSeek Harness…", "Updating DeepSeek Harness safely…");
                     progress.Visible = true;
                     Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(new[] { "update", "--no-browser", "--json" }));
                     if (updated.Item1 != 0) throw new InvalidOperationException(updated.Item2);
                 }
+                else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
                 else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
             }
             else if (updateStatus == "full-package-required")
             {
-                bool openDownload = await ShowUpdateChoiceAsync(latest, true);
-                await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
-                if (openDownload)
-                    Process.Start(new ProcessStartInfo("https://github.com/WSL043/DSH-Portable/releases/latest") { UseShellExecute = true });
+                int choice = await ShowUpdateChoiceAsync(latest, true);
+                if (choice == 1) { StartFullPackageUpdate(); return; }
+                else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
+                else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
             }
             ResetOperationUi();
         }
@@ -1016,12 +1027,17 @@ namespace DshPortable
                 }
                 if (updateStatus == "full-package-required")
                 {
-                    DialogResult open = MessageBox.Show(this,
-                        L("这个版本需要下载完整安装包。要现在打开下载页吗？", "This version requires a complete package. Open the download page now?")
-                            + (String.IsNullOrEmpty(latest) ? "" : "\r\n\r\n" + latest),
-                        L("发现新版", "Update available"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
-                    if (open == DialogResult.Yes)
-                        OpenExternalUrl("https://github.com/WSL043/DSH-Portable/releases/latest");
+                    if (trayState != null && trayState.hasRunningSession)
+                    {
+                        MessageBox.Show(this,
+                            L("任务仍在运行，本次不会中断它。任务完成后可从托盘再次检查更新。",
+                              "A task is still running, so it will not be interrupted. Check again from the tray after it finishes."),
+                            L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
+                    int choice = await ShowUpdateChoiceAsync(latest, true);
+                    if (choice == 1) StartFullPackageUpdate();
+                    else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
                     else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
                     return;
                 }
@@ -1080,6 +1096,7 @@ namespace DshPortable
             progress.Visible = true;
             updateDescription.Visible = false;
             updateButton.Visible = false;
+            skipUpdateButton.Visible = false;
             laterButton.Visible = false;
             detailsBox.Visible = false;
             copyButton.Visible = false;
@@ -1113,6 +1130,25 @@ namespace DshPortable
             MessageBox.Show(this,
                 L("更新已完成。", "The update is complete."),
                 L("DSH-Portable 已更新", "DSH-Portable updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void StartFullPackageUpdate()
+        {
+            string source = Path.Combine(root, "launcher", "DSH-FullUpdater.exe");
+            if (!File.Exists(source)) throw new FileNotFoundException(L(
+                "完整更新组件缺失，请重新安装当前版本后再试。",
+                "The full update component is missing. Reinstall this version and try again."), source);
+            string helper = Path.Combine(Path.GetTempPath(), "DSH-FullUpdater-" + Process.GetCurrentProcess().Id + ".exe");
+            File.Copy(source, helper, true);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = helper,
+                Arguments = "--upgrade-existing --destination \"" + root.Replace("\"", "\\\"") + "\"",
+                WorkingDirectory = Path.GetTempPath(),
+                UseShellExecute = true,
+            });
+            allowClose = true;
+            Close();
         }
 
         private async Task RestoreDesktopAfterUpdateAttemptAsync()
@@ -1257,7 +1293,7 @@ namespace DshPortable
                 && parsed.Port >= 3080 && parsed.Port <= 3180;
         }
 
-        private Task<bool> ShowUpdateChoiceAsync(string latest, bool fullPackage)
+        private Task<int> ShowUpdateChoiceAsync(string latest, bool fullPackage)
         {
             progress.Visible = false;
             ClientSize = new Size(560, 260);
@@ -1269,13 +1305,14 @@ namespace DshPortable
                 ? L("此版本需要完整升级", "A complete package is required") + (String.IsNullOrEmpty(latest) ? "" : " · " + latest)
                 : L("发现新版", "Update available") + (String.IsNullOrEmpty(latest) ? "" : " · " + latest);
             updateDescription.Text = fullPackage
-                ? L("运行环境或启动器兼容边界已变化。当前版本仍可继续使用。", "The runtime or launcher compatibility boundary changed. You can keep using this version.")
+                ? L("将自动下载完整版本并原地替换程序；设置、会话、插件和工作区保持原位。", "The complete version will be downloaded and installed in place. Settings, sessions, plugins, and workspace stay where they are.")
                 : L("仅下载已变更的 DSH 应用组件；设置、会话和工作区保持原位。", "Only the changed DSH application component is downloaded. Settings, sessions, and workspace stay in place.");
             updateDescription.Visible = true;
-            updateButton.Text = fullPackage ? L("打开下载页", "Open download page") : L("现在更新", "Update now");
+            updateButton.Text = L("现在更新", "Update now");
             updateButton.Visible = true;
+            skipUpdateButton.Visible = true;
             laterButton.Visible = true;
-            updateChoice = new TaskCompletionSource<bool>();
+            updateChoice = new TaskCompletionSource<int>();
             updateButton.Focus();
             return updateChoice.Task;
         }
@@ -1295,6 +1332,7 @@ namespace DshPortable
                 : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
             updateDescription.Visible = false;
             updateButton.Visible = false;
+            skipUpdateButton.Visible = false;
             laterButton.Visible = false;
             progress.Visible = true;
         }

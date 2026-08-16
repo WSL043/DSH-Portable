@@ -274,6 +274,9 @@ export async function checkForUpdate({
   }
   if (!force && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
     const evaluated = evaluateUpdate(cached.manifest, installed, platform)
+    if (evaluated.latest && cached.ignoredVersion === evaluated.latest) {
+      return { ...evaluated, status: 'ignored', cached: true, checkedAt: cached.checkedAt }
+    }
     if (evaluated.status === 'available' && cached.deferredUntil > now) {
       return { ...evaluated, status: 'deferred', cached: true, checkedAt: cached.checkedAt, deferredUntil: cached.deferredUntil }
     }
@@ -283,7 +286,11 @@ export async function checkForUpdate({
     const manifest = await fetchJson(manifestUrl, { allowHttp, fetchImpl, timeoutMs })
     const result = evaluateUpdate(manifest, installed, platform)
     const deferredUntil = cached?.manifest?.portableVersion === manifest.portableVersion ? Number(cached.deferredUntil ?? 0) : 0
-    await writeJsonAtomic(layout.updateCheckCache, { schemaVersion: 1, checkedAt: now, manifestUrl, manifest, deferredUntil })
+    const ignoredVersion = cached?.ignoredVersion === manifest.portableVersion ? cached.ignoredVersion : ''
+    await writeJsonAtomic(layout.updateCheckCache, { schemaVersion: 1, checkedAt: now, manifestUrl, manifest, deferredUntil, ignoredVersion })
+    if (!force && result.latest && ignoredVersion === result.latest) {
+      return { ...result, status: 'ignored', cached: false, checkedAt: now }
+    }
     if (!force && result.status === 'available' && deferredUntil > now) {
       return { ...result, status: 'deferred', cached: false, checkedAt: now, deferredUntil }
     }
@@ -311,8 +318,17 @@ export async function deferUpdate(layout, { now = Date.now(), durationMs = 24 * 
   const cached = await readJson(layout.updateCheckCache, null)
   if (!cached?.manifest) return { status: 'none' }
   const deferredUntil = now + Math.max(60 * 1000, Number(durationMs) || 0)
-  await writeJsonAtomic(layout.updateCheckCache, { ...cached, deferredUntil })
+  await writeJsonAtomic(layout.updateCheckCache, { ...cached, deferredUntil, ignoredVersion: '' })
   return { status: 'deferred', latest: cached.manifest.portableVersion, deferredUntil }
+}
+
+export async function ignoreUpdate(layout, version = '') {
+  const cached = await readJson(layout.updateCheckCache, null)
+  const ignoredVersion = String(version || cached?.manifest?.portableVersion || '')
+  if (!ignoredVersion) return { status: 'none' }
+  parseSemanticVersion(ignoredVersion)
+  await writeJsonAtomic(layout.updateCheckCache, { ...cached, schemaVersion: 1, ignoredVersion, deferredUntil: 0 })
+  return { status: 'ignored', latest: ignoredVersion }
 }
 
 function operationFromStage(layout, stagedRoot) {

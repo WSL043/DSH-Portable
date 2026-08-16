@@ -49,6 +49,8 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /navigate\(/)
   assert.match(source, /check-update/)
   assert.match(source, /defer-update/)
+  assert.match(source, /ignore-update/)
+  assert.match(source, /YesNoCancel/)
   assert.match(source, /DSH_PORTABLE_STATE_ROOT/)
   assert.match(source, /direct_mode[\s\S]+env::var_os\("APPDIR"\)\.is_some\(\)[\s\S]+resolve_layout\(None\)/)
   assert.match(source, /fn copy_symlink[\s\S]+read_link[\s\S]+unix::fs::symlink/)
