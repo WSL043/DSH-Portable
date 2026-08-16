@@ -242,6 +242,9 @@ test('Windows CI verifies the real tray bridge in a background browser without d
     readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'),
   ])
   assert.match(smoke, /--headless=new/)
+  assert.match(smoke, /--remote-debugging-port=\$\{debugPort\}/)
+  assert.doesNotMatch(smoke, /--remote-debugging-port=0/)
+  assert.match(smoke, /headless Chrome exited before DevTools became ready/)
   assert.match(smoke, /Page\.addScriptToEvaluateOnNewDocument/)
   assert.match(smoke, /dsh-portable\/state/)
   assert.match(smoke, /dsh-portable\/action/)

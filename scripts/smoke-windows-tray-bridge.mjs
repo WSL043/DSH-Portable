@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -47,13 +48,36 @@ async function portable(args) {
   return lastJsonLine(result.stdout)
 }
 
-async function waitForFile(filename, timeoutMs = 15000) {
+async function reserveLoopbackPort() {
+  const server = createServer()
+  await new Promise((resolve, reject) => {
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', resolve)
+  })
+  const address = server.address()
+  const port = typeof address === 'object' && address ? address.port : 0
+  await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()))
+  if (!port) throw new Error('could not reserve a loopback port for headless Chrome')
+  return port
+}
+
+async function waitForDevTools(port, process, output, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    if (existsSync(filename)) return readFile(filename, 'utf8')
-    await new Promise(resolve => setTimeout(resolve, 50))
+    if (process.exitCode !== null) {
+      throw new Error(`headless Chrome exited before DevTools became ready (code ${process.exitCode}): ${output.stderr || output.stdout}`)
+    }
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`)
+      if (response.ok) {
+        const targets = await response.json()
+        const page = targets.find(target => target.type === 'page')
+        if (page?.webSocketDebuggerUrl) return page
+      }
+    } catch { /* Chrome is still starting */ }
+    await new Promise(resolve => setTimeout(resolve, 100))
   }
-  throw new Error(`timed out waiting for ${filename}`)
+  throw new Error(`timed out waiting for headless Chrome DevTools on 127.0.0.1:${port}: ${output.stderr || output.stdout}`)
 }
 
 class CdpClient {
@@ -186,21 +210,24 @@ try {
   assert.match(launch.url, /^http:\/\/127\.0\.0\.1:\d+$/)
 
   profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-tray-headless-'))
+  const debugPort = await reserveLoopbackPort()
+  const chromeOutput = { stdout: '', stderr: '' }
   chrome = spawn(chromeExecutable(), [
     '--headless=new',
-    '--remote-debugging-port=0',
+    `--remote-debugging-port=${debugPort}`,
+    '--remote-debugging-address=127.0.0.1',
     `--user-data-dir=${profile}`,
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-background-networking',
     '--disable-component-update',
+    '--disable-gpu',
     'about:blank',
-  ], { stdio: 'ignore', windowsHide: true })
+  ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  chrome.stdout.on('data', chunk => { chromeOutput.stdout = `${chromeOutput.stdout}${chunk}`.slice(-8000) })
+  chrome.stderr.on('data', chunk => { chromeOutput.stderr = `${chromeOutput.stderr}${chunk}`.slice(-8000) })
 
-  const activePort = (await waitForFile(path.join(profile, 'DevToolsActivePort'))).split(/\r?\n/)
-  const targets = await fetch(`http://127.0.0.1:${Number(activePort[0])}/json/list`).then(response => response.json())
-  const page = targets.find(target => target.type === 'page')
-  if (!page?.webSocketDebuggerUrl) throw new Error('headless Chrome did not expose a page target')
+  const page = await waitForDevTools(debugPort, chrome, chromeOutput)
 
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
