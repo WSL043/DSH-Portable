@@ -20,8 +20,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.7")]
-[assembly: AssemblyFileVersion("0.2.0.7")]
+[assembly: AssemblyVersion("0.2.0.8")]
+[assembly: AssemblyFileVersion("0.2.0.8")]
 
 namespace DshPortable
 {
@@ -43,6 +43,16 @@ namespace DshPortable
         public string theme { get; set; }
         public string currentSessionId { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
+    }
+
+    internal sealed class DesktopWindowState
+    {
+        public int schemaVersion { get; set; }
+        public int x { get; set; }
+        public int y { get; set; }
+        public int width { get; set; }
+        public int height { get; set; }
+        public bool maximized { get; set; }
     }
 
     internal sealed class DshMenuColorTable : ProfessionalColorTable
@@ -128,6 +138,7 @@ namespace DshPortable
         private bool trayMenuOpen;
         private bool trayMenuRefreshPending;
         private WindowCloseBehavior closeBehavior;
+        private FormWindowState windowStateBeforeHide = FormWindowState.Normal;
         private TrayBridgeState trayState;
         private string trayTheme = "light";
         private Uri applicationUri;
@@ -297,11 +308,13 @@ namespace DshPortable
             Controls.Add(webView);
             Controls.Add(launchPanel);
             CenterLaunchContent();
+            ResizeEnd += delegate { SaveDesktopWindowState(); };
             Shown += async delegate { await RunLauncherAsync(); };
         }
 
         protected override void OnFormClosing(FormClosingEventArgs eventArgs)
         {
+            if (desktopReady) SaveDesktopWindowState();
             if (desktopReady && !allowClose && eventArgs.CloseReason != CloseReason.WindowsShutDown)
             {
                 eventArgs.Cancel = true;
@@ -344,6 +357,10 @@ namespace DshPortable
 
         private void HideToTray()
         {
+            windowStateBeforeHide = WindowState == FormWindowState.Maximized
+                ? FormWindowState.Maximized
+                : FormWindowState.Normal;
+            SaveDesktopWindowState();
             Hide();
             ShowInTaskbar = false;
             trayIcon.Visible = true;
@@ -362,7 +379,7 @@ namespace DshPortable
             if (!desktopReady) return;
             ShowInTaskbar = true;
             Show();
-            WindowState = FormWindowState.Normal;
+            WindowState = windowStateBeforeHide;
             Activate();
         }
 
@@ -547,6 +564,85 @@ namespace DshPortable
             return Path.Combine(ResolveProductDataRoot(), "launcher-settings.json");
         }
 
+        private string DesktopWindowStatePath()
+        {
+            return Path.Combine(ResolveProductDataRoot(), "window-state.json");
+        }
+
+        private static bool IsSafeDesktopBounds(Rectangle bounds)
+        {
+            if (bounds.Width < 900 || bounds.Height < 620) return false;
+            return Screen.AllScreens.Any(screen =>
+            {
+                Rectangle visible = Rectangle.Intersect(screen.WorkingArea, bounds);
+                return visible.Width >= 120 && visible.Height >= 80;
+            });
+        }
+
+        private void RestoreDesktopWindowState()
+        {
+            try
+            {
+                DesktopWindowState state = json.Deserialize<DesktopWindowState>(
+                    File.ReadAllText(DesktopWindowStatePath(), Encoding.UTF8));
+                Rectangle bounds = new Rectangle(state.x, state.y, state.width, state.height);
+                if (state.schemaVersion != 1 || !IsSafeDesktopBounds(bounds)) throw new InvalidDataException();
+                StartPosition = FormStartPosition.Manual;
+                Bounds = bounds;
+                windowStateBeforeHide = state.maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+                WindowState = windowStateBeforeHide;
+                return;
+            }
+            catch { }
+
+            StartPosition = FormStartPosition.CenterScreen;
+            ClientSize = new Size(1280, 820);
+            CenterToScreen();
+            windowStateBeforeHide = FormWindowState.Normal;
+        }
+
+        private void SaveDesktopWindowState()
+        {
+            if (!desktopReady) return;
+            try { SaveDesktopWindowStateCore(); }
+            catch
+            {
+                try { File.Delete(DesktopWindowStatePath() + ".tmp"); }
+                catch { }
+            }
+        }
+
+        private void SaveDesktopWindowStateCore()
+        {
+            if (Visible && WindowState != FormWindowState.Minimized)
+                windowStateBeforeHide = WindowState;
+            Rectangle bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+            if (!IsSafeDesktopBounds(bounds)) return;
+            DesktopWindowState state = new DesktopWindowState
+            {
+                schemaVersion = 1,
+                x = bounds.X,
+                y = bounds.Y,
+                width = bounds.Width,
+                height = bounds.Height,
+                maximized = windowStateBeforeHide == FormWindowState.Maximized,
+            };
+            string filename = DesktopWindowStatePath();
+            string temporary = filename + ".tmp";
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            File.WriteAllText(temporary, json.Serialize(state) + "\r\n", new UTF8Encoding(false));
+            if (File.Exists(filename))
+            {
+                try { File.Replace(temporary, filename, null, true); }
+                catch
+                {
+                    File.Copy(temporary, filename, true);
+                    File.Delete(temporary);
+                }
+            }
+            else File.Move(temporary, filename);
+        }
+
         private WindowCloseBehavior LoadCloseBehavior()
         {
             try
@@ -591,6 +687,7 @@ namespace DshPortable
 
         protected override void OnFormClosed(FormClosedEventArgs eventArgs)
         {
+            SaveDesktopWindowState();
             DisposeTrayIcon();
             trayIcon.Dispose();
             base.OnFormClosed(eventArgs);
@@ -874,9 +971,8 @@ namespace DshPortable
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = true;
             MinimizeBox = true;
-            ClientSize = new Size(1280, 820);
             MinimumSize = new Size(900, 620);
-            CenterToScreen();
+            RestoreDesktopWindowState();
             webView.Visible = true;
             webView.BringToFront();
             launchPanel.Visible = false;

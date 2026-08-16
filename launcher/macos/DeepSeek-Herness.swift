@@ -19,6 +19,14 @@ private enum HostError: LocalizedError {
     }
 }
 
+private struct WindowFrameState: Codable {
+    let schemaVersion: Int
+    let x: Double
+    let y: Double
+    let width: Double
+    let height: Double
+}
+
 private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
     private var window: NSWindow!
     private var webView: WKWebView!
@@ -46,6 +54,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         runtimeRoot.appendingPathComponent("launcher/portable-cli.mjs")
     }
 
+    private var productDataRoot: URL {
+        if installedMode {
+            return FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/Application Support/DeepSeek-Herness/data")
+        }
+        return runtimeRoot.appendingPathComponent("data")
+    }
+
+    private var windowStateURL: URL {
+        productDataRoot.appendingPathComponent("window-state.json")
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         createWindow()
         NSApp.activate(ignoringOtherApps: true)
@@ -60,14 +80,24 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if allowingClose { return .terminateNow }
+        saveWindowFrame()
         beginShutdown()
         return .terminateLater
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if allowingClose { return true }
+        saveWindowFrame()
         beginShutdown()
         return false
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        saveWindowFrame()
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        saveWindowFrame()
     }
 
     private func createWindow() {
@@ -183,13 +213,47 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         spinner.stopAnimation(nil)
         spinner.isHidden = true
         webView.isHidden = false
-        window.setContentSize(NSSize(width: 1280, height: 820))
-        window.center()
+        if !restoreWindowFrame() {
+            window.setContentSize(NSSize(width: 1280, height: 820))
+            window.center()
+        }
         webView.load(URLRequest(url: url))
+    }
+
+    private func restoreWindowFrame() -> Bool {
+        guard let data = try? Data(contentsOf: windowStateURL),
+              let state = try? JSONDecoder().decode(WindowFrameState.self, from: data),
+              state.schemaVersion == 1 else { return false }
+        let frame = NSRect(x: state.x, y: state.y, width: state.width, height: state.height)
+        guard frame.width >= 900, frame.height >= 620 else { return false }
+        let isVisible = NSScreen.screens.contains { screen in
+            let intersection = screen.visibleFrame.intersection(frame)
+            return intersection.width >= 120 && intersection.height >= 80
+        }
+        guard isVisible else { return false }
+        window.setFrame(frame, display: false)
+        return true
+    }
+
+    private func saveWindowFrame() {
+        guard webView != nil, !webView.isHidden else { return }
+        let frame = window.frame
+        guard frame.width >= 900, frame.height >= 620 else { return }
+        let state = WindowFrameState(
+            schemaVersion: 1,
+            x: frame.origin.x,
+            y: frame.origin.y,
+            width: frame.width,
+            height: frame.height
+        )
+        guard let data = try? JSONEncoder().encode(state) else { return }
+        try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
+        try? data.write(to: windowStateURL, options: .atomic)
     }
 
     private func beginShutdown() {
         guard !shuttingDown else { return }
+        saveWindowFrame()
         shuttingDown = true
         window.title = "DeepSeek-Herness · 正在关闭"
         webView.isHidden = true

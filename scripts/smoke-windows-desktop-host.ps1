@@ -35,6 +35,9 @@ public static class WindowAppIdentity {
     [DllImport("user32.dll")]
     public static extern bool GetWindowRect(IntPtr hwnd, out Rect rect);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    public static extern bool SetWindowPos(IntPtr hwnd, IntPtr insertAfter, int x, int y, int width, int height, uint flags);
+
     [DllImport("user32.dll")]
     public static extern bool IsWindowVisible(IntPtr hwnd);
 
@@ -176,6 +179,21 @@ try {
     }
     if ($EmbeddedRenderers.Count -eq 0) { throw 'The native window did not initialize its embedded WebView2 renderer.' }
 
+    # Resize through Win32 without desktop input. Closing to the tray must save
+    # these bounds so a later native-host process can restore them.
+    $PersistedWidth = 960
+    $PersistedHeight = 680
+    if (-not [WindowAppIdentity]::SetWindowPos(
+        $Process.MainWindowHandle,
+        [IntPtr]::Zero,
+        $DesktopRect.Left,
+        $DesktopRect.Top,
+        $PersistedWidth,
+        $PersistedHeight,
+        0x0014
+    )) { throw 'Could not set deterministic desktop bounds for the persistence check.' }
+    Start-Sleep -Milliseconds 250
+
     # Default close behavior is minimized to tray: closing the window must keep
     # the native host and running task alive until the user explicitly exits.
     $DesktopHandle = $Process.MainWindowHandle
@@ -184,6 +202,12 @@ try {
     $Process.Refresh()
     if ($Process.HasExited) { throw 'Default window close exited instead of minimizing to tray.' }
     if ([WindowAppIdentity]::IsWindowVisible($DesktopHandle)) { throw 'Default window close left the desktop window visible.' }
+    $WindowStateFile = Join-Path $Root 'data\window-state.json'
+    if (-not (Test-Path -LiteralPath $WindowStateFile)) { throw 'Closing to the tray did not persist native window state.' }
+    $SavedWindowState = Get-Content -Raw -LiteralPath $WindowStateFile | ConvertFrom-Json
+    if ($SavedWindowState.width -ne $PersistedWidth -or $SavedWindowState.height -ne $PersistedHeight) {
+        throw "Persisted native bounds were $($SavedWindowState.width)x$($SavedWindowState.height), expected ${PersistedWidth}x${PersistedHeight}."
+    }
     $StillRunning = Get-ProductStatus
     if ($StillRunning.Status -ne 'running') { throw 'Minimizing to tray stopped the DSH backend.' }
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker).Hash -ne $WorkspaceDigest) { throw 'Workspace data changed during native host shutdown.' }
@@ -238,6 +262,15 @@ try {
             $ExitWidth = $ExitRect.Right - $ExitRect.Left
         }
     } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $ExitWidth -lt 900 -or $ExitReady -ne 'running') -and [DateTime]::UtcNow -lt $ExitDeadline)
+    $RestoredStateRect = [WindowAppIdentity+Rect]::new()
+    if (-not [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$RestoredStateRect)) {
+        throw 'Could not read the restored native window bounds.'
+    }
+    $RestoredStateWidth = $RestoredStateRect.Right - $RestoredStateRect.Left
+    $RestoredStateHeight = $RestoredStateRect.Bottom - $RestoredStateRect.Top
+    if ([Math]::Abs($RestoredStateWidth - $PersistedWidth) -gt 4 -or [Math]::Abs($RestoredStateHeight - $PersistedHeight) -gt 4) {
+        throw "Native window bounds were not restored after restart: ${RestoredStateWidth}x${RestoredStateHeight}."
+    }
     if (-not $Process.CloseMainWindow()) { throw 'Close-to-exit could not request a native close.' }
     if (-not $Process.WaitForExit(45000)) { throw 'Close-to-exit setting left the host running.' }
     if ((Get-ProductStatus).Status -ne 'stopped') { throw 'Close-to-exit setting left the backend running.' }

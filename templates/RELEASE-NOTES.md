@@ -1,8 +1,8 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-本次更新让 Windows 托盘与 DSH 工作台保持同步。托盘会跟随 DSH 的语言和明暗外观，
-显示最近会话，并可直接打开会话或新建会话。关闭窗口默认收进系统托盘，任务继续运行；
-托盘菜单也可以重新打开、完全退出或更改关闭行为。
+本次更新会在 Windows 和 macOS 记住桌面窗口的大小与位置；重新打开时恢复上次布局，
+显示器变化后则自动回到安全的可见位置。Windows 托盘继续跟随 DSH 的语言和明暗外观，
+显示最近会话，并可直接打开会话或新建会话。关闭窗口默认收进系统托盘，任务继续运行。
 
 便携目录继续完整保留会话、设置、插件和工作区。启动时检查更新，一般只下载变化的
 DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新继续只下载变化的 DSH 应用组件。
@@ -34,10 +34,10 @@ DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新�
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`).
 > DSH-Portable is an independent community distribution.
 
-This release keeps the Windows tray in sync with the DSH workspace. The tray follows the DSH
-language and light/dark appearance, lists recent sessions, and can open a session or start a new
-one directly. Closing the window sends the app to the tray by default, so active tasks continue
-running.
+This release remembers the native window size and position on Windows and macOS. It restores the
+last workspace layout on launch and falls back to a safe visible position after display changes.
+The Windows tray continues to follow the DSH language and appearance, list recent sessions, and
+open a session or start a new one directly. Closing the window sends the app to the tray by default.
 
 Portable sessions, settings, plugins, and workspace remain in the same folder. Startup update checks
 normally download only the changed DSH application component. This release requires one complete
