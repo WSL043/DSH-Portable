@@ -24,6 +24,13 @@ async function sha256(filename) {
 }
 
 async function archiveText(archive, rawEntry) {
+  if (process.platform === 'linux') {
+    const result = await execFileAsync('unzip', ['-p', archive, rawEntry], {
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    return result.stdout
+  }
   const tar = process.platform === 'win32' ? 'tar.exe' : 'tar'
   const result = await execFileAsync(tar, ['-x', '-O', '-f', archive, rawEntry], {
     encoding: 'utf8',
@@ -57,8 +64,11 @@ async function main() {
   const declaredNames = (component.urls ?? []).map((value) => path.basename(new URL(value).pathname))
   if (!declaredNames.includes(archiveName)) fail(`Update manifest does not publish ${archiveName}.`)
 
-  const tar = process.platform === 'win32' ? 'tar.exe' : 'tar'
-  const listed = await execFileAsync(tar, ['-t', '-f', archive], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, windowsHide: true })
+  const listed = process.platform === 'linux'
+    ? await execFileAsync('unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+    : await execFileAsync(process.platform === 'win32' ? 'tar.exe' : 'tar', ['-t', '-f', archive], {
+      encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, windowsHide: true,
+    })
   const rawEntries = listed.stdout.split(/\r?\n/).filter(Boolean)
   validateArchiveEntries(rawEntries)
   const entryMap = new Map(rawEntries.map((entry) => [normalizedEntry(entry), entry]))
