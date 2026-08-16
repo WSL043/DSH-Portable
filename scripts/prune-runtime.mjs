@@ -18,7 +18,6 @@ assert.equal(allowed.has(target), true, `unsupported runtime prune target: ${tar
 const linuxNativeRoot = path.join(ptyRoot, 'build', 'Release')
 const nativeRoot = platform === 'linux' ? linuxNativeRoot : path.join(prebuildRoot, target)
 await access(path.join(nativeRoot, 'pty.node'))
-if (platform === 'linux') await access(path.join(nativeRoot, 'spawn-helper'))
 
 async function bytes(root) {
   const info = await stat(root)
