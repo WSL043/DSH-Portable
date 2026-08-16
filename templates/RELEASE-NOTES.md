@@ -2,7 +2,9 @@
 
 本次更新会在 Windows 和 macOS 记住桌面窗口的大小与位置；重新打开时恢复上次布局，
 显示器变化后则自动回到安全的可见位置。Windows 托盘继续跟随 DSH 的语言和明暗外观，
-显示最近会话，并可直接打开会话或新建会话。关闭窗口默认收进系统托盘，任务继续运行。
+显示最近会话，并可直接打开会话或新建会话。Windows 托盘和 macOS 应用菜单现在也能手动检查更新、
+关闭启动时自动检查，并直接提交 Bug 报告。发现新版后可选择现在更新或稍后；运行中的任务不会被
+更新中断。关闭窗口默认收进系统托盘，任务继续运行。
 
 便携目录继续完整保留会话、设置、插件和工作区。启动时检查更新，一般只下载变化的
 DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新继续只下载变化的 DSH 应用组件。
@@ -37,7 +39,9 @@ DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新�
 This release remembers the native window size and position on Windows and macOS. It restores the
 last workspace layout on launch and falls back to a safe visible position after display changes.
 The Windows tray continues to follow the DSH language and appearance, list recent sessions, and
-open a session or start a new one directly. Closing the window sends the app to the tray by default.
+open a session or start a new one directly. The Windows tray and macOS application menu can now
+check for updates, turn off startup checks, and open a Bug report directly. Choose Update now or Later when a release is available; a running
+task is never interrupted. Closing the window sends the app to the tray by default.
 
 Portable sessions, settings, plugins, and workspace remain in the same folder. Startup update checks
 normally download only the changed DSH application component. This release requires one complete

@@ -1,0 +1,29 @@
+name: 功能建议 / Feature request
+description: 提议改善 DSH-Portable 的使用体验 / Suggest an improvement to DSH-Portable
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: 想解决什么问题 / Problem to solve
+      description: 请先描述使用场景，不必先设计实现。 / Describe the use case first; an implementation is optional.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 希望怎样改进 / Preferred outcome
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 主要平台 / Main platform
+      options:
+        - Windows
+        - macOS
+        - Windows 和 macOS / Windows and macOS
+        - 与平台无关 / Platform independent
+    validations:
+      required: true

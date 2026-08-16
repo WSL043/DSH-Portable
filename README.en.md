@@ -111,6 +111,11 @@ DSH-Portable checks for updates when it starts and asks before installing one. A
 downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place. Files are verified before replacement, and a failed launch restores
 the previous version.
 
+On Windows, you can **Check for updates** from the system tray; on macOS, use the application menu.
+Turn off **Check for updates at startup** from the same menu if you do not want automatic prompts.
+The manual check remains available. When an update is available, choose **Update now** or **Later**.
+A running task is never interrupted for an update.
+
 When the runtime compatibility boundary changes, DSH-Portable requests a complete package. Official
 preview updates first become candidate builds and must pass Windows and macOS finished-product
 tests before they enter the launcher update channel.
@@ -124,6 +129,12 @@ tests before they enter the launcher update channel.
 
 The installed edition keeps the same data under `%LOCALAPPDATA%\DeepSeek-Herness` and does not
 delete it during uninstall.
+
+## Get help
+
+[**Report a problem**](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
+or [**request an improvement**](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml).
+Do not paste API keys, login credentials, or private conversations into an issue.
 
 ## Security
 

@@ -15,6 +15,8 @@ macOS 双击 DSH-Portable.app。首次被系统拦截时，按住 Control 点按
 
 启动器会先询问再安装更新。普通更新只下载变化的 DSH 应用组件；会话、设置、
 凭据和工作区都会保留。兼容性变化时才会提示下载完整包，新版启动失败会恢复旧版。
+Windows 托盘和 macOS 应用菜单都可手动检查更新，也可关闭启动时自动检查；
+运行中的任务不会被更新中断。
 
 Windows 插件命令：
 
@@ -44,6 +46,8 @@ The launcher asks before installing an update. A normal update downloads only
 the changed DSH application component and keeps sessions, settings, credentials,
 and workspace in place. It requests the complete package only across a runtime
 compatibility change and restores the previous version after a failed launch.
+The Windows tray and macOS application menu can check manually or turn off
+startup checks. Updates never interrupt a running task.
 
 Windows plugin commands:
 

@@ -1,0 +1,49 @@
+name: Bug 报告 / Bug report
+description: 报告可以稳定复现的问题 / Report a reproducible problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: dropdown
+    id: package
+    attributes:
+      label: 使用方式 / Package
+      options:
+        - Windows 便携版 / Windows portable
+        - Windows 安装版 / Windows installer
+        - macOS 便携 ZIP / macOS portable ZIP
+        - macOS DMG / macOS DMG
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: DSH-Portable 版本 / Version
+      placeholder: 例如 / e.g. 0.2.0-rc.9
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: 发生了什么 / What happened
+      description: 请写实际结果和预期结果。 / Describe the actual and expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      placeholder: "1. ...\n2. ...\n3. ..."
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: 日志或截图 / Logs or screenshots
+      description: 可选。请先删除私人信息。 / Optional. Remove private information first.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隐私确认 / Privacy check
+      options:
+        - label: 我没有粘贴 API Key、登录凭据或私人会话。 / I did not paste API keys, login credentials, or private conversations.
+          required: true

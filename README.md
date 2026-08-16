@@ -112,6 +112,10 @@ DSH-Portable 会在启动时检查更新，并先询问是否安装。一般更�
 应用组件；会话、设置、凭据和工作区都会保留。下载完成后会先验证再替换，若新版
 不能正常启动，会自动恢复到更新前版本。
 
+Windows 可以从系统托盘手动 **检查更新**，macOS 可以从应用菜单检查。不想接收主动提醒时，
+可以在同一菜单里关闭 **启动时检查更新**；手动检查入口仍会保留。发现更新时可以选择
+**现在更新** 或 **稍后**，有任务运行时不会为了更新中断任务。
+
 只有运行环境或启动器出现兼容性变化时，才会提示下载完整安装包。官方预览版更新
 会先生成候选版本，经过 Windows 与 macOS 成品测试后才进入启动器更新通道，不会把
 未经验证的官方提交直接装到你的工作环境。
@@ -124,6 +128,12 @@ DSH-Portable 会在启动时检查更新，并先询问是否安装。一般更�
 - `data/logs/`：本地服务日志。
 
 安装版把相同数据放在 `%LOCALAPPDATA%\DeepSeek-Herness`，卸载应用时不会自动删除。
+
+## 获取帮助
+
+遇到问题可直接[**提交 Bug 报告**](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)，
+有改进想法可[**提交功能建议**](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)。
+请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 
 ## 安全
 

@@ -77,7 +77,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.8')
+  assert.equal(manifest.version, '0.2.0-rc.9')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -137,10 +137,12 @@ test('update guidance describes the component update path without exposing inter
   const releaseNotes = await read('templates/RELEASE-NOTES.md')
 
   assert.match(chinese, /启动时检查更新/)
+  assert.match(chinese, /Windows.+macOS.+关闭.+启动时检查更新/s)
   assert.match(chinese, /只下载.+DSH.+组件/s)
   assert.match(chinese, /会话、设置、凭据和工作区.+保留/s)
   assert.match(chinese, /兼容性变化.+完整安装包/s)
   assert.match(english, /checks for updates when it starts/i)
+  assert.match(english, /Windows.+macOS.+Turn off.+updates at startup/is)
   assert.match(english, /downloads only the changed DSH application component/i)
   assert.match(english, /sessions, settings, credentials, and workspace remain in place/i)
   assert.match(english, /compatibility boundary changes.+complete package/is)
@@ -151,6 +153,25 @@ test('update guidance describes the component update path without exposing inter
   assert.match(releaseNotes, /启动时检查更新/)
   assert.match(releaseNotes, /本次更新.+完整包.+后续.+DSH 应用组件/s)
   assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
+})
+
+test('GitHub gives Chinese and English users direct, privacy-safe feedback forms', async () => {
+  const [chinese, english, bug, feature, config] = await Promise.all([
+    read('README.md'),
+    read('README.en.md'),
+    read('.github/ISSUE_TEMPLATE/bug-report.yml'),
+    read('.github/ISSUE_TEMPLATE/feature-request.yml'),
+    read('.github/ISSUE_TEMPLATE/config.yml'),
+  ])
+  assert.match(chinese, /反馈问题|获取帮助/)
+  assert.match(english, /Report a problem|Get help/i)
+  assert.match(chinese, /issues\/new\?template=bug-report\.yml/)
+  assert.match(english, /issues\/new\?template=bug-report\.yml/)
+  assert.match(bug, /Bug 报告 \/ Bug report/)
+  assert.match(bug, /Windows 便携版 \/ Windows portable/)
+  assert.match(bug, /没有粘贴 API Key、登录凭据或私人会话/)
+  assert.match(feature, /功能建议 \/ Feature request/)
+  assert.match(config, /blank_issues_enabled:\s*false/)
 })
 
 test('release notes prioritize downloads and keep verification optional', async () => {
@@ -293,9 +314,9 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*7/)
-  assert.match(build, /requiredShellSchema\s*=\s*7/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.8"\)/)
+  assert.match(build, /shellSchema\s*=\s*8/)
+  assert.match(build, /requiredShellSchema\s*=\s*8/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.9"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -472,10 +493,15 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 7/)
-  assert.match(build, /"requiredShellSchema": 7/)
-  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>4<\/string>/s)
+  assert.match(build, /"shellSchema": 8/)
+  assert.match(build, /"requiredShellSchema": 8/)
+  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>5<\/string>/s)
   assert.match(app, /check-update/)
+  assert.match(app, /Check for Updates|检查更新/)
+  assert.match(app, /Check for updates at startup|启动时检查更新/)
+  assert.match(app, /updateCheckEnabled/)
+  assert.match(app, /issues\/new\?template=bug-report\.yml/)
+  assert.match(app, /check-update", "--json", "--force/)
   assert.match(app, /defer-update/)
   assert.doesNotMatch(app, /--app=/)
 })

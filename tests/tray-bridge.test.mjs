@@ -128,6 +128,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   assert.equal(initial.locale, 'zh')
   assert.equal(initial.theme, 'dark')
   assert.equal(initial.currentSessionId, 'session-11')
+  assert.equal(initial.hasRunningSession, true, 'the native shell must know if any visible user session is still running')
   assert.equal(initial.sessions.length, 10, 'the native menu payload stays bounded')
   assert.deepEqual(initial.sessions.slice(0, 3).map(item => item.id), ['session-11', 'session-10', 'session-9'])
   assert.equal(initial.sessions.some(item => item.id === 'blank' || item.id === 'child'), false)
@@ -144,6 +145,11 @@ test('private tray bridge projects bounded official runtime state and invokes on
   client.send({ type: 'dsh-portable/action', action: 'new-session' })
   assert.deepEqual(runtime.opened, ['session-9'])
   assert.equal(runtime.cleared, 1)
+
+  const idle = sessionList(2)
+  for (const item of Object.values(idle.byId)) item.running = false
+  runtime.setSessions(idle)
+  assert.equal(client.posted.at(-1).hasRunningSession, false)
 
   const beforeDispose = client.posted.length
   runtime.dispose()
@@ -166,10 +172,10 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*7/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*7/)
-  assert.match(macBuild, /"shellSchema": 7/)
-  assert.match(macBuild, /"requiredShellSchema": 7/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*8/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*8/)
+  assert.match(macBuild, /"shellSchema": 8/)
+  assert.match(macBuild, /"requiredShellSchema": 8/)
 })
 
 test('portable bridge fallback follows the moved product without entering a user plugin manifest', async () => {
@@ -215,6 +221,16 @@ test('Windows tray consumes official projected state and keeps a bounded native 
   assert.match(source, /ShortcutKeyDisplayString/)
   assert.match(source, /More|更多/)
   assert.match(source, /DshMenuColorTable/)
+  assert.match(source, /检查更新|Check for updates/)
+  assert.match(source, /启动时检查更新|Check for updates at startup/)
+  assert.match(source, /updateCheckEnabled/)
+  assert.match(source, /反馈问题|Report a problem/)
+  assert.match(source, /issues\/new\?template=bug-report\.yml/)
+  assert.match(source, /check-update", "--json", "--force/)
+  assert.match(source, /hasRunningSession/)
+  assert.match(source, /任务仍在运行|task is still running/i)
+  assert.match(source, /现在更新|Update now/)
+  assert.match(source, /稍后|Later/)
   assert.match(source, /item\.Checked\s*=\s*true/)
   assert.doesNotMatch(source, /new Font\(trayMenu\.Font, FontStyle\.Bold\)/)
   assert.match(build, /System\.Web\.Extensions\.dll/)

@@ -15,8 +15,11 @@ window.__ModuleLoader__.load({
 
     function sessionState(ctx) {
       const source = ctx.sessions.list.getSnapshot()
-      const sessions = (source.ids ?? [])
+      const sourceSessions = (source.ids ?? [])
         .map(id => source.byId?.[id])
+        .filter(Boolean)
+      const hasRunningSession = sourceSessions.some(item => Boolean(item.running))
+      const sessions = sourceSessions
         .filter(item => item && !item.blank && item.origin !== 'subagent')
         .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
         .slice(0, 10)
@@ -34,6 +37,7 @@ window.__ModuleLoader__.load({
         locale: localeOf(ctx),
         theme: themeOf(ctx),
         currentSessionId: source.current == null ? '' : String(source.current),
+        hasRunningSession,
         sessions,
       }
     }

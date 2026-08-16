@@ -20,8 +20,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.8")]
-[assembly: AssemblyFileVersion("0.2.0.8")]
+[assembly: AssemblyVersion("0.2.0.9")]
+[assembly: AssemblyFileVersion("0.2.0.9")]
 
 namespace DshPortable
 {
@@ -42,6 +42,7 @@ namespace DshPortable
         public string locale { get; set; }
         public string theme { get; set; }
         public string currentSessionId { get; set; }
+        public bool hasRunningSession { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
     }
 
@@ -122,6 +123,9 @@ namespace DshPortable
         private readonly ToolStripMenuItem closeBehaviorMenu;
         private readonly ToolStripMenuItem closeToTrayItem;
         private readonly ToolStripMenuItem closeToExitItem;
+        private readonly ToolStripMenuItem updateMenu;
+        private readonly ToolStripMenuItem checkUpdateItem;
+        private readonly ToolStripMenuItem automaticUpdateCheckItem;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly string root;
         private readonly string[] launcherArgs;
@@ -137,6 +141,8 @@ namespace DshPortable
         private bool trayBridgeReady;
         private bool trayMenuOpen;
         private bool trayMenuRefreshPending;
+        private bool manualUpdateRunning;
+        private bool updateCheckEnabled;
         private WindowCloseBehavior closeBehavior;
         private FormWindowState windowStateBeforeHide = FormWindowState.Normal;
         private TrayBridgeState trayState;
@@ -271,6 +277,7 @@ namespace DshPortable
             launchPanel.Controls.Add(launchContent);
 
             closeBehavior = LoadCloseBehavior();
+            updateCheckEnabled = LoadUpdateCheckEnabled();
             closeToTrayItem = new ToolStripMenuItem(L("最小化到托盘", "Minimize to tray")) { Checked = closeBehavior == WindowCloseBehavior.Tray };
             closeToExitItem = new ToolStripMenuItem(L("退出程序", "Exit application")) { Checked = closeBehavior == WindowCloseBehavior.Exit };
             closeToTrayItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Tray); };
@@ -278,6 +285,22 @@ namespace DshPortable
             closeBehaviorMenu = new ToolStripMenuItem(L("关闭窗口时", "When closing the window"));
             closeBehaviorMenu.DropDownItems.Add(closeToTrayItem);
             closeBehaviorMenu.DropDownItems.Add(closeToExitItem);
+            checkUpdateItem = new ToolStripMenuItem(L("检查更新", "Check for updates"));
+            checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(); };
+            automaticUpdateCheckItem = new ToolStripMenuItem(L("启动时检查更新", "Check for updates at startup"))
+            {
+                Checked = updateCheckEnabled,
+                CheckOnClick = false,
+            };
+            automaticUpdateCheckItem.Click += delegate
+            {
+                updateCheckEnabled = !updateCheckEnabled;
+                automaticUpdateCheckItem.Checked = updateCheckEnabled;
+                SaveLauncherSettings();
+            };
+            updateMenu = new ToolStripMenuItem(L("更新", "Updates"));
+            updateMenu.DropDownItems.Add(checkUpdateItem);
+            updateMenu.DropDownItems.Add(automaticUpdateCheckItem);
             trayMenu = new ContextMenuStrip
             {
                 ShowImageMargin = false,
@@ -429,6 +452,14 @@ namespace DshPortable
             });
         }
 
+        private ToolStripMenuItem CreateReportProblemItem()
+        {
+            return new ToolStripMenuItem(L("反馈问题", "Report a problem"), null, delegate
+            {
+                OpenExternalUrl("https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml");
+            });
+        }
+
         private void RebuildTrayMenu()
         {
             if (trayMenuOpen)
@@ -440,6 +471,13 @@ namespace DshPortable
             closeBehaviorMenu.Text = L("关闭窗口时", "When closing the window");
             closeToTrayItem.Text = L("最小化到托盘", "Minimize to tray");
             closeToExitItem.Text = L("退出程序", "Exit application");
+            updateMenu.Text = L("更新", "Updates");
+            checkUpdateItem.Text = manualUpdateRunning
+                ? L("正在检查…", "Checking…")
+                : L("检查更新", "Check for updates");
+            checkUpdateItem.Enabled = !manualUpdateRunning;
+            automaticUpdateCheckItem.Text = L("启动时检查更新", "Check for updates at startup");
+            automaticUpdateCheckItem.Checked = updateCheckEnabled;
             trayMenu.Items.Clear();
 
             List<TrayBridgeSession> sessions = trayBridgeReady && trayState != null && trayState.sessions != null
@@ -474,6 +512,9 @@ namespace DshPortable
                 trayMenu.Items.Add(fresh);
             }
 
+            trayMenu.Items.Add(new ToolStripSeparator());
+            trayMenu.Items.Add(updateMenu);
+            trayMenu.Items.Add(CreateReportProblemItem());
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add(CreateExitItem());
             ApplyTrayTheme();
@@ -655,17 +696,34 @@ namespace DshPortable
             catch { return WindowCloseBehavior.Tray; }
         }
 
+        private bool LoadUpdateCheckEnabled()
+        {
+            try
+            {
+                string source = File.ReadAllText(LauncherSettingsPath(), Encoding.UTF8);
+                return !Regex.IsMatch(source, "\\\"updateCheckEnabled\\\"\\s*:\\s*false", RegexOptions.IgnoreCase);
+            }
+            catch { return true; }
+        }
+
         private void SaveCloseBehavior(WindowCloseBehavior behavior)
         {
             closeBehavior = behavior;
             closeToTrayItem.Checked = behavior == WindowCloseBehavior.Tray;
             closeToExitItem.Checked = behavior == WindowCloseBehavior.Exit;
+            SaveLauncherSettings();
+        }
+
+        private void SaveLauncherSettings()
+        {
             string filename = LauncherSettingsPath();
             string temporary = filename + ".tmp";
             Directory.CreateDirectory(Path.GetDirectoryName(filename));
-            File.WriteAllText(temporary, behavior == WindowCloseBehavior.Exit
-                ? "{\"schemaVersion\":1,\"closeBehavior\":\"exit\"}\r\n"
-                : "{\"schemaVersion\":1,\"closeBehavior\":\"tray\"}\r\n", new UTF8Encoding(false));
+            string close = closeBehavior == WindowCloseBehavior.Exit ? "exit" : "tray";
+            File.WriteAllText(temporary,
+                "{\"schemaVersion\":1,\"closeBehavior\":\"" + close + "\",\"updateCheckEnabled\":"
+                    + (updateCheckEnabled ? "true" : "false") + "}\r\n",
+                new UTF8Encoding(false));
             if (File.Exists(filename))
             {
                 try { File.Replace(temporary, filename, filename + ".bak", true); }
@@ -890,7 +948,8 @@ namespace DshPortable
 
         private async Task CheckAndApplyUpdateAsync()
         {
-            if (string.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK"), "1", StringComparison.Ordinal))
+            if (!updateCheckEnabled
+                || string.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK"), "1", StringComparison.Ordinal))
             {
                 ResetOperationUi();
                 return;
@@ -920,6 +979,184 @@ namespace DshPortable
                     Process.Start(new ProcessStartInfo("https://github.com/WSL043/DSH-Portable/releases/latest") { UseShellExecute = true });
             }
             ResetOperationUi();
+        }
+
+        private async Task CheckForDesktopUpdateAsync()
+        {
+            if (manualUpdateRunning) return;
+            RestoreFromTray();
+            manualUpdateRunning = true;
+            RebuildTrayMenu();
+            try
+            {
+                Tuple<int, string> check = await Task.Run(() => InvokePortableCli(new[] { "check-update", "--json", "--force" }));
+                if (check.Item1 != 0)
+                {
+                    MessageBox.Show(this,
+                        L("现在无法检查更新，请稍后再试。", "Updates could not be checked right now. Try again later."),
+                        L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                string updateStatus = JsonString(check.Item2, "status");
+                string latest = JsonString(check.Item2, "latest");
+                if (updateStatus == "current")
+                {
+                    MessageBox.Show(this,
+                        L("你使用的已经是最新版。", "You're already using the latest version."),
+                        L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (updateStatus == "unavailable")
+                {
+                    MessageBox.Show(this,
+                        L("现在无法连接更新服务，请稍后再试。", "The update service is unavailable right now. Try again later."),
+                        L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                if (updateStatus == "full-package-required")
+                {
+                    DialogResult open = MessageBox.Show(this,
+                        L("这个版本需要下载完整安装包。要现在打开下载页吗？", "This version requires a complete package. Open the download page now?")
+                            + (String.IsNullOrEmpty(latest) ? "" : "\r\n\r\n" + latest),
+                        L("发现新版", "Update available"), MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                    if (open == DialogResult.Yes)
+                        OpenExternalUrl("https://github.com/WSL043/DSH-Portable/releases/latest");
+                    else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
+                    return;
+                }
+                if (updateStatus != "available") return;
+
+                if (!trayBridgeReady)
+                {
+                    MessageBox.Show(this,
+                        L("已发现新版。为了确认不会中断任务，请稍后退出并重新打开 DSH-Portable；启动时可以选择“现在更新”或“稍后”。",
+                          "An update is available. To avoid interrupting work, exit and reopen DSH-Portable when convenient; startup will offer Update now or Later."),
+                        L("发现新版", "Update available"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (trayState != null && trayState.hasRunningSession)
+                {
+                    MessageBox.Show(this,
+                        L("任务仍在运行，本次不会中断它。任务完成后退出并重新打开，启动时再选择是否更新。",
+                          "A task is still running, so it will not be interrupted. When it finishes, exit and reopen the app to choose whether to update."),
+                        L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                DialogResult accepted = MessageBox.Show(this,
+                    L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
+                      "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later.")
+                        + (String.IsNullOrEmpty(latest) ? "" : "\r\n\r\n" + latest),
+                    L("发现新版", "Update available"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                if (accepted != DialogResult.Yes)
+                {
+                    await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
+                    return;
+                }
+                await ApplyDesktopUpdateAsync();
+            }
+            catch (Exception error)
+            {
+                MessageBox.Show(this, error.Message,
+                    L("更新失败", "Update failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                manualUpdateRunning = false;
+                RebuildTrayMenu();
+            }
+        }
+
+        private void ShowDesktopOperation(string message)
+        {
+            RestoreFromTray();
+            webView.Enabled = false;
+            launchContent.Size = new Size(504, 144);
+            statusLabel.Location = new Point(80, 53);
+            statusLabel.Size = new Size(400, 36);
+            statusLabel.AutoEllipsis = true;
+            statusLabel.Text = message;
+            progress.Visible = true;
+            updateDescription.Visible = false;
+            updateButton.Visible = false;
+            laterButton.Visible = false;
+            detailsBox.Visible = false;
+            copyButton.Visible = false;
+            closeButton.Visible = false;
+            launchPanel.Visible = true;
+            launchPanel.BringToFront();
+            CenterLaunchContent();
+        }
+
+        private async Task ApplyDesktopUpdateAsync()
+        {
+            ShowDesktopOperation(L("正在安全更新 DeepSeek Harness…", "Updating DeepSeek Harness safely…"));
+            trayBridgeReady = false;
+            Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(new[] { "update", "--no-browser", "--json" }));
+            if (updated.Item1 != 0)
+            {
+                await RestoreDesktopAfterUpdateAttemptAsync();
+                throw new InvalidOperationException(updated.Item2);
+            }
+            string url = JsonString(updated.Item2, "url");
+            if (!IsTrustedLoopbackUrl(url))
+            {
+                Tuple<int, string> status = await Task.Run(() => InvokePortableCli(new[] { "status", "--json" }));
+                url = status.Item1 == 0 ? JsonString(status.Item2, "url") : String.Empty;
+            }
+            if (!IsTrustedLoopbackUrl(url)) throw new InvalidOperationException(L(
+                "更新完成，但工作台没有返回可用的本地地址。请重新打开 DSH-Portable。",
+                "The update finished, but the workspace did not return a usable local address. Reopen DSH-Portable."));
+            await NavigateDesktopAsync(url);
+            HideDesktopOperation();
+            MessageBox.Show(this,
+                L("更新已完成。", "The update is complete."),
+                L("DSH-Portable 已更新", "DSH-Portable updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private async Task RestoreDesktopAfterUpdateAttemptAsync()
+        {
+            try
+            {
+                Tuple<int, string> status = await Task.Run(() => InvokePortableCli(new[] { "status", "--json" }));
+                string url = status.Item1 == 0 ? JsonString(status.Item2, "url") : String.Empty;
+                if (IsTrustedLoopbackUrl(url)) await NavigateDesktopAsync(url);
+            }
+            catch { }
+            HideDesktopOperation();
+        }
+
+        private async Task NavigateDesktopAsync(string url)
+        {
+            applicationUri = new Uri(url);
+            TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
+                new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
+            EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = null;
+            completed = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
+            {
+                webView.CoreWebView2.NavigationCompleted -= completed;
+                navigation.TrySetResult(eventArgs);
+            };
+            webView.CoreWebView2.NavigationCompleted += completed;
+            webView.CoreWebView2.Navigate(url);
+            Task winner = await Task.WhenAny(navigation.Task, Task.Delay(30000));
+            if (winner != navigation.Task)
+            {
+                webView.CoreWebView2.NavigationCompleted -= completed;
+                throw new TimeoutException(L("更新后的工作台未能在 30 秒内打开。", "The updated workspace did not open within 30 seconds."));
+            }
+            CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
+            if (!result.IsSuccess) throw new InvalidOperationException(L("更新后的工作台加载失败：", "The updated workspace could not load: ") + result.WebErrorStatus);
+            backendStarted = true;
+        }
+
+        private void HideDesktopOperation()
+        {
+            launchPanel.Visible = false;
+            webView.Enabled = true;
+            webView.Visible = true;
+            webView.BringToFront();
         }
 
         private async Task ShowDesktopAsync(string url)

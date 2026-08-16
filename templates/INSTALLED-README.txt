@@ -8,6 +8,7 @@ DeepSeek-Herness
 
 关闭窗口默认会收进系统托盘，正在执行的任务继续运行。右键托盘图标可以重新
 打开窗口、完全退出，或把“关闭窗口时”改成直接退出。
+托盘也可以手动检查更新，或关闭启动时自动检查；运行中的任务不会被更新中断。
 
 设置、凭据、会话、插件、桌面数据和默认工作区保存在：
 
@@ -30,6 +31,8 @@ Open DeepSeek-Herness from the Start menu or desktop shortcut.
 Closing the window sends the app to the system tray by default so active tasks
 continue. The tray menu can reopen the window, exit the app completely, or change
 the close behavior to exit directly.
+It can also check for updates manually or turn off startup checks. Updates never
+interrupt a running task.
 
 Settings, credentials, sessions, plugins, desktop data, and the default workspace
 remain in:
