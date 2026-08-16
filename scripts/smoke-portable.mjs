@@ -46,7 +46,7 @@ function startNativeHost(command, args = [], options = {}) {
     child.once('error', reject)
     child.once('exit', (code, signal) => resolve({ code, signal, stdout, stderr }))
   })
-  return { child, completion }
+  return { child, completion, output: () => ({ stdout, stderr }) }
 }
 
 const delay = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
@@ -72,7 +72,19 @@ async function waitForPortableStatus(root, expected, nativeHost, timeoutMs = 90_
     if (latest?.status === expected) return latest
     await delay(250)
   }
-  assert.fail(`portable status did not become ${expected}; latest=${JSON.stringify(latest)}`)
+  const nativeOutput = nativeHost?.output() ?? { stdout: '', stderr: '' }
+  const [dshStdout, dshStderr] = await Promise.all([
+    readFile(path.join(root, 'data', 'logs', 'dsh.stdout.log'), 'utf8').catch(() => ''),
+    readFile(path.join(root, 'data', 'logs', 'dsh.stderr.log'), 'utf8').catch(() => ''),
+  ])
+  const details = [
+    `portable status did not become ${expected}; latest=${JSON.stringify(latest)}`,
+    nativeOutput.stderr && `native stderr:\n${nativeOutput.stderr}`,
+    nativeOutput.stdout && `native stdout:\n${nativeOutput.stdout}`,
+    dshStderr && `DSH stderr:\n${dshStderr}`,
+    dshStdout && `DSH stdout:\n${dshStdout}`,
+  ].filter(Boolean).join('\n')
+  assert.fail(details)
 }
 
 async function requestMacAppQuit(nativeHost) {
