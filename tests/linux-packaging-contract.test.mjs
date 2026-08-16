@@ -54,7 +54,9 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(build, /DeepSeek-Herness-linux-\$ARCH\.AppImage/)
   assert.match(build, /rustc --version[\s\S]+rustc 1\.88\.0/)
   assert.match(build, /cargo metadata --locked/)
-  assert.match(build, /npm exec -- tauri build --bundles appimage/)
+  assert.match(build, /command -v patchelf/)
+  assert.match(build, /NO_STRIP=true npm exec -- tauri build --verbose --bundles appimage/)
+  assert.match(workflow, /libwebkit2gtk-4\.1-dev[\s\\]+patchelf/)
   assert.match(cli, /\['win32',\s*'darwin',\s*'linux'\]/)
 })
 

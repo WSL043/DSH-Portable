@@ -168,10 +168,11 @@ done
   cd "$PROJECT_ROOT/launcher/linux"
   RUST_VERSION="$(rustc --version)"
   [[ "$RUST_VERSION" == rustc\ 1.88.0* ]] || { echo "Linux build requires rustc 1.88.0, got: $RUST_VERSION" >&2; exit 1; }
+  command -v patchelf >/dev/null || { echo "Linux build requires patchelf" >&2; exit 1; }
   cargo fmt --all -- --check
   cargo metadata --locked --format-version 1 >/dev/null
   npm ci --no-audit --no-fund
-  npm exec -- tauri build --bundles appimage
+  NO_STRIP=true npm exec -- tauri build --verbose --bundles appimage
 )
 
 NATIVE_HOST="$PROJECT_ROOT/launcher/linux/target/release/deepseek-herness-linux"
