@@ -9,6 +9,9 @@
 *.sh text eol=lf
 *.command text eol=lf
 *.plist text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+Cargo.lock text eol=lf
 launcher/macos/DSH-Portable text eol=lf
 launcher/macos/DeepSeek-Herness-installed text eol=lf
 launcher/macos/Stop-DeepSeek-Herness-installed text eol=lf

@@ -558,11 +558,15 @@ fn run_dsh_passthrough(layout: &ProductLayout, args: &[String]) -> i32 {
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    if executable_dir()
+    let direct_mode = args
+        .first()
+        .is_some_and(|arg| arg == "dsh" || arg == "--diagnostic-root-json");
+    let bundled_payload = executable_dir()
         .ok()
         .as_deref()
         .is_some_and(has_product_payload)
-    {
+        || env::var_os("APPDIR").is_some();
+    if direct_mode && bundled_payload {
         let layout = resolve_layout(None).expect("portable layout could not be resolved");
         if args.first().is_some_and(|arg| arg == "dsh") {
             std::process::exit(run_dsh_passthrough(&layout, &args[1..]));

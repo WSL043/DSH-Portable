@@ -49,6 +49,7 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /check-update/)
   assert.match(source, /defer-update/)
   assert.match(source, /DSH_PORTABLE_STATE_ROOT/)
+  assert.match(source, /direct_mode[\s\S]+env::var_os\("APPDIR"\)\.is_some\(\)[\s\S]+resolve_layout\(None\)/)
   assert.doesNotMatch(source, /xdg-open|gio\s+open|Command::new\("(?:firefox|chromium|google-chrome)"/i)
   assert.match(config, /"productName"\s*:\s*"DeepSeek-Herness"/)
   assert.match(config, /"targets"\s*:\s*\[\s*"appimage"/)
@@ -63,6 +64,7 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(rootCli, /ROOT=\$\(CDPATH= cd -- "\$\(dirname -- "\$0"\)" && pwd\)/)
   assert.doesNotMatch(rootCli, /dirname[^\n]+\.\.\/\.\./)
   assert.match(attributes, /^launcher\/linux\/dsh text eol=lf$/m)
+  assert.match(attributes, /^\*\.rs text eol=lf$/m)
   assert.match(cli, /\['win32',\s*'darwin',\s*'linux'\]/)
 })
 
@@ -82,6 +84,7 @@ test('Linux packaging and real product smokes run independently on x64 and arm64
   assert.match(workflow, /smoke-linux-desktop-host\.sh/)
   assert.match(workflow, /xvfb-run/)
   assert.match(appImagePluginSmoke, /APPIMAGE_EXTRACT_AND_RUN=1/)
+  assert.match(appImagePluginSmoke, /if ! mutation="\$\(run_dsh[\s\S]+printf[^\n]+mutation/)
   assert.match(appImagePluginSmoke, /plugin --profile "\$PROFILE" add/)
   assert.match(appImagePluginSmoke, /--dump-config/)
   assert.match(appImagePluginSmoke, /DSH-Portable-data/)

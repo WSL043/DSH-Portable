@@ -25,7 +25,10 @@ run_dsh() {
 }
 
 echo '[linux-appimage-plugin-smoke] add/list/dump/remove from the one-click package'
-mutation="$(run_dsh plugin --profile "$PROFILE" add "$ARCHIVE" 2>&1)"
+if ! mutation="$(run_dsh plugin --profile "$PROFILE" add "$ARCHIVE" 2>&1)"; then
+  printf '%s\n' "$mutation" >&2
+  exit 1
+fi
 grep -Eq '不会自动重启|never restarts' <<<"$mutation"
 run_dsh plugin --profile "$PROFILE" list --depth 0 --json | grep -q 'dsh-portable-smoke-plugin'
 run_dsh --profile "$PROFILE" --dump-config | grep -q 'dsh-portable-smoke-v1'
