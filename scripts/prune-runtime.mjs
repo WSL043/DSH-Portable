@@ -15,7 +15,10 @@ await access(path.join(ptyRoot, 'package.json'))
 const target = `${platform}-${architecture}`
 const allowed = new Set(['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64'])
 assert.equal(allowed.has(target), true, `unsupported runtime prune target: ${target}`)
-await access(path.join(prebuildRoot, target))
+const linuxNativeRoot = path.join(ptyRoot, 'build', 'Release')
+const nativeRoot = platform === 'linux' ? linuxNativeRoot : path.join(prebuildRoot, target)
+await access(path.join(nativeRoot, 'pty.node'))
+if (platform === 'linux') await access(path.join(nativeRoot, 'spawn-helper'))
 
 async function bytes(root) {
   const info = await stat(root)
@@ -73,14 +76,30 @@ async function removeDebugSymbols(root) {
 
 const before = await bytes(ptyRoot)
 for (const entry of await readdir(prebuildRoot, { withFileTypes: true })) {
-  if (entry.isDirectory() && entry.name !== target) await removeTree(path.join(prebuildRoot, entry.name))
+  if (entry.isDirectory() && (platform === 'linux' || entry.name !== target)) {
+    await removeTree(path.join(prebuildRoot, entry.name))
+  }
 }
-await removeDebugSymbols(path.join(prebuildRoot, target))
+await removeDebugSymbols(nativeRoot)
+
+if (platform === 'linux') {
+  const buildRoot = path.join(ptyRoot, 'build')
+  for (const entry of await readdir(buildRoot, { withFileTypes: true })) {
+    if (entry.name !== 'Release') await removeTree(path.join(buildRoot, entry.name))
+  }
+  for (const entry of await readdir(linuxNativeRoot, { withFileTypes: true })) {
+    if (!['pty.node', 'spawn-helper'].includes(entry.name)) {
+      await removeTree(path.join(linuxNativeRoot, entry.name))
+    }
+  }
+}
 
 // npm install has already selected and validated the target prebuild. These
 // directories contain only build inputs or TypeScript declarations and are not
 // read by node-pty's runtime loader.
-for (const name of ['benchmark', 'benchmarks', 'build', 'deps', 'examples', 'scripts', 'src', 'test', 'tests', 'third_party', 'typings']) {
+const removablePtyDirectories = ['benchmark', 'benchmarks', 'deps', 'examples', 'scripts', 'src', 'test', 'tests', 'third_party', 'typings']
+if (platform !== 'linux') removablePtyDirectories.push('build')
+for (const name of removablePtyDirectories) {
   const filename = path.join(ptyRoot, name)
   try {
     await removeTree(filename)
@@ -103,11 +122,11 @@ try {
   if (error?.code !== 'ENOENT') throw error
 }
 
-const targetFiles = await readdir(path.join(prebuildRoot, target))
+const targetFiles = await readdir(nativeRoot)
 assert.equal(targetFiles.some((name) => name.endsWith('.node')), true, `node-pty target ${target} has no native module`)
 assert.equal(targetFiles.some((name) => name.endsWith('.pdb')), false, `node-pty target ${target} retained debug symbols`)
 const remainingTargets = (await readdir(prebuildRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
-assert.deepEqual(remainingTargets, [target])
+assert.deepEqual(remainingTargets, platform === 'linux' ? [] : [target])
 
 const after = await bytes(ptyRoot)
 console.log(JSON.stringify({

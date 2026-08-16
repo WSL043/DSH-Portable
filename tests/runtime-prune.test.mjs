@@ -101,3 +101,30 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   assert.ok(report.removedDirectories >= 5)
   assert.equal(await readFile(path.join(appDir, 'node_modules', 'example-package', 'NOTICE.md'), 'utf8'), 'must remain too')
 })
+
+test('Linux pruning keeps only the native node-pty runtime products', async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-prune-linux-'))
+  t.after(() => rm(temporary, { recursive: true, force: true }))
+  const appDir = path.join(temporary, 'app')
+
+  await fixtureFile(appDir, 'node-pty/package.json', '{"name":"node-pty"}')
+  await fixtureFile(appDir, 'node-pty/lib/index.js', 'module.exports = true')
+  await fixtureFile(appDir, 'node-pty/build/Release/pty.node', 'native')
+  await fixtureFile(appDir, 'node-pty/build/Release/spawn-helper', 'helper')
+  await fixtureFile(appDir, 'node-pty/build/Release/obj.target/pty/src/unix/pty.o', 'object')
+  await fixtureFile(appDir, 'node-pty/build/Makefile', 'generated')
+  await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/pty.node', 'windows')
+  await fixtureFile(appDir, 'node-pty/prebuilds/darwin-arm64/pty.node', 'mac')
+
+  const result = spawnSync(process.execPath, [pruneScript, appDir, 'linux', 'x64'], {
+    encoding: 'utf8',
+  })
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Release/pty.node')), true)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Release/spawn-helper')), true)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Release/obj.target')), false)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Makefile')), false)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/win32-x64')), false)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-arm64')), false)
+  assert.equal(JSON.parse(result.stdout.trim()).target, 'linux-x64')
+})
