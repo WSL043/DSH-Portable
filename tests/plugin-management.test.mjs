@@ -39,6 +39,20 @@ test('portable plugin CLI uses bundled Node, pnpm, and portable DSH_HOME without
   assert.equal(process.env.DSH_HOME, undefined)
 })
 
+test('Linux plugin CLI uses a product-owned pnpm entry instead of npm .bin links', async () => {
+  const root = '/media/user/USB Drive/DSH-Portable'
+  const spec = buildPluginCliSpec(root, root, [
+    'plugin', '--profile', 'web', 'list', '--depth', '0',
+  ], 'linux', { PATH: '/usr/bin' })
+
+  assert.equal(spec.layout.packageManagerBin, path.posix.join(root, 'launcher', 'pnpm'))
+  assert.deepEqual(spec.env.PATH.split(':').slice(0, 3), [
+    path.posix.join(root, 'runtime', 'node', 'bin'),
+    path.posix.join(root, 'launcher'),
+    '/usr/bin',
+  ])
+})
+
 test('installed plugin CLI expands installed-mode stateRoot and keeps the profile outside the app', async () => {
   const root = 'C:\\Program Files\\DeepSeek-Herness'
   const installedMode = JSON.stringify({

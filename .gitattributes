@@ -16,6 +16,7 @@ launcher/macos/DSH-Portable text eol=lf
 launcher/macos/DeepSeek-Herness-installed text eol=lf
 launcher/macos/Stop-DeepSeek-Herness-installed text eol=lf
 launcher/linux/dsh text eol=lf
+launcher/linux/pnpm text eol=lf
 .gitattributes text eol=lf
 .gitignore text eol=lf
 LICENSE text eol=lf

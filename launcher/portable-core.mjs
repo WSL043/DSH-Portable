@@ -49,7 +49,9 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     packageManagerStore: paths.join(dataDir, 'pnpm-store'),
     packageManagerBin: platform === 'win32'
       ? paths.join(appBinDir, 'pnpm.cmd')
-      : paths.join(appBinDir, 'pnpm'),
+      : platform === 'linux'
+        ? paths.join(portableRoot, 'launcher', 'pnpm')
+        : paths.join(appBinDir, 'pnpm'),
     platform,
     portableCli: paths.join(portableRoot, 'launcher', 'portable-cli.mjs'),
     portableMeta: paths.join(dataDir, 'portable.json'),
@@ -103,7 +105,7 @@ export function buildDshEnv(layout, source = process.env) {
     DSH_HOME: layout.dshHome,
     DSH_PORTABLE: '1',
     DSH_TELEMETRY_MODE: 'DISABLED',
-    PATH: [paths.dirname(layout.nodeExe), layout.appBinDir, source.PATH ?? ''].filter(Boolean).join(separator),
+    PATH: [paths.dirname(layout.nodeExe), paths.dirname(layout.packageManagerBin), source.PATH ?? ''].filter(Boolean).join(separator),
   }
   for (const key of Object.keys(environment)) {
     if (key.toLowerCase() === 'pnpm_config_store_dir') delete environment[key]

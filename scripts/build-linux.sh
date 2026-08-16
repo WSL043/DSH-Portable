@@ -69,6 +69,8 @@ for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs
 done
 cp "$PROJECT_ROOT/launcher/linux/dsh" "$STAGE/dsh"
 chmod 755 "$STAGE/dsh"
+cp "$PROJECT_ROOT/launcher/linux/pnpm" "$STAGE/launcher/pnpm"
+chmod 755 "$STAGE/launcher/pnpm"
 cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
 cp "$PROJECT_ROOT/templates/DATA-README.txt" "$STAGE/data/README.txt"
 cp "$PROJECT_ROOT/templates/WORKSPACE-README.txt" "$STAGE/workspace/README.txt"

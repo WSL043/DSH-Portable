@@ -28,7 +28,7 @@ test('Linux uses architecture-specific component update channels', () => {
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
-  const [cargo, cargoLock, source, config, build, cli, rootCli, attributes, workflow] = await Promise.all([
+  const [cargo, cargoLock, source, config, build, cli, rootCli, pnpmCli, attributes, workflow] = await Promise.all([
     read('launcher/linux/Cargo.toml'),
     read('launcher/linux/Cargo.lock'),
     read('launcher/linux/src/main.rs'),
@@ -36,6 +36,7 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
     read('scripts/build-linux.sh'),
     read('launcher/portable-cli.mjs'),
     read('launcher/linux/dsh'),
+    read('launcher/linux/pnpm'),
     read('.gitattributes'),
     read('.github/workflows/ci.yml'),
   ])
@@ -65,7 +66,11 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(workflow, /libayatana-appindicator3-1[\s\\]+libwebkit2gtk-4\.1-0/)
   assert.match(rootCli, /ROOT=\$\(CDPATH= cd -- "\$\(dirname -- "\$0"\)" && pwd\)/)
   assert.doesNotMatch(rootCli, /dirname[^\n]+\.\.\/\.\./)
+  assert.match(pnpmCli, /app\/node_modules\/pnpm\/bin\/pnpm\.mjs/)
+  assert.doesNotMatch(pnpmCli, /node_modules\/\.bin/)
+  assert.match(build, /launcher\/linux\/pnpm[\s\S]+STAGE\/launcher\/pnpm/)
   assert.match(attributes, /^launcher\/linux\/dsh text eol=lf$/m)
+  assert.match(attributes, /^launcher\/linux\/pnpm text eol=lf$/m)
   assert.match(attributes, /^\*\.rs text eol=lf$/m)
   assert.match(cli, /\['win32',\s*'darwin',\s*'linux'\]/)
 })
