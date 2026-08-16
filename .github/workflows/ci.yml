@@ -210,6 +210,7 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           ./scripts/smoke-windows-desktop-host.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable')
 
   windows-bootstrap-smoke:
     name: Windows lightweight bootstrap

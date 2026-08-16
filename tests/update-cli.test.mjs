@@ -30,7 +30,7 @@ import http from 'node:http'
 const args = process.argv.slice(2)
 if (args.includes('--version') || args.includes('-V')) {
   console.log(${JSON.stringify(version)})
-} else if (args[0] === 'web') {
+} else if (args.includes('web')) {
   const port = Number(args[args.indexOf('--port') + 1])
   const server = http.createServer((_request, response) => response.end('DSH ${version}'))
   process.on('SIGTERM', () => server.close(() => process.exit(0)))
@@ -45,9 +45,13 @@ async function makeComponentArchive(root, version, portableVersion) {
   const buildRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-component-'))
   const source = path.join(buildRoot, 'component-source')
   const dshBin = path.join(source, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  const bridgePatch = path.join(source, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'cordis.patch.yml')
   await mkdir(path.dirname(dshBin), { recursive: true })
+  await mkdir(path.dirname(bridgePatch), { recursive: true })
   await mkdir(path.join(source, 'licenses'), { recursive: true })
   await writeFile(dshBin, fakeDsh(version))
+  await writeFile(bridgePatch, '- insert: []\n')
+  await writeFile(path.join(path.dirname(bridgePatch), 'package.json'), '{"name":"@wsl043/dsh-portable-desktop-bridge"}\n')
   await writeFile(path.join(source, 'app', 'package.json'), '{"name":"updated-fixture"}\n')
   await writeFile(path.join(source, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
     product: 'DSH-Portable',
@@ -84,8 +88,10 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       ? path.join(root, 'runtime', 'node', 'bin', 'node')
       : path.join(root, 'runtime', 'node', 'node.exe')
     const oldDsh = path.join(root, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+    const oldBridgePatch = path.join(root, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'cordis.patch.yml')
     await mkdir(path.dirname(runtimeNode), { recursive: true })
     await mkdir(path.dirname(oldDsh), { recursive: true })
+    await mkdir(path.dirname(oldBridgePatch), { recursive: true })
     await mkdir(path.join(root, 'launcher'), { recursive: true })
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
@@ -95,6 +101,8 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))
     await writeFile(oldDsh, fakeDsh('0.1.0-rc.6'))
+    await writeFile(oldBridgePatch, '- insert: []\n')
+    await writeFile(path.join(path.dirname(oldBridgePatch), 'package.json'), '{"name":"@wsl043/dsh-portable-desktop-bridge"}\n')
     await writeFile(path.join(root, 'app', 'package.json'), '{"name":"old-fixture"}\n')
     await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
       product: 'DSH-Portable',

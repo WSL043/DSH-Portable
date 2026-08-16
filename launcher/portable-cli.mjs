@@ -13,6 +13,7 @@ import {
   acquireLaunchLock,
   browserLaunchSpec,
   buildDshEnv,
+  ensureDesktopBridgeFallback,
   ensurePortableDirectories,
   isOwnedDshProcess,
   isOwnedPortableBrowserProcess,
@@ -35,8 +36,10 @@ const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_ST
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
 const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
-function requireRuntime() {
-  for (const filename of [layout.nodeExe, layout.dshBin, layout.hostBin]) {
+function requireRuntime({ desktopBridge = false } = {}) {
+  const required = [layout.nodeExe, layout.dshBin, layout.hostBin]
+  if (desktopBridge) required.push(layout.desktopBridgePatch)
+  for (const filename of required) {
     if (!existsSync(filename)) throw new Error(`Portable runtime is incomplete: ${filename}`)
   }
 }
@@ -260,8 +263,9 @@ function tailSince(filename, offset, maxBytes = 8000) {
 }
 
 async function start(noBrowser) {
-  requireRuntime()
+  requireRuntime({ desktopBridge: true })
   await ensurePortableDirectories(layout)
+  await ensureDesktopBridgeFallback(layout)
   const migration = await migratePortableRoot(layout)
   const prior = readProcessState()
   if (ownedState(prior) && await httpReady(prior.port)) {
@@ -286,7 +290,13 @@ async function start(noBrowser) {
     : path.join('/tmp', `dshp-${process.pid}-${randomBytes(8).toString('hex')}.sock`)
   if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
   const controlToken = randomBytes(32).toString('hex')
-  const child = spawn(layout.nodeExe, [layout.hostBin, layout.dshBin, 'web', '--host', '127.0.0.1', '--port', String(port)], {
+  const child = spawn(layout.nodeExe, [
+    layout.hostBin,
+    layout.dshBin,
+    '--profile', 'web',
+    '--patch', layout.desktopBridgePatch,
+    '--host', '127.0.0.1', '--port', String(port),
+  ], {
     cwd: layout.workspace,
     env: {
       ...buildDshEnv(layout),

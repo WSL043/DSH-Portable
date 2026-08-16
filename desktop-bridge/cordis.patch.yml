@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-portable-desktop-bridge
+      name: '@wsl043/dsh-portable-desktop-bridge'

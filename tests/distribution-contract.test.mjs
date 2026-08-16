@@ -7,9 +7,13 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 
-test('runtime dependency boundary contains official DSH and its pinned package manager only', async () => {
+test('runtime dependency boundary contains official DSH, the private desktop bridge, and its pinned package manager only', async () => {
   const runtime = JSON.parse(await read('app/package.json'))
-  assert.deepEqual(runtime.dependencies, { '@deepseek-ai/dsh': '0.1.0-rc.6', pnpm: '11.7.0' })
+  assert.deepEqual(runtime.dependencies, {
+    '@deepseek-ai/dsh': '0.1.0-rc.6',
+    '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
+    pnpm: '11.7.0',
+  })
   const serialized = JSON.stringify(runtime)
   for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
     assert.equal(serialized.includes(forbidden), false, forbidden)
@@ -46,6 +50,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const rootPackage = lockfile.packages['']
   assert.deepEqual(rootPackage.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
+    '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     pnpm: upstream.pnpm.version,
   })
   const dsh = lockfile.packages['node_modules/@deepseek-ai/dsh']
@@ -54,6 +59,9 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const pnpm = lockfile.packages['node_modules/pnpm']
   assert.equal(pnpm.version, upstream.pnpm.version)
   assert.equal(pnpm.integrity, upstream.pnpm.integrity)
+  const desktopBridge = lockfile.packages['node_modules/@wsl043/dsh-portable-desktop-bridge']
+  assert.equal(desktopBridge.resolved, 'file:../desktop-bridge')
+  assert.equal(desktopBridge.license, 'MIT')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {
