@@ -76,8 +76,10 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
 })
 
 test('Linux packaging and real product smokes run independently on x64 and arm64', async () => {
-  const [workflow, appImagePluginSmoke] = await Promise.all([
+  const [workflow, build, updateSmoke, appImagePluginSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
+    read('scripts/build-linux.sh'),
+    read('scripts/smoke-update-artifact.mjs'),
     read('scripts/smoke-linux-appimage-plugins.sh'),
   ])
   for (const runner of ['ubuntu-22.04', 'ubuntu-22.04-arm']) assert.match(workflow, new RegExp(runner.replaceAll('.', '\\.')))
@@ -90,6 +92,8 @@ test('Linux packaging and real product smokes run independently on x64 and arm64
   assert.match(workflow, /smoke-linux-appimage-plugins\.sh/)
   assert.match(workflow, /smoke-linux-desktop-host\.sh/)
   assert.match(workflow, /xvfb-run/)
+  assert.match(build, /zip -q -y -r "\$UPDATE_COMPONENT"/)
+  assert.match(updateSmoke, /execFileAsync\('zip', \['-q', '-y', '-r', probeArchive/)
   assert.match(appImagePluginSmoke, /APPIMAGE_EXTRACT_AND_RUN=1/)
   assert.match(appImagePluginSmoke, /if ! mutation="\$\(run_dsh[\s\S]+printf[^\n]+mutation/)
   assert.match(appImagePluginSmoke, /plugin --profile "\$PROFILE" add/)

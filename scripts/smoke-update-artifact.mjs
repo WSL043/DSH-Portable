@@ -53,7 +53,7 @@ async function buildRollbackProbe(archive, manifest) {
   } else if (process.platform === 'darwin') {
     await execFileAsync('ditto', ['-c', '-k', '--norsrc', source, probeArchive])
   } else {
-    await execFileAsync('zip', ['-q', '-r', probeArchive, '.'], { cwd: source })
+    await execFileAsync('zip', ['-q', '-y', '-r', probeArchive, '.'], { cwd: source })
   }
   const probeManifest = structuredClone(manifest)
   probeManifest.portableVersion = portableVersion
