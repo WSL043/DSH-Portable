@@ -119,13 +119,30 @@ fn read_components(root: &Path) -> io::Result<Components> {
     serde_json::from_str(&source).map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))
 }
 
+#[cfg(unix)]
+fn copy_symlink(source: &Path, target: &Path) -> io::Result<()> {
+    let link = fs::read_link(source)?;
+    std::os::unix::fs::symlink(link, target)
+}
+
+#[cfg(not(unix))]
+fn copy_symlink(_source: &Path, _target: &Path) -> io::Result<()> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Linux product symlinks cannot be materialized on this host",
+    ))
+}
+
 fn copy_tree(source: &Path, target: &Path) -> io::Result<()> {
     fs::create_dir_all(target)?;
     for entry in fs::read_dir(source)? {
         let entry = entry?;
         let source_path = entry.path();
         let target_path = target.join(entry.file_name());
-        if entry.file_type()?.is_dir() {
+        let file_type = entry.file_type()?;
+        if file_type.is_symlink() {
+            copy_symlink(&source_path, &target_path)?;
+        } else if file_type.is_dir() {
             copy_tree(&source_path, &target_path)?;
         } else {
             fs::copy(&source_path, &target_path)?;

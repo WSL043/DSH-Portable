@@ -50,6 +50,8 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /defer-update/)
   assert.match(source, /DSH_PORTABLE_STATE_ROOT/)
   assert.match(source, /direct_mode[\s\S]+env::var_os\("APPDIR"\)\.is_some\(\)[\s\S]+resolve_layout\(None\)/)
+  assert.match(source, /fn copy_symlink[\s\S]+read_link[\s\S]+unix::fs::symlink/)
+  assert.match(source, /file_type\.is_symlink\(\)[\s\S]+copy_symlink/)
   assert.doesNotMatch(source, /xdg-open|gio\s+open|Command::new\("(?:firefox|chromium|google-chrome)"/i)
   assert.match(config, /"productName"\s*:\s*"DeepSeek-Herness"/)
   assert.match(config, /"targets"\s*:\s*\[\s*"appimage"/)
