@@ -16,6 +16,7 @@
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=171717" alt="Latest release"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-171717?style=flat-square" alt="Windows and macOS">
+  <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="Star DSH-Portable on GitHub"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2F855A?style=flat-square" alt="MIT license"></a>
 </p>
 
@@ -147,6 +148,9 @@ The repository pins dependencies, release contents, and finished-product tests. 
 download verification, so normal users do not need to compare checksums manually.
 
 </details>
+
+If DSH-Portable helps you, consider giving it a
+[**Star**](https://github.com/WSL043/DSH-Portable). It helps more people who need a portable DSH find the project.
 
 DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is maintained
 independently by WSL043 and is not endorsed by DeepSeek.

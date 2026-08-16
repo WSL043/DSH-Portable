@@ -16,6 +16,7 @@
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=171717" alt="最新版本"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-171717?style=flat-square" alt="Windows 和 macOS">
+  <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="在 GitHub 上 Star DSH-Portable"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2F855A?style=flat-square" alt="MIT 许可证"></a>
 </p>
 
@@ -147,6 +148,9 @@ bash scripts/build-macos.sh arm64   # 或 x64
 手动比对校验值。
 
 </details>
+
+如果 DSH-Portable 对你有帮助，欢迎在 GitHub 上给它点一个
+[**Star**](https://github.com/WSL043/DSH-Portable)。这会帮助更多需要便携 DSH 的用户找到它。
 
 DeepSeek Harness、DeepSeek 名称与标志归 DeepSeek 所有。DSH-Portable 由 WSL043
 独立维护，未获 DeepSeek 背书。
