@@ -77,7 +77,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.7')
+  assert.equal(manifest.version, '0.2.0-rc.8')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -190,10 +190,11 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.match(macBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-macos-\$ARCH\.zip/)
 })
 
-test('official preview updates become tested candidate pull requests instead of manual issues', async () => {
-  const [workflow, updater] = await Promise.all([
+test('installable official preview updates become tested candidates while source-only activity stays informational', async () => {
+  const [workflow, updater, upstreamState] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     read('scripts/update-upstream.mjs'),
+    read('scripts/upstream-state.mjs'),
   ])
 
   assert.match(workflow, /pull-requests:\s*write/)
@@ -202,8 +203,10 @@ test('official preview updates become tested candidate pull requests instead of 
   assert.match(workflow, /gh pr (?:create|edit)/)
   assert.doesNotMatch(workflow, /issues:\s*write/)
   assert.match(updater, /registry\.npmjs\.org/)
-  assert.match(updater, /dist-tags/)
-  assert.match(updater, /integrity/)
+  assert.match(upstreamState, /dist-tags/)
+  assert.match(upstreamState, /integrity/)
+  assert.match(upstreamState, /changed:\s*packageChanged/)
+  assert.match(workflow, /No candidate PR was created because there is no new installable package/)
   assert.match(updater, /package-lock-only/)
   assert.match(updater, /upstream\.lock\.json/)
 })
@@ -290,9 +293,9 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*6/)
-  assert.match(build, /requiredShellSchema\s*=\s*6/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.7"\)/)
+  assert.match(build, /shellSchema\s*=\s*7/)
+  assert.match(build, /requiredShellSchema\s*=\s*7/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.8"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -469,9 +472,9 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 6/)
-  assert.match(build, /"requiredShellSchema": 6/)
-  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>3<\/string>/s)
+  assert.match(build, /"shellSchema": 7/)
+  assert.match(build, /"requiredShellSchema": 7/)
+  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>4<\/string>/s)
   assert.match(app, /check-update/)
   assert.match(app, /defer-update/)
   assert.doesNotMatch(app, /--app=/)

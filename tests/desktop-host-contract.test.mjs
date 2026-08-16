@@ -81,6 +81,9 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(windowsSmoke, /CloseMainWindow/)
   assert.match(windowsSmoke, /minimiz(?:e|ed).+tray|托盘/is)
   assert.match(windowsSmoke, /launcher-settings\.json/)
+  assert.match(windowsSmoke, /window-state\.json/)
+  assert.match(windowsSmoke, /SetWindowPos/)
+  assert.match(windowsSmoke, /not restored after restart/)
   assert.doesNotMatch(windowsSmoke, /Stop DeepSeek-Herness\.exe/)
   assert.match(windowsSmoke, /function Get-ProductStatus/)
   assert.match(windowsSmoke, /Another portable launcher is already starting or stopping DSH/)
@@ -113,4 +116,25 @@ test('macOS package smokes treat the native app as a long-lived desktop process'
   assert.match(dmgSmoke, /status --json/)
   assert.match(dmgSmoke, /tell application id "io\.github\.wsl043\.dsh-portable\.installed" to quit/)
   assert.doesNotMatch(dmgSmoke, /^"\$APP\/Contents\/MacOS\/DeepSeek-Herness"$/m)
+})
+
+test('native hosts preserve only safe on-screen window placement in product data', async () => {
+  const [windowsHost, macHost] = await Promise.all([
+    read('launcher/windows/DSH-Portable.cs'),
+    read('launcher/macos/DeepSeek-Herness.swift'),
+  ])
+
+  assert.match(windowsHost, /window-state\.json/)
+  assert.match(windowsHost, /SaveDesktopWindowState/)
+  assert.match(windowsHost, /RestoreDesktopWindowState/)
+  assert.match(windowsHost, /RestoreBounds/)
+  assert.match(windowsHost, /Screen\.AllScreens/)
+  assert.match(windowsHost, /Rectangle\.Intersect/)
+
+  assert.match(macHost, /window-state\.json/)
+  assert.match(macHost, /saveWindowFrame/)
+  assert.match(macHost, /restoreWindowFrame/)
+  assert.match(macHost, /NSScreen\.screens/)
+  assert.match(macHost, /visibleFrame\.intersection/)
+  assert.match(macHost, /options:\s*\.atomic/)
 })

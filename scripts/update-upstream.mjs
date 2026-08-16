@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { appendFile, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { evaluateUpstream } from './upstream-state.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tag = process.argv.includes('--latest') ? 'latest' : 'next'
@@ -22,11 +23,13 @@ const [registry, commit, currentLock] = await Promise.all([
   json('https://api.github.com/repos/deepseek-ai/deepseek-harness/commits/master'),
   readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
 ])
-const version = registry['dist-tags']?.[tag]
-const published = registry.versions?.[version]
-if (!version || !published?.dist?.integrity) throw new Error(`official npm tag ${tag} has no verifiable package integrity`)
-
-const changed = version !== currentLock.dsh.version || commit.sha !== currentLock.dsh.reviewedCommit
+const state = evaluateUpstream({
+  lock: currentLock,
+  registry,
+  commit,
+  requestedTag: tag,
+})
+const { changed, version } = state
 if (changed) {
   const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm'
   const install = spawnSync(npm, [
@@ -37,20 +40,33 @@ if (changed) {
 
   const packageLock = JSON.parse(await readFile(path.join(root, 'app', 'package-lock.json'), 'utf8'))
   const lockedDsh = packageLock.packages?.['node_modules/@deepseek-ai/dsh']
-  if (lockedDsh?.version !== version || lockedDsh?.integrity !== published.dist.integrity) {
+  if (lockedDsh?.version !== version || lockedDsh?.integrity !== state.integrity) {
     throw new Error('refreshed package lock does not match the official npm version and integrity')
   }
   currentLock.dsh.version = version
-  currentLock.dsh.integrity = published.dist.integrity
-  currentLock.dsh.reviewedCommit = commit.sha
+  currentLock.dsh.integrity = state.integrity
+  currentLock.dsh.reviewedCommit = state.commit
   const target = path.join(root, 'upstream.lock.json')
   const temporary = `${target}.tmp`
   await writeFile(temporary, `${JSON.stringify(currentLock, null, 2)}\n`, 'utf8')
   await rename(temporary, target)
 }
 
-const result = { changed, tag, version, commit: commit.sha }
+const result = {
+  changed,
+  packageChanged: state.packageChanged,
+  sourceChanged: state.sourceChanged,
+  tag: state.selectedTag,
+  version,
+  commit: state.commit,
+}
 console.log(JSON.stringify(result, null, 2))
 if (process.env.GITHUB_OUTPUT) {
-  await appendFile(process.env.GITHUB_OUTPUT, `changed=${changed}\nversion=${version}\ncommit=${commit.sha}\n`)
+  await appendFile(process.env.GITHUB_OUTPUT, [
+    `changed=${changed}`,
+    `version=${version}`,
+    `commit=${state.commit}`,
+    `source_changed=${state.sourceChanged}`,
+    '',
+  ].join('\n'))
 }

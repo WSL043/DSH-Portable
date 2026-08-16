@@ -52,7 +52,7 @@ workspace language can also be changed in **Settings**, and that choice is remem
 - **One complete work environment**: sessions, settings, plugins, default workspace, and desktop data move together.
 - **Continue from a new location**: copy the folder to another drive, USB device, or Windows PC.
 - **Simple backup**: exit the app, then copy one folder instead of finding separate data directories.
-- **Native desktop ownership**: a dedicated window, taskbar identity, and system tray replace browser app-mode windows.
+- **Native desktop ownership**: a dedicated window, taskbar identity, system tray, and remembered window placement.
 - **Data-safe updates**: tested releases preserve local sessions, credentials, plugins, and workspace.
 - **Online or offline preparation**: use the small launcher normally or the complete ZIP on a restricted network.
 
