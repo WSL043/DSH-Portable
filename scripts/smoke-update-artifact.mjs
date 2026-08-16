@@ -29,8 +29,10 @@ async function buildRollbackProbe(archive, manifest) {
   await mkdir(source, { recursive: true })
   if (process.platform === 'win32') {
     await execFileAsync('tar.exe', ['-x', '-f', archive, '-C', source])
-  } else {
+  } else if (process.platform === 'darwin') {
     await execFileAsync('ditto', ['-x', '-k', archive, source])
+  } else {
+    await execFileAsync('unzip', ['-q', archive, '-d', source])
   }
 
   const portableVersion = '9999.0.0-rollback.1'
@@ -48,8 +50,10 @@ async function buildRollbackProbe(archive, manifest) {
 
   if (process.platform === 'win32') {
     await execFileAsync('tar.exe', ['-a', '-c', '-f', probeArchive, '-C', source, '.'])
-  } else {
+  } else if (process.platform === 'darwin') {
     await execFileAsync('ditto', ['-c', '-k', '--norsrc', source, probeArchive])
+  } else {
+    await execFileAsync('zip', ['-q', '-r', probeArchive, '.'], { cwd: source })
   }
   const probeManifest = structuredClone(manifest)
   probeManifest.portableVersion = portableVersion

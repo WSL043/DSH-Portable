@@ -74,8 +74,13 @@ async function makeComponentArchive(root, version, portableVersion) {
     dshCommit: 'b'.repeat(40),
   })}\n`)
   const archive = path.join(buildRoot, 'component.zip')
-  if (process.platform === 'darwin') await execFileAsync('ditto', ['-c', '-k', source, archive])
-  else await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', source, '.'])
+  if (process.platform === 'win32') {
+    await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', source, '.'])
+  } else if (process.platform === 'darwin') {
+    await execFileAsync('ditto', ['-c', '-k', source, archive])
+  } else {
+    await execFileAsync('zip', ['-q', '-r', archive, '.'], { cwd: source })
+  }
   return { archive, buildRoot }
 }
 
@@ -84,9 +89,9 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
   let componentBuildRoot
   let server
   try {
-    const runtimeNode = process.platform === 'darwin'
-      ? path.join(root, 'runtime', 'node', 'bin', 'node')
-      : path.join(root, 'runtime', 'node', 'node.exe')
+    const runtimeNode = process.platform === 'win32'
+      ? path.join(root, 'runtime', 'node', 'node.exe')
+      : path.join(root, 'runtime', 'node', 'bin', 'node')
     const oldDsh = path.join(root, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
     const oldBridgePatch = path.join(root, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'cordis.patch.yml')
     await mkdir(path.dirname(runtimeNode), { recursive: true })
