@@ -139,9 +139,15 @@ It is not bundled with DSH-Portable and can be installed or removed independentl
 Versions without a suffix, such as `0.2.0`, are stable releases. Versions ending in `-rc.N`
 are release candidates, are marked **Pre-release** on GitHub, and are not offered to stable users.
 
+Every notification names the DSH-Portable product version. The update window separately shows the
+current and target bundled official DSH versions and whether the engine changes in that release.
+An official DSH release is adapted and tested as a finished product before it is delivered through
+DSH-Portable; it never bypasses the desktop shell to replace a working environment directly.
+
 DSH-Portable checks for updates when it starts and asks before installing one. A normal update
-downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place. Files are verified before replacement, and a failed launch restores
-the previous version.
+downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place.
+The window shows the real download percentage and transferred size, followed by the
+verification, installation, and reopen stages. A failed launch restores the previous version.
 
 On Windows and Linux, you can **Check for updates** from the system tray; on macOS, use the application menu.
 Turn off **Check for updates at startup** from the same menu if you do not want automatic prompts.

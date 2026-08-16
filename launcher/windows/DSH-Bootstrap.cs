@@ -22,8 +22,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.2.0.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.2.0.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.2.1.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.2.1.65534")]
 
 namespace DshPortableBootstrap
 {
@@ -728,6 +728,7 @@ namespace DshPortableBootstrap
         private readonly Label statusLabel;
         private readonly Label locationLabel;
         private readonly ProgressBar progress;
+        private readonly Label progressPercentLabel;
         private readonly Button actionButton;
         private readonly LinkLabel offlineLink;
         private readonly CancellationTokenSource cancellation = new CancellationTokenSource();
@@ -765,7 +766,7 @@ namespace DshPortableBootstrap
                 Text = "保存到：" + options.Destination,
                 ForeColor = Color.FromArgb(95, 95, 95),
                 Location = new Point(28, 91),
-                Size = new Size(464, 23),
+                Size = new Size(276, 23),
                 AutoEllipsis = true,
             };
             progress = new ProgressBar
@@ -774,6 +775,14 @@ namespace DshPortableBootstrap
                 Size = new Size(464, 10),
                 Style = ProgressBarStyle.Marquee,
                 MarqueeAnimationSpeed = 22,
+            };
+            progressPercentLabel = new Label
+            {
+                Location = new Point(310, 91),
+                Size = new Size(182, 23),
+                ForeColor = Color.FromArgb(95, 95, 95),
+                TextAlign = ContentAlignment.MiddleRight,
+                Visible = false,
             };
             actionButton = new Button
             {
@@ -806,6 +815,7 @@ namespace DshPortableBootstrap
             Controls.Add(titleLabel);
             Controls.Add(statusLabel);
             Controls.Add(locationLabel);
+            Controls.Add(progressPercentLabel);
             Controls.Add(progress);
             Controls.Add(actionButton);
             Controls.Add(offlineLink);
@@ -829,6 +839,7 @@ namespace DshPortableBootstrap
                 WriteResult(options.ResultFile, result);
                 running = false;
                 progress.Visible = false;
+                progressPercentLabel.Visible = false;
                 titleLabel.Text = "未能准备 DSH-Portable";
                 statusLabel.Text = result.Message;
                 statusLabel.ForeColor = Color.FromArgb(176, 38, 38);
@@ -854,6 +865,15 @@ namespace DshPortableBootstrap
             progress.Style = ProgressBarStyle.Continuous;
             progress.MarqueeAnimationSpeed = 0;
             progress.Value = value;
+            progressPercentLabel.Text = value + "%" + "  ·  " + FormatBytes(current) + " / " + FormatBytes(total);
+            progressPercentLabel.Visible = true;
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes < 1024) return Math.Max(0, bytes) + " B";
+            if (bytes < 1024L * 1024L) return (bytes / 1024D).ToString("0.0") + " KB";
+            return (bytes / 1024D / 1024D).ToString("0.0") + " MB";
         }
 
         private void OnFormClosing(object sender, FormClosingEventArgs eventArgs)

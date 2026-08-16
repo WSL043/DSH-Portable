@@ -1,16 +1,19 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-这是 DSH-Portable 首个稳定正式版。以后稳定版使用 `X.Y.Z`，发布候选版本仅使用
-`X.Y.Z-rc.N` 并明确标为 Pre-release。
+0.2.1 把更新信息和桌面托盘收成一套更清楚的产品体验：
 
-本次加入 Linux x64 与 ARM64。两个架构都提供一键 AppImage 和完整便携目录；使用原生
-桌面窗口与系统托盘，不会在启动时拉起外部浏览器。会话、设置、插件和工作区随便携数据
-一起移动，插件命令使用包内运行环境，不要求修改系统 PATH。
+- 更新窗口分别显示 **DSH-Portable** 与 **内置官方 DSH** 的当前和目标版本；本次内置
+  官方 DSH 仍为 `0.1.0-rc.6`。
+- 下载显示真实百分比与已下载大小，并继续显示验证、安装和重新打开阶段。
+- Windows 托盘跟随 DSH 的中文/英文与明暗外观；最近会话、新会话、更多操作和退出采用
+  一致的层级，仍通过官方会话接口打开内容。
+- 关闭启动时检查更新后不再主动提醒，手动检查保留；运行中的任务不会被自动更新中断。
 
-发现新版时可以立即更新、稍后处理或跳过当前版本；关闭启动时检查更新后不会主动提醒，
-手动检查仍然可用。Windows 遇到运行环境或启动器变化时会直接下载完整版本、保留
-`data` 与 `workspace` 并原地更新，不再跳转下载页。运行中的任务不会被自动更新中断。
 普通更新只替换 DSH 应用组件并保留用户数据。
+
+从旧版升级时，如果启动器兼容边界变化，会下载一次完整版本并原地更新；`data`、
+`workspace`、会话、凭据和插件都会保留。Windows、macOS、Linux x64 与 ARM64 成品仍由
+同一发布门验证。
 
 ## Windows x64（推荐）
 
@@ -40,18 +43,20 @@
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`).
 > DSH-Portable is an independent community distribution.
 
-This is the first stable DSH-Portable release. Stable releases use `X.Y.Z`; release candidates
-use `X.Y.Z-rc.N` and are always marked as Pre-release.
+0.2.1 makes updates and the desktop tray feel like one coherent product:
 
-This release adds Linux x64 and ARM64. Both architectures include a one-click AppImage and a
-complete portable folder. The native desktop window and system tray do not launch an external
-browser at startup. Sessions, settings, plugins, and workspace move with the portable data, and
-plugin commands use the bundled runtime without changing the system PATH.
+- The update window separates the **DSH-Portable** version from the **bundled official DSH** version.
+  The bundled official DSH remains `0.1.0-rc.6` in this release.
+- Downloads show the real percentage and transferred size, followed by verification, installation,
+  and reopen stages.
+- The Windows tray follows the DSH language and light/dark appearance. Recent sessions, New Session,
+  More, and Exit use a consistent hierarchy while session actions still use the official runtime API.
+- Disabling startup checks suppresses automatic prompts while manual checks stay available. Running
+  tasks are never interrupted automatically.
 
-Choose Update now, Later, or Skip this version when a release is available. Turning off startup
-checks suppresses automatic prompts while manual checks remain available. On Windows, a runtime or
-launcher change now downloads the verified complete package and replaces the program in place while
-keeping `data` and `workspace`. A running task is never interrupted automatically.
+If an older launcher crosses a compatibility boundary, it downloads one complete package and updates
+in place while preserving `data`, `workspace`, sessions, credentials, and plugins. Finished products
+for Windows, macOS, Linux x64, and Linux ARM64 continue through the same release gate.
 
 ### Windows x64 (recommended)
 

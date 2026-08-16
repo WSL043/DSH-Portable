@@ -134,12 +134,14 @@ export function parseCli(argv) {
   let allowHttp = false
   let force = false
   let updateManifest = ''
+  let progressJson = false
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--no-browser') noBrowser = true
     else if (arg === '--json') json = true
     else if (arg === '--allow-http') allowHttp = true
     else if (arg === '--force') force = true
+    else if (arg === '--progress-json') progressJson = true
     else if (arg === '--update-manifest') {
       if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--update-manifest requires a value.')
       updateManifest = argv[index + 1]
@@ -152,7 +154,7 @@ export function parseCli(argv) {
     }
     else throw new Error(`Unknown command or option: ${arg}`)
   }
-  return { command, noBrowser, json, allowHttp, force, updateManifest }
+  return { command, noBrowser, json, allowHttp, force, updateManifest, progressJson }
 }
 
 function comparable(value, platform = process.platform) {

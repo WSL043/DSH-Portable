@@ -76,9 +76,26 @@ test('update evaluation distinguishes current, component update, full package, a
     shellSchema: 1,
     nodeVersion: '24.19.0',
   }
-  assert.equal(evaluateUpdate(updateManifest(), installed, 'windows-x64').status, 'available')
+  const componentUpdate = evaluateUpdate(updateManifest(), installed, 'windows-x64')
+  assert.equal(componentUpdate.status, 'available')
+  assert.deepEqual(componentUpdate.product, {
+    name: 'DSH-Portable',
+    current: installed.portableVersion,
+    latest: updateManifest().portableVersion,
+  })
+  assert.deepEqual(componentUpdate.engine, {
+    name: 'DeepSeek Harness',
+    current: installed.dshVersion,
+    latest: updateManifest().component.dshVersion,
+    changed: true,
+  })
+  assert.equal(componentUpdate.delivery, 'component')
   assert.equal(evaluateUpdate(updateManifest({ portableVersion: installed.portableVersion }), installed, 'windows-x64').status, 'current')
-  assert.equal(evaluateUpdate(updateManifest({ minimumUpdaterSchema: 2 }), installed, 'windows-x64').status, 'full-package-required')
+  const fullUpdate = evaluateUpdate(updateManifest({ minimumUpdaterSchema: 2 }), installed, 'windows-x64')
+  assert.equal(fullUpdate.status, 'full-package-required')
+  assert.equal(fullUpdate.delivery, 'full-package')
+  assert.equal(fullUpdate.product.name, 'DSH-Portable')
+  assert.equal(fullUpdate.engine.name, 'DeepSeek Harness')
   assert.equal(evaluateUpdate(updateManifest({ requiredShellSchema: 2 }), installed, 'windows-x64').status, 'full-package-required')
   assert.equal(evaluateUpdate(updateManifest({
     component: { ...updateManifest().component, requiredNodeVersion: '25.0.0' },
@@ -294,6 +311,7 @@ test('component download timeout measures inactivity instead of total transfer t
   const output = path.join(root, 'component.zip')
   const chunks = [Buffer.from('sl'), Buffer.from('ow'), Buffer.from('!')]
   const bytes = Buffer.concat(chunks)
+  const progress = []
   const fetchImpl = async (_url, { signal }) => ({
     ok: true,
     status: 200,
@@ -323,9 +341,16 @@ test('component download timeout measures inactivity instead of total transfer t
       sha256: createHash('sha256').update(bytes).digest('hex'),
       fetchImpl,
       timeoutMs: 25,
+      onProgress: (event) => progress.push(event),
     })
     assert.equal(result.bytes, bytes.length)
     assert.deepEqual(await readFile(output), bytes)
+    assert.equal(progress[0].phase, 'downloading')
+    assert.equal(progress[0].receivedBytes, 0)
+    assert.equal(progress.at(-1).percent, 100)
+    assert.equal(progress.at(-1).receivedBytes, bytes.length)
+    assert.ok(progress.every((event) => event.totalBytes === bytes.length))
+    assert.deepEqual(progress.map((event) => event.receivedBytes), [...progress.map((event) => event.receivedBytes)].sort((a, b) => a - b))
   } finally {
     await rm(root, { recursive: true, force: true })
   }

@@ -152,6 +152,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     allowHttp: false,
     force: false,
     updateManifest: '',
+    progressJson: false,
   })
   assert.deepEqual(parseCli(['start', '--no-browser', '--json']), {
     command: 'start',
@@ -160,6 +161,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     allowHttp: false,
     force: false,
     updateManifest: '',
+    progressJson: false,
   })
   assert.deepEqual(parseCli(['check-update', '--json', '--force', '--allow-http', '--update-manifest', 'http://127.0.0.1/update.json']), {
     command: 'check-update',
@@ -168,7 +170,9 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     allowHttp: true,
     force: true,
     updateManifest: 'http://127.0.0.1/update.json',
+    progressJson: false,
   })
+  assert.equal(parseCli(['update', '--json', '--progress-json']).progressJson, true)
   assert.equal(parseCli(['defer-update', '--json']).command, 'defer-update')
   assert.equal(parseCli(['ignore-update', '--json']).command, 'ignore-update')
   assert.throws(() => parseCli(['start', 'stop']), /more than one command/)

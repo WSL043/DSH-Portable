@@ -154,11 +154,16 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     origin = `http://127.0.0.1:${server.address().port}`
 
     const cli = path.join(root, 'launcher', 'portable-cli.mjs')
-    const updated = await execFileAsync(runtimeNode, [cli, 'update', '--json', '--no-browser', '--force', '--allow-http', '--update-manifest', `${origin}/update.json`], {
+    const updated = await execFileAsync(runtimeNode, [cli, 'update', '--json', '--progress-json', '--no-browser', '--force', '--allow-http', '--update-manifest', `${origin}/update.json`], {
       timeout: 60000,
       windowsHide: true,
     })
-    const result = JSON.parse(updated.stdout.trim())
+    const lines = updated.stdout.trim().split(/\r?\n/).map((line) => JSON.parse(line))
+    const progress = lines.filter((line) => line.type === 'update-progress')
+    const result = lines.at(-1)
+    assert.ok(progress.some((event) => event.phase === 'downloading' && event.percent === 100))
+    assert.ok(progress.some((event) => event.phase === 'verifying'))
+    assert.ok(progress.some((event) => event.phase === 'installing'))
     assert.equal(result.status, 'updated')
     assert.equal(result.dshVersion, '0.1.0-rc.7')
     assert.equal(JSON.parse(await readFile(path.join(root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, portableVersion)

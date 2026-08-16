@@ -20,8 +20,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.0.65534")]
-[assembly: AssemblyFileVersion("0.2.0.65534")]
+[assembly: AssemblyVersion("0.2.1.65534")]
+[assembly: AssemblyFileVersion("0.2.1.65534")]
 
 namespace DshPortable
 {
@@ -66,10 +66,13 @@ namespace DshPortable
             UseSystemColors = false;
         }
 
-        private Color Surface { get { return dark ? Color.FromArgb(35, 35, 36) : Color.White; } }
-        private Color Selected { get { return dark ? Color.FromArgb(44, 44, 46) : Color.FromArgb(233, 236, 242); } }
-        private Color Border { get { return dark ? Color.FromArgb(70, 70, 72) : Color.FromArgb(210, 213, 218); } }
+        private Color Surface { get { return dark ? Color.FromArgb(53, 54, 56) : Color.White; } }
+        private Color Selected { get { return dark ? Color.FromArgb(67, 69, 74) : Color.FromArgb(233, 236, 242); } }
+        private Color Border { get { return dark ? Color.FromArgb(84, 85, 87) : Color.FromArgb(210, 213, 218); } }
         internal Color TextColor { get { return dark ? Color.FromArgb(249, 250, 251) : Color.FromArgb(15, 17, 21); } }
+        internal Color CaptionColor { get { return dark ? Color.FromArgb(173, 178, 184) : Color.FromArgb(97, 102, 107); } }
+        internal Color SurfaceColor { get { return Surface; } }
+        internal Color SelectedColor { get { return Selected; } }
 
         public override Color ToolStripDropDownBackground { get { return Surface; } }
         public override Color ImageMarginGradientBegin { get { return Surface; } }
@@ -111,6 +114,7 @@ namespace DshPortable
         private readonly Label productLabel;
         private readonly Label statusLabel;
         private readonly ProgressBar progress;
+        private readonly Label progressDetail;
         private readonly TextBox detailsBox;
         private readonly Label updateDescription;
         private readonly Button updateButton;
@@ -220,6 +224,15 @@ namespace DshPortable
                 Location = new Point(184, 154),
                 Visible = false,
             };
+            progressDetail = new Label
+            {
+                AutoEllipsis = true,
+                Location = new Point(24, 84),
+                Size = new Size(456, 20),
+                ForeColor = Color.FromArgb(97, 102, 107),
+                TextAlign = ContentAlignment.MiddleLeft,
+                Visible = false,
+            };
             updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(1); };
             skipUpdateButton = new Button
             {
@@ -276,6 +289,7 @@ namespace DshPortable
             launchContent.Controls.Add(productIcon);
             launchContent.Controls.Add(productLabel);
             launchContent.Controls.Add(statusLabel);
+            launchContent.Controls.Add(progressDetail);
             launchContent.Controls.Add(progress);
             launchContent.Controls.Add(updateDescription);
             launchContent.Controls.Add(updateButton);
@@ -308,14 +322,15 @@ namespace DshPortable
                 automaticUpdateCheckItem.Checked = updateCheckEnabled;
                 SaveLauncherSettings();
             };
-            updateMenu = new ToolStripMenuItem(L("更新", "Updates"));
+            updateMenu = new ToolStripMenuItem(L("DSH-Portable 更新", "DSH-Portable updates"));
             updateMenu.DropDownItems.Add(checkUpdateItem);
             updateMenu.DropDownItems.Add(automaticUpdateCheckItem);
             trayMenu = new ContextMenuStrip
             {
                 ShowImageMargin = false,
-                ShowCheckMargin = true,
-                Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point),
+                ShowCheckMargin = false,
+                Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
+                MinimumSize = new Size(288, 0),
             };
             trayMenu.Opening += delegate { trayMenuOpen = true; };
             trayMenu.Closed += delegate
@@ -437,10 +452,10 @@ namespace DshPortable
                 AutoToolTip = false,
                 ShowShortcutKeys = true,
                 ShortcutKeyDisplayString = SessionHint(session),
-                Tag = session.id,
+                Name = session.id,
             };
             if (trayState != null && String.Equals(trayState.currentSessionId, session.id, StringComparison.Ordinal))
-                item.Checked = true;
+                item.Tag = "current";
             item.Click += delegate
             {
                 RestoreFromTray();
@@ -470,6 +485,16 @@ namespace DshPortable
             });
         }
 
+        private ToolStripMenuItem CreateSectionHeader(string chinese, string english)
+        {
+            return new ToolStripMenuItem(L(chinese, english))
+            {
+                Enabled = false,
+                Tag = "section",
+                ShowShortcutKeys = false,
+            };
+        }
+
         private void RebuildTrayMenu()
         {
             if (trayMenuOpen)
@@ -481,7 +506,7 @@ namespace DshPortable
             closeBehaviorMenu.Text = L("关闭窗口时", "When closing the window");
             closeToTrayItem.Text = L("最小化到托盘", "Minimize to tray");
             closeToExitItem.Text = L("退出程序", "Exit application");
-            updateMenu.Text = L("更新", "Updates");
+            updateMenu.Text = L("DSH-Portable 更新", "DSH-Portable updates");
             checkUpdateItem.Text = manualUpdateRunning
                 ? L("正在检查…", "Checking…")
                 : L("检查更新", "Check for updates");
@@ -497,11 +522,14 @@ namespace DshPortable
             if (!trayBridgeReady)
             {
                 trayMenu.Items.Add(CreateOpenItem());
-                trayMenu.Items.Add(new ToolStripSeparator());
-                trayMenu.Items.Add(closeBehaviorMenu);
+                ToolStripMenuItem more = new ToolStripMenuItem(L("更多", "More"));
+                more.DropDownItems.Add(updateMenu);
+                more.DropDownItems.Add(closeBehaviorMenu);
+                trayMenu.Items.Add(more);
             }
             else
             {
+                if (sessions.Count > 0) trayMenu.Items.Add(CreateSectionHeader("最近", "Recent"));
                 foreach (TrayBridgeSession session in sessions.Take(3))
                     trayMenu.Items.Add(CreateSessionMenuItem(session));
 
@@ -510,6 +538,7 @@ namespace DshPortable
                     more.DropDownItems.Add(CreateSessionMenuItem(session));
                 if (more.DropDownItems.Count > 0) more.DropDownItems.Add(new ToolStripSeparator());
                 more.DropDownItems.Add(CreateOpenItem());
+                more.DropDownItems.Add(updateMenu);
                 more.DropDownItems.Add(closeBehaviorMenu);
                 trayMenu.Items.Add(more);
 
@@ -523,7 +552,6 @@ namespace DshPortable
             }
 
             trayMenu.Items.Add(new ToolStripSeparator());
-            trayMenu.Items.Add(updateMenu);
             trayMenu.Items.Add(CreateReportProblemItem());
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add(CreateExitItem());
@@ -535,25 +563,25 @@ namespace DshPortable
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
             DshMenuColorTable colors = new DshMenuColorTable(dark);
             trayMenu.Renderer = new ToolStripProfessionalRenderer(colors);
-            trayMenu.BackColor = dark ? Color.FromArgb(35, 35, 36) : Color.White;
+            trayMenu.BackColor = colors.SurfaceColor;
             trayMenu.ForeColor = colors.TextColor;
-            trayMenu.Padding = new Padding(4, 4, 4, 4);
-            ApplyTrayItemTheme(trayMenu.Items, colors.TextColor, trayMenu.BackColor);
+            trayMenu.Padding = new Padding(6, 6, 6, 6);
+            ApplyTrayItemTheme(trayMenu.Items, colors.TextColor, colors.CaptionColor, trayMenu.BackColor, colors.SelectedColor);
         }
 
-        private static void ApplyTrayItemTheme(ToolStripItemCollection items, Color foreground, Color background)
+        private static void ApplyTrayItemTheme(ToolStripItemCollection items, Color foreground, Color caption, Color background, Color selected)
         {
             foreach (ToolStripItem item in items)
             {
-                item.ForeColor = foreground;
-                item.BackColor = background;
-                item.Padding = item is ToolStripSeparator ? Padding.Empty : new Padding(4, 3, 4, 3);
+                item.ForeColor = String.Equals(item.Tag as string, "section", StringComparison.Ordinal) ? caption : foreground;
+                item.BackColor = String.Equals(item.Tag as string, "current", StringComparison.Ordinal) ? selected : background;
+                item.Padding = item is ToolStripSeparator ? Padding.Empty : new Padding(10, 5, 10, 5);
                 ToolStripMenuItem menuItem = item as ToolStripMenuItem;
                 if (menuItem == null) continue;
                 menuItem.DropDown.BackColor = background;
                 menuItem.DropDown.ForeColor = foreground;
                 if (menuItem.DropDownItems.Count > 0)
-                    ApplyTrayItemTheme(menuItem.DropDownItems, foreground, background);
+                    ApplyTrayItemTheme(menuItem.DropDownItems, foreground, caption, background, selected);
             }
         }
 
@@ -968,15 +996,18 @@ namespace DshPortable
             Tuple<int, string> check = await Task.Run(() => InvokePortableCli(new[] { "check-update", "--json" }));
             if (check.Item1 != 0) { ResetOperationUi(); return; }
             string updateStatus = JsonString(check.Item2, "status");
+            string current = JsonString(check.Item2, "productCurrent");
             string latest = JsonString(check.Item2, "latest");
+            string engineCurrent = JsonString(check.Item2, "engineCurrent");
+            string engineLatest = JsonString(check.Item2, "engineLatest");
             if (updateStatus == "available")
             {
-                int choice = await ShowUpdateChoiceAsync(latest, false);
+                int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, false);
                 if (choice == 1)
                 {
-                    statusLabel.Text = L("正在安全更新 DeepSeek Harness…", "Updating DeepSeek Harness safely…");
-                    progress.Visible = true;
-                    Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(new[] { "update", "--no-browser", "--json" }));
+                    ShowDesktopOperation(L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
+                    Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(
+                        new[] { "update", "--no-browser", "--json", "--progress-json" }, HandleUpdateProgress));
                     if (updated.Item1 != 0) throw new InvalidOperationException(updated.Item2);
                 }
                 else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
@@ -984,7 +1015,7 @@ namespace DshPortable
             }
             else if (updateStatus == "full-package-required")
             {
-                int choice = await ShowUpdateChoiceAsync(latest, true);
+                int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, true);
                 if (choice == 1) { StartFullPackageUpdate(); return; }
                 else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
                 else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
@@ -1010,11 +1041,16 @@ namespace DshPortable
                 }
 
                 string updateStatus = JsonString(check.Item2, "status");
+                string current = JsonString(check.Item2, "productCurrent");
                 string latest = JsonString(check.Item2, "latest");
+                string engineCurrent = JsonString(check.Item2, "engineCurrent");
+                string engineLatest = JsonString(check.Item2, "engineLatest");
                 if (updateStatus == "current")
                 {
                     MessageBox.Show(this,
-                        L("你使用的已经是最新版。", "You're already using the latest version."),
+                        L("你使用的已经是最新版。", "You're already using the latest version.")
+                            + (String.IsNullOrEmpty(current) ? "" : "\r\n\r\nDSH-Portable " + current)
+                            + (String.IsNullOrEmpty(engineCurrent) ? "" : "\r\n" + L("内置官方 DSH ", "Bundled official DSH ") + engineCurrent),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -1035,7 +1071,7 @@ namespace DshPortable
                             L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
-                    int choice = await ShowUpdateChoiceAsync(latest, true);
+                    int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, true);
                     if (choice == 1) StartFullPackageUpdate();
                     else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
                     else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
@@ -1046,9 +1082,10 @@ namespace DshPortable
                 if (!trayBridgeReady)
                 {
                     MessageBox.Show(this,
-                        L("已发现新版。为了确认不会中断任务，请稍后退出并重新打开 DSH-Portable；启动时可以选择“现在更新”或“稍后”。",
-                          "An update is available. To avoid interrupting work, exit and reopen DSH-Portable when convenient; startup will offer Update now or Later."),
-                        L("发现新版", "Update available"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        UpdateDescription(current, latest, engineCurrent, engineLatest, false) + "\r\n\r\n"
+                            + L("为了确认不会中断任务，请稍后退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
+                                "To avoid interrupting work, exit and reopen when convenient; startup will offer Update now or Later."),
+                        L("DSH-Portable 更新", "DSH-Portable update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 if (trayState != null && trayState.hasRunningSession)
@@ -1061,10 +1098,10 @@ namespace DshPortable
                 }
 
                 DialogResult accepted = MessageBox.Show(this,
-                    L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
-                      "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later.")
-                        + (String.IsNullOrEmpty(latest) ? "" : "\r\n\r\n" + latest),
-                    L("发现新版", "Update available"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    UpdateDescription(current, latest, engineCurrent, engineLatest, false) + "\r\n\r\n"
+                        + L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
+                            "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later."),
+                    L("DSH-Portable 更新", "DSH-Portable update"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (accepted != DialogResult.Yes)
                 {
                     await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
@@ -1094,6 +1131,10 @@ namespace DshPortable
             statusLabel.AutoEllipsis = true;
             statusLabel.Text = message;
             progress.Visible = true;
+            progress.Style = ProgressBarStyle.Marquee;
+            progress.MarqueeAnimationSpeed = 24;
+            progressDetail.Text = L("正在准备…", "Preparing…");
+            progressDetail.Visible = true;
             updateDescription.Visible = false;
             updateButton.Visible = false;
             skipUpdateButton.Visible = false;
@@ -1108,9 +1149,10 @@ namespace DshPortable
 
         private async Task ApplyDesktopUpdateAsync()
         {
-            ShowDesktopOperation(L("正在安全更新 DeepSeek Harness…", "Updating DeepSeek Harness safely…"));
+            ShowDesktopOperation(L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
             trayBridgeReady = false;
-            Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(new[] { "update", "--no-browser", "--json" }));
+            Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(
+                new[] { "update", "--no-browser", "--json", "--progress-json" }, HandleUpdateProgress));
             if (updated.Item1 != 0)
             {
                 await RestoreDesktopAfterUpdateAttemptAsync();
@@ -1128,7 +1170,7 @@ namespace DshPortable
             await NavigateDesktopAsync(url);
             HideDesktopOperation();
             MessageBox.Show(this,
-                L("更新已完成。", "The update is complete."),
+                L("DSH-Portable 更新已完成。", "The DSH-Portable update is complete."),
                 L("DSH-Portable 已更新", "DSH-Portable updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
@@ -1190,6 +1232,7 @@ namespace DshPortable
         private void HideDesktopOperation()
         {
             launchPanel.Visible = false;
+            progressDetail.Visible = false;
             webView.Enabled = true;
             webView.Visible = true;
             webView.BringToFront();
@@ -1293,21 +1336,40 @@ namespace DshPortable
                 && parsed.Port >= 3080 && parsed.Port <= 3180;
         }
 
-        private Task<int> ShowUpdateChoiceAsync(string latest, bool fullPackage)
+        private static string UpdateDescription(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
+        {
+            string product = "DSH-Portable" + (String.IsNullOrEmpty(current) ? "" : " " + current)
+                + (String.IsNullOrEmpty(latest) ? "" : "  →  " + latest);
+            string engine;
+            if (!String.IsNullOrEmpty(engineCurrent) && !String.IsNullOrEmpty(engineLatest)
+                && !String.Equals(engineCurrent, engineLatest, StringComparison.Ordinal))
+                engine = L("内置官方 DSH ", "Bundled official DSH ") + engineCurrent + "  →  " + engineLatest;
+            else
+                engine = L("内置官方 DSH ", "Bundled official DSH ")
+                    + (!String.IsNullOrEmpty(engineLatest) ? engineLatest : engineCurrent)
+                    + L("（本次不变）", " (unchanged)");
+            string delivery = fullPackage
+                ? L("交付方式：完整更新", "Delivery: complete package")
+                : L("交付方式：轻量更新（仅下载已变更的 DSH 应用组件）", "Delivery: component update (only the changed DSH application component)");
+            return product + "\r\n" + engine + "\r\n" + delivery;
+        }
+
+        private Task<int> ShowUpdateChoiceAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
         {
             progress.Visible = false;
-            ClientSize = new Size(560, 260);
-            launchContent.Size = new Size(504, 208);
+            progressDetail.Visible = false;
+            ClientSize = new Size(560, 280);
+            launchContent.Size = new Size(504, 224);
             CenterLaunchContent();
             statusLabel.AutoEllipsis = false;
             statusLabel.Size = new Size(400, 34);
-            statusLabel.Text = fullPackage
-                ? L("此版本需要完整升级", "A complete package is required") + (String.IsNullOrEmpty(latest) ? "" : " · " + latest)
-                : L("发现新版", "Update available") + (String.IsNullOrEmpty(latest) ? "" : " · " + latest);
-            updateDescription.Text = fullPackage
-                ? L("将自动下载完整版本并原地替换程序；设置、会话、插件和工作区保持原位。", "The complete version will be downloaded and installed in place. Settings, sessions, plugins, and workspace stay where they are.")
-                : L("仅下载已变更的 DSH 应用组件；设置、会话和工作区保持原位。", "Only the changed DSH application component is downloaded. Settings, sessions, and workspace stay in place.");
+            statusLabel.Text = L("DSH-Portable 更新", "DSH-Portable update");
+            updateDescription.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage);
+            updateDescription.Size = new Size(456, 64);
             updateDescription.Visible = true;
+            updateButton.Location = new Point(184, 174);
+            skipUpdateButton.Location = new Point(304, 174);
+            laterButton.Location = new Point(424, 174);
             updateButton.Text = L("现在更新", "Update now");
             updateButton.Visible = true;
             skipUpdateButton.Visible = true;
@@ -1331,16 +1393,65 @@ namespace DshPortable
                 ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
                 : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
             updateDescription.Visible = false;
+            updateDescription.Size = new Size(456, 48);
+            updateButton.Location = new Point(184, 154);
+            skipUpdateButton.Location = new Point(304, 154);
+            laterButton.Location = new Point(424, 154);
             updateButton.Visible = false;
             skipUpdateButton.Visible = false;
             laterButton.Visible = false;
+            progressDetail.Visible = false;
+            progress.Style = ProgressBarStyle.Marquee;
+            progress.MarqueeAnimationSpeed = 24;
+            progress.Value = 0;
             progress.Visible = true;
+        }
+
+        private void HandleUpdateProgress(string jsonLine)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action<string>(HandleUpdateProgress), jsonLine); return; }
+            string phase = JsonString(jsonLine, "phase");
+            if (phase == "downloading")
+            {
+                int percent = (int)Math.Max(0, Math.Min(100, JsonLong(jsonLine, "percent")));
+                long current = JsonLong(jsonLine, "receivedBytes");
+                long total = JsonLong(jsonLine, "totalBytes");
+                statusLabel.Text = L("正在下载 DSH-Portable 更新…", "Downloading the DSH-Portable update…");
+                progress.Style = ProgressBarStyle.Continuous;
+                progress.MarqueeAnimationSpeed = 0;
+                progress.Value = percent;
+                progressDetail.Text = percent + "%  ·  " + FormatBytes(current) + " / " + FormatBytes(total);
+            }
+            else
+            {
+                progress.Style = ProgressBarStyle.Marquee;
+                progress.MarqueeAnimationSpeed = 24;
+                if (phase == "verifying") statusLabel.Text = L("正在验证 DSH-Portable 更新…", "Verifying the DSH-Portable update…");
+                else if (phase == "installing") statusLabel.Text = L("正在安装 DSH-Portable 更新…", "Installing the DSH-Portable update…");
+                else if (phase == "complete") statusLabel.Text = L("正在重新打开工作台…", "Reopening the workspace…");
+                progressDetail.Text = phase == "complete" ? "100%" : L("会话、设置、插件和工作区保持不变", "Sessions, settings, plugins, and workspace stay in place");
+            }
+            progressDetail.Visible = true;
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            if (bytes < 1024) return Math.Max(0, bytes) + " B";
+            if (bytes < 1024L * 1024L) return (bytes / 1024D).ToString("0.0") + " KB";
+            return (bytes / 1024D / 1024D).ToString("0.0") + " MB";
         }
 
         private static string JsonString(string json, string name)
         {
             Match match = Regex.Match(json ?? String.Empty, "\\\"" + Regex.Escape(name) + "\\\"\\s*:\\s*\\\"(?<value>(?:\\\\.|[^\\\"])*)\\\"");
             return match.Success ? Regex.Unescape(match.Groups["value"].Value) : String.Empty;
+        }
+
+        private static long JsonLong(string json, string name)
+        {
+            Match match = Regex.Match(json ?? String.Empty, "\\\"" + Regex.Escape(name) + "\\\"\\s*:\\s*(?<value>-?\\d+)");
+            long value;
+            return match.Success && Int64.TryParse(match.Groups["value"].Value, out value) ? value : 0;
         }
 
         private void HandleFailure(int exitCode, string message)
@@ -1366,6 +1477,11 @@ namespace DshPortable
         }
 
         private Tuple<int, string> InvokePortableCli(string[] actionArgs)
+        {
+            return InvokePortableCli(actionArgs, null);
+        }
+
+        private Tuple<int, string> InvokePortableCli(string[] actionArgs, Action<string> progressCallback)
         {
             string node = Path.Combine(root, "runtime", "node", "node.exe");
             string cli = Path.Combine(root, "launcher", "portable-cli.mjs");
@@ -1396,11 +1512,17 @@ namespace DshPortable
 
             using (Process process = Process.Start(start))
             {
-                Task<string> stdout = process.StandardOutput.ReadToEndAsync();
                 Task<string> stderr = process.StandardError.ReadToEndAsync();
+                List<string> stdout = new List<string>();
+                string line;
+                while ((line = process.StandardOutput.ReadLine()) != null)
+                {
+                    if (progressCallback != null && JsonString(line, "type") == "update-progress") progressCallback(line);
+                    else if (!String.IsNullOrWhiteSpace(line)) stdout.Add(line);
+                }
                 process.WaitForExit();
-                Task.WaitAll(stdout, stderr);
-                string message = (stderr.Result + Environment.NewLine + stdout.Result).Trim();
+                stderr.Wait();
+                string message = (stderr.Result + Environment.NewLine + String.Join(Environment.NewLine, stdout)).Trim();
                 return Tuple.Create(process.ExitCode, message);
             }
         }

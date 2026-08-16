@@ -83,12 +83,35 @@ function assertManifestShape(manifest) {
 
 export function evaluateUpdate(manifest, installed, platform) {
   assertManifestShape(manifest)
-  if (manifest.platform !== platform) return { status: 'wrong-platform', current: installed.portableVersion, latest: manifest.portableVersion }
+  const engineCurrent = String(installed.dshVersion ?? '')
+  const engineLatest = String(manifest.component?.dshVersion ?? engineCurrent)
+  const describe = (status, delivery) => ({
+    status,
+    current: installed.portableVersion,
+    latest: manifest.portableVersion,
+    productCurrent: installed.portableVersion,
+    productLatest: manifest.portableVersion,
+    engineCurrent,
+    engineLatest,
+    delivery,
+    product: {
+      name: 'DSH-Portable',
+      current: installed.portableVersion,
+      latest: manifest.portableVersion,
+    },
+    engine: {
+      name: 'DeepSeek Harness',
+      current: engineCurrent,
+      latest: engineLatest,
+      changed: Boolean(engineCurrent && engineLatest && engineCurrent !== engineLatest),
+    },
+  })
+  if (manifest.platform !== platform) return describe('wrong-platform', 'none')
   if (comparePortableVersions(installed.portableVersion, manifest.portableVersion) >= 0) {
-    return { status: 'current', current: installed.portableVersion, latest: manifest.portableVersion }
+    return describe('current', 'none')
   }
   if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0) || manifest.component?.kind !== 'dsh-app') {
-    return { status: 'full-package-required', current: installed.portableVersion, latest: manifest.portableVersion }
+    return describe('full-package-required', 'full-package')
   }
   const component = manifest.component
   if (
@@ -96,15 +119,13 @@ export function evaluateUpdate(manifest, installed, platform) {
     || !component.requiredNodeVersion
     || component.requiredNodeVersion !== installed.nodeVersion
   ) {
-    return { status: 'full-package-required', current: installed.portableVersion, latest: manifest.portableVersion }
+    return describe('full-package-required', 'full-package')
   }
   if (!component.dshVersion || !Array.isArray(component.urls) || component.urls.length === 0) throw new Error('Update component is incomplete.')
   if (!Number.isSafeInteger(Number(component.bytes)) || Number(component.bytes) <= 0) throw new Error('Update component size is invalid.')
   if (!/^[a-f0-9]{64}$/i.test(String(component.sha256 ?? ''))) throw new Error('Update component digest is invalid.')
   return {
-    status: 'available',
-    current: installed.portableVersion,
-    latest: manifest.portableVersion,
+    ...describe('available', 'component'),
     platform: manifest.platform,
     minimumUpdaterSchema: Number(manifest.minimumUpdaterSchema),
     requiredShellSchema: Number(manifest.requiredShellSchema),
@@ -127,6 +148,7 @@ export async function downloadVerifiedComponent({
   allowHttp = false,
   fetchImpl = fetch,
   timeoutMs = 120000,
+  onProgress = () => {},
 }) {
   if (!Array.isArray(urls) || urls.length === 0) throw new Error('No update download routes are available.')
   await mkdir(path.dirname(destination), { recursive: true })
@@ -142,6 +164,15 @@ export async function downloadVerifiedComponent({
       timer = setTimeout(() => controller.abort(), timeoutMs)
     }
     armInactivityTimeout()
+    const report = (receivedBytes) => onProgress({
+      phase: 'downloading',
+      route: index + 1,
+      routeCount: urls.length,
+      receivedBytes,
+      totalBytes: Number(bytes),
+      percent: Math.max(0, Math.min(100, Math.floor(receivedBytes * 100 / Number(bytes)))),
+    })
+    report(0)
     try {
       const response = await fetchImpl(url, { signal: controller.signal, redirect: 'follow' })
       if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`)
@@ -156,6 +187,7 @@ export async function downloadVerifiedComponent({
             return
           }
           digest.update(chunk)
+          report(received)
           callback(null, chunk)
         },
       })
@@ -457,6 +489,7 @@ export async function installAvailableAppUpdate({
   beforeRollback,
   download = downloadVerifiedComponent,
   extract = extractUpdateArchive,
+  onProgress = () => {},
 }) {
   if (update?.status !== 'available' || update.component?.kind !== 'dsh-app') throw new Error('No compatible application update is available.')
   if (typeof healthCheck !== 'function') throw new Error('Update health check is required.')
@@ -466,13 +499,16 @@ export async function installAvailableAppUpdate({
   const stagedRoot = path.join(operationRoot, 'staged')
   await mkdir(operationRoot, { recursive: true })
   try {
+    onProgress({ phase: 'preparing' })
     await download({
       urls: update.component.urls,
       destination: archive,
       bytes: update.component.bytes,
       sha256: update.component.sha256,
       allowHttp,
+      onProgress,
     })
+    onProgress({ phase: 'verifying' })
     await extract(archive, stagedRoot)
     const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
     const components = await readJson(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), null)
@@ -486,7 +522,10 @@ export async function installAvailableAppUpdate({
       || Number(components.shellSchema) < Number(update.requiredShellSchema)) {
       throw new Error('Downloaded component compatibility metadata does not match its manifest.')
     }
-    return await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
+    onProgress({ phase: 'installing' })
+    const applied = await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
+    onProgress({ phase: 'complete', percent: 100 })
+    return applied
   } catch (error) {
     if (!await readJson(layout.updateJournal, null)) await rm(operationRoot, { recursive: true, force: true })
     throw error

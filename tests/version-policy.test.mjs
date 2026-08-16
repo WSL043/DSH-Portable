@@ -33,7 +33,7 @@ test('stable and release-candidate versions have unambiguous GitHub channels', (
 
 test('all finished-product manifests use the same stable product version', async () => {
   const manifest = JSON.parse(await read('package.json'))
-  assert.equal(manifest.version, '0.2.0')
+  assert.equal(manifest.version, '0.2.1')
 
   const sources = await Promise.all([
     read('installer/windows/DSH-Portable.iss'),
@@ -48,8 +48,8 @@ test('all finished-product manifests use the same stable product version', async
     read('launcher/macos/Info-installed.plist'),
     read('launcher/macos/Info-stop-installed.plist'),
   ])
-  for (const source of sources) assert.match(source, /0\.2\.0/)
-  assert.doesNotMatch(sources.join('\n'), /0\.2\.0-rc\./)
+  for (const source of sources) assert.match(source, /0\.2\.1/)
+  assert.doesNotMatch(sources.join('\n'), /0\.2\.1-rc\./)
 })
 
 test('publishing derives prerelease state from the product version instead of user input', async () => {

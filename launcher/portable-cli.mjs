@@ -424,6 +424,10 @@ async function update(options) {
   })
   if (available.status !== 'available') return available
 
+  const reportProgress = options.progressJson
+    ? (event) => process.stdout.write(`${JSON.stringify({ type: 'update-progress', ...event })}\n`)
+    : () => {}
+
   const prior = readProcessState()
   if (ownedState(prior)) await stop()
   try {
@@ -446,6 +450,7 @@ async function update(options) {
         const current = readProcessState()
         if (ownedState(current)) await stop()
       },
+      onProgress: reportProgress,
     })
     const running = await status()
     const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null

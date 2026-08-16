@@ -24,6 +24,8 @@ body:
         - Windows
         - macOS
         - Windows 和 macOS / Windows and macOS
+        - Linux
+        - Windows、macOS 和 Linux / Windows, macOS, and Linux
         - 与平台无关 / Platform independent
     validations:
       required: true

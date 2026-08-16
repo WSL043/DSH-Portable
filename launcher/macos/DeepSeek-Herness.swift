@@ -185,16 +185,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func presentManualUpdateResult(_ update: [String: Any]?) {
         let alert = NSAlert()
         let status = update?["status"] as? String ?? "unavailable"
-        let latest = update?["latest"] as? String ?? ""
         if status == "current" {
-            alert.messageText = L("已经是最新版", "You're up to date")
-            alert.informativeText = L("当前不需要更新。", "No update is needed right now.")
+            alert.messageText = L("DSH-Portable 已是最新版", "DSH-Portable is up to date")
+            alert.informativeText = updateDescription(update, fullPackage: false)
             alert.runModal()
             return
         }
         if status == "full-package-required" {
-            alert.messageText = L("需要完整升级 \(latest)", "Complete package required \(latest)")
-            alert.informativeText = L("要现在打开下载页吗？", "Open the download page now?")
+            alert.messageText = L("DSH-Portable 需要完整更新", "DSH-Portable needs a complete update")
+            alert.informativeText = updateDescription(update, fullPackage: true)
             alert.addButton(withTitle: L("打开下载页", "Open Download Page"))
             alert.addButton(withTitle: L("稍后", "Later"))
             alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
@@ -209,15 +208,32 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return
         }
         if status == "available" {
-            alert.messageText = L("发现新版 \(latest)", "Update available \(latest)")
-            alert.informativeText = L("为避免中断正在运行的任务，请在方便时退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
-                                      "To avoid interrupting a running task, quit and reopen when convenient. Startup will offer Update now or Later.")
+            alert.messageText = L("DSH-Portable 有可用更新", "A DSH-Portable update is available")
+            alert.informativeText = updateDescription(update, fullPackage: false) + "\n\n" +
+                L("为避免中断正在运行的任务，请在方便时退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
+                  "To avoid interrupting a running task, quit and reopen when convenient. Startup will offer Update now or Later.")
             alert.runModal()
             return
         }
         alert.messageText = L("现在无法检查更新", "Could not check for updates")
         alert.informativeText = L("请稍后再试。", "Try again later.")
         alert.runModal()
+    }
+
+    private func updateDescription(_ update: [String: Any]?, fullPackage: Bool) -> String {
+        let productCurrent = update?["productCurrent"] as? String ?? update?["current"] as? String ?? ""
+        let productLatest = update?["productLatest"] as? String ?? update?["latest"] as? String ?? productCurrent
+        let engineCurrent = update?["engineCurrent"] as? String ?? ""
+        let engineLatest = update?["engineLatest"] as? String ?? engineCurrent
+        let product = "DSH-Portable \(productCurrent)  →  \(productLatest)"
+        let engine = engineCurrent != engineLatest
+            ? L("内置官方 DSH \(engineCurrent)  →  \(engineLatest)", "Bundled official DSH \(engineCurrent)  →  \(engineLatest)")
+            : L("内置官方 DSH \(engineLatest)（本次不变）", "Bundled official DSH \(engineLatest) (unchanged)")
+        let delivery = fullPackage
+            ? L("交付方式：完整更新", "Delivery: complete package")
+            : L("交付方式：轻量更新（仅下载已变更的 DSH 应用组件）",
+                "Delivery: component update (only the changed DSH application component)")
+        return [product, engine, delivery].joined(separator: "\n")
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -332,17 +348,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         guard let update = try? runCLI(["check-update", "--json"]),
               let status = update["status"] as? String,
               status == "available" || status == "full-package-required" else { return }
-        let latest = update["latest"] as? String ?? ""
         let choice: NSApplication.ModalResponse = DispatchQueue.main.sync {
             let alert = NSAlert()
             alert.messageText = status == "available" && !installedMode
-                ? L("发现新版 \(latest)", "Update available \(latest)")
-                : L("需要完整升级 \(latest)", "Complete package required \(latest)")
-            alert.informativeText = status == "available" && !installedMode
-                ? L("只下载已变化的 DSH 应用组件；设置、会话和工作区保持原位。",
-                    "Only the changed DSH application component is downloaded. Settings, sessions, and workspace stay in place.")
-                : L("安装新版不会覆盖设置、会话和工作区。",
-                    "Installing the new version does not overwrite settings, sessions, or workspace.")
+                ? L("DSH-Portable 有可用更新", "A DSH-Portable update is available")
+                : L("DSH-Portable 需要完整更新", "DSH-Portable needs a complete update")
+            alert.informativeText = updateDescription(update, fullPackage: status != "available" || installedMode)
             alert.addButton(withTitle: status == "available" && !installedMode
                 ? L("现在更新", "Update Now") : L("打开下载页", "Open Download Page"))
             alert.addButton(withTitle: L("稍后", "Later"))
@@ -350,7 +361,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return alert.runModal()
         }
         if choice == .alertFirstButtonReturn && status == "available" && !installedMode {
-            _ = try runCLI(["update", "--no-browser", "--json"])
+            _ = try runCLI(["update", "--no-browser", "--json", "--progress-json"], progressHandler: { [weak self] progress in
+                self?.presentUpdateProgress(progress)
+            })
         } else if choice == .alertThirdButtonReturn {
             _ = try? runCLI(["ignore-update", "--json"])
         } else {
@@ -361,6 +374,32 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 }
             }
         }
+    }
+
+    private func presentUpdateProgress(_ progress: [String: Any]) {
+        let phase = progress["phase"] as? String ?? ""
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if phase == "downloading" {
+                let percent = progress["percent"] as? Int ?? 0
+                let received = progress["receivedBytes"] as? Int ?? 0
+                let total = progress["totalBytes"] as? Int ?? 0
+                self.statusLabel.stringValue = L("正在下载 DSH-Portable 更新…", "Downloading the DSH-Portable update…")
+                    + " \(percent)%  ·  \(self.formatBytes(received)) / \(self.formatBytes(total))"
+            } else if phase == "verifying" {
+                self.statusLabel.stringValue = L("正在验证 DSH-Portable 更新…", "Verifying the DSH-Portable update…")
+            } else if phase == "installing" {
+                self.statusLabel.stringValue = L("正在安装 DSH-Portable 更新…", "Installing the DSH-Portable update…")
+            } else if phase == "complete" {
+                self.statusLabel.stringValue = L("DSH-Portable 更新完成，正在重新打开…", "DSH-Portable updated. Reopening…")
+            }
+        }
+    }
+
+    private func formatBytes(_ bytes: Int) -> String {
+        if bytes < 1024 { return "\(max(0, bytes)) B" }
+        if bytes < 1024 * 1024 { return String(format: "%.1f KB", Double(bytes) / 1024) }
+        return String(format: "%.1f MB", Double(bytes) / 1024 / 1024)
     }
 
     private func showWebView(_ url: URL) {
@@ -439,7 +478,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
-    private func runCLI(_ arguments: [String]) throws -> [String: Any] {
+    private func runCLI(_ arguments: [String], progressHandler: (([String: Any]) -> Void)? = nil) throws -> [String: Any] {
         let process = Process()
         process.executableURL = nodeURL
         process.arguments = [cliURL.path] + arguments
@@ -455,8 +494,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         process.standardOutput = output
         process.standardError = errors
         try process.run()
+        var pending = Data()
+        var resultLines: [String] = []
+        while true {
+            let chunk = output.fileHandleForReading.availableData
+            if chunk.isEmpty { break }
+            pending.append(chunk)
+            while let newline = pending.firstIndex(of: 0x0A) {
+                let lineData = pending.subdata(in: pending.startIndex..<newline)
+                pending.removeSubrange(pending.startIndex...newline)
+                collectCLILine(lineData, progressHandler: progressHandler, resultLines: &resultLines)
+            }
+        }
+        if !pending.isEmpty { collectCLILine(pending, progressHandler: progressHandler, resultLines: &resultLines) }
         process.waitUntilExit()
-        let stdout = String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        let stdout = resultLines.joined(separator: "\n")
         let stderr = String(data: errors.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         guard process.terminationStatus == 0 else {
             throw HostError.commandFailed((stderr + "\n" + stdout).trimmingCharacters(in: .whitespacesAndNewlines))
@@ -467,6 +519,16 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                                             "DeepSeek Harness returned an unrecognized result."))
         }
         return json
+    }
+
+    private func collectCLILine(_ data: Data, progressHandler: (([String: Any]) -> Void)?, resultLines: inout [String]) {
+        guard !data.isEmpty, let line = String(data: data, encoding: .utf8), !line.isEmpty else { return }
+        if let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           object["type"] as? String == "update-progress" {
+            progressHandler?(object)
+        } else {
+            resultLines.append(line)
+        }
     }
 
     private func showFailure(_ error: Error) {

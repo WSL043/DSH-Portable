@@ -159,7 +159,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 9
+        shellSchema = 10
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -270,7 +270,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 9
+            requiredShellSchema = 10
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
