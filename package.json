@@ -1,12 +1,13 @@
 {
   "name": "dsh-portable",
-  "version": "0.2.0-rc.11",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "check:upstream": "node scripts/check-upstream.mjs",
-    "icons": "node scripts/render-icons.mjs app assets/DSH-Portable.svg assets"
+    "icons": "node scripts/render-icons.mjs app assets/DSH-Portable.svg assets",
+    "version:set": "node scripts/set-product-version.mjs"
   }
 }

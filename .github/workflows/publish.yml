@@ -8,14 +8,9 @@ on:
         required: true
         type: string
       tag:
-        description: Release tag, for example v0.2.0-rc.4
+        description: Stable vX.Y.Z or candidate vX.Y.Z-rc.N tag matching package.json
         required: true
         type: string
-      prerelease:
-        description: Mark the user release as a prerelease
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   actions: read
@@ -29,6 +24,11 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Resolve the release channel from the canonical product version
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
       - name: Require a successful main build for this commit and version
         env:
           GH_TOKEN: ${{ github.token }}
@@ -38,7 +38,7 @@ jobs:
           test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .conclusion)" = success
           test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_branch)" = main
           test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_sha)" = "$GITHUB_SHA"
-          test "$RELEASE_TAG" = "v$(node -p "require('./package.json').version")"
+          test "$RELEASE_TAG" = "${{ steps.version.outputs.tag }}"
       - uses: actions/download-artifact@v8
         with:
           run-id: ${{ inputs.run_id }}
@@ -58,10 +58,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-          PRERELEASE: ${{ inputs.prerelease }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
-          FLAGS=()
-          if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
-          gh release view "$RELEASE_TAG" >/dev/null 2>&1 || \
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || {
+              echo "Refusing to mutate an already published release: $RELEASE_TAG" >&2
+              exit 1
+            }
+          else
+            FLAGS=(--draft)
+            if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file templates/RELEASE-NOTES.md "${FLAGS[@]}"
+          fi
           gh release upload "$RELEASE_TAG" release-staging/user-assets/* --clobber
+          if [ "$PRERELEASE" = true ]; then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+          fi

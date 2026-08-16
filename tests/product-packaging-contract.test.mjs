@@ -77,7 +77,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.11')
+  assert.equal(manifest.version, '0.2.0')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -198,7 +198,8 @@ test('publishing separates beginner downloads from machine update assets', async
   ])
 
   assert.match(workflow, /workflow_dispatch:/)
-  assert.match(workflow, /prerelease:[\s\S]+default:\s*false/)
+  assert.doesNotMatch(workflow, /^\s{6}prerelease:/m)
+  assert.match(workflow, /scripts\/version-policy\.mjs/)
   assert.match(workflow, /actions\/download-artifact@v8/)
   assert.match(workflow, /update-channel-stable/)
   assert.match(workflow, /stage-release-assets\.mjs/)
@@ -322,7 +323,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /shellSchema/)
   assert.match(build, /shellSchema\s*=\s*9/)
   assert.match(build, /requiredShellSchema\s*=\s*9/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.11"\)/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.65534"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -501,7 +502,7 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
   assert.match(build, /"shellSchema": 9/)
   assert.match(build, /"requiredShellSchema": 9/)
-  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>6<\/string>/s)
+  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>2000999<\/string>/s)
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)
   assert.match(app, /Check for updates at startup|启动时检查更新/)

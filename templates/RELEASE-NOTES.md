@@ -1,5 +1,8 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
+这是 DSH-Portable 首个稳定正式版。以后稳定版使用 `X.Y.Z`，发布候选版本仅使用
+`X.Y.Z-rc.N` 并明确标为 Pre-release。
+
 本次加入 Linux x64 与 ARM64。两个架构都提供一键 AppImage 和完整便携目录；使用原生
 桌面窗口与系统托盘，不会在启动时拉起外部浏览器。会话、设置、插件和工作区随便携数据
 一起移动，插件命令使用包内运行环境，不要求修改系统 PATH。
@@ -36,6 +39,9 @@
 
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`).
 > DSH-Portable is an independent community distribution.
+
+This is the first stable DSH-Portable release. Stable releases use `X.Y.Z`; release candidates
+use `X.Y.Z-rc.N` and are always marked as Pre-release.
 
 This release adds Linux x64 and ARM64. Both architectures include a one-click AppImage and a
 complete portable folder. The native desktop window and system tray do not launch an external

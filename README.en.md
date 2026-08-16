@@ -136,6 +136,9 @@ It is not bundled with DSH-Portable and can be installed or removed independentl
 
 ## Updates
 
+Versions without a suffix, such as `0.2.0`, are stable releases. Versions ending in `-rc.N`
+are release candidates, are marked **Pre-release** on GitHub, and are not offered to stable users.
+
 DSH-Portable checks for updates when it starts and asks before installing one. A normal update
 downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place. Files are verified before replacement, and a failed launch restores
 the previous version.

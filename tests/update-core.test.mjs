@@ -64,6 +64,7 @@ test('portable preview versions compare monotonically without lexical mistakes',
   assert.equal(comparePortableVersions('0.1.0-rc.6-portable.10', '0.1.0-rc.7-portable.1'), -1)
   assert.equal(comparePortableVersions('0.1.0-rc.9-portable.8', '0.1.0-rc.10-portable.1'), -1)
   assert.equal(comparePortableVersions('0.1.0', '0.1.0-rc.99-portable.99'), 1)
+  assert.equal(comparePortableVersions('0.2.0-rc.11', '0.2.0'), -1)
   assert.throws(() => comparePortableVersions('latest', '0.1.0'), /valid semantic version/i)
 })
 
