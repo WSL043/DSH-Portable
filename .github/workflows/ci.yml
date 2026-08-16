@@ -504,7 +504,8 @@ jobs:
       - name: Install native Linux desktop smoke dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 xauth xvfb xdotool
+          sudo apt-get install -y --no-install-recommends \
+            libayatana-appindicator3-1 libwebkit2gtk-4.1-0 xauth xvfb xdotool
       - name: Verify native window, lifecycle, and self-contained AppImage payload
         run: |
           ROOT="$RUNNER_TEMP/dsh-linux-desktop"

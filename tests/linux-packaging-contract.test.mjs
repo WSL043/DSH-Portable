@@ -28,13 +28,15 @@ test('Linux uses architecture-specific component update channels', () => {
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
-  const [cargo, cargoLock, source, config, build, cli, workflow] = await Promise.all([
+  const [cargo, cargoLock, source, config, build, cli, rootCli, attributes, workflow] = await Promise.all([
     read('launcher/linux/Cargo.toml'),
     read('launcher/linux/Cargo.lock'),
     read('launcher/linux/src/main.rs'),
     read('launcher/linux/tauri.conf.json'),
     read('scripts/build-linux.sh'),
     read('launcher/portable-cli.mjs'),
+    read('launcher/linux/dsh'),
+    read('.gitattributes'),
     read('.github/workflows/ci.yml'),
   ])
   assert.match(cargo, /tauri\s*=\s*\{[^\n]+version\s*=\s*"=2\./)
@@ -57,6 +59,10 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(build, /command -v patchelf/)
   assert.match(build, /NO_STRIP=true npm exec -- tauri build --verbose --bundles appimage/)
   assert.match(workflow, /libwebkit2gtk-4\.1-dev[\s\\]+patchelf/)
+  assert.match(workflow, /libayatana-appindicator3-1[\s\\]+libwebkit2gtk-4\.1-0/)
+  assert.match(rootCli, /ROOT=\$\(CDPATH= cd -- "\$\(dirname -- "\$0"\)" && pwd\)/)
+  assert.doesNotMatch(rootCli, /dirname[^\n]+\.\.\/\.\./)
+  assert.match(attributes, /^launcher\/linux\/dsh text eol=lf$/m)
   assert.match(cli, /\['win32',\s*'darwin',\s*'linux'\]/)
 })
 

@@ -1,4 +1,4 @@
 #!/bin/sh
 set -eu
-ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$ROOT/runtime/node/bin/node" "$ROOT/launcher/dsh-cli.mjs" "$@"
