@@ -114,6 +114,9 @@ test('Linux pruning keeps only the native node-pty runtime products', async (t) 
   await fixtureFile(appDir, 'node-pty/build/Makefile', 'generated')
   await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/pty.node', 'windows')
   await fixtureFile(appDir, 'node-pty/prebuilds/darwin-arm64/pty.node', 'mac')
+  await fixtureFile(appDir, '@koromix/koffi-linux-x64/package.json', '{"name":"@koromix/koffi-linux-x64"}')
+  await fixtureFile(appDir, '@koromix/koffi-linux-x64/linux_x64/koffi.node', 'glibc')
+  await fixtureFile(appDir, '@koromix/koffi-linux-x64/musl_x64/koffi.node', 'musl')
 
   const result = spawnSync(process.execPath, [pruneScript, appDir, 'linux', 'x64'], {
     encoding: 'utf8',
@@ -124,5 +127,7 @@ test('Linux pruning keeps only the native node-pty runtime products', async (t) 
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Makefile')), false)
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/win32-x64')), false)
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-arm64')), false)
+  assert.equal(await exists(path.join(appDir, 'node_modules/@koromix/koffi-linux-x64/linux_x64/koffi.node')), true)
+  assert.equal(await exists(path.join(appDir, 'node_modules/@koromix/koffi-linux-x64/musl_x64')), false)
   assert.equal(JSON.parse(result.stdout.trim()).target, 'linux-x64')
 })

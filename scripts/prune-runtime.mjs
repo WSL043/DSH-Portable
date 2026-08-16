@@ -91,6 +91,19 @@ if (platform === 'linux') {
       await removeTree(path.join(linuxNativeRoot, entry.name))
     }
   }
+
+  // Koffi publishes both glibc and musl binaries in the same Linux package.
+  // DSH-Portable is built and supported on Ubuntu/glibc; retaining the unused
+  // musl binary makes linuxdeploy try to resolve libc.musl-*.so.1 and abort.
+  const koffiNativeRoot = path.join(nodeModules, '@koromix', `koffi-linux-${architecture}`)
+  const koffiGlibcRoot = path.join(koffiNativeRoot, `linux_${architecture}`)
+  const koffiMuslRoot = path.join(koffiNativeRoot, `musl_${architecture}`)
+  await access(path.join(koffiGlibcRoot, 'koffi.node'))
+  try {
+    await removeTree(koffiMuslRoot)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
 }
 
 // npm install has already selected and validated the target prebuild. These
@@ -126,6 +139,10 @@ assert.equal(targetFiles.some((name) => name.endsWith('.node')), true, `node-pty
 assert.equal(targetFiles.some((name) => name.endsWith('.pdb')), false, `node-pty target ${target} retained debug symbols`)
 const remainingTargets = (await readdir(prebuildRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
 assert.deepEqual(remainingTargets, platform === 'linux' ? [] : [target])
+if (platform === 'linux') {
+  await access(path.join(nodeModules, '@koromix', `koffi-linux-${architecture}`, `linux_${architecture}`, 'koffi.node'))
+  await assert.rejects(access(path.join(nodeModules, '@koromix', `koffi-linux-${architecture}`, `musl_${architecture}`)), { code: 'ENOENT' })
+}
 
 const after = await bytes(ptyRoot)
 console.log(JSON.stringify({
