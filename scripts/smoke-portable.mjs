@@ -92,6 +92,19 @@ async function requestMacAppQuit(nativeHost) {
   assert.equal(closed.code, 0, closed.stderr || closed.stdout)
 }
 
+async function requestLinuxAppQuit(nativeHost) {
+  nativeHost.child.kill('SIGTERM')
+  const closed = await Promise.race([
+    nativeHost.completion,
+    delay(30_000).then(() => null),
+  ])
+  if (!closed) {
+    nativeHost.child.kill('SIGKILL')
+    assert.fail('native Linux host did not exit after SIGTERM')
+  }
+  assert.ok(closed.code === 0 || closed.signal === 'SIGTERM', closed.stderr || closed.stdout)
+}
+
 async function invokeCli(root, ...args) {
   return run(nodeFor(root), [cliFor(root), ...args], { cwd: root })
 }
@@ -127,20 +140,27 @@ if (process.platform === 'win32') {
   }
   const launched = await run(path.join(originalRoot, 'DeepSeek-Herness.exe'), ['--no-browser', '--json'], { cwd: originalRoot })
   assert.equal(launched.code, 0, launched.stderr || launched.stdout)
-} else if (process.platform === 'darwin') {
+  } else if (process.platform === 'darwin') {
   const app = path.join(originalRoot, 'DSH-Portable.app')
   const executable = path.join(app, 'Contents', 'MacOS', 'DSH-Portable')
   assert.equal(await exists(executable), true, `missing macOS entry: ${executable}`)
   assert.equal(await exists(path.join(app, 'Contents', 'Resources', 'DSH-Portable.icns')), true)
-  nativeHost = startNativeHost('/usr/bin/open', ['-n', '-W', app, '--args', '--skip-update-check'], {
+    nativeHost = startNativeHost('/usr/bin/open', ['-n', '-W', app, '--args', '--skip-update-check'], {
     cwd: originalRoot,
     env: { ...process.env, DSH_PORTABLE_NO_BROWSER: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
-  })
-} else {
+    })
+  } else if (process.platform === 'linux') {
+    const executable = path.join(originalRoot, 'DeepSeek-Herness')
+    assert.equal(await exists(executable), true, `missing Linux entry: ${executable}`)
+    nativeHost = startNativeHost(executable, [], {
+      cwd: originalRoot,
+      env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
+    })
+  } else {
   throw new Error(`unsupported smoke-test platform: ${process.platform}`)
 }
 
-const running = process.platform === 'darwin'
+const running = process.platform === 'darwin' || process.platform === 'linux'
   ? await waitForPortableStatus(originalRoot, 'running', nativeHost)
   : await cli(originalRoot, 'status', '--json')
 assert.equal(running.status, 'running')
@@ -150,11 +170,14 @@ if (process.platform === 'win32') {
   const stopped = await run(path.join(originalRoot, 'DeepSeek-Herness.exe'), ['stop', '--no-browser', '--json'], { cwd: originalRoot })
   assert.equal(stopped.code, 0, stopped.stderr || stopped.stdout)
 } else {
-  const stopped = await run(path.join(originalRoot, 'Stop DSH-Portable.command'), [], { cwd: originalRoot })
+  const stopped = process.platform === 'darwin'
+    ? await run(path.join(originalRoot, 'Stop DSH-Portable.command'), [], { cwd: originalRoot })
+    : await invokeCli(originalRoot, 'stop', '--json')
   assert.equal(stopped.code, 0, stopped.stderr || stopped.stdout)
 }
 assert.equal((await cli(originalRoot, 'status', '--json')).status, 'stopped')
-if (nativeHost) await requestMacAppQuit(nativeHost)
+if (nativeHost && process.platform === 'darwin') await requestMacAppQuit(nativeHost)
+if (nativeHost && process.platform === 'linux') await requestLinuxAppQuit(nativeHost)
 
 const movedRoot = `${originalRoot} moved ü`
 await renameWithRetry(originalRoot, movedRoot)

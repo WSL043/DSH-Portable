@@ -40,7 +40,7 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
-    assert.match(runtime.archive, /^node-v\d+\.\d+\.\d+-(win-x64\.zip|darwin-(arm64|x64)\.tar\.gz)$/, key)
+    assert.match(runtime.archive, /^node-v\d+\.\d+\.\d+-(win-x64\.zip|darwin-(arm64|x64)\.tar\.gz|linux-(arm64|x64)\.tar\.xz)$/, key)
   }
 })
 

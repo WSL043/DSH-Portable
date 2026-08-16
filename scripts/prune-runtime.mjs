@@ -13,7 +13,7 @@ const prebuildRoot = path.join(ptyRoot, 'prebuilds')
 await access(path.join(ptyRoot, 'package.json'))
 
 const target = `${platform}-${architecture}`
-const allowed = new Set(['win32-x64', 'darwin-arm64', 'darwin-x64'])
+const allowed = new Set(['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64'])
 assert.equal(allowed.has(target), true, `unsupported runtime prune target: ${target}`)
 await access(path.join(prebuildRoot, target))
 

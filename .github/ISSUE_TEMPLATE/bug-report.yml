@@ -18,7 +18,7 @@ body:
     id: version
     attributes:
       label: DSH-Portable 版本 / Version
-      placeholder: 例如 / e.g. 0.2.0-rc.9
+      placeholder: 例如 / e.g. 0.2.0-rc.10
     validations:
       required: true
   - type: textarea

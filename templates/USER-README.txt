@@ -13,6 +13,9 @@ Windows 双击 DeepSeek-Herness.exe。关闭窗口默认收进系统托盘，任
 macOS 双击 DSH-Portable.app。首次被系统拦截时，按住 Control 点按应用并选择
 “打开”。移动文件夹或拔出移动盘前，运行 Stop DSH-Portable.command。
 
+Linux 完整便携目录运行 ./DeepSeek-Herness；AppImage 首次使用前执行 chmod +x。
+AppImage 数据保存在同目录的 DSH-Portable-data，迁移时请把两者一起复制。
+
 启动器会先询问再安装更新。普通更新只下载变化的 DSH 应用组件；会话、设置、
 凭据和工作区都会保留。兼容性变化时才会提示下载完整包，新版启动失败会恢复旧版。
 Windows 托盘和 macOS 应用菜单都可手动检查更新，也可关闭启动时自动检查；
@@ -28,6 +31,14 @@ Windows 插件命令：
 
 插件变更不会自动重启 DSH。保存任务并手动退出、重新打开后生效。
 
+Linux 插件命令：
+
+  ./dsh plugin --profile web add <插件>
+  ./dsh plugin --profile web list --depth 0
+  ./dsh plugin --profile web update <插件包名>
+  ./dsh plugin --profile web remove <插件包名>
+  ./dsh --profile web --dump-config
+
 English
 -------
 
@@ -41,6 +52,10 @@ app, or change close behavior.
 
 On macOS, run DSH-Portable.app. Control-click and choose Open if first launch is
 blocked. Run Stop DSH-Portable.command before moving or unplugging the folder.
+
+On Linux, run ./DeepSeek-Herness from the complete portable folder. Make an
+AppImage executable once with chmod +x. Its data lives in the sibling
+DSH-Portable-data folder; move both together.
 
 The launcher asks before installing an update. A normal update downloads only
 the changed DSH application component and keeps sessions, settings, credentials,
@@ -59,3 +74,11 @@ Windows plugin commands:
 
 Plugin changes never restart DSH automatically. Save the task, exit, and reopen
 the app when convenient.
+
+Linux plugin commands:
+
+  ./dsh plugin --profile web add <plugin>
+  ./dsh plugin --profile web list --depth 0
+  ./dsh plugin --profile web update <package-name>
+  ./dsh plugin --profile web remove <package-name>
+  ./dsh --profile web --dump-config

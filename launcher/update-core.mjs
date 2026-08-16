@@ -23,6 +23,7 @@ const UPDATE_LICENSE_FILES = [
 export function platformUpdateKey(platform = process.platform, arch = process.arch) {
   if (platform === 'win32' && arch === 'x64') return 'windows-x64'
   if (platform === 'darwin' && ['arm64', 'x64'].includes(arch)) return `macos-${arch}`
+  if (platform === 'linux' && ['arm64', 'x64'].includes(arch)) return `linux-${arch}`
   throw new Error(`Unsupported update platform: ${platform}-${arch}`)
 }
 
@@ -202,6 +203,13 @@ export async function extractUpdateArchive(archive, stagedRoot, {
   if (platform === 'win32') {
     if (!existsSync(windowsExtractor)) throw new Error('Windows update extractor is missing.')
     await exec(windowsExtractor, [archive, stagedRoot], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true })
+    return stagedRoot
+  }
+  if (platform === 'linux') {
+    const listed = await exec('unzip', ['-Z1', archive], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
+    validateArchiveEntries(String(listed.stdout ?? listed).split(/\r?\n/))
+    await mkdir(path.dirname(stagedRoot), { recursive: true })
+    await exec('unzip', ['-q', archive, '-d', stagedRoot], { encoding: 'utf8' })
     return stagedRoot
   }
   const listed = await exec('tar', ['-t', '-f', archive], { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })

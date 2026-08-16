@@ -39,6 +39,10 @@ jobs:
             label: macos-arm64
           - runner: macos-15-intel
             label: macos-x64
+          - runner: ubuntu-22.04
+            label: linux-x64
+          - runner: ubuntu-22.04-arm
+            label: linux-arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
@@ -364,3 +368,149 @@ jobs:
           name: macos-${{ matrix.arch }}-build
           path: artifacts
       - run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
+
+  linux-build:
+    name: Build Linux (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: |
+            app/package-lock.json
+            launcher/linux/package-lock.json
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          components: rustfmt
+      - name: Install pinned Linux desktop build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential curl file fuse libayatana-appindicator3-dev libfuse2 \
+            libgtk-3-dev librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev \
+            unzip xauth xvfb xdotool zip
+      - run: bash scripts/build-linux.sh "${{ matrix.arch }}"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch }}-build
+          path: |
+            artifacts/DSH-Portable-linux-${{ matrix.arch }}.tar.gz
+            artifacts/DSH-Portable-linux-${{ matrix.arch }}.tar.gz.sha256
+            artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage
+            artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage.sha256
+            artifacts/DSH-Portable-update-linux-${{ matrix.arch }}.zip
+            artifacts/DSH-Portable-update-linux-${{ matrix.arch }}.zip.sha256
+            artifacts/portable-update-linux-${{ matrix.arch }}.json
+          if-no-files-found: error
+          compression-level: 0
+
+  linux-portable-smoke:
+    name: Linux movable package and component update (${{ matrix.arch }})
+    needs: linux-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-${{ matrix.arch }}-build
+          path: artifacts
+      - name: Install Linux runtime smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 unzip xauth xvfb
+      - run: node scripts/verify-update-artifact.mjs "artifacts/portable-update-linux-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-linux-${{ matrix.arch }}.zip"
+      - name: Extract, update, run, move, and stop
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-linux-portable"
+          mkdir -p "$ROOT"
+          tar -xzf "artifacts/DSH-Portable-linux-${{ matrix.arch }}.tar.gz" -C "$ROOT"
+          node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-linux-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-linux-${{ matrix.arch }}.zip"
+          xvfb-run -a node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
+
+  linux-plugin-smoke:
+    name: Linux bundled plugin management (${{ matrix.arch }})
+    needs: linux-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-${{ matrix.arch }}-build
+          path: artifacts
+      - name: Install one-click package smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 xauth xvfb
+      - name: Add, list, compose, remove, and move with no system Node or pnpm
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-linux-plugins"
+          mkdir -p "$ROOT"
+          tar -xzf "artifacts/DSH-Portable-linux-${{ matrix.arch }}.tar.gz" -C "$ROOT"
+          bash scripts/smoke-linux-plugins.sh "$ROOT/DSH-Portable" tests/fixtures/dsh-portable-smoke-plugin
+      - name: Repeat plugin lifecycle through the one-click AppImage
+        run: |
+          chmod +x "artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage"
+          xvfb-run -a bash scripts/smoke-linux-appimage-plugins.sh \
+            "artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage" \
+            tests/fixtures/dsh-portable-smoke-plugin
+
+  linux-desktop-host:
+    name: Linux native desktop identity and AppImage (${{ matrix.arch }})
+    needs: linux-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            arch: x64
+          - runner: ubuntu-22.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: linux-${{ matrix.arch }}-build
+          path: artifacts
+      - name: Install native Linux desktop smoke dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-0 xauth xvfb xdotool
+      - name: Verify native window, lifecycle, and self-contained AppImage payload
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-linux-desktop"
+          mkdir -p "$ROOT"
+          tar -xzf "artifacts/DSH-Portable-linux-${{ matrix.arch }}.tar.gz" -C "$ROOT"
+          xvfb-run -a bash scripts/smoke-linux-desktop-host.sh "$ROOT/DSH-Portable"
+          chmod +x "artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage"
+          APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a "artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage" --diagnostic-root-json | tee "$RUNNER_TEMP/appimage-layout.json"
+          grep -q '"mode":"appimage"' "$RUNNER_TEMP/appimage-layout.json"

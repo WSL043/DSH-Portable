@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=171717" alt="Latest release"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-171717?style=flat-square" alt="Windows and macOS">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-171717?style=flat-square" alt="Windows, macOS, and Linux">
   <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="Star DSH-Portable on GitHub"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2F855A?style=flat-square" alt="MIT license"></a>
 </p>
@@ -86,9 +86,27 @@ When syncing between two computers, exit the app on both before syncing the whol
 The macOS packages are ad-hoc signed, not notarized by Apple. If first launch is blocked,
 Control-click the app and choose **Open**.
 
+### Linux
+
+| Computer | One-click app (recommended) | Complete portable folder |
+| --- | --- | --- |
+| Common Intel / AMD computer (x64) | [AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) | [tar.gz](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz) |
+| ARM64 computer | [AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) | [tar.gz](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz) |
+
+Make the AppImage executable once, then run it:
+
+```bash
+chmod +x DeepSeek-Herness-linux-x64.AppImage
+./DeepSeek-Herness-linux-x64.AppImage
+```
+
+The AppImage keeps sessions, settings, plugins, and workspace in a sibling
+`DSH-Portable-data` folder. Move or back up the AppImage and that folder together. The tar.gz
+contains a complete `DSH-Portable` directory; extract it and run `DeepSeek-Herness` inside.
+
 ## Plugin management
 
-The Windows product includes its plugin command. Open PowerShell in the DSH-Portable folder:
+Windows and Linux products include their plugin command. On Windows, open PowerShell in the DSH-Portable folder:
 
 ```powershell
 .\dsh.exe plugin --profile web add <plugin>
@@ -96,6 +114,17 @@ The Windows product includes its plugin command. Open PowerShell in the DSH-Port
 .\dsh.exe plugin --profile web update <package-name>
 .\dsh.exe plugin --profile web remove <package-name>
 .\dsh.exe --profile web --dump-config
+```
+
+In a complete Linux portable folder, use `./dsh`. With the AppImage, use
+`./DeepSeek-Herness-linux-<architecture>.AppImage dsh`:
+
+```bash
+./dsh plugin --profile web add <plugin>
+./dsh plugin --profile web list --depth 0
+./dsh plugin --profile web update <package-name>
+./dsh plugin --profile web remove <package-name>
+./dsh --profile web --dump-config
 ```
 
 Plugins and settings travel with the portable data. Plugin changes never restart a running task;
@@ -111,13 +140,13 @@ DSH-Portable checks for updates when it starts and asks before installing one. A
 downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place. Files are verified before replacement, and a failed launch restores
 the previous version.
 
-On Windows, you can **Check for updates** from the system tray; on macOS, use the application menu.
+On Windows and Linux, you can **Check for updates** from the system tray; on macOS, use the application menu.
 Turn off **Check for updates at startup** from the same menu if you do not want automatic prompts.
 The manual check remains available. When an update is available, choose **Update now** or **Later**.
 A running task is never interrupted for an update.
 
 When the runtime compatibility boundary changes, DSH-Portable requests a complete package. Official
-preview updates first become candidate builds and must pass Windows and macOS finished-product
+preview updates first become candidate builds and must pass Windows, macOS, and Linux x64/ARM64 finished-product
 tests before they enter the launcher update channel.
 
 ## Portable data

@@ -77,7 +77,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.0-rc.9')
+  assert.equal(manifest.version, '0.2.0-rc.10')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -151,7 +151,8 @@ test('update guidance describes the component update path without exposing inter
   assert.match(userReadme, /只下载.+DSH.+组件/s)
   assert.match(userReadme, /English[\s\S]+downloads only\s+the changed DSH application component/i)
   assert.match(releaseNotes, /启动时检查更新/)
-  assert.match(releaseNotes, /本次更新.+完整包.+后续.+DSH 应用组件/s)
+  assert.match(releaseNotes, /Linux x64 与 ARM64/)
+  assert.match(releaseNotes, /普通更新只替换 DSH 应用组件.+保留用户数据/s)
   assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
 })
 
@@ -316,7 +317,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /shellSchema/)
   assert.match(build, /shellSchema\s*=\s*8/)
   assert.match(build, /requiredShellSchema\s*=\s*8/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.9"\)/)
+  assert.match(source, /AssemblyFileVersion\("0\.2\.0\.10"\)/)
   assert.match(bootstrap, /ZipArchive/)
   assert.doesNotMatch(bootstrap, /tar\.exe/i)
   assert.doesNotMatch(build, /community\.1|DeepSeek Harness\.cmd/)
@@ -495,7 +496,7 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
   assert.match(build, /"shellSchema": 8/)
   assert.match(build, /"requiredShellSchema": 8/)
-  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>5<\/string>/s)
+  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>6<\/string>/s)
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)
   assert.match(app, /Check for updates at startup|启动时检查更新/)
@@ -615,11 +616,13 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(macDesktopHostSmoke, /--no-browser/)
 })
 
-test('Node runtime lock covers Windows and both Mac CPU families', async () => {
+test('Node runtime lock covers Windows, macOS, and both Linux CPU families', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
   assert.equal(lock.node.version, '24.19.0')
   assert.match(lock.node.runtimes['win-x64'].archive, /win-x64\.zip$/)
   assert.match(lock.node.runtimes['darwin-arm64'].archive, /darwin-arm64\.tar\.gz$/)
   assert.match(lock.node.runtimes['darwin-x64'].archive, /darwin-x64\.tar\.gz$/)
+  assert.match(lock.node.runtimes['linux-arm64'].archive, /linux-arm64\.tar\.xz$/)
+  assert.match(lock.node.runtimes['linux-x64'].archive, /linux-x64\.tar\.xz$/)
   for (const runtime of Object.values(lock.node.runtimes)) assert.match(runtime.sha256, /^[0-9a-f]{64}$/)
 })

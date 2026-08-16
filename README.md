@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=171717" alt="最新版本"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS-171717?style=flat-square" alt="Windows 和 macOS">
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-171717?style=flat-square" alt="Windows、macOS 和 Linux">
   <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="在 GitHub 上 Star DSH-Portable"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2F855A?style=flat-square" alt="MIT 许可证"></a>
 </p>
@@ -86,9 +86,27 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 macOS 包采用临时签名，没有经过 Apple 公证。首次打开若被阻止，请按住 Control
 点按应用，再选择 **打开**。
 
+### Linux
+
+| 电脑 | 一键启动（推荐） | 完整便携目录 |
+| --- | --- | --- |
+| 常见 Intel / AMD 电脑（x64） | [下载 AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) | [下载 tar.gz](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz) |
+| ARM64 电脑 | [下载 AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) | [下载 tar.gz](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz) |
+
+给 AppImage 添加一次执行权限后即可启动：
+
+```bash
+chmod +x DeepSeek-Herness-linux-x64.AppImage
+./DeepSeek-Herness-linux-x64.AppImage
+```
+
+AppImage 会把会话、设置、插件和工作区保存在同目录的 `DSH-Portable-data` 文件夹；
+迁移或备份时把 AppImage 与这个文件夹一起复制。tar.gz 是完整的 `DSH-Portable`
+目录，解压后运行其中的 `DeepSeek-Herness`，整个目录可直接移动。
+
 ## 插件管理
 
-Windows 成品已经准备好插件命令。在 DSH-Portable 文件夹中打开 PowerShell：
+Windows 和 Linux 成品都已准备好插件命令。Windows 在 DSH-Portable 文件夹中打开 PowerShell：
 
 ```powershell
 .\dsh.exe plugin --profile web add <插件>
@@ -96,6 +114,16 @@ Windows 成品已经准备好插件命令。在 DSH-Portable 文件夹中打开 
 .\dsh.exe plugin --profile web update <插件包名>
 .\dsh.exe plugin --profile web remove <插件包名>
 .\dsh.exe --profile web --dump-config
+```
+
+Linux 完整便携目录使用 `./dsh`；AppImage 使用 `./DeepSeek-Herness-linux-<架构>.AppImage dsh`：
+
+```bash
+./dsh plugin --profile web add <插件>
+./dsh plugin --profile web list --depth 0
+./dsh plugin --profile web update <插件包名>
+./dsh plugin --profile web remove <插件包名>
+./dsh --profile web --dump-config
 ```
 
 `<插件>` 可以是包名、Git 地址、本地目录或压缩包。插件和设置都保存在便携数据中，
@@ -112,12 +140,12 @@ DSH-Portable 会在启动时检查更新，并先询问是否安装。一般更�
 应用组件；会话、设置、凭据和工作区都会保留。下载完成后会先验证再替换，若新版
 不能正常启动，会自动恢复到更新前版本。
 
-Windows 可以从系统托盘手动 **检查更新**，macOS 可以从应用菜单检查。不想接收主动提醒时，
+Windows 和 Linux 可以从系统托盘手动 **检查更新**，macOS 可以从应用菜单检查。不想接收主动提醒时，
 可以在同一菜单里关闭 **启动时检查更新**；手动检查入口仍会保留。发现更新时可以选择
 **现在更新** 或 **稍后**，有任务运行时不会为了更新中断任务。
 
 只有运行环境或启动器出现兼容性变化时，才会提示下载完整安装包。官方预览版更新
-会先生成候选版本，经过 Windows 与 macOS 成品测试后才进入启动器更新通道，不会把
+会先生成候选版本，经过 Windows、macOS 与 Linux x64/ARM64 成品测试后才进入启动器更新通道，不会把
 未经验证的官方提交直接装到你的工作环境。
 
 ## 便携数据
@@ -152,6 +180,7 @@ NTFS；FAT 和 exFAT 无法提供同等级权限保护。
 
 ```bash
 bash scripts/build-macos.sh arm64   # 或 x64
+bash scripts/build-linux.sh x64     # 或 arm64
 ```
 
 依赖版本、发布内容和成品测试都由仓库固定。下载完整性由启动器处理，普通用户无需

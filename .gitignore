@@ -1,6 +1,11 @@
 /.cache/
 /artifacts/
 /app/node_modules/
+/launcher/linux/node_modules/
+/launcher/linux/gen/
+/launcher/linux/payload/*
+!/launcher/linux/payload/.keep
+/launcher/linux/target/
 /data/
 /runtime/
 /workspace/

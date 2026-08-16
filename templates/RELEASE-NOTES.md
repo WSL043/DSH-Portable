@@ -1,14 +1,12 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-本次更新会在 Windows 和 macOS 记住桌面窗口的大小与位置；重新打开时恢复上次布局，
-显示器变化后则自动回到安全的可见位置。Windows 托盘继续跟随 DSH 的语言和明暗外观，
-显示最近会话，并可直接打开会话或新建会话。Windows 托盘和 macOS 应用菜单现在也能手动检查更新、
-关闭启动时自动检查，并直接提交 Bug 报告。发现新版后可选择现在更新或稍后；运行中的任务不会被
-更新中断。关闭窗口默认收进系统托盘，任务继续运行。
+本次加入 Linux x64 与 ARM64。两个架构都提供一键 AppImage 和完整便携目录；使用原生
+桌面窗口与系统托盘，不会在启动时拉起外部浏览器。会话、设置、插件和工作区随便携数据
+一起移动，插件命令使用包内运行环境，不要求修改系统 PATH。
 
-便携目录继续完整保留会话、设置、插件和工作区。启动时检查更新，一般只下载变化的
-DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新继续只下载变化的 DSH 应用组件。
-推荐下载器无法联网时会打开实际发布的离线 ZIP；普通下载列表不再混入机器更新文件。
+Linux 成品和现有 Windows、macOS 成品使用同一套组件更新通道。发现新版时先询问是否更新，
+普通更新只替换 DSH 应用组件并保留用户数据；运行中的任务不会被自动更新中断。
+可以从托盘或应用菜单手动检查，也可以关闭启动时检查更新。
 
 ## Windows x64（推荐）
 
@@ -24,6 +22,8 @@ DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新�
 - [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe)
 - Apple Silicon：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
 - Intel Mac：[便携 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
+- Linux x64：[AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) · [完整便携目录](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz)
+- Linux ARM64：[AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) · [完整便携目录](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz)
 
 </details>
 
@@ -36,18 +36,15 @@ DSH 应用组件；本次更新需要下载一次完整包，后续兼容更新�
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`).
 > DSH-Portable is an independent community distribution.
 
-This release remembers the native window size and position on Windows and macOS. It restores the
-last workspace layout on launch and falls back to a safe visible position after display changes.
-The Windows tray continues to follow the DSH language and appearance, list recent sessions, and
-open a session or start a new one directly. The Windows tray and macOS application menu can now
-check for updates, turn off startup checks, and open a Bug report directly. Choose Update now or Later when a release is available; a running
-task is never interrupted. Closing the window sends the app to the tray by default.
+This release adds Linux x64 and ARM64. Both architectures include a one-click AppImage and a
+complete portable folder. The native desktop window and system tray do not launch an external
+browser at startup. Sessions, settings, plugins, and workspace move with the portable data, and
+plugin commands use the bundled runtime without changing the system PATH.
 
-Portable sessions, settings, plugins, and workspace remain in the same folder. Startup update checks
-normally download only the changed DSH application component. This release requires one complete
-package download; later compatible updates return to component-only downloads.
-If the recommended downloader cannot connect, its offline option now opens the published ZIP.
-Machine update files no longer appear in the normal download list.
+Linux joins the existing Windows and macOS component update channel. The app asks before installing
+an update, replaces only the DSH application component during compatible updates, and keeps user
+data in place. A running task is never interrupted automatically.
+Use the tray or app menu to check manually or turn off update checks at startup.
 
 ### Windows x64 (recommended)
 
@@ -63,6 +60,8 @@ Run it once to create a movable `DSH-Portable` folder beside the launcher. After
 - [Windows installer](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe)
 - Apple Silicon: [portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg)
 - Intel Mac: [portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) · [DMG](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg)
+- Linux x64: [AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) · [complete portable folder](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz)
+- Linux ARM64: [AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) · [complete portable folder](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz)
 
 </details>
 

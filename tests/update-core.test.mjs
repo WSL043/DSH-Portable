@@ -92,7 +92,9 @@ test('platform update keys are explicit and unsupported targets fail closed', ()
   assert.equal(platformUpdateKey('win32', 'x64'), 'windows-x64')
   assert.equal(platformUpdateKey('darwin', 'arm64'), 'macos-arm64')
   assert.equal(platformUpdateKey('darwin', 'x64'), 'macos-x64')
-  assert.throws(() => platformUpdateKey('linux', 'x64'), /unsupported/i)
+  assert.equal(platformUpdateKey('linux', 'arm64'), 'linux-arm64')
+  assert.equal(platformUpdateKey('linux', 'x64'), 'linux-x64')
+  assert.throws(() => platformUpdateKey('linux', 'ia32'), /unsupported/i)
 })
 
 test('update checks read installed metadata and cache a successful result', async () => {
@@ -303,6 +305,27 @@ test('component archives are restricted to replaceable application files', () =>
   ]))
   for (const entry of ['../data/private.txt', '/absolute', 'C:/Windows/System32/file', 'data/session.json', 'launcher/portable-cli.mjs']) {
     assert.throws(() => validateArchiveEntries([entry]), /unsafe|not allowed/i, entry)
+  }
+})
+
+test('Linux extracts a verified update without relying on macOS ditto', async () => {
+  const calls = []
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-linux-update-extract-'))
+  try {
+    await extractUpdateArchive('/tmp/component.zip', root, {
+      platform: 'linux',
+      exec: async (command, args) => {
+        calls.push({ command, args })
+        if (command === 'unzip' && args[0] === '-Z1') return { stdout: 'component.json\napp/package.json\n' }
+        return { stdout: '' }
+      },
+    })
+    assert.deepEqual(calls, [
+      { command: 'unzip', args: ['-Z1', '/tmp/component.zip'] },
+      { command: 'unzip', args: ['-q', '/tmp/component.zip', '-d', root] },
+    ])
+  } finally {
+    await rm(root, { recursive: true, force: true })
   }
 })
 

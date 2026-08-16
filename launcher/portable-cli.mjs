@@ -469,7 +469,7 @@ function print(result, json) {
 }
 
 async function main() {
-  if (!['win32', 'darwin'].includes(process.platform)) throw new Error('DSH-Portable supports Windows and macOS.')
+  if (!['win32', 'darwin', 'linux'].includes(process.platform)) throw new Error('DSH-Portable supports Windows, macOS, and Linux.')
   const options = parseCli(process.argv.slice(2))
   const release = await acquireLaunchLock(layout)
   try {

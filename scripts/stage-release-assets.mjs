@@ -16,6 +16,10 @@ const userAssets = [
   'DSH-Portable-macos-x64.zip',
   'DeepSeek-Herness-macos-arm64.dmg',
   'DeepSeek-Herness-macos-x64.dmg',
+  'DSH-Portable-linux-x64.tar.gz',
+  'DSH-Portable-linux-arm64.tar.gz',
+  'DeepSeek-Herness-linux-x64.AppImage',
+  'DeepSeek-Herness-linux-arm64.AppImage',
 ]
 const updateAssets = [
   'portable-manifest.json',
@@ -26,6 +30,10 @@ const updateAssets = [
   'portable-update-macos-arm64.json',
   'DSH-Portable-update-macos-x64.zip',
   'portable-update-macos-x64.json',
+  'DSH-Portable-update-linux-x64.zip',
+  'portable-update-linux-x64.json',
+  'DSH-Portable-update-linux-arm64.zip',
+  'portable-update-linux-arm64.json',
 ]
 async function requireFile(name) {
   const filename = path.join(artifacts, name)
