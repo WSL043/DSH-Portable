@@ -21,8 +21,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.2.65534")]
-[assembly: AssemblyFileVersion("0.2.2.65534")]
+[assembly: AssemblyVersion("0.2.3.65534")]
+[assembly: AssemblyFileVersion("0.2.3.65534")]
 
 namespace DshPortable
 {
@@ -475,7 +475,7 @@ namespace DshPortable
             automaticUpdateCheckItem.Click += delegate
             {
                 updateCheckEnabled = !updateCheckEnabled;
-                automaticUpdateCheckItem.Checked = updateCheckEnabled;
+                RefreshAutomaticUpdateCheckItem();
                 SaveLauncherSettings();
             };
             trayMenu = new ContextMenuStrip
@@ -503,10 +503,7 @@ namespace DshPortable
                 ContextMenuStrip = trayMenu,
                 Visible = false,
             };
-            trayIcon.MouseUp += delegate(object sender, MouseEventArgs eventArgs)
-            {
-                if (eventArgs.Button == MouseButtons.Left) ShowTrayMenu();
-            };
+            trayIcon.MouseUp += HandleTrayMouseUp;
 
             webView = new WebView2 { Dock = DockStyle.Fill, Visible = false };
             Controls.Add(webView);
@@ -663,12 +660,7 @@ namespace DshPortable
                 ? L("正在检查…", "Checking…")
                 : L("检查更新", "Check for updates");
             checkUpdateItem.Enabled = !manualUpdateRunning;
-            automaticUpdateCheckItem.Text = L("启动时检查更新", "Check for updates at startup");
-            automaticUpdateCheckItem.Checked = false;
-            automaticUpdateCheckItem.ShowShortcutKeys = true;
-            automaticUpdateCheckItem.ShortcutKeyDisplayString = updateCheckEnabled
-                ? L("已开启", "On")
-                : L("已关闭", "Off");
+            RefreshAutomaticUpdateCheckItem();
             closeBehaviorItem.Checked = false;
             closeBehaviorItem.ShowShortcutKeys = true;
             closeBehaviorItem.ShortcutKeyDisplayString = closeBehavior == WindowCloseBehavior.Tray
@@ -680,25 +672,22 @@ namespace DshPortable
                 ? trayState.sessions.Where(item => item != null && !String.IsNullOrWhiteSpace(item.id)).Take(10).ToList()
                 : new List<TrayBridgeSession>();
 
-            if (!trayBridgeReady)
+            trayMenu.Items.Add(CreateOpenItem());
+            if (trayBridgeReady)
             {
-                trayMenu.Items.Add(CreateOpenItem());
-            }
-            else
-            {
+                trayMenu.Items.Add(new ToolStripSeparator());
                 foreach (TrayBridgeSession session in sessions.Take(3))
                     trayMenu.Items.Add(CreateSessionMenuItem(session));
 
-                if (sessions.Count > 0) trayMenu.Items.Add(new ToolStripSeparator());
                 ToolStripMenuItem more = new ToolStripMenuItem(L("更多", "More"));
                 foreach (TrayBridgeSession session in sessions.Skip(3).Take(7))
                     more.DropDownItems.Add(CreateSessionMenuItem(session));
                 if (more.DropDownItems.Count > 0) more.DropDownItems.Add(new ToolStripSeparator());
-                more.DropDownItems.Add(CreateOpenItem());
                 more.DropDownItems.Add(checkUpdateItem);
                 more.DropDownItems.Add(automaticUpdateCheckItem);
-                more.DropDownItems.Add(new ToolStripSeparator());
                 more.DropDownItems.Add(closeBehaviorItem);
+                more.DropDownItems.Add(new ToolStripSeparator());
+                more.DropDownItems.Add(CreateReportProblemItem());
                 ToolStripDropDownMenu moreMenu = more.DropDown as ToolStripDropDownMenu;
                 if (moreMenu != null)
                 {
@@ -716,17 +705,26 @@ namespace DshPortable
                     PostBridgeAction("new-session", null);
                 };
                 trayMenu.Items.Add(fresh);
-                trayMenu.Items.Add(CreateReportProblemItem());
             }
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add(CreateExitItem());
             ApplyTrayTheme();
         }
 
-        private void ShowTrayMenu()
+        private void HandleTrayMouseUp(object sender, MouseEventArgs eventArgs)
         {
-            RebuildTrayMenu();
-            trayMenu.Show(Cursor.Position);
+            if (eventArgs.Button == MouseButtons.Left) RestoreFromTray();
+        }
+
+        private void RefreshAutomaticUpdateCheckItem()
+        {
+            automaticUpdateCheckItem.Text = L("启动时检查更新", "Check for updates at startup");
+            automaticUpdateCheckItem.Checked = false;
+            automaticUpdateCheckItem.ShowShortcutKeys = true;
+            automaticUpdateCheckItem.ShortcutKeyDisplayString = updateCheckEnabled
+                ? L("已开启", "On")
+                : L("已关闭", "Off");
+            automaticUpdateCheckItem.Invalidate();
         }
 
         private void ApplyTrayTheme()

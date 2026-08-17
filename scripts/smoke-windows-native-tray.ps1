@@ -35,6 +35,9 @@ $Constructor = $WindowType.GetConstructor($InstanceMembers, $null, [Type[]]@([st
 $ConstructorArgs = New-Object 'System.Object[]' 1
 $ConstructorArgs[0] = [string[]]@('--desktop')
 $Window = $Constructor.Invoke($ConstructorArgs)
+$WindowType.GetField('root', $AllFields).SetValue($Window, $ResolvedRoot)
+$InitialUpdateEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers).Invoke($Window, $null)
+$WindowType.GetField('updateCheckEnabled', $AllFields).SetValue($Window, $InitialUpdateEnabled)
 if ($CaptureDirectory) {
     New-Item -ItemType Directory -Force -Path $CaptureDirectory | Out-Null
 }
@@ -102,20 +105,70 @@ try {
         $Menu = [Windows.Forms.ContextMenuStrip]$WindowType.GetField('trayMenu', $AllFields).GetValue($Window)
 
         if ($Menu.Items.Count -ne 10) { throw "The tray menu must expose exactly ten bounded rows for $($Case.Locale)" }
-        if ($Menu.Items[0].ShortcutKeyDisplayString.Trim() -ne $Case.Running) { throw "Running state is missing for $($Case.Locale)" }
-        if ($Menu.Items[1].ShortcutKeyDisplayString -ne $Case.Waiting) { throw "Waiting state is missing for $($Case.Locale)" }
-        if ($Menu.Items[2].ShortcutKeyDisplayString -ne $Case.Completed) { throw "Completed state is missing for $($Case.Locale)" }
-        if ($Menu.Items[3] -isnot [Windows.Forms.ToolStripSeparator] -or $Menu.Items[5] -isnot [Windows.Forms.ToolStripSeparator] -or $Menu.Items[8] -isnot [Windows.Forms.ToolStripSeparator]) {
+        if ($Menu.Items[0].Text -notmatch 'DeepSeek Harness') { throw "Open command must be the first root item for $($Case.Locale)" }
+        if ($Menu.Items[1] -isnot [Windows.Forms.ToolStripSeparator]) { throw "Open command separator is missing for $($Case.Locale)" }
+        if ($Menu.Items[2].ShortcutKeyDisplayString.Trim() -ne $Case.Running) { throw "Running state is missing for $($Case.Locale)" }
+        if ($Menu.Items[3].ShortcutKeyDisplayString -ne $Case.Waiting) { throw "Waiting state is missing for $($Case.Locale)" }
+        if ($Menu.Items[4].ShortcutKeyDisplayString -ne $Case.Completed) { throw "Completed state is missing for $($Case.Locale)" }
+        if ($Menu.Items[6] -isnot [Windows.Forms.ToolStripSeparator] -or $Menu.Items[8] -isnot [Windows.Forms.ToolStripSeparator]) {
             throw "Tray grouping is incorrect for $($Case.Locale)"
         }
-        if ($Menu.Items[4].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
-        if ($Menu.Items[6].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
-        if ($Menu.Items[7].Text -ne $Case.Feedback) { throw "Feedback command is missing for $($Case.Locale)" }
+        if ($Menu.Items[5].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
+        if ($Menu.Items[7].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
         if ($Menu.Items[9].Text -ne $Case.Exit) { throw "Exit command is missing for $($Case.Locale)" }
-        if ($Menu.Items[4].DropDownItems.Count -ne 7) { throw "More submenu must contain bounded overflow and direct settings commands" }
-        foreach ($MoreItem in $Menu.Items[4].DropDownItems) {
+        if ($Menu.Items[5].DropDownItems.Count -ne 7) { throw "More submenu must contain bounded overflow and direct settings commands" }
+        if ($Menu.Items[5].DropDownItems[6].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
+        foreach ($MoreItem in $Menu.Items[5].DropDownItems) {
             if ($MoreItem -is [Windows.Forms.ToolStripMenuItem] -and $MoreItem.DropDownItems.Count -ne 0) {
                 throw "More submenu must stop at the second level"
+            }
+        }
+
+        $Window.Hide()
+        $Window.ShowInTaskbar = $false
+        $WindowType.GetField('desktopReady', $AllFields).SetValue($Window, $true)
+        $LeftClick = [Windows.Forms.MouseEventArgs]::new([Windows.Forms.MouseButtons]::Left, 1, 0, 0, 0)
+        $WindowType.GetMethod('HandleTrayMouseUp', $InstanceMembers).Invoke($Window, @($null, $LeftClick)) | Out-Null
+        [Windows.Forms.Application]::DoEvents()
+        if (-not $Window.Visible -or -not $Window.ShowInTaskbar -or $Menu.Visible) {
+            throw 'Left-click must restore the desktop window without opening the tray menu'
+        }
+
+        if ($Case.Locale -eq 'en') {
+            $AutomaticItem = [Windows.Forms.ToolStripMenuItem]$WindowType.GetField('automaticUpdateCheckItem', $AllFields).GetValue($Window)
+            $UpdateEnabledField = $WindowType.GetField('updateCheckEnabled', $AllFields)
+            $SettingsPath = Join-Path $ResolvedRoot 'data\launcher-settings.json'
+            if (-not [bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
+                throw 'Automatic update checks must default to On'
+            }
+            $AutomaticItem.PerformClick()
+            [Windows.Forms.Application]::DoEvents()
+            if ([bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
+                throw 'Automatic update check status did not change immediately after click'
+            }
+            if (-not (Test-Path -LiteralPath $SettingsPath) -or (Get-Content -Raw -LiteralPath $SettingsPath) -notmatch '"updateCheckEnabled":false') {
+                throw 'Automatic update check preference was not saved'
+            }
+
+            $ReloadedWindow = $Constructor.Invoke($ConstructorArgs)
+            try {
+                $WindowType.GetField('root', $AllFields).SetValue($ReloadedWindow, $ResolvedRoot)
+                $ReloadedEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers).Invoke($ReloadedWindow, $null)
+                $UpdateEnabledField.SetValue($ReloadedWindow, $ReloadedEnabled)
+                $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers).Invoke($ReloadedWindow, $null) | Out-Null
+                $ReloadedItem = [Windows.Forms.ToolStripMenuItem]$WindowType.GetField('automaticUpdateCheckItem', $AllFields).GetValue($ReloadedWindow)
+                if ([bool]$UpdateEnabledField.GetValue($ReloadedWindow) -or $ReloadedItem.ShortcutKeyDisplayString -ne 'Off') {
+                    throw 'Automatic update check preference was not restored after restart'
+                }
+            }
+            finally {
+                $ReloadedWindow.Dispose()
+            }
+
+            $AutomaticItem.PerformClick()
+            [Windows.Forms.Application]::DoEvents()
+            if (-not [bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
+                throw 'Automatic update check preference could not be re-enabled'
             }
         }
 
