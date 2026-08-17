@@ -59,9 +59,18 @@ try {
         throw "Tray title truncation must preserve exactly 35 complete text elements"
     }
 
+    $ZhRecent = -join ([char[]]@(0x6700, 0x8FD1))
+    $ZhRunning = -join ([char[]]@(0x8FD0, 0x884C, 0x4E2D))
+    $ZhWaiting = -join ([char[]]@(0x5F85, 0x56DE, 0x590D))
+    $ZhReview = -join ([char[]]@(0x590D, 0x6838))
+    $ZhMore = -join ([char[]]@(0x66F4, 0x591A))
+    $ZhNew = -join ([char[]]@(0x65B0, 0x4F1A, 0x8BDD))
+    $ZhFeedback = -join ([char[]]@(0x53CD, 0x9988, 0x95EE, 0x9898))
+    $ZhExit = (-join ([char[]]@(0x9000, 0x51FA))) + ' DeepSeek Harness'
+
     foreach ($Case in @(
         @{ Locale = 'en'; Theme = 'light'; Recent = 'Recent'; Running = 'Running'; Waiting = 'Needs input'; Review = 'Review'; More = 'More'; New = 'New session'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
-        @{ Locale = 'zh'; Theme = 'dark'; Recent = '最近'; Running = '运行中'; Waiting = '待回复'; Review = '复核'; More = '更多'; New = '新会话'; Feedback = '反馈问题'; Exit = '退出 DeepSeek Harness' }
+        @{ Locale = 'zh'; Theme = 'dark'; Recent = $ZhRecent; Running = $ZhRunning; Waiting = $ZhWaiting; Review = $ZhReview; More = $ZhMore; New = $ZhNew; Feedback = $ZhFeedback; Exit = $ZhExit }
     )) {
         Set-Property $StateType $State 'locale' $Case.Locale
         Set-Property $StateType $State 'theme' $Case.Theme

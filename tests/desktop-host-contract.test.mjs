@@ -101,9 +101,10 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
 })
 
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
-  const [workflow, windowsSmoke, macSmoke] = await Promise.all([
+  const [workflow, windowsSmoke, traySmoke, macSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-desktop-host.ps1'),
+    read('scripts/smoke-windows-native-tray.ps1'),
     read('scripts/smoke-macos-desktop-host.sh'),
   ])
 
@@ -111,6 +112,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /smoke-windows-desktop-host\.ps1/)
   assert.match(workflow, /smoke-windows-native-tray\.ps1/)
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
+  assert.doesNotMatch(traySmoke, /[^\x00-\x7F]/, 'Windows PowerShell 5.1 smoke scripts must remain encoding-safe without a BOM')
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)
