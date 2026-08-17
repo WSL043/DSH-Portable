@@ -112,6 +112,8 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /smoke-windows-desktop-host\.ps1/)
   assert.match(workflow, /smoke-windows-native-tray\.ps1/)
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
+  assert.match(workflow, /\$DownloadRoot = Join-Path \$env:RUNNER_TEMP 'dsh-native-download-host'/)
+  assert.match(workflow, /smoke-windows-native-download\.mjs \(Join-Path \$DownloadRoot 'DSH-Portable'\)/)
   assert.doesNotMatch(traySmoke, /[^\x00-\x7F]/, 'Windows PowerShell 5.1 smoke scripts must remain encoding-safe without a BOM')
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
