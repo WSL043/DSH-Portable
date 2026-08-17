@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -66,13 +67,14 @@ namespace DshPortable
             UseSystemColors = false;
         }
 
-        private Color Surface { get { return dark ? Color.FromArgb(53, 54, 56) : Color.White; } }
-        private Color Selected { get { return dark ? Color.FromArgb(67, 69, 74) : Color.FromArgb(233, 236, 242); } }
-        private Color Border { get { return dark ? Color.FromArgb(84, 85, 87) : Color.FromArgb(210, 213, 218); } }
-        internal Color TextColor { get { return dark ? Color.FromArgb(249, 250, 251) : Color.FromArgb(15, 17, 21); } }
+        private Color Surface { get { return dark ? Color.FromArgb(31, 32, 34) : Color.FromArgb(249, 249, 249); } }
+        private Color Selected { get { return dark ? Color.FromArgb(45, 47, 50) : Color.FromArgb(235, 235, 235); } }
+        private Color Border { get { return dark ? Color.FromArgb(61, 63, 66) : Color.FromArgb(218, 218, 218); } }
+        internal Color TextColor { get { return dark ? Color.FromArgb(238, 239, 241) : Color.FromArgb(15, 17, 21); } }
         internal Color CaptionColor { get { return dark ? Color.FromArgb(173, 178, 184) : Color.FromArgb(97, 102, 107); } }
         internal Color SurfaceColor { get { return Surface; } }
         internal Color SelectedColor { get { return Selected; } }
+        internal Color BorderColor { get { return Border; } }
 
         public override Color ToolStripDropDownBackground { get { return Surface; } }
         public override Color ImageMarginGradientBegin { get { return Surface; } }
@@ -90,139 +92,155 @@ namespace DshPortable
         public override Color SeparatorLight { get { return Surface; } }
     }
 
-    internal sealed class DownloadProgressWindow : Form
+    internal sealed class DshMenuRenderer : ToolStripProfessionalRenderer
     {
-        private readonly CoreWebView2DownloadOperation operation;
+        private readonly Color selectedColor;
+        private readonly Color textColor;
+        private readonly Color captionColor;
+        private readonly Color runningColor;
+        private readonly Color borderColor;
         private readonly bool chinese;
-        private readonly Label status;
-        private readonly Label details;
-        private readonly ProgressBar progress;
-        private readonly Button cancel;
-        private readonly Button reveal;
-        private readonly Button open;
-        private bool terminal;
 
-        internal DownloadProgressWindow(CoreWebView2DownloadOperation download, bool isChinese)
+        internal DshMenuRenderer(DshMenuColorTable colors, bool isChinese)
+            : base(colors)
         {
-            operation = download;
+            RoundedEdges = false;
+            selectedColor = colors.SelectedColor;
+            textColor = colors.TextColor;
+            captionColor = colors.CaptionColor;
+            runningColor = Color.FromArgb(45, 201, 111);
+            borderColor = colors.BorderColor;
             chinese = isChinese;
-            Text = T("下载", "Download");
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.CenterParent;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
-            ClientSize = new Size(500, 170);
-            AutoScaleMode = AutoScaleMode.Dpi;
-            Padding = new Padding(20);
-            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
-            AccessibleName = T("下载进度", "Download progress");
-
-            status = new Label { Location = new Point(20, 18), Size = new Size(460, 28), AutoEllipsis = true, Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold) };
-            details = new Label { Location = new Point(20, 50), Size = new Size(460, 24), AutoEllipsis = true, ForeColor = Color.FromArgb(92, 94, 99) };
-            progress = new ProgressBar { Location = new Point(20, 82), Size = new Size(460, 7), Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 20 };
-            cancel = new Button { Location = new Point(364, 112), Size = new Size(116, 34), Text = T("取消下载", "Cancel download"), AccessibleName = T("取消下载", "Cancel download") };
-            reveal = new Button { Location = new Point(244, 112), Size = new Size(112, 34), Text = T("打开文件夹", "Show in folder"), AccessibleName = T("打开文件夹", "Show in folder"), Visible = false };
-            open = new Button { Location = new Point(124, 112), Size = new Size(112, 34), Text = T("打开文件", "Open file"), AccessibleName = T("打开文件", "Open file"), Visible = false };
-            cancel.Click += delegate { if (!terminal) operation.Cancel(); else Close(); };
-            reveal.Click += delegate { RevealFile(operation.ResultFilePath); };
-            open.Click += delegate { OpenFile(operation.ResultFilePath); };
-            Controls.Add(status);
-            Controls.Add(details);
-            Controls.Add(progress);
-            Controls.Add(cancel);
-            Controls.Add(reveal);
-            Controls.Add(open);
-            operation.BytesReceivedChanged += OnDownloadChanged;
-            operation.EstimatedEndTimeChanged += OnDownloadChanged;
-            operation.StateChanged += OnDownloadChanged;
-            FormClosed += delegate
-            {
-                operation.BytesReceivedChanged -= OnDownloadChanged;
-                operation.EstimatedEndTimeChanged -= OnDownloadChanged;
-                operation.StateChanged -= OnDownloadChanged;
-            };
-            UpdateState();
         }
 
-        private string T(string zh, string en) { return chinese ? zh : en; }
-
-        private void OnDownloadChanged(object sender, object eventArgs)
+        private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
         {
-            if (IsDisposed) return;
-            if (InvokeRequired) { BeginInvoke((MethodInvoker)UpdateState); return; }
-            UpdateState();
+            int diameter = radius * 2;
+            GraphicsPath path = new GraphicsPath();
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
         }
 
-        private void UpdateState()
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs eventArgs)
         {
-            if (IsDisposed) return;
-            string filename = Path.GetFileName(operation.ResultFilePath);
-            CoreWebView2DownloadState state = operation.State;
-            terminal = state != CoreWebView2DownloadState.InProgress;
-            if (state == CoreWebView2DownloadState.Completed)
+            ToolStripMenuItem item = eventArgs.Item as ToolStripMenuItem;
+            using (Brush surface = new SolidBrush(eventArgs.ToolStrip.BackColor))
+                eventArgs.Graphics.FillRectangle(surface, new Rectangle(Point.Empty, eventArgs.Item.Size));
+            if (item == null || !item.Selected) return;
+            Rectangle selectedBounds = new Rectangle(4, 2, Math.Max(1, eventArgs.Item.Width - 8), Math.Max(1, eventArgs.Item.Height - 4));
+            eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (GraphicsPath path = RoundedRectangle(selectedBounds, 5))
+            using (Brush selected = new SolidBrush(selectedColor))
+                eventArgs.Graphics.FillPath(selected, path);
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs eventArgs)
+        {
+            int y = eventArgs.Item.Height / 2;
+            using (Pen pen = new Pen(borderColor))
+                eventArgs.Graphics.DrawLine(pen, 8, y, Math.Max(8, eventArgs.Item.Width - 8), y);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs eventArgs)
+        {
+            TrayBridgeSession session = eventArgs.Item.Tag as TrayBridgeSession;
+            ToolStripMenuItem menuItem = eventArgs.Item as ToolStripMenuItem;
+            if (menuItem == null)
             {
-                status.Text = T("下载完成", "Download complete") + " · " + filename;
-                details.Text = operation.ResultFilePath;
-                progress.Style = ProgressBarStyle.Continuous;
-                progress.Value = 100;
-                open.Visible = true;
-                reveal.Visible = true;
-                cancel.Text = T("关闭", "Close");
+                base.OnRenderItemText(eventArgs);
                 return;
             }
-            if (state == CoreWebView2DownloadState.Interrupted)
+            if (session == null)
             {
-                status.Text = T("下载未完成", "Download did not finish") + " · " + filename;
-                details.Text = operation.InterruptReason.ToString();
-                progress.Style = ProgressBarStyle.Continuous;
-                progress.Value = 0;
-                cancel.Text = T("关闭", "Close");
+                string caption = menuItem.ShortcutKeyDisplayString ?? "";
+                Size captionSize = String.IsNullOrEmpty(caption)
+                    ? Size.Empty
+                    : TextRenderer.MeasureText(caption, eventArgs.TextFont, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                int trailing = menuItem.DropDownItems.Count > 0 ? 28 : 12;
+                int captionLeft = Math.Max(82, eventArgs.Item.Width - trailing - captionSize.Width);
+                if (eventArgs.Text == menuItem.Text)
+                {
+                    int titleRight = String.IsNullOrEmpty(caption) ? eventArgs.Item.Width - trailing : captionLeft - 12;
+                    Rectangle commandBounds = new Rectangle(14, 0, Math.Max(24, titleRight - 14), eventArgs.Item.Height);
+                    TextRenderer.DrawText(
+                        eventArgs.Graphics,
+                        menuItem.Text,
+                        eventArgs.TextFont,
+                        commandBounds,
+                        menuItem.ForeColor,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                    return;
+                }
+                if (eventArgs.Text == caption && !String.IsNullOrEmpty(caption))
+                {
+                    Rectangle captionBounds = new Rectangle(captionLeft, 0, captionSize.Width, eventArgs.Item.Height);
+                    TextRenderer.DrawText(
+                        eventArgs.Graphics,
+                        caption,
+                        eventArgs.TextFont,
+                        captionBounds,
+                        captionColor,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+                }
                 return;
             }
 
-            status.Text = T("正在下载", "Downloading") + " · " + filename;
-            ulong? total = operation.TotalBytesToReceive;
-            long received = operation.BytesReceived;
-            if (total.HasValue && total.Value > 0)
+            string status = LauncherWindow.SessionHintForLocale(session, chinese);
+            Size statusSize = TextRenderer.MeasureText(
+                status,
+                eventArgs.TextFont,
+                Size.Empty,
+                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+            int statusLeft = Math.Max(82, eventArgs.Item.Width - 12 - statusSize.Width);
+            if (eventArgs.Text == menuItem.Text)
             {
-                progress.Style = ProgressBarStyle.Continuous;
-                progress.Value = (int)Math.Max(0, Math.Min(100, (received * 100L) / (long)Math.Min(total.Value, (ulong)long.MaxValue)));
-                details.Text = FormatBytes(received) + " / " + FormatBytes((long)Math.Min(total.Value, (ulong)long.MaxValue));
+                Rectangle titleBounds = new Rectangle(14, 0, Math.Max(24, statusLeft - 26), eventArgs.Item.Height);
+                TextRenderer.DrawText(
+                    eventArgs.Graphics,
+                    menuItem.Text,
+                    eventArgs.TextFont,
+                    titleBounds,
+                    menuItem.ForeColor,
+                    TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+                return;
             }
-            else
+            if (eventArgs.Text != menuItem.ShortcutKeyDisplayString) return;
+
+            Rectangle textBounds = new Rectangle(statusLeft, 0, statusSize.Width, eventArgs.Item.Height);
+            if (session.running)
             {
-                progress.Style = ProgressBarStyle.Marquee;
-                details.Text = FormatBytes(received);
+                using (Brush dot = new SolidBrush(runningColor))
+                    eventArgs.Graphics.FillEllipse(dot, Math.Max(10, statusLeft - 11), Math.Max(0, (eventArgs.Item.Height - 6) / 2), 6, 6);
             }
+            TextRenderer.DrawText(
+                eventArgs.Graphics,
+                status,
+                eventArgs.TextFont,
+                textBounds,
+                captionColor,
+                TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
         }
 
-        private static string FormatBytes(long value)
+        protected override void OnRenderArrow(ToolStripArrowRenderEventArgs eventArgs)
         {
-            double bytes = Math.Max(0, value);
-            if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).ToString("0.0") + " GB";
-            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).ToString("0.0") + " MB";
-            if (bytes >= 1024) return (bytes / 1024).ToString("0.0") + " KB";
-            return bytes.ToString("0") + " B";
-        }
-
-        private static void OpenFile(string filename)
-        {
-            if (String.IsNullOrWhiteSpace(filename) || !File.Exists(filename)) return;
-            Process.Start(new ProcessStartInfo(filename) { UseShellExecute = true });
-        }
-
-        private static void RevealFile(string filename)
-        {
-            if (String.IsNullOrWhiteSpace(filename)) return;
-            Process.Start(new ProcessStartInfo("explorer.exe", "/select," + Quote(filename)) { UseShellExecute = true });
-        }
-
-        private static string Quote(string value)
-        {
-            return "\"" + value.Replace("\"", "\\\"") + "\"";
+            Rectangle arrowBounds = new Rectangle(
+                Math.Max(0, eventArgs.Item.Width - 22),
+                Math.Max(0, (eventArgs.Item.Height - 12) / 2),
+                12,
+                12);
+            ControlPaint.DrawMenuGlyph(
+                eventArgs.Graphics,
+                arrowBounds,
+                MenuGlyph.Arrow,
+                textColor,
+                eventArgs.Item.Selected ? selectedColor : eventArgs.Item.Owner.BackColor);
         }
     }
+
 
     internal sealed class LauncherWindow : Form
     {
@@ -231,6 +249,8 @@ namespace DshPortable
         private enum WindowCloseBehavior { Tray, Exit }
 
         private static string uiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+        private enum DwmWindowCornerPreference { Default = 0, DoNotRound = 1, Round = 2, RoundSmall = 3 }
+        private const int DwmwaWindowCornerPreference = 33;
 
         private static string L(string chinese, string english)
         {
@@ -259,10 +279,7 @@ namespace DshPortable
         private readonly WebView2 webView;
         private readonly NotifyIcon trayIcon;
         private readonly ContextMenuStrip trayMenu;
-        private readonly ToolStripMenuItem closeBehaviorMenu;
-        private readonly ToolStripMenuItem closeToTrayItem;
-        private readonly ToolStripMenuItem closeToExitItem;
-        private readonly ToolStripMenuItem updateMenu;
+        private readonly ToolStripMenuItem closeBehaviorItem;
         private readonly ToolStripMenuItem checkUpdateItem;
         private readonly ToolStripMenuItem automaticUpdateCheckItem;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -440,13 +457,14 @@ namespace DshPortable
 
             closeBehavior = LoadCloseBehavior();
             updateCheckEnabled = LoadUpdateCheckEnabled();
-            closeToTrayItem = new ToolStripMenuItem(L("最小化到托盘", "Minimize to tray")) { Checked = closeBehavior == WindowCloseBehavior.Tray };
-            closeToExitItem = new ToolStripMenuItem(L("退出程序", "Exit application")) { Checked = closeBehavior == WindowCloseBehavior.Exit };
-            closeToTrayItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Tray); };
-            closeToExitItem.Click += delegate { SaveCloseBehavior(WindowCloseBehavior.Exit); };
-            closeBehaviorMenu = new ToolStripMenuItem(L("关闭窗口时", "When closing the window"));
-            closeBehaviorMenu.DropDownItems.Add(closeToTrayItem);
-            closeBehaviorMenu.DropDownItems.Add(closeToExitItem);
+            closeBehaviorItem = new ToolStripMenuItem(L("关闭窗口时", "When closing"));
+            closeBehaviorItem.Click += delegate
+            {
+                SaveCloseBehavior(closeBehavior == WindowCloseBehavior.Tray
+                    ? WindowCloseBehavior.Exit
+                    : WindowCloseBehavior.Tray);
+                RebuildTrayMenu();
+            };
             checkUpdateItem = new ToolStripMenuItem(L("检查更新", "Check for updates"));
             checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(); };
             automaticUpdateCheckItem = new ToolStripMenuItem(L("启动时检查更新", "Check for updates at startup"))
@@ -460,17 +478,14 @@ namespace DshPortable
                 automaticUpdateCheckItem.Checked = updateCheckEnabled;
                 SaveLauncherSettings();
             };
-            updateMenu = new ToolStripMenuItem(L("DSH-Portable 更新", "DSH-Portable updates"));
-            updateMenu.DropDownItems.Add(checkUpdateItem);
-            updateMenu.DropDownItems.Add(automaticUpdateCheckItem);
             trayMenu = new ContextMenuStrip
             {
                 ShowImageMargin = false,
                 ShowCheckMargin = false,
-                Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point),
-                MinimumSize = new Size(288, 0),
+                Font = new Font("Segoe UI Variable Text", 8.0F, FontStyle.Regular, GraphicsUnit.Point),
             };
             trayMenu.Opening += delegate { trayMenuOpen = true; };
+            trayMenu.Opened += delegate { ApplyRoundedCorners(trayMenu); };
             trayMenu.Closed += delegate
             {
                 trayMenuOpen = false;
@@ -488,9 +503,9 @@ namespace DshPortable
                 ContextMenuStrip = trayMenu,
                 Visible = false,
             };
-            trayIcon.MouseClick += delegate(object sender, MouseEventArgs eventArgs)
+            trayIcon.MouseUp += delegate(object sender, MouseEventArgs eventArgs)
             {
-                if (eventArgs.Button == MouseButtons.Left) RestoreFromTray();
+                if (eventArgs.Button == MouseButtons.Left) ShowTrayMenu();
             };
 
             webView = new WebView2 { Dock = DockStyle.Fill, Visible = false };
@@ -572,37 +587,40 @@ namespace DshPortable
             Activate();
         }
 
-        private static string MenuTitle(string value)
+        internal static string MenuTitle(string value)
         {
             string text = String.IsNullOrWhiteSpace(value) ? L("未命名会话", "Untitled session") : value.Trim();
-            const int limit = 35;
+            const int limit = 28;
             int[] starts = StringInfo.ParseCombiningCharacters(text);
             if (starts.Length > limit) text = text.Substring(0, starts[limit]).TrimEnd() + "…";
             return text.Replace("&", "&&");
         }
 
-        private string SessionHint(TrayBridgeSession session)
+        internal static string SessionHintForLocale(TrayBridgeSession session, bool chinese)
         {
-            if (!String.IsNullOrEmpty(session.pendingInteraction)) return L("待回复", "Needs input");
-            if (session.running) return L("运行中", "Running");
+            if (!String.IsNullOrEmpty(session.pendingInteraction)) return chinese ? "待回复" : "Needs input";
+            if (session.running) return chinese ? "运行中" : "Running";
             string preset = String.IsNullOrWhiteSpace(session.agentPreset) ? "" : session.agentPreset.Trim();
-            if (preset.Equals("coding", StringComparison.OrdinalIgnoreCase)) return L("编码", "Coding");
-            if (preset.Equals("plan", StringComparison.OrdinalIgnoreCase)) return L("计划", "Plan");
-            if (preset.Equals("review", StringComparison.OrdinalIgnoreCase)) return L("复核", "Review");
+            if (preset.Equals("coding", StringComparison.OrdinalIgnoreCase)) return chinese ? "编码" : "Coding";
+            if (preset.Equals("plan", StringComparison.OrdinalIgnoreCase)) return chinese ? "计划" : "Plan";
+            if (preset.Equals("review", StringComparison.OrdinalIgnoreCase)) return chinese ? "复核" : "Review";
+            if (preset.Equals("standard", StringComparison.OrdinalIgnoreCase)) return chinese ? "标准" : "Standard";
+            if (String.IsNullOrEmpty(preset)) return chinese ? "已完成" : "Completed";
             return preset;
         }
 
         private ToolStripMenuItem CreateSessionMenuItem(TrayBridgeSession session)
         {
+            bool chinese = uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase);
+            string hint = SessionHintForLocale(session, chinese);
             ToolStripMenuItem item = new ToolStripMenuItem(MenuTitle(session.title))
             {
                 AutoToolTip = false,
                 ShowShortcutKeys = true,
-                ShortcutKeyDisplayString = SessionHint(session),
+                ShortcutKeyDisplayString = hint,
                 Name = session.id,
+                Tag = session,
             };
-            if (trayState != null && String.Equals(trayState.currentSessionId, session.id, StringComparison.Ordinal))
-                item.Tag = "current";
             item.Click += delegate
             {
                 RestoreFromTray();
@@ -632,16 +650,6 @@ namespace DshPortable
             });
         }
 
-        private ToolStripMenuItem CreateSectionHeader(string chinese, string english)
-        {
-            return new ToolStripMenuItem(L(chinese, english))
-            {
-                Enabled = false,
-                Tag = "section",
-                ShowShortcutKeys = false,
-            };
-        }
-
         private void RebuildTrayMenu()
         {
             if (trayMenuOpen)
@@ -650,16 +658,22 @@ namespace DshPortable
                 return;
             }
 
-            closeBehaviorMenu.Text = L("关闭窗口时", "When closing the window");
-            closeToTrayItem.Text = L("最小化到托盘", "Minimize to tray");
-            closeToExitItem.Text = L("退出程序", "Exit application");
-            updateMenu.Text = L("DSH-Portable 更新", "DSH-Portable updates");
+            closeBehaviorItem.Text = L("关闭窗口时", "When closing");
             checkUpdateItem.Text = manualUpdateRunning
                 ? L("正在检查…", "Checking…")
                 : L("检查更新", "Check for updates");
             checkUpdateItem.Enabled = !manualUpdateRunning;
             automaticUpdateCheckItem.Text = L("启动时检查更新", "Check for updates at startup");
-            automaticUpdateCheckItem.Checked = updateCheckEnabled;
+            automaticUpdateCheckItem.Checked = false;
+            automaticUpdateCheckItem.ShowShortcutKeys = true;
+            automaticUpdateCheckItem.ShortcutKeyDisplayString = updateCheckEnabled
+                ? L("已开启", "On")
+                : L("已关闭", "Off");
+            closeBehaviorItem.Checked = false;
+            closeBehaviorItem.ShowShortcutKeys = true;
+            closeBehaviorItem.ShortcutKeyDisplayString = closeBehavior == WindowCloseBehavior.Tray
+                ? L("最小化到托盘", "Minimize to tray")
+                : L("退出程序", "Exit application");
             trayMenu.Items.Clear();
 
             List<TrayBridgeSession> sessions = trayBridgeReady && trayState != null && trayState.sessions != null
@@ -669,25 +683,31 @@ namespace DshPortable
             if (!trayBridgeReady)
             {
                 trayMenu.Items.Add(CreateOpenItem());
-                ToolStripMenuItem more = new ToolStripMenuItem(L("更多", "More"));
-                more.DropDownItems.Add(updateMenu);
-                more.DropDownItems.Add(closeBehaviorMenu);
-                trayMenu.Items.Add(more);
             }
             else
             {
-                if (sessions.Count > 0) trayMenu.Items.Add(CreateSectionHeader("最近", "Recent"));
                 foreach (TrayBridgeSession session in sessions.Take(3))
                     trayMenu.Items.Add(CreateSessionMenuItem(session));
 
+                if (sessions.Count > 0) trayMenu.Items.Add(new ToolStripSeparator());
                 ToolStripMenuItem more = new ToolStripMenuItem(L("更多", "More"));
                 foreach (TrayBridgeSession session in sessions.Skip(3).Take(7))
                     more.DropDownItems.Add(CreateSessionMenuItem(session));
                 if (more.DropDownItems.Count > 0) more.DropDownItems.Add(new ToolStripSeparator());
                 more.DropDownItems.Add(CreateOpenItem());
-                more.DropDownItems.Add(updateMenu);
-                more.DropDownItems.Add(closeBehaviorMenu);
+                more.DropDownItems.Add(checkUpdateItem);
+                more.DropDownItems.Add(automaticUpdateCheckItem);
+                more.DropDownItems.Add(new ToolStripSeparator());
+                more.DropDownItems.Add(closeBehaviorItem);
+                ToolStripDropDownMenu moreMenu = more.DropDown as ToolStripDropDownMenu;
+                if (moreMenu != null)
+                {
+                    moreMenu.ShowImageMargin = false;
+                    moreMenu.ShowCheckMargin = false;
+                }
+                more.DropDown.Opened += delegate { ApplyRoundedCorners(more.DropDown); };
                 trayMenu.Items.Add(more);
+                trayMenu.Items.Add(new ToolStripSeparator());
 
                 ToolStripMenuItem fresh = new ToolStripMenuItem(L("新会话", "New session"));
                 fresh.Click += delegate
@@ -696,39 +716,70 @@ namespace DshPortable
                     PostBridgeAction("new-session", null);
                 };
                 trayMenu.Items.Add(fresh);
+                trayMenu.Items.Add(CreateReportProblemItem());
             }
-
-            trayMenu.Items.Add(new ToolStripSeparator());
-            trayMenu.Items.Add(CreateReportProblemItem());
             trayMenu.Items.Add(new ToolStripSeparator());
             trayMenu.Items.Add(CreateExitItem());
             ApplyTrayTheme();
+        }
+
+        private void ShowTrayMenu()
+        {
+            RebuildTrayMenu();
+            trayMenu.Show(Cursor.Position);
         }
 
         private void ApplyTrayTheme()
         {
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
             DshMenuColorTable colors = new DshMenuColorTable(dark);
-            trayMenu.Renderer = new ToolStripProfessionalRenderer(colors);
+            trayMenu.Renderer = new DshMenuRenderer(colors, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
             trayMenu.BackColor = colors.SurfaceColor;
             trayMenu.ForeColor = colors.TextColor;
-            trayMenu.Padding = new Padding(6, 6, 6, 6);
-            ApplyTrayItemTheme(trayMenu.Items, colors.TextColor, colors.CaptionColor, trayMenu.BackColor, colors.SelectedColor);
+            trayMenu.Padding = Padding.Empty;
+            int rootWidth = MeasureTrayMenuWidth(trayMenu.Items, trayMenu.Font, 220, 282);
+            trayMenu.MinimumSize = new Size(rootWidth, 0);
+            ApplyTrayItemTheme(trayMenu.Items, rootWidth, colors.TextColor, colors.CaptionColor, trayMenu.BackColor, colors.SelectedColor);
         }
 
-        private static void ApplyTrayItemTheme(ToolStripItemCollection items, Color foreground, Color caption, Color background, Color selected)
+        private static int MeasureTrayMenuWidth(ToolStripItemCollection items, Font font, int minimum, int maximum)
+        {
+            int desired = minimum;
+            foreach (ToolStripItem item in items)
+            {
+                ToolStripMenuItem menuItem = item as ToolStripMenuItem;
+                if (menuItem == null) continue;
+                Size title = TextRenderer.MeasureText(menuItem.Text ?? "", font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                Size status = String.IsNullOrEmpty(menuItem.ShortcutKeyDisplayString)
+                    ? Size.Empty
+                    : TextRenderer.MeasureText(menuItem.ShortcutKeyDisplayString, font, Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                int width = 28 + title.Width;
+                if (status.Width > 0) width += 18 + status.Width;
+                if (menuItem.DropDownItems.Count > 0) width += 18;
+                desired = Math.Max(desired, width);
+            }
+            return Math.Min(maximum, desired);
+        }
+
+        private static void ApplyTrayItemTheme(ToolStripItemCollection items, int menuWidth, Color foreground, Color caption, Color background, Color selected)
         {
             foreach (ToolStripItem item in items)
             {
-                item.ForeColor = String.Equals(item.Tag as string, "section", StringComparison.Ordinal) ? caption : foreground;
-                item.BackColor = String.Equals(item.Tag as string, "current", StringComparison.Ordinal) ? selected : background;
+                item.ForeColor = foreground;
+                item.BackColor = background;
+                item.AutoSize = false;
+                item.Size = item is ToolStripSeparator ? new Size(menuWidth - 2, 6) : new Size(menuWidth - 2, 35);
                 item.Padding = item is ToolStripSeparator ? Padding.Empty : new Padding(10, 5, 10, 5);
                 ToolStripMenuItem menuItem = item as ToolStripMenuItem;
                 if (menuItem == null) continue;
                 menuItem.DropDown.BackColor = background;
                 menuItem.DropDown.ForeColor = foreground;
                 if (menuItem.DropDownItems.Count > 0)
-                    ApplyTrayItemTheme(menuItem.DropDownItems, foreground, caption, background, selected);
+                {
+                    int childWidth = MeasureTrayMenuWidth(menuItem.DropDownItems, font: item.Font, minimum: 196, maximum: 264);
+                    menuItem.DropDown.MinimumSize = new Size(childWidth, 0);
+                    ApplyTrayItemTheme(menuItem.DropDownItems, childWidth, foreground, caption, background, selected);
+                }
             }
         }
 
@@ -743,6 +794,15 @@ namespace DshPortable
             if (!String.IsNullOrEmpty(sessionId)) message["sessionId"] = sessionId;
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
             catch { trayBridgeReady = false; RebuildTrayMenu(); }
+        }
+
+        private static void ApplyRoundedCorners(ToolStripDropDown menu)
+        {
+            if (menu == null || menu.IsDisposed || !menu.IsHandleCreated) return;
+            DwmWindowCornerPreference preference = DwmWindowCornerPreference.Round;
+            try { DwmSetWindowAttribute(menu.Handle, DwmwaWindowCornerPreference, ref preference, sizeof(int)); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
         }
 
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
@@ -894,8 +954,6 @@ namespace DshPortable
         private void SaveCloseBehavior(WindowCloseBehavior behavior)
         {
             closeBehavior = behavior;
-            closeToTrayItem.Checked = behavior == WindowCloseBehavior.Tray;
-            closeToExitItem.Checked = behavior == WindowCloseBehavior.Exit;
             SaveLauncherSettings();
         }
 
@@ -1022,6 +1080,13 @@ namespace DshPortable
 
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(
+            IntPtr window,
+            int attribute,
+            ref DwmWindowCornerPreference preference,
+            int preferenceSize);
 
         internal static bool SignalExistingDesktopHost(int message)
         {
@@ -1497,21 +1562,104 @@ namespace DshPortable
                 if (dialog.ShowDialog(this) != DialogResult.OK)
                 {
                     eventArgs.Cancel = true;
+                    PostDownloadStateSoon(eventArgs.DownloadOperation, "cancelled");
                     return;
                 }
                 eventArgs.ResultFilePath = dialog.FileName;
             }
 
-            if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)) return;
+            TrackDownloadOperation(eventArgs.DownloadOperation);
+        }
 
-            DownloadProgressWindow window = new DownloadProgressWindow(
-                eventArgs.DownloadOperation,
-                uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
-            BeginInvoke((MethodInvoker)delegate
+        private void TrackDownloadOperation(CoreWebView2DownloadOperation operation)
+        {
+            string sessionId = QueryValue(operation.Uri, "sessionId");
+            if (String.IsNullOrWhiteSpace(sessionId)) return;
+            int lastPercent = -2;
+            string lastState = String.Empty;
+            EventHandler<object> changed = null;
+            Action publish = delegate
             {
-                if (Visible) window.Show(this);
-                else window.Show();
+                if (IsDisposed || webView.CoreWebView2 == null) return;
+                string state = "downloading";
+                if (operation.State == CoreWebView2DownloadState.Completed) state = "completed";
+                else if (operation.State == CoreWebView2DownloadState.Interrupted)
+                    state = operation.InterruptReason == CoreWebView2DownloadInterruptReason.UserCanceled
+                        ? "cancelled"
+                        : "interrupted";
+                ulong? total = operation.TotalBytesToReceive;
+                long totalBytes = total.HasValue
+                    ? (long)Math.Min(total.Value, (ulong)long.MaxValue)
+                    : 0L;
+                int percent = totalBytes > 0
+                    ? (int)Math.Max(0, Math.Min(100, operation.BytesReceived * 100L / totalBytes))
+                    : -1;
+                if (state == lastState && percent == lastPercent) return;
+                lastState = state;
+                lastPercent = percent;
+                PostDownloadState(operation, sessionId, state, percent, totalBytes);
+                if (operation.State != CoreWebView2DownloadState.InProgress && changed != null)
+                {
+                    operation.BytesReceivedChanged -= changed;
+                    operation.StateChanged -= changed;
+                }
+            };
+            changed = delegate
+            {
+                if (IsDisposed) return;
+                try { BeginInvoke((MethodInvoker)delegate { publish(); }); }
+                catch (InvalidOperationException) { }
+            };
+            operation.BytesReceivedChanged += changed;
+            operation.StateChanged += changed;
+            BeginInvoke((MethodInvoker)delegate { publish(); });
+        }
+
+        private void PostDownloadStateSoon(CoreWebView2DownloadOperation operation, string state)
+        {
+            string sessionId = QueryValue(operation.Uri, "sessionId");
+            if (String.IsNullOrWhiteSpace(sessionId)) return;
+            Task.Delay(75).ContinueWith(delegate
+            {
+                if (IsDisposed) return;
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate { PostDownloadState(operation, sessionId, state, -1, 0L); });
+                }
+                catch (InvalidOperationException) { }
             });
+        }
+
+        private void PostDownloadState(CoreWebView2DownloadOperation operation, string sessionId, string state, int percent, long totalBytes)
+        {
+            Dictionary<string, object> message = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/download" },
+                { "schemaVersion", 1 },
+                { "sessionId", sessionId },
+                { "state", state },
+                { "fileName", Path.GetFileName(operation.ResultFilePath) ?? String.Empty },
+                { "bytesReceived", Math.Max(0L, operation.BytesReceived) },
+                { "totalBytes", Math.Max(0L, totalBytes) },
+                { "percent", percent },
+                { "reason", operation.State == CoreWebView2DownloadState.Interrupted ? operation.InterruptReason.ToString() : String.Empty },
+            };
+            try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
+            catch { }
+        }
+
+        private static string QueryValue(string uriText, string name)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(uriText, UriKind.Absolute, out uri)) return String.Empty;
+            foreach (string pair in uri.Query.TrimStart('?').Split('&'))
+            {
+                if (String.IsNullOrEmpty(pair)) continue;
+                string[] parts = pair.Split(new[] { '=' }, 2);
+                if (!String.Equals(Uri.UnescapeDataString(parts[0].Replace('+', ' ')), name, StringComparison.Ordinal)) continue;
+                return parts.Length > 1 ? Uri.UnescapeDataString(parts[1].Replace('+', ' ')) : String.Empty;
+            }
+            return String.Empty;
         }
 
         private static string GetDefaultDownloadFolder()
