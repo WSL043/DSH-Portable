@@ -262,11 +262,23 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /more\.DropDownItems\.Add\(checkUpdateItem\)/)
   assert.match(source, /more\.DropDownItems\.Add\(automaticUpdateCheckItem\)/)
   assert.match(source, /more\.DropDownItems\.Add\(closeBehaviorItem\)/)
+  assert.match(source, /trayMenu\.Items\.Add\(CreateOpenItem\(\)\)[\s\S]+foreach \(TrayBridgeSession session in sessions\.Take\(3\)\)/)
+  assert.match(source, /more\.DropDownItems\.Add\(CreateReportProblemItem\(\)\)/)
+  assert.doesNotMatch(source, /more\.DropDownItems\.Add\(CreateOpenItem\(\)\)/)
+  assert.doesNotMatch(source, /trayMenu\.Items\.Add\(CreateReportProblemItem\(\)\)/)
   assert.doesNotMatch(source, /more\.DropDownItems\.Add\(closeToTrayItem\)/)
   assert.doesNotMatch(source, /more\.DropDownItems\.Add\(closeToExitItem\)/)
   assert.doesNotMatch(source, /more\.DropDownItems\.Add\(updateMenu\)/)
   assert.doesNotMatch(source, /more\.DropDownItems\.Add\(closeBehaviorMenu\)/)
   assert.match(source, /automaticUpdateCheckItem\.ShortcutKeyDisplayString\s*=\s*updateCheckEnabled/)
+  assert.match(
+    source,
+    /automaticUpdateCheckItem\.Click \+= delegate[\s\S]+updateCheckEnabled = !updateCheckEnabled;[\s\S]+RefreshAutomaticUpdateCheckItem\(\);[\s\S]+SaveLauncherSettings\(\);/,
+  )
+  assert.match(
+    source,
+    /private void RefreshAutomaticUpdateCheckItem\(\)[\s\S]+ShortcutKeyDisplayString = updateCheckEnabled/,
+  )
   assert.match(source, /closeBehaviorItem\.ShortcutKeyDisplayString\s*=\s*closeBehavior/)
   assert.match(source, /Equals\("standard"[\s\S]*chinese\s*\?\s*"标准"\s*:\s*"Standard"/)
   assert.match(source, /MeasureTrayMenuWidth/)
@@ -283,7 +295,10 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /OnRenderArrow[\s\S]+ControlPaint\.DrawMenuGlyph[\s\S]+MenuGlyph\.Arrow/)
   assert.match(source, /OnRenderMenuItemBackground[\s\S]+item\.Selected[\s\S]+RoundedRectangle[\s\S]+selectedColor[\s\S]+FillPath/)
   assert.match(source, /ContextMenuStrip\s*=\s*trayMenu/)
-  assert.match(source, /eventArgs\.Button\s*==\s*MouseButtons\.Left[\s\S]+ShowTrayMenu/)
+  assert.match(source, /trayIcon\.MouseUp\s*\+=\s*HandleTrayMouseUp/)
+  assert.match(source, /private void HandleTrayMouseUp[\s\S]+eventArgs\.Button\s*==\s*MouseButtons\.Left[\s\S]+RestoreFromTray\(\)/)
+  assert.doesNotMatch(source, /eventArgs\.Button\s*==\s*MouseButtons\.Left[\s\S]+ShowTrayMenu/)
+  assert.doesNotMatch(source, /trayMenu\.Show\(Cursor\.Position\)/)
   assert.match(source, /检查更新|Check for updates/)
   assert.match(source, /启动时检查更新|Check for updates at startup/)
   assert.match(source, /updateCheckEnabled/)

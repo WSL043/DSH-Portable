@@ -7,8 +7,8 @@ using System.Text;
 [assembly: AssemblyTitle("DSH-Portable Command")]
 [assembly: AssemblyProduct("DSH-Portable")]
 [assembly: AssemblyCompany("WSL043")]
-[assembly: AssemblyVersion("0.2.2.65534")]
-[assembly: AssemblyFileVersion("0.2.2.65534")]
+[assembly: AssemblyVersion("0.2.3.65534")]
+[assembly: AssemblyFileVersion("0.2.3.65534")]
 
 internal static class DshCommand
 {
