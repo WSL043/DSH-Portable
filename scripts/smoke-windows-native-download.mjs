@@ -114,7 +114,7 @@ try {
       DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
       DSH_PORTABLE_TEST_HIDDEN: '1',
       DSH_PORTABLE_DOWNLOAD_DIRECTORY: downloadRoot,
-      WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
+      DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
     },
     stdio: 'ignore',
     windowsHide: true,

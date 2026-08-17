@@ -1396,6 +1396,13 @@ namespace DshPortable
                 {
                     Language = UiLanguageTag,
                 };
+                string testBrowserArguments = Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS");
+                if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
+                    && !String.IsNullOrWhiteSpace(testBrowserArguments)
+                    && Regex.IsMatch(testBrowserArguments, "^--remote-debugging-port=[0-9]{1,5}$"))
+                {
+                    options.AdditionalBrowserArguments = testBrowserArguments;
+                }
                 CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, userData, options);
                 await webView.EnsureCoreWebView2Async(environment);
             }

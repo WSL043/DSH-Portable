@@ -62,6 +62,8 @@ test('Windows owns browser chrome and file downloads instead of exposing Edge UI
   assert.match(host, /取消下载|Cancel download/)
   assert.match(host, /DSH_PORTABLE_DOWNLOAD_DIRECTORY/)
   assert.match(host, /DSH_PORTABLE_TEST_HIDDEN/)
+  assert.match(host, /DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS/)
+  assert.match(host, /options\.AdditionalBrowserArguments\s*=\s*testBrowserArguments/)
 })
 
 test('Windows tray follows the Codex native bounded task-menu hierarchy', async () => {
