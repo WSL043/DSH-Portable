@@ -46,6 +46,45 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.doesNotMatch(build, /Copy-Item\s+\$LauncherExe\s+\(Join-Path\s+\$Stage\s+'Stop DeepSeek-Herness\.exe'\)/)
 })
 
+test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
+  const host = await read('launcher/windows/DSH-Portable.cs')
+
+  assert.match(host, /AreDefaultContextMenusEnabled\s*=\s*false/)
+  assert.match(host, /IsStatusBarEnabled\s*=\s*false/)
+  assert.match(host, /DownloadStarting\s*\+=\s*OnDownloadStarting/)
+  assert.match(host, /CoreWebView2DownloadStartingEventArgs/)
+  assert.match(host, /eventArgs\.Handled\s*=\s*true/)
+  assert.match(host, /SaveFileDialog/)
+  assert.match(host, /CoreWebView2DownloadOperation/)
+  assert.match(host, /BytesReceivedChanged/)
+  assert.match(host, /StateChanged/)
+  assert.match(host, /打开文件夹|Show in folder/)
+  assert.match(host, /取消下载|Cancel download/)
+  assert.match(host, /DSH_PORTABLE_DOWNLOAD_DIRECTORY/)
+  assert.match(host, /DSH_PORTABLE_TEST_HIDDEN/)
+})
+
+test('Windows tray follows the Codex native bounded task-menu hierarchy', async () => {
+  const host = await read('launcher/windows/DSH-Portable.cs')
+
+  assert.doesNotMatch(host, /class\s+TrayTaskCenter\s*:\s*Form/)
+  assert.match(host, /ContextMenuStrip\s*=\s*trayMenu/)
+  assert.match(host, /trayIcon\.MouseClick\s*\+=/)
+  assert.match(host, /sessions\.Take\(3\)/)
+  assert.match(host, /sessions\.Skip\(3\)\.Take\(7\)/)
+  assert.match(host, /CreateSectionHeader\("最近",\s*"Recent"\)/)
+  assert.match(host, /ShortcutKeyDisplayString\s*=\s*SessionHint/)
+  assert.match(host, /StringInfo\.ParseCombiningCharacters/)
+  assert.match(host, /const\s+int\s+limit\s*=\s*35/)
+  assert.match(host, /Equals\("coding"[\s\S]*L\("编码",\s*"Coding"\)/)
+  assert.match(host, /Equals\("plan"[\s\S]*L\("计划",\s*"Plan"\)/)
+  assert.match(host, /Equals\("review"[\s\S]*L\("复核",\s*"Review"\)/)
+  assert.match(host, /ToolStripMenuItem\s+more\s*=\s*new ToolStripMenuItem\(L\("更多",\s*"More"\)\)/)
+  assert.match(host, /新会话|New session/)
+  assert.match(host, /反馈问题|Report a problem/)
+  assert.match(host, /退出 DeepSeek Harness|Exit DeepSeek Harness/)
+})
+
 test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher', async () => {
   const [host, build] = await Promise.all([
     read('launcher/macos/DeepSeek-Herness.swift'),
@@ -70,6 +109,8 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
 
   assert.match(workflow, /windows-desktop-host:/)
   assert.match(workflow, /smoke-windows-desktop-host\.ps1/)
+  assert.match(workflow, /smoke-windows-native-tray\.ps1/)
+  assert.match(workflow, /smoke-windows-native-download\.mjs/)
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)

@@ -1,13 +1,14 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
 
-0.2.1 把更新信息和桌面托盘收成一套更清楚的产品体验：
+0.2.2 让 Windows 桌面壳更接近原生应用：
 
-- 更新窗口分别显示 **DSH-Portable** 与 **内置官方 DSH** 的当前和目标版本；本次内置
-  官方 DSH 仍为 `0.1.0-rc.6`。
-- 下载显示真实百分比与已下载大小，并继续显示验证、安装和重新打开阶段。
-- Windows 托盘跟随 DSH 的中文/英文与明暗外观；最近会话、新会话、更多操作和退出采用
-  一致的层级，仍通过官方会话接口打开内容。
-- 关闭启动时检查更新后不再主动提醒，手动检查保留；运行中的任务不会被自动更新中断。
+- 托盘改为系统原生任务菜单：最近 3 个会话直接可达，状态显示在右侧，其余会话进入
+  “更多”；左键回到主窗口，打开与新建仍使用官方会话接口。
+- 网页式右键菜单和浏览器状态栏不再出现在桌面窗口中。
+- 导出会话等文件下载改由桌面壳接管：选择保存位置后显示真实进度，可取消、打开文件或
+  打开所在文件夹。
+- 托盘继续跟随 DSH 的中文/英文与明暗外观；本次内置官方 DSH 仍为 `0.1.0-rc.6`。
+- 仍可在托盘“更多”中关闭“启动时检查更新”；手动检查始终保留。
 
 普通更新只替换 DSH 应用组件并保留用户数据。
 
@@ -43,16 +44,17 @@
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`).
 > DSH-Portable is an independent community distribution.
 
-0.2.1 makes updates and the desktop tray feel like one coherent product:
+0.2.2 makes the Windows desktop shell behave more like a native application:
 
-- The update window separates the **DSH-Portable** version from the **bundled official DSH** version.
-  The bundled official DSH remains `0.1.0-rc.6` in this release.
-- Downloads show the real percentage and transferred size, followed by verification, installation,
-  and reopen stages.
-- The Windows tray follows the DSH language and light/dark appearance. Recent sessions, New Session,
-  More, and Exit use a consistent hierarchy while session actions still use the official runtime API.
-- Disabling startup checks suppresses automatic prompts while manual checks stay available. Running
-  tasks are never interrupted automatically.
+- The tray is now a native task menu: the three most recent sessions stay one click away, their state
+  appears on the right, and the remaining sessions move into More. Session actions still use the
+  official runtime API.
+- Web-style context menus and the browser status bar no longer appear in the desktop window.
+- Session exports and other downloads are owned by the desktop shell, with a save location, real
+  progress, cancel, open-file, and show-in-folder actions.
+- The tray continues to follow DSH language and light/dark appearance. The bundled official DSH
+  remains `0.1.0-rc.6` in this release.
+- You can still turn off **Check for updates at startup** from More; manual checks remain available.
 
 If an older launcher crosses a compatibility boundary, it downloads one complete package and updates
 in place while preserving `data`, `workspace`, sessions, credentials, and plugins. Finished products

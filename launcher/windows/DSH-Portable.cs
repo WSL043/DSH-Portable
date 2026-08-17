@@ -20,8 +20,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.1.65534")]
-[assembly: AssemblyFileVersion("0.2.1.65534")]
+[assembly: AssemblyVersion("0.2.2.65534")]
+[assembly: AssemblyFileVersion("0.2.2.65534")]
 
 namespace DshPortable
 {
@@ -88,6 +88,140 @@ namespace DshPortable
         public override Color MenuItemPressedGradientEnd { get { return Selected; } }
         public override Color SeparatorDark { get { return Border; } }
         public override Color SeparatorLight { get { return Surface; } }
+    }
+
+    internal sealed class DownloadProgressWindow : Form
+    {
+        private readonly CoreWebView2DownloadOperation operation;
+        private readonly bool chinese;
+        private readonly Label status;
+        private readonly Label details;
+        private readonly ProgressBar progress;
+        private readonly Button cancel;
+        private readonly Button reveal;
+        private readonly Button open;
+        private bool terminal;
+
+        internal DownloadProgressWindow(CoreWebView2DownloadOperation download, bool isChinese)
+        {
+            operation = download;
+            chinese = isChinese;
+            Text = T("下载", "Download");
+            ShowInTaskbar = false;
+            StartPosition = FormStartPosition.CenterParent;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            ClientSize = new Size(500, 170);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            Padding = new Padding(20);
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
+            AccessibleName = T("下载进度", "Download progress");
+
+            status = new Label { Location = new Point(20, 18), Size = new Size(460, 28), AutoEllipsis = true, Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold) };
+            details = new Label { Location = new Point(20, 50), Size = new Size(460, 24), AutoEllipsis = true, ForeColor = Color.FromArgb(92, 94, 99) };
+            progress = new ProgressBar { Location = new Point(20, 82), Size = new Size(460, 7), Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 20 };
+            cancel = new Button { Location = new Point(364, 112), Size = new Size(116, 34), Text = T("取消下载", "Cancel download"), AccessibleName = T("取消下载", "Cancel download") };
+            reveal = new Button { Location = new Point(244, 112), Size = new Size(112, 34), Text = T("打开文件夹", "Show in folder"), AccessibleName = T("打开文件夹", "Show in folder"), Visible = false };
+            open = new Button { Location = new Point(124, 112), Size = new Size(112, 34), Text = T("打开文件", "Open file"), AccessibleName = T("打开文件", "Open file"), Visible = false };
+            cancel.Click += delegate { if (!terminal) operation.Cancel(); else Close(); };
+            reveal.Click += delegate { RevealFile(operation.ResultFilePath); };
+            open.Click += delegate { OpenFile(operation.ResultFilePath); };
+            Controls.Add(status);
+            Controls.Add(details);
+            Controls.Add(progress);
+            Controls.Add(cancel);
+            Controls.Add(reveal);
+            Controls.Add(open);
+            operation.BytesReceivedChanged += OnDownloadChanged;
+            operation.EstimatedEndTimeChanged += OnDownloadChanged;
+            operation.StateChanged += OnDownloadChanged;
+            FormClosed += delegate
+            {
+                operation.BytesReceivedChanged -= OnDownloadChanged;
+                operation.EstimatedEndTimeChanged -= OnDownloadChanged;
+                operation.StateChanged -= OnDownloadChanged;
+            };
+            UpdateState();
+        }
+
+        private string T(string zh, string en) { return chinese ? zh : en; }
+
+        private void OnDownloadChanged(object sender, object eventArgs)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired) { BeginInvoke((MethodInvoker)UpdateState); return; }
+            UpdateState();
+        }
+
+        private void UpdateState()
+        {
+            if (IsDisposed) return;
+            string filename = Path.GetFileName(operation.ResultFilePath);
+            CoreWebView2DownloadState state = operation.State;
+            terminal = state != CoreWebView2DownloadState.InProgress;
+            if (state == CoreWebView2DownloadState.Completed)
+            {
+                status.Text = T("下载完成", "Download complete") + " · " + filename;
+                details.Text = operation.ResultFilePath;
+                progress.Style = ProgressBarStyle.Continuous;
+                progress.Value = 100;
+                open.Visible = true;
+                reveal.Visible = true;
+                cancel.Text = T("关闭", "Close");
+                return;
+            }
+            if (state == CoreWebView2DownloadState.Interrupted)
+            {
+                status.Text = T("下载未完成", "Download did not finish") + " · " + filename;
+                details.Text = operation.InterruptReason.ToString();
+                progress.Style = ProgressBarStyle.Continuous;
+                progress.Value = 0;
+                cancel.Text = T("关闭", "Close");
+                return;
+            }
+
+            status.Text = T("正在下载", "Downloading") + " · " + filename;
+            ulong? total = operation.TotalBytesToReceive;
+            long received = operation.BytesReceived;
+            if (total.HasValue && total.Value > 0)
+            {
+                progress.Style = ProgressBarStyle.Continuous;
+                progress.Value = (int)Math.Max(0, Math.Min(100, (received * 100L) / (long)Math.Min(total.Value, (ulong)long.MaxValue)));
+                details.Text = FormatBytes(received) + " / " + FormatBytes((long)Math.Min(total.Value, (ulong)long.MaxValue));
+            }
+            else
+            {
+                progress.Style = ProgressBarStyle.Marquee;
+                details.Text = FormatBytes(received);
+            }
+        }
+
+        private static string FormatBytes(long value)
+        {
+            double bytes = Math.Max(0, value);
+            if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).ToString("0.0") + " GB";
+            if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).ToString("0.0") + " MB";
+            if (bytes >= 1024) return (bytes / 1024).ToString("0.0") + " KB";
+            return bytes.ToString("0") + " B";
+        }
+
+        private static void OpenFile(string filename)
+        {
+            if (String.IsNullOrWhiteSpace(filename) || !File.Exists(filename)) return;
+            Process.Start(new ProcessStartInfo(filename) { UseShellExecute = true });
+        }
+
+        private static void RevealFile(string filename)
+        {
+            if (String.IsNullOrWhiteSpace(filename)) return;
+            Process.Start(new ProcessStartInfo("explorer.exe", "/select," + Quote(filename)) { UseShellExecute = true });
+        }
+
+        private static string Quote(string value)
+        {
+            return "\"" + value.Replace("\"", "\\\"") + "\"";
+        }
     }
 
     internal sealed class LauncherWindow : Form
@@ -160,6 +294,10 @@ namespace DshPortable
             launcherArgs = ResolveArguments(args);
             nonInteractive = Array.Exists(launcherArgs, item =>
                 string.Equals(item, "--json", StringComparison.OrdinalIgnoreCase));
+            bool testHidden = String.Equals(
+                Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"),
+                "1",
+                StringComparison.Ordinal);
             desktopStart = !nonInteractive && IsStartCommand(launcherArgs);
 
             Text = "DeepSeek-Herness";
@@ -168,8 +306,8 @@ namespace DshPortable
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox = false;
             MinimizeBox = desktopStart;
-            ShowInTaskbar = !nonInteractive;
-            if (nonInteractive) Opacity = 0;
+            ShowInTaskbar = !nonInteractive && !testHidden;
+            if (nonInteractive || testHidden) Opacity = 0;
             ClientSize = desktopStart ? new Size(560, 220) : new Size(440, 160);
             MinimumSize = Size.Empty;
             BackColor = SystemColors.Window;
@@ -350,7 +488,10 @@ namespace DshPortable
                 ContextMenuStrip = trayMenu,
                 Visible = false,
             };
-            trayIcon.DoubleClick += delegate { RestoreFromTray(); };
+            trayIcon.MouseClick += delegate(object sender, MouseEventArgs eventArgs)
+            {
+                if (eventArgs.Button == MouseButtons.Left) RestoreFromTray();
+            };
 
             webView = new WebView2 { Dock = DockStyle.Fill, Visible = false };
             Controls.Add(webView);
@@ -434,7 +575,9 @@ namespace DshPortable
         private static string MenuTitle(string value)
         {
             string text = String.IsNullOrWhiteSpace(value) ? L("未命名会话", "Untitled session") : value.Trim();
-            if (text.Length > 52) text = text.Substring(0, 51) + "…";
+            const int limit = 35;
+            int[] starts = StringInfo.ParseCombiningCharacters(text);
+            if (starts.Length > limit) text = text.Substring(0, starts[limit]).TrimEnd() + "…";
             return text.Replace("&", "&&");
         }
 
@@ -442,7 +585,11 @@ namespace DshPortable
         {
             if (!String.IsNullOrEmpty(session.pendingInteraction)) return L("待回复", "Needs input");
             if (session.running) return L("运行中", "Running");
-            return String.IsNullOrWhiteSpace(session.agentPreset) ? "" : session.agentPreset.Trim();
+            string preset = String.IsNullOrWhiteSpace(session.agentPreset) ? "" : session.agentPreset.Trim();
+            if (preset.Equals("coding", StringComparison.OrdinalIgnoreCase)) return L("编码", "Coding");
+            if (preset.Equals("plan", StringComparison.OrdinalIgnoreCase)) return L("计划", "Plan");
+            if (preset.Equals("review", StringComparison.OrdinalIgnoreCase)) return L("复核", "Review");
+            return preset;
         }
 
         private ToolStripMenuItem CreateSessionMenuItem(TrayBridgeSession session)
@@ -1261,11 +1408,13 @@ namespace DshPortable
             }
 
             applicationUri = new Uri(url);
-            webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
+            webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+            webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
             webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
+            webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
             TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
                 new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
             EventHandler<CoreWebView2NavigationCompletedEventArgs> navigationCompleted = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
@@ -1312,6 +1461,74 @@ namespace DshPortable
             eventArgs.Cancel = true;
             OpenExternalUrl(eventArgs.Uri);
         }
+
+        private void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs eventArgs)
+        {
+            eventArgs.Handled = true;
+            string suggested = Path.GetFileName(eventArgs.ResultFilePath);
+            if (String.IsNullOrWhiteSpace(suggested)) suggested = L("下载文件", "download");
+            string downloads = GetDefaultDownloadFolder();
+            string testDirectory = Environment.GetEnvironmentVariable("DSH_PORTABLE_DOWNLOAD_DIRECTORY");
+            if (!String.IsNullOrWhiteSpace(testDirectory))
+            {
+                string resolved = Path.GetFullPath(testDirectory);
+                if (!Directory.Exists(resolved)) throw new DirectoryNotFoundException(resolved);
+                eventArgs.ResultFilePath = Path.Combine(resolved, suggested);
+            }
+            else using (SaveFileDialog dialog = new SaveFileDialog
+            {
+                AddExtension = true,
+                CheckPathExists = true,
+                FileName = suggested,
+                Filter = L("所有文件 (*.*)|*.*", "All files (*.*)|*.*"),
+                InitialDirectory = Directory.Exists(downloads) ? downloads : Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                OverwritePrompt = true,
+                RestoreDirectory = true,
+                Title = L("保存下载文件", "Save download"),
+            })
+            {
+                if (dialog.ShowDialog(this) != DialogResult.OK)
+                {
+                    eventArgs.Cancel = true;
+                    return;
+                }
+                eventArgs.ResultFilePath = dialog.FileName;
+            }
+
+            if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)) return;
+
+            DownloadProgressWindow window = new DownloadProgressWindow(
+                eventArgs.DownloadOperation,
+                uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
+            BeginInvoke((MethodInvoker)delegate
+            {
+                if (Visible) window.Show(this);
+                else window.Show();
+            });
+        }
+
+        private static string GetDefaultDownloadFolder()
+        {
+            Guid downloadsFolder = new Guid("374DE290-123F-4565-9164-39C4925E467B");
+            IntPtr path = IntPtr.Zero;
+            try
+            {
+                if (SHGetKnownFolderPath(ref downloadsFolder, 0, IntPtr.Zero, out path) == 0 && path != IntPtr.Zero)
+                {
+                    string value = Marshal.PtrToStringUni(path);
+                    if (!String.IsNullOrWhiteSpace(value)) return value;
+                }
+            }
+            catch { }
+            finally
+            {
+                if (path != IntPtr.Zero) Marshal.FreeCoTaskMem(path);
+            }
+            return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHGetKnownFolderPath(ref Guid folderId, uint flags, IntPtr token, out IntPtr path);
 
         private static void OpenExternalUrl(string url)
         {

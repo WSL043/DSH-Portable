@@ -8,6 +8,7 @@ import { classifyProductVersion } from '../scripts/version-policy.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
+const regexEscape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 test('stable and release-candidate versions have unambiguous GitHub channels', () => {
   assert.deepEqual(classifyProductVersion('0.2.0'), {
@@ -33,7 +34,8 @@ test('stable and release-candidate versions have unambiguous GitHub channels', (
 
 test('all finished-product manifests use the same stable product version', async () => {
   const manifest = JSON.parse(await read('package.json'))
-  assert.equal(manifest.version, '0.2.1')
+  const policy = classifyProductVersion(manifest.version)
+  assert.equal(policy.channel, 'stable')
 
   const sources = await Promise.all([
     read('installer/windows/DSH-Portable.iss'),
@@ -48,8 +50,9 @@ test('all finished-product manifests use the same stable product version', async
     read('launcher/macos/Info-installed.plist'),
     read('launcher/macos/Info-stop-installed.plist'),
   ])
-  for (const source of sources) assert.match(source, /0\.2\.1/)
-  assert.doesNotMatch(sources.join('\n'), /0\.2\.1-rc\./)
+  const productVersion = new RegExp(regexEscape(policy.version))
+  for (const source of sources) assert.match(source, productVersion)
+  assert.doesNotMatch(sources.join('\n'), new RegExp(`${regexEscape(policy.version)}-rc\\.`))
 })
 
 test('publishing derives prerelease state from the product version instead of user input', async () => {

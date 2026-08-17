@@ -5,9 +5,12 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { inflateSync } from 'node:zlib'
 
+import { classifyProductVersion } from '../scripts/version-policy.mjs'
+
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 const exists = async (name) => access(path.join(root, name)).then(() => true, () => false)
+const regexEscape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 function pngCornerAlphas(png) {
   assert.equal(png.subarray(0, 8).toString('hex'), '89504e470d0a1a0a')
@@ -77,7 +80,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(manifest.version, '0.2.1')
+  assert.equal(classifyProductVersion(manifest.version).channel, 'stable')
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -276,6 +279,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   const bootstrap = await read('launcher/windows/DSH-Bootstrap.cs')
   const manifest = await read('launcher/windows/DSH-Portable.manifest')
   const build = await read('scripts/build-windows.ps1')
+  const policy = classifyProductVersion(JSON.parse(await read('package.json')).version)
 
   assert.match(source, /Application\.ExecutablePath/)
   assert.match(source, /portable-cli\.mjs/)
@@ -333,7 +337,7 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /shellSchema/)
   assert.match(build, /shellSchema\s*=\s*10/)
   assert.match(build, /requiredShellSchema\s*=\s*10/)
-  assert.match(source, /AssemblyFileVersion\("0\.2\.1\.65534"\)/)
+  assert.match(source, new RegExp(`AssemblyFileVersion\\("${regexEscape(policy.windowsVersion)}"\\)`))
   assert.match(bootstrap, /ZipArchive/)
   assert.match(bootstrap, /progressPercentLabel/)
   assert.match(bootstrap, /FormatBytes/)
@@ -497,6 +501,7 @@ test('macOS package is a movable signed app shell for both supported architectur
   const app = await read('launcher/macos/DeepSeek-Herness.swift')
   const stop = await read('launcher/macos/Stop DSH-Portable.command')
   const build = await read('scripts/build-macos.sh')
+  const policy = classifyProductVersion(JSON.parse(await read('package.json')).version)
 
   assert.match(plist, /<string>DSH-Portable<\/string>/)
   assert.match(plist, /<string>io\.github\.wsl043\.dsh-portable<\/string>/)
@@ -515,7 +520,7 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
   assert.match(build, /"shellSchema": 10/)
   assert.match(build, /"requiredShellSchema": 10/)
-  assert.match(plist, /<key>CFBundleVersion<\/key>\s*<string>2001999<\/string>/s)
+  assert.match(plist, new RegExp(`<key>CFBundleVersion<\\/key>\\s*<string>${regexEscape(policy.macBuildVersion)}<\\/string>`, 's'))
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)
   assert.match(app, /Check for updates at startup|启动时检查更新/)
