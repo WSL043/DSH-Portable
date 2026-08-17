@@ -2,13 +2,13 @@
 
 0.2.2 让 Windows 桌面壳更接近原生应用：
 
-- 托盘改为系统原生任务菜单：最近 3 个会话直接可达，状态显示在右侧，其余会话进入
-  “更多”；左键回到主窗口，打开与新建仍使用官方会话接口。
+- 托盘采用紧凑的系统原生任务菜单：宽度会根据会话与操作内容调整，最近 3 个会话直接
+  可达，状态显示在右侧，其余会话进入“更多”；打开与新建仍使用官方会话接口。
 - 网页式右键菜单和浏览器状态栏不再出现在桌面窗口中。
-- 导出会话等文件下载改由桌面壳接管：选择保存位置后显示真实进度，可取消、打开文件或
-  打开所在文件夹。
+- 导出会话等文件下载由桌面壳接管，真实进度与完成状态直接显示在 DSH 原有导出窗口中。
 - 托盘继续跟随 DSH 的中文/英文与明暗外观；本次内置官方 DSH 仍为 `0.1.0-rc.6`。
 - 仍可在托盘“更多”中关闭“启动时检查更新”；手动检查始终保留。
+- 插件命令异常中断后留下的失效锁会被安全回收，不再永久阻止后续插件安装或更新。
 
 普通更新只替换 DSH 应用组件并保留用户数据。
 
@@ -46,15 +46,17 @@
 
 0.2.2 makes the Windows desktop shell behave more like a native application:
 
-- The tray is now a native task menu: the three most recent sessions stay one click away, their state
-  appears on the right, and the remaining sessions move into More. Session actions still use the
-  official runtime API.
+- The tray is now a compact native task menu whose width follows its content. The three most recent
+  sessions stay one click away, their state appears on the right, and the remaining sessions move
+  into More. Session actions still use the official runtime API.
 - Web-style context menus and the browser status bar no longer appear in the desktop window.
-- Session exports and other downloads are owned by the desktop shell, with a save location, real
-  progress, cancel, open-file, and show-in-folder actions.
+- Session exports and other downloads are owned by the desktop shell, with native progress and
+  completion state shown directly in DSH's existing export dialog.
 - The tray continues to follow DSH language and light/dark appearance. The bundled official DSH
   remains `0.1.0-rc.6` in this release.
 - You can still turn off **Check for updates at startup** from More; manual checks remain available.
+- Stale plugin-command locks left by an interrupted process are safely recovered instead of blocking
+  future plugin installs or updates.
 
 If an older launcher crosses a compatibility boundary, it downloads one complete package and updates
 in place while preserving `data`, `workspace`, sessions, credentials, and plugins. Finished products

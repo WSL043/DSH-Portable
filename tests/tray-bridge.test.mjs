@@ -48,6 +48,7 @@ function fakeContext(initialSessions) {
   let cleared = 0
   let locale = { active: 'zh', revision: 1 }
   let theme = { active: { colorScheme: 'dark' }, revision: 1 }
+  let downloadSnapshot = { bySession: {} }
   const disposers = []
   const ctx = {
     locale: { getLocale: () => locale },
@@ -62,6 +63,16 @@ function fakeContext(initialSessions) {
       },
       open(id) { opened.push(id) },
       clear() { cleared += 1 },
+    },
+    sessionLogDownload: {
+      store: {
+        getSnapshot: () => downloadSnapshot,
+        update(updater) {
+          const next = structuredClone(downloadSnapshot)
+          updater(next)
+          downloadSnapshot = next
+        },
+      },
     },
     effect(factory) {
       const dispose = factory()
@@ -78,6 +89,7 @@ function fakeContext(initialSessions) {
     ctx,
     opened,
     get cleared() { return cleared },
+    get downloadSnapshot() { return downloadSnapshot },
     emit(name, value) {
       if (name === 'locale/change') locale = value
       if (name === 'theme/change') theme = value
@@ -119,7 +131,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList())
 
-  assert.deepEqual([...client.exports.inject], ['locale', 'theme', 'sessions'])
+  assert.deepEqual([...client.exports.inject], ['locale', 'theme', 'sessions', 'sessionLogDownload'])
   client.exports.apply(runtime.ctx)
 
   const initial = client.posted.at(-1)
@@ -145,6 +157,28 @@ test('private tray bridge projects bounded official runtime state and invokes on
   client.send({ type: 'dsh-portable/action', action: 'new-session' })
   assert.deepEqual(runtime.opened, ['session-9'])
   assert.equal(runtime.cleared, 1)
+
+  client.send({
+    type: 'dsh-portable/download',
+    schemaVersion: 1,
+    sessionId: 'session-9',
+    state: 'downloading',
+    fileName: 'session-9.zip',
+    percent: 42,
+    bytesReceived: 420,
+    totalBytes: 1000,
+  })
+  assert.equal(runtime.downloadSnapshot.bySession['session-9'].status, 'downloading')
+  assert.equal(runtime.downloadSnapshot.bySession['session-9'].nativeDownload.percent, 42)
+  client.send({
+    type: 'dsh-portable/download',
+    schemaVersion: 1,
+    sessionId: 'session-9',
+    state: 'completed',
+    fileName: 'session-9.zip',
+    percent: 100,
+  })
+  assert.equal(runtime.downloadSnapshot.bySession['session-9'].status, 'success')
 
   const idle = sessionList(2)
   for (const item of Object.values(idle.byId)) item.running = false
@@ -208,7 +242,7 @@ test('portable bridge fallback follows the moved product without entering a user
   }
 })
 
-test('Windows tray consumes official projected state and keeps a bounded native fallback menu', async () => {
+test('Windows tray consumes official projected state in one bounded compact native menu', async () => {
   const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   const build = await readFile(new URL('../scripts/build-windows.ps1', import.meta.url), 'utf8')
   assert.match(source, /WebMessageReceived/)
@@ -217,17 +251,39 @@ test('Windows tray consumes official projected state and keeps a bounded native 
   assert.match(source, /dsh-portable\/state/)
   assert.match(source, /open-session/)
   assert.match(source, /new-session/)
+  assert.doesNotMatch(source, /TrayTaskFlyout/)
+  assert.doesNotMatch(source, /TraySessionRow/)
+  assert.doesNotMatch(source, /ShowTrayTaskFlyout/)
+  assert.match(source, /CreateSessionMenuItem/)
+  assert.match(source, /ShortcutKeyDisplayString[\s\S]+SessionHintForLocale/)
   assert.match(source, /Take\(3\)/)
-  assert.match(source, /ShortcutKeyDisplayString/)
   assert.match(source, /More|更多/)
-  assert.match(source, /CreateSectionHeader/)
-  assert.match(source, /最近|Recent/)
-  assert.match(source, /more\.DropDownItems\.Add\(updateMenu\)/)
+  assert.match(source, /已完成|Completed/)
+  assert.match(source, /more\.DropDownItems\.Add\(checkUpdateItem\)/)
+  assert.match(source, /more\.DropDownItems\.Add\(automaticUpdateCheckItem\)/)
+  assert.match(source, /more\.DropDownItems\.Add\(closeBehaviorItem\)/)
+  assert.doesNotMatch(source, /more\.DropDownItems\.Add\(closeToTrayItem\)/)
+  assert.doesNotMatch(source, /more\.DropDownItems\.Add\(closeToExitItem\)/)
+  assert.doesNotMatch(source, /more\.DropDownItems\.Add\(updateMenu\)/)
+  assert.doesNotMatch(source, /more\.DropDownItems\.Add\(closeBehaviorMenu\)/)
+  assert.match(source, /automaticUpdateCheckItem\.ShortcutKeyDisplayString\s*=\s*updateCheckEnabled/)
+  assert.match(source, /closeBehaviorItem\.ShortcutKeyDisplayString\s*=\s*closeBehavior/)
+  assert.match(source, /Equals\("standard"[\s\S]*chinese\s*\?\s*"标准"\s*:\s*"Standard"/)
+  assert.match(source, /MeasureTrayMenuWidth/)
+  assert.doesNotMatch(source, /more\.DropDown\.MinimumSize\s*=\s*new Size\(300,\s*0\)/)
   assert.match(source, /DshMenuColorTable/)
-  assert.match(source, /Color\.FromArgb\(53,\s*54,\s*56\)/)
-  assert.match(source, /Color\.FromArgb\(67,\s*69,\s*74\)/)
-  assert.match(source, /MinimumSize\s*=\s*new Size\(288,\s*0\)/)
-  assert.match(source, /new Font\("Segoe UI",\s*10F/)
+  assert.match(source, /Color\.FromArgb\(31,\s*32,\s*34\)/)
+  assert.match(source, /Color\.FromArgb\(45,\s*47,\s*50\)/)
+  assert.doesNotMatch(source, /MinimumSize\s*=\s*new Size\(300,\s*0\)/)
+  assert.doesNotMatch(source, /new Size\(298,\s*35\)/)
+  assert.match(source, /new Font\("Segoe UI Variable Text",\s*8\.0F/)
+  assert.match(source, /DwmSetWindowAttribute/)
+  assert.match(source, /DwmWindowCornerPreference/)
+  assert.match(source, /pendingInteraction[\s\S]+running[\s\S]+SessionHint/)
+  assert.match(source, /OnRenderArrow[\s\S]+ControlPaint\.DrawMenuGlyph[\s\S]+MenuGlyph\.Arrow/)
+  assert.match(source, /OnRenderMenuItemBackground[\s\S]+item\.Selected[\s\S]+RoundedRectangle[\s\S]+selectedColor[\s\S]+FillPath/)
+  assert.match(source, /ContextMenuStrip\s*=\s*trayMenu/)
+  assert.match(source, /eventArgs\.Button\s*==\s*MouseButtons\.Left[\s\S]+ShowTrayMenu/)
   assert.match(source, /检查更新|Check for updates/)
   assert.match(source, /启动时检查更新|Check for updates at startup/)
   assert.match(source, /updateCheckEnabled/)
@@ -241,7 +297,7 @@ test('Windows tray consumes official projected state and keeps a bounded native 
   assert.match(source, /官方 DSH|Bundled official DSH/)
   assert.match(source, /稍后|Later/)
   assert.doesNotMatch(source, /item\.Checked\s*=\s*true/)
-  assert.match(source, /item\.Tag\s*=\s*"current"/)
+  assert.doesNotMatch(source, /item\.Tag\s*=\s*"current"/)
   assert.match(source, /SelectedColor/)
   assert.match(source, /ShowCheckMargin\s*=\s*false/)
   assert.doesNotMatch(source, /new Font\(trayMenu\.Font, FontStyle\.Bold\)/)

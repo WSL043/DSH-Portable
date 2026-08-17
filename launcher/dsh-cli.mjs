@@ -228,17 +228,30 @@ async function relinkMovedProfileIfNeeded(spec, argv, adapters = {}) {
   return true
 }
 
-function processExists(pid) {
+export function processExists(pid, platform = process.platform, adapters = {}) {
   if (!Number.isSafeInteger(Number(pid)) || Number(pid) <= 0) return false
+  const kill = adapters.kill ?? process.kill.bind(process)
   try {
-    process.kill(Number(pid), 0)
+    kill(Number(pid), 0)
     return true
   } catch (error) {
-    return error?.code === 'EPERM'
+    if (error?.code !== 'EPERM') return false
+    if (platform !== 'win32') return true
+
+    const run = adapters.spawnSync ?? spawnSync
+    const result = run('tasklist.exe', ['/FI', `PID eq ${Number(pid)}`, '/FO', 'CSV', '/NH'], {
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    if (result?.error || result?.status !== 0 || typeof result?.stdout !== 'string') return true
+    return result.stdout.split(/\r?\n/).some((line) => {
+      const fields = /^"(?:[^"]|"")*","(?<pid>\d+)"(?:,|$)/.exec(line.trim())
+      return Number(fields?.groups?.pid) === Number(pid)
+    })
   }
 }
 
-async function acquirePluginLock(layout) {
+export async function acquirePluginLock(layout) {
   await mkdir(layout.stateDir, { recursive: true })
   const filename = platformPaths(layout.platform).join(layout.stateDir, 'plugin-command.lock')
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -252,7 +265,7 @@ async function acquirePluginLock(layout) {
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error
       const owner = Number.parseInt((await readFile(filename, 'utf8').catch(() => '')).trim(), 10)
-      if (processExists(owner)) throw new Error('Another DSH plugin command is already running.')
+      if (processExists(owner, layout.platform)) throw new Error('Another DSH plugin command is already running.')
       await rm(filename, { force: true }).catch(() => {})
     }
   }

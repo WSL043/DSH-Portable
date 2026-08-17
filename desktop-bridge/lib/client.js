@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: '@wsl043/dsh-portable-desktop-bridge',
   factory: function () {
     const exports = {}
-    const inject = ['locale', 'theme', 'sessions']
+    const inject = ['locale', 'theme', 'sessions', 'sessionLogDownload']
 
     function localeOf(ctx) {
       const active = String(ctx.locale.getLocale()?.active ?? '').toLowerCase()
@@ -42,6 +42,38 @@ window.__ModuleLoader__.load({
       }
     }
 
+    function applyNativeDownload(ctx, message) {
+      if (message?.schemaVersion !== 1) return
+      const sessionId = String(message.sessionId || '')
+      if (!sessionId || !ctx.sessionLogDownload?.store?.update) return
+      const nativeDownload = {
+        state: String(message.state || ''),
+        fileName: String(message.fileName || ''),
+        bytesReceived: Math.max(0, Number(message.bytesReceived || 0)),
+        totalBytes: Math.max(0, Number(message.totalBytes || 0)),
+        percent: Number.isFinite(Number(message.percent)) ? Number(message.percent) : -1,
+        reason: String(message.reason || ''),
+      }
+      const status = nativeDownload.state === 'completed'
+        ? 'success'
+        : nativeDownload.state === 'interrupted' || nativeDownload.state === 'cancelled'
+          ? 'error'
+          : 'downloading'
+      ctx.sessionLogDownload.store.update(state => {
+        const current = state.bySession[sessionId]
+        state.bySession = {
+          ...state.bySession,
+          [sessionId]: {
+            ...current,
+            open: current?.open ?? true,
+            status,
+            error: status === 'error' ? nativeDownload.reason : null,
+            nativeDownload,
+          },
+        }
+      })
+    }
+
     function apply(ctx) {
       const webview = window.chrome?.webview
       if (!webview?.postMessage || !webview?.addEventListener) return
@@ -53,7 +85,12 @@ window.__ModuleLoader__.load({
         }
         const receive = event => {
           const message = event?.data
-          if (!message || message.type !== 'dsh-portable/action') return
+          if (!message) return
+          if (message.type === 'dsh-portable/download') {
+            applyNativeDownload(ctx, message)
+            return
+          }
+          if (message.type !== 'dsh-portable/action') return
           if (message.action === 'new-session') {
             ctx.sessions.clear()
             return
