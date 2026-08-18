@@ -10,8 +10,8 @@ if (($# == 0)); then
   exit 2
 fi
 
-readonly APT_MAX_ATTEMPTS=3
-readonly APT_TIMEOUT_SECONDS=180
+readonly APT_MAX_ATTEMPTS=2
+readonly APT_TIMEOUT_SECONDS=600
 readonly APT_KILL_GRACE_SECONDS=15
 
 run_apt() {
