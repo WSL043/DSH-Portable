@@ -232,7 +232,10 @@ try {
         Write-Host '[plugin-smoke] move folder, load cached remote archive, then repeat local archive add/list/remove'
         $MovedRoot = "$Root-plugin-moved"
         if (Test-Path -LiteralPath $MovedRoot) { throw "plugin move target already exists: $MovedRoot" }
-        Move-Item -LiteralPath $Root -Destination $MovedRoot
+        # A same-volume user move is a directory rename. PowerShell's provider
+        # can traverse pnpm links and fail on a valid link whose target is being
+        # regenerated; Directory.Move preserves the tree without dereferencing it.
+        [System.IO.Directory]::Move($Root, $MovedRoot)
         $Root = $MovedRoot
         $ExpectedStateRoot = $MovedRoot
         $ProfileRoot = Join-Path $ExpectedStateRoot "data\dsh-home\profiles\$Profile"
