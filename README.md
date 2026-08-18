@@ -76,11 +76,11 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 
 ### 国内镜像下载
 
-| 路线 | 说明 | 镜像链接 |
+| 路线 | 镜像 | 链接 |
 | --- | --- | --- |
-| 主选 | 便携完整 ZIP（离线版，免安装）· gh-proxy.com，实测最快 | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| 备用 1 | 便携完整 ZIP（离线版，免安装）· ghfast.top | [下载](https://ghfast.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| 备用 2 | 便携完整 ZIP（离线版，免安装）· gh.ddlc.top | [下载](https://gh.ddlc.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 主选 | gh-proxy.com | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 备用 1 | ghfast.top | [下载](https://ghfast.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 备用 2 | gh.ddlc.top | [下载](https://gh.ddlc.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### Windows
 
