@@ -123,7 +123,8 @@ test('Linux CI dependency installation is bounded, retryable, and shared by ever
     'all four Linux jobs must use the bounded package installer',
   )
   assert.match(installer, /DEBIAN_FRONTEND=noninteractive/)
-  assert.match(installer, /APT_MAX_ATTEMPTS=3/)
+  assert.match(installer, /APT_MAX_ATTEMPTS=2/)
+  assert.match(installer, /APT_TIMEOUT_SECONDS=600/)
   assert.match(installer, /timeout\s+--foreground[\s\S]+APT_TIMEOUT_SECONDS/)
   assert.match(installer, /Acquire::Retries=2/)
   assert.match(installer, /Acquire::http::Timeout=20/)
