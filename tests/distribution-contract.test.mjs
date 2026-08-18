@@ -1,16 +1,19 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
+const execFileAsync = promisify(execFile)
 
 test('runtime dependency boundary contains official DSH, the private desktop bridge, and its pinned package manager only', async () => {
   const runtime = JSON.parse(await read('app/package.json'))
   assert.deepEqual(runtime.dependencies, {
-    '@deepseek-ai/dsh': '0.1.0-rc.6',
+    '@deepseek-ai/dsh': '0.1.0-rc.7',
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     pnpm: '11.7.0',
   })
@@ -19,10 +22,10 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
     assert.equal(serialized.includes(forbidden), false, forbidden)
   }
   assert.deepEqual(runtime.allowScripts, {
-    '@deepseek-ai/dsh-subprocess-local@0.1.0-rc.6': true,
+    '@deepseek-ai/dsh-subprocess-local@0.1.0-rc.7': true,
     '@google/genai@1.52.0': true,
     'koffi@3.1.5': true,
-    'node-pty@1.1.0': true,
+    'node-pty@1.2.0-beta.15': true,
     'protobufjs@7.6.5': true,
   })
 })
@@ -30,9 +33,12 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
 test('upstream lock pins independently verifiable DSH and Node artifacts', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
   assert.equal(lock.dsh.package, '@deepseek-ai/dsh')
+  assert.equal(lock.dsh.version, '0.1.0-rc.7')
+  assert.equal(lock.dsh.reviewedCommit, '99f6f02fecdb7dff40c3fbc9470f5907c29f74ca')
   assert.match(lock.dsh.version, /^0\.1\.0-rc\.\d+$/)
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
+  assert.equal(lock.dsh.noticesSha256, '4a2ff8717eeb94173df9f98316437ce6e0817f740cd1e23098d5b29a3e72791a')
   assert.deepEqual(lock.pnpm, {
     package: 'pnpm',
     version: '11.7.0',
@@ -60,8 +66,23 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   assert.equal(pnpm.version, upstream.pnpm.version)
   assert.equal(pnpm.integrity, upstream.pnpm.integrity)
   const desktopBridge = lockfile.packages['node_modules/@wsl043/dsh-portable-desktop-bridge']
-  assert.equal(desktopBridge.resolved, 'file:../desktop-bridge')
-  assert.equal(desktopBridge.license, 'MIT')
+  assert.equal(desktopBridge.resolved, '../desktop-bridge')
+  assert.equal(desktopBridge.link, true)
+  const desktopBridgeSource = lockfile.packages['../desktop-bridge']
+  const desktopBridgeManifest = JSON.parse(await read('desktop-bridge/package.json'))
+  assert.equal(desktopBridgeSource.name, '@wsl043/dsh-portable-desktop-bridge')
+  assert.equal(desktopBridgeSource.version, desktopBridgeManifest.version)
+  assert.equal(desktopBridgeSource.license, 'MIT')
+})
+
+test('the independent lock verifier accepts the current local bridge link and exact upstream pins', async () => {
+  const { stdout } = await execFileAsync(process.execPath, [
+    path.join(root, 'scripts', 'verify-lock.mjs'),
+    path.join(root, 'app', 'package-lock.json'),
+    path.join(root, 'upstream.lock.json'),
+  ])
+  const result = JSON.parse(stdout)
+  assert.equal(result.dshVersion, '0.1.0-rc.7')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {
@@ -82,6 +103,22 @@ test('build script verifies downloads and emits ZIP plus checksum', async () => 
   assert.match(script, /File\]::Replace/)
   assert.doesNotMatch(script, /File\]::Replace\([^\n]+\$null/)
   assert.match(script, /UTF8Encoding\]::new\(\$false\)/)
+  assert.match(script, /Lock\.dsh\.noticesSha256/)
+  assert.doesNotMatch(script, /61f68731049dbea19ba91ad8cf363dd2778c5f7b1f9a63496a6a62c1129eefee/)
+})
+
+test('all platform builders verify official notices through the reviewed upstream lock', async () => {
+  const [windows, macos, linux] = await Promise.all([
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('scripts/build-linux.sh'),
+  ])
+  assert.match(windows, /Lock\.dsh\.noticesSha256/)
+  assert.match(macos, /lock_value dsh\.noticesSha256/)
+  assert.match(linux, /lock_value dsh\.noticesSha256/)
+  for (const builder of [windows, macos, linux]) {
+    assert.doesNotMatch(builder, /61f68731049dbea19ba91ad8cf363dd2778c5f7b1f9a63496a6a62c1129eefee/)
+  }
 })
 
 test('one-click launchers resolve everything from their own folder', async () => {

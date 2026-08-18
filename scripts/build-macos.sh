@@ -25,6 +25,7 @@ NODE_ARCHIVE="$(lock_value node.runtimes.$RUNTIME_KEY.archive)"
 NODE_SHA256="$(lock_value node.runtimes.$RUNTIME_KEY.sha256)"
 DSH_VERSION="$(lock_value dsh.version)"
 DSH_COMMIT="$(lock_value dsh.reviewedCommit)"
+DSH_NOTICES_SHA256="$(lock_value dsh.noticesSha256)"
 PORTABLE_VERSION="$("$BUILD_NODE" -p 'require(process.argv[1]).version' "$PROJECT_ROOT/package.json")"
 
 DOWNLOAD_DIR="$CACHE_DIR/downloads"
@@ -91,7 +92,7 @@ NOTICES="$DOWNLOAD_DIR/DeepSeek-Harness-THIRD_PARTY_NOTICES-$DSH_COMMIT.md"
 if [[ ! -f "$NOTICES" ]]; then
   curl --fail --location --retry 3 --output "$NOTICES" "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$DSH_COMMIT/THIRD_PARTY_NOTICES.md"
 fi
-printf '%s  %s\n' '61f68731049dbea19ba91ad8cf363dd2778c5f7b1f9a63496a6a62c1129eefee' "$NOTICES" | shasum -a 256 -c -
+printf '%s  %s\n' "$DSH_NOTICES_SHA256" "$NOTICES" | shasum -a 256 -c -
 cp "$NOTICES" "$STAGE/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md"
 
 cat > "$STAGE/licenses/COMPONENTS.json" <<EOF

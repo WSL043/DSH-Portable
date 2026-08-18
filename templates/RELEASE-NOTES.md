@@ -1,16 +1,16 @@
-> 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.6`）。DSH-Portable 是独立社区分发项目。
+> 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.7`）。DSH-Portable 是独立社区分发项目。
 
-0.2.3 修正 Windows 托盘的基础交互：
+0.2.4 同步官方 rc.7，并继续保持便携数据与桌面体验：
 
-- 左键单击托盘图标会直接打开 DeepSeek Harness；右键才显示任务菜单，点击菜单外会按
-  Windows 原生行为关闭菜单。
-- “打开 DeepSeek Harness”固定在一级菜单首项；最近 3 个会话仍直接可达，其余会话进入
-  “更多”，菜单最多两层。
-- “启动时检查更新”会在点击后立即显示开关结果，重启后继续使用用户选择。
-- 网页式右键菜单和浏览器状态栏不再出现在桌面窗口中。
-- 导出会话等文件下载由桌面壳接管，真实进度与完成状态直接显示在 DSH 原有导出窗口中。
-- 托盘继续跟随 DSH 的中文/英文与明暗外观；本次内置官方 DSH 仍为 `0.1.0-rc.6`。
-- 插件命令异常中断后留下的失效锁会被安全回收，不再永久阻止后续插件安装或更新。
+- 设置页现在可显示插件注册的设置卡；Job Panel 可呈现 Codex、Claude Code 等外部 Agent
+  启动的子任务。
+- MCP、ACP 与嵌套 PTC 工具返回的图片可保留在对话上下文中。
+- 修复大段历史记录分页可能导致的栈溢出，以及达到最大 Token 后会话无法继续的问题。
+- 改善最小模式下持续 Bash 调用的延迟；问题卡片可折叠，并保留尚未提交的答案草稿。
+- DeepSeek 模型增加 `low` 推理强度选项；原 Code 模式统一更名为 PTC 模式。
+- Portable 已适配官方新版终端运行时；Windows、macOS、Linux x64 与 ARM64 继续使用同一套
+  完整发布门。
+- “启动时检查更新”仍可在应用菜单中关闭；关闭后不会自动提醒，仍可随时手动检查。
 
 普通更新只替换 DSH 应用组件并保留用户数据。
 
@@ -43,23 +43,23 @@
 
 ## English
 
-> Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.6`).
+> Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.7`).
 > DSH-Portable is an independent community distribution.
 
-0.2.3 corrects the fundamental Windows tray interactions:
+0.2.4 updates the bundled official runtime to rc.7 while preserving portable data and desktop behavior:
 
-- Left-clicking the tray icon opens DeepSeek Harness directly. Right-clicking opens the task menu,
-  and clicking elsewhere dismisses it through the native Windows menu behavior.
-- **Open DeepSeek Harness** is the first top-level command. The three most recent sessions remain
-  directly accessible, remaining sessions are under More, and the menu is never deeper than two levels.
-- **Check for updates at startup** now reflects a click immediately and keeps the choice after restart.
-- Web-style context menus and the browser status bar no longer appear in the desktop window.
-- Session exports and other downloads are owned by the desktop shell, with native progress and
-  completion state shown directly in DSH's existing export dialog.
-- The tray continues to follow DSH language and light/dark appearance. The bundled official DSH
-  remains `0.1.0-rc.6` in this release.
-- Stale plugin-command locks left by an interrupted process are safely recovered instead of blocking
-  future plugin installs or updates.
+- Settings can now show plugin-registered cards, and the Job Panel can surface subagent tasks launched
+  by external tools such as Codex and Claude Code.
+- Images returned through MCP, ACP, and nested PTC tools remain available in conversation context.
+- Large-history pagination no longer risks a stack overflow, and sessions remain usable after
+  max-token truncation.
+- Persistent Bash work in minimal mode has lower latency. Question cards can collapse without losing
+  unsubmitted answer drafts.
+- DeepSeek models gain a `low` reasoning-effort option, and Code mode is now named PTC mode.
+- The Portable packages support the updated terminal runtime across Windows, macOS, Linux x64, and
+  Linux ARM64 through the same release gate.
+- **Check for updates at startup** remains optional. Turn it off to suppress automatic prompts while
+  keeping manual update checks available.
 
 If an older launcher crosses a compatibility boundary, it downloads one complete package and updates
 in place while preserving `data`, `workspace`, sessions, credentials, and plugins. Finished products
