@@ -69,25 +69,16 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 ## 其他下载
 
 > [!TIP]
-> **国内网络加速**：GitHub 直连下载在国内可能较慢，可直接使用下方社区镜像成品链接，
-> 内容与 GitHub 完全一致。镜像是社区维护的加速服务，非官方部署；失效时请用上方
-> GitHub 原链接，并核对 [checksums.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt)。
+> **国内网络加速**：GitHub 直连下载在国内可能较慢，可直接下载下方社区镜像的
+> **Windows 离线版完整 ZIP**（解压后直接使用，免安装）。镜像是社区维护的加速
+> 服务，非官方部署；失效时请用上方 GitHub 原链接，并核对
+> [checksums.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt)。
 
 ### 国内镜像下载（gh-proxy.com）
 
 | 平台 | 文件 | 镜像链接 |
 | --- | --- | --- |
-| Windows | 便携启动器 | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) |
-| Windows | 便携完整 ZIP | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| Windows | 安装版 | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) |
-| macOS Apple Silicon | 便携 ZIP | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
-| macOS Apple Silicon | 安装 DMG | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg) |
-| macOS Intel | 便携 ZIP | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) |
-| macOS Intel | 安装 DMG | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg) |
-| Linux x64 | AppImage | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage) |
-| Linux x64 | 完整目录 tar.gz | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz) |
-| Linux ARM64 | AppImage | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) |
-| Linux ARM64 | 完整目录 tar.gz | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz) |
+| Windows x64 | 便携完整 ZIP（离线版，免安装） | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### Windows
 
