@@ -111,6 +111,28 @@ test('Linux packaging and real product smokes run independently on x64 and arm64
   assert.match(appImagePluginSmoke, /mv "\$ROOT" "\$MOVED"/)
 })
 
+test('Linux CI dependency installation is bounded, retryable, and shared by every product job', async () => {
+  const [workflow, installer] = await Promise.all([
+    read('.github/workflows/ci.yml'),
+    read('scripts/install-linux-packages.sh'),
+  ])
+  assert.doesNotMatch(workflow, /sudo\s+apt-get\s+(?:update|install)/)
+  assert.equal(
+    (workflow.match(/bash scripts\/install-linux-packages\.sh/g) ?? []).length,
+    4,
+    'all four Linux jobs must use the bounded package installer',
+  )
+  assert.match(installer, /DEBIAN_FRONTEND=noninteractive/)
+  assert.match(installer, /APT_MAX_ATTEMPTS=3/)
+  assert.match(installer, /timeout\s+--foreground[\s\S]+APT_TIMEOUT_SECONDS/)
+  assert.match(installer, /Acquire::Retries=2/)
+  assert.match(installer, /Acquire::http::Timeout=20/)
+  assert.match(installer, /Acquire::https::Timeout=20/)
+  assert.match(installer, /apt-get[\s\S]+update/)
+  assert.match(installer, /apt-get[\s\S]+install[\s\S]+--no-install-recommends/)
+  assert.doesNotMatch(installer, /curl[^\n]*\|\s*(?:ba)?sh/)
+})
+
 test('release staging exposes two obvious Linux choices per architecture', async () => {
   const staging = await read('scripts/stage-release-assets.mjs')
   for (const arch of ['x64', 'arm64']) {
