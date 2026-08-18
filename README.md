@@ -68,6 +68,25 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 
 ## 其他下载
 
+> [!TIP]
+> **国内网络加速**：GitHub 直连下载在国内可能较慢。把下面任一**社区镜像前缀**加在
+> 下载链接前面即可，内容与 GitHub 完全一致；下载后建议核对
+> [checksums.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt)。
+
+| 镜像 | 前缀 |
+| --- | --- |
+| 主选 | `https://gh-proxy.com/` |
+| 备用 1 | `https://ghfast.top/` |
+| 备用 2 | `https://gh.ddlc.top/` |
+
+示例（Windows 便携启动器，前缀后保留原有 `latest` 路径，无需手动改版本号）：
+
+```text
+https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe
+```
+
+> 镜像为社区维护的 GitHub 加速服务，非官方部署；如失效可换用备用镜像或 GitHub 原地址。
+
 ### Windows
 
 | 你想怎么用 | 下载 |
