@@ -91,6 +91,21 @@ async function evaluate(client, expression) {
   return result.result?.value
 }
 
+async function waitForDocumentBody(client, launcher, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
+  let latest = 'document is not ready'
+  while (Date.now() < deadline) {
+    if (launcher.exitCode !== null) throw new Error(`desktop host exited before the DSH document became ready: ${launcher.exitCode}`)
+    try {
+      if (await evaluate(client, "Boolean(document.body && document.readyState !== 'loading')")) return
+    } catch (error) {
+      latest = error instanceof Error ? error.message : String(error)
+    }
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  throw new Error(`timed out waiting for the embedded DSH document body; latest=${latest}`)
+}
+
 async function portable(args) {
   return execFileAsync(portableNode, [portableCli, ...args], {
     cwd: root,
@@ -124,6 +139,7 @@ try {
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
   await client.send('Runtime.enable')
+  await waitForDocumentBody(client, launcher)
   const filename = 'dsh-native-download-smoke.txt'
   const body = 'DSH native WebView2 download passed.'
   await evaluate(client, `(() => {
