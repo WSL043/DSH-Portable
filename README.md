@@ -68,20 +68,6 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 
 ## 其他下载
 
-> [!TIP]
-> **国内网络加速**：GitHub 直连下载在国内可能较慢，可直接下载下方社区镜像的
-> **Windows 离线版完整 ZIP**（解压后直接使用，免安装）。镜像是社区维护的加速
-> 服务，非官方部署；失效时请换用备用路线或 GitHub 原链接，并核对
-> [checksums.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt)。
-
-### 国内镜像下载
-
-| 路线 | 镜像 | 链接 |
-| --- | --- | --- |
-| 主选 | gh-proxy.com | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| 备用 1 | ghfast.top | [下载](https://ghfast.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| 备用 2 | gh.ddlc.top | [下载](https://gh.ddlc.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-
 ### Windows
 
 | 你想怎么用 | 下载 |
@@ -89,6 +75,18 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 | **便携使用（推荐）** | [便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) — 首次运行后得到可移动文件夹 |
 | **目标电脑首次准备时无法联网** | [便携完整 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — 解压后直接使用 |
 | **像普通软件一样安装** | [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — 开始菜单、桌面快捷方式和标准卸载 |
+
+> [!TIP]
+> **国内网络加速**：GitHub 直连下载在国内可能较慢，可直接下载下方社区镜像的
+> **Windows 离线版完整 ZIP**（解压后直接使用，免安装）。镜像是社区维护的加速
+> 服务，非官方部署；失效时请换用备用路线或 GitHub 原链接，并核对
+> [checksums.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt)。
+
+| 路线 | 镜像 | 链接 |
+| --- | --- | --- |
+| 主选 | gh-proxy.com | [下载](https://gh-proxy.com/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 备用 1 | ghfast.top | [下载](https://ghfast.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 备用 2 | gh.ddlc.top | [下载](https://gh.ddlc.top/https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### macOS
 
