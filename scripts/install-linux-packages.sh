@@ -14,6 +14,26 @@ readonly APT_MAX_ATTEMPTS=2
 readonly APT_TIMEOUT_SECONDS=600
 readonly APT_KILL_GRACE_SECONDS=15
 
+normalize_github_apt_mirror() {
+  [[ "${GITHUB_ACTIONS:-}" == "true" ]] || return 0
+  local mirror_file=/etc/apt/apt-mirrors.txt
+  [[ -f "$mirror_file" ]] || return 0
+
+  local mirror
+  case "$(dpkg --print-architecture)" in
+    amd64 | i386)
+      mirror=https://archive.ubuntu.com/ubuntu/
+      ;;
+    arm64 | armhf)
+      mirror=https://ports.ubuntu.com/ubuntu-ports/
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+  printf '%s\n' "$mirror" | sudo tee "$mirror_file" >/dev/null
+}
+
 run_apt() {
   sudo env DEBIAN_FRONTEND=noninteractive \
     timeout --foreground --signal=TERM --kill-after="${APT_KILL_GRACE_SECONDS}s" "${APT_TIMEOUT_SECONDS}s" \
@@ -24,6 +44,8 @@ run_apt() {
       -o DPkg::Lock::Timeout=60 \
       "$@"
 }
+
+normalize_github_apt_mirror
 
 for ((attempt = 1; attempt <= APT_MAX_ATTEMPTS; attempt += 1)); do
   echo "Installing Linux dependencies (attempt ${attempt}/${APT_MAX_ATTEMPTS})..."
