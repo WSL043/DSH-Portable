@@ -15,9 +15,13 @@ await access(path.join(ptyRoot, 'package.json'))
 const target = `${platform}-${architecture}`
 const allowed = new Set(['win32-x64', 'darwin-arm64', 'darwin-x64', 'linux-arm64', 'linux-x64'])
 assert.equal(allowed.has(target), true, `unsupported runtime prune target: ${target}`)
-const linuxNativeRoot = path.join(ptyRoot, 'build', 'Release')
-const nativeRoot = platform === 'linux' ? linuxNativeRoot : path.join(prebuildRoot, target)
-await access(path.join(nativeRoot, 'pty.node'))
+const nativeRoot = path.join(prebuildRoot, target)
+const requiredNativeFiles = platform === 'win32'
+  ? ['conpty.node', 'conpty_console_list.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe']
+  : platform === 'darwin'
+    ? ['pty.node', 'spawn-helper']
+    : ['pty.node']
+for (const relative of requiredNativeFiles) await access(path.join(nativeRoot, ...relative.split('/')))
 
 async function bytes(root) {
   const info = await stat(root)
@@ -75,23 +79,13 @@ async function removeDebugSymbols(root) {
 
 const before = await bytes(ptyRoot)
 for (const entry of await readdir(prebuildRoot, { withFileTypes: true })) {
-  if (entry.isDirectory() && (platform === 'linux' || entry.name !== target)) {
+  if (entry.isDirectory() && entry.name !== target) {
     await removeTree(path.join(prebuildRoot, entry.name))
   }
 }
 await removeDebugSymbols(nativeRoot)
 
 if (platform === 'linux') {
-  const buildRoot = path.join(ptyRoot, 'build')
-  for (const entry of await readdir(buildRoot, { withFileTypes: true })) {
-    if (entry.name !== 'Release') await removeTree(path.join(buildRoot, entry.name))
-  }
-  for (const entry of await readdir(linuxNativeRoot, { withFileTypes: true })) {
-    if (!['pty.node', 'spawn-helper'].includes(entry.name)) {
-      await removeTree(path.join(linuxNativeRoot, entry.name))
-    }
-  }
-
   // Koffi publishes both glibc and musl binaries in the same Linux package.
   // DSH-Portable is built and supported on Ubuntu/glibc; retaining the unused
   // musl binary makes linuxdeploy try to resolve libc.musl-*.so.1 and abort.
@@ -109,8 +103,7 @@ if (platform === 'linux') {
 // npm install has already selected and validated the target prebuild. These
 // directories contain only build inputs or TypeScript declarations and are not
 // read by node-pty's runtime loader.
-const removablePtyDirectories = ['benchmark', 'benchmarks', 'deps', 'examples', 'scripts', 'src', 'test', 'tests', 'third_party', 'typings']
-if (platform !== 'linux') removablePtyDirectories.push('build')
+const removablePtyDirectories = ['benchmark', 'benchmarks', 'build', 'deps', 'examples', 'scripts', 'src', 'test', 'tests', 'third_party', 'typings']
 for (const name of removablePtyDirectories) {
   const filename = path.join(ptyRoot, name)
   try {
@@ -138,7 +131,7 @@ const targetFiles = await readdir(nativeRoot)
 assert.equal(targetFiles.some((name) => name.endsWith('.node')), true, `node-pty target ${target} has no native module`)
 assert.equal(targetFiles.some((name) => name.endsWith('.pdb')), false, `node-pty target ${target} retained debug symbols`)
 const remainingTargets = (await readdir(prebuildRoot, { withFileTypes: true })).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
-assert.deepEqual(remainingTargets, platform === 'linux' ? [] : [target])
+assert.deepEqual(remainingTargets, [target])
 if (platform === 'linux') {
   await access(path.join(nodeModules, '@koromix', `koffi-linux-${architecture}`, `linux_${architecture}`, 'koffi.node'))
   await assert.rejects(access(path.join(nodeModules, '@koromix', `koffi-linux-${architecture}`, `musl_${architecture}`)), { code: 'ENOENT' })

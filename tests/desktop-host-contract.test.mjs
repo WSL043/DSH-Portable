@@ -121,10 +121,11 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
 })
 
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
-  const [workflow, windowsSmoke, traySmoke, macSmoke] = await Promise.all([
+  const [workflow, windowsSmoke, traySmoke, nativeDownloadSmoke, macSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-desktop-host.ps1'),
     read('scripts/smoke-windows-native-tray.ps1'),
+    read('scripts/smoke-windows-native-download.mjs'),
     read('scripts/smoke-macos-desktop-host.sh'),
   ])
 
@@ -137,6 +138,12 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.doesNotMatch(traySmoke, /[^\x00-\x7F]/, 'Windows PowerShell 5.1 smoke scripts must remain encoding-safe without a BOM')
   assert.match(traySmoke, /CaptureDirectory/)
   assert.match(traySmoke, /Bitmap\.Save/)
+  assert.match(nativeDownloadSmoke, /async function waitForDocumentBody/)
+  assert.match(nativeDownloadSmoke, /document\.body\s*&&\s*document\.readyState\s*!==\s*['"]loading['"]/)
+  assert.ok(
+    nativeDownloadSmoke.indexOf('await waitForDocumentBody') < nativeDownloadSmoke.indexOf('document.body.appendChild(anchor)'),
+    'the real native download smoke must wait for the embedded document before injecting a download',
+  )
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)

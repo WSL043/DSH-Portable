@@ -36,6 +36,10 @@ test('all finished-product manifests use the same stable product version', async
   const manifest = JSON.parse(await read('package.json'))
   const policy = classifyProductVersion(manifest.version)
   assert.equal(policy.channel, 'stable')
+  const desktopBridge = JSON.parse(await read('desktop-bridge/package.json'))
+  const appLock = JSON.parse(await read('app/package-lock.json'))
+  assert.equal(desktopBridge.version, policy.version)
+  assert.equal(appLock.packages['../desktop-bridge'].version, policy.version)
 
   const sources = await Promise.all([
     read('installer/windows/DSH-Portable.iss'),

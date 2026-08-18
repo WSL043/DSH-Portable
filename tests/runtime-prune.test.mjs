@@ -30,7 +30,10 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, 'node-pty/lib/index.d.ts')
   await fixtureFile(appDir, 'node-pty/tests/runtime.test.js')
   await fixtureFile(appDir, 'node-pty/build/Release/conpty/OpenConsole.exe')
-  await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/pty.node')
+  await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/conpty.node')
+  await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/conpty_console_list.node')
+  await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/conpty.pdb')
+  await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/conpty/conpty.dll')
   await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/conpty/OpenConsole.exe')
   await fixtureFile(appDir, 'node-pty/prebuilds/darwin-arm64/pty.node')
   await fixtureFile(appDir, '@types/example/package.json', '{"name":"@types/example"}')
@@ -61,7 +64,9 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'node-pty/package.json',
     'node-pty/lib/index.js',
     'node-pty/LICENSE',
-    'node-pty/prebuilds/win32-x64/pty.node',
+    'node-pty/prebuilds/win32-x64/conpty.node',
+    'node-pty/prebuilds/win32-x64/conpty_console_list.node',
+    'node-pty/prebuilds/win32-x64/conpty/conpty.dll',
     'node-pty/prebuilds/win32-x64/conpty/OpenConsole.exe',
     'example-package/package.json',
     'example-package/dist/index.js',
@@ -85,6 +90,7 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'node-pty/lib/index.d.ts',
     'node-pty/tests/runtime.test.js',
     'node-pty/build',
+    'node-pty/prebuilds/win32-x64/conpty.pdb',
     'node-pty/prebuilds/darwin-arm64',
     '@types/example',
     'example-package/dist/index.js.map',
@@ -109,7 +115,7 @@ test('Linux pruning keeps only the native node-pty runtime products', async (t) 
 
   await fixtureFile(appDir, 'node-pty/package.json', '{"name":"node-pty"}')
   await fixtureFile(appDir, 'node-pty/lib/index.js', 'module.exports = true')
-  await fixtureFile(appDir, 'node-pty/build/Release/pty.node', 'native')
+  await fixtureFile(appDir, 'node-pty/prebuilds/linux-x64/pty.node', 'native')
   await fixtureFile(appDir, 'node-pty/build/Release/obj.target/pty/src/unix/pty.o', 'object')
   await fixtureFile(appDir, 'node-pty/build/Makefile', 'generated')
   await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/pty.node', 'windows')
@@ -122,12 +128,34 @@ test('Linux pruning keeps only the native node-pty runtime products', async (t) 
     encoding: 'utf8',
   })
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
-  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Release/pty.node')), true)
-  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Release/obj.target')), false)
-  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build/Makefile')), false)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/linux-x64/pty.node')), true)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build')), false)
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/win32-x64')), false)
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-arm64')), false)
   assert.equal(await exists(path.join(appDir, 'node_modules/@koromix/koffi-linux-x64/linux_x64/koffi.node')), true)
   assert.equal(await exists(path.join(appDir, 'node_modules/@koromix/koffi-linux-x64/musl_x64')), false)
   assert.equal(JSON.parse(result.stdout.trim()).target, 'linux-x64')
+})
+
+test('macOS pruning preserves the pty module and spawn helper for the selected architecture', async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-prune-macos-'))
+  t.after(() => rm(temporary, { recursive: true, force: true }))
+  const appDir = path.join(temporary, 'app')
+
+  await fixtureFile(appDir, 'node-pty/package.json', '{"name":"node-pty"}')
+  await fixtureFile(appDir, 'node-pty/lib/index.js', 'module.exports = true')
+  await fixtureFile(appDir, 'node-pty/prebuilds/darwin-arm64/pty.node', 'native')
+  await fixtureFile(appDir, 'node-pty/prebuilds/darwin-arm64/spawn-helper', 'helper')
+  await fixtureFile(appDir, 'node-pty/prebuilds/darwin-x64/pty.node', 'other')
+  await fixtureFile(appDir, 'node-pty/build/Release/pty.node', 'build output')
+
+  const result = spawnSync(process.execPath, [pruneScript, appDir, 'darwin', 'arm64'], {
+    encoding: 'utf8',
+  })
+  assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-arm64/pty.node')), true)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-arm64/spawn-helper')), true)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-x64')), false)
+  assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build')), false)
+  assert.equal(JSON.parse(result.stdout.trim()).target, 'darwin-arm64')
 })

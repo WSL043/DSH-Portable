@@ -31,8 +31,11 @@ assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm in
 assert.equal(packageManager?.license, 'MIT', 'pnpm npm license')
 assert.equal(packageManager?.bin?.pnpm, 'bin/pnpm.mjs', 'pnpm executable entry')
 const desktopBridge = lockfile.packages?.[`node_modules/${desktopBridgePackage}`]
-assert.equal(desktopBridge?.resolved, 'file:../desktop-bridge', 'desktop bridge must stay a local product component')
-assert.equal(desktopBridge?.license, 'MIT', 'desktop bridge license')
+assert.equal(desktopBridge?.resolved, '../desktop-bridge', 'desktop bridge must resolve only to the local product component')
+assert.equal(desktopBridge?.link, true, 'desktop bridge must stay an npm local link')
+const desktopBridgeSource = lockfile.packages?.['../desktop-bridge']
+assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge link target identity')
+assert.equal(desktopBridgeSource?.license, 'MIT', 'desktop bridge license')
 
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {

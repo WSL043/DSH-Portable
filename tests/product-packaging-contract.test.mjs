@@ -243,6 +243,12 @@ test('installable official preview updates become tested candidates while source
   assert.match(workflow, /No candidate PR was created because there is no new installable package/)
   assert.match(updater, /package-lock-only/)
   assert.match(updater, /upstream\.lock\.json/)
+  assert.match(updater, /process\.execPath/)
+  assert.match(updater, /npm-cli\.js/)
+  assert.match(updater, /THIRD_PARTY_NOTICES\.md/)
+  assert.match(updater, /createHash\(['"]sha256['"]\)/)
+  assert.match(updater, /noticesSha256/)
+  assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {

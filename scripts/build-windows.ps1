@@ -143,7 +143,7 @@ try {
     if (-not (Test-Path -LiteralPath $Notices)) {
         Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$($Lock.dsh.reviewedCommit)/THIRD_PARTY_NOTICES.md" -OutFile $Notices
     }
-    Assert-Sha256 $Notices '61f68731049dbea19ba91ad8cf363dd2778c5f7b1f9a63496a6a62c1129eefee'
+    Assert-Sha256 $Notices $Lock.dsh.noticesSha256
     Copy-Item $Notices (Join-Path $Stage 'licenses\DeepSeek-Harness-THIRD_PARTY_NOTICES.md')
 
     $Components = [ordered]@{

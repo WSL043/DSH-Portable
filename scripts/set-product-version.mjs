@@ -40,6 +40,11 @@ async function stageJsonVersion(filename, occurrences = 1) {
 await Promise.all([
   stageJsonVersion('package.json'),
   stageJsonVersion('desktop-bridge/package.json'),
+  stageReplace(
+    'app/package-lock.json',
+    /("\.\.\/desktop-bridge"\s*:\s*\{[\s\S]*?"version"\s*:\s*")[^"]+/,
+    `$1${policy.version}`,
+  ),
   stageJsonVersion('launcher/linux/package.json'),
   stageJsonVersion('launcher/linux/package-lock.json', 2),
   stageJsonVersion('launcher/linux/tauri.conf.json'),
