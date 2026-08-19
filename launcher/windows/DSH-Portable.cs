@@ -251,6 +251,7 @@ namespace DshPortable
         private static string uiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
         private enum DwmWindowCornerPreference { Default = 0, DoNotRound = 1, Round = 2, RoundSmall = 3 }
         private const int DwmwaWindowCornerPreference = 33;
+        private const int WorkspaceNavigationTimeoutMs = 60000;
 
         private static string L(string chinese, string english)
         {
@@ -1428,11 +1429,11 @@ namespace DshPortable
             };
             webView.CoreWebView2.NavigationCompleted += completed;
             webView.CoreWebView2.Navigate(url);
-            Task winner = await Task.WhenAny(navigation.Task, Task.Delay(30000));
+            Task winner = await Task.WhenAny(navigation.Task, Task.Delay(WorkspaceNavigationTimeoutMs));
             if (winner != navigation.Task)
             {
                 webView.CoreWebView2.NavigationCompleted -= completed;
-                throw new TimeoutException(L("更新后的工作台未能在 30 秒内打开。", "The updated workspace did not open within 30 seconds."));
+                throw new TimeoutException(L("更新后的工作台未能在 60 秒内打开。", "The updated workspace did not open within 60 seconds."));
             }
             CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
             if (!result.IsSuccess) throw new InvalidOperationException(L("更新后的工作台加载失败：", "The updated workspace could not load: ") + result.WebErrorStatus);
@@ -1494,10 +1495,10 @@ namespace DshPortable
             webView.CoreWebView2.NavigationCompleted += navigationCompleted;
             webView.Source = applicationUri;
 
-            Task completed = await Task.WhenAny(navigation.Task, Task.Delay(30000));
+            Task completed = await Task.WhenAny(navigation.Task, Task.Delay(WorkspaceNavigationTimeoutMs));
             webView.CoreWebView2.NavigationCompleted -= navigationCompleted;
             if (completed != navigation.Task)
-                throw new TimeoutException(L("DeepSeek Harness 工作台未能在 30 秒内打开。", "The DeepSeek Harness workspace did not open within 30 seconds."));
+                throw new TimeoutException(L("DeepSeek Harness 工作台未能在 60 秒内打开。", "The DeepSeek Harness workspace did not open within 60 seconds."));
             CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
             if (!result.IsSuccess)
                 throw new InvalidOperationException(L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: ") + result.WebErrorStatus);
