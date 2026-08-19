@@ -18,14 +18,24 @@ if ($DelayCount -ne 2) {
 }
 $PatchedSource = [regex]::Replace($PatchedSource, $DelayPattern, 'Task.Delay(60000)')
 
-$Replacements = [ordered]@{
-    '更新后的工作台未能在 30 秒内打开。' = '更新后的工作台未能在 60 秒内通过内置 WebView2 打开。后端在超时前已经就绪。'
+# Keep this script ASCII-only because Windows PowerShell 5.1 treats a UTF-8
+# script without a BOM as an ANSI code page. Construct the Chinese seconds
+# marker from its Unicode code point instead of embedding non-ASCII source.
+$SecondCharacter = [string][char]0x79D2
+$Chinese30Seconds = '30 ' + $SecondCharacter
+$Chinese60Seconds = '60 ' + $SecondCharacter
+$ChineseTimeoutCount = [regex]::Matches($PatchedSource, [regex]::Escape($Chinese30Seconds)).Count
+if ($ChineseTimeoutCount -ne 2) {
+    throw "Expected exactly two Chinese 30-second timeout labels, found $ChineseTimeoutCount."
+}
+$PatchedSource = $PatchedSource.Replace($Chinese30Seconds, $Chinese60Seconds)
+
+$EnglishReplacements = [ordered]@{
     'The updated workspace did not open within 30 seconds.' = 'The updated workspace did not open in the embedded WebView2 within 60 seconds. The local backend had already become ready before this timeout.'
-    'DeepSeek Harness 工作台未能在 30 秒内打开。' = 'DeepSeek Harness 工作台未能在 60 秒内通过内置 WebView2 打开。后端在超时前已经就绪。'
     'The DeepSeek Harness workspace did not open within 30 seconds.' = 'The DeepSeek Harness workspace did not open in the embedded WebView2 within 60 seconds. The local backend had already become ready before this timeout.'
 }
 
-foreach ($Entry in $Replacements.GetEnumerator()) {
+foreach ($Entry in $EnglishReplacements.GetEnumerator()) {
     $Count = ([regex]::Matches($PatchedSource, [regex]::Escape([string]$Entry.Key))).Count
     if ($Count -ne 1) {
         throw "Expected one launcher message matching '$($Entry.Key)', found $Count. Refusing to build an ambiguous dev package."
@@ -36,7 +46,7 @@ foreach ($Entry in $Replacements.GetEnumerator()) {
 if ([regex]::Matches($PatchedSource, 'Task\.Delay\(60000\)').Count -ne 2) {
     throw 'The development timeout patch did not produce exactly two 60-second navigation waits.'
 }
-if ($PatchedSource.Contains('within 30 seconds') -or $PatchedSource.Contains('30 秒内打开')) {
+if ($PatchedSource.Contains('within 30 seconds') -or $PatchedSource.Contains($Chinese30Seconds)) {
     throw 'A stale 30-second workspace timeout message remains after the development patch.'
 }
 
