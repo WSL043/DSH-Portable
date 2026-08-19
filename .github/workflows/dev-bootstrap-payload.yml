@@ -1,0 +1,91 @@
+name: Development bootstrap payload
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dev-bootstrap-payload.yml'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish-dev60-payload:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'dev/webview2-navigation-timeout-60s'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download previously validated WebView2 60s development artifact
+        uses: actions/download-artifact@v8
+        with:
+          run-id: 32273447594
+          github-token: ${{ github.token }}
+          name: windows-x64-dev-webview2-60s
+          path: downloaded
+
+      - name: Stage compact dev60 manifest
+        shell: powershell
+        run: |
+          $PayloadName = 'DSH-Portable-windows-x64-dev-webview2-60s.zip'
+          $PayloadPath = Join-Path 'downloaded' $PayloadName
+          if (-not (Test-Path -LiteralPath $PayloadPath)) { throw "Missing payload: $PayloadPath" }
+          $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $PayloadPath).Hash.ToLowerInvariant()
+          $Bytes = (Get-Item -LiteralPath $PayloadPath).Length
+          $PayloadUrl = 'https://github.com/WSL043/DSH-Portable/raw/dev60/dev-payload/' + $PayloadName
+          $Manifest = [ordered]@{
+            schemaVersion = 1
+            version = '0.2.4-dev-webview2-60s'
+            payloads = [ordered]@{
+              windowsX64 = [ordered]@{
+                filename = $PayloadName
+                url = $PayloadUrl
+                sha256 = $Hash
+                bytes = $Bytes
+              }
+            }
+          }
+          New-Item -ItemType Directory -Force -Path 'staged/dev-payload' | Out-Null
+          Copy-Item -Force $PayloadPath 'staged/dev-payload/'
+          [System.IO.File]::WriteAllText(
+            (Join-Path 'staged/dev-payload' 'portable-manifest.json'),
+            (($Manifest | ConvertTo-Json -Depth 6) + [Environment]::NewLine),
+            [System.Text.UTF8Encoding]::new($false)
+          )
+
+      - name: Check out dev60 payload branch
+        uses: actions/checkout@v7
+        with:
+          ref: dev60
+          path: dev60-repo
+          persist-credentials: true
+
+      - name: Publish validated payload to dev60 branch
+        shell: powershell
+        run: |
+          $Target = Join-Path 'dev60-repo' 'dev-payload'
+          New-Item -ItemType Directory -Force -Path $Target | Out-Null
+          Copy-Item -Force 'staged/dev-payload/portable-manifest.json' (Join-Path $Target 'portable-manifest.json')
+          Copy-Item -Force 'staged/dev-payload/DSH-Portable-windows-x64-dev-webview2-60s.zip' (Join-Path $Target 'DSH-Portable-windows-x64-dev-webview2-60s.zip')
+          git -C dev60-repo config user.name 'github-actions[bot]'
+          git -C dev60-repo config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C dev60-repo add dev-payload/portable-manifest.json dev-payload/DSH-Portable-windows-x64-dev-webview2-60s.zip
+          git -C dev60-repo diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git -C dev60-repo commit -m 'dev: publish WebView2 60s portable payload'
+            if ($LASTEXITCODE -ne 0) { throw 'Could not commit dev60 payload.' }
+            git -C dev60-repo push origin HEAD:dev60
+            if ($LASTEXITCODE -ne 0) { throw 'Could not push dev60 payload.' }
+          }
+
+      - name: Verify public dev60 manifest
+        shell: powershell
+        run: |
+          $ManifestUrl = 'https://github.com/WSL043/DSH-Portable/raw/dev60/dev-payload/portable-manifest.json'
+          $Manifest = Invoke-RestMethod -UseBasicParsing -Uri $ManifestUrl
+          if ($Manifest.schemaVersion -ne 1) { throw 'Published dev60 manifest schema is invalid.' }
+          $Expected = (Get-FileHash -Algorithm SHA256 -LiteralPath 'downloaded/DSH-Portable-windows-x64-dev-webview2-60s.zip').Hash.ToLowerInvariant()
+          if ($Manifest.payloads.windowsX64.sha256 -ne $Expected) { throw 'Published dev60 manifest hash mismatch.' }
