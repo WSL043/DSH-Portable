@@ -17,8 +17,8 @@
 - Windows、macOS、Linux x64 与 ARM64 继续经过同一套 contracts、真实成品构建、更新、
   移动和桌面生命周期测试后才进入发布通道。
 
-普通应用组件更新只替换可更新的 DSH 应用文件并保留用户数据；跨启动器兼容边界时才会
-下载一次完整版本并安全原地升级。
+普通更新只替换 DSH 应用组件并保留用户数据；跨启动器兼容边界时才会下载一次完整版本并
+安全原地升级。
 
 ## Windows x64（推荐）
 
@@ -66,8 +66,8 @@
 - Windows, macOS, Linux x64, and Linux ARM64 continue through the same contracts, finished-product build,
   update, movable-package, and desktop lifecycle release gates.
 
-Normal component updates replace only the updateable DSH application files and preserve user data. A full
-package is downloaded only when the launcher/runtime compatibility boundary requires it.
+Normal updates replace only the DSH application component and preserve user data. A full package is downloaded
+only when the launcher/runtime compatibility boundary requires it.
 
 ### Windows x64 (recommended)
 
