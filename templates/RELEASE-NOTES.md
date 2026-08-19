@@ -12,6 +12,8 @@
   profile/runtime 混成半新半旧；升级已有目录请使用轻量便携启动器。
 - **原生 WebView2 工作台启动等待从 30 秒提高到 60 秒。** 较慢机器或首次初始化时不再
   过早判定工作台启动失败。
+- **“启动时检查更新”仍可在应用菜单中关闭。** 关闭后不会自动提醒，手动“检查更新”
+  入口仍会保留。
 - Windows、macOS、Linux x64 与 ARM64 继续经过同一套 contracts、真实成品构建、更新、
   移动和桌面生命周期测试后才进入发布通道。
 
@@ -59,6 +61,8 @@
   half-old/half-new installations; use the lightweight portable launcher when upgrading an existing folder.
 - **The native WebView2 workspace startup window increases from 30 seconds to 60 seconds**, avoiding
   premature startup failures on slower systems and first-run initialization.
+- **Check for updates at startup remains optional.** Turn it off to suppress automatic prompts while
+  keeping manual update checks available.
 - Windows, macOS, Linux x64, and Linux ARM64 continue through the same contracts, finished-product build,
   update, movable-package, and desktop lifecycle release gates.
 
