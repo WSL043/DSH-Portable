@@ -6,13 +6,14 @@ on:
     paths:
       - '.github/workflows/dev-windows-webview2.yml'
       - 'scripts/build-windows-dev.ps1'
+      - 'scripts/build-windows-dev-bootstrap.ps1'
       - 'scripts/build-windows.ps1'
-      - 'scripts/build-windows-inno.ps1'
       - 'launcher/windows/DSH-Portable.cs'
+      - 'launcher/windows/DSH-Bootstrap.cs'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   windows-webview2-dev:
@@ -31,56 +32,83 @@ jobs:
         shell: powershell
         run: ./scripts/build-windows-dev.ps1 -OutputDir artifacts
 
-      - name: Install pinned Inno Setup 7 compiler
+      - name: Stage temporary development payload manifest
         shell: powershell
         run: |
-          $Installer = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.0-x64.exe'
-          $CompilerRoot = Join-Path $env:RUNNER_TEMP 'is7'
-          $ExpectedSha256 = '0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f'
-          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe' -OutFile $Installer
-          $ActualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Installer).Hash.ToLowerInvariant()
-          if ($ActualSha256 -ne $ExpectedSha256) { throw "Inno Setup SHA-256 mismatch: $ActualSha256" }
-          $Arguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /PORTABLE=1 /DIR="{0}"' -f $CompilerRoot
-          $Process = Start-Process -FilePath $Installer -ArgumentList $Arguments -Wait -PassThru
-          if ($Process.ExitCode -ne 0) { throw "Inno Setup installation failed with code $($Process.ExitCode)" }
-          $Iscc = Join-Path $CompilerRoot 'ISCC.exe'
-          if (-not (Test-Path -LiteralPath $Iscc)) { throw "ISCC.exe is missing: $Iscc" }
-          "ISCC_PATH=$Iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: Package offline development self-extractor
-        shell: powershell
-        run: ./scripts/build-windows-inno.ps1 -Kind portable -Archive 'artifacts/DSH-Portable-windows-x64-offline.zip' -OutputDir 'artifacts' -IsccPath $env:ISCC_PATH
-
-      - name: Stage clearly named development downloads
-        shell: powershell
-        run: |
-          $DevBase = 'DSH-Portable-windows-x64-dev-webview2-60s'
-          Copy-Item -Force 'artifacts/DSH-Portable-windows-x64-offline.exe' "artifacts/$DevBase.exe"
-          Copy-Item -Force 'artifacts/DSH-Portable-windows-x64-offline.zip' "artifacts/$DevBase.zip"
-          foreach ($Extension in @('exe', 'zip')) {
-            $File = "artifacts/$DevBase.$Extension"
-            $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $File).Hash.ToLowerInvariant()
-            "$Hash  $DevBase.$Extension" | Set-Content -LiteralPath ($File + '.sha256') -Encoding ascii -NoNewline
+          $PayloadName = 'DSH-Portable-windows-x64-dev-webview2-60s.zip'
+          $PayloadPath = Join-Path 'artifacts' $PayloadName
+          Copy-Item -Force 'artifacts/DSH-Portable-windows-x64-offline.zip' $PayloadPath
+          $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $PayloadPath).Hash.ToLowerInvariant()
+          $Bytes = (Get-Item -LiteralPath $PayloadPath).Length
+          $PayloadUrl = 'https://raw.githubusercontent.com/WSL043/DSH-Portable/dev-payload-webview2-60s/dev-payload/' + $PayloadName
+          $Manifest = [ordered]@{
+            schemaVersion = 1
+            version = '0.2.4-dev-webview2-60s'
+            payloads = [ordered]@{
+              windowsX64 = [ordered]@{
+                filename = $PayloadName
+                url = $PayloadUrl
+                sha256 = $Hash
+                bytes = $Bytes
+              }
+            }
           }
-          @'
-          DEVELOPMENT TEST BUILD — DO NOT PUBLISH
+          New-Item -ItemType Directory -Force -Path 'artifacts/dev-payload' | Out-Null
+          [System.IO.File]::WriteAllText(
+            (Join-Path 'artifacts/dev-payload' 'portable-manifest.json'),
+            (($Manifest | ConvertTo-Json -Depth 6) + [Environment]::NewLine),
+            [System.Text.UTF8Encoding]::new($false)
+          )
+          Copy-Item -Force $PayloadPath 'artifacts/dev-payload/'
+          "$Hash  $PayloadName" | Set-Content -LiteralPath ($PayloadPath + '.sha256') -Encoding ascii -NoNewline
 
-          Changes under test:
-          - Initial embedded WebView2 navigation timeout: 30s -> 60s
-          - Post-update embedded WebView2 navigation timeout: 30s -> 60s
-          - Timeout diagnostics now explicitly identify the embedded WebView2 layer and note that the local backend had already become ready.
+      - name: Build lightweight development bootstrap
+        shell: powershell
+        run: |
+          $ManifestUrl = 'https://raw.githubusercontent.com/WSL043/DSH-Portable/dev-payload-webview2-60s/dev-payload/portable-manifest.json'
+          ./scripts/build-windows-dev-bootstrap.ps1 -ManifestUrl $ManifestUrl -OutputDir artifacts
 
-          The stable release channel and main branch are not modified by this build.
-          '@ | Set-Content -LiteralPath 'artifacts/DEV-NOTES.txt' -Encoding utf8
+      - name: Check out temporary payload branch
+        uses: actions/checkout@v7
+        with:
+          ref: dev-payload-webview2-60s
+          path: dev-payload-repo
+          persist-credentials: true
+
+      - name: Publish temporary development payload branch
+        shell: powershell
+        run: |
+          $Target = Join-Path 'dev-payload-repo' 'dev-payload'
+          New-Item -ItemType Directory -Force -Path $Target | Out-Null
+          Copy-Item -Force 'artifacts/dev-payload/portable-manifest.json' (Join-Path $Target 'portable-manifest.json')
+          Copy-Item -Force 'artifacts/dev-payload/DSH-Portable-windows-x64-dev-webview2-60s.zip' (Join-Path $Target 'DSH-Portable-windows-x64-dev-webview2-60s.zip')
+          git -C dev-payload-repo config user.name 'github-actions[bot]'
+          git -C dev-payload-repo config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C dev-payload-repo add dev-payload/portable-manifest.json dev-payload/DSH-Portable-windows-x64-dev-webview2-60s.zip
+          git -C dev-payload-repo diff --cached --quiet
+          if ($LASTEXITCODE -ne 0) {
+            git -C dev-payload-repo commit -m 'dev: refresh WebView2 60s bootstrap payload'
+            if ($LASTEXITCODE -ne 0) { throw 'Could not commit temporary development payload.' }
+            git -C dev-payload-repo push origin HEAD:dev-payload-webview2-60s
+            if ($LASTEXITCODE -ne 0) { throw 'Could not push temporary development payload.' }
+          }
+
+      - name: Verify published development manifest
+        shell: powershell
+        run: |
+          $ManifestUrl = 'https://raw.githubusercontent.com/WSL043/DSH-Portable/dev-payload-webview2-60s/dev-payload/portable-manifest.json'
+          $Manifest = Invoke-RestMethod -UseBasicParsing -Uri $ManifestUrl
+          if ($Manifest.schemaVersion -ne 1) { throw 'Published development manifest schema is invalid.' }
+          if ($Manifest.payloads.windowsX64.sha256 -ne (Get-FileHash -Algorithm SHA256 -LiteralPath 'artifacts/DSH-Portable-windows-x64-dev-webview2-60s.zip').Hash.ToLowerInvariant()) {
+            throw 'Published development manifest hash does not match the development payload.'
+          }
 
       - uses: actions/upload-artifact@v7
         with:
-          name: windows-x64-dev-webview2-60s
+          name: windows-x64-dev-bootstrap-webview2-60s
           path: |
-            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.exe
-            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.exe.sha256
-            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.zip
-            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.zip.sha256
-            artifacts/DEV-NOTES.txt
+            artifacts/DSH-Portable-windows-x64-dev-bootstrap.exe
+            artifacts/DSH-Portable-windows-x64-dev-bootstrap.exe.sha256
+            artifacts/dev-payload/portable-manifest.json
           if-no-files-found: error
           compression-level: 0
