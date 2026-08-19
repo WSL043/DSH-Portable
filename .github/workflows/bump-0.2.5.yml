@@ -1,0 +1,39 @@
+name: Apply canonical 0.2.5 version bump
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/0.2.5-windows-upgrade'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+
+      - name: Apply the repository's canonical version policy
+        run: |
+          node scripts/set-product-version.mjs 0.2.5
+          node scripts/version-policy.mjs 0.2.5 v0.2.5
+
+      - name: Commit version metadata
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo '0.2.5 version metadata is already canonical.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json desktop-bridge/package.json app/package-lock.json launcher installer
+          git commit -m 'release: set product version 0.2.5'
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
