@@ -64,6 +64,13 @@ namespace DshPortableBootstrap
     }
 
     [DataContract]
+    internal sealed class InstalledComponents
+    {
+        [DataMember(Name = "portableVersion")]
+        public string PortableVersion { get; set; }
+    }
+
+    [DataContract]
     internal sealed class BootstrapResult
     {
         [DataMember(Name = "status")]
@@ -138,6 +145,14 @@ namespace DshPortableBootstrap
         private const int ErrorAlreadyExists = 183;
         private static readonly IntPtr InvalidFindHandle = new IntPtr(-1);
 
+        private sealed class SemanticVersion
+        {
+            internal long Major;
+            internal long Minor;
+            internal long Patch;
+            internal string[] Prerelease;
+        }
+
         private readonly BootstrapOptions options;
         private readonly Action<string> reportStatus;
         private readonly Action<long, long> reportProgress;
@@ -151,14 +166,52 @@ namespace DshPortableBootstrap
 
         internal async Task<BootstrapResult> ExecuteAsync(CancellationToken cancellationToken)
         {
-            if (IsCompletePortable(options.Destination) && !options.UpgradeExisting)
+            bool existingComplete = IsCompletePortable(options.Destination);
+            bool upgradeExisting = options.UpgradeExisting;
+            string installedVersion = existingComplete ? ReadInstalledPortableVersion(options.Destination) : null;
+            PortableManifest manifest = null;
+            PortablePayload payload = null;
+
+            if (existingComplete && !upgradeExisting)
             {
-                reportStatus("DSH-Portable 已就绪，正在启动…");
-                LaunchIfRequested();
-                return Result("ready", null, null);
+                if (String.IsNullOrWhiteSpace(installedVersion))
+                {
+                    reportStatus("现有 DSH-Portable 缺少版本信息，正在直接启动…");
+                    LaunchIfRequested();
+                    return Result("ready", null, "Installed version metadata is unavailable; automatic update was skipped.");
+                }
+
+                try
+                {
+                    ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
+                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    reportStatus("正在检查 DSH-Portable 更新…");
+                    manifest = await DownloadManifestAsync(
+                        options.ManifestUrl,
+                        cancellationToken,
+                        TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+                    payload = ValidateManifest(manifest);
+                    ValidateRemoteUri(payload.Url, options.AllowHttp, "payload");
+                    int compared = ComparePortableVersions(installedVersion, manifest.Version);
+                    if (compared >= 0)
+                    {
+                        reportStatus("DSH-Portable 已是最新版，正在启动…");
+                        LaunchIfRequested();
+                        return Result("ready", installedVersion, null);
+                    }
+                    upgradeExisting = true;
+                    reportStatus("发现新版本 " + manifest.Version + "，正在准备安全升级…");
+                }
+                catch (Exception error)
+                {
+                    if (error is OperationCanceledException && cancellationToken.IsCancellationRequested) throw;
+                    reportStatus("暂时无法检查更新，正在启动现有版本…");
+                    LaunchIfRequested();
+                    return Result("ready", installedVersion, FriendlyMessage(error));
+                }
             }
 
-            if (Directory.Exists(options.Destination) && !options.UpgradeExisting)
+            if (Directory.Exists(options.Destination) && !upgradeExisting)
                 throw new InvalidOperationException("目标目录已经存在但内容不完整。为避免覆盖数据，请删除该空目录或把下载器移到其他位置后重试。");
 
             ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
@@ -174,10 +227,13 @@ namespace DshPortableBootstrap
 
             try
             {
-                reportStatus("正在获取 DSH-Portable 版本信息…");
-                PortableManifest manifest = await DownloadManifestAsync(options.ManifestUrl, cancellationToken).ConfigureAwait(false);
-                PortablePayload payload = ValidateManifest(manifest);
-                ValidateRemoteUri(payload.Url, options.AllowHttp, "payload");
+                if (manifest == null || payload == null)
+                {
+                    reportStatus("正在获取 DSH-Portable 版本信息…");
+                    manifest = await DownloadManifestAsync(options.ManifestUrl, cancellationToken).ConfigureAwait(false);
+                    payload = ValidateManifest(manifest);
+                    ValidateRemoteUri(payload.Url, options.AllowHttp, "payload");
+                }
 
                 reportStatus("正在下载运行环境，完成后可离线使用…");
                 await DownloadFileAsync(payload.Url, temporaryArchive, payload.Bytes, cancellationToken).ConfigureAwait(false);
@@ -193,12 +249,14 @@ namespace DshPortableBootstrap
                 string extracted = Path.Combine(stagingRoot, "DSH-Portable");
                 if (!IsCompletePortable(extracted))
                     throw new InvalidDataException("下载包缺少启动器或运行环境；没有修改目标目录。");
-                if (options.UpgradeExisting)
+                if (upgradeExisting)
                 {
                     if (!IsCompletePortable(options.Destination))
                         throw new InvalidOperationException("现有 DSH-Portable 目录不完整；没有修改任何文件。");
                     reportStatus("正在停止当前版本…");
                     StopRunningPortable();
+                    reportStatus("正在刷新 DSH profile 模块映射…");
+                    ResetManagedProfileModuleFallback();
                     reportStatus("正在安装新版本并保留个人数据…");
                     ReplacePortableTransactionally(extracted, Path.Combine(destinationParent, ".dsh-portable-backup-" + operationId));
                 }
@@ -209,9 +267,9 @@ namespace DshPortableBootstrap
                     Directory.Move(extracted, options.Destination);
                 }
                 reportProgress(payload.Bytes, payload.Bytes);
-                reportStatus(options.UpgradeExisting ? "DSH-Portable 已更新完成。" : "DSH-Portable 已准备完成。");
+                reportStatus(upgradeExisting ? "DSH-Portable 已更新完成。" : "DSH-Portable 已准备完成。");
                 LaunchIfRequested();
-                return Result(options.UpgradeExisting ? "updated" : "installed", manifest.Version, null);
+                return Result(upgradeExisting ? "updated" : "installed", manifest.Version, null);
             }
             finally
             {
@@ -241,6 +299,97 @@ namespace DshPortableBootstrap
             return File.Exists(Path.Combine(root, "DeepSeek-Herness.exe"))
                 && File.Exists(Path.Combine(root, "runtime", "node", "node.exe"))
                 && File.Exists(Path.Combine(root, "app", "package.json"));
+        }
+
+        private static string ReadInstalledPortableVersion(string root)
+        {
+            string filename = Path.Combine(root, "licenses", "COMPONENTS.json");
+            if (!File.Exists(filename)) return null;
+            try
+            {
+                using (FileStream stream = File.OpenRead(filename))
+                {
+                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(InstalledComponents));
+                    InstalledComponents components = (InstalledComponents)serializer.ReadObject(stream);
+                    return components == null || String.IsNullOrWhiteSpace(components.PortableVersion)
+                        ? null
+                        : components.PortableVersion.Trim();
+                }
+            }
+            catch { return null; }
+        }
+
+        private static SemanticVersion ParsePortableVersion(string value)
+        {
+            Match match = Regex.Match(
+                value ?? String.Empty,
+                @"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$");
+            long major;
+            long minor;
+            long patch;
+            if (!match.Success
+                || !Int64.TryParse(match.Groups[1].Value, out major)
+                || !Int64.TryParse(match.Groups[2].Value, out minor)
+                || !Int64.TryParse(match.Groups[3].Value, out patch))
+                throw new InvalidDataException((value ?? String.Empty) + " is not a valid semantic version.");
+
+            string[] prerelease = null;
+            string rawPrerelease = match.Groups[4].Success ? match.Groups[4].Value : null;
+            if (!String.IsNullOrEmpty(rawPrerelease))
+            {
+                Match portablePreview = Regex.Match(rawPrerelease, @"^rc\.([0-9]+)-portable\.([0-9]+)$");
+                prerelease = portablePreview.Success
+                    ? new[] { "rc", portablePreview.Groups[1].Value, "portable", portablePreview.Groups[2].Value }
+                    : rawPrerelease.Split('.');
+            }
+            return new SemanticVersion { Major = major, Minor = minor, Patch = patch, Prerelease = prerelease };
+        }
+
+        private static int CompareNumericIdentifier(string left, string right)
+        {
+            string normalizedLeft = left.TrimStart('0');
+            string normalizedRight = right.TrimStart('0');
+            if (normalizedLeft.Length == 0) normalizedLeft = "0";
+            if (normalizedRight.Length == 0) normalizedRight = "0";
+            if (normalizedLeft.Length != normalizedRight.Length) return normalizedLeft.Length < normalizedRight.Length ? -1 : 1;
+            int compared = String.CompareOrdinal(normalizedLeft, normalizedRight);
+            return compared == 0 ? 0 : compared < 0 ? -1 : 1;
+        }
+
+        private static int ComparePrereleaseIdentifier(string left, string right)
+        {
+            bool leftNumeric = Regex.IsMatch(left, "^[0-9]+$");
+            bool rightNumeric = Regex.IsMatch(right, "^[0-9]+$");
+            if (leftNumeric && rightNumeric) return CompareNumericIdentifier(left, right);
+            if (leftNumeric != rightNumeric) return leftNumeric ? -1 : 1;
+            int compared = String.CompareOrdinal(left, right);
+            return compared == 0 ? 0 : compared < 0 ? -1 : 1;
+        }
+
+        private static int ComparePortableVersions(string leftValue, string rightValue)
+        {
+            SemanticVersion left = ParsePortableVersion(leftValue);
+            SemanticVersion right = ParsePortableVersion(rightValue);
+            long[] leftCore = { left.Major, left.Minor, left.Patch };
+            long[] rightCore = { right.Major, right.Minor, right.Patch };
+            for (int index = 0; index < 3; index += 1)
+            {
+                if (leftCore[index] != rightCore[index]) return leftCore[index] < rightCore[index] ? -1 : 1;
+            }
+            if (left.Prerelease == null || right.Prerelease == null)
+            {
+                if (left.Prerelease == null && right.Prerelease == null) return 0;
+                return left.Prerelease == null ? 1 : -1;
+            }
+            int length = Math.Max(left.Prerelease.Length, right.Prerelease.Length);
+            for (int index = 0; index < length; index += 1)
+            {
+                if (index >= left.Prerelease.Length) return -1;
+                if (index >= right.Prerelease.Length) return 1;
+                int compared = ComparePrereleaseIdentifier(left.Prerelease[index], right.Prerelease[index]);
+                if (compared != 0) return compared;
+            }
+            return 0;
         }
 
         private void LaunchIfRequested()
@@ -294,6 +443,16 @@ namespace DshPortableBootstrap
             return false;
         }
 
+        private void ResetManagedProfileModuleFallback()
+        {
+            string fallback = Path.Combine(options.Destination, "data", "dsh-home", "profiles", "node_modules");
+            if (!Directory.Exists(fallback) && !File.Exists(fallback)) return;
+            if (Directory.Exists(fallback)) TryDeleteDirectory(fallback);
+            else TryDeleteFile(fallback);
+            if (Directory.Exists(fallback) || File.Exists(fallback))
+                throw new IOException("无法刷新 DSH profile 的可再生模块映射；没有替换程序文件。");
+        }
+
         private void ReplacePortableTransactionally(string extracted, string backupRoot)
         {
             string[] preserved = new[] { "data", "workspace", "installed-mode.json" };
@@ -345,9 +504,12 @@ namespace DshPortableBootstrap
             else TryDeleteFile(value);
         }
 
-        private static async Task<PortableManifest> DownloadManifestAsync(string url, CancellationToken cancellationToken)
+        private static async Task<PortableManifest> DownloadManifestAsync(
+            string url,
+            CancellationToken cancellationToken,
+            TimeSpan? timeout = null)
         {
-            using (HttpClient client = CreateClient())
+            using (HttpClient client = CreateClient(timeout))
             using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
@@ -394,10 +556,10 @@ namespace DshPortableBootstrap
             }
         }
 
-        private static HttpClient CreateClient()
+        private static HttpClient CreateClient(TimeSpan? timeout = null)
         {
             HttpClientHandler handler = new HttpClientHandler { AllowAutoRedirect = true };
-            HttpClient client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(30) };
+            HttpClient client = new HttpClient(handler) { Timeout = timeout ?? TimeSpan.FromMinutes(30) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd("DSH-Portable-Bootstrap/1.0");
             return client;
         }
