@@ -9,7 +9,7 @@ on:
 
 permissions:
   actions: write
-  contents: read
+  contents: write
 
 jobs:
   dispatch:
@@ -41,16 +41,96 @@ jobs:
           echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
           echo "Using tested main run $run_id for $MAIN_SHA"
 
-      - name: Dispatch the repository's canonical stable publisher
+      - name: Reuse or dispatch the canonical stable publisher and wait for it
+        id: publish
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.ci.outputs.run_id }}
+          MAIN_SHA: dc49e51100ad80e62841bd707cc99fd22263b156
         shell: bash
         run: |
           set -euo pipefail
-          gh workflow run publish.yml \
+
+          if gh release view v0.2.5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v0.2.5 is already published; verifying it instead of dispatching again."
+            echo "publish_run_id=already-published" >> "$GITHUB_OUTPUT"
+          else
+            publish_id="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow publish.yml \
+              --branch main \
+              --event workflow_dispatch \
+              --limit 20 \
+              --json databaseId,headSha,status,conclusion \
+              --jq ".[] | select(.headSha == \"$MAIN_SHA\" and (.status == \"queued\" or .status == \"in_progress\")) | .databaseId" \
+              | head -n 1)"
+
+            if [ -z "$publish_id" ]; then
+              echo "No active publisher found; dispatching publish.yml for v0.2.5."
+              gh workflow run publish.yml \
+                --repo "$GITHUB_REPOSITORY" \
+                --ref main \
+                -f run_id="$RUN_ID" \
+                -f tag=v0.2.5
+
+              for _ in $(seq 1 30); do
+                publish_id="$(gh run list \
+                  --repo "$GITHUB_REPOSITORY" \
+                  --workflow publish.yml \
+                  --branch main \
+                  --event workflow_dispatch \
+                  --limit 20 \
+                  --json databaseId,headSha,status,conclusion \
+                  --jq ".[] | select(.headSha == \"$MAIN_SHA\" and (.status == \"queued\" or .status == \"in_progress\" or .status == \"completed\")) | .databaseId" \
+                  | head -n 1)"
+                [ -n "$publish_id" ] && break
+                sleep 2
+              done
+            else
+              echo "Reusing active publish run $publish_id."
+            fi
+
+            test -n "$publish_id" || {
+              echo "publish.yml was dispatched but no matching run appeared." >&2
+              exit 1
+            }
+            echo "publish_run_id=$publish_id" >> "$GITHUB_OUTPUT"
+            gh run watch "$publish_id" --repo "$GITHUB_REPOSITORY" --exit-status
+          fi
+
+          gh release view v0.2.5 \
             --repo "$GITHUB_REPOSITORY" \
-            --ref main \
-            -f run_id="$RUN_ID" \
-            -f tag=v0.2.5
-          echo "Dispatched publish.yml for v0.2.5 from tested main run $RUN_ID"
+            --json tagName,isDraft,isPrerelease,targetCommitish \
+            --jq '.'
+
+      - name: Record verified publication status on the retired fix branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MAIN_SHA: dc49e51100ad80e62841bd707cc99fd22263b156
+          TESTED_RUN_ID: ${{ steps.ci.outputs.run_id }}
+          PUBLISH_RUN_ID: ${{ steps.publish.outputs.publish_run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="$(jq -nc \
+            --arg version '0.2.5' \
+            --arg mainSha "$MAIN_SHA" \
+            --arg testedRunId "$TESTED_RUN_ID" \
+            --arg publishRunId "$PUBLISH_RUN_ID" \
+            '{version:$version,status:"published",mainSha:$mainSha,testedRunId:$testedRunId,publishRunId:$publishRunId}')"
+          encoded="$(printf '%s\n' "$marker" | base64 -w 0)"
+          path='.release-v0.2.5.json'
+          branch='fix/0.2.5-windows-upgrade'
+          existing_sha="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${path}?ref=${branch}" --jq .sha 2>/dev/null || true)"
+          if [ -n "$existing_sha" ]; then
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+              -f message='ops: record published v0.2.5' \
+              -f content="$encoded" \
+              -f branch="$branch" \
+              -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "repos/${GITHUB_REPOSITORY}/contents/${path}" \
+              -f message='ops: record published v0.2.5' \
+              -f content="$encoded" \
+              -f branch="$branch" >/dev/null
+          fi
