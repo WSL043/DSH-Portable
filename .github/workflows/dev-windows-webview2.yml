@@ -1,0 +1,86 @@
+name: Development Windows WebView2 package
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/dev-windows-webview2.yml'
+      - 'scripts/build-windows-dev.ps1'
+      - 'scripts/build-windows.ps1'
+      - 'scripts/build-windows-inno.ps1'
+      - 'launcher/windows/DSH-Portable.cs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-webview2-dev:
+    if: github.event_name == 'workflow_dispatch' || github.head_ref == 'dev/webview2-navigation-timeout-60s'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Build patched Windows development base
+        shell: powershell
+        run: ./scripts/build-windows-dev.ps1 -OutputDir artifacts
+
+      - name: Install pinned Inno Setup 7 compiler
+        shell: powershell
+        run: |
+          $Installer = Join-Path $env:RUNNER_TEMP 'innosetup-7.1.0-x64.exe'
+          $CompilerRoot = Join-Path $env:RUNNER_TEMP 'is7'
+          $ExpectedSha256 = '0362a383ed217d4c4239b5933866dd96d3eb2102737da92f80f6057a4b40df2f'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-7_1_0/innosetup-7.1.0-x64.exe' -OutFile $Installer
+          $ActualSha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $Installer).Hash.ToLowerInvariant()
+          if ($ActualSha256 -ne $ExpectedSha256) { throw "Inno Setup SHA-256 mismatch: $ActualSha256" }
+          $Arguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /PORTABLE=1 /DIR="{0}"' -f $CompilerRoot
+          $Process = Start-Process -FilePath $Installer -ArgumentList $Arguments -Wait -PassThru
+          if ($Process.ExitCode -ne 0) { throw "Inno Setup installation failed with code $($Process.ExitCode)" }
+          $Iscc = Join-Path $CompilerRoot 'ISCC.exe'
+          if (-not (Test-Path -LiteralPath $Iscc)) { throw "ISCC.exe is missing: $Iscc" }
+          "ISCC_PATH=$Iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Package offline development self-extractor
+        shell: powershell
+        run: ./scripts/build-windows-inno.ps1 -Kind portable -Archive 'artifacts/DSH-Portable-windows-x64-offline.zip' -OutputDir 'artifacts' -IsccPath $env:ISCC_PATH
+
+      - name: Stage clearly named development downloads
+        shell: powershell
+        run: |
+          $DevBase = 'DSH-Portable-windows-x64-dev-webview2-60s'
+          Copy-Item -Force 'artifacts/DSH-Portable-windows-x64-offline.exe' "artifacts/$DevBase.exe"
+          Copy-Item -Force 'artifacts/DSH-Portable-windows-x64-offline.zip' "artifacts/$DevBase.zip"
+          foreach ($Extension in @('exe', 'zip')) {
+            $File = "artifacts/$DevBase.$Extension"
+            $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $File).Hash.ToLowerInvariant()
+            "$Hash  $DevBase.$Extension" | Set-Content -LiteralPath ($File + '.sha256') -Encoding ascii -NoNewline
+          }
+          @'
+          DEVELOPMENT TEST BUILD — DO NOT PUBLISH
+
+          Changes under test:
+          - Initial embedded WebView2 navigation timeout: 30s -> 60s
+          - Post-update embedded WebView2 navigation timeout: 30s -> 60s
+          - Timeout diagnostics now explicitly identify the embedded WebView2 layer and note that the local backend had already become ready.
+
+          The stable release channel and main branch are not modified by this build.
+          '@ | Set-Content -LiteralPath 'artifacts/DEV-NOTES.txt' -Encoding utf8
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-x64-dev-webview2-60s
+          path: |
+            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.exe
+            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.exe.sha256
+            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.zip
+            artifacts/DSH-Portable-windows-x64-dev-webview2-60s.zip.sha256
+            artifacts/DEV-NOTES.txt
+          if-no-files-found: error
+          compression-level: 0
