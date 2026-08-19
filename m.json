@@ -1,0 +1,12 @@
+{
+    "schemaVersion":  1,
+    "version":  "0.2.4-dev-webview2-60s",
+    "payloads":  {
+                     "windowsX64":  {
+                                        "filename":  "DSH-Portable-windows-x64-dev-webview2-60s.zip",
+                                        "url":  "https://github.com/WSL043/DSH-Portable/raw/dev60/dev-payload/DSH-Portable-windows-x64-dev-webview2-60s.zip",
+                                        "sha256":  "a4233fe3ebdc2cd01ddbb3ab8f89bdb0853aae5f1eedcc13cb2b39e16b950808",
+                                        "bytes":  81322082
+                                    }
+                 }
+}
