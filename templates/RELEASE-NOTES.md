@@ -1,22 +1,24 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.7`）。DSH-Portable 是独立社区分发项目。
 
-0.2.4 同步官方 rc.7，并继续保持便携数据与桌面体验：
+0.2.5 继续使用官方 rc.7，重点修复 Windows 便携版的升级与启动可靠性：
 
-- 设置页现在可显示插件注册的设置卡；Job Panel 可呈现 Codex、Claude Code 等外部 Agent
-  启动的子任务。
-- MCP、ACP 与嵌套 PTC 工具返回的图片可保留在对话上下文中。
-- 修复大段历史记录分页可能导致的栈溢出，以及达到最大 Token 后会话无法继续的问题。
-- 改善最小模式下持续 Bash 调用的延迟；问题卡片可折叠，并保留尚未提交的答案草稿。
-- DeepSeek 模型增加 `low` 推理强度选项；原 Code 模式统一更名为 PTC 模式。
-- Portable 已适配官方新版终端运行时；Windows、macOS、Linux x64 与 ARM64 继续使用同一套
-  完整发布门。
-- “启动时检查更新”仍可在应用菜单中关闭；关闭后不会自动提醒，仍可随时手动检查。
+- **轻量便携启动器现在会安全检查并升级已有版本。** 发现新版时先停止当前 DSH，再保留
+  `data`、`workspace`、会话、凭据和插件完成事务替换；同版本直接启动。网络或更新通道
+  暂时不可用时，也会继续启动本地版本，不把日常使用变成联网必需。
+- **完整升级会重建 DSH 自动生成的 profile 模块映射。** 用户 profile、设置、会话、
+  profile 内安装的插件和工作区保持不动，避免新旧 runtime 混用后出现
+  `ERR_MODULE_NOT_FOUND`。
+- **Windows 离线自解压构建不再覆盖已有的非空便携目录。** 这样不会把新程序文件与旧
+  profile/runtime 混成半新半旧；升级已有目录请使用轻量便携启动器。
+- **原生 WebView2 工作台启动等待从 30 秒提高到 60 秒。** 较慢机器或首次初始化时不再
+  过早判定工作台启动失败。
+- **“启动时检查更新”仍可在应用菜单中关闭。** 关闭后不会自动提醒，手动“检查更新”
+  入口仍会保留。
+- Windows、macOS、Linux x64 与 ARM64 继续经过同一套 contracts、真实成品构建、更新、
+  移动和桌面生命周期测试后才进入发布通道。
 
-普通更新只替换 DSH 应用组件并保留用户数据。
-
-从旧版升级时，如果启动器兼容边界变化，会下载一次完整版本并原地更新；`data`、
-`workspace`、会话、凭据和插件都会保留。Windows、macOS、Linux x64 与 ARM64 成品仍由
-同一发布门验证。
+普通更新只替换 DSH 应用组件并保留用户数据；跨启动器兼容边界时才会下载一次完整版本并
+安全原地升级。
 
 ## Windows x64（推荐）
 
@@ -46,24 +48,26 @@
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.7`).
 > DSH-Portable is an independent community distribution.
 
-0.2.4 updates the bundled official runtime to rc.7 while preserving portable data and desktop behavior:
+0.2.5 keeps the official rc.7 runtime and focuses on safer, more reliable Windows portable updates and startup:
 
-- Settings can now show plugin-registered cards, and the Job Panel can surface subagent tasks launched
-  by external tools such as Codex and Claude Code.
-- Images returned through MCP, ACP, and nested PTC tools remain available in conversation context.
-- Large-history pagination no longer risks a stack overflow, and sessions remain usable after
-  max-token truncation.
-- Persistent Bash work in minimal mode has lower latency. Question cards can collapse without losing
-  unsubmitted answer drafts.
-- DeepSeek models gain a `low` reasoning-effort option, and Code mode is now named PTC mode.
-- The Portable packages support the updated terminal runtime across Windows, macOS, Linux x64, and
-  Linux ARM64 through the same release gate.
-- **Check for updates at startup** remains optional. Turn it off to suppress automatic prompts while
+- **The lightweight portable launcher now checks and upgrades an existing installation safely.** When a
+  newer version is available, it stops the current DSH process and performs a transactional full-package
+  replacement while preserving `data`, `workspace`, sessions, credentials, and plugins. If the update
+  service or network is unavailable, the installed version still starts normally.
+- **Full-package upgrades rebuild only DSH's generated profile module fallback.** Profile settings,
+  sessions, profile-local plugins, and workspace data remain untouched, avoiding `ERR_MODULE_NOT_FOUND`
+  failures caused by mixing a new runtime with stale generated module mappings.
+- **The Windows offline self-extractor no longer overwrites a non-empty portable folder.** This prevents
+  half-old/half-new installations; use the lightweight portable launcher when upgrading an existing folder.
+- **The native WebView2 workspace startup window increases from 30 seconds to 60 seconds**, avoiding
+  premature startup failures on slower systems and first-run initialization.
+- **Check for updates at startup remains optional.** Turn it off to suppress automatic prompts while
   keeping manual update checks available.
+- Windows, macOS, Linux x64, and Linux ARM64 continue through the same contracts, finished-product build,
+  update, movable-package, and desktop lifecycle release gates.
 
-If an older launcher crosses a compatibility boundary, it downloads one complete package and updates
-in place while preserving `data`, `workspace`, sessions, credentials, and plugins. Finished products
-for Windows, macOS, Linux x64, and Linux ARM64 continue through the same release gate.
+Normal updates replace only the DSH application component and preserve user data. A full package is downloaded
+only when the launcher/runtime compatibility boundary requires it.
 
 ### Windows x64 (recommended)
 

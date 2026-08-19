@@ -57,6 +57,33 @@ if (Get-ChildItem -LiteralPath $ExtractRoot -Filter 'unins*.exe' -File) {
     throw 'portable extraction created an uninstaller'
 }
 
+Write-Host '::group::Reject overwrite of an existing portable folder'
+$Sentinel = Join-Path $ExtractRoot 'data\extractor-overwrite-sentinel.txt'
+$SentinelText = 'keep-existing-user-data'
+Set-Content -LiteralPath $Sentinel -Value $SentinelText -NoNewline -Encoding UTF8
+$OverwriteLog = Join-Path $TestParent 'extractor-overwrite.log'
+$OverwriteArguments = '/SP- /VERYSILENT /SUPPRESSMSGBOXES /NOCANCEL /NORESTART /CURRENTUSER /DIR="{0}" /LOG="{1}"' -f $ExtractRoot, $OverwriteLog
+$OverwriteProcess = Start-Process -FilePath $Extractor -ArgumentList $OverwriteArguments -PassThru
+try {
+    if (-not $OverwriteProcess.WaitForExit(120000)) {
+        & taskkill.exe /PID $OverwriteProcess.Id /T /F 2>&1 | ForEach-Object { Write-Host $_ }
+        $OverwriteProcess.WaitForExit(10000) | Out-Null
+        throw 'portable overwrite rejection timed out after 120 seconds'
+    }
+    $OverwriteProcess.Refresh()
+    if ($OverwriteProcess.ExitCode -eq 0) {
+        throw 'portable self-extractor unexpectedly overwrote an existing DSH-Portable folder'
+    }
+    if (-not (Test-Path -LiteralPath $Sentinel)) {
+        throw 'portable self-extractor removed existing user data while rejecting overwrite'
+    }
+    if ((Get-Content -LiteralPath $Sentinel -Raw) -ne $SentinelText) {
+        throw 'portable self-extractor changed existing user data while rejecting overwrite'
+    }
+} finally {
+    Write-Host '::endgroup::'
+}
+
 Write-Host '::group::Run movable portable smoke test'
 try {
     $PortableNode = Join-Path $ExtractRoot 'runtime\node\node.exe'
