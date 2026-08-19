@@ -424,6 +424,12 @@ export async function rollbackPendingAppUpdate(layout, { beforeRestore = async (
   return { status: 'rolled-back', operationId: journal.operationId }
 }
 
+export async function resetManagedProfileModuleFallback(layout) {
+  const fallback = path.join(layout.dshHome, 'profiles', 'node_modules')
+  await rm(fallback, { recursive: true, force: true })
+  return fallback
+}
+
 export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {} }) {
   if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
   const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
@@ -460,6 +466,7 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, be
       if (existsSync(rootFile)) await rename(rootFile, path.join(paths.backupLicenses, name))
       await rename(path.join(stagedLicenses, name), rootFile)
     }
+    await resetManagedProfileModuleFallback(layout)
     await writeJournal(layout, { operationId, phase: 'testing', hadLicenses })
 
     const healthy = await healthCheck(metadata)
