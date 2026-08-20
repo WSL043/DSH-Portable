@@ -29,8 +29,8 @@ test('Linux uses architecture-specific component update channels', () => {
 
 test('Linux requires the rc8-aware native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
-  assert.match(source, /"shellSchema": 4/)
-  assert.match(source, /"requiredShellSchema": 4/)
+  assert.match(source, /"shellSchema": 5/)
+  assert.match(source, /"requiredShellSchema": 5/)
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
