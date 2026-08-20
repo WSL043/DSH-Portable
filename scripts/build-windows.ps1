@@ -134,6 +134,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "runtime verification failed with exit code $LASTEXITCODE" }
 
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
+    Copy-Item (Join-Path $Stage 'app\node_modules\dshmarket\LICENSE') (Join-Path $Stage 'licenses\dsh-market-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\pnpm\LICENSE') (Join-Path $Stage 'licenses\pnpm-LICENSE.txt')
     Copy-Item $WebView2Core (Join-Path $Stage 'Microsoft.Web.WebView2.Core.dll')
     Copy-Item $WebView2WinForms (Join-Path $Stage 'Microsoft.Web.WebView2.WinForms.dll')
@@ -153,6 +154,8 @@ try {
         dshPackage = $Lock.dsh.package
         dshVersion = $Lock.dsh.version
         dshCommit = $Lock.dsh.reviewedCommit
+        pluginMarketPackage = 'dshmarket'
+        pluginMarketVersion = '1.15.0'
         pnpmVersion = $Lock.pnpm.version
         pnpmIntegrity = $Lock.pnpm.integrity
         nodeVersion = $Lock.node.version
@@ -250,7 +253,7 @@ try {
         & tar.exe -a -c -f $UpdateComponentCandidate -C $Stage `
             'component.json' 'app' 'licenses/COMPONENTS.json' `
             'licenses/DeepSeek-Harness-LICENSE.txt' 'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md' `
-            'licenses/pnpm-LICENSE.txt'
+            'licenses/dsh-market-LICENSE.txt' 'licenses/pnpm-LICENSE.txt'
         if ($LASTEXITCODE -ne 0) { throw "update component creation failed with exit code $LASTEXITCODE" }
     } finally {
         Remove-Item -LiteralPath $ComponentMetadata -Force -ErrorAction SilentlyContinue

@@ -197,10 +197,9 @@ jobs:
             'tests\fixtures\dsh-portable-smoke-plugin'
           if ($LASTEXITCODE -ne 0) { throw "Windows stable extension-surface smoke failed with exit code $LASTEXITCODE" }
           & (Join-Path $Root 'DSH-Portable\runtime\node\node.exe') `
-            scripts/smoke-portable-catalog-extension.mjs `
-            (Join-Path $Root 'DSH-Portable') `
-            session-delete
-          if ($LASTEXITCODE -ne 0) { throw "Windows retired catalog smoke failed with exit code $LASTEXITCODE" }
+            scripts/smoke-plugin-marketplace.mjs `
+            (Join-Path $Root 'DSH-Portable')
+          if ($LASTEXITCODE -ne 0) { throw "Windows visual plugin market smoke failed with exit code $LASTEXITCODE" }
           ./scripts/smoke-windows-plugins.ps1 `
             -Root (Join-Path $Root 'DSH-Portable') `
             -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
@@ -430,9 +429,8 @@ jobs:
             "$ROOT/DSH-Portable" \
             tests/fixtures/dsh-portable-smoke-plugin
           "$ROOT/DSH-Portable/runtime/node/bin/node" \
-            scripts/smoke-portable-catalog-extension.mjs \
-            "$ROOT/DSH-Portable" \
-            session-delete
+            scripts/smoke-plugin-marketplace.mjs \
+            "$ROOT/DSH-Portable"
 
   macos-dmg-smoke:
     name: macOS DMG (${{ matrix.arch }})
@@ -560,9 +558,8 @@ jobs:
             "$ROOT/DSH-Portable" \
             tests/fixtures/dsh-portable-smoke-plugin
           "$ROOT/DSH-Portable/runtime/node/bin/node" \
-            scripts/smoke-portable-catalog-extension.mjs \
-            "$ROOT/DSH-Portable" \
-            session-delete
+            scripts/smoke-plugin-marketplace.mjs \
+            "$ROOT/DSH-Portable"
           bash scripts/smoke-linux-plugins.sh "$ROOT/DSH-Portable" tests/fixtures/dsh-portable-smoke-plugin
       - name: Repeat plugin lifecycle through the one-click AppImage
         run: |

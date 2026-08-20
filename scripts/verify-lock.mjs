@@ -19,6 +19,7 @@ const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'
 assert.deepEqual(root?.dependencies, {
   [upstream.dsh.package]: upstream.dsh.version,
   [desktopBridgePackage]: 'file:../desktop-bridge',
+  [upstream.pluginMarket.package]: upstream.pluginMarket.version,
   [upstream.pnpm.package]: upstream.pnpm.version,
 })
 const installed = lockfile.packages?.[`node_modules/${upstream.dsh.package}`]
@@ -30,6 +31,10 @@ assert.equal(packageManager?.version, upstream.pnpm.version, 'pinned pnpm versio
 assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm integrity')
 assert.equal(packageManager?.license, 'MIT', 'pnpm npm license')
 assert.equal(packageManager?.bin?.pnpm, 'bin/pnpm.mjs', 'pnpm executable entry')
+const pluginMarket = lockfile.packages?.[`node_modules/${upstream.pluginMarket.package}`]
+assert.equal(pluginMarket?.version, upstream.pluginMarket.version, 'pinned plugin market version')
+assert.equal(pluginMarket?.integrity, upstream.pluginMarket.integrity, 'pinned plugin market integrity')
+assert.equal(pluginMarket?.license, 'MIT', 'plugin market npm license')
 const desktopBridge = lockfile.packages?.[`node_modules/${desktopBridgePackage}`]
 assert.equal(desktopBridge?.resolved, '../desktop-bridge', 'desktop bridge must resolve only to the local product component')
 assert.equal(desktopBridge?.link, true, 'desktop bridge must stay an npm local link')
@@ -44,6 +49,7 @@ for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent
 
 console.log(JSON.stringify({
   dshVersion: installed.version,
+  pluginMarketVersion: pluginMarket.version,
   pnpmVersion: packageManager.version,
   integrity: installed.integrity,
   packages: Object.keys(lockfile.packages).length,

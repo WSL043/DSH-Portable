@@ -37,6 +37,7 @@ async function buildFixture(root, { componentsOverrides = {}, requiredShellSchem
   })}\n`)
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'license\n')
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'notices\n')
+  await writeFile(path.join(source, 'licenses', 'dsh-market-LICENSE.txt'), 'market license\n')
   await writeFile(path.join(source, 'licenses', 'pnpm-LICENSE.txt'), 'pnpm license\n')
   if (process.platform === 'win32') {
     await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', source, '.'])

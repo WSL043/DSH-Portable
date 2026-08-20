@@ -10,11 +10,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 const execFileAsync = promisify(execFile)
 
-test('runtime dependency boundary contains official DSH, the private desktop bridge, and its pinned package manager only', async () => {
+test('runtime dependency boundary contains official DSH, the private desktop bridge, the visual market, and its pinned package manager only', async () => {
   const runtime = JSON.parse(await read('app/package.json'))
   assert.deepEqual(runtime.dependencies, {
     '@deepseek-ai/dsh': '0.1.0-rc.8',
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
+    dshmarket: '1.15.0',
     pnpm: '11.7.0',
   })
   const serialized = JSON.stringify(runtime)
@@ -44,6 +45,12 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
     version: '11.7.0',
     integrity: 'sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA==',
   })
+  assert.deepEqual(lock.pluginMarket, {
+    package: 'dshmarket',
+    version: '1.15.0',
+    integrity: 'sha512-E69XJp5jPOdALLml4Rbc8WX0WvdHs8WHdPuoP8408dLdNUDEX9lipIaCiqvjtsUmWPZ6pY83DAtDtvm+6ZAPnA==',
+    sourceRepository: 'https://github.com/dsh-market/dsh-market',
+  })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
     assert.match(runtime.archive, /^node-v\d+\.\d+\.\d+-(win-x64\.zip|darwin-(arm64|x64)\.tar\.gz|linux-(arm64|x64)\.tar\.xz)$/, key)
@@ -57,6 +64,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   assert.deepEqual(rootPackage.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
+    dshmarket: upstream.pluginMarket.version,
     pnpm: upstream.pnpm.version,
   })
   const dsh = lockfile.packages['node_modules/@deepseek-ai/dsh']
@@ -65,6 +73,9 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const pnpm = lockfile.packages['node_modules/pnpm']
   assert.equal(pnpm.version, upstream.pnpm.version)
   assert.equal(pnpm.integrity, upstream.pnpm.integrity)
+  const pluginMarket = lockfile.packages['node_modules/dshmarket']
+  assert.equal(pluginMarket.version, upstream.pluginMarket.version)
+  assert.equal(pluginMarket.integrity, upstream.pluginMarket.integrity)
   const desktopBridge = lockfile.packages['node_modules/@wsl043/dsh-portable-desktop-bridge']
   assert.equal(desktopBridge.resolved, '../desktop-bridge')
   assert.equal(desktopBridge.link, true)
@@ -83,6 +94,7 @@ test('the independent lock verifier accepts the current local bridge link and ex
   ])
   const result = JSON.parse(stdout)
   assert.equal(result.dshVersion, '0.1.0-rc.8')
+  assert.equal(result.pluginMarketVersion, '1.15.0')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {

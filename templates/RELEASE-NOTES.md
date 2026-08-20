@@ -1,13 +1,15 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.8`）。DSH-Portable 是独立社区分发项目。
 
-0.3.0 是 Windows 首次启动稳定性更新：
+0.4.0-rc.1 是插件市场预发布版，不会推送给稳定版用户：
 
-- **首次打开不再只等待完整页面加载事件。** 本地工作台 DOM 已可用时会立即显示；页面资源迟迟未结束时仍保留有界诊断，不会把已经可用的工作台误判为启动失败。
-- **慢速电脑拥有更可靠的启动边界。** Host、WebView2 环境、导航和页面就绪分别记录阶段，真正失败时仍能提供可复制的诊断。
-- **`dsh.exe` 不再像失效的桌面程序。** 它仍是高级插件管理命令；直接双击时会说明用途并指向 `DeepSeek-Herness.exe`，带参数运行时保持完整 DSH CLI 能力。
-- **Windows、macOS、Linux x64 与 ARM64 继续使用同一成品测试门。** 会话、设置、凭据、现有插件与工作区保持原位。
+- **设置中新增实时插件市场。** 可搜索、分类、排序与分页浏览社区插件，不再由 Portable 手工维护插件卡片。
+- **插件详情使用真实图片。** 市场优先显示作者策展截图，没有时从项目说明中提取；打开详情时才加载图片。
+- **语言和外观跟随 DSH。** 中文/英文、明暗主题与工作台保持一致。
+- **插件操作留在当前便携环境。** 安装、更新、停用和卸载使用 Portable 内置运行环境与 `web` 配置；市场不能自行重启桌面端，运行中的任务不会被静默打断。
+- **不预装业务插件。** 用户只从实时目录中选择自己需要的第三方插件。
+- **保留 0.3.0 的首次启动修复。** 慢速电脑在工作台 DOM 已可用时即可显示，不会因页面资源迟迟未结束而误报 60 秒启动失败。
 
-内置官方 DSH 仍为 `0.1.0-rc.8`（提交 `141eb6f`），本次没有用未发布的上游源码替换已验证运行时。
+内置官方 DSH 仍为 `0.1.0-rc.8`（提交 `141eb6f`），本次没有用未发布的上游源码替换已验证运行时；候选成品会经过 Windows、macOS、Linux x64 与 ARM64 验收。
 
 桌面端会先打开本地工作区，再在后台启动时检查更新。Windows 与 macOS 都可以在设置或托盘中关闭“启动时检查更新”，也可以对单个版本选择“跳过此版本”。每次提示都会明确区分 DSH-Portable 产品版本与内置官方 DSH 版本；兼容边界不变时只下载变化的 DSH 应用组件，界面显示真实下载百分比。需要完整升级时会下载经过校验的完整版本并原地替换应用文件，会话、设置、凭据、插件与工作区继续保留。
 
@@ -39,12 +41,14 @@
 
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.8`). DSH-Portable is an independent community distribution.
 
-0.3.0 is the Windows first-start stability release:
+0.4.0-rc.1 is the Plugin Market preview and is not offered to stable users:
 
-- **First launch no longer waits only for the final page-load event.** The local workspace appears as soon as its DOM is usable. Slow page resources still produce bounded diagnostics instead of turning an already usable workspace into a false startup failure.
-- **Slow PCs now have a more reliable startup boundary.** Host, WebView2 environment, navigation, and page readiness are recorded separately, while genuine failures still provide copyable diagnostics.
-- **`dsh.exe` no longer looks like a broken desktop app.** It remains the advanced plugin-management command. Opening it directly explains its purpose and points to `DeepSeek-Herness.exe`; command-line arguments still reach the complete DSH CLI.
-- **Windows, macOS, Linux x64, and Linux ARM64 continue to share the same finished-product gate.** Sessions, settings, credentials, existing plugins, and workspace remain in place.
+- **DSH Settings now includes a live Plugin Market.** Search, categories, sorting, and pagination come from the community catalog instead of hand-maintained Portable cards.
+- **Plugin details use real images.** The market prefers author-curated screenshots and can extract images from project documentation, loading them only when details are opened.
+- **Language and appearance follow DSH.** Chinese/English and light/dark presentation stay aligned with the workspace.
+- **Plugin operations remain inside the current portable environment.** Install, update, disable, and uninstall use the bundled runtime and `web` profile. The market cannot restart the desktop shell, so an active task is never interrupted silently.
+- **No task-specific plugin is preinstalled.** Users choose their own third-party plugins from the live catalog.
+- **The 0.3.0 first-start repair remains included.** Slow PCs show the workspace when its DOM is ready instead of reporting a false 60-second timeout while resources are still finishing.
 
 The bundled official DSH remains `0.1.0-rc.8` at commit `141eb6f`; this candidate does not replace the tested runtime with unpublished upstream source.
 

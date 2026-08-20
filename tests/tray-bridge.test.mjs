@@ -239,7 +239,9 @@ test('portable bridge fallback follows the moved product without entering a user
   try {
     const layout = core.layoutForRoot(first, process.platform)
     await mkdir(path.join(first, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge'), { recursive: true })
+    await mkdir(path.join(first, 'app', 'node_modules', 'dshmarket'), { recursive: true })
     await writeFile(path.join(first, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'package.json'), '{}\n')
+    await writeFile(path.join(first, 'app', 'node_modules', 'dshmarket', 'package.json'), '{}\n')
     await core.ensureDesktopBridgeFallback(layout)
     assert.equal(
       await realpath(layout.desktopBridgeFallback),

@@ -363,6 +363,7 @@ test('component archives are restricted to replaceable application files', () =>
     'app/node_modules/@deepseek-ai/dsh/lib/bin.js',
     'licenses/COMPONENTS.json',
     'licenses/DeepSeek-Harness-LICENSE.txt',
+    'licenses/dsh-market-LICENSE.txt',
     'licenses/pnpm-LICENSE.txt',
   ]))
   for (const entry of ['../data/private.txt', '/absolute', 'C:/Windows/System32/file', 'data/session.json', 'launcher/portable-cli.mjs']) {
@@ -466,6 +467,8 @@ async function makeUpdateFixture() {
   await writeFile(path.join(stagedRoot, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'new license\n')
   await writeFile(path.join(root, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'old notices\n')
   await writeFile(path.join(stagedRoot, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'new notices\n')
+  await writeFile(path.join(root, 'licenses', 'dsh-market-LICENSE.txt'), 'old market license\n')
+  await writeFile(path.join(stagedRoot, 'licenses', 'dsh-market-LICENSE.txt'), 'new market license\n')
   await writeFile(path.join(root, 'licenses', 'pnpm-LICENSE.txt'), 'old pnpm license\n')
   await writeFile(path.join(stagedRoot, 'licenses', 'pnpm-LICENSE.txt'), 'new pnpm license\n')
   await writeFile(path.join(stagedRoot, 'component.json'), `${JSON.stringify({
@@ -492,6 +495,7 @@ test('app update commits only replaceable files and preserves portable user data
     assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, '0.1.0-rc.7-portable.1')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'utf8'), 'new license\n')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'utf8'), 'new notices\n')
+    assert.equal(await readFile(path.join(fixture.root, 'licenses', 'dsh-market-LICENSE.txt'), 'utf8'), 'new market license\n')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'pnpm-LICENSE.txt'), 'utf8'), 'new pnpm license\n')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
     await assert.rejects(readFile(fixture.layout.updateJournal, 'utf8'), { code: 'ENOENT' })
@@ -512,6 +516,7 @@ test('failed health check restores the prior app and metadata without touching d
     assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, '0.1.0-rc.6-portable.5')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'utf8'), 'old license\n')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'utf8'), 'old notices\n')
+    assert.equal(await readFile(path.join(fixture.root, 'licenses', 'dsh-market-LICENSE.txt'), 'utf8'), 'old market license\n')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'pnpm-LICENSE.txt'), 'utf8'), 'old pnpm license\n')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
   } finally {

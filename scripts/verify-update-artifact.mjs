@@ -78,6 +78,7 @@ async function main() {
     'licenses/COMPONENTS.json',
     'licenses/DeepSeek-Harness-LICENSE.txt',
     'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+    'licenses/dsh-market-LICENSE.txt',
     'licenses/pnpm-LICENSE.txt',
   ]) {
     if (!entryMap.has(required)) fail(`Update archive is missing ${required}.`)

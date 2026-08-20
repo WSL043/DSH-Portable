@@ -92,6 +92,7 @@ rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 
 cp "$STAGE/app/node_modules/@deepseek-ai/dsh/LICENSE" "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt"
+cp "$STAGE/app/node_modules/dshmarket/LICENSE" "$STAGE/licenses/dsh-market-LICENSE.txt"
 cp "$STAGE/app/node_modules/pnpm/LICENSE" "$STAGE/licenses/pnpm-LICENSE.txt"
 NOTICES="$DOWNLOAD_DIR/DeepSeek-Harness-THIRD_PARTY_NOTICES-$DSH_COMMIT.md"
 if [[ ! -f "$NOTICES" ]]; then
@@ -108,6 +109,8 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "dshPackage": "@deepseek-ai/dsh",
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT",
+  "pluginMarketPackage": "dshmarket",
+  "pluginMarketVersion": "1.15.0",
   "pnpmVersion": "$(lock_value pnpm.version)",
   "pnpmIntegrity": "$(lock_value pnpm.integrity)",
   "nodeVersion": "$NODE_VERSION",
@@ -122,7 +125,7 @@ UPDATE_COMPONENT="$OUTPUT_DIR/DSH-Portable-update-linux-$ARCH.zip"
 UPDATE_MANIFEST="$OUTPUT_DIR/portable-update-linux-$ARCH.json"
 mkdir -p "$UPDATE_COMPONENT_ROOT/licenses"
 cp -R "$STAGE/app" "$UPDATE_COMPONENT_ROOT/app"
-for file in COMPONENTS.json DeepSeek-Harness-LICENSE.txt DeepSeek-Harness-THIRD_PARTY_NOTICES.md pnpm-LICENSE.txt; do
+for file in COMPONENTS.json DeepSeek-Harness-LICENSE.txt DeepSeek-Harness-THIRD_PARTY_NOTICES.md dsh-market-LICENSE.txt pnpm-LICENSE.txt; do
   cp "$STAGE/licenses/$file" "$UPDATE_COMPONENT_ROOT/licenses/$file"
 done
 cat > "$UPDATE_COMPONENT_ROOT/component.json" <<EOF

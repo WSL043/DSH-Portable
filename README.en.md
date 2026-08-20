@@ -106,10 +106,18 @@ contains a complete `DSH-Portable` directory; extract it and run `DeepSeek-Herne
 
 ## Plugin management
 
-Plugins, settings, and sessions stay with the Portable data when the product is moved or backed up.
-Windows and Linux builds include the DSH command for advanced users without requiring a separate
-runtime. On Windows, open PowerShell in the DSH-Portable folder before using it. For normal desktop
-use, launch `DeepSeek-Herness.exe`; `dsh.exe` is a command-line tool, not a second desktop launcher.
+The `0.4.0-rc.1` pre-release adds a visual **Plugin Market** to DSH Settings. It browses the live
+community catalog with search, categories, popularity, and publish-time filters. Plugin details use
+real author-provided screenshots or images extracted from project documentation. The catalog is
+updated by [awesome-dsh-plugin](https://awesome-dsh-plugin.com), rather than being maintained as a
+list of cards in this repository. The market follows the DSH language and theme. Install, update,
+disable, and uninstall actions target the current `web` profile, while the Portable shell retains
+process ownership and the market cannot restart an active desktop instance by itself.
+
+Plugins, settings, and sessions stay with Portable data when the product is moved or backed up.
+`dsh.exe` remains an advanced command-line tool, not a second desktop launcher; normal desktop use
+starts with `DeepSeek-Herness.exe`. To install a plugin outside the catalog, open PowerShell in the
+DSH-Portable folder:
 
 ```powershell
 .\dsh.exe plugin --profile web add <plugin>

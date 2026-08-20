@@ -1,3 +1,8 @@
 - insert:
     - id: dsh-portable-desktop-bridge
       name: '@wsl043/dsh-portable-desktop-bridge'
+    - id: dsh-market
+      name: 'dshmarket'
+      config:
+        profile: web
+        allowRestart: false

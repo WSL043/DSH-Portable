@@ -67,6 +67,10 @@ const piAiProviderData = path.join(
 )
 const desktopBridgeManifestPath = requireFromApp.resolve('@wsl043/dsh-portable-desktop-bridge/package.json')
 const desktopBridgeRoot = path.dirname(desktopBridgeManifestPath)
+const marketManifestPath = requireFromApp.resolve('dshmarket/package.json')
+const marketManifest = JSON.parse(readFileSync(marketManifestPath, 'utf8'))
+const marketRoot = path.dirname(marketManifestPath)
+const marketClientPath = requireFromApp.resolve('dshmarket/client')
 const sessionExportClientPath = requireFromApp.resolve('@deepseek-ai/dsh-session-log-export/client')
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
 assert.equal(existsSync(dshBin), true, `official DSH CLI is missing: ${dshBin}`)
@@ -76,6 +80,10 @@ assert.equal(existsSync(piAiProviderData), true, `pi-ai provider data is missing
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'client.js')), true, 'desktop bridge client is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'index.js')), true, 'desktop bridge host entry is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'cordis.patch.yml')), true, 'desktop bridge patch is missing')
+assert.equal(marketManifest.name, 'dshmarket')
+assert.equal(marketManifest.version, '1.15.0', 'pinned visual market version')
+assert.equal(existsSync(marketClientPath), true, 'dshmarket/client is missing')
+assert.equal(existsSync(path.join(marketRoot, 'LICENSE')), true, 'dshmarket license is missing')
 assert.match(
   readFileSync(sessionExportClientPath, 'utf8'),
   /dsh-portable-native-download-v1/,
@@ -83,7 +91,7 @@ assert.match(
 )
 
 await new Promise((resolve) => {
-  process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, pnpmVersion: pnpmManifest.version, pnpmBin, loaded })}\n`, resolve)
+  process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, marketVersion: marketManifest.version, pnpmVersion: pnpmManifest.version, pnpmBin, loaded })}\n`, resolve)
 })
 // node-pty keeps a ConPTY handle referenced on some headless Windows hosts even
 // after the child has emitted its marker. This script is a one-shot build gate,

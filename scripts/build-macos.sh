@@ -88,6 +88,7 @@ rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 
 cp "$STAGE/app/node_modules/@deepseek-ai/dsh/LICENSE" "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt"
+cp "$STAGE/app/node_modules/dshmarket/LICENSE" "$STAGE/licenses/dsh-market-LICENSE.txt"
 cp "$STAGE/app/node_modules/pnpm/LICENSE" "$STAGE/licenses/pnpm-LICENSE.txt"
 NOTICES="$DOWNLOAD_DIR/DeepSeek-Harness-THIRD_PARTY_NOTICES-$DSH_COMMIT.md"
 if [[ ! -f "$NOTICES" ]]; then
@@ -104,6 +105,8 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "dshPackage": "@deepseek-ai/dsh",
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT",
+  "pluginMarketPackage": "dshmarket",
+  "pluginMarketVersion": "1.15.0",
   "pnpmVersion": "$(lock_value pnpm.version)",
   "pnpmIntegrity": "$(lock_value pnpm.integrity)",
   "nodeVersion": "$NODE_VERSION",
@@ -144,6 +147,7 @@ ditto "$STAGE/app" "$UPDATE_COMPONENT_ROOT/app"
 cp "$STAGE/licenses/COMPONENTS.json" "$UPDATE_COMPONENT_ROOT/licenses/COMPONENTS.json"
 cp "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt" "$UPDATE_COMPONENT_ROOT/licenses/DeepSeek-Harness-LICENSE.txt"
 cp "$STAGE/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md" "$UPDATE_COMPONENT_ROOT/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md"
+cp "$STAGE/licenses/dsh-market-LICENSE.txt" "$UPDATE_COMPONENT_ROOT/licenses/dsh-market-LICENSE.txt"
 cp "$STAGE/licenses/pnpm-LICENSE.txt" "$UPDATE_COMPONENT_ROOT/licenses/pnpm-LICENSE.txt"
 cat > "$UPDATE_COMPONENT_ROOT/component.json" <<EOF
 {

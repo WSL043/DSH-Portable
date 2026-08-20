@@ -17,6 +17,7 @@ const UPDATE_LICENSE_FILES = [
   'COMPONENTS.json',
   'DeepSeek-Harness-LICENSE.txt',
   'DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+  'dsh-market-LICENSE.txt',
   'pnpm-LICENSE.txt',
 ]
 
@@ -213,6 +214,7 @@ export function validateArchiveEntries(entries) {
     'licenses/COMPONENTS.json',
     'licenses/DeepSeek-Harness-LICENSE.txt',
     'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+    'licenses/dsh-market-LICENSE.txt',
     'licenses/pnpm-LICENSE.txt',
   ])
   for (const rawEntry of entries) {

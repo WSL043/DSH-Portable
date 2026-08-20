@@ -303,6 +303,19 @@ try {
     tab: [...document.querySelectorAll('button')].some(item => ['Portable extensions', '便携扩展'].includes((item.textContent || '').trim())),
   })`)
   assert.deepEqual(extensionUi, { root: false, tab: false })
+  await waitForValue(client, clickButton(['Plugin Market', '插件市场']), value => value?.clicked, 'Plugin Market settings section')
+  const expectedMarketSearch = targetLocale === 'zh'
+    ? '搜索插件，比如：通知、终端、记忆…'
+    : 'Search plugins: notify, terminal, memory…'
+  const marketUi = await waitForValue(client, `(() => {
+    const search = [...document.querySelectorAll('input')].find(item => item.placeholder === ${JSON.stringify(expectedMarketSearch)})
+    const controls = [...document.querySelectorAll('button')]
+    const installButtons = controls.filter(item => ['Install', '安装'].includes((item.textContent || '').trim())).length
+    const ownerImages = [...document.querySelectorAll('img')].filter(item => item.src.includes('github.com/') && item.src.includes('.png?size=96')).length
+    return { search: Boolean(search), installButtons, ownerImages }
+  })()`, value => value?.search && value.installButtons > 0 && value.ownerImages > 0, 'visual Plugin Market cards', 60000)
+  assert.ok(marketUi.installButtons > 0)
+  assert.ok(marketUi.ownerImages > 0)
   if (screenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(screenshotPath), { recursive: true })

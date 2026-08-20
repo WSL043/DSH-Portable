@@ -51,7 +51,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/render-release-notes.mjs templates/RELEASE-NOTES.md release-staging/RELEASE-NOTES.md "$RELEASE_TAG"
-      - name: Publish machine-readable update channel
+      - name: Publish stable machine-readable update channel
+        if: steps.version.outputs.prerelease != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

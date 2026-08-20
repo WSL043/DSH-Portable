@@ -13,6 +13,12 @@
     "version": "11.7.0",
     "integrity": "sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA=="
   },
+  "pluginMarket": {
+    "package": "dshmarket",
+    "version": "1.15.0",
+    "integrity": "sha512-E69XJp5jPOdALLml4Rbc8WX0WvdHs8WHdPuoP8408dLdNUDEX9lipIaCiqvjtsUmWPZ6pY83DAtDtvm+6ZAPnA==",
+    "sourceRepository": "https://github.com/dsh-market/dsh-market"
+  },
   "webview2": {
     "package": "Microsoft.Web.WebView2",
     "version": "1.0.4078.44",

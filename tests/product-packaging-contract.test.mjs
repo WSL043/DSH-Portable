@@ -227,35 +227,39 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.match(macBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-macos-\$ARCH\.zip/)
 })
 
-test('every desktop platform verifies that the stable finished product exposes no extension catalog', async () => {
+test('every desktop platform verifies the live visual plugin marketplace', async () => {
   const workflow = await read('.github/workflows/ci.yml')
-  const smoke = await read('scripts/smoke-portable-catalog-extension.mjs')
+  const smoke = await read('scripts/smoke-plugin-marketplace.mjs')
 
-  assert.match(smoke, /\/api\/dsh-portable\/extensions/)
-  assert.match(smoke, /notEqual\([^\n]+status,\s*200/)
-  assert.match(smoke, /extension catalog route is disabled/)
-  assert.doesNotMatch(smoke, /\/preview|\/confirm|session-not-found/)
-  assert.equal((workflow.match(/smoke-portable-catalog-extension\.mjs/g) || []).length, 3)
+  assert.match(smoke, /\/dsh-market\/registry/)
+  assert.match(smoke, /\/dsh-market\/installed/)
+  assert.match(smoke, /\/dsh-market\/status/)
+  assert.match(smoke, /plugin\.screenshots/)
+  assert.doesNotMatch(smoke, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
+  assert.equal((workflow.match(/smoke-plugin-marketplace\.mjs/g) || []).length, 3)
 })
 
-test('installable official preview updates become tested candidates while source-only activity stays informational', async () => {
+test('installable official preview updates become tested issue artifacts without repository branches', async () => {
   const [workflow, updater, upstreamState] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     read('scripts/update-upstream.mjs'),
     read('scripts/upstream-state.mjs'),
   ])
 
-  assert.match(workflow, /pull-requests:\s*write/)
+  assert.match(workflow, /issues:\s*write/)
   assert.match(workflow, /node scripts\/update-upstream\.mjs/)
   assert.match(workflow, /npm test/)
-  assert.match(workflow, /gh pr (?:create|edit)/)
+  assert.match(workflow, /official-dsh-candidate\.patch/)
+  assert.match(workflow, /actions\/upload-artifact@v7/)
+  assert.match(workflow, /gh issue (?:create|edit)/)
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/)
-  assert.doesNotMatch(workflow, /issues:\s*write/)
+  assert.doesNotMatch(workflow, /git (?:switch|push)/)
+  assert.doesNotMatch(workflow, /automation\/dsh-upstream/)
   assert.match(updater, /registry\.npmjs\.org/)
   assert.match(upstreamState, /dist-tags/)
   assert.match(upstreamState, /integrity/)
   assert.match(upstreamState, /changed:\s*packageChanged/)
-  assert.match(workflow, /No candidate PR was created because there is no new installable package/)
+  assert.match(workflow, /No candidate issue was created because there is no new installable package/)
   assert.match(updater, /package-lock-only/)
   assert.match(updater, /upstream\.lock\.json/)
   assert.match(updater, /process\.execPath/)
@@ -477,7 +481,7 @@ test('plugin management is a generic finished-product capability and release gat
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
 
-test('the stable product packages no built-in portable extension catalog', async () => {
+test('the marketplace candidate packages no hand-maintained portable extension catalog', async () => {
   const [chinese, english, releaseNotes] = await Promise.all([
     read('README.md'),
     read('README.en.md'),
@@ -485,6 +489,7 @@ test('the stable product packages no built-in portable extension catalog', async
   ])
   assert.equal(await exists('desktop-bridge/extensions/catalog.json'), false)
   assert.equal(await exists('desktop-bridge/lib/extensions.js'), false)
+  assert.equal(await exists('scripts/smoke-portable-catalog-extension.mjs'), false)
   assert.doesNotMatch(`${chinese}\n${english}\n${releaseNotes}`, /codex|chatgpt|dsh-codex-subscription/i)
 })
 

@@ -73,6 +73,7 @@ namespace DshPortableUpdateExtractor
             if (normalized == "licenses/COMPONENTS.json"
                 || normalized == "licenses/DeepSeek-Harness-LICENSE.txt"
                 || normalized == "licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md"
+                || normalized == "licenses/dsh-market-LICENSE.txt"
                 || normalized == "licenses/pnpm-LICENSE.txt") return;
             throw new InvalidDataException("Update archive entry is not allowed: " + relativePath);
         }

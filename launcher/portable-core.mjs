@@ -39,6 +39,8 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
       '@wsl043',
       'dsh-portable-desktop-bridge',
     ),
+    pluginMarketRoot: paths.join(appDir, 'node_modules', 'dshmarket'),
+    pluginMarketFallback: paths.join(dshHome, 'profiles', 'node_modules', 'dshmarket'),
     dshBin: paths.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
     dshHome,
     extensionCache: paths.join(stateDir, 'extension-cache'),
@@ -102,12 +104,10 @@ export async function retirePendingExtensionOperation(layout) {
   return true
 }
 
-export async function ensureDesktopBridgeFallback(layout) {
+async function ensurePackageFallback(layout, target, fallback, label) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
-  const target = paths.dirname(layout.desktopBridgePatch)
-  const fallback = layout.desktopBridgeFallback
   const packageFile = paths.join(target, 'package.json')
-  if (!existsSync(packageFile)) throw new Error(`Portable desktop bridge is missing: ${packageFile}`)
+  if (!existsSync(packageFile)) throw new Error(`Portable ${label} is missing: ${packageFile}`)
 
   await mkdir(paths.dirname(fallback), { recursive: true })
   let current = null
@@ -119,7 +119,7 @@ export async function ensureDesktopBridgeFallback(layout) {
 
   if (current) {
     if (!current.isSymbolicLink()) {
-      throw new Error(`Portable desktop bridge fallback is occupied by another file: ${fallback}`)
+      throw new Error(`Portable ${label} fallback is occupied by another file: ${fallback}`)
     }
     try {
       if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) return false
@@ -131,6 +131,25 @@ export async function ensureDesktopBridgeFallback(layout) {
 
   await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
   return true
+}
+
+export async function ensureDesktopBridgeFallback(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const bridgeChanged = await ensurePackageFallback(
+    layout,
+    paths.dirname(layout.desktopBridgePatch),
+    layout.desktopBridgeFallback,
+    'desktop bridge',
+  )
+  const marketChanged = existsSync(path.join(layout.pluginMarketRoot, 'package.json'))
+    ? await ensurePackageFallback(
+      layout,
+      layout.pluginMarketRoot,
+      layout.pluginMarketFallback,
+      'plugin market',
+    )
+    : false
+  return bridgeChanged || marketChanged
 }
 
 export function buildDshEnv(layout, source = process.env) {

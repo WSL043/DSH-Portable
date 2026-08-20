@@ -11,6 +11,7 @@ const licenseFiles = [
   'COMPONENTS.json',
   'DeepSeek-Harness-LICENSE.txt',
   'DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+  'dsh-market-LICENSE.txt',
   'pnpm-LICENSE.txt',
 ]
 

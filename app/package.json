@@ -7,6 +7,7 @@
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.0-rc.8",
     "@wsl043/dsh-portable-desktop-bridge": "file:../desktop-bridge",
+    "dshmarket": "1.15.0",
     "pnpm": "11.7.0"
   },
   "allowScripts": {

@@ -6,8 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+  issues: write
 
 jobs:
   check:
@@ -31,31 +31,39 @@ jobs:
             '### Official DSH source activity observed' \
             '' "- installable npm package remains: \`${VERSION}\`" \
             "- official master is now: \`${COMMIT}\`" \
-            '' 'No candidate PR was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
+            '' 'No candidate issue was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
         if: steps.upstream.outputs.changed == 'true'
         run: npm test
-      - name: Create or refresh the tested candidate pull request
+      - name: Package the tested candidate without creating a branch
+        if: steps.upstream.outputs.changed == 'true'
+        run: git diff --binary -- app/package.json app/package-lock.json upstream.lock.json > official-dsh-candidate.patch
+      - name: Upload the tested candidate
+        if: steps.upstream.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: official-dsh-${{ steps.upstream.outputs.version }}-candidate
+          path: official-dsh-candidate.patch
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create or refresh the tested candidate issue
         if: steps.upstream.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.upstream.outputs.version }}
           COMMIT: ${{ steps.upstream.outputs.commit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          BRANCH=automation/dsh-upstream
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git switch -C "$BRANCH"
-          git add app/package.json app/package-lock.json upstream.lock.json
-          git commit -m "chore: test official DSH ${VERSION} candidate"
-          git push --force origin "HEAD:refs/heads/${BRANCH}"
+          TITLE="Official DSH ${VERSION} candidate"
           BODY=$(mktemp)
           printf '%s\n' \
             'Automated candidate from the official DeepSeek Harness preview channel.' \
             '' "- npm package: \`${VERSION}\`" "- matching official tag commit: \`${COMMIT}\`" \
-            '' 'This pull request is not auto-merged or auto-released. The normal Windows, macOS, and Linux product CI remains the release gate.' > "$BODY"
-          if gh pr view "$BRANCH" >/dev/null 2>&1; then
-            gh pr edit "$BRANCH" --title "chore: test official DSH ${VERSION} candidate" --body-file "$BODY"
+            "- tested candidate patch: ${RUN_URL} (Artifacts)" \
+            '' 'This issue is not auto-merged or auto-released. The candidate still requires product adaptation and the normal Windows, macOS, and Linux release gate.' > "$BODY"
+          ISSUE=$(gh issue list --state open --search "${TITLE} in:title" --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)
+          if [ -n "$ISSUE" ]; then
+            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY"
           else
-            gh pr create --head "$BRANCH" --base main --title "chore: test official DSH ${VERSION} candidate" --body-file "$BODY"
+            gh issue create --title "$TITLE" --body-file "$BODY"
           fi
