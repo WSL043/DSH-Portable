@@ -27,6 +27,12 @@ test('Linux uses architecture-specific component update channels', () => {
   assert.throws(() => platformUpdateKey('linux', 'ia32'), /unsupported/i)
 })
 
+test('Linux requires the rc8-aware native shell before installing the app component', async () => {
+  const source = await read('scripts/build-linux.sh')
+  assert.match(source, /"shellSchema": 3/)
+  assert.match(source, /"requiredShellSchema": 3/)
+})
+
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
   const [cargo, cargoLock, source, config, build, cli, rootCli, pnpmCli, attributes, workflow] = await Promise.all([
     read('launcher/linux/Cargo.toml'),
@@ -51,6 +57,19 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /defer-update/)
   assert.match(source, /ignore-update/)
   assert.match(source, /YesNoCancel/)
+  const liveCheck = source.slice(source.indexOf('fn check_updates('), source.indexOf('fn stop_and_exit('))
+  assert.doesNotMatch(liveCheck, /run_portable_cli\(&layout,\s*&\["update"/)
+  assert.match(liveCheck, /install_update_at_next_start\s*=\s*true/)
+  const startup = source.slice(source.indexOf('fn start_dsh('), source.indexOf('fn run_dsh_passthrough('))
+  assert.match(startup, /apply_pending_update/)
+  assert.ok(startup.indexOf('apply_pending_update') < startup.indexOf('["start", "--no-browser", "--json"]'))
+  const pendingUpdate = source.slice(source.indexOf('fn apply_pending_update('), source.indexOf('fn start_dsh('))
+  const pendingRunIndex = pendingUpdate.indexOf('run_portable_cli(layout, &["update"')
+  const pendingClearIndex = pendingUpdate.indexOf('install_update_at_next_start = false')
+  assert.ok(
+    pendingRunIndex >= 0 && pendingClearIndex > pendingRunIndex,
+    'a failed Linux update must remain scheduled for the following launch',
+  )
   assert.match(source, /DSH_PORTABLE_STATE_ROOT/)
   assert.match(source, /direct_mode[\s\S]+env::var_os\("APPDIR"\)\.is_some\(\)[\s\S]+resolve_layout\(None\)/)
   assert.match(source, /fn copy_symlink[\s\S]+read_link[\s\S]+unix::fs::symlink/)

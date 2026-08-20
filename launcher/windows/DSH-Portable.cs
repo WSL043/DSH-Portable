@@ -21,8 +21,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.5.65534")]
-[assembly: AssemblyFileVersion("0.2.5.65534")]
+[assembly: AssemblyVersion("0.2.6.65534")]
+[assembly: AssemblyFileVersion("0.2.6.65534")]
 
 namespace DshPortable
 {
@@ -467,7 +467,7 @@ namespace DshPortable
                 RebuildTrayMenu();
             };
             checkUpdateItem = new ToolStripMenuItem(L("检查更新", "Check for updates"));
-            checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(); };
+            checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(true); };
             automaticUpdateCheckItem = new ToolStripMenuItem(L("启动时检查更新", "Check for updates at startup"))
             {
                 Checked = updateCheckEnabled,
@@ -1142,7 +1142,6 @@ namespace DshPortable
             {
                 if (desktopStart)
                 {
-                    await CheckAndApplyUpdateAsync();
                     statusLabel.Text = L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
                     Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json" }));
                     if (started.Item1 != 0) { HandleFailure(started.Item1, started.Item2); return; }
@@ -1158,6 +1157,7 @@ namespace DshPortable
                         && startupHold > 0)
                         await Task.Delay(Math.Min(startupHold, 10000));
                     await ShowDesktopAsync(url);
+                    await CheckForDesktopUpdateAsync(false);
                     return;
                 }
 
@@ -1195,56 +1195,23 @@ namespace DshPortable
             }
         }
 
-        private async Task CheckAndApplyUpdateAsync()
+        private async Task CheckForDesktopUpdateAsync(bool manual)
         {
-            if (!updateCheckEnabled
-                || string.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK"), "1", StringComparison.Ordinal))
-            {
-                ResetOperationUi();
-                return;
-            }
-            statusLabel.Text = L("正在检查更新…", "Checking for updates…");
-            Tuple<int, string> check = await Task.Run(() => InvokePortableCli(new[] { "check-update", "--json" }));
-            if (check.Item1 != 0) { ResetOperationUi(); return; }
-            string updateStatus = JsonString(check.Item2, "status");
-            string current = JsonString(check.Item2, "productCurrent");
-            string latest = JsonString(check.Item2, "latest");
-            string engineCurrent = JsonString(check.Item2, "engineCurrent");
-            string engineLatest = JsonString(check.Item2, "engineLatest");
-            if (updateStatus == "available")
-            {
-                int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, false);
-                if (choice == 1)
-                {
-                    ShowDesktopOperation(L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
-                    Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(
-                        new[] { "update", "--no-browser", "--json", "--progress-json" }, HandleUpdateProgress));
-                    if (updated.Item1 != 0) throw new InvalidOperationException(updated.Item2);
-                }
-                else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
-                else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
-            }
-            else if (updateStatus == "full-package-required")
-            {
-                int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, true);
-                if (choice == 1) { StartFullPackageUpdate(); return; }
-                else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
-                else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
-            }
-            ResetOperationUi();
-        }
-
-        private async Task CheckForDesktopUpdateAsync()
-        {
+            if (!manual && (!updateCheckEnabled
+                || string.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK"), "1", StringComparison.Ordinal))) return;
             if (manualUpdateRunning) return;
-            RestoreFromTray();
+            if (manual) RestoreFromTray();
             manualUpdateRunning = true;
             RebuildTrayMenu();
             try
             {
-                Tuple<int, string> check = await Task.Run(() => InvokePortableCli(new[] { "check-update", "--json", "--force" }));
+                string[] checkArguments = manual
+                    ? new[] { "check-update", "--json", "--force" }
+                    : new[] { "check-update", "--json" };
+                Tuple<int, string> check = await Task.Run(() => InvokePortableCli(checkArguments));
                 if (check.Item1 != 0)
                 {
+                    if (!manual) return;
                     MessageBox.Show(this,
                         L("现在无法检查更新，请稍后再试。", "Updates could not be checked right now. Try again later."),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1258,6 +1225,7 @@ namespace DshPortable
                 string engineLatest = JsonString(check.Item2, "engineLatest");
                 if (updateStatus == "current")
                 {
+                    if (!manual) return;
                     MessageBox.Show(this,
                         L("你使用的已经是最新版。", "You're already using the latest version.")
                             + (String.IsNullOrEmpty(current) ? "" : "\r\n\r\nDSH-Portable " + current)
@@ -1267,6 +1235,7 @@ namespace DshPortable
                 }
                 if (updateStatus == "unavailable")
                 {
+                    if (!manual) return;
                     MessageBox.Show(this,
                         L("现在无法连接更新服务，请稍后再试。", "The update service is unavailable right now. Try again later."),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1274,8 +1243,18 @@ namespace DshPortable
                 }
                 if (updateStatus == "full-package-required")
                 {
+                    if (!trayBridgeReady)
+                    {
+                        if (!manual) return;
+                        MessageBox.Show(this,
+                            L("正在读取任务状态，请稍后再试。",
+                              "Still reading the current task state. Try again in a moment."),
+                            L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        return;
+                    }
                     if (trayState != null && trayState.hasRunningSession)
                     {
+                        if (!manual) return;
                         MessageBox.Show(this,
                             L("任务仍在运行，本次不会中断它。任务完成后可从托盘再次检查更新。",
                               "A task is still running, so it will not be interrupted. Check again from the tray after it finishes."),
@@ -1292,6 +1271,7 @@ namespace DshPortable
 
                 if (!trayBridgeReady)
                 {
+                    if (!manual) return;
                     MessageBox.Show(this,
                         UpdateDescription(current, latest, engineCurrent, engineLatest, false) + "\r\n\r\n"
                             + L("为了确认不会中断任务，请稍后退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
@@ -1301,6 +1281,7 @@ namespace DshPortable
                 }
                 if (trayState != null && trayState.hasRunningSession)
                 {
+                    if (!manual) return;
                     MessageBox.Show(this,
                         L("任务仍在运行，本次不会中断它。任务完成后退出并重新打开，启动时再选择是否更新。",
                           "A task is still running, so it will not be interrupted. When it finishes, exit and reopen the app to choose whether to update."),
@@ -1322,6 +1303,7 @@ namespace DshPortable
             }
             catch (Exception error)
             {
+                if (!manual) return;
                 MessageBox.Show(this, error.Message,
                     L("更新失败", "Update failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }

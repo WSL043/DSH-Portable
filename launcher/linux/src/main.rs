@@ -45,12 +45,15 @@ struct Components {
 struct ShellSettings {
     #[serde(rename = "checkUpdatesAtStartup")]
     check_updates_at_startup: bool,
+    #[serde(rename = "installUpdateAtNextStart", default)]
+    install_update_at_next_start: bool,
 }
 
 impl Default for ShellSettings {
     fn default() -> Self {
         Self {
             check_updates_at_startup: true,
+            install_update_at_next_start: false,
         }
     }
 }
@@ -337,7 +340,7 @@ fn dialog(title: &str, description: &str, level: MessageLevel) {
         .show();
 }
 
-fn check_updates(app: tauri::AppHandle, interactive: bool) {
+fn check_updates(_app: tauri::AppHandle, interactive: bool) {
     if UPDATE_PROMPT_OPEN.swap(true, Ordering::SeqCst) {
         return;
     }
@@ -366,27 +369,19 @@ fn check_updates(app: tauri::AppHandle, interactive: bool) {
                     .set_buttons(MessageButtons::YesNoCancel)
                     .show();
                 if choice == MessageDialogResult::Yes {
-                    match run_portable_cli(&layout, &["update", "--json", "--no-browser"])
-                        .map_err(|error| error.to_string())
-                        .and_then(|output| output_json(&output))
-                    {
-                        Ok(updated) => {
-                            if let Some(url) =
-                                updated.pointer("/running/url").and_then(Value::as_str)
-                            {
-                                if let (Some(window), Ok(url)) =
-                                    (app.get_webview_window("main"), Url::parse(url))
-                                {
-                                    let _ = window.navigate(url);
-                                }
-                            }
-                            dialog(
-                                PRODUCT_NAME,
-                                &text(&layout, "更新完成。", "Update complete."),
-                                MessageLevel::Info,
-                            );
-                        }
-                        Err(error) => dialog(PRODUCT_NAME, &error, MessageLevel::Error),
+                    let mut settings = read_shell_settings(&layout);
+                    settings.install_update_at_next_start = true;
+                    match write_shell_settings(&layout, &settings) {
+                        Ok(()) => dialog(
+                            PRODUCT_NAME,
+                            &text(
+                                &layout,
+                                "已安排在下次启动前更新。当前任务不会被中断。",
+                                "The update will install before the next launch. The current task will not be interrupted.",
+                            ),
+                            MessageLevel::Info,
+                        ),
+                        Err(error) => dialog(PRODUCT_NAME, &error.to_string(), MessageLevel::Error),
                     }
                 } else if choice == MessageDialogResult::Cancel {
                     let _ = run_portable_cli(&layout, &["ignore-update", "--json"]);
@@ -498,12 +493,9 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
             "startup-update" => {
                 if let Some(layout) = LAYOUT.get() {
                     let checked = startup_for_event.is_checked().unwrap_or(true);
-                    let _ = write_shell_settings(
-                        layout,
-                        &ShellSettings {
-                            check_updates_at_startup: checked,
-                        },
-                    );
+                    let mut settings = read_shell_settings(layout);
+                    settings.check_updates_at_startup = checked;
+                    let _ = write_shell_settings(layout, &settings);
                 }
             }
             "quit" => stop_and_exit(app.clone()),
@@ -525,9 +517,29 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
     Ok(())
 }
 
+fn apply_pending_update(layout: &ProductLayout) -> Result<(), String> {
+    let mut settings = read_shell_settings(layout);
+    if !settings.install_update_at_next_start {
+        return Ok(());
+    }
+    run_portable_cli(layout, &["update", "--json", "--no-browser"])
+        .map_err(|error| error.to_string())
+        .and_then(|output| output_json(&output))?;
+    settings.install_update_at_next_start = false;
+    write_shell_settings(layout, &settings).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn start_dsh(app: tauri::AppHandle) {
     thread::spawn(move || {
         let layout = LAYOUT.get().expect("layout is initialized").clone();
+        if let Err(error) = apply_pending_update(&layout) {
+            dialog(
+                PRODUCT_NAME,
+                &format!("{}\n\n{error}", text(&layout, "更新未能安装，已继续启动当前版本。", "The update could not be installed. The current version will start instead.")),
+                MessageLevel::Error,
+            );
+        }
         let result = run_portable_cli(&layout, &["start", "--no-browser", "--json"])
             .map_err(|error| error.to_string())
             .and_then(|output| output_json(&output));

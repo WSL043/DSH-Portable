@@ -294,8 +294,9 @@ async function start(noBrowser) {
   const child = spawn(layout.nodeExe, [
     layout.hostBin,
     layout.dshBin,
-    '--profile', 'web',
     '--patch', layout.desktopBridgePatch,
+    '--profile', 'web',
+    '--no-open',
     '--host', '127.0.0.1', '--port', String(port),
   ], {
     cwd: layout.workspace,

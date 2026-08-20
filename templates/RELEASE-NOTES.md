@@ -1,31 +1,20 @@
-> 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.7`）。DSH-Portable 是独立社区分发项目。
+> 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.8`）。DSH-Portable 是独立社区分发项目。
 
-0.2.5 继续使用官方 rc.7，重点修复 Windows 便携版的升级与启动可靠性：
+0.2.6 完成了官方 rc.8 的桌面适配，并修复启动关键路径：
 
-- **轻量便携启动器现在会安全检查并升级已有版本。** 发现新版时先停止当前 DSH，再保留
-  `data`、`workspace`、会话、凭据和插件完成事务替换；同版本直接启动。网络或更新通道
-  暂时不可用时，也会继续启动本地版本，不把日常使用变成联网必需。
-- **完整升级会重建 DSH 自动生成的 profile 模块映射。** 用户 profile、设置、会话、
-  profile 内安装的插件和工作区保持不动，避免新旧 runtime 混用后出现
-  `ERR_MODULE_NOT_FOUND`。
-- **Windows 离线自解压构建不再覆盖已有的非空便携目录。** 这样不会把新程序文件与旧
-  profile/runtime 混成半新半旧；升级已有目录请使用轻量便携启动器。
-- **原生 WebView2 工作台启动等待从 30 秒提高到 60 秒。** 较慢机器或首次初始化时不再
-  过早判定工作台启动失败。
-- **“启动时检查更新”仍可在应用菜单中关闭。** 关闭后不会自动提醒，手动“检查更新”
-  入口仍会保留。
-- Windows、macOS、Linux x64 与 ARM64 继续经过同一套 contracts、真实成品构建、更新、
-  移动和桌面生命周期测试后才进入发布通道。
+- **工作台先打开，更新检查随后在后台进行。** 网络慢或更新服务暂时不可用时，不再延迟本地 DSH 启动；关闭“启动时检查更新”后不会发起自动检查，托盘中的手动入口仍可使用。
+- **官方 rc.8 不再额外打开 Edge、Chrome 或默认浏览器。** Windows 使用 WebView2，macOS 使用 WKWebView，Linux 使用原生桌面壳；系统浏览器只处理用户主动打开的外部链接。
+- **内置官方 DSH 升级到 rc.8。** 包含推理内容回传、多查询 Web Search、图片输入保护、文件打开错误提示、引用交互、动态 UI 与 Codex 子任务可靠性修复。
+- **上游更新候选现在固定到 npm 版本对应的官方 Git tag。** 官方 `master` 后续变化不会被误写成已审核发行源码；候选仍需通过全部平台成品测试才会进入稳定更新通道。
+- **Windows、macOS、Linux x64 与 ARM64 使用同一版本与数据保留契约。** 从 0.2.5 升级到 0.2.6 时，Windows 会自动下载一次完整版本；macOS 与 Linux 会提示下载一次完整新版，因为 rc.8 改变了桌面启动契约。会话、设置、凭据、插件与工作区继续保留。以后的兼容更新仍只下载变化的应用组件；macOS 与 Linux 会安排在下次启动前安装，避免打断任务。
 
-普通更新只替换 DSH 应用组件并保留用户数据；跨启动器兼容边界时才会下载一次完整版本并
-安全原地升级。
+默认 JSONL 会话可以直接升级。若你曾自行启用 DSH 的可选持久 SQLite 后端，rc.8 的数据库格式与旧版不兼容；请先备份并等待上游提供迁移方案，不要删除旧数据库。
 
 ## Windows x64（推荐）
 
 [**下载便携版**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)
 
-双击后会在旁边准备可移动的 `DSH-Portable` 文件夹。以后直接运行文件夹中的
-`DeepSeek-Herness.exe`。
+双击后会在旁边准备可移动的 `DSH-Portable` 文件夹。以后直接运行文件夹中的 `DeepSeek-Herness.exe`。
 
 <details>
 <summary><strong>其他下载</strong></summary>
@@ -45,36 +34,23 @@
 
 ## English
 
-> Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.7`).
-> DSH-Portable is an independent community distribution.
+> Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.8`). DSH-Portable is an independent community distribution.
 
-0.2.5 keeps the official rc.7 runtime and focuses on safer, more reliable Windows portable updates and startup:
+0.2.6 adapts the official rc.8 release and fixes the desktop startup path:
 
-- **The lightweight portable launcher now checks and upgrades an existing installation safely.** When a
-  newer version is available, it stops the current DSH process and performs a transactional full-package
-  replacement while preserving `data`, `workspace`, sessions, credentials, and plugins. If the update
-  service or network is unavailable, the installed version still starts normally.
-- **Full-package upgrades rebuild only DSH's generated profile module fallback.** Profile settings,
-  sessions, profile-local plugins, and workspace data remain untouched, avoiding `ERR_MODULE_NOT_FOUND`
-  failures caused by mixing a new runtime with stale generated module mappings.
-- **The Windows offline self-extractor no longer overwrites a non-empty portable folder.** This prevents
-  half-old/half-new installations; use the lightweight portable launcher when upgrading an existing folder.
-- **The native WebView2 workspace startup window increases from 30 seconds to 60 seconds**, avoiding
-  premature startup failures on slower systems and first-run initialization.
-- **Check for updates at startup remains optional.** Turn it off to suppress automatic prompts while
-  keeping manual update checks available.
-- Windows, macOS, Linux x64, and Linux ARM64 continue through the same contracts, finished-product build,
-  update, movable-package, and desktop lifecycle release gates.
+- **The local workspace opens before update checking begins in the background.** A slow network or unavailable update service no longer delays local DSH startup. Disabling startup checks performs no automatic check; the manual tray command remains available.
+- **Official rc.8 no longer opens Edge, Chrome, or the default browser beside the desktop app.** Windows uses WebView2, macOS uses WKWebView, and Linux uses its native desktop shell. The system browser is reserved for external links the user chooses to open.
+- **The bundled official DSH moves to rc.8**, including reasoning delivery, multi-query Web Search, image-input safeguards, file-open feedback, references, dynamic UI, and Codex subtask reliability fixes.
+- **Upstream candidates are pinned to the official Git tag matching the npm version.** Later `master` changes cannot be recorded as reviewed release source. Every candidate still has to pass the complete cross-platform product gate.
+- **Windows, macOS, Linux x64, and Linux ARM64 share one version and data-preservation contract.** From 0.2.5 to 0.2.6, Windows downloads one complete package automatically; macOS and Linux request one complete download because rc.8 changes the desktop startup contract. Sessions, settings, credentials, plugins, and workspace remain in place. Later compatible updates return to the smaller component path, with macOS and Linux installing before the next launch so running work is not interrupted.
 
-Normal updates replace only the DSH application component and preserve user data. A full package is downloaded
-only when the launcher/runtime compatibility boundary requires it.
+Default JSONL sessions can be upgraded normally. If you explicitly enabled DSH's optional durable SQLite backend, rc.8 uses an incompatible database format. Back up the old database and wait for an upstream migration path instead of deleting it.
 
 ### Windows x64 (recommended)
 
 [**Download the portable edition**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)
 
-Run it once to create a movable `DSH-Portable` folder beside the launcher. Afterwards, start
-`DeepSeek-Herness.exe` inside that folder.
+Run it once to create a movable `DSH-Portable` folder beside the launcher. Afterwards, start `DeepSeek-Herness.exe` inside that folder.
 
 <details>
 <summary><strong>Other downloads</strong></summary>
@@ -88,5 +64,4 @@ Run it once to create a movable `DSH-Portable` folder beside the launcher. After
 
 </details>
 
-Choose one download for your system. `checksums.txt` is optional and intended only for users who
-want independent download verification.
+Choose one download for your system. `checksums.txt` is optional and intended only for users who want independent download verification.

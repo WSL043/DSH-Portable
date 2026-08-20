@@ -108,7 +108,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 10
+  "shellSchema": 11
 }
 EOF
 
@@ -164,7 +164,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 10,
+  "requiredShellSchema": 11,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

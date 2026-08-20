@@ -148,7 +148,7 @@ test('update guidance describes the component update path without exposing inter
   assert.match(chinese, /会话、设置、凭据和工作区.+保留/s)
   assert.match(chinese, /兼容性变化.+直接下载.+完整版本.+原地/s)
   assert.match(chinese, /跳过此版本/)
-  assert.match(english, /checks for updates when it starts/i)
+  assert.match(english, /opens the local workspace first.+checks for updates in the background/is)
   assert.match(english, /Windows.+macOS.+Turn off.+updates at startup/is)
   assert.match(english, /Every notification names the DSH-Portable product version/)
   assert.match(english, /bundled official DSH/i)
@@ -163,7 +163,7 @@ test('update guidance describes the component update path without exposing inter
   assert.match(userReadme, /English[\s\S]+downloads only\s+the changed DSH application component/i)
   assert.match(releaseNotes, /启动时检查更新/)
   assert.match(releaseNotes, /Linux x64 与 ARM64/)
-  assert.match(releaseNotes, /普通更新只替换 DSH 应用组件.+保留用户数据/s)
+  assert.match(releaseNotes, /会话、设置、凭据、插件与工作区.+保留/s)
   assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
 })
 
@@ -235,6 +235,7 @@ test('installable official preview updates become tested candidates while source
   assert.match(workflow, /node scripts\/update-upstream\.mjs/)
   assert.match(workflow, /npm test/)
   assert.match(workflow, /gh pr (?:create|edit)/)
+  assert.doesNotMatch(workflow, /continue-on-error:\s*true/)
   assert.doesNotMatch(workflow, /issues:\s*write/)
   assert.match(updater, /registry\.npmjs\.org/)
   assert.match(upstreamState, /dist-tags/)
@@ -341,8 +342,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*10/)
-  assert.match(build, /requiredShellSchema\s*=\s*10/)
+  assert.match(build, /shellSchema\s*=\s*11/)
+  assert.match(build, /requiredShellSchema\s*=\s*11/)
   assert.match(source, new RegExp(`AssemblyFileVersion\\("${regexEscape(policy.windowsVersion)}"\\)`))
   assert.match(bootstrap, /ZipArchive/)
   assert.match(bootstrap, /progressPercentLabel/)
@@ -455,6 +456,7 @@ test('plugin management is a generic finished-product capability and release gat
 test('Windows portable self-extractor stays offline, movable, and registration-free', async () => {
   const extractor = await read('installer/windows/DSH-Portable.iss')
   const build = await read('scripts/build-windows.ps1')
+  const innoBuild = await read('scripts/build-windows-inno.ps1')
   const smoke = await read('scripts/smoke-windows-portable-extractor.ps1')
   const workflow = await read('.github/workflows/ci.yml')
 
@@ -480,7 +482,11 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.match(build, /DSH-Portable-windows-x64-offline\.exe/)
   assert.match(build, /PortableExtractorSha256/)
   assert.match(build, /installer\\windows\\DSH-Portable\.iss/)
-  assert.match(build, /--version/)
+  for (const compilerConsumer of [build, innoBuild]) {
+    assert.doesNotMatch(compilerConsumer, /--version/)
+    assert.match(compilerConsumer, /['"]\/\?['"]/)
+    assert.match(compilerConsumer, /Command-Line Compiler/)
+  }
   assert.match(build, /Inno Setup 7 or newer/)
   assert.doesNotMatch(build, /Inno Setup 6/)
   assert.match(smoke, /DSH-Portable-windows-x64-offline\.exe/)
@@ -526,8 +532,8 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 10/)
-  assert.match(build, /"requiredShellSchema": 10/)
+  assert.match(build, /"shellSchema": 11/)
+  assert.match(build, /"requiredShellSchema": 11/)
   assert.match(plist, new RegExp(`<key>CFBundleVersion<\\/key>\\s*<string>${regexEscape(policy.macBuildVersion)}<\\/string>`, 's'))
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)
@@ -546,6 +552,28 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(app, /receivedBytes/)
   assert.match(app, /totalBytes/)
   assert.doesNotMatch(app, /--app=/)
+
+  const launchDesktop = app.slice(
+    app.indexOf('private func launchDesktop()'),
+    app.indexOf('private func presentUpdateProgress'),
+  )
+  const startIndex = launchDesktop.indexOf('runCLI(["start", "--no-browser", "--json"])')
+  const showIndex = launchDesktop.indexOf('showWebView(url)')
+  const backgroundCheckIndex = launchDesktop.indexOf('checkForUpdateAfterStartup()')
+  assert.ok(startIndex >= 0 && showIndex > startIndex && backgroundCheckIndex > showIndex)
+  assert.doesNotMatch(launchDesktop.slice(0, startIndex), /checkAndApplyUpdate/)
+  assert.match(app, /installUpdateAtNextLaunch/)
+  assert.match(app, /applyPendingUpdateBeforeStartup/)
+  const pendingUpdate = app.slice(
+    app.indexOf('private func applyPendingUpdateBeforeStartup()'),
+    app.indexOf('private func checkForUpdateAfterStartup()'),
+  )
+  const pendingRunIndex = pendingUpdate.indexOf('runCLI(["update"')
+  const pendingClearIndex = pendingUpdate.indexOf('installUpdateAtNextLaunch = false')
+  assert.ok(
+    pendingRunIndex >= 0 && pendingClearIndex > pendingRunIndex,
+    'a failed macOS update must remain scheduled for the following launch',
+  )
 })
 
 test('macOS DMG carries a self-contained app and keeps installed data outside its signature', async () => {
@@ -655,6 +683,14 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(macDesktopHostSmoke, /browser\.json/)
   assert.match(macDesktopHostSmoke, /--app=/)
   assert.match(macDesktopHostSmoke, /--no-browser/)
+})
+
+test('CI upgrades the latest published Windows product through the candidate full-package boundary', async () => {
+  const workflow = await read('.github/workflows/ci.yml')
+  assert.match(workflow, /^  windows-version-upgrade-smoke:/m)
+  assert.match(workflow, /gh release view --repo "\$env:GITHUB_REPOSITORY" --json tagName/)
+  assert.match(workflow, /gh release download \$PriorTag/)
+  assert.match(workflow, /smoke-windows-version-upgrade\.mjs/)
 })
 
 test('Node runtime lock covers Windows, macOS, and both Linux CPU families', async () => {

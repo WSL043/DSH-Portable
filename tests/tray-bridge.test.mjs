@@ -206,10 +206,10 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*10/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*10/)
-  assert.match(macBuild, /"shellSchema": 10/)
-  assert.match(macBuild, /"requiredShellSchema": 10/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*11/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*11/)
+  assert.match(macBuild, /"shellSchema": 11/)
+  assert.match(macBuild, /"requiredShellSchema": 11/)
 })
 
 test('portable bridge fallback follows the moved product without entering a user plugin manifest', async () => {

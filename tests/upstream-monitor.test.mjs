@@ -41,6 +41,7 @@ test('a published preview is an installable candidate with pinned integrity', ()
     lock,
     registry: registry({ next: '0.1.0-rc.7' }),
     commit: { sha: 'b'.repeat(40) },
+    packageCommit: { sha: 'c'.repeat(40) },
   })
 
   assert.equal(result.changed, true)
@@ -48,6 +49,22 @@ test('a published preview is an installable candidate with pinned integrity', ()
   assert.equal(result.selectedTag, 'next')
   assert.equal(result.version, '0.1.0-rc.7')
   assert.equal(result.integrity, 'sha512-next')
+  assert.equal(result.commit, 'c'.repeat(40))
+  assert.equal(result.sourceCommit, 'b'.repeat(40))
+})
+
+test('a published package is pinned to its matching tag even when master moves later', () => {
+  const result = evaluateUpstream({
+    lock,
+    registry: registry({ next: '0.1.0-rc.7' }),
+    commit: { sha: 'd'.repeat(40) },
+    packageCommit: { sha: 'c'.repeat(40) },
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(result.commit, 'c'.repeat(40))
+  assert.equal(result.sourceCommit, 'd'.repeat(40))
+  assert.equal(result.sourceChanged, true)
 })
 
 test('the monitor falls back to latest when the preview tag is absent', () => {
