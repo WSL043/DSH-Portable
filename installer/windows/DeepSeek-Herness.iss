@@ -71,7 +71,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; GroupDescription
 Filename: "{app}\DeepSeek-Herness.exe"; Description: "{cm:StartApp}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\DeepSeek-Herness.exe"; Parameters: "uninstall-stop --no-browser --json"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
+Filename: "{app}\DeepSeek-Herness.exe"; Parameters: "stop --no-browser --json"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;

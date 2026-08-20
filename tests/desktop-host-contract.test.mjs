@@ -57,6 +57,10 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.match(host, /webView\.Dispose\(\)/)
   assert.match(host, /await WaitForWebViewExitAsync\(/)
   assert.match(host, /Owned WebView2 processes still hold the portable folder/)
+  const webViewExit = host.slice(host.indexOf('private async Task WaitForWebViewExitAsync'), host.indexOf('private List<string> OwnedWebViewProcessDiagnostics'))
+  assert.match(webViewExit, /remaining\s*=\s*await Task\.Run\(\(\) => OwnedWebViewProcessDiagnostics\(\)\)/)
+  assert.match(webViewExit, /if \(remaining\.Count == 0\)/)
+  assert.doesNotMatch(webViewExit, /if \(exited\.IsCompleted\)\s*\{\s*remaining\s*=/)
 
   const externalExit = host.slice(host.indexOf('if (message.Msg == WmPortableExit)'), host.indexOf('if (message.Msg == WmPortableRestore)'))
   assert.match(externalExit, /BeginDesktopShutdown\(/)

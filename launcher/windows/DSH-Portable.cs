@@ -1173,22 +1173,24 @@ namespace DshPortable
             List<string> remaining = new List<string>();
             while (DateTime.UtcNow < deadline)
             {
-                if (exited.IsCompleted)
+                if (!exited.IsCompleted)
+                    await Task.WhenAny(exited, Task.Delay(400));
+                remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
+                if (remaining.Count == 0)
                 {
-                    remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
-                    if (remaining.Count == 0)
-                    {
-                        webViewEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
-                        return;
-                    }
+                    webViewEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
+                    return;
                 }
                 await Task.Delay(200);
             }
 
             remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
-            string details = remaining.Count == 0
-                ? L("WebView2 未在截止时间内确认资源释放。", "WebView2 did not confirm resource release before the deadline.")
-                : "Owned WebView2 processes still hold the portable folder:\r\n" + String.Join("\r\n", remaining);
+            if (remaining.Count == 0)
+            {
+                webViewEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
+                return;
+            }
+            string details = "Owned WebView2 processes still hold the portable folder:\r\n" + String.Join("\r\n", remaining);
             throw new TimeoutException(details);
         }
 
@@ -2442,11 +2444,6 @@ namespace DshPortable
             SetCurrentProcessExplicitAppUserModelID("io.github.wsl043.dsh-portable");
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            if (args != null && args.Length > 0 && string.Equals(args[0], "uninstall-stop", StringComparison.OrdinalIgnoreCase))
-            {
-                LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableExit);
-                args = new[] { "stop", "--no-browser", "--json", "--wait-for-lock-ms", "30000" };
-            }
             if ((args == null || args.Length == 0) && LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableRestore))
                 return;
             Application.Run(new LauncherWindow(args));
