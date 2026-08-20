@@ -1,11 +1,12 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.8`）。DSH-Portable 是独立社区分发项目。
 
-0.3.0-rc.1 是 Portable 扩展市场的公开测试版：
+0.3.0-rc.2 是 Portable 扩展管理与 Windows 首次启动修复的公开测试版：
 
-- **设置 → 插件新增“便携扩展”。** 首批只提供两个经过版本固定的可选扩展：ChatGPT / Codex 订阅，以及实验性的永久删除会话。两者都默认不安装。
+- **设置 → 插件新增“便携扩展”。** 首批仅提供经过版本固定的实验性永久删除会话扩展，默认不安装。
 - **扩展变更不会打断正在运行的任务。** 用户确认后只排到下次正常启动；安装包会校验大小与 SHA-256，随后组合配置并等待桌面 Host 健康检查。
 - **失败会恢复原配置。** Portable 会保存 profile 快照、重建依赖并再次验证配置；恢复没有完成时会保留证据并暂停启动，不会带着未知配置继续运行。
 - **永久删除仍是显式实验能力。** 安装前会单独披露不可撤销的本地会话删除权限；移除插件不会自动删除插件曾创建的数据。
+- **Windows 首次打开不再只等待完整页面加载事件。** 本地工作台 DOM 已可用时会立即显示，并在页面资源迟迟未结束时保留明确诊断。
 - **Windows、macOS、Linux x64 与 ARM64 使用同一成品测试门。** 这次桌面壳能力变化需要从 0.2.6 完整升级一次；会话、设置、凭据、现有插件与工作区继续保留。
 
 内置官方 DSH 仍为 `0.1.0-rc.8`（提交 `141eb6f`），本次没有用未发布的上游源码替换已验证运行时。
@@ -40,12 +41,13 @@
 
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.8`). DSH-Portable is an independent community distribution.
 
-0.3.0-rc.1 is the public test candidate for Portable Extensions:
+0.3.0-rc.2 is the public test candidate for Portable Extensions and the Windows first-start fix:
 
-- **Settings → Plugins gains Portable extensions.** The initial catalog contains only two pinned, optional entries: ChatGPT / Codex subscriptions and experimental permanent session deletion. Neither is installed by default.
+- **Settings → Plugins gains Portable extensions.** The initial catalog contains only the pinned experimental permanent-session-deletion extension, which is not installed by default.
 - **Extension changes never interrupt a running task.** A confirmed change waits for the next normal start. The product verifies artifact size and SHA-256, composes the profile, and waits for the Portable Host health gate.
 - **Failures restore the previous profile.** Portable keeps a profile snapshot, rebuilds dependencies, and validates the restored configuration. If recovery cannot complete, it preserves the evidence and pauses startup instead of loading an unknown profile.
 - **Permanent deletion remains explicitly experimental.** Its irreversible local-session capability is disclosed separately before installation. Removing the extension does not automatically delete data the extension created.
+- **Windows first start no longer waits only for the final page-load event.** The local workspace appears as soon as its DOM is usable, while stalled page resources still produce bounded diagnostics.
 - **Windows, macOS, Linux x64, and Linux ARM64 share the same finished-product gate.** This desktop-shell change requires one complete upgrade from 0.2.6; sessions, settings, credentials, existing plugins, and workspace remain in place.
 
 The bundled official DSH remains `0.1.0-rc.8` at commit `141eb6f`; this candidate does not replace the tested runtime with unpublished upstream source.

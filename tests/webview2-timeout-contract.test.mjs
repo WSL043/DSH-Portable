@@ -9,7 +9,15 @@ const launcherSource = path.join(projectRoot, 'launcher', 'windows', 'DSH-Portab
 test('Windows desktop host waits for the usable DOM and reports the failing boundary', async () => {
   const source = await readFile(launcherSource, 'utf8')
   assert.match(source, /WorkspaceNavigationTimeoutMs\s*=\s*60000/)
-  assert.match(source, /DOMContentLoaded\s*\+=/)
+  assert.match(source, /TaskCompletionSource<bool>\s+workspaceUsable/)
+  assert.match(source, /EventHandler<CoreWebView2DOMContentLoadedEventArgs>\s+domLoaded/)
+  assert.match(source, /DOMContentLoaded\s*\+=\s*domLoaded/)
+  assert.match(source, /ProbeWorkspaceDomAsync\(url\)/)
+  assert.match(source, /ExecuteScriptAsync/)
+  assert.match(source, /workspaceUsable\.TrySetResult\(true\)/)
+  assert.match(source, /Task\.WhenAny\(workspaceUsable\.Task,\s*navigation\.Task,\s*webViewProcessFailure\.Task,\s*timeout\)/)
+  assert.match(source, /webView\.Visible\s*=\s*true/)
+  assert.match(source, /launchPanel\.BringToFront\(\)/)
   assert.match(source, /ProbeWorkspaceDocument/)
   assert.match(source, /Stopwatch probeBudget = Stopwatch\.StartNew\(\)/)
   assert.match(source, /stream\.ReadTimeout = Math\.Max\(1, remaining\)/)
@@ -21,6 +29,20 @@ test('Windows desktop host waits for the usable DOM and reports the failing boun
   assert.doesNotMatch(source, /工作台未能在 30 秒内打开|workspace did not open within 30 seconds/)
   assert.match(source, /60 秒内打开/)
   assert.match(source, /within 60 seconds/)
+})
+
+test('Windows finished-product smoke proves usable DOM wins over a stalled subresource', async () => {
+  const [source, smoke, workflow] = await Promise.all([
+    readFile(launcherSource, 'utf8'),
+    readFile(path.join(projectRoot, 'scripts', 'smoke-windows-dom-ready.ps1'), 'utf8'),
+    readFile(path.join(projectRoot, '.github', 'workflows', 'ci.yml'), 'utf8'),
+  ])
+  assert.match(source, /DSH_PORTABLE_TEST_STALLED_RESOURCE_URL/)
+  assert.match(source, /AddScriptToExecuteOnDocumentCreatedAsync/)
+  assert.match(smoke, /DshStalledHttpServer/)
+  assert.match(smoke, /never-finishes\.png/)
+  assert.match(smoke, /DesktopWidth\s+-lt\s+900/)
+  assert.match(workflow, /smoke-windows-dom-ready\.ps1/)
 })
 
 test('Windows overlaps cold WebView2 initialization with the first DSH start', async () => {

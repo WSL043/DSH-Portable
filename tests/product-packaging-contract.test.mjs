@@ -112,7 +112,7 @@ test('the GitHub landing page gives beginners one obvious download path', async 
   assert.doesNotMatch(chineseReadme, /不用配置 Node\.js|不需要安装 Node\.js/)
   assert.match(chineseReadme, /会话、设置、插件和工作区/)
   assert.match(chineseReadme, /U 盘|移动硬盘/)
-  assert.match(chineseReadme, /WSL043\/dsh-codex-subscription/)
+  assert.doesNotMatch(chineseReadme, /codex|chatgpt|dsh-codex-subscription/i)
 })
 
 test('Simplified Chinese is the default GitHub landing page and English is a complete peer', async () => {
@@ -123,12 +123,13 @@ test('Simplified Chinese is the default GitHub landing page and English is a com
   assert.match(english.slice(0, 1400), /README\.md.+<strong>English<\/strong>/s)
   assert.equal((english.match(/assets\/dsh-interface-en\.png/g) || []).length, 1)
   assert.equal((chinese.match(/assets\/dsh-interface-zh\.png/g) || []).length, 1)
-  assert.equal((english.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 1)
-  assert.equal((chinese.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 1)
+  assert.equal((english.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
+  assert.equal((chinese.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
   assert.doesNotMatch(`${chinese}\n${english}`, /assets\/(?:dsh-interface|dsh-portable-folder)\.png/)
-  for (const asset of ['assets/dsh-interface-zh.png', 'assets/dsh-interface-en.png', 'assets/dsh-portable-extensions-en.png']) {
+  for (const asset of ['assets/dsh-interface-zh.png', 'assets/dsh-interface-en.png']) {
     assert.equal(await exists(asset), true, `${asset} must be shipped with the repository`)
   }
+  assert.equal(await exists('assets/dsh-portable-extensions-en.png'), false)
   assert.equal(await exists('assets/dsh-portable-folder.png'), false, 'the README must not ship a decorative folder screenshot')
   for (const heading of ['Start in 3 steps', 'Portable data', 'Updates', 'Security']) assert.match(english, new RegExp(`## ${heading}`, 'i'))
   for (const heading of ['三步启动', '便携数据', '更新', '安全']) assert.match(chinese, new RegExp(`## ${heading}`))
@@ -453,9 +454,7 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(chinese, /\.\\dsh\.exe --profile web --dump-config/)
   assert.match(english, /\.\\dsh\.exe plugin --profile web add <plugin>/i)
   assert.match(docs, /不会自动重启|never restarts/i)
-  assert.match(chinese, /github\.com\/WSL043\/dsh-codex-subscription/)
-  assert.match(english, /github\.com\/WSL043\/dsh-codex-subscription/)
-  assert.doesNotMatch(docs, /openai-codex|zen\s*free/i)
+  assert.doesNotMatch(docs, /codex|chatgpt|openai-codex|zen\s*free/i)
 
   assert.match(workflow, /^  windows-plugin-smoke:/m)
   assert.match(workflow, /smoke-windows-plugins\.ps1/)
@@ -477,6 +476,18 @@ test('plugin management is a generic finished-product capability and release gat
   assert.doesNotMatch(smoke, /Move-Item\s+-LiteralPath\s+\$Root/)
   assert.doesNotMatch(smoke, /where\.exe/i)
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
+})
+
+test('the bundled portable extension catalog contains only explicitly approved entries', async () => {
+  const [catalog, chinese, english, releaseNotes] = await Promise.all([
+    read('desktop-bridge/extensions/catalog.json').then(JSON.parse),
+    read('README.md'),
+    read('README.en.md'),
+    read('templates/RELEASE-NOTES.md'),
+  ])
+  assert.deepEqual(catalog.items.map(item => item.id), ['session-delete'])
+  assert.doesNotMatch(JSON.stringify(catalog), /codex|chatgpt|dsh-codex-subscription/i)
+  assert.doesNotMatch(`${chinese}\n${english}\n${releaseNotes}`, /codex|chatgpt|dsh-codex-subscription/i)
 })
 
 test('Windows portable self-extractor stays offline, movable, and registration-free', async () => {

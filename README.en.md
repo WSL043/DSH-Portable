@@ -113,10 +113,6 @@ profile on the next start; failures restore the previous profile. Permanent sess
 experimental, absent by default, and requires a separate acknowledgement of its irreversible data
 capability.
 
-<p align="center">
-  <img src="assets/dsh-portable-extensions-en.png" width="960" alt="Portable Extensions in DSH-Portable">
-</p>
-
 The graphical catalog is deliberately small and does not represent every community plugin. Use the
 generic commands below for other extensions.
 
@@ -143,10 +139,6 @@ In a complete Linux portable folder, use `./dsh`. With the AppImage, use
 
 Plugins and settings travel with the portable data. Plugin changes never restart a running task;
 save your work and restart the app when convenient. Install only plugins you trust.
-
-For the capabilities and sign-in boundary of the ChatGPT / Codex subscription extension, see:
-[**WSL043/dsh-codex-subscription**](https://github.com/WSL043/dsh-codex-subscription).
-It is not installed by default and can be added or removed from the graphical catalog or command line.
 
 ## Updates
 

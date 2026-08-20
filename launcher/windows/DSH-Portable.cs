@@ -22,8 +22,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.3.0.1")]
-[assembly: AssemblyFileVersion("0.3.0.1")]
+[assembly: AssemblyVersion("0.3.0.2")]
+[assembly: AssemblyFileVersion("0.3.0.2")]
 
 namespace DshPortable
 {
@@ -510,9 +510,10 @@ namespace DshPortable
             };
             trayIcon.MouseUp += HandleTrayMouseUp;
 
-            webView = new WebView2 { Dock = DockStyle.Fill, Visible = false };
+            webView = new WebView2 { Dock = DockStyle.Fill, Visible = true };
             Controls.Add(webView);
             Controls.Add(launchPanel);
+            launchPanel.BringToFront();
             CenterLaunchContent();
             ResizeEnd += delegate { SaveDesktopWindowState(); };
             Shown += async delegate { await RunLauncherAsync(); };
@@ -1451,19 +1452,32 @@ namespace DshPortable
         {
             TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
                 new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
+            TaskCompletionSource<bool> workspaceUsable = new TaskCompletionSource<bool>();
             webViewProcessFailure = new TaskCompletionSource<string>();
             EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = null;
+            EventHandler<CoreWebView2DOMContentLoadedEventArgs> domLoaded = null;
             completed = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
             {
                 RecordWebViewPhase("navigation-completed:" + eventArgs.IsSuccess + "/" + eventArgs.WebErrorStatus);
                 navigation.TrySetResult(eventArgs);
             };
+            domLoaded = async delegate(object sender, CoreWebView2DOMContentLoadedEventArgs eventArgs)
+            {
+                RecordWebViewPhase("dom-content-loaded:" + eventArgs.NavigationId);
+                bool usable = await ProbeWorkspaceDomAsync(url);
+                RecordWebViewPhase("dom-probe:" + usable);
+                if (usable) workspaceUsable.TrySetResult(true);
+            };
             webView.CoreWebView2.NavigationCompleted += completed;
+            webView.CoreWebView2.DOMContentLoaded += domLoaded;
+            webView.Visible = true;
+            launchPanel.BringToFront();
             RecordWebViewPhase("navigation-start:" + url);
             webView.CoreWebView2.Navigate(url);
             Task timeout = Task.Delay(WorkspaceNavigationTimeoutMs);
-            Task winner = await Task.WhenAny(navigation.Task, webViewProcessFailure.Task, timeout);
+            Task winner = await Task.WhenAny(workspaceUsable.Task, navigation.Task, webViewProcessFailure.Task, timeout);
             webView.CoreWebView2.NavigationCompleted -= completed;
+            webView.CoreWebView2.DOMContentLoaded -= domLoaded;
             if (winner == webViewProcessFailure.Task)
             {
                 string webViewSnapshot = WebViewEnvironmentSnapshot();
@@ -1482,6 +1496,11 @@ namespace DshPortable
                     : L("DeepSeek Harness 工作台未能在 60 秒内打开。", "The DeepSeek Harness workspace did not open within 60 seconds."))
                     + "\r\n" + diagnostics);
             }
+            if (winner == workspaceUsable.Task)
+            {
+                webViewProcessFailure = null;
+                return;
+            }
             CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
             if (!result.IsSuccess)
             {
@@ -1492,7 +1511,37 @@ namespace DshPortable
                     : L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: "))
                     + result.WebErrorStatus + "\r\n" + diagnostics);
             }
+            if (!await ProbeWorkspaceDomAsync(url))
+            {
+                string webViewSnapshot = WebViewEnvironmentSnapshot();
+                string diagnostics = await Task.Run(() => WorkspaceFailureDiagnostics(url, webViewSnapshot));
+                throw new InvalidOperationException(L(
+                    "DeepSeek Harness 工作台页面未达到可用状态。",
+                    "The DeepSeek Harness workspace did not reach a usable state.") + "\r\n" + diagnostics);
+            }
             webViewProcessFailure = null;
+        }
+
+        private async Task<bool> ProbeWorkspaceDomAsync(string expectedUrl)
+        {
+            try
+            {
+                string expected = json.Serialize(expectedUrl.TrimEnd('/'));
+                string script = "(function(){try{"
+                    + "var expected=" + expected + ";"
+                    + "var current=String(window.location.href||'').replace(/\\/$/,'');"
+                    + "var ready=document.readyState==='interactive'||document.readyState==='complete';"
+                    + "var errorPage=current.indexOf('chrome-error://')===0||!!document.querySelector('#main-frame-error');"
+                    + "return current.indexOf(expected)===0&&ready&&!!document.body&&!errorPage;"
+                    + "}catch(_){return false;}})()";
+                string result = await webView.CoreWebView2.ExecuteScriptAsync(script);
+                return String.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (Exception error)
+            {
+                RecordWebViewPhase("dom-probe-failed:" + error.GetType().Name);
+                return false;
+            }
         }
 
         private string ProbeWorkspaceDocument(string url)
@@ -1623,12 +1672,26 @@ namespace DshPortable
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            string testStalledResource = Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_STALLED_RESOURCE_URL");
+            Uri stalledResourceUri;
+            if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
+                && Uri.TryCreate(testStalledResource, UriKind.Absolute, out stalledResourceUri)
+                && stalledResourceUri.IsLoopback)
+            {
+                string resource = json.Serialize(stalledResourceUri.AbsoluteUri);
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "document.addEventListener('DOMContentLoaded',function(){"
+                    + "var image=document.createElement('img');image.hidden=true;image.src=" + resource + ";document.body.appendChild(image);"
+                    + "},{once:true});");
+            }
             webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
-            webView.CoreWebView2.ContentLoading += delegate { RecordWebViewPhase("content-loading"); };
-            webView.CoreWebView2.DOMContentLoaded += delegate { RecordWebViewPhase("dom-content-loaded"); };
+            webView.CoreWebView2.ContentLoading += delegate(object sender, CoreWebView2ContentLoadingEventArgs eventArgs)
+            {
+                RecordWebViewPhase("content-loading:" + eventArgs.NavigationId);
+            };
             webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
         }
 

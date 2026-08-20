@@ -20,7 +20,7 @@ import {
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 
 const currentComponents = {
-  portableVersion: '0.3.0-rc.1',
+  portableVersion: '0.3.0-rc.2',
   dshVersion: '0.1.0-rc.8',
   dshCommit: '141eb6fef83422698aef7a981029e843e8161534',
 }
@@ -39,7 +39,7 @@ test('bundled catalog is small, immutable, and explicit about experimental capab
     assert.ok(['reviewed', 'experimental'].includes(item.channel))
     assert.ok(item.permissions.zh.length > 0)
     assert.ok(item.permissions.en.length > 0)
-    assert.equal(item.compatibility.portable, '0.3.0-rc.1')
+    assert.equal(item.compatibility.portable, '0.3.0-rc.2')
     assert.equal(item.compatibility.dsh, '0.1.0-rc.8')
     assert.equal(item.compatibility.dshCommit, currentComponents.dshCommit)
   }
@@ -542,11 +542,11 @@ test('concurrent confirmations cannot overwrite an already queued extension', as
     readState: fileState.readState,
     writePending: fileState.writePending,
   })
-  const first = await market.preview({ id: 'codex-subscription', action: 'install' })
-  const second = await market.preview({ id: 'codex-subscription', action: 'install' })
+  const first = await market.preview({ id: 'session-delete', action: 'install' })
+  const second = await market.preview({ id: 'session-delete', action: 'install' })
   const results = await Promise.allSettled([
-    market.confirm({ previewToken: first.previewToken, experimentalAcknowledged: false }),
-    market.confirm({ previewToken: second.previewToken, experimentalAcknowledged: false }),
+    market.confirm({ previewToken: first.previewToken, experimentalAcknowledged: true }),
+    market.confirm({ previewToken: second.previewToken, experimentalAcknowledged: true }),
   ])
   assert.equal(results.filter(result => result.status === 'fulfilled').length, 1)
   assert.equal(results.filter(result => result.status === 'rejected').length, 1)
@@ -566,10 +566,10 @@ test('a torn pending file is quarantined before a new confirmation is queued', a
     readState: fileState.readState,
     writePending: fileState.writePending,
   })
-  const preview = await market.preview({ id: 'codex-subscription', action: 'install' })
-  const result = await market.confirm({ previewToken: preview.previewToken, experimentalAcknowledged: false })
+  const preview = await market.preview({ id: 'session-delete', action: 'install' })
+  const result = await market.confirm({ previewToken: preview.previewToken, experimentalAcknowledged: true })
   assert.equal(result.status, 'queued')
-  assert.equal(JSON.parse(await readFile(pendingPath, 'utf8')).id, 'codex-subscription')
+  assert.equal(JSON.parse(await readFile(pendingPath, 'utf8')).id, 'session-delete')
 })
 
 test('a stale confirmation lock is recoverable without filesystem hard links', async () => {
@@ -588,10 +588,10 @@ test('a stale confirmation lock is recoverable without filesystem hard links', a
     readState: fileState.readState,
     writePending: fileState.writePending,
   })
-  const preview = await market.preview({ id: 'codex-subscription', action: 'install' })
-  const result = await market.confirm({ previewToken: preview.previewToken, experimentalAcknowledged: false })
+  const preview = await market.preview({ id: 'session-delete', action: 'install' })
+  const result = await market.confirm({ previewToken: preview.previewToken, experimentalAcknowledged: true })
   assert.equal(result.status, 'queued')
-  assert.equal(JSON.parse(await readFile(pendingPath, 'utf8')).id, 'codex-subscription')
+  assert.equal(JSON.parse(await readFile(pendingPath, 'utf8')).id, 'session-delete')
 
   const source = await readFile(path.join(process.cwd(), 'desktop-bridge', 'lib', 'extensions.js'), 'utf8')
   assert.doesNotMatch(source, /\blink\(/)
@@ -610,7 +610,7 @@ test('pending confirmation fails closed for a live writer and recovers a dead wr
   const lockPath = `${pendingPath}.lock`
   await mkdir(path.dirname(pendingPath), { recursive: true })
   const catalog = await loadBundledCatalog()
-  const item = catalog.items.find(value => value.id === 'codex-subscription')
+  const item = catalog.items.find(value => value.id === 'session-delete')
   const createMarket = () => createExtensionMarket({
     catalog, components: currentComponents, readState: fileState.readState, writePending: fileState.writePending,
   })
@@ -619,14 +619,14 @@ test('pending confirmation fails closed for a live writer and recovers a dead wr
   const live = createMarket()
   const livePreview = await live.preview({ id: item.id, action: 'install' })
   await assert.rejects(
-    () => live.confirm({ previewToken: livePreview.previewToken, experimentalAcknowledged: false }),
+    () => live.confirm({ previewToken: livePreview.previewToken, experimentalAcknowledged: true }),
     /another extension operation/i,
   )
 
   await writeFile(lockPath, JSON.stringify({ schemaVersion: 1, pid: 999999999 }), 'utf8')
   const stale = createMarket()
   const stalePreview = await stale.preview({ id: item.id, action: 'install' })
-  await stale.confirm({ previewToken: stalePreview.previewToken, experimentalAcknowledged: false })
+  await stale.confirm({ previewToken: stalePreview.previewToken, experimentalAcknowledged: true })
   assert.equal(JSON.parse(await readFile(pendingPath, 'utf8')).id, item.id)
 })
 

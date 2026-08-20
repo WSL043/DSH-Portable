@@ -123,10 +123,6 @@ AppImage 会把会话、设置、插件和工作区保存在同目录的 `DSH-Po
 验证和健康检查；失败会恢复原配置。永久删除会话标为实验性，默认不安装，启用前必须
 单独确认不可撤销的数据权限。
 
-<p align="center">
-  <img src="assets/dsh-portable-extensions-en.png" width="960" alt="DSH-Portable 便携扩展目录">
-</p>
-
 图形目录只收录少量已经固定版本和权限边界的扩展，不代表所有社区插件。其他插件仍可
 使用下面的通用命令管理。
 
@@ -153,10 +149,6 @@ Linux 完整便携目录使用 `./dsh`；AppImage 使用 `./DeepSeek-Herness-lin
 `<插件>` 可以是包名、Git 地址、本地目录或压缩包。插件和设置都保存在便携数据中，
 会随整个文件夹迁移。插件变更不会自动打断正在运行的任务；保存工作并手动退出、
 重新打开后生效。只安装你信任的插件。
-
-想了解 ChatGPT / Codex 订阅扩展的功能与登录边界，可查看独立插件仓库：
-[**WSL043/dsh-codex-subscription**](https://github.com/WSL043/dsh-codex-subscription)。
-扩展不会随 Portable 默认安装，可以在图形目录或命令行中按需安装、移除。
 
 ## 更新
 
