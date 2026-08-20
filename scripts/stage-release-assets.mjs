@@ -2,14 +2,15 @@ import { createHash } from 'node:crypto'
 import { copyFile, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-const [artifactArg = 'artifacts', outputArg = 'release-staging'] = process.argv.slice(2)
+const [artifactArg = 'artifacts', outputArg = 'release-staging', channel = 'stable'] = process.argv.slice(2)
+if (!['stable', 'candidate'].includes(channel)) throw new Error(`unsupported release channel: ${channel}`)
 const artifacts = path.resolve(artifactArg)
 const output = path.resolve(outputArg)
 const userDir = path.join(output, 'user-assets')
 const updateDir = path.join(output, 'update-assets')
 
 const userAssets = [
-  'DSH-Portable-windows-x64.exe',
+  ...(channel === 'candidate' ? [] : ['DSH-Portable-windows-x64.exe']),
   'DSH-Portable-windows-x64-offline.zip',
   'DeepSeek-Herness-Setup.exe',
   'DSH-Portable-macos-arm64.zip',

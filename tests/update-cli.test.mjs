@@ -59,6 +59,7 @@ async function makeComponentArchive(root, version, portableVersion) {
   await writeFile(path.join(source, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
     product: 'DSH-Portable',
     portableVersion,
+    releaseChannel: 'candidate',
     platform: platformUpdateKey(),
     dshVersion: version,
     dshCommit: 'b'.repeat(40),
@@ -74,6 +75,7 @@ async function makeComponentArchive(root, version, portableVersion) {
     schemaVersion: 1,
     kind: 'dsh-app',
     portableVersion,
+    releaseChannel: 'candidate',
     dshVersion: version,
     dshCommit: 'b'.repeat(40),
   })}\n`)
@@ -92,8 +94,10 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh update cli 中文 '))
   let componentBuildRoot
   let server
+  let runtimeNode
+  let cli
   try {
-    const runtimeNode = process.platform === 'win32'
+    runtimeNode = process.platform === 'win32'
       ? path.join(root, 'runtime', 'node', 'node.exe')
       : path.join(root, 'runtime', 'node', 'bin', 'node')
     const oldDsh = path.join(root, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
@@ -105,7 +109,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))
@@ -136,6 +140,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
         const body = Buffer.from(JSON.stringify({
           schemaVersion: 1,
           portableVersion,
+          releaseChannel: 'candidate',
           platform: platformUpdateKey(),
           minimumUpdaterSchema: 1,
           requiredShellSchema: 1,
@@ -157,7 +162,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
     origin = `http://127.0.0.1:${server.address().port}`
 
-    const cli = path.join(root, 'launcher', 'portable-cli.mjs')
+    cli = path.join(root, 'launcher', 'portable-cli.mjs')
     const updated = await execFileAsync(runtimeNode, [cli, 'update', '--json', '--progress-json', '--no-browser', '--force', '--allow-http', '--update-manifest', `${origin}/update.json`], {
       timeout: 60000,
       windowsHide: true,
@@ -177,6 +182,10 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     assert.equal(status.status, 'running')
     await execFileAsync(runtimeNode, [cli, 'stop', '--json'], { timeout: 30000, windowsHide: true })
   } finally {
+    if (runtimeNode && cli) {
+      await execFileAsync(runtimeNode, [cli, 'stop', '--json'], { timeout: 30000, windowsHide: true }).catch(() => {})
+    }
+    server?.closeAllConnections?.()
     if (server) await new Promise((resolve) => server.close(resolve))
     if (componentBuildRoot) await rm(componentBuildRoot, { recursive: true, force: true })
     await rm(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 })

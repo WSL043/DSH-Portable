@@ -24,6 +24,8 @@ const [newArchiveBytes, fullManifestSource, componentManifestSource] = await Pro
   readFile(componentManifestPath, 'utf8').then(JSON.parse),
 ])
 const payload = fullManifestSource?.payloads?.windowsX64
+assert.equal(fullManifestSource.releaseChannel, 'candidate', 'the complete-package manifest must target the candidate channel')
+assert.equal(componentManifestSource.releaseChannel, 'candidate', 'the component manifest must target the candidate channel')
 assert.equal(newArchiveBytes.length, payload?.bytes, 'new full archive size does not match its manifest')
 assert.equal(createHash('sha256').update(newArchiveBytes).digest('hex'), payload?.sha256, 'new full archive digest does not match its manifest')
 
@@ -56,6 +58,7 @@ try {
   await execFileAsync('tar.exe', ['-x', '-f', oldArchive, '-C', root], { timeout: 5 * 60 * 1000, windowsHide: true })
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
+  assert.match(oldComponents.portableVersion, /-rc\./, 'the prior package must be a release candidate')
   assert.notEqual(oldComponents.portableVersion, fullManifestSource.version, 'the prior package must be older than the candidate')
   assert.ok(
     Number(oldComponents.shellSchema) < Number(componentManifestSource.requiredShellSchema),

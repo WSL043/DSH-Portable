@@ -34,6 +34,7 @@ import {
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
 import { workspaceDocumentReady } from './http-readiness.mjs'
+import { seedDefaultPlugins } from './default-plugins.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
@@ -278,6 +279,11 @@ async function start(noBrowser) {
 
   await retirePendingExtensionOperation(layout)
 
+  const defaultPlugins = await seedDefaultPlugins(layout)
+  if (defaultPlugins.status === 'warning') {
+    process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
+  }
+
   const port = await selectPort(prior?.port)
   const stdoutLog = path.join(layout.logsDir, 'dsh.stdout.log')
   const stderrLog = path.join(layout.logsDir, 'dsh.stderr.log')
@@ -344,7 +350,7 @@ async function start(noBrowser) {
 
     const url = `http://127.0.0.1:${port}`
     const browser = noBrowser ? null : await openBrowser(url)
-    return { status: 'started', pid: child.pid, port, url, browser, migration }
+    return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins }
   } catch (error) {
     let cleanupError = null
     if (ownedState(state)) {

@@ -36,6 +36,7 @@ $RegistryV1 = Join-Path $TestRoot 'plugin-v1.tgz'
 $RegistryV2 = Join-Path $TestRoot 'plugin-v2.tgz'
 $RegistryChannel = Join-Path $TestRoot 'registry-channel.txt'
 $RegistryReady = Join-Path $TestRoot 'registry-ready.json'
+$ClsxArchive = Join-Path $TestRoot 'clsx.tgz'
 $RegistryProcess = $null
 $PriorPath = $env:PATH
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
@@ -154,8 +155,12 @@ try {
     )
     & tar.exe -czf $RegistryV2 -C $PackageParent 'package'
     if ($LASTEXITCODE -ne 0) { throw 'could not create the revised plugin fixture archive' }
+    $ClsxRoot = Join-Path $Root 'app\node_modules\clsx'
+    $ClsxManifest = Get-Content -Raw -LiteralPath (Join-Path $ClsxRoot 'package.json') | ConvertFrom-Json
+    & tar.exe -czf $ClsxArchive -C (Split-Path -Parent $ClsxRoot) 'clsx'
+    if ($LASTEXITCODE -ne 0) { throw 'could not create the clsx fixture archive' }
     [System.IO.File]::WriteAllText($RegistryChannel, "1.0.0`n", [System.Text.UTF8Encoding]::new($false))
-    $RegistryProcess = Start-Process -FilePath $Node -ArgumentList @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady) -PassThru -WindowStyle Hidden
+    $RegistryProcess = Start-Process -FilePath $Node -ArgumentList @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version) -PassThru -WindowStyle Hidden
     $ReadyDeadline = [DateTime]::UtcNow.AddSeconds(15)
     while (-not (Test-Path -LiteralPath $RegistryReady)) {
         if ($RegistryProcess.HasExited) { throw "fixture registry exited with code $($RegistryProcess.ExitCode)" }

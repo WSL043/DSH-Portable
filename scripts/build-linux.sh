@@ -27,6 +27,13 @@ DSH_VERSION="$(lock_value dsh.version)"
 DSH_COMMIT="$(lock_value dsh.reviewedCommit)"
 DSH_NOTICES_SHA256="$(lock_value dsh.noticesSha256)"
 PORTABLE_VERSION="$("$BUILD_NODE" -p 'require(process.argv[1]).version' "$PROJECT_ROOT/package.json")"
+DEFAULT_PLUGIN_URL="$(lock_value defaultPlugins.sessionDelete.url)"
+DEFAULT_PLUGIN_FILENAME="$(lock_value defaultPlugins.sessionDelete.filename)"
+DEFAULT_PLUGIN_SHA256="$(lock_value defaultPlugins.sessionDelete.sha256)"
+VERSION_POLICY="$("$BUILD_NODE" "$PROJECT_ROOT/scripts/version-policy.mjs" "$PORTABLE_VERSION")"
+RELEASE_CHANNEL="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "channel" { print $2 }')"
+UPDATE_CHANNEL_TAG="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "updateChannelTag" { print $2 }')"
+[[ -n "$RELEASE_CHANNEL" && -n "$UPDATE_CHANNEL_TAG" ]] || { echo "Product version policy returned no release channel" >&2; exit 1; }
 
 DOWNLOAD_DIR="$CACHE_DIR/downloads"
 ARCHIVE="$DOWNLOAD_DIR/$NODE_ARCHIVE"
@@ -41,7 +48,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node,licenses,data,workspace}
+mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node,licenses,default-plugins,data,workspace}
 cp -R "$PROJECT_ROOT/desktop-bridge" "$STAGE/desktop-bridge"
 
 if [[ ! -f "$ARCHIVE" ]]; then
@@ -65,7 +72,7 @@ NPM_CLI="$NODE_FOLDER/lib/node_modules/npm/bin/npm-cli.js"
 
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
-for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs http-readiness.mjs; do
+for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs; do
   cp "$PROJECT_ROOT/launcher/$file" "$STAGE/launcher/$file"
 done
 cp "$PROJECT_ROOT/launcher/linux/dsh" "$STAGE/dsh"
@@ -79,6 +86,15 @@ cp "$PROJECT_ROOT/LICENSE" "$STAGE/licenses/DSH-Portable-LICENSE.txt"
 cp -R "$NODE_FOLDER"/. "$STAGE/runtime/node/"
 chmod 755 "$STAGE/runtime/node/bin/node"
 cp "$NODE_FOLDER/LICENSE" "$STAGE/licenses/Node.js-LICENSE.txt"
+
+DEFAULT_PLUGIN_ARCHIVE="$DOWNLOAD_DIR/$DEFAULT_PLUGIN_FILENAME"
+if [[ ! -f "$DEFAULT_PLUGIN_ARCHIVE" ]]; then
+  curl --fail --location --retry 3 --output "$DEFAULT_PLUGIN_ARCHIVE" "$DEFAULT_PLUGIN_URL"
+fi
+printf '%s  %s\n' "$DEFAULT_PLUGIN_SHA256" "$DEFAULT_PLUGIN_ARCHIVE" | sha256sum --check
+cp "$DEFAULT_PLUGIN_ARCHIVE" "$STAGE/default-plugins/$DEFAULT_PLUGIN_FILENAME"
+tar -xOf "$DEFAULT_PLUGIN_ARCHIVE" package/LICENSE > "$STAGE/licenses/dsh-native-session-delete-LICENSE.txt"
+tar -xOf "$DEFAULT_PLUGIN_ARCHIVE" package/THIRD_PARTY_NOTICES.md > "$STAGE/licenses/dsh-native-session-delete-THIRD-PARTY-NOTICES.txt"
 
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-lock.mjs" "$PROJECT_ROOT/app/package-lock.json" "$LOCK_FILE"
 (
@@ -105,12 +121,17 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
 {
   "product": "DSH-Portable",
   "portableVersion": "$PORTABLE_VERSION",
+  "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "linux-$ARCH",
   "dshPackage": "@deepseek-ai/dsh",
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT",
   "pluginMarketPackage": "dshmarket",
-  "pluginMarketVersion": "1.15.0",
+  "pluginMarketVersion": "1.16.0",
+  "defaultPluginPackage": "$(lock_value defaultPlugins.sessionDelete.package)",
+  "defaultPluginVersion": "$(lock_value defaultPlugins.sessionDelete.version)",
+  "defaultPluginSha256": "$DEFAULT_PLUGIN_SHA256",
+  "defaultPluginIntegrity": "$(lock_value defaultPlugins.sessionDelete.integrity)",
   "pnpmVersion": "$(lock_value pnpm.version)",
   "pnpmIntegrity": "$(lock_value pnpm.integrity)",
   "nodeVersion": "$NODE_VERSION",
@@ -133,6 +154,7 @@ cat > "$UPDATE_COMPONENT_ROOT/component.json" <<EOF
   "schemaVersion": 1,
   "kind": "dsh-app",
   "portableVersion": "$PORTABLE_VERSION",
+  "releaseChannel": "$RELEASE_CHANNEL",
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT"
 }
@@ -149,6 +171,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
 {
   "schemaVersion": 1,
   "portableVersion": "$PORTABLE_VERSION",
+  "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "linux-$ARCH",
   "minimumUpdaterSchema": 1,
   "requiredShellSchema": 5,
@@ -160,7 +183,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
     "bytes": $UPDATE_COMPONENT_BYTES,
     "sha256": "$UPDATE_COMPONENT_HASH",
     "urls": [
-      "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/DSH-Portable-update-linux-$ARCH.zip"
+      "https://github.com/WSL043/DSH-Portable/releases/download/$UPDATE_CHANNEL_TAG/DSH-Portable-update-linux-$ARCH.zip"
     ]
   }
 }
@@ -168,7 +191,7 @@ EOF
 
 rm -rf "$PAYLOAD"
 mkdir -p "$PAYLOAD"
-for item in app launcher runtime licenses README.txt; do
+for item in app launcher runtime licenses default-plugins README.txt; do
   cp -R "$STAGE/$item" "$PAYLOAD/$item"
 done
 (

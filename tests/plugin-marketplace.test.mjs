@@ -17,19 +17,22 @@ test('the marketplace candidate pins one live visual catalog and no curated exte
     read('README.en.md'),
   ])
 
-  assert.equal(product.version, '0.4.0-rc.1')
-  assert.equal(app.dependencies.dshmarket, '1.15.0')
+  assert.match(product.version, /^0\.4\.0-rc\.[1-9]\d*$/)
+  assert.equal(app.dependencies.dshmarket, '1.16.0')
 
   const market = lock.packages['node_modules/dshmarket']
-  assert.equal(market.version, '1.15.0')
-  assert.equal(market.resolved, 'https://registry.npmjs.org/dshmarket/-/dshmarket-1.15.0.tgz')
-  assert.equal(market.integrity, 'sha512-E69XJp5jPOdALLml4Rbc8WX0WvdHs8WHdPuoP8408dLdNUDEX9lipIaCiqvjtsUmWPZ6pY83DAtDtvm+6ZAPnA==')
+  assert.equal(market.version, '1.16.0')
+  assert.equal(market.resolved, 'https://registry.npmjs.org/dshmarket/-/dshmarket-1.16.0.tgz')
+  assert.equal(market.integrity, 'sha512-WuHVUQzzECcK0gWdf0Q84KVvKNYNLTbF/GEh2TpBZEeekEI9hbZlqRu3kDwfVDciRgb49GtD0ost1sn45BbfMQ==')
 
   assert.match(patch, /id:\s*dsh-market/)
   assert.match(patch, /name:\s*['"]dshmarket['"]/)
   assert.match(patch, /profile:\s*web/)
   assert.match(patch, /allowRestart:\s*false/)
-  assert.doesNotMatch(`${patch}\n${chinese}\n${english}`, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
+  assert.doesNotMatch(patch, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
+  assert.doesNotMatch(`${chinese}\n${english}`, /dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
+  assert.match(chinese, /全新安装[\s\S]+永久删除会话/)
+  assert.match(english, /fresh install[\s\S]+permanent session deletion/i)
 })
 
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
@@ -45,11 +48,19 @@ test('finished products verify and smoke the visual market through the real DSH 
 
   assert.match(runtime, /dshmarket\/package\.json/)
   assert.match(runtime, /dshmarket\/client/)
-  assert.match(runtime, /marketManifest\.version[^\n]+1\.15\.0/)
+  assert.match(runtime, /marketManifest\.version[^\n]+1\.16\.0/)
   assert.match(smoke, /\/dsh-market\/status/)
   assert.match(smoke, /\/dsh-market\/installed/)
+  assert.match(smoke, /dsh-native-session-delete/)
+  assert.match(smoke, /--dump-config/)
+  assert.match(smoke, /ui-workspace-session-delete/)
+  assert.match(smoke, /ui-workspace[\s\S]+disabled/)
   assert.match(smoke, /\/dsh-market\/registry/)
   assert.match(smoke, /registry[^\n]+plugins/)
+  assert.match(smoke, /plugins\.length\s*>=\s*1_000/)
+  assert.match(smoke, /canonicalPluginIdentity/)
+  assert.match(smoke, /plugin\.page/)
+  assert.match(smoke, /plugin\.screenshots/)
   assert.match(browserSmoke, /Plugin Market/)
   assert.match(browserSmoke, /Search plugins/)
   assert.match(browserSmoke, /installButtons/)
@@ -87,7 +98,12 @@ test('the built-in market resolves from the movable profile fallback after a fol
 })
 
 test('release candidates never replace the stable automatic-update channel', async () => {
-  const workflow = await read('.github/workflows/publish.yml')
-  assert.match(workflow, /if:\s*steps\.version\.outputs\.prerelease\s*!=\s*['"]true['"]/)
-  assert.match(workflow, /Publish stable machine-readable update channel/)
+  const [workflow, policy] = await Promise.all([
+    read('.github/workflows/publish.yml'),
+    import('../scripts/version-policy.mjs'),
+  ])
+  assert.equal(policy.classifyProductVersion('0.4.0').updateChannelTag, 'update-channel-stable')
+  assert.equal(policy.classifyProductVersion('0.4.0-rc.2').updateChannelTag, 'update-channel-candidate')
+  assert.match(workflow, /UPDATE_CHANNEL_TAG:\s*\$\{\{ steps\.version\.outputs\.updateChannelTag \}\}/)
+  assert.match(workflow, /if \[ "\$RELEASE_CHANNEL" = stable \]; then[\s\S]+update-channel-candidate/)
 })

@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.4.0-rc.1"
+  #define AppVersion "0.4.0-rc.2"
 #endif
 
 [Setup]
@@ -36,7 +36,7 @@ LanguageDetectionMethod=uilanguage
 ShowLanguageDialog=auto
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=0.4.0.1
+VersionInfoVersion=0.4.0.2
 VersionInfoProductName=DeepSeek-Herness
 VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043

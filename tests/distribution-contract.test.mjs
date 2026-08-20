@@ -15,7 +15,7 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
   assert.deepEqual(runtime.dependencies, {
     '@deepseek-ai/dsh': '0.1.0-rc.8',
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
-    dshmarket: '1.15.0',
+    dshmarket: '1.16.0',
     pnpm: '11.7.0',
   })
   const serialized = JSON.stringify(runtime)
@@ -47,8 +47,8 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   })
   assert.deepEqual(lock.pluginMarket, {
     package: 'dshmarket',
-    version: '1.15.0',
-    integrity: 'sha512-E69XJp5jPOdALLml4Rbc8WX0WvdHs8WHdPuoP8408dLdNUDEX9lipIaCiqvjtsUmWPZ6pY83DAtDtvm+6ZAPnA==',
+    version: '1.16.0',
+    integrity: 'sha512-WuHVUQzzECcK0gWdf0Q84KVvKNYNLTbF/GEh2TpBZEeekEI9hbZlqRu3kDwfVDciRgb49GtD0ost1sn45BbfMQ==',
     sourceRepository: 'https://github.com/dsh-market/dsh-market',
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
@@ -94,7 +94,7 @@ test('the independent lock verifier accepts the current local bridge link and ex
   ])
   const result = JSON.parse(stdout)
   assert.equal(result.dshVersion, '0.1.0-rc.8')
-  assert.equal(result.pluginMarketVersion, '1.15.0')
+  assert.equal(result.pluginMarketVersion, '1.16.0')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {

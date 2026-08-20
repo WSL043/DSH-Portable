@@ -16,6 +16,7 @@ test('stable and release-candidate versions have unambiguous GitHub channels', (
     version: '0.2.0',
     tag: 'v0.2.0',
     channel: 'stable',
+    updateChannelTag: 'update-channel-stable',
     prerelease: false,
     windowsVersion: '0.2.0.65534',
     macBuildVersion: '2000999',
@@ -24,6 +25,7 @@ test('stable and release-candidate versions have unambiguous GitHub channels', (
     version: '0.3.0-rc.4',
     tag: 'v0.3.0-rc.4',
     channel: 'candidate',
+    updateChannelTag: 'update-channel-candidate',
     prerelease: true,
     windowsVersion: '0.3.0.4',
     macBuildVersion: '3000004',
@@ -40,6 +42,27 @@ test('release notes always link to the immutable release tag being published', (
     '[download](https://github.com/WSL043/DSH-Portable/releases/download/v0.3.0-rc.1/file.zip)',
   )
   assert.throws(() => renderReleaseNotes(source, 'latest'), /tag/i)
+})
+
+test('candidate notes recommend a self-contained candidate package instead of the stable bootstrap', () => {
+  const source = '{{PRODUCT_VERSION}}\n{{CHANNEL_UPGRADE_NOTICE_ZH}}\n{{CHANNEL_UPGRADE_NOTICE_EN}}\n[download](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})\n{{WINDOWS_PRIMARY_GUIDE_ZH}}\n{{WINDOWS_PRIMARY_GUIDE_EN}}'
+  const candidate = renderReleaseNotes(source, 'v0.4.0-rc.2')
+  assert.match(candidate, /^0\.4\.0-rc\.2$/m)
+  assert.match(candidate, /v0\.4\.0-rc\.2\/DSH-Portable-windows-x64-offline\.zip/)
+  assert.doesNotMatch(candidate, /DSH-Portable-windows-x64\.exe/)
+  assert.match(candidate, /candidate/i)
+  assert.match(candidate, /候选/)
+  assert.match(candidate, /解压/)
+  assert.match(candidate, /Extract/)
+  assert.doesNotMatch(candidate, /\{\{[^}]+\}\}/)
+
+  const stable = renderReleaseNotes(source, 'v0.4.0')
+  assert.match(stable, /^0\.4\.0$/m)
+  assert.match(stable, /v0\.4\.0\/DSH-Portable-windows-x64\.exe/)
+  assert.match(stable, /双击/)
+  assert.match(stable, /Run it once/)
+  assert.doesNotMatch(stable, /candidate channel|候选更新通道/i)
+  assert.doesNotMatch(stable, /\{\{[^}]+\}\}/)
 })
 
 test('all finished-product manifests use the same declared product version', async () => {

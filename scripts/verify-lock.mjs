@@ -42,6 +42,17 @@ const desktopBridgeSource = lockfile.packages?.['../desktop-bridge']
 assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge link target identity')
 assert.equal(desktopBridgeSource?.license, 'MIT', 'desktop bridge license')
 
+assert.deepEqual(upstream.defaultPlugins?.sessionDelete, {
+  package: 'dsh-native-session-delete',
+  version: '1.0.0',
+  url: 'https://github.com/WSL043/dsh-session-delete/releases/download/v1.0.0/dsh-native-session-delete.tgz',
+  sha256: 'e51bbe07ca27f87b742438d15afc16319074a338688f8e28480bff084d74462e',
+  integrity: 'sha512-PMcKj2vxJQbmWiXTnuuYRcAKWVqmGY1dRnbzYQDNgBhrgK2HmODWloFHFiS9t4EuWpSp7q5SsPfSjzlhdigYzg==',
+  license: 'MIT',
+  reviewedCommit: '5842dc611884da08c8a95e306a9e41ac0bcb7c7e',
+  filename: 'dsh-native-session-delete.tgz',
+}, 'locked default session-delete plugin')
+
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
   assert.equal(serializedRoot.includes(forbidden), false, `forbidden root integration: ${forbidden}`)

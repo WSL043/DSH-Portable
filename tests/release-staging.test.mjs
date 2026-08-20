@@ -34,17 +34,21 @@ const required = [
   'portable-update-linux-arm64.json',
 ]
 
-test('release staging exposes obvious packages for every platform and keeps updater payloads in their own channel', async () => {
+async function stageRelease(channel) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-release-staging-'))
   const artifacts = path.join(root, 'artifacts')
   const output = path.join(root, 'output')
-  try {
-    await import('node:fs/promises').then(({ mkdir }) => mkdir(artifacts, { recursive: true }))
-    for (const name of required) await writeFile(path.join(artifacts, name), `fixture:${name}`)
-    await writeFile(path.join(artifacts, 'DSH-Portable-windows-x64-offline.exe'), 'redundant self-extractor')
-    await writeFile(path.join(artifacts, 'DSH-Portable-windows-x64.exe.sha256'), 'old sidecar')
+  await import('node:fs/promises').then(({ mkdir }) => mkdir(artifacts, { recursive: true }))
+  for (const name of required) await writeFile(path.join(artifacts, name), `fixture:${name}`)
+  await writeFile(path.join(artifacts, 'DSH-Portable-windows-x64-offline.exe'), 'redundant self-extractor')
+  await writeFile(path.join(artifacts, 'DSH-Portable-windows-x64.exe.sha256'), 'old sidecar')
+  await execFileAsync(process.execPath, [script, artifacts, output, channel])
+  return { root, output }
+}
 
-    await execFileAsync(process.execPath, [script, artifacts, output])
+test('stable release staging exposes obvious packages for every platform and keeps updater payloads in their own channel', async () => {
+  const { root, output } = await stageRelease('stable')
+  try {
     const user = (await readdir(path.join(output, 'user-assets'))).sort()
     const update = (await readdir(path.join(output, 'update-assets'))).sort()
     assert.equal(user.length, 12)
@@ -55,6 +59,21 @@ test('release staging exposes obvious packages for every platform and keeps upda
     await assert.rejects(readdir(path.join(output, 'compat-assets')), { code: 'ENOENT' })
     const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
     assert.equal(checksums.trim().split(/\r?\n/).length, 11)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('candidate releases never offer a stable-channel bootstrap as a candidate download', async () => {
+  const { root, output } = await stageRelease('candidate')
+  try {
+    const user = (await readdir(path.join(output, 'user-assets'))).sort()
+    assert.ok(!user.includes('DSH-Portable-windows-x64.exe'))
+    assert.ok(user.includes('DSH-Portable-windows-x64-offline.zip'))
+    assert.ok(user.includes('DeepSeek-Herness-Setup.exe'))
+    const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
+    assert.ok(!checksums.includes('DSH-Portable-windows-x64.exe'))
+    assert.equal(checksums.trim().split(/\r?\n/).length, 10)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

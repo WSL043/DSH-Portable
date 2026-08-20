@@ -133,6 +133,7 @@ function sessionList(count = 12) {
       displayTitle: `真实会话 ${index}`,
       updatedAt: index * 100,
       running: index === count - 1,
+      completed: index === count - 2,
       pendingInteraction: index === count - 2 ? 'question' : undefined,
       agentPreset: index % 2 === 0 ? 'coding' : undefined,
       blank: false,
@@ -163,6 +164,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   assert.deepEqual(initial.sessions.slice(0, 3).map(item => item.id), ['session-11', 'session-10', 'session-9'])
   assert.equal(initial.sessions.some(item => item.id === 'blank' || item.id === 'child'), false)
   assert.equal(initial.sessions[0].running, true)
+  assert.equal(initial.sessions[1].completed, true, 'the bridge must forward the official task-completion signal')
   assert.equal(initial.sessions[1].pendingInteraction, 'question')
 
   runtime.emit('locale/change', { active: 'en', revision: 2 })
@@ -337,6 +339,63 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /ShowCheckMargin\s*=\s*false/)
   assert.doesNotMatch(source, /new Font\(trayMenu\.Font, FontStyle\.Bold\)/)
   assert.match(build, /System\.Web\.Extensions\.dll/)
+})
+
+test('Windows task completion notifications are edge-triggered, private, clickable, and user-controlled', async () => {
+  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+
+  assert.match(source, /public bool completed \{ get; set; \}/)
+  assert.match(source, /private bool taskNotificationsEnabled;/)
+  assert.match(source, /private bool taskCompletionBaselineReady;/)
+  assert.match(source, /Dictionary<string, bool> taskCompletionState/)
+  assert.match(source, /taskNotificationsEnabled = LoadTaskNotificationsEnabled\(\);/)
+  assert.match(source, /more\.DropDownItems\.Add\(taskNotificationsItem\)/)
+  assert.match(
+    source,
+    /taskNotificationsItem\.Click \+= delegate[\s\S]+taskNotificationsEnabled = !taskNotificationsEnabled;[\s\S]+RefreshTaskNotificationsItem\(\);[\s\S]+SaveLauncherSettings\(\);/,
+  )
+
+  const loaderStart = source.indexOf('private bool LoadTaskNotificationsEnabled()')
+  const loaderEnd = source.indexOf('\n        private ', loaderStart + 1)
+  assert.ok(loaderStart >= 0 && loaderEnd > loaderStart)
+  const loader = source.slice(loaderStart, loaderEnd)
+  assert.match(loader, /Regex\.IsMatch[\s\S]+taskNotificationsEnabled[\s\S]+false/)
+  assert.match(loader, /catch \{ return true; \}/, 'missing settings must keep notifications enabled by default')
+
+  const saveStart = source.indexOf('private void SaveLauncherSettings()')
+  const saveEnd = source.indexOf('\n        private ', saveStart + 1)
+  const save = source.slice(saveStart, saveEnd)
+  assert.match(save, /taskNotificationsEnabled/)
+
+  const handlerStart = source.indexOf('private void HandleTaskCompletionNotifications(')
+  const handlerEnd = source.indexOf('\n        private ', handlerStart + 1)
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart)
+  const handler = source.slice(handlerStart, handlerEnd)
+  assert.match(
+    handler,
+    /if \(!taskCompletionBaselineReady\)[\s\S]+taskCompletionBaselineReady = true;[\s\S]+return;/,
+    'the first official state snapshot is a silent baseline',
+  )
+  assert.match(handler, /taskCompletionState\.TryGetValue\(session\.id, out previouslyCompleted\) && previouslyCompleted/)
+  assert.match(handler, /List<TrayBridgeSession> completedThisFrame/)
+  assert.match(handler, /session\.completed && !wasCompleted && taskNotificationsEnabled/)
+  assert.match(handler, /completedThisFrame\.Add\(session\)/)
+  assert.match(handler, /ShowTaskCompletionNotifications\(completedThisFrame\)/)
+  assert.match(handler, /taskCompletionState\.Clear\(\)/, 'sessions absent from a later snapshot must lose their old completion bit')
+
+  const notificationStart = source.indexOf('private void ShowTaskCompletionNotifications(')
+  const notificationEnd = source.indexOf('\n        private ', notificationStart + 1)
+  assert.ok(notificationStart >= 0 && notificationEnd > notificationStart)
+  const notification = source.slice(notificationStart, notificationEnd)
+  assert.match(notification, /trayIcon\.Visible = true/)
+  assert.match(notification, /sessions\.Count == 1/)
+  assert.match(notification, /ShowBalloonTip\([\s\S]+MenuTitle\(session\.title\)/)
+  assert.match(notification, /sessions\.Count\.ToString/)
+  assert.doesNotMatch(notification, /\b(answer|response|cwd|path|log|reason|details)\b/i)
+  assert.match(
+    source,
+    /trayIcon\.BalloonTipClicked \+= delegate[\s\S]+RestoreFromTray\(\);[\s\S]+if \(!String\.IsNullOrEmpty\(sessionId\)\) PostBridgeAction\("open-session", sessionId\);/,
+  )
 })
 
 test('Windows CI verifies the real tray bridge in a background browser without desktop input', async () => {

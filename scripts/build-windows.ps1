@@ -30,6 +30,8 @@ $WebView2Core = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.
 $WebView2WinForms = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.WinForms.dll'
 $WebView2Loader = Join-Path $WebView2Extracted 'runtimes\win-x64\native\WebView2Loader.dll'
 $WebView2License = Join-Path $WebView2Extracted 'LICENSE.txt'
+$DefaultPlugin = $Lock.defaultPlugins.sessionDelete
+$DefaultPluginArchive = Join-Path $Downloads $DefaultPlugin.filename
 
 function Assert-Sha256([string]$Filename, [string]$Expected) {
     $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Filename).Hash.ToLowerInvariant()
@@ -39,13 +41,13 @@ function Assert-Sha256([string]$Filename, [string]$Expected) {
 }
 
 function Copy-PortableSources([string]$Target) {
-    foreach ($Directory in @('app', 'launcher', 'runtime\node', 'licenses', 'data', 'workspace')) {
+    foreach ($Directory in @('app', 'launcher', 'runtime\node', 'licenses', 'default-plugins', 'data', 'workspace')) {
         New-Item -ItemType Directory -Force -Path (Join-Path $Target $Directory) | Out-Null
     }
     Copy-Item -Recurse (Join-Path $ProjectRoot 'desktop-bridge') (Join-Path $Target 'desktop-bridge')
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs')) {
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.txt') (Join-Path $Target 'README.txt')
@@ -68,6 +70,12 @@ try {
 }
 
 try {
+    if (-not (Test-Path -LiteralPath $DefaultPluginArchive)) {
+        Write-Host "Downloading pinned default plugin: $($DefaultPlugin.package) $($DefaultPlugin.version)"
+        Invoke-WebRequest -UseBasicParsing -Uri $DefaultPlugin.url -OutFile $DefaultPluginArchive
+    }
+    Assert-Sha256 $DefaultPluginArchive $DefaultPlugin.sha256
+
     if (-not (Test-Path -LiteralPath $WebView2Archive)) {
         Write-Host "Downloading pinned Microsoft WebView2 SDK: $($Lock.webview2.version)"
         Invoke-WebRequest -UseBasicParsing -Uri $Lock.webview2.url -OutFile $WebView2Archive
@@ -106,7 +114,18 @@ try {
     if (-not (Test-Path -LiteralPath $NpmCli)) { throw "Pinned Node archive contains no npm CLI: $NpmCli" }
     if (-not (Test-Path -LiteralPath $PackageLock)) { throw 'app/package-lock.json is required.' }
 
+    $ReleasePolicy = @{}
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\version-policy.mjs') $PortableVersion | ForEach-Object {
+        $Parts = $_ -split '=', 2
+        if ($Parts.Count -eq 2) { $ReleasePolicy[$Parts[0]] = $Parts[1] }
+    }
+    if ($LASTEXITCODE -ne 0) { throw "product version policy failed with exit code $LASTEXITCODE" }
+    $ReleaseChannel = $ReleasePolicy.channel
+    $UpdateChannelTag = $ReleasePolicy.updateChannelTag
+    if (-not $ReleaseChannel -or -not $UpdateChannelTag) { throw 'Product version policy returned no release channel.' }
+
     Copy-PortableSources $Stage
+    Copy-Item $DefaultPluginArchive (Join-Path $Stage "default-plugins\$($DefaultPlugin.filename)")
     Copy-Item $NodeExe (Join-Path $Stage 'runtime\node\node.exe')
     Copy-Item (Join-Path $NodeFolder 'LICENSE') (Join-Path $Stage 'licenses\Node.js-LICENSE.txt')
 
@@ -136,6 +155,20 @@ try {
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\dshmarket\LICENSE') (Join-Path $Stage 'licenses\dsh-market-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\pnpm\LICENSE') (Join-Path $Stage 'licenses\pnpm-LICENSE.txt')
+    $DefaultPluginLicenseText = (& tar.exe -xOf $DefaultPluginArchive package/LICENSE) -join [Environment]::NewLine
+    if ($LASTEXITCODE -ne 0 -or -not $DefaultPluginLicenseText) { throw 'Default session-delete plugin archive contains no LICENSE.' }
+    [System.IO.File]::WriteAllText(
+        (Join-Path $Stage 'licenses\dsh-native-session-delete-LICENSE.txt'),
+        ($DefaultPluginLicenseText + [Environment]::NewLine),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+    $DefaultPluginNoticesText = (& tar.exe -xOf $DefaultPluginArchive package/THIRD_PARTY_NOTICES.md) -join [Environment]::NewLine
+    if ($LASTEXITCODE -ne 0 -or -not $DefaultPluginNoticesText) { throw 'Default session-delete plugin archive contains no THIRD_PARTY_NOTICES.md.' }
+    [System.IO.File]::WriteAllText(
+        (Join-Path $Stage 'licenses\dsh-native-session-delete-THIRD-PARTY-NOTICES.txt'),
+        ($DefaultPluginNoticesText + [Environment]::NewLine),
+        [System.Text.UTF8Encoding]::new($false)
+    )
     Copy-Item $WebView2Core (Join-Path $Stage 'Microsoft.Web.WebView2.Core.dll')
     Copy-Item $WebView2WinForms (Join-Path $Stage 'Microsoft.Web.WebView2.WinForms.dll')
     Copy-Item $WebView2Loader (Join-Path $Stage 'WebView2Loader.dll')
@@ -150,12 +183,17 @@ try {
     $Components = [ordered]@{
         product = 'DSH-Portable'
         portableVersion = $PortableVersion
+        releaseChannel = $ReleaseChannel
         platform = 'windows-x64'
         dshPackage = $Lock.dsh.package
         dshVersion = $Lock.dsh.version
         dshCommit = $Lock.dsh.reviewedCommit
         pluginMarketPackage = 'dshmarket'
-        pluginMarketVersion = '1.15.0'
+        pluginMarketVersion = '1.16.0'
+        defaultPluginPackage = $DefaultPlugin.package
+        defaultPluginVersion = $DefaultPlugin.version
+        defaultPluginSha256 = $DefaultPlugin.sha256
+        defaultPluginIntegrity = $DefaultPlugin.integrity
         pnpmVersion = $Lock.pnpm.version
         pnpmIntegrity = $Lock.pnpm.integrity
         nodeVersion = $Lock.node.version
@@ -244,6 +282,7 @@ try {
             schemaVersion = 1
             kind = 'dsh-app'
             portableVersion = $PortableVersion
+            releaseChannel = $ReleaseChannel
             dshVersion = $Lock.dsh.version
             dshCommit = $Lock.dsh.reviewedCommit
         } | ConvertTo-Json -Depth 4) + [Environment]::NewLine),
@@ -273,6 +312,7 @@ try {
         (([ordered]@{
             schemaVersion = 1
             portableVersion = $PortableVersion
+            releaseChannel = $ReleaseChannel
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
             requiredShellSchema = 13
@@ -283,7 +323,7 @@ try {
                 requiredNodeVersion = $Lock.node.version
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
                 sha256 = $UpdateComponentHash
-                urls = @('https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/DSH-Portable-update-windows-x64.zip')
+                urls = @("https://github.com/WSL043/DSH-Portable/releases/download/$UpdateChannelTag/DSH-Portable-update-windows-x64.zip")
             }
         } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
         [System.Text.UTF8Encoding]::new($false)
@@ -317,10 +357,11 @@ try {
     $ManifestBody = [ordered]@{
         schemaVersion = 1
         version = $PortableVersion
+        releaseChannel = $ReleaseChannel
         payloads = [ordered]@{
             windowsX64 = [ordered]@{
                 filename = 'DSH-Portable-windows-x64-offline.zip'
-                url = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/DSH-Portable-windows-x64-offline.zip'
+                url = "https://github.com/WSL043/DSH-Portable/releases/download/$UpdateChannelTag/DSH-Portable-windows-x64-offline.zip"
                 sha256 = $Hash
                 bytes = (Get-Item -LiteralPath $Zip).Length
             }

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { inflateSync } from 'node:zlib'
 
 import { classifyProductVersion } from '../scripts/version-policy.mjs'
+import { renderReleaseNotes } from '../scripts/render-release-notes.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
@@ -190,7 +191,7 @@ test('GitHub gives Chinese and English users direct, privacy-safe feedback forms
 })
 
 test('release notes prioritize downloads and keep verification optional', async () => {
-  const notes = await read('templates/RELEASE-NOTES.md')
+  const notes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0')
   assert.match(notes, /^>\s+打包官方 DeepSeek Harness 预览版/m)
   assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
   assert.match(notes, /DSH-Portable-windows-x64\.exe/)
@@ -213,18 +214,24 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.doesNotMatch(workflow, /^\s{6}prerelease:/m)
   assert.match(workflow, /scripts\/version-policy\.mjs/)
   assert.match(workflow, /actions\/download-artifact@v8/)
-  assert.match(workflow, /update-channel-stable/)
+  assert.match(workflow, /steps\.version\.outputs\.updateChannelTag/)
+  assert.match(workflow, /update-channel-candidate/)
   assert.match(workflow, /stage-release-assets\.mjs/)
+  assert.match(workflow, /stage-release-assets\.mjs artifacts release-staging "\$\{\{ steps\.version\.outputs\.channel \}\}"/)
+  assert.match(staging, /channel === 'candidate'/)
   assert.match(staging, /user-assets/)
   assert.match(staging, /update-assets/)
   assert.doesNotMatch(staging, /compat-assets|compatibilityAssets/)
   assert.doesNotMatch(workflow, /compat-assets/)
   assert.match(staging, /checksums\.txt/)
   assert.doesNotMatch(staging, /\.sha256['"`]/)
-  assert.match(updateCore, /releases\/download\/update-channel-stable\/portable-update-/)
+  assert.match(updateCore, /update-channel-\$\{releaseChannel\}/)
   assert.match(bootstrap, /releases\/download\/update-channel-stable\/portable-manifest\.json/)
-  assert.match(windowsBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-windows-x64\.zip/)
-  assert.match(macBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-macos-\$ARCH\.zip/)
+  assert.match(windowsBuild, /releaseChannel\s*=\s*\$ReleaseChannel/)
+  assert.match(windowsBuild, /\$ManifestBody\s*=\s*\[ordered\]@\{[\s\S]+releaseChannel\s*=\s*\$ReleaseChannel/)
+  assert.match(windowsBuild, /releases\/download\/\$UpdateChannelTag\/DSH-Portable-update-windows-x64\.zip/)
+  assert.match(macBuild, /"releaseChannel": "\$RELEASE_CHANNEL"/)
+  assert.match(macBuild, /releases\/download\/\$UPDATE_CHANNEL_TAG\/DSH-Portable-update-macos-\$ARCH\.zip/)
 })
 
 test('every desktop platform verifies the live visual plugin marketplace', async () => {
@@ -235,7 +242,7 @@ test('every desktop platform verifies the live visual plugin marketplace', async
   assert.match(smoke, /\/dsh-market\/installed/)
   assert.match(smoke, /\/dsh-market\/status/)
   assert.match(smoke, /plugin\.screenshots/)
-  assert.doesNotMatch(smoke, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
+  assert.doesNotMatch(smoke, /dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
   assert.equal((workflow.match(/smoke-plugin-marketplace\.mjs/g) || []).length, 3)
 })
 
@@ -481,6 +488,42 @@ test('plugin management is a generic finished-product capability and release gat
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
 
+test('session delete is a removable offline default only for a newly created web profile', async () => {
+  const [lock, windows, macos, linux, cli, core] = await Promise.all([
+    read('upstream.lock.json').then(JSON.parse),
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('scripts/build-linux.sh'),
+    read('launcher/portable-cli.mjs'),
+    read('launcher/default-plugins.mjs'),
+  ])
+  assert.deepEqual(lock.defaultPlugins.sessionDelete, {
+    package: 'dsh-native-session-delete',
+    version: '1.0.0',
+    url: 'https://github.com/WSL043/dsh-session-delete/releases/download/v1.0.0/dsh-native-session-delete.tgz',
+    sha256: 'e51bbe07ca27f87b742438d15afc16319074a338688f8e28480bff084d74462e',
+    integrity: 'sha512-PMcKj2vxJQbmWiXTnuuYRcAKWVqmGY1dRnbzYQDNgBhrgK2HmODWloFHFiS9t4EuWpSp7q5SsPfSjzlhdigYzg==',
+    license: 'MIT',
+    reviewedCommit: '5842dc611884da08c8a95e306a9e41ac0bcb7c7e',
+    filename: 'dsh-native-session-delete.tgz',
+  })
+  for (const build of [windows, macos, linux]) {
+    assert.match(build, /default-plugins/)
+    assert.match(build, /sessionDelete/)
+    assert.match(build, /sha256|Sha256/i)
+    assert.match(build, /dsh-native-session-delete-LICENSE\.txt/)
+    assert.match(build, /dsh-native-session-delete-THIRD-PARTY-NOTICES\.txt/)
+  }
+  assert.match(cli, /seedDefaultPlugins/)
+  assert.match(core, /profile-exists/)
+  assert.match(core, /\.dsh-portable-archives/)
+  assert.match(core, /file:\$\{paths\.relative/)
+  for (const build of [windows, macos, linux]) {
+    const updateSection = build.slice(build.indexOf('UPDATE_COMPONENT_ROOT'))
+    assert.doesNotMatch(updateSection, /(?:cp|Copy-Item)[^\n]+default-plugins/)
+  }
+})
+
 test('the marketplace candidate packages no hand-maintained portable extension catalog', async () => {
   const [chinese, english, releaseNotes] = await Promise.all([
     read('README.md'),
@@ -720,7 +763,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
   assert.match(desktopMoveSmoke, /Move-Item/)
   assert.match(desktopMoveSmoke, /smoke-windows-desktop-host\.ps1/g)
-  assert.match(desktopMoveSmoke, /msedgewebview2\.exe/)
+  assert.doesNotMatch(desktopMoveSmoke, /Wait-ForPortableWebViewExit|msedgewebview2\.exe/)
   assert.match(workflow, /macos-desktop-host:[\s\S]+needs:\s*macos-build/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.match(macDesktopHostSmoke, /DSH-Portable\.app/)
@@ -731,12 +774,20 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(macDesktopHostSmoke, /--no-browser/)
 })
 
-test('CI upgrades the latest published Windows product through the candidate full-package boundary', async () => {
-  const workflow = await read('.github/workflows/ci.yml')
+test('CI upgrades a published Windows candidate through the candidate full-package boundary', async () => {
+  const [workflow, smoke] = await Promise.all([
+    read('.github/workflows/ci.yml'),
+    read('scripts/smoke-windows-version-upgrade.mjs'),
+  ])
   assert.match(workflow, /^  windows-version-upgrade-smoke:/m)
-  assert.match(workflow, /gh release view --repo "\$env:GITHUB_REPOSITORY" --json tagName/)
+  assert.match(workflow, /gh release list --repo "\$env:GITHUB_REPOSITORY"[\s\S]+isPrerelease/)
+  assert.match(workflow, /\[regex\]::Match\(\$_\.tagName, '\^v[\s\S]+\$_\.isPrerelease/)
+  assert.match(workflow, /Groups\[['"]base['"]\]\.Value[\s\S]+Groups\[['"]rc['"]\]\.Value/)
+  assert.doesNotMatch(workflow, /gh release view --repo "\$env:GITHUB_REPOSITORY" --json tagName/)
   assert.match(workflow, /gh release download \$PriorTag/)
   assert.match(workflow, /smoke-windows-version-upgrade\.mjs/)
+  assert.match(smoke, /componentManifestSource\.releaseChannel, 'candidate'/)
+  assert.match(smoke, /oldComponents\.portableVersion, \/-rc/)
 })
 
 test('Node runtime lock covers Windows, macOS, and both Linux CPU families', async () => {

@@ -43,7 +43,8 @@
 Closing the window sends the app to the system tray by default, so active tasks keep running.
 Use **Exit DeepSeek Harness** in the tray menu to stop everything, or change **When closing the
 window** to exit directly. The tray follows the DSH language and light/dark appearance, and can
-open a recent session or start a new one directly.
+open a recent session or start a new one directly. Task-completion notifications can be toggled
+from **More** in the same menu.
 
 The Windows launcher and installer follow the system UI language in Chinese or English. The DSH
 workspace language can also be changed in **Settings**, and that choice is remembered.
@@ -106,13 +107,18 @@ contains a complete `DSH-Portable` directory; extract it and run `DeepSeek-Herne
 
 ## Plugin management
 
-The `0.4.0-rc.1` pre-release adds a visual **Plugin Market** to DSH Settings. It browses the live
-community catalog with search, categories, popularity, and publish-time filters. Plugin details use
-real author-provided screenshots or images extracted from project documentation. The catalog is
-updated by [awesome-dsh-plugin](https://awesome-dsh-plugin.com), rather than being maintained as a
-list of cards in this repository. The market follows the DSH language and theme. Install, update,
-disable, and uninstall actions target the current `web` profile, while the Portable shell retains
-process ownership and the market cannot restart an active desktop instance by itself.
+The current candidate includes a visual **Plugin Market** in DSH Settings. It browses the thousand-plus
+community catalog maintained by [awesome-dsh-plugin](https://awesome-dsh-plugin.com), with search,
+categories, popularity, and publish-time filters. The same repository is listed only once. Curated
+author screenshots appear directly on cards; other images load only after details are opened. Every
+plugin links to its own project page instead of being copied into a hand-maintained Portable catalog.
+
+The market follows the DSH language and theme. Install, update, disable, and uninstall actions target
+the current `web` profile, while the Portable shell keeps process ownership and never interrupts an
+active task silently. A fresh install includes the removable
+[permanent session deletion](https://github.com/WSL043/dsh-session-delete) extension in **Installed**.
+It is enabled by default, always asks for a second confirmation, and does not replace recoverable
+Archive. Ordinary upgrades never reinstall an extension that an existing user already removed.
 
 Plugins, settings, and sessions stay with Portable data when the product is moved or backed up.
 `dsh.exe` remains an advanced command-line tool, not a second desktop launcher; normal desktop use

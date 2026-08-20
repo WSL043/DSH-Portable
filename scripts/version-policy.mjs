@@ -15,6 +15,7 @@ export function classifyProductVersion(value) {
     version,
     tag: `v${version}`,
     channel: releaseCandidate === null ? 'stable' : 'candidate',
+    updateChannelTag: `update-channel-${releaseCandidate === null ? 'stable' : 'candidate'}`,
     prerelease: releaseCandidate !== null,
     windowsVersion: `${numbers.join('.')}.${releaseCandidate ?? 65534}`,
     macBuildVersion: String(numbers[0] * 1_000_000_000 + numbers[1] * 1_000_000 + numbers[2] * 1000 + (releaseCandidate ?? 999)),

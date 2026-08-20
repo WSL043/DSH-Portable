@@ -81,7 +81,7 @@ assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'client.js')), true,
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'index.js')), true, 'desktop bridge host entry is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'cordis.patch.yml')), true, 'desktop bridge patch is missing')
 assert.equal(marketManifest.name, 'dshmarket')
-assert.equal(marketManifest.version, '1.15.0', 'pinned visual market version')
+assert.equal(marketManifest.version, '1.16.0', 'pinned visual market version')
 assert.equal(existsSync(marketClientPath), true, 'dshmarket/client is missing')
 assert.equal(existsSync(path.join(marketRoot, 'LICENSE')), true, 'dshmarket license is missing')
 assert.match(

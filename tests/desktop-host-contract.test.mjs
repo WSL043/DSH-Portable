@@ -46,6 +46,29 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.doesNotMatch(build, /Copy-Item\s+\$LauncherExe\s+\(Join-Path\s+\$Stage\s+'Stop DeepSeek-Herness\.exe'\)/)
 })
 
+test('Windows exit does not complete until the owned WebView2 runtime releases the portable folder', async () => {
+  const [host, moveSmoke] = await Promise.all([
+    read('launcher/windows/DSH-Portable.cs'),
+    read('scripts/smoke-windows-desktop-move.ps1'),
+  ])
+
+  assert.match(host, /private CoreWebView2Environment webViewEnvironment;/)
+  assert.match(host, /TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>/)
+  assert.match(host, /webView\.Dispose\(\)/)
+  assert.match(host, /await WaitForWebViewExitAsync\(/)
+  assert.match(host, /Owned WebView2 processes still hold the portable folder/)
+
+  const externalExit = host.slice(host.indexOf('if (message.Msg == WmPortableExit)'), host.indexOf('if (message.Msg == WmPortableRestore)'))
+  assert.match(externalExit, /BeginDesktopShutdown\(/)
+  assert.doesNotMatch(externalExit, /Close\(\)/)
+
+  const fullPackageUpdate = host.slice(host.indexOf('private void StartFullPackageUpdate()'), host.indexOf('private async Task RestoreDesktopAfterUpdateAttemptAsync'))
+  assert.doesNotMatch(fullPackageUpdate, /allowClose\s*=\s*true|Close\(\)/)
+
+  assert.doesNotMatch(moveSmoke, /Wait-ForPortableWebViewExit/)
+  assert.match(moveSmoke, /lifecycle failed[\s\S]+Move-Item -LiteralPath \$Root -Destination \$MovedRoot/)
+})
+
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
   const host = await read('launcher/windows/DSH-Portable.cs')
 

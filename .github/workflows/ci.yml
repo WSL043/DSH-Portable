@@ -252,7 +252,7 @@ jobs:
       - run: node scripts/smoke-windows-bootstrap.mjs
 
   windows-version-upgrade-smoke:
-    name: Windows latest release upgrade
+    name: Windows candidate release upgrade
     needs: windows-build
     runs-on: windows-latest
     timeout-minutes: 20
@@ -265,16 +265,30 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Upgrade the latest published portable release
+      - name: Upgrade the latest published candidate release
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $PriorTag = gh release view --repo "$env:GITHUB_REPOSITORY" --json tagName --jq .tagName
-          if (-not $PriorTag) { throw 'Could not resolve the latest published release.' }
           $CandidateVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          if ($PriorTag -eq "v$CandidateVersion") {
-            Write-Host "Latest release $PriorTag already matches this candidate; no upgrade boundary to test."
+          $Policy = node scripts/version-policy.mjs $CandidateVersion | ConvertFrom-StringData
+          if ($Policy.channel -ne 'candidate') {
+            Write-Host "Version $CandidateVersion is stable; the candidate-to-candidate boundary does not apply."
+            exit 0
+          }
+          $CandidateMatch = [regex]::Match($CandidateVersion, '^(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
+          $PriorRelease = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts `
+            --limit 100 --json tagName,isPrerelease,publishedAt | ConvertFrom-Json | `
+            Where-Object {
+              $ReleaseMatch = [regex]::Match($_.tagName, '^v(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
+              $_.isPrerelease -and $ReleaseMatch.Success -and `
+                $ReleaseMatch.Groups['base'].Value -eq $CandidateMatch.Groups['base'].Value -and `
+                [int]$ReleaseMatch.Groups['rc'].Value -lt [int]$CandidateMatch.Groups['rc'].Value
+            } | `
+            Sort-Object publishedAt -Descending | Select-Object -First 1
+          $PriorTag = $PriorRelease.tagName
+          if (-not $PriorTag) {
+            Write-Host 'No earlier published release candidate exists; no candidate upgrade boundary to test.'
             exit 0
           }
           $Prior = Join-Path $env:RUNNER_TEMP 'prior-release'

@@ -28,8 +28,19 @@ export function platformUpdateKey(platform = process.platform, arch = process.ar
   throw new Error(`Unsupported update platform: ${platform}-${arch}`)
 }
 
-export function defaultUpdateManifestUrl(platform = process.platform, arch = process.arch) {
-  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-${platformUpdateKey(platform, arch)}.json`
+function releaseChannelForVersion(value) {
+  return parseSemanticVersion(value).prerelease ? 'candidate' : 'stable'
+}
+
+function normalizeReleaseChannel(value, portableVersion) {
+  const releaseChannel = value || releaseChannelForVersion(portableVersion)
+  if (!['stable', 'candidate'].includes(releaseChannel)) throw new Error(`Unsupported release channel: ${releaseChannel}`)
+  return releaseChannel
+}
+
+export function defaultUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
+  normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${releaseChannel}/portable-update-${platformUpdateKey(platform, arch)}.json`
 }
 
 function parseSemanticVersion(value) {
@@ -80,10 +91,13 @@ function assertManifestShape(manifest) {
     throw new Error('Update manifest compatibility metadata is invalid.')
   }
   parseSemanticVersion(manifest.portableVersion)
+  normalizeReleaseChannel(manifest.releaseChannel, manifest.portableVersion)
 }
 
 export function evaluateUpdate(manifest, installed, platform) {
   assertManifestShape(manifest)
+  const installedReleaseChannel = normalizeReleaseChannel(installed.releaseChannel, installed.portableVersion)
+  const manifestReleaseChannel = normalizeReleaseChannel(manifest.releaseChannel, manifest.portableVersion)
   const engineCurrent = String(installed.dshVersion ?? '')
   const engineLatest = String(manifest.component?.dshVersion ?? engineCurrent)
   const describe = (status, delivery) => ({
@@ -95,6 +109,7 @@ export function evaluateUpdate(manifest, installed, platform) {
     engineCurrent,
     engineLatest,
     delivery,
+    releaseChannel: manifestReleaseChannel,
     product: {
       name: 'DSH-Portable',
       current: installed.portableVersion,
@@ -108,6 +123,9 @@ export function evaluateUpdate(manifest, installed, platform) {
     },
   })
   if (manifest.platform !== platform) return describe('wrong-platform', 'none')
+  if (installedReleaseChannel === 'stable' && manifestReleaseChannel !== 'stable') {
+    return describe('channel-mismatch', 'none')
+  }
   if (comparePortableVersions(installed.portableVersion, manifest.portableVersion) >= 0) {
     return describe('current', 'none')
   }
@@ -284,6 +302,7 @@ export async function readInstalledUpdateState(layout) {
   if (!components?.portableVersion || !components?.dshVersion) throw new Error('Installed component metadata is missing or incomplete.')
   return {
     portableVersion: components.portableVersion,
+    releaseChannel: normalizeReleaseChannel(components.releaseChannel, components.portableVersion),
     dshVersion: components.dshVersion,
     updaterSchema: Number(components.updaterSchema ?? 0),
     shellSchema: Number(components.shellSchema ?? 0),
@@ -293,7 +312,7 @@ export async function readInstalledUpdateState(layout) {
 
 export async function checkForUpdate({
   layout,
-  manifestUrl = defaultUpdateManifestUrl(layout.platform),
+  manifestUrl,
   allowHttp = false,
   force = false,
   fetchImpl = fetch,
@@ -301,6 +320,7 @@ export async function checkForUpdate({
   now = Date.now(),
 }) {
   const installed = await readInstalledUpdateState(layout)
+  manifestUrl ||= defaultUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
   const platform = platformUpdateKey(layout.platform, process.arch)
   const cached = await readJson(layout.updateCheckCache, null)
   if (!force && cached?.manifestUrl === manifestUrl && cached?.retryAfter > now) {
@@ -523,9 +543,11 @@ export async function installAvailableAppUpdate({
     const components = await readJson(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), null)
     if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-app') throw new Error('Downloaded update metadata is invalid.')
     if (metadata.portableVersion !== update.latest || metadata.dshVersion !== update.component.dshVersion) throw new Error('Downloaded update version does not match its manifest.')
+    if (metadata.releaseChannel !== update.releaseChannel) throw new Error('Downloaded update channel does not match its manifest.')
     if (update.component.dshCommit && metadata.dshCommit !== update.component.dshCommit) throw new Error('Downloaded update commit does not match its manifest.')
     if (!components
       || components.nodeVersion !== update.component.requiredNodeVersion
+      || components.releaseChannel !== update.releaseChannel
       || components.platform !== update.platform
       || Number(components.updaterSchema) < Number(update.minimumUpdaterSchema)
       || Number(components.shellSchema) < Number(update.requiredShellSchema)) {

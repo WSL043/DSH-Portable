@@ -6,7 +6,28 @@ export function renderReleaseNotes(source, tag) {
   if (!/^v\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(String(tag))) {
     throw new Error('A stable or release-candidate tag is required to render release notes.')
   }
-  return String(source).replaceAll(
+  const candidate = /-rc\./.test(tag)
+  const replacements = {
+    '{{PRODUCT_VERSION}}': tag.slice(1),
+    '{{CHANNEL_UPGRADE_NOTICE_ZH}}': candidate
+      ? '如果你正在使用仍指向稳定更新通道的较早候选版，请从本页手动下载一次与你的系统匹配的完整包；从此版本开始，后续候选版只检查候选更新通道，正式版发布后会正常升级到正式版。'
+      : '',
+    '{{CHANNEL_UPGRADE_NOTICE_EN}}': candidate
+      ? 'If an earlier candidate still checks the stable update channel, manually download the complete package for your system from this release once. From this version onward, candidates check only the candidate channel and will advance to the final stable release when it is published.'
+      : '',
+    '{{WINDOWS_PRIMARY_FILENAME}}': candidate
+      ? 'DSH-Portable-windows-x64-offline.zip'
+      : 'DSH-Portable-windows-x64.exe',
+    '{{WINDOWS_PRIMARY_GUIDE_ZH}}': candidate
+      ? '解压后直接运行文件夹中的 `DeepSeek-Herness.exe`。会话、设置、插件和工作区都保存在这个可移动目录中。'
+      : '双击后会在旁边准备可移动的 `DSH-Portable` 文件夹。以后直接运行文件夹中的 `DeepSeek-Herness.exe`。',
+    '{{WINDOWS_PRIMARY_GUIDE_EN}}': candidate
+      ? 'Extract the archive, then run `DeepSeek-Herness.exe` inside the folder. Sessions, settings, plugins, and the workspace stay in this movable directory.'
+      : 'Run it once to create a movable `DSH-Portable` folder beside the launcher. Afterwards, start `DeepSeek-Herness.exe` inside that folder.',
+  }
+  let rendered = String(source)
+  for (const [token, value] of Object.entries(replacements)) rendered = rendered.replaceAll(token, value)
+  return rendered.replaceAll(
     'https://github.com/WSL043/DSH-Portable/releases/latest/download/',
     `https://github.com/WSL043/DSH-Portable/releases/download/${tag}/`,
   )

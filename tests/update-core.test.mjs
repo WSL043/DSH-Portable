@@ -13,6 +13,7 @@ import {
   applyStagedAppUpdate,
   checkForUpdate,
   comparePortableVersions,
+  defaultUpdateManifestUrl,
   deferUpdate,
   downloadVerifiedComponent,
   evaluateUpdate,
@@ -42,6 +43,7 @@ function updateManifest(overrides = {}) {
   return {
     schemaVersion: 1,
     portableVersion: '0.1.0-rc.7-portable.1',
+    releaseChannel: 'candidate',
     platform: 'windows-x64',
     minimumUpdaterSchema: 1,
     requiredShellSchema: 1,
@@ -114,6 +116,73 @@ test('platform update keys are explicit and unsupported targets fail closed', ()
   assert.equal(platformUpdateKey('linux', 'arm64'), 'linux-arm64')
   assert.equal(platformUpdateKey('linux', 'x64'), 'linux-x64')
   assert.throws(() => platformUpdateKey('linux', 'ia32'), /unsupported/i)
+})
+
+test('installed release channel selects an isolated machine update feed', () => {
+  assert.equal(
+    defaultUpdateManifestUrl('stable', 'win32', 'x64'),
+    'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-windows-x64.json',
+  )
+  assert.equal(
+    defaultUpdateManifestUrl('candidate', 'darwin', 'arm64'),
+    'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-candidate/portable-update-macos-arm64.json',
+  )
+  assert.throws(() => defaultUpdateManifestUrl('preview', 'linux', 'x64'), /release channel/i)
+})
+
+test('automatic checks derive the feed from installed channel metadata', async () => {
+  const cases = [
+    { releaseChannel: 'stable', installedVersion: '0.3.0', latestVersion: '0.4.0' },
+    { releaseChannel: 'candidate', installedVersion: '0.4.0-rc.1', latestVersion: '0.4.0-rc.2' },
+  ]
+  for (const value of cases) {
+    const root = await mkdtemp(path.join(os.tmpdir(), `dsh-update-${value.releaseChannel}-`))
+    const layout = layoutForRoot(root)
+    const requested = []
+    try {
+      await mkdir(path.join(root, 'licenses'), { recursive: true })
+      await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+        portableVersion: value.installedVersion,
+        releaseChannel: value.releaseChannel,
+        dshVersion: '0.1.0-rc.8',
+        updaterSchema: 1,
+        shellSchema: 1,
+        nodeVersion: '24.19.0',
+      })}\n`)
+      const manifest = updateManifest({
+        portableVersion: value.latestVersion,
+        releaseChannel: value.releaseChannel,
+        platform: platformUpdateKey(process.platform, process.arch),
+      })
+      await checkForUpdate({
+        layout,
+        force: true,
+        fetchImpl: async (url) => {
+          requested.push(String(url))
+          return new Response(JSON.stringify(manifest), { status: 200 })
+        },
+      })
+      assert.equal(requested.length, 1)
+      assert.match(requested[0], new RegExp(`/update-channel-${value.releaseChannel}/`))
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  }
+})
+
+test('stable rejects candidates while candidates advance through rc and final stable', () => {
+  const base = {
+    dshVersion: '0.1.0-rc.8',
+    updaterSchema: 1,
+    shellSchema: 1,
+    nodeVersion: '24.19.0',
+  }
+  const rc2 = updateManifest({ portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' })
+  const final = updateManifest({ portableVersion: '0.4.0', releaseChannel: 'stable' })
+
+  assert.equal(evaluateUpdate(rc2, { ...base, portableVersion: '0.3.0', releaseChannel: 'stable' }, 'windows-x64').status, 'channel-mismatch')
+  assert.equal(evaluateUpdate(rc2, { ...base, portableVersion: '0.4.0-rc.1', releaseChannel: 'candidate' }, 'windows-x64').status, 'available')
+  assert.equal(evaluateUpdate(final, { ...base, portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' }, 'windows-x64').status, 'available')
 })
 
 test('update checks read installed metadata and cache a successful result', async () => {
@@ -414,6 +483,7 @@ test('download, extract, and transactional apply form one verified update path',
     const update = {
       status: 'available',
       latest: '0.1.0-rc.7-portable.1',
+      releaseChannel: 'candidate',
       platform: 'windows-x64',
       minimumUpdaterSchema: 1,
       requiredShellSchema: 1,
@@ -457,11 +527,11 @@ async function makeUpdateFixture() {
   await writeFile(path.join(stagedRoot, 'app', dshRelative), 'new app')
   await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
     portableVersion: '0.1.0-rc.6-portable.5', dshVersion: '0.1.0-rc.6', dshCommit: 'a'.repeat(40),
-    platform: 'windows-x64', nodeVersion: '24.19.0', updaterSchema: 1, shellSchema: 1,
+    releaseChannel: 'candidate', platform: 'windows-x64', nodeVersion: '24.19.0', updaterSchema: 1, shellSchema: 1,
   })}\n`)
   await writeFile(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
     portableVersion: '0.1.0-rc.7-portable.1', dshVersion: '0.1.0-rc.7', dshCommit: 'b'.repeat(40),
-    platform: 'windows-x64', nodeVersion: '24.19.0', updaterSchema: 1, shellSchema: 1,
+    releaseChannel: 'candidate', platform: 'windows-x64', nodeVersion: '24.19.0', updaterSchema: 1, shellSchema: 1,
   })}\n`)
   await writeFile(path.join(root, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'old license\n')
   await writeFile(path.join(stagedRoot, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'new license\n')
@@ -475,6 +545,7 @@ async function makeUpdateFixture() {
     schemaVersion: 1,
     kind: 'dsh-app',
     portableVersion: '0.1.0-rc.7-portable.1',
+    releaseChannel: 'candidate',
     dshVersion: '0.1.0-rc.7',
     dshCommit: 'b'.repeat(40),
   })}\n`)

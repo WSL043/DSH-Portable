@@ -28,6 +28,7 @@ window.__ModuleLoader__.load({
           title: String(item.displayTitle || item.title || item.id),
           updatedAt: Number(item.updatedAt || 0),
           running: Boolean(item.running),
+          completed: Boolean(item.completed),
           pendingInteraction: item.pendingInteraction == null ? '' : String(item.pendingInteraction),
           agentPreset: item.agentPreset == null ? '' : String(item.agentPreset),
         }))
