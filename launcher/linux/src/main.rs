@@ -419,7 +419,9 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
                     let release_url = value
                         .get("releaseUrl")
                         .and_then(Value::as_str)
-                        .filter(|url| url.starts_with("https://github.com/WSL043/DSH-Portable/releases/tag/v"))
+                        .filter(|url| {
+                            url.starts_with("https://github.com/WSL043/DSH-Portable/releases/tag/v")
+                        })
                         .unwrap_or("https://github.com/WSL043/DSH-Portable/releases");
                     dialog(PRODUCT_NAME, release_url, MessageLevel::Info);
                 }
