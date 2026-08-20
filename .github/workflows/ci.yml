@@ -241,6 +241,39 @@ jobs:
           path: artifacts
       - run: node scripts/smoke-windows-bootstrap.mjs
 
+  windows-version-upgrade-smoke:
+    name: Windows latest release upgrade
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - name: Upgrade the latest published portable release
+        shell: powershell
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $PriorTag = gh release view --repo "$env:GITHUB_REPOSITORY" --json tagName --jq .tagName
+          if (-not $PriorTag) { throw 'Could not resolve the latest published release.' }
+          $CandidateVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($PriorTag -eq "v$CandidateVersion") {
+            Write-Host "Latest release $PriorTag already matches this candidate; no upgrade boundary to test."
+            exit 0
+          }
+          $Prior = Join-Path $env:RUNNER_TEMP 'prior-release'
+          New-Item -ItemType Directory -Force -Path $Prior | Out-Null
+          gh release download $PriorTag --repo "$env:GITHUB_REPOSITORY" `
+            --pattern 'DSH-Portable-windows-x64-offline.zip' --dir $Prior
+          node scripts/smoke-windows-version-upgrade.mjs `
+            (Join-Path $Prior 'DSH-Portable-windows-x64-offline.zip') artifacts
+
   windows-extractor-smoke:
     name: Windows self-extractor
     needs: windows-inno-build

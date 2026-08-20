@@ -100,6 +100,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
+    private var installUpdateAtNextLaunch: Bool {
+        get {
+            guard let data = try? Data(contentsOf: launcherSettingsURL),
+                  let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return settings["installUpdateAtNextLaunch"] as? Bool ?? false
+        }
+        set {
+            var settings: [String: Any] = [:]
+            if let data = try? Data(contentsOf: launcherSettingsURL),
+               let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                settings = existing
+            }
+            settings["schemaVersion"] = 1
+            settings["installUpdateAtNextLaunch"] = newValue
+            guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]) else { return }
+            try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
+            try? data.write(to: launcherSettingsURL, options: .atomic)
+        }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         configureApplicationMenu()
         createWindow()
@@ -191,7 +211,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             alert.runModal()
             return
         }
-        if status == "full-package-required" {
+        if status == "full-package-required" || (status == "available" && installedMode) {
             alert.messageText = L("DSH-Portable 需要完整更新", "DSH-Portable needs a complete update")
             alert.informativeText = updateDescription(update, fullPackage: true)
             alert.addButton(withTitle: L("打开下载页", "Open Download Page"))
@@ -210,9 +230,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if status == "available" {
             alert.messageText = L("DSH-Portable 有可用更新", "A DSH-Portable update is available")
             alert.informativeText = updateDescription(update, fullPackage: false) + "\n\n" +
-                L("为避免中断正在运行的任务，请在方便时退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
-                  "To avoid interrupting a running task, quit and reopen when convenient. Startup will offer Update now or Later.")
-            alert.runModal()
+                L("为避免中断正在运行的任务，可选择在下次启动前安装。当前任务不会被停止。",
+                  "To avoid interrupting running work, install before the next launch. The current task will not be stopped.")
+            alert.addButton(withTitle: L("下次启动时更新", "Update at Next Launch"))
+            alert.addButton(withTitle: L("稍后", "Later"))
+            alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
+            let choice = alert.runModal()
+            if choice == .alertFirstButtonReturn {
+                installUpdateAtNextLaunch = true
+            } else if choice == .alertThirdButtonReturn {
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--json"]) }
+            } else {
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["defer-update", "--json"]) }
+            }
             return
         }
         alert.messageText = L("现在无法检查更新", "Could not check for updates")
@@ -320,7 +350,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                   FileManager.default.fileExists(atPath: cliURL.path) else {
                 throw HostError.incomplete
             }
-            try checkAndApplyUpdate()
+            applyPendingUpdateBeforeStartup()
             let result = try runCLI(["start", "--no-browser", "--json"])
             backendStarted = true
             guard let value = result["url"] as? String,
@@ -331,7 +361,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 throw HostError.invalidURL
             }
             applicationURL = url
-            DispatchQueue.main.async { [weak self] in self?.showWebView(url) }
+            DispatchQueue.main.sync { [weak self] in self?.showWebView(url) }
+            checkForUpdateAfterStartup()
         } catch {
             if backendStarted {
                 _ = try? runCLI(["stop", "--no-browser", "--json"])
@@ -341,37 +372,33 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
     }
 
-    private func checkAndApplyUpdate() throws {
+    private func applyPendingUpdateBeforeStartup() {
+        guard installUpdateAtNextLaunch else { return }
+        do {
+            _ = try runCLI(["update", "--no-browser", "--json", "--progress-json"], progressHandler: { [weak self] progress in
+                self?.presentUpdateProgress(progress)
+            })
+            installUpdateAtNextLaunch = false
+        } catch {
+            DispatchQueue.main.async { [weak self] in self?.showFailureAlert(error) }
+        }
+    }
+
+    private func checkForUpdateAfterStartup() {
         if !updateCheckEnabled
             || ProcessInfo.processInfo.environment["DSH_PORTABLE_SKIP_UPDATE_CHECK"] == "1"
             || CommandLine.arguments.contains("--skip-update-check") { return }
         guard let update = try? runCLI(["check-update", "--json"]),
               let status = update["status"] as? String,
               status == "available" || status == "full-package-required" else { return }
-        let choice: NSApplication.ModalResponse = DispatchQueue.main.sync {
-            let alert = NSAlert()
-            alert.messageText = status == "available" && !installedMode
-                ? L("DSH-Portable 有可用更新", "A DSH-Portable update is available")
-                : L("DSH-Portable 需要完整更新", "DSH-Portable needs a complete update")
-            alert.informativeText = updateDescription(update, fullPackage: status != "available" || installedMode)
-            alert.addButton(withTitle: status == "available" && !installedMode
-                ? L("现在更新", "Update Now") : L("打开下载页", "Open Download Page"))
-            alert.addButton(withTitle: L("稍后", "Later"))
-            alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
-            return alert.runModal()
-        }
-        if choice == .alertFirstButtonReturn && status == "available" && !installedMode {
-            _ = try runCLI(["update", "--no-browser", "--json", "--progress-json"], progressHandler: { [weak self] progress in
-                self?.presentUpdateProgress(progress)
-            })
-        } else if choice == .alertThirdButtonReturn {
-            _ = try? runCLI(["ignore-update", "--json"])
-        } else {
-            _ = try? runCLI(["defer-update", "--json"])
-            if choice == .alertFirstButtonReturn {
-                DispatchQueue.main.async {
-                    NSWorkspace.shared.open(URL(string: "https://github.com/WSL043/DSH-Portable/releases/latest")!)
-                }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            if status == "available" && !self.installedMode {
+                self.presentManualUpdateResult(update)
+            } else {
+                var complete = update
+                complete["status"] = "full-package-required"
+                self.presentManualUpdateResult(complete)
             }
         }
     }

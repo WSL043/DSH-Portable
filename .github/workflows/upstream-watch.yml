@@ -24,7 +24,7 @@ jobs:
       - name: Summarize source-only upstream activity
         if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.source_changed == 'true'
         env:
-          COMMIT: ${{ steps.upstream.outputs.commit }}
+          COMMIT: ${{ steps.upstream.outputs.source_commit }}
           VERSION: ${{ steps.upstream.outputs.version }}
         run: |
           printf '%s\n' \
@@ -34,7 +34,6 @@ jobs:
             '' 'No candidate PR was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
         if: steps.upstream.outputs.changed == 'true'
-        continue-on-error: true
         run: npm test
       - name: Create or refresh the tested candidate pull request
         if: steps.upstream.outputs.changed == 'true'
@@ -53,8 +52,8 @@ jobs:
           BODY=$(mktemp)
           printf '%s\n' \
             'Automated candidate from the official DeepSeek Harness preview channel.' \
-            '' "- npm package: \`${VERSION}\`" "- official master: \`${COMMIT}\`" \
-            '' 'This pull request is not auto-merged or auto-released. The normal Windows and macOS product CI remains the release gate.' > "$BODY"
+            '' "- npm package: \`${VERSION}\`" "- matching official tag commit: \`${COMMIT}\`" \
+            '' 'This pull request is not auto-merged or auto-released. The normal Windows, macOS, and Linux product CI remains the release gate.' > "$BODY"
           if gh pr view "$BRANCH" >/dev/null 2>&1; then
             gh pr edit "$BRANCH" --title "chore: test official DSH ${VERSION} candidate" --body-file "$BODY"
           else

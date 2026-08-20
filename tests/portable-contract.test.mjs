@@ -23,6 +23,7 @@ import {
   queryWindowsProcess,
 } from '../launcher/portable-core.mjs'
 
+const projectRoot = path.resolve(import.meta.dirname, '..')
 const usbRoot = path.win32.resolve('R:\\AI Tools\\深度求索 Harness')
 
 test('all durable application paths stay under the movable root', () => {
@@ -178,6 +179,16 @@ test('CLI defaults to start and supports bounded automation flags', () => {
   assert.throws(() => parseCli(['start', 'stop']), /more than one command/)
   assert.throws(() => parseCli(['erase-data']), /Unknown command/)
   assert.throws(() => parseCli(['--update-manifest']), /requires a value/)
+})
+
+test('portable startup owns the desktop surface without allowing official DSH to open a browser', async () => {
+  const source = await readFile(path.join(projectRoot, 'launcher', 'portable-cli.mjs'), 'utf8')
+  assert.match(source, /'--patch',\s*layout\.desktopBridgePatch,[\s\S]*'--profile',\s*'web',[\s\S]*'--no-open'/)
+  assert.ok(
+    source.indexOf("'--patch'") < source.indexOf("'--no-open'")
+      && source.indexOf("'--no-open'") < source.indexOf("'--host', '127.0.0.1'"),
+    'global patch options must precede the official web-profile no-open flag',
+  )
 })
 
 test('a stale or recycled PID is never treated as our DSH host', () => {

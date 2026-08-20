@@ -144,21 +144,27 @@ current and target bundled official DSH versions and whether the engine changes 
 An official DSH release is adapted and tested as a finished product before it is delivered through
 DSH-Portable; it never bypasses the desktop shell to replace a working environment directly.
 
-DSH-Portable checks for updates when it starts and asks before installing one. A normal update
+DSH-Portable opens the local workspace first, then checks for updates in the background and asks before installing one. Network availability does not block startup. A normal update
 downloads only the changed DSH application component. Sessions, settings, credentials, and workspace remain in place.
 The window shows the real download percentage and transferred size, followed by the
 verification, installation, and reopen stages. A failed launch restores the previous version.
 
 On Windows and Linux, you can **Check for updates** from the system tray; on macOS, use the application menu.
 Turn off **Check for updates at startup** from the same menu if you do not want automatic prompts.
-The manual check remains available. When an update is available, choose **Update now**, **Later**,
-or **Skip this version**. Skipping affects only that release; a later release can still be offered.
-A running task is never interrupted for an update.
+The manual check remains available. When an update is available, choose to update, handle it **Later**,
+or **Skip this version**. Windows installs immediately only after it can confirm that no task is running;
+macOS and Linux schedule the component for installation before the next launch. Skipping affects only that release,
+and a running task is never interrupted for an update.
 
 When the runtime compatibility boundary changes, Windows downloads the verified complete package,
-keeps `data` and `workspace`, and replaces the program in place instead of sending you to a download page. Official
+keeps `data` and `workspace`, and replaces the program in place. macOS and Linux clearly request a one-time complete
+package download for the same boundary. Official
 preview updates first become candidate builds and must pass Windows, macOS, and Linux x64/ARM64 finished-product
 tests before they enter the launcher update channel.
+
+Default JSONL sessions upgrade normally. If you explicitly enabled DSH's optional durable SQLite backend,
+back it up before upgrading. DSH-Portable does not delete an old database when an upstream preview changes
+its format without providing a migration.
 
 ## Portable data
 

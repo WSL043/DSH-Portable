@@ -13,7 +13,7 @@ const execFileAsync = promisify(execFile)
 test('runtime dependency boundary contains official DSH, the private desktop bridge, and its pinned package manager only', async () => {
   const runtime = JSON.parse(await read('app/package.json'))
   assert.deepEqual(runtime.dependencies, {
-    '@deepseek-ai/dsh': '0.1.0-rc.7',
+    '@deepseek-ai/dsh': '0.1.0-rc.8',
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     pnpm: '11.7.0',
   })
@@ -22,7 +22,7 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
     assert.equal(serialized.includes(forbidden), false, forbidden)
   }
   assert.deepEqual(runtime.allowScripts, {
-    '@deepseek-ai/dsh-subprocess-local@0.1.0-rc.7': true,
+    '@deepseek-ai/dsh-subprocess-local@0.1.0-rc.8': true,
     '@google/genai@1.52.0': true,
     'koffi@3.1.5': true,
     'node-pty@1.2.0-beta.15': true,
@@ -33,12 +33,12 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
 test('upstream lock pins independently verifiable DSH and Node artifacts', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
   assert.equal(lock.dsh.package, '@deepseek-ai/dsh')
-  assert.equal(lock.dsh.version, '0.1.0-rc.7')
-  assert.equal(lock.dsh.reviewedCommit, '99f6f02fecdb7dff40c3fbc9470f5907c29f74ca')
+  assert.equal(lock.dsh.version, '0.1.0-rc.8')
+  assert.equal(lock.dsh.reviewedCommit, '141eb6fef83422698aef7a981029e843e8161534')
   assert.match(lock.dsh.version, /^0\.1\.0-rc\.\d+$/)
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
-  assert.equal(lock.dsh.noticesSha256, '4a2ff8717eeb94173df9f98316437ce6e0817f740cd1e23098d5b29a3e72791a')
+  assert.equal(lock.dsh.noticesSha256, '50c0b03d591244cdceb61c3bcb0db224e998388af6cbad8fa9d1e980440e25b3')
   assert.deepEqual(lock.pnpm, {
     package: 'pnpm',
     version: '11.7.0',
@@ -82,7 +82,7 @@ test('the independent lock verifier accepts the current local bridge link and ex
     path.join(root, 'upstream.lock.json'),
   ])
   const result = JSON.parse(stdout)
-  assert.equal(result.dshVersion, '0.1.0-rc.7')
+  assert.equal(result.dshVersion, '0.1.0-rc.8')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {

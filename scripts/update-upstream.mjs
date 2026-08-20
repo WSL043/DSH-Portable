@@ -19,15 +19,36 @@ async function json(url) {
   return response.json()
 }
 
+async function officialTagCommit(version) {
+  const ref = await json(`https://api.github.com/repos/deepseek-ai/deepseek-harness/git/ref/tags/dsh-v${version}`)
+  let object = ref?.object
+  if (object?.type === 'tag') {
+    const annotated = await json(`https://api.github.com/repos/deepseek-ai/deepseek-harness/git/tags/${object.sha}`)
+    object = annotated?.object
+  }
+  if (object?.type !== 'commit' || !/^[0-9a-f]{40}$/.test(object.sha ?? '')) {
+    throw new Error(`official tag dsh-v${version} does not resolve to a commit`)
+  }
+  return { sha: object.sha }
+}
+
 const [registry, commit, currentLock] = await Promise.all([
   json('https://registry.npmjs.org/@deepseek-ai%2Fdsh'),
   json('https://api.github.com/repos/deepseek-ai/deepseek-harness/commits/master'),
   readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
 ])
+const provisional = evaluateUpstream({
+  lock: currentLock,
+  registry,
+  commit,
+  requestedTag: tag,
+})
+const packageCommit = await officialTagCommit(provisional.version)
 const state = evaluateUpstream({
   lock: currentLock,
   registry,
   commit,
+  packageCommit,
   requestedTag: tag,
 })
 const { changed, version } = state
@@ -101,6 +122,7 @@ const result = {
   tag: state.selectedTag,
   version,
   commit: state.commit,
+  sourceCommit: state.sourceCommit,
 }
 console.log(JSON.stringify(result, null, 2))
 if (process.env.GITHUB_OUTPUT) {
@@ -108,6 +130,7 @@ if (process.env.GITHUB_OUTPUT) {
     `changed=${changed}`,
     `version=${version}`,
     `commit=${state.commit}`,
+    `source_commit=${state.sourceCommit}`,
     `source_changed=${state.sourceChanged}`,
     '',
   ].join('\n'))

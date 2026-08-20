@@ -19,8 +19,8 @@ AppImage 数据保存在同目录的 DSH-Portable-data，迁移时请把两者�
 启动器会先询问再安装更新。普通更新只下载变化的 DSH 应用组件；会话、设置、
 凭据和工作区都会保留。Windows 遇到兼容性变化时会直接下载完整版本并原地更新，
 不会覆盖 data 与 workspace；新版启动失败会恢复旧版。
-Windows 托盘和 macOS 应用菜单都可手动检查更新，也可关闭启动时自动检查；
-可选择稍后或跳过当前版本，运行中的任务不会被更新中断。
+Windows 与 Linux 托盘、macOS 应用菜单都可手动检查更新，也可关闭启动时自动检查。
+Windows 只在确认没有任务运行时直接更新；macOS 与 Linux 会在下次启动前安装，运行中的任务不会被中断。
 
 Windows 插件命令：
 
@@ -62,8 +62,9 @@ The launcher asks before installing an update. A normal update downloads only
 the changed DSH application component and keeps sessions, settings, credentials,
 and workspace in place. It requests the complete package only across a runtime
 compatibility change and restores the previous version after a failed launch.
-The Windows tray and macOS application menu can check manually or turn off
-startup checks. Updates never interrupt a running task.
+The Windows and Linux trays and the macOS application menu can check manually
+or turn off startup checks. Windows updates only after confirming that no task is running;
+macOS and Linux install before the next launch. Updates never interrupt a running task.
 
 Windows plugin commands:
 

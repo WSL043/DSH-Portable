@@ -161,7 +161,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 10
+        shellSchema = 11
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -272,7 +272,7 @@ try {
             portableVersion = $PortableVersion
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 10
+            requiredShellSchema = 11
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
@@ -384,8 +384,8 @@ try {
         if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath)) {
             throw 'BuildInstaller requires Inno Setup 7 or newer (ISCC.exe).'
         }
-        $IsccVersion = [string]((& $IsccPath '--version' | Select-Object -First 1))
-        $IsccVersionMatch = [regex]::Match($IsccVersion.Trim(), '^(?<major>\d+)\.')
+        $IsccVersion = [string]((& $IsccPath '/?' 2>&1 | Select-Object -First 1))
+        $IsccVersionMatch = [regex]::Match($IsccVersion.Trim(), '^Inno Setup (?<major>\d+) Command-Line Compiler$')
         if (-not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
             throw "BuildInstaller requires Inno Setup 7 or newer; found '$IsccVersion'."
         }

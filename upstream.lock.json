@@ -2,11 +2,11 @@
   "schemaVersion": 1,
   "dsh": {
     "package": "@deepseek-ai/dsh",
-    "version": "0.1.0-rc.7",
-    "integrity": "sha512-ZceDCJ8FAywih+USW/OMk9jEhunlvJBGEz4kqrhau23hPzbciOazZrywH0nBRsaalSeAJ1JGBmjtw4OSjToStw==",
+    "version": "0.1.0-rc.8",
+    "integrity": "sha512-VQU5NlomrKLRgcXuOf+sxWFvqxPA8q9vMhrKPlPPXiOJEhGlGlAdiyxZvZxkCVI+v0zbhe21cY3/luLyxpSzzA==",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
-    "reviewedCommit": "99f6f02fecdb7dff40c3fbc9470f5907c29f74ca",
-    "noticesSha256": "4a2ff8717eeb94173df9f98316437ce6e0817f740cd1e23098d5b29a3e72791a"
+    "reviewedCommit": "141eb6fef83422698aef7a981029e843e8161534",
+    "noticesSha256": "50c0b03d591244cdceb61c3bcb0db224e998388af6cbad8fa9d1e980440e25b3"
   },
   "pnpm": {
     "package": "pnpm",

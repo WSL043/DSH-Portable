@@ -32,7 +32,7 @@ function compareSemver(leftValue, rightValue) {
   return 0
 }
 
-export function evaluateUpstream({ lock, registry, commit, requestedTag = 'next' }) {
+export function evaluateUpstream({ lock, registry, commit, packageCommit, requestedTag = 'next' }) {
   const tags = registry?.['dist-tags'] ?? {}
   const selectedTag = requestedTag === 'latest'
     ? 'latest'
@@ -51,6 +51,7 @@ export function evaluateUpstream({ lock, registry, commit, requestedTag = 'next'
   }
 
   const packageChanged = version !== lock.dsh.version
+  const reviewedCommit = packageCommit?.sha ?? commit.sha
   const sourceChanged = commit.sha !== lock.dsh.reviewedCommit
   return {
     changed: packageChanged,
@@ -59,6 +60,7 @@ export function evaluateUpstream({ lock, registry, commit, requestedTag = 'next'
     selectedTag,
     version,
     integrity,
-    commit: commit.sha,
+    commit: reviewedCommit,
+    sourceCommit: commit.sha,
   }
 }
