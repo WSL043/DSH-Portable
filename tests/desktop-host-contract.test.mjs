@@ -62,8 +62,11 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.match(externalExit, /BeginDesktopShutdown\(/)
   assert.doesNotMatch(externalExit, /Close\(\)/)
 
-  const fullPackageUpdate = host.slice(host.indexOf('private void StartFullPackageUpdate()'), host.indexOf('private async Task RestoreDesktopAfterUpdateAttemptAsync'))
+  const fullPackageUpdate = host.slice(host.indexOf('private void StartFullPackageUpdate('), host.indexOf('private async Task RestoreDesktopAfterUpdateAttemptAsync'))
   assert.doesNotMatch(fullPackageUpdate, /allowClose\s*=\s*true|Close\(\)/)
+  assert.match(fullPackageUpdate, /--manifest/)
+  assert.match(host, /JsonString\(check\.Item2, "fullPackageManifestUrl"\)/)
+  assert.doesNotMatch(fullPackageUpdate, /DefaultManifestUrl|update-channel-stable/)
 
   assert.doesNotMatch(moveSmoke, /Wait-ForPortableWebViewExit/)
   assert.match(moveSmoke, /lifecycle failed[\s\S]+Move-Item -LiteralPath \$Root -Destination \$MovedRoot/)

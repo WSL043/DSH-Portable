@@ -51,14 +51,15 @@ test('stable release staging exposes obvious packages for every platform and kee
   try {
     const user = (await readdir(path.join(output, 'user-assets'))).sort()
     const update = (await readdir(path.join(output, 'update-assets'))).sort()
-    assert.equal(user.length, 12)
+    assert.equal(user.length, 13)
+    assert.ok(user.includes('portable-manifest.json'), 'the immutable version release must publish the exact full-package manifest used by desktop updates')
     assert.ok(user.includes('checksums.txt'))
     assert.ok(!user.some((name) => name.endsWith('.sha256')))
     assert.ok(!user.includes('DSH-Portable-windows-x64-offline.exe'))
     assert.equal(update.length, 12)
     await assert.rejects(readdir(path.join(output, 'compat-assets')), { code: 'ENOENT' })
     const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
-    assert.equal(checksums.trim().split(/\r?\n/).length, 11)
+    assert.equal(checksums.trim().split(/\r?\n/).length, 12)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -71,9 +72,10 @@ test('candidate releases never offer a stable-channel bootstrap as a candidate d
     assert.ok(!user.includes('DSH-Portable-windows-x64.exe'))
     assert.ok(user.includes('DSH-Portable-windows-x64-offline.zip'))
     assert.ok(user.includes('DeepSeek-Herness-Setup.exe'))
+    assert.ok(user.includes('portable-manifest.json'))
     const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
     assert.ok(!checksums.includes('DSH-Portable-windows-x64.exe'))
-    assert.equal(checksums.trim().split(/\r?\n/).length, 10)
+    assert.equal(checksums.trim().split(/\r?\n/).length, 11)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

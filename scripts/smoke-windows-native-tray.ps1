@@ -116,8 +116,8 @@ try {
         if ($Menu.Items[5].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
         if ($Menu.Items[7].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
         if ($Menu.Items[9].Text -ne $Case.Exit) { throw "Exit command is missing for $($Case.Locale)" }
-        if ($Menu.Items[5].DropDownItems.Count -ne 7) { throw "More submenu must contain bounded overflow and direct settings commands" }
-        if ($Menu.Items[5].DropDownItems[6].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
+        if ($Menu.Items[5].DropDownItems.Count -ne 8) { throw "More submenu must contain bounded overflow and direct settings commands" }
+        if ($Menu.Items[5].DropDownItems[7].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
         foreach ($MoreItem in $Menu.Items[5].DropDownItems) {
             if ($MoreItem -is [Windows.Forms.ToolStripMenuItem] -and $MoreItem.DropDownItems.Count -ne 0) {
                 throw "More submenu must stop at the second level"

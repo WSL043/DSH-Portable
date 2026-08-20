@@ -21,8 +21,6 @@ use tauri::{
 
 const PRODUCT_NAME: &str = "DeepSeek-Herness";
 const PORTABLE_DATA_NAME: &str = "DSH-Portable-data";
-const RELEASE_URL: &str = "https://github.com/WSL043/DSH-Portable/releases/latest";
-
 static LAYOUT: OnceLock<ProductLayout> = OnceLock::new();
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static UPDATE_PROMPT_OPEN: AtomicBool = AtomicBool::new(false);
@@ -418,7 +416,12 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
                 } else if choice == MessageDialogResult::No {
                     let _ = run_portable_cli(&layout, &["defer-update", "--json"]);
                 } else {
-                    dialog(PRODUCT_NAME, RELEASE_URL, MessageLevel::Info);
+                    let release_url = value
+                        .get("releaseUrl")
+                        .and_then(Value::as_str)
+                        .filter(|url| url.starts_with("https://github.com/WSL043/DSH-Portable/releases/tag/v"))
+                        .unwrap_or("https://github.com/WSL043/DSH-Portable/releases");
+                    dialog(PRODUCT_NAME, release_url, MessageLevel::Info);
                 }
             }
             Ok(_) => {}

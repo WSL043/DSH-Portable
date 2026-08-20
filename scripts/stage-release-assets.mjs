@@ -11,6 +11,7 @@ const updateDir = path.join(output, 'update-assets')
 
 const userAssets = [
   ...(channel === 'candidate' ? [] : ['DSH-Portable-windows-x64.exe']),
+  'portable-manifest.json',
   'DSH-Portable-windows-x64-offline.zip',
   'DeepSeek-Herness-Setup.exe',
   'DSH-Portable-macos-arm64.zip',

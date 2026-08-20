@@ -60,6 +60,8 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   const liveCheck = source.slice(source.indexOf('fn check_updates('), source.indexOf('fn stop_and_exit('))
   assert.doesNotMatch(liveCheck, /run_portable_cli\(&layout,\s*&\["update"/)
   assert.match(liveCheck, /install_update_at_next_start\s*=\s*true/)
+  assert.match(liveCheck, /releaseUrl/)
+  assert.doesNotMatch(liveCheck, /releases\/latest/)
   const startup = source.slice(source.indexOf('fn start_dsh('), source.indexOf('fn run_dsh_passthrough('))
   assert.match(startup, /apply_pending_update/)
   assert.ok(startup.indexOf('apply_pending_update') < startup.indexOf('["start", "--no-browser", "--json"]'))

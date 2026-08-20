@@ -65,6 +65,14 @@ test('candidate notes recommend a self-contained candidate package instead of th
   assert.doesNotMatch(stable, /\{\{[^}]+\}\}/)
 })
 
+test('stable release notes never describe the product as a candidate', async () => {
+  const template = await read('templates/RELEASE-NOTES.md')
+  const stable = renderReleaseNotes(template, 'v0.4.0')
+  assert.doesNotMatch(stable, /候选版|candidate(?: release| build| version)?/i)
+  assert.match(stable, /0\.4\.0 是正式版/)
+  assert.match(stable, /0\.4\.0 is a stable release/i)
+})
+
 test('all finished-product manifests use the same declared product version', async () => {
   const manifest = JSON.parse(await read('package.json'))
   const policy = classifyProductVersion(manifest.version)

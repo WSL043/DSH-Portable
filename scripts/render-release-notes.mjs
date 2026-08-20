@@ -9,6 +9,18 @@ export function renderReleaseNotes(source, tag) {
   const candidate = /-rc\./.test(tag)
   const replacements = {
     '{{PRODUCT_VERSION}}': tag.slice(1),
+    '{{RELEASE_INTRO_ZH}}': candidate
+      ? `${tag.slice(1)} 是插件市场候选版，不会推送给稳定版用户：`
+      : `${tag.slice(1)} 是正式版：`,
+    '{{RELEASE_INTRO_EN}}': candidate
+      ? `${tag.slice(1)} is the Plugin Market candidate and is not offered to stable users:`
+      : `${tag.slice(1)} is a stable release:`,
+    '{{VERIFICATION_SCOPE_ZH}}': candidate
+      ? '候选成品会经过 Windows、macOS、Linux x64 与 ARM64 验收。'
+      : '正式成品已通过 Windows、macOS、Linux x64 与 ARM64 验收。',
+    '{{VERIFICATION_SCOPE_EN}}': candidate
+      ? 'Candidate artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.'
+      : 'Stable artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.',
     '{{CHANNEL_UPGRADE_NOTICE_ZH}}': candidate
       ? '如果你正在使用仍指向稳定更新通道的较早候选版，请从本页手动下载一次与你的系统匹配的完整包；从此版本开始，后续候选版只检查候选更新通道，正式版发布后会正常升级到正式版。'
       : '',

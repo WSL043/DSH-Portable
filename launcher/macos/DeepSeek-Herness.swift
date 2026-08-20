@@ -219,7 +219,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
             let choice = alert.runModal()
             if choice == .alertFirstButtonReturn {
-                NSWorkspace.shared.open(URL(string: "https://github.com/WSL043/DSH-Portable/releases/latest")!)
+                if let value = update?["releaseUrl"] as? String,
+                   let target = URL(string: value),
+                   target.scheme == "https",
+                   target.host == "github.com",
+                   target.path.hasPrefix("/WSL043/DSH-Portable/releases/tag/v") {
+                    NSWorkspace.shared.open(target)
+                }
             } else if choice == .alertThirdButtonReturn {
                 DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--json"]) }
             } else {

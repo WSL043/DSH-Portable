@@ -100,6 +100,7 @@ export function evaluateUpdate(manifest, installed, platform) {
   const manifestReleaseChannel = normalizeReleaseChannel(manifest.releaseChannel, manifest.portableVersion)
   const engineCurrent = String(installed.dshVersion ?? '')
   const engineLatest = String(manifest.component?.dshVersion ?? engineCurrent)
+  const releaseTag = `v${manifest.portableVersion}`
   const describe = (status, delivery) => ({
     status,
     current: installed.portableVersion,
@@ -110,6 +111,8 @@ export function evaluateUpdate(manifest, installed, platform) {
     engineLatest,
     delivery,
     releaseChannel: manifestReleaseChannel,
+    releaseUrl: `https://github.com/WSL043/DSH-Portable/releases/tag/${releaseTag}`,
+    fullPackageManifestUrl: `https://github.com/WSL043/DSH-Portable/releases/download/${releaseTag}/portable-manifest.json`,
     product: {
       name: 'DSH-Portable',
       current: installed.portableVersion,

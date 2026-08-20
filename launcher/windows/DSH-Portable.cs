@@ -1455,6 +1455,7 @@ namespace DshPortable
                 string latest = JsonString(check.Item2, "latest");
                 string engineCurrent = JsonString(check.Item2, "engineCurrent");
                 string engineLatest = JsonString(check.Item2, "engineLatest");
+                string fullPackageManifestUrl = JsonString(check.Item2, "fullPackageManifestUrl");
                 if (updateStatus == "current")
                 {
                     if (!manual) return;
@@ -1494,7 +1495,7 @@ namespace DshPortable
                         return;
                     }
                     int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, true);
-                    if (choice == 1) StartFullPackageUpdate();
+                    if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl);
                     else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
                     else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
                     return;
@@ -1599,8 +1600,17 @@ namespace DshPortable
                 L("DSH-Portable 已更新", "DSH-Portable updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
-        private void StartFullPackageUpdate()
+        private void StartFullPackageUpdate(string manifestUrl)
         {
+            Uri manifest;
+            if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
+                || manifest.Scheme != Uri.UriSchemeHttps
+                || !String.Equals(manifest.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+                || !manifest.AbsolutePath.StartsWith("/WSL043/DSH-Portable/releases/download/v", StringComparison.Ordinal)
+                || !manifest.AbsolutePath.EndsWith("/portable-manifest.json", StringComparison.Ordinal))
+                throw new InvalidOperationException(L(
+                    "更新清单地址无效，请重新检查更新。",
+                    "The update manifest target is invalid. Check for updates again."));
             string source = Path.Combine(root, "launcher", "DSH-FullUpdater.exe");
             if (!File.Exists(source)) throw new FileNotFoundException(L(
                 "完整更新组件缺失，请重新安装当前版本后再试。",
@@ -1610,7 +1620,7 @@ namespace DshPortable
             Process.Start(new ProcessStartInfo
             {
                 FileName = helper,
-                Arguments = "--upgrade-existing --destination \"" + root.Replace("\"", "\\\"") + "\"",
+                Arguments = "--upgrade-existing --destination \"" + root.Replace("\"", "\\\"") + "\" --manifest \"" + manifest.AbsoluteUri.Replace("\"", "\\\"") + "\"",
                 WorkingDirectory = Path.GetTempPath(),
                 UseShellExecute = true,
             });

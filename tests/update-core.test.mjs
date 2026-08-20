@@ -185,6 +185,27 @@ test('stable rejects candidates while candidates advance through rc and final st
   assert.equal(evaluateUpdate(final, { ...base, portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' }, 'windows-x64').status, 'available')
 })
 
+test('full-package decisions carry immutable release and package-manifest targets', () => {
+  const installed = {
+    portableVersion: '0.4.0-rc.1',
+    releaseChannel: 'candidate',
+    platform: 'windows-x64',
+    nodeVersion: '24.19.0',
+    updaterSchema: 1,
+    shellSchema: 1,
+    dshVersion: '0.1.0-rc.7',
+  }
+  const result = evaluateUpdate(updateManifest({
+    portableVersion: '0.4.0-rc.2',
+    releaseChannel: 'candidate',
+    requiredShellSchema: 2,
+  }), installed, 'windows-x64')
+
+  assert.equal(result.status, 'full-package-required')
+  assert.equal(result.releaseUrl, 'https://github.com/WSL043/DSH-Portable/releases/tag/v0.4.0-rc.2')
+  assert.equal(result.fullPackageManifestUrl, 'https://github.com/WSL043/DSH-Portable/releases/download/v0.4.0-rc.2/portable-manifest.json')
+})
+
 test('update checks read installed metadata and cache a successful result', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-check-'))
   const layout = layoutForRoot(root)

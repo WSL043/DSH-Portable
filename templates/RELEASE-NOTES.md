@@ -1,6 +1,6 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.8`）。DSH-Portable 是独立社区分发项目。
 
-{{PRODUCT_VERSION}} 是插件市场候选版，不会推送给稳定版用户：
+{{RELEASE_INTRO_ZH}}
 
 - **设置中新增实时插件市场。** 可搜索、分类、排序与分页浏览千余个社区插件；相同仓库只显示一次，每项都能打开自己的项目页面。
 - **插件详情使用真实图片。** 市场优先显示作者策展截图，没有时从项目说明中提取；图片按需加载，不拖慢工作台启动。
@@ -10,7 +10,7 @@
 - **任务完成通知可关闭。** Windows 托盘可开关系统通知；单个任务通知可直接返回对应会话，多个同时完成时只显示一条汇总。
 - **退出后目录立即可移动。** Windows 会等自身的 WebView2 进程释放便携目录后才完成退出；若释放失败会给出明确错误，而不是留下后台占用。
 
-内置官方 DSH 为 `0.1.0-rc.8`。候选成品会经过 Windows、macOS、Linux x64 与 ARM64 验收。
+内置官方 DSH 为 `0.1.0-rc.8`。{{VERIFICATION_SCOPE_ZH}}
 
 桌面端会先打开本地工作区，再在后台启动时检查更新。Windows 与 macOS 都可以在设置或托盘中关闭“启动时检查更新”，也可以对单个版本选择“跳过此版本”。每次提示都会明确区分 DSH-Portable 产品版本与内置官方 DSH 版本；兼容边界不变时只下载变化的 DSH 应用组件，界面显示真实下载百分比。需要完整升级时会下载经过校验的完整版本并原地替换应用文件，会话、设置、凭据、插件与工作区继续保留。
 
@@ -44,7 +44,7 @@
 
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.8`). DSH-Portable is an independent community distribution.
 
-{{PRODUCT_VERSION}} is the Plugin Market candidate and is not offered to stable users:
+{{RELEASE_INTRO_EN}}
 
 - **DSH Settings now includes a live Plugin Market.** Search, categories, sorting, and pagination cover a thousand-plus community catalog. The same repository appears once and every entry links to its own project page.
 - **Plugin details use real images.** The market prefers author-curated screenshots and can extract images from project documentation, loading them only when needed so workspace startup remains light.
@@ -54,7 +54,7 @@
 - **Task-completion notifications are optional.** The Windows tray can turn them off; one completed task opens its session, while simultaneous completions produce one summary.
 - **The portable folder is movable as soon as exit completes.** Windows waits for its owned WebView2 processes to release the directory and reports a clear failure instead of leaving a hidden lock.
 
-The bundled official DSH is `0.1.0-rc.8`. Candidate artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.
+The bundled official DSH is `0.1.0-rc.8`. {{VERIFICATION_SCOPE_EN}}
 
 The desktop opens the local workspace first, then checks for updates in the background at startup. On Windows and macOS, you can turn off updates at startup from Settings or the tray, or choose **Skip this version** for one release. Every notification names the DSH-Portable product version separately from the bundled official DSH version. When the compatibility boundary is unchanged, it downloads only the changed DSH application component and shows the real download percentage. When a complete upgrade is required, it downloads the verified complete package and replaces application files in place while sessions, settings, credentials, plugins, and workspace remain in place.
 

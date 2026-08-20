@@ -361,7 +361,7 @@ try {
         payloads = [ordered]@{
             windowsX64 = [ordered]@{
                 filename = 'DSH-Portable-windows-x64-offline.zip'
-                url = "https://github.com/WSL043/DSH-Portable/releases/download/$UpdateChannelTag/DSH-Portable-windows-x64-offline.zip"
+                url = "https://github.com/WSL043/DSH-Portable/releases/download/v$PortableVersion/DSH-Portable-windows-x64-offline.zip"
                 sha256 = $Hash
                 bytes = (Get-Item -LiteralPath $Zip).Length
             }

@@ -141,7 +141,7 @@ test('update guidance describes the component update path without exposing inter
   const chinese = await read('README.md')
   const english = await read('README.en.md')
   const userReadme = await read('templates/USER-README.txt')
-  const releaseNotes = await read('templates/RELEASE-NOTES.md')
+  const releaseNotes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0-rc.2')
 
   assert.match(chinese, /启动时检查更新/)
   assert.match(chinese, /Windows.+macOS.+关闭.+启动时检查更新/s)
@@ -217,6 +217,10 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.match(workflow, /steps\.version\.outputs\.updateChannelTag/)
   assert.match(workflow, /update-channel-candidate/)
   assert.match(workflow, /stage-release-assets\.mjs/)
+  assert.ok(
+    workflow.indexOf('Publish curated user downloads') < workflow.indexOf('Publish the isolated machine-readable update channel'),
+    'the immutable version release must be public before its update channel advertises the new version',
+  )
   assert.match(workflow, /stage-release-assets\.mjs artifacts release-staging "\$\{\{ steps\.version\.outputs\.channel \}\}"/)
   assert.match(staging, /channel === 'candidate'/)
   assert.match(staging, /user-assets/)
@@ -361,6 +365,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /DSH-Bootstrap\.cs/)
   assert.match(build, /DSH-FullUpdater\.exe/)
   assert.match(build, /portable-manifest\.json/)
+  assert.match(build, /releases\/download\/v\$PortableVersion\/DSH-Portable-windows-x64-offline\.zip/)
+  assert.doesNotMatch(build, /releases\/download\/\$UpdateChannelTag\/DSH-Portable-windows-x64-offline\.zip/)
   assert.match(build, /update-core\.mjs/)
   assert.match(build, /DSH-UpdateExtractor\.cs/)
   assert.match(build, /DSH-Portable-update-windows-x64\.zip/)
