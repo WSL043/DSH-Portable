@@ -227,15 +227,14 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.match(macBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-macos-\$ARCH\.zip/)
 })
 
-test('every desktop platform exercises the pinned catalog extension lifecycle from the finished product', async () => {
+test('every desktop platform verifies that the stable finished product exposes no extension catalog', async () => {
   const workflow = await read('.github/workflows/ci.yml')
   const smoke = await read('scripts/smoke-portable-catalog-extension.mjs')
 
-  assert.match(smoke, /session-delete/)
-  assert.match(smoke, /\/plugins\/dsh-session-delete\/delete/)
-  assert.match(smoke, /session-not-found/)
-  assert.match(smoke, /queue\(host\.url,\s*'remove',\s*false\)/)
-  assert.match(smoke, /@deepseek-ai\/dsh-client-ui-workspace/)
+  assert.match(smoke, /\/api\/dsh-portable\/extensions/)
+  assert.match(smoke, /notEqual\([^\n]+status,\s*200/)
+  assert.match(smoke, /extension catalog route is disabled/)
+  assert.doesNotMatch(smoke, /\/preview|\/confirm|session-not-found/)
   assert.equal((workflow.match(/smoke-portable-catalog-extension\.mjs/g) || []).length, 3)
 })
 
@@ -478,15 +477,14 @@ test('plugin management is a generic finished-product capability and release gat
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
 
-test('the bundled portable extension catalog contains only explicitly approved entries', async () => {
-  const [catalog, chinese, english, releaseNotes] = await Promise.all([
-    read('desktop-bridge/extensions/catalog.json').then(JSON.parse),
+test('the stable product packages no built-in portable extension catalog', async () => {
+  const [chinese, english, releaseNotes] = await Promise.all([
     read('README.md'),
     read('README.en.md'),
     read('templates/RELEASE-NOTES.md'),
   ])
-  assert.deepEqual(catalog.items.map(item => item.id), ['session-delete'])
-  assert.doesNotMatch(JSON.stringify(catalog), /codex|chatgpt|dsh-codex-subscription/i)
+  assert.equal(await exists('desktop-bridge/extensions/catalog.json'), false)
+  assert.equal(await exists('desktop-bridge/lib/extensions.js'), false)
   assert.doesNotMatch(`${chinese}\n${english}\n${releaseNotes}`, /codex|chatgpt|dsh-codex-subscription/i)
 })
 

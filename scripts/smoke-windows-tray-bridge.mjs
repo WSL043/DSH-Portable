@@ -298,17 +298,11 @@ try {
   assert.equal(state.theme, 'light')
 
   await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab')
-  await waitForValue(client, clickButton(['Portable extensions', '便携扩展']), value => value?.clicked, 'Portable Extensions subtab')
-  const extensionUi = await waitForValue(client, `(() => {
-    const root = document.querySelector('.dspx-root')
-    if (!root) return null
-    return {
-      title: root.querySelector('h3')?.textContent?.trim() || '',
-      cards: root.querySelectorAll('.dspx-card').length,
-      actions: [...root.querySelectorAll('.dspx-action')].map(item => (item.textContent || '').trim()),
-    }
-  })()`, value => value?.cards === 2 && /Portable extensions|便携扩展/.test(value.title), 'Portable Extensions settings UI')
-  assert.equal(extensionUi.cards, 2)
+  const extensionUi = await evaluate(client, `({
+    root: Boolean(document.querySelector('.dspx-root')),
+    tab: [...document.querySelectorAll('button')].some(item => ['Portable extensions', '便携扩展'].includes((item.textContent || '').trim())),
+  })`)
+  assert.deepEqual(extensionUi, { root: false, tab: false })
   if (screenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(screenshotPath), { recursive: true })

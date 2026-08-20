@@ -106,17 +106,10 @@ contains a complete `DSH-Portable` directory; extract it and run `DeepSeek-Herne
 
 ## Plugin management
 
-The 0.3 test candidate adds **Settings → Plugins → Portable extensions** for a small set of
-optional extensions pinned to the current Portable build. A confirmed change never restarts the
-current task. It waits for a normal exit, then downloads, verifies, composes, and health-checks the
-profile on the next start; failures restore the previous profile. Permanent session deletion is
-experimental, absent by default, and requires a separate acknowledgement of its irreversible data
-capability.
-
-The graphical catalog is deliberately small and does not represent every community plugin. Use the
-generic commands below for other extensions.
-
-Windows and Linux products include their plugin command. On Windows, open PowerShell in the DSH-Portable folder:
+Plugins, settings, and sessions stay with the Portable data when the product is moved or backed up.
+Windows and Linux builds include the DSH command for advanced users without requiring a separate
+runtime. On Windows, open PowerShell in the DSH-Portable folder before using it. For normal desktop
+use, launch `DeepSeek-Herness.exe`; `dsh.exe` is a command-line tool, not a second desktop launcher.
 
 ```powershell
 .\dsh.exe plugin --profile web add <plugin>

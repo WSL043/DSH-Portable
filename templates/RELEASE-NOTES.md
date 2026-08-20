@@ -1,13 +1,11 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.8`）。DSH-Portable 是独立社区分发项目。
 
-0.3.0-rc.2 是 Portable 扩展管理与 Windows 首次启动修复的公开测试版：
+0.3.0 是 Windows 首次启动稳定性更新：
 
-- **设置 → 插件新增“便携扩展”。** 首批仅提供经过版本固定的实验性永久删除会话扩展，默认不安装。
-- **扩展变更不会打断正在运行的任务。** 用户确认后只排到下次正常启动；安装包会校验大小与 SHA-256，随后组合配置并等待桌面 Host 健康检查。
-- **失败会恢复原配置。** Portable 会保存 profile 快照、重建依赖并再次验证配置；恢复没有完成时会保留证据并暂停启动，不会带着未知配置继续运行。
-- **永久删除仍是显式实验能力。** 安装前会单独披露不可撤销的本地会话删除权限；移除插件不会自动删除插件曾创建的数据。
-- **Windows 首次打开不再只等待完整页面加载事件。** 本地工作台 DOM 已可用时会立即显示，并在页面资源迟迟未结束时保留明确诊断。
-- **Windows、macOS、Linux x64 与 ARM64 使用同一成品测试门。** 这次桌面壳能力变化需要从 0.2.6 完整升级一次；会话、设置、凭据、现有插件与工作区继续保留。
+- **首次打开不再只等待完整页面加载事件。** 本地工作台 DOM 已可用时会立即显示；页面资源迟迟未结束时仍保留有界诊断，不会把已经可用的工作台误判为启动失败。
+- **慢速电脑拥有更可靠的启动边界。** Host、WebView2 环境、导航和页面就绪分别记录阶段，真正失败时仍能提供可复制的诊断。
+- **`dsh.exe` 不再像失效的桌面程序。** 它仍是高级插件管理命令；直接双击时会说明用途并指向 `DeepSeek-Herness.exe`，带参数运行时保持完整 DSH CLI 能力。
+- **Windows、macOS、Linux x64 与 ARM64 继续使用同一成品测试门。** 会话、设置、凭据、现有插件与工作区保持原位。
 
 内置官方 DSH 仍为 `0.1.0-rc.8`（提交 `141eb6f`），本次没有用未发布的上游源码替换已验证运行时。
 
@@ -41,14 +39,12 @@
 
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.8`). DSH-Portable is an independent community distribution.
 
-0.3.0-rc.2 is the public test candidate for Portable Extensions and the Windows first-start fix:
+0.3.0 is the Windows first-start stability release:
 
-- **Settings → Plugins gains Portable extensions.** The initial catalog contains only the pinned experimental permanent-session-deletion extension, which is not installed by default.
-- **Extension changes never interrupt a running task.** A confirmed change waits for the next normal start. The product verifies artifact size and SHA-256, composes the profile, and waits for the Portable Host health gate.
-- **Failures restore the previous profile.** Portable keeps a profile snapshot, rebuilds dependencies, and validates the restored configuration. If recovery cannot complete, it preserves the evidence and pauses startup instead of loading an unknown profile.
-- **Permanent deletion remains explicitly experimental.** Its irreversible local-session capability is disclosed separately before installation. Removing the extension does not automatically delete data the extension created.
-- **Windows first start no longer waits only for the final page-load event.** The local workspace appears as soon as its DOM is usable, while stalled page resources still produce bounded diagnostics.
-- **Windows, macOS, Linux x64, and Linux ARM64 share the same finished-product gate.** This desktop-shell change requires one complete upgrade from 0.2.6; sessions, settings, credentials, existing plugins, and workspace remain in place.
+- **First launch no longer waits only for the final page-load event.** The local workspace appears as soon as its DOM is usable. Slow page resources still produce bounded diagnostics instead of turning an already usable workspace into a false startup failure.
+- **Slow PCs now have a more reliable startup boundary.** Host, WebView2 environment, navigation, and page readiness are recorded separately, while genuine failures still provide copyable diagnostics.
+- **`dsh.exe` no longer looks like a broken desktop app.** It remains the advanced plugin-management command. Opening it directly explains its purpose and points to `DeepSeek-Herness.exe`; command-line arguments still reach the complete DSH CLI.
+- **Windows, macOS, Linux x64, and Linux ARM64 continue to share the same finished-product gate.** Sessions, settings, credentials, existing plugins, and workspace remain in place.
 
 The bundled official DSH remains `0.1.0-rc.8` at commit `141eb6f`; this candidate does not replace the tested runtime with unpublished upstream source.
 

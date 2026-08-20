@@ -118,15 +118,10 @@ AppImage 会把会话、设置、插件和工作区保存在同目录的 `DSH-Po
 
 ## 插件管理
 
-0.3 测试版可在 **设置 → 插件 → 便携扩展** 中安装少量经过当前 Portable 版本固定的
-可选扩展。确认后不会立即重启，而是等你正常退出，在下次启动前完成下载、校验、配置
-验证和健康检查；失败会恢复原配置。永久删除会话标为实验性，默认不安装，启用前必须
-单独确认不可撤销的数据权限。
-
-图形目录只收录少量已经固定版本和权限边界的扩展，不代表所有社区插件。其他插件仍可
-使用下面的通用命令管理。
-
-Windows 和 Linux 成品都已准备好插件命令。Windows 在 DSH-Portable 文件夹中打开 PowerShell：
+插件、设置与会话都保存在 Portable 数据目录中，移动或备份时会一起保留。Windows 和
+Linux 成品内置了面向高级用户的 DSH 命令，无需另行准备运行环境。Windows 请在
+DSH-Portable 文件夹中打开 PowerShell 后使用；日常启动仍双击 `DeepSeek-Herness.exe`，
+`dsh.exe` 是命令行工具，不是第二个桌面启动器。
 
 ```powershell
 .\dsh.exe plugin --profile web add <插件>

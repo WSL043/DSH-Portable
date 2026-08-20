@@ -1,6 +1,6 @@
 {
   "name": "@wsl043/dsh-portable-desktop-bridge",
-  "version": "0.3.0-rc.2",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
@@ -25,8 +25,6 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
-    "lib/extensions.js",
-    "extensions/catalog.json",
     "cordis.patch.yml"
   ],
   "license": "MIT"

@@ -150,9 +150,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
 
   assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'sessionLogDownload'])
   client.exports.apply(runtime.ctx)
-  assert.equal(runtime.slotEntries.length, 1)
-  assert.equal(runtime.slotEntries[0].options.name, 'settings.plugins.tab')
-  assert.equal(runtime.slotEntries[0].options.id, 'portable-extensions')
+  assert.equal(runtime.slotEntries.length, 0)
 
   const initial = client.posted.at(-1)
   assert.equal(initial.type, 'dsh-portable/state')

@@ -195,12 +195,12 @@ jobs:
             scripts/smoke-portable-extensions.mjs `
             (Join-Path $Root 'DSH-Portable') `
             'tests\fixtures\dsh-portable-smoke-plugin'
-          if ($LASTEXITCODE -ne 0) { throw "Windows Portable Extensions smoke failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "Windows stable extension-surface smoke failed with exit code $LASTEXITCODE" }
           & (Join-Path $Root 'DSH-Portable\runtime\node\node.exe') `
             scripts/smoke-portable-catalog-extension.mjs `
             (Join-Path $Root 'DSH-Portable') `
             session-delete
-          if ($LASTEXITCODE -ne 0) { throw "Windows catalog extension smoke failed with exit code $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 0) { throw "Windows retired catalog smoke failed with exit code $LASTEXITCODE" }
           ./scripts/smoke-windows-plugins.ps1 `
             -Root (Join-Path $Root 'DSH-Portable') `
             -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
@@ -403,7 +403,7 @@ jobs:
           bash scripts/smoke-macos-desktop-host.sh "$ROOT/DSH-Portable"
 
   macos-plugin-smoke:
-    name: macOS Portable Extensions (${{ matrix.arch }})
+    name: macOS plugin portability (${{ matrix.arch }})
     needs: macos-build
     strategy:
       fail-fast: false

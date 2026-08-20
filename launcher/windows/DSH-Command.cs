@@ -1,17 +1,32 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Text;
 
 [assembly: AssemblyTitle("DSH-Portable Command")]
 [assembly: AssemblyProduct("DSH-Portable")]
 [assembly: AssemblyCompany("WSL043")]
-[assembly: AssemblyVersion("0.3.0.2")]
-[assembly: AssemblyFileVersion("0.3.0.2")]
+[assembly: AssemblyVersion("0.3.0.65534")]
+[assembly: AssemblyFileVersion("0.3.0.65534")]
 
 internal static class DshCommand
 {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
+    private static extern int MessageBoxW(IntPtr window, string message, string title, uint type);
+
+    private static int ShowNoArgumentsGuidance()
+    {
+        const string message =
+            "这是 DSH 命令行入口，需要在 PowerShell 或终端中带参数使用。\n\n" +
+            "若要打开 DeepSeek Harness，请运行同一文件夹中的 DeepSeek-Herness.exe。\n\n" +
+            "This is the DSH command-line entry point and requires arguments in PowerShell or a terminal.\n\n" +
+            "To open DeepSeek Harness, run DeepSeek-Herness.exe in the same folder.";
+        MessageBoxW(IntPtr.Zero, message, "DSH 命令行 / DSH command line", 0x00010040);
+        return 0;
+    }
+
     private static string QuoteWindowsArgument(string value)
     {
         if (value.Length > 0 && value.IndexOfAny(new[] { ' ', '\t', '\n', '\v', '"' }) < 0)
@@ -57,6 +72,9 @@ internal static class DshCommand
     [STAThread]
     private static int Main(string[] arguments)
     {
+        if (arguments == null || arguments.Length == 0)
+            return ShowNoArgumentsGuidance();
+
         try
         {
             var executable = Process.GetCurrentProcess().MainModule.FileName;

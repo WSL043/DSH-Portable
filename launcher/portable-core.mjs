@@ -71,6 +71,37 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
   }
 }
 
+export async function retirePendingExtensionOperation(layout) {
+  let pendingText
+  try {
+    pendingText = await readFile(layout.extensionPending, 'utf8')
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false
+    throw error
+  }
+
+  let pending
+  try {
+    pending = JSON.parse(pendingText)
+  } catch {
+    throw new Error('A retired Portable Extensions operation requires recovery; the pending state was left unchanged.')
+  }
+  if (pending?.status !== 'queued') {
+    throw new Error('A retired Portable Extensions operation requires recovery; the pending state was left unchanged.')
+  }
+
+  await writeJsonAtomic(layout.extensionResult, {
+    schemaVersion: 1,
+    operationId: String(pending.operationId || ''),
+    id: String(pending.id || ''),
+    action: String(pending.action || ''),
+    status: 'failed',
+    code: 'portable_extensions_retired',
+  })
+  await rm(layout.extensionPending, { force: true })
+  return true
+}
+
 export async function ensureDesktopBridgeFallback(layout) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const target = paths.dirname(layout.desktopBridgePatch)
