@@ -5,6 +5,7 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { classifyProductVersion } from '../scripts/version-policy.mjs'
+import { renderReleaseNotes } from '../scripts/render-release-notes.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
@@ -32,21 +33,27 @@ test('stable and release-candidate versions have unambiguous GitHub channels', (
   }
 })
 
-test('all finished-product manifests use the same stable product version', async () => {
+test('release notes always link to the immutable release tag being published', () => {
+  const source = '[download](https://github.com/WSL043/DSH-Portable/releases/latest/download/file.zip)'
+  assert.equal(
+    renderReleaseNotes(source, 'v0.3.0-rc.1'),
+    '[download](https://github.com/WSL043/DSH-Portable/releases/download/v0.3.0-rc.1/file.zip)',
+  )
+  assert.throws(() => renderReleaseNotes(source, 'latest'), /tag/i)
+})
+
+test('all finished-product manifests use the same declared product version', async () => {
   const manifest = JSON.parse(await read('package.json'))
   const policy = classifyProductVersion(manifest.version)
-  assert.equal(policy.channel, 'stable')
+  assert.ok(['stable', 'candidate'].includes(policy.channel))
   const desktopBridge = JSON.parse(await read('desktop-bridge/package.json'))
   const appLock = JSON.parse(await read('app/package-lock.json'))
   assert.equal(desktopBridge.version, policy.version)
   assert.equal(appLock.packages['../desktop-bridge'].version, policy.version)
 
-  const sources = await Promise.all([
+  const productSources = await Promise.all([
     read('installer/windows/DSH-Portable.iss'),
     read('installer/windows/DeepSeek-Herness.iss'),
-    read('launcher/windows/DSH-Bootstrap.cs'),
-    read('launcher/windows/DSH-Portable.cs'),
-    read('launcher/windows/DSH-Command.cs'),
     read('launcher/linux/Cargo.toml'),
     read('launcher/linux/package.json'),
     read('launcher/linux/tauri.conf.json'),
@@ -55,8 +62,15 @@ test('all finished-product manifests use the same stable product version', async
     read('launcher/macos/Info-stop-installed.plist'),
   ])
   const productVersion = new RegExp(regexEscape(policy.version))
-  for (const source of sources) assert.match(source, productVersion)
-  assert.doesNotMatch(sources.join('\n'), new RegExp(`${regexEscape(policy.version)}-rc\\.`))
+  for (const source of productSources) assert.match(source, productVersion)
+  const windowsSources = await Promise.all([
+    read('launcher/windows/DSH-Bootstrap.cs'),
+    read('launcher/windows/DSH-Portable.cs'),
+    read('launcher/windows/DSH-Command.cs'),
+  ])
+  const windowsVersion = new RegExp(regexEscape(policy.windowsVersion))
+  for (const source of windowsSources) assert.match(source, windowsVersion)
+  assert.doesNotMatch([...productSources, ...windowsSources].join('\n'), new RegExp(`${regexEscape(policy.version)}-rc\\.`))
 })
 
 test('publishing derives prerelease state from the product version instead of user input', async () => {

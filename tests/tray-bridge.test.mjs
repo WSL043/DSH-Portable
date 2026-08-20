@@ -30,7 +30,10 @@ async function loadBridgeClient() {
   }
   vm.runInNewContext(source, { console, queueMicrotask, window })
   assert.equal(definition?.id, '@wsl043/dsh-portable-desktop-bridge')
-  const exports = definition.factory(() => { throw new Error('the private bridge must not import another client bundle') })
+  const exports = definition.factory((id) => {
+    if (id === 'react') return {}
+    throw new Error(`the private bridge imported an unexpected client bundle: ${id}`)
+  })
   return {
     exports,
     posted,
@@ -50,8 +53,21 @@ function fakeContext(initialSessions) {
   let theme = { active: { colorScheme: 'dark' }, revision: 1 }
   let downloadSnapshot = { bySession: {} }
   const disposers = []
+  const slotEntries = []
   const ctx = {
-    locale: { getLocale: () => locale },
+    locale: {
+      getLocale: () => locale,
+      register() { return () => {} },
+      bind() { return key => key },
+    },
+    slots: {
+      inject(_name, factory) { const dispose = factory(); if (typeof dispose === 'function') disposers.push(dispose) },
+      register(options, component) {
+        const entry = { options, component }
+        slotEntries.push(entry)
+        return () => { const index = slotEntries.indexOf(entry); if (index >= 0) slotEntries.splice(index, 1) }
+      },
+    },
     theme: { getTheme: () => theme },
     sessions: {
       list: {
@@ -90,6 +106,7 @@ function fakeContext(initialSessions) {
     opened,
     get cleared() { return cleared },
     get downloadSnapshot() { return downloadSnapshot },
+    slotEntries,
     emit(name, value) {
       if (name === 'locale/change') locale = value
       if (name === 'theme/change') theme = value
@@ -131,8 +148,11 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList())
 
-  assert.deepEqual([...client.exports.inject], ['locale', 'theme', 'sessions', 'sessionLogDownload'])
+  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'sessionLogDownload'])
   client.exports.apply(runtime.ctx)
+  assert.equal(runtime.slotEntries.length, 1)
+  assert.equal(runtime.slotEntries[0].options.name, 'settings.plugins.tab')
+  assert.equal(runtime.slotEntries[0].options.id, 'portable-extensions')
 
   const initial = client.posted.at(-1)
   assert.equal(initial.type, 'dsh-portable/state')
@@ -206,10 +226,10 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*11/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*11/)
-  assert.match(macBuild, /"shellSchema": 11/)
-  assert.match(macBuild, /"requiredShellSchema": 11/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*12/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*12/)
+  assert.match(macBuild, /"shellSchema": 12/)
+  assert.match(macBuild, /"requiredShellSchema": 12/)
 })
 
 test('portable bridge fallback follows the moved product without entering a user plugin manifest', async () => {

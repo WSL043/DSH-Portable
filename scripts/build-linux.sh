@@ -65,7 +65,7 @@ NPM_CLI="$NODE_FOLDER/lib/node_modules/npm/bin/npm-cli.js"
 
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
-for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs; do
+for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs extension-operations.mjs http-readiness.mjs; do
   cp "$PROJECT_ROOT/launcher/$file" "$STAGE/launcher/$file"
 done
 cp "$PROJECT_ROOT/launcher/linux/dsh" "$STAGE/dsh"
@@ -113,7 +113,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 3
+  "shellSchema": 4
 }
 EOF
 
@@ -148,7 +148,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "linux-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 3,
+  "requiredShellSchema": 4,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

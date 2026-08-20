@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url'
 import {
   PORT_RANGE,
   acquireLaunchLock,
+  acquireLaunchLockWithWait,
   browserLaunchSpec,
   buildDshEnv,
   ensureDesktopBridgeFallback,
@@ -31,6 +32,12 @@ import {
   installAvailableAppUpdate,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
+import {
+  finishExtensionOperation,
+  preparePendingExtensionOperation,
+  rollbackExtensionOperationAfterBootFailure,
+} from './extension-operations.mjs'
+import { workspaceDocumentReady } from './http-readiness.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
@@ -66,16 +73,7 @@ function ownedState(state) {
   return isOwnedDshProcess(queryProcess(state.pid, layout.platform), layout, state.port)
 }
 
-function httpReady(port, timeout = 1200) {
-  return new Promise((resolve) => {
-    const request = http.get({ hostname: '127.0.0.1', port, path: '/', timeout }, (response) => {
-      response.resume()
-      resolve(Number(response.statusCode) >= 200 && Number(response.statusCode) < 500)
-    })
-    request.once('timeout', () => request.destroy())
-    request.once('error', () => resolve(false))
-  })
-}
+const httpReady = workspaceDocumentReady
 
 function requestGracefulShutdown(state, timeout = 2500) {
   if (!state?.controlPipe || !state?.controlToken) return Promise.resolve(false)
@@ -100,6 +98,42 @@ async function waitForHost(state, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     if (await httpReady(state.port)) return true
+    if (!ownedState(state)) return false
+    await new Promise((resolve) => setTimeout(resolve, 250))
+  }
+  return false
+}
+
+function extensionHostReady(port, timeout = 1200) {
+  return new Promise((resolve) => {
+    const request = http.get({
+      hostname: '127.0.0.1', port, path: '/api/dsh-portable/extensions', timeout,
+      headers: { host: `127.0.0.1:${port}` },
+    }, (response) => {
+      const chunks = []
+      let length = 0
+      response.on('data', (chunk) => {
+        length += chunk.length
+        if (length <= 64 * 1024) chunks.push(chunk)
+        else request.destroy()
+      })
+      response.once('end', () => {
+        if (response.statusCode !== 200 || length > 64 * 1024) return resolve(false)
+        try {
+          const value = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+          resolve(value?.schemaVersion === 1 && typeof value.catalogRevision === 'string' && Array.isArray(value.items))
+        } catch { resolve(false) }
+      })
+    })
+    request.once('timeout', () => request.destroy())
+    request.once('error', () => resolve(false))
+  })
+}
+
+async function waitForExtensionHost(state, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await extensionHostReady(state.port)) return true
     if (!ownedState(state)) return false
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
@@ -269,15 +303,22 @@ async function start(noBrowser) {
   await ensureDesktopBridgeFallback(layout)
   const migration = await migratePortableRoot(layout)
   const prior = readProcessState()
-  if (ownedState(prior) && await httpReady(prior.port)) {
-    const url = `http://127.0.0.1:${prior.port}`
-    const browser = noBrowser ? null : await openBrowser(url)
-    return { status: 'already-running', pid: prior.pid, port: prior.port, url, browser, migration }
+  if (ownedState(prior)) {
+    if (await waitForHost(prior, 15000)) {
+      const url = `http://127.0.0.1:${prior.port}`
+      const browser = noBrowser ? null : await openBrowser(url)
+      return { status: 'already-running', pid: prior.pid, port: prior.port, url, browser, migration }
+    }
+    throw new Error('DeepSeek Harness is still running but its local workspace is not ready. Stop the existing instance before retrying; Portable Extensions were not changed.')
   }
   if (prior) {
     if (process.platform !== 'win32' && prior.controlPipe) rmSync(prior.controlPipe, { force: true })
     rmSync(layout.processState, { force: true })
   }
+
+  // Portable Extensions never mutate a live profile. A confirmed operation is
+  // applied only after the existing Host check above proves DSH is stopped.
+  const extensionTransaction = await preparePendingExtensionOperation(layout)
 
   const port = await selectPort(prior?.port)
   const stdoutLog = path.join(layout.logsDir, 'dsh.stdout.log')
@@ -323,27 +364,46 @@ async function start(noBrowser) {
     startedAt: new Date().toISOString(),
   }
   await writeJsonAtomic(layout.processState, state)
-  if (!await waitForHost(state)) {
-    const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
-    if (child.pid) {
-      try {
-        if (process.platform === 'win32') {
-          execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { encoding: 'utf8', windowsHide: true })
-        } else {
-          process.kill(-child.pid, 'SIGKILL')
+  try {
+    const hostUnavailable = !await waitForHost(state)
+      || extensionTransaction && !await waitForExtensionHost(state)
+    if (hostUnavailable) {
+      const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
+      if (child.pid) {
+        try {
+          if (process.platform === 'win32') {
+            execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { encoding: 'utf8', windowsHide: true })
+          } else {
+            process.kill(-child.pid, 'SIGKILL')
+          }
+        } catch {
+          // The process may already have exited; the state file is still removed below.
         }
-      } catch {
-        // The process may already have exited; the state file is still removed below.
       }
+      rmSync(layout.processState, { force: true })
+      if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
+      if (extensionTransaction) {
+        await rollbackExtensionOperationAfterBootFailure(layout, extensionTransaction)
+        return start(noBrowser)
+      }
+      throw new Error(`DeepSeek Harness failed to start.\n${details}`)
     }
-    rmSync(layout.processState, { force: true })
-    if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
-    throw new Error(`DeepSeek Harness failed to start.\n${details}`)
-  }
 
-  const url = `http://127.0.0.1:${port}`
-  const browser = noBrowser ? null : await openBrowser(url)
-  return { status: 'started', pid: child.pid, port, url, browser, migration }
+    if (extensionTransaction) await finishExtensionOperation(layout, extensionTransaction)
+
+    const url = `http://127.0.0.1:${port}`
+    const browser = noBrowser ? null : await openBrowser(url)
+    return { status: 'started', pid: child.pid, port, url, browser, migration }
+  } catch (error) {
+    let cleanupError = null
+    if (ownedState(state)) {
+      try { await stop() } catch (failedCleanup) { cleanupError = failedCleanup }
+    }
+    if (cleanupError) {
+      throw new Error(`${error?.message ?? error}\nStartup cleanup failed: ${cleanupError?.message ?? cleanupError}`, { cause: error })
+    }
+    throw error
+  }
 }
 
 async function stop() {
@@ -478,7 +538,9 @@ function print(result, json) {
 async function main() {
   if (!['win32', 'darwin', 'linux'].includes(process.platform)) throw new Error('DSH-Portable supports Windows, macOS, and Linux.')
   const options = parseCli(process.argv.slice(2))
-  const release = await acquireLaunchLock(layout)
+  const release = options.waitForLockMs > 0
+    ? await acquireLaunchLockWithWait(layout, options.waitForLockMs)
+    : await acquireLaunchLock(layout)
   try {
     await ensurePortableDirectories(layout)
     if (existsSync(layout.updateJournal)) {

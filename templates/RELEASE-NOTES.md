@@ -1,12 +1,16 @@
 > 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh 0.1.0-rc.8`）。DSH-Portable 是独立社区分发项目。
 
-0.2.6 完成了官方 rc.8 的桌面适配，并修复启动关键路径：
+0.3.0-rc.1 是 Portable 扩展市场的公开测试版：
 
-- **工作台先打开，更新检查随后在后台进行。** 网络慢或更新服务暂时不可用时，不再延迟本地 DSH 启动；关闭“启动时检查更新”后不会发起自动检查，托盘中的手动入口仍可使用。
-- **官方 rc.8 不再额外打开 Edge、Chrome 或默认浏览器。** Windows 使用 WebView2，macOS 使用 WKWebView，Linux 使用原生桌面壳；系统浏览器只处理用户主动打开的外部链接。
-- **内置官方 DSH 升级到 rc.8。** 包含推理内容回传、多查询 Web Search、图片输入保护、文件打开错误提示、引用交互、动态 UI 与 Codex 子任务可靠性修复。
-- **上游更新候选现在固定到 npm 版本对应的官方 Git tag。** 官方 `master` 后续变化不会被误写成已审核发行源码；候选仍需通过全部平台成品测试才会进入稳定更新通道。
-- **Windows、macOS、Linux x64 与 ARM64 使用同一版本与数据保留契约。** 从 0.2.5 升级到 0.2.6 时，Windows 会自动下载一次完整版本；macOS 与 Linux 会提示下载一次完整新版，因为 rc.8 改变了桌面启动契约。会话、设置、凭据、插件与工作区继续保留。以后的兼容更新仍只下载变化的应用组件；macOS 与 Linux 会安排在下次启动前安装，避免打断任务。
+- **设置 → 插件新增“便携扩展”。** 首批只提供两个经过版本固定的可选扩展：ChatGPT / Codex 订阅，以及实验性的永久删除会话。两者都默认不安装。
+- **扩展变更不会打断正在运行的任务。** 用户确认后只排到下次正常启动；安装包会校验大小与 SHA-256，随后组合配置并等待桌面 Host 健康检查。
+- **失败会恢复原配置。** Portable 会保存 profile 快照、重建依赖并再次验证配置；恢复没有完成时会保留证据并暂停启动，不会带着未知配置继续运行。
+- **永久删除仍是显式实验能力。** 安装前会单独披露不可撤销的本地会话删除权限；移除插件不会自动删除插件曾创建的数据。
+- **Windows、macOS、Linux x64 与 ARM64 使用同一成品测试门。** 这次桌面壳能力变化需要从 0.2.6 完整升级一次；会话、设置、凭据、现有插件与工作区继续保留。
+
+内置官方 DSH 仍为 `0.1.0-rc.8`（提交 `141eb6f`），本次没有用未发布的上游源码替换已验证运行时。
+
+桌面端会先打开本地工作区，再在后台启动时检查更新。Windows 与 macOS 都可以在设置或托盘中关闭“启动时检查更新”，也可以对单个版本选择“跳过此版本”。每次提示都会明确区分 DSH-Portable 产品版本与内置官方 DSH 版本；兼容边界不变时只下载变化的 DSH 应用组件，界面显示真实下载百分比。需要完整升级时会下载经过校验的完整版本并原地替换应用文件，会话、设置、凭据、插件与工作区继续保留。
 
 默认 JSONL 会话可以直接升级。若你曾自行启用 DSH 的可选持久 SQLite 后端，rc.8 的数据库格式与旧版不兼容；请先备份并等待上游提供迁移方案，不要删除旧数据库。
 
@@ -36,13 +40,17 @@
 
 > Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh 0.1.0-rc.8`). DSH-Portable is an independent community distribution.
 
-0.2.6 adapts the official rc.8 release and fixes the desktop startup path:
+0.3.0-rc.1 is the public test candidate for Portable Extensions:
 
-- **The local workspace opens before update checking begins in the background.** A slow network or unavailable update service no longer delays local DSH startup. Disabling startup checks performs no automatic check; the manual tray command remains available.
-- **Official rc.8 no longer opens Edge, Chrome, or the default browser beside the desktop app.** Windows uses WebView2, macOS uses WKWebView, and Linux uses its native desktop shell. The system browser is reserved for external links the user chooses to open.
-- **The bundled official DSH moves to rc.8**, including reasoning delivery, multi-query Web Search, image-input safeguards, file-open feedback, references, dynamic UI, and Codex subtask reliability fixes.
-- **Upstream candidates are pinned to the official Git tag matching the npm version.** Later `master` changes cannot be recorded as reviewed release source. Every candidate still has to pass the complete cross-platform product gate.
-- **Windows, macOS, Linux x64, and Linux ARM64 share one version and data-preservation contract.** From 0.2.5 to 0.2.6, Windows downloads one complete package automatically; macOS and Linux request one complete download because rc.8 changes the desktop startup contract. Sessions, settings, credentials, plugins, and workspace remain in place. Later compatible updates return to the smaller component path, with macOS and Linux installing before the next launch so running work is not interrupted.
+- **Settings → Plugins gains Portable extensions.** The initial catalog contains only two pinned, optional entries: ChatGPT / Codex subscriptions and experimental permanent session deletion. Neither is installed by default.
+- **Extension changes never interrupt a running task.** A confirmed change waits for the next normal start. The product verifies artifact size and SHA-256, composes the profile, and waits for the Portable Host health gate.
+- **Failures restore the previous profile.** Portable keeps a profile snapshot, rebuilds dependencies, and validates the restored configuration. If recovery cannot complete, it preserves the evidence and pauses startup instead of loading an unknown profile.
+- **Permanent deletion remains explicitly experimental.** Its irreversible local-session capability is disclosed separately before installation. Removing the extension does not automatically delete data the extension created.
+- **Windows, macOS, Linux x64, and Linux ARM64 share the same finished-product gate.** This desktop-shell change requires one complete upgrade from 0.2.6; sessions, settings, credentials, existing plugins, and workspace remain in place.
+
+The bundled official DSH remains `0.1.0-rc.8` at commit `141eb6f`; this candidate does not replace the tested runtime with unpublished upstream source.
+
+The desktop opens the local workspace first, then checks for updates in the background at startup. On Windows and macOS, you can turn off updates at startup from Settings or the tray, or choose **Skip this version** for one release. Every notification names the DSH-Portable product version separately from the bundled official DSH version. When the compatibility boundary is unchanged, it downloads only the changed DSH application component and shows the real download percentage. When a complete upgrade is required, it downloads the verified complete package and replaces application files in place while sessions, settings, credentials, plugins, and workspace remain in place.
 
 Default JSONL sessions can be upgraded normally. If you explicitly enabled DSH's optional durable SQLite backend, rc.8 uses an incompatible database format. Back up the old database and wait for an upstream migration path instead of deleting it.
 

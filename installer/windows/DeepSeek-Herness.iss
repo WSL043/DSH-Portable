@@ -8,7 +8,7 @@
   #error ProjectRoot is required
 #endif
 #ifndef AppVersion
-  #define AppVersion "0.2.6"
+  #define AppVersion "0.3.0-rc.1"
 #endif
 
 [Setup]
@@ -34,9 +34,9 @@ SolidCompression=yes
 WizardStyle=modern
 LanguageDetectionMethod=uilanguage
 ShowLanguageDialog=auto
-CloseApplications=no
+CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=0.2.6.65534
+VersionInfoVersion=0.3.0.1
 VersionInfoProductName=DeepSeek-Herness
 VersionInfoDescription=DeepSeek-Herness installer
 VersionInfoCompany=WSL043
@@ -71,7 +71,7 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; GroupDescription
 Filename: "{app}\DeepSeek-Herness.exe"; Description: "{cm:StartApp}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\DeepSeek-Herness.exe"; Parameters: "stop --no-browser --json"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
+Filename: "{app}\DeepSeek-Herness.exe"; Parameters: "uninstall-stop --no-browser --json"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "StopDeepSeekHerness"
 
 [Code]
 function PrepareToInstall(var NeedsRestart: Boolean): String;
