@@ -6,6 +6,7 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -21,8 +22,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.2.6.65534")]
-[assembly: AssemblyFileVersion("0.2.6.65534")]
+[assembly: AssemblyVersion("0.3.0.1")]
+[assembly: AssemblyFileVersion("0.3.0.1")]
 
 namespace DshPortable
 {
@@ -305,6 +306,9 @@ namespace DshPortable
         private TrayBridgeState trayState;
         private string trayTheme = "light";
         private Uri applicationUri;
+        private readonly List<string> webViewStartupTrace = new List<string>();
+        private Stopwatch webViewStartupClock;
+        private TaskCompletionSource<string> webViewProcessFailure;
 
         internal LauncherWindow(string[] args)
         {
@@ -1143,9 +1147,18 @@ namespace DshPortable
                 if (desktopStart)
                 {
                     statusLabel.Text = L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
+                    Task webViewInitialization = InitializeWebViewAsync();
                     Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json" }));
-                    if (started.Item1 != 0) { HandleFailure(started.Item1, started.Item2); return; }
+                    if (started.Item1 != 0)
+                    {
+                        Task ignoredInitializationFailure = webViewInitialization.ContinueWith(
+                            task => { var ignored = task.Exception; },
+                            TaskContinuationOptions.OnlyOnFaulted);
+                        HandleFailure(started.Item1, started.Item2);
+                        return;
+                    }
                     backendStarted = true;
+                    await webViewInitialization;
                     string url = JsonString(started.Item2, "url");
                     if (!IsTrustedLoopbackUrl(url))
                     {
@@ -1187,9 +1200,20 @@ namespace DshPortable
             {
                 if (desktopStart && backendStarted)
                 {
-                    try { await Task.Run(() => InvokePortableCli(new[] { "stop", "--no-browser", "--json" })); }
-                    catch { }
-                    backendStarted = false;
+                    try
+                    {
+                        Tuple<int, string> stopped = await Task.Run(() => InvokePortableCli(new[] { "stop", "--no-browser", "--json" }));
+                        if (stopped.Item1 == 0) backendStarted = false;
+                        else launchError = new InvalidOperationException(
+                            launchError.Message + "\r\n" + L("启动失败后的后台清理也失败：", "Background cleanup after startup failure also failed: ") + stopped.Item2,
+                            launchError);
+                    }
+                    catch (Exception cleanupError)
+                    {
+                        launchError = new InvalidOperationException(
+                            launchError.Message + "\r\n" + L("启动失败后的后台清理也失败：", "Background cleanup after startup failure also failed: ") + cleanupError.Message,
+                            launchError);
+                    }
                 }
                 HandleFailure(1, launchError.Message);
             }
@@ -1401,25 +1425,155 @@ namespace DshPortable
         private async Task NavigateDesktopAsync(string url)
         {
             applicationUri = new Uri(url);
+            await NavigateWorkspaceAsync(url, true);
+            backendStarted = true;
+        }
+
+        private void RecordWebViewPhase(string phase)
+        {
+            long elapsed = webViewStartupClock == null ? 0 : webViewStartupClock.ElapsedMilliseconds;
+            lock (webViewStartupTrace)
+            {
+                if (webViewStartupTrace.Count < 32) webViewStartupTrace.Add(elapsed + "ms " + phase);
+            }
+        }
+
+        private void OnWebViewProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs eventArgs)
+        {
+            string failure = eventArgs.ProcessFailedKind + "/" + eventArgs.Reason
+                + " exit=" + eventArgs.ExitCode
+                + (String.IsNullOrWhiteSpace(eventArgs.ProcessDescription) ? "" : " " + eventArgs.ProcessDescription);
+            RecordWebViewPhase("process-failed:" + failure);
+            if (webViewProcessFailure != null) webViewProcessFailure.TrySetResult(failure);
+        }
+
+        private async Task NavigateWorkspaceAsync(string url, bool updated)
+        {
             TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
                 new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
+            webViewProcessFailure = new TaskCompletionSource<string>();
             EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = null;
             completed = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
             {
-                webView.CoreWebView2.NavigationCompleted -= completed;
+                RecordWebViewPhase("navigation-completed:" + eventArgs.IsSuccess + "/" + eventArgs.WebErrorStatus);
                 navigation.TrySetResult(eventArgs);
             };
             webView.CoreWebView2.NavigationCompleted += completed;
+            RecordWebViewPhase("navigation-start:" + url);
             webView.CoreWebView2.Navigate(url);
-            Task winner = await Task.WhenAny(navigation.Task, Task.Delay(WorkspaceNavigationTimeoutMs));
-            if (winner != navigation.Task)
+            Task timeout = Task.Delay(WorkspaceNavigationTimeoutMs);
+            Task winner = await Task.WhenAny(navigation.Task, webViewProcessFailure.Task, timeout);
+            webView.CoreWebView2.NavigationCompleted -= completed;
+            if (winner == webViewProcessFailure.Task)
             {
-                webView.CoreWebView2.NavigationCompleted -= completed;
-                throw new TimeoutException(L("更新后的工作台未能在 60 秒内打开。", "The updated workspace did not open within 60 seconds."));
+                string webViewSnapshot = WebViewEnvironmentSnapshot();
+                string diagnostics = await Task.Run(() => WorkspaceFailureDiagnostics(url, webViewSnapshot));
+                throw new InvalidOperationException(L(
+                    "WebView2 进程在打开工作台时失败。",
+                    "A WebView2 process failed while opening the workspace.") + "\r\n" + diagnostics);
+            }
+            if (winner == timeout)
+            {
+                RecordWebViewPhase("navigation-timeout");
+                string webViewSnapshot = WebViewEnvironmentSnapshot();
+                string diagnostics = await Task.Run(() => WorkspaceFailureDiagnostics(url, webViewSnapshot));
+                throw new TimeoutException((updated
+                    ? L("更新后的工作台未能在 60 秒内打开。", "The updated workspace did not open within 60 seconds.")
+                    : L("DeepSeek Harness 工作台未能在 60 秒内打开。", "The DeepSeek Harness workspace did not open within 60 seconds."))
+                    + "\r\n" + diagnostics);
             }
             CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
-            if (!result.IsSuccess) throw new InvalidOperationException(L("更新后的工作台加载失败：", "The updated workspace could not load: ") + result.WebErrorStatus);
-            backendStarted = true;
+            if (!result.IsSuccess)
+            {
+                string webViewSnapshot = WebViewEnvironmentSnapshot();
+                string diagnostics = await Task.Run(() => WorkspaceFailureDiagnostics(url, webViewSnapshot));
+                throw new InvalidOperationException((updated
+                    ? L("更新后的工作台加载失败：", "The updated workspace could not load: ")
+                    : L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: "))
+                    + result.WebErrorStatus + "\r\n" + diagnostics);
+            }
+            webViewProcessFailure = null;
+        }
+
+        private string ProbeWorkspaceDocument(string url)
+        {
+            Stopwatch probeBudget = Stopwatch.StartNew();
+            try
+            {
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+                request.AllowAutoRedirect = true;
+                request.Proxy = null;
+                request.Timeout = 5000;
+                request.ReadWriteTimeout = 5000;
+                using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                using (Stream stream = response.GetResponseStream())
+                {
+                    byte[] buffer = new byte[16384];
+                    int total = 0;
+                    int read;
+                    while (true)
+                    {
+                        int remaining = 5000 - (int)probeBudget.ElapsedMilliseconds;
+                        if (remaining <= 0) return "host-probe-timeout";
+                        if (stream.CanTimeout) stream.ReadTimeout = Math.Max(1, remaining);
+                        read = stream.Read(buffer, 0, buffer.Length);
+                        if (read <= 0) break;
+                        total += read;
+                        if (total > 2 * 1024 * 1024) return "host-body-too-large";
+                    }
+                    return "host=" + (int)response.StatusCode + " " + response.ContentType + " bytes=" + total;
+                }
+            }
+            catch (Exception error)
+            {
+                return "host-probe-failed=" + error.GetType().Name + ": " + error.Message;
+            }
+        }
+
+        private string WebViewEnvironmentSnapshot()
+        {
+            try
+            {
+                return "webview2=" + webView.CoreWebView2.Environment.BrowserVersionString + "\r\n"
+                    + "webview2-data=" + webView.CoreWebView2.Environment.UserDataFolder + "\r\n"
+                    + "webview2-reports=" + webView.CoreWebView2.Environment.FailureReportFolderPath;
+            }
+            catch { return "webview2=unavailable"; }
+        }
+
+        private static string TailLog(string filename, int maximumCharacters)
+        {
+            try
+            {
+                using (FileStream stream = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                {
+                    long start = Math.Max(0, stream.Length - maximumCharacters * 4L);
+                    stream.Seek(start, SeekOrigin.Begin);
+                    using (StreamReader reader = new StreamReader(stream, Encoding.UTF8, true))
+                    {
+                        string text = reader.ReadToEnd();
+                        return text.Length <= maximumCharacters ? text : text.Substring(text.Length - maximumCharacters);
+                    }
+                }
+            }
+            catch { return String.Empty; }
+        }
+
+        private string WorkspaceFailureDiagnostics(string url, string webViewSnapshot)
+        {
+            StringBuilder details = new StringBuilder();
+            details.AppendLine("diagnostic=workspace-navigation-v1");
+            details.AppendLine(ProbeWorkspaceDocument(url));
+            details.AppendLine(webViewSnapshot);
+            lock (webViewStartupTrace)
+                details.AppendLine("phases=" + String.Join(" | ", webViewStartupTrace.ToArray()));
+            string logDirectory = Path.Combine(Path.GetDirectoryName(ResolveWebViewDataRoot()), "logs");
+            foreach (string name in new[] { "dsh.stderr.log", "dsh.stdout.log" })
+            {
+                string tail = TailLog(Path.Combine(logDirectory, name), 2000).Trim();
+                if (!String.IsNullOrEmpty(tail)) details.AppendLine(name + ":\r\n" + tail);
+            }
+            return details.ToString().Trim();
         }
 
         private void HideDesktopOperation()
@@ -1431,9 +1585,10 @@ namespace DshPortable
             webView.BringToFront();
         }
 
-        private async Task ShowDesktopAsync(string url)
+        private async Task InitializeWebViewAsync()
         {
-            statusLabel.Text = L("正在打开工作台…", "Opening the workspace…");
+            webViewStartupClock = Stopwatch.StartNew();
+            RecordWebViewPhase("environment-start");
             string userData = ResolveWebViewDataRoot();
             Directory.CreateDirectory(userData);
             try
@@ -1450,7 +1605,12 @@ namespace DshPortable
                     options.AdditionalBrowserArguments = testBrowserArguments;
                 }
                 CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(null, userData, options);
+                environment.BrowserProcessExited += delegate(object sender, CoreWebView2BrowserProcessExitedEventArgs eventArgs)
+                {
+                    RecordWebViewPhase("browser-exited:" + eventArgs.BrowserProcessExitKind);
+                };
                 await webView.EnsureCoreWebView2Async(environment);
+                RecordWebViewPhase("environment-ready:" + environment.BrowserVersionString);
             }
             catch (WebView2RuntimeNotFoundException)
             {
@@ -1460,7 +1620,6 @@ namespace DshPortable
                         "Microsoft Edge WebView2 Runtime is missing.\r\nInstall the official Evergreen Runtime, then open the app again:\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703"));
             }
 
-            applicationUri = new Uri(url);
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
@@ -1468,22 +1627,16 @@ namespace DshPortable
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
-            TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
-                new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
-            EventHandler<CoreWebView2NavigationCompletedEventArgs> navigationCompleted = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
-            {
-                navigation.TrySetResult(eventArgs);
-            };
-            webView.CoreWebView2.NavigationCompleted += navigationCompleted;
-            webView.Source = applicationUri;
+            webView.CoreWebView2.ContentLoading += delegate { RecordWebViewPhase("content-loading"); };
+            webView.CoreWebView2.DOMContentLoaded += delegate { RecordWebViewPhase("dom-content-loaded"); };
+            webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
+        }
 
-            Task completed = await Task.WhenAny(navigation.Task, Task.Delay(WorkspaceNavigationTimeoutMs));
-            webView.CoreWebView2.NavigationCompleted -= navigationCompleted;
-            if (completed != navigation.Task)
-                throw new TimeoutException(L("DeepSeek Harness 工作台未能在 60 秒内打开。", "The DeepSeek Harness workspace did not open within 60 seconds."));
-            CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
-            if (!result.IsSuccess)
-                throw new InvalidOperationException(L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: ") + result.WebErrorStatus);
+        private async Task ShowDesktopAsync(string url)
+        {
+            statusLabel.Text = L("正在打开工作台…", "Opening the workspace…");
+            applicationUri = new Uri(url);
+            await NavigateWorkspaceAsync(url, false);
 
             SuspendLayout();
             FormBorderStyle = FormBorderStyle.Sizable;
@@ -1986,6 +2139,11 @@ namespace DshPortable
             SetCurrentProcessExplicitAppUserModelID("io.github.wsl043.dsh-portable");
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+            if (args != null && args.Length > 0 && string.Equals(args[0], "uninstall-stop", StringComparison.OrdinalIgnoreCase))
+            {
+                LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableExit);
+                args = new[] { "stop", "--no-browser", "--json", "--wait-for-lock-ms", "30000" };
+            }
             if ((args == null || args.Length == 0) && LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableRestore))
                 return;
             Application.Run(new LauncherWindow(args));

@@ -80,7 +80,7 @@ function icoPngFrames(ico) {
 test('the public product identity is DSH-Portable everywhere users see it', async () => {
   const manifest = JSON.parse(await read('package.json'))
   assert.equal(manifest.name, 'dsh-portable')
-  assert.equal(classifyProductVersion(manifest.version).channel, 'stable')
+  assert.ok(['stable', 'candidate'].includes(classifyProductVersion(manifest.version).channel))
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
@@ -123,8 +123,10 @@ test('Simplified Chinese is the default GitHub landing page and English is a com
   assert.match(english.slice(0, 1400), /README\.md.+<strong>English<\/strong>/s)
   assert.equal((english.match(/assets\/dsh-interface-en\.png/g) || []).length, 1)
   assert.equal((chinese.match(/assets\/dsh-interface-zh\.png/g) || []).length, 1)
+  assert.equal((english.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 1)
+  assert.equal((chinese.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 1)
   assert.doesNotMatch(`${chinese}\n${english}`, /assets\/(?:dsh-interface|dsh-portable-folder)\.png/)
-  for (const asset of ['assets/dsh-interface-zh.png', 'assets/dsh-interface-en.png']) {
+  for (const asset of ['assets/dsh-interface-zh.png', 'assets/dsh-interface-en.png', 'assets/dsh-portable-extensions-en.png']) {
     assert.equal(await exists(asset), true, `${asset} must be shipped with the repository`)
   }
   assert.equal(await exists('assets/dsh-portable-folder.png'), false, 'the README must not ship a decorative folder screenshot')
@@ -222,6 +224,18 @@ test('publishing separates beginner downloads from machine update assets', async
   assert.match(bootstrap, /releases\/download\/update-channel-stable\/portable-manifest\.json/)
   assert.match(windowsBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-windows-x64\.zip/)
   assert.match(macBuild, /releases\/download\/update-channel-stable\/DSH-Portable-update-macos-\$ARCH\.zip/)
+})
+
+test('every desktop platform exercises the pinned catalog extension lifecycle from the finished product', async () => {
+  const workflow = await read('.github/workflows/ci.yml')
+  const smoke = await read('scripts/smoke-portable-catalog-extension.mjs')
+
+  assert.match(smoke, /session-delete/)
+  assert.match(smoke, /\/plugins\/dsh-session-delete\/delete/)
+  assert.match(smoke, /session-not-found/)
+  assert.match(smoke, /queue\(host\.url,\s*'remove',\s*false\)/)
+  assert.match(smoke, /@deepseek-ai\/dsh-client-ui-workspace/)
+  assert.equal((workflow.match(/smoke-portable-catalog-extension\.mjs/g) || []).length, 3)
 })
 
 test('installable official preview updates become tested candidates while source-only activity stays informational', async () => {
@@ -342,8 +356,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*11/)
-  assert.match(build, /requiredShellSchema\s*=\s*11/)
+  assert.match(build, /shellSchema\s*=\s*12/)
+  assert.match(build, /requiredShellSchema\s*=\s*12/)
   assert.match(source, new RegExp(`AssemblyFileVersion\\("${regexEscape(policy.windowsVersion)}"\\)`))
   assert.match(bootstrap, /ZipArchive/)
   assert.match(bootstrap, /progressPercentLabel/)
@@ -368,6 +382,8 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(setup, /OutputBaseFilename=DeepSeek-Herness-Setup/)
   assert.match(setup, /DefaultDirName=\{localappdata\}\\Programs\\DeepSeek-Herness/)
   assert.match(setup, /PrivilegesRequired=lowest/)
+  assert.match(setup, /CloseApplications=yes/)
+  assert.match(setup, /RestartApplications=no/)
   assert.match(setup, /SetupIconFile=.*DSH-Portable\.ico/)
   assert.match(setup, /Name:\s*"\{group\}\\DeepSeek-Herness";[^\n]+IconFilename:\s*"\{app\}\\DeepSeek-Herness\.exe"/)
   assert.doesNotMatch(setup, /Name:\s*"\{group\}\\Stop DeepSeek-Herness"/)
@@ -384,7 +400,9 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.doesNotMatch(setup, /Stop DeepSeek-Herness\.exe/)
   assert.match(setup, /Excludes:\s*"\\data\\\*,\\workspace\\\*"/)
   assert.doesNotMatch(setup, /Excludes:\s*"data\\\*,workspace\\\*"/)
-  assert.match(setup, /DeepSeek-Herness\.exe";\s*Parameters:\s*"stop/)
+  assert.match(setup, /DeepSeek-Herness\.exe";\s*Parameters:\s*"uninstall-stop/)
+  assert.match(build, /DSH-Portable\.cs/)
+  assert.match(await read('launcher/windows/DSH-Portable.cs'), /uninstall-stop[\s\S]+WmPortableExit/)
   assert.match(build, /BuildInstaller/)
   assert.match(build, /ISCC/)
   assert.match(build, /subst\.exe/)
@@ -392,6 +410,7 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(build, /finally[\s\S]+subst\.exe[\s\S]+\/D/)
   assert.match(smoke, /DeepSeek-Herness-Setup\.exe/)
   assert.match(smoke, /DSH_PORTABLE_STATE_ROOT/)
+  assert.match(smoke, /\$env:LOCALAPPDATA\s*=\s*if\s*\(\$UseRealKnownFolder\)\s*\{\s*\$PriorLocalAppData\s*\}\s*else\s*\{\s*\$LocalAppData\s*\}/)
   assert.match(smoke, /unins000\.exe/)
   assert.match(smoke, /\/SP-/)
   assert.match(smoke, /\/NOCANCEL/)
@@ -406,9 +425,16 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /IconLocation/)
   assert.match(smoke, /amazon-bedrock\.json/)
   assert.match(verifyRuntime, /amazon-bedrock\.json/)
-  for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Uninstall package']) {
+  for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Repair existing installation', 'Restart repaired installation', 'Repair running installation', 'Uninstall package']) {
     assert.match(smoke, new RegExp(stage))
   }
+  assert.match(smoke, /repair-state-sentinel/)
+  assert.match(smoke, /repair did not restore packaged files/)
+  assert.match(smoke, /uninstaller changed retained user data/)
+  assert.match(smoke, /retained test state could not be deleted after uninstall/)
+  assert.match(smoke, /\$IsIsolatedKnownFolder\s*=\s*\$UseRealKnownFolder/)
+  assert.match(smoke, /\$RepairStateSentinel/)
+  assert.match(smoke, /refusing to remove unverified smoke state/)
 })
 
 test('plugin management is a generic finished-product capability and release gate', async () => {
@@ -532,8 +558,8 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 11/)
-  assert.match(build, /"requiredShellSchema": 11/)
+  assert.match(build, /"shellSchema": 12/)
+  assert.match(build, /"requiredShellSchema": 12/)
   assert.match(plist, new RegExp(`<key>CFBundleVersion<\\/key>\\s*<string>${regexEscape(policy.macBuildVersion)}<\\/string>`, 's'))
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)
@@ -599,6 +625,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   const workflow = await read('.github/workflows/ci.yml')
   const upstreamWorkflow = await read('.github/workflows/upstream-watch.yml')
   const desktopHostSmoke = await read('scripts/smoke-windows-desktop-host.ps1')
+  const desktopMoveSmoke = await read('scripts/smoke-windows-desktop-move.ps1')
   const macDesktopHostSmoke = await read('scripts/smoke-macos-desktop-host.sh')
   const bootstrapSmoke = await read('scripts/smoke-windows-bootstrap.mjs')
   const updateSmoke = await read('scripts/smoke-update-artifact.mjs')
@@ -658,7 +685,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8/)
   assert.match(workflow, /\.\/actionlint/)
   assert.match(workflow, /windows-desktop-host:[\s\S]+needs:\s*windows-build/)
-  assert.match(workflow, /smoke-windows-desktop-host\.ps1/)
+  assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
   const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   assert.doesNotMatch(windowsBaseJob, /BuildInstaller|ISCC|Inno Setup/)
@@ -675,6 +702,11 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(desktopHostSmoke, /browser\.json/)
   assert.match(desktopHostSmoke, /--app=/)
   assert.match(desktopHostSmoke, /--no-browser/)
+  assert.match(desktopHostSmoke, /ColdStartSeconds/)
+  assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
+  assert.match(desktopMoveSmoke, /Move-Item/)
+  assert.match(desktopMoveSmoke, /smoke-windows-desktop-host\.ps1/g)
+  assert.match(desktopMoveSmoke, /msedgewebview2\.exe/)
   assert.match(workflow, /macos-desktop-host:[\s\S]+needs:\s*macos-build/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.match(macDesktopHostSmoke, /DSH-Portable\.app/)

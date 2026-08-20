@@ -12,6 +12,7 @@ $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
 $BrowserState = Join-Path $Root 'data\runtime\browser.json'
 $WorkspaceMarker = Join-Path $Root 'workspace\desktop-host-smoke.txt'
 $HomeMarker = Join-Path $Root 'data\dsh-home\desktop-host-smoke.txt'
+$LauncherSettings = Join-Path $Root 'data\launcher-settings.json'
 
 foreach ($File in @(
     $StartExe,
@@ -80,6 +81,7 @@ public static class WindowAppIdentity {
 '@
 
 New-Item -ItemType Directory -Force -Path (Split-Path -Parent $WorkspaceMarker), (Split-Path -Parent $HomeMarker) | Out-Null
+[System.IO.File]::WriteAllText($LauncherSettings, '{"schemaVersion":1,"closeBehavior":"tray"}', [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::WriteAllText($WorkspaceMarker, 'workspace survives native host shutdown', [System.Text.UTF8Encoding]::new($false))
 [System.IO.File]::WriteAllText($HomeMarker, 'home survives native host shutdown', [System.Text.UTF8Encoding]::new($false))
 $WorkspaceDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $WorkspaceMarker).Hash
@@ -120,6 +122,7 @@ function Get-ProductStatus {
 }
 
 try {
+    $ColdStartClock = [System.Diagnostics.Stopwatch]::StartNew()
     $StartInfo = [System.Diagnostics.ProcessStartInfo]::new()
     $StartInfo.FileName = $StartExe
     $StartInfo.WorkingDirectory = $Root
@@ -178,6 +181,7 @@ try {
         throw "Native desktop startup launched an Edge/Chrome app-mode window: $($AppModeBrowsers.ProcessId -join ', ')"
     }
     if ($EmbeddedRenderers.Count -eq 0) { throw 'The native window did not initialize its embedded WebView2 renderer.' }
+    $ColdStartClock.Stop()
 
     # Resize through Win32 without desktop input. Closing to the tray must save
     # these bounds so a later native-host process can restore them.
@@ -247,7 +251,6 @@ try {
     if ($StoppedByLauncher -ne 'stopped') { throw 'Explicit exit left the DSH backend running.' }
 
     # The persisted setting can opt into close-to-exit without changing system settings.
-    $LauncherSettings = Join-Path $Root 'data\launcher-settings.json'
     [System.IO.File]::WriteAllText($LauncherSettings, '{"schemaVersion":1,"closeBehavior":"exit"}', [System.Text.UTF8Encoding]::new($false))
     $Process = [System.Diagnostics.Process]::Start($StartInfo)
     $ExitDeadline = [DateTime]::UtcNow.AddSeconds(90)
@@ -280,6 +283,7 @@ try {
         AppUserModelID = $AppId
         MainWindowHandle = $Process.MainWindowHandle
         EmbeddedWebView2Processes = $EmbeddedRenderers.Count
+        ColdStartSeconds = [Math]::Round($ColdStartClock.Elapsed.TotalSeconds, 3)
         Status = 'passed'
     }
 } finally {

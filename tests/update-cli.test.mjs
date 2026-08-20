@@ -32,7 +32,10 @@ if (args.includes('--version') || args.includes('-V')) {
   console.log(${JSON.stringify(version)})
 } else if (args.includes('web')) {
   const port = Number(args[args.indexOf('--port') + 1])
-  const server = http.createServer((_request, response) => response.end('DSH ${version}'))
+  const server = http.createServer((_request, response) => {
+    response.setHeader('content-type', 'text/html; charset=utf-8')
+    response.end('<!doctype html><html><body>DSH ${version}</body></html>')
+  })
   process.on('SIGTERM', () => server.close(() => process.exit(0)))
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
 } else {
@@ -101,7 +104,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'extension-operations.mjs', 'http-readiness.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))

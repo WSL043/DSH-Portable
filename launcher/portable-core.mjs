@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import path from 'node:path'
@@ -41,6 +41,11 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     ),
     dshBin: paths.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
     dshHome,
+    extensionCache: paths.join(stateDir, 'extension-cache'),
+    extensionPending: paths.join(stateDir, 'pending-extension.json'),
+    extensionReceipts: paths.join(stateDir, 'extension-receipts.json'),
+    extensionRecovery: paths.join(stateDir, 'extension-recovery'),
+    extensionResult: paths.join(stateDir, 'extension-result.json'),
     hostBin: paths.join(portableRoot, 'launcher', 'portable-host.mjs'),
     launchLock: paths.join(stateDir, 'launcher.lock'),
     logsDir: paths.join(dataDir, 'logs'),
@@ -104,8 +109,18 @@ export function buildDshEnv(layout, source = process.env) {
     ...source,
     DSH_HOME: layout.dshHome,
     DSH_PORTABLE: '1',
+    DSH_PORTABLE_ROOT: layout.root,
+    DSH_PORTABLE_STATE_ROOT: layout.stateRoot,
     DSH_TELEMETRY_MODE: 'DISABLED',
     PATH: [paths.dirname(layout.nodeExe), paths.dirname(layout.packageManagerBin), source.PATH ?? ''].filter(Boolean).join(separator),
+  }
+  try {
+    const components = JSON.parse(readFileSync(paths.join(layout.root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+    if (typeof components.portableVersion === 'string') environment.DSH_PORTABLE_VERSION = components.portableVersion
+    if (typeof components.dshVersion === 'string') environment.DSH_PORTABLE_DSH_VERSION = components.dshVersion
+    if (typeof components.dshCommit === 'string') environment.DSH_PORTABLE_DSH_COMMIT = components.dshCommit
+  } catch {
+    // Source checkouts and early bootstrap stages may not have COMPONENTS.json yet.
   }
   for (const key of Object.keys(environment)) {
     if (key.toLowerCase() === 'pnpm_config_store_dir') delete environment[key]
@@ -135,6 +150,7 @@ export function parseCli(argv) {
   let force = false
   let updateManifest = ''
   let progressJson = false
+  let waitForLockMs = 0
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--no-browser') noBrowser = true
@@ -142,6 +158,12 @@ export function parseCli(argv) {
     else if (arg === '--allow-http') allowHttp = true
     else if (arg === '--force') force = true
     else if (arg === '--progress-json') progressJson = true
+    else if (arg === '--wait-for-lock-ms') {
+      const value = Number(argv[index + 1])
+      if (!Number.isSafeInteger(value) || value < 0 || value > 60000) throw new Error('--wait-for-lock-ms requires an integer from 0 to 60000.')
+      waitForLockMs = value
+      index += 1
+    }
     else if (arg === '--update-manifest') {
       if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--update-manifest requires a value.')
       updateManifest = argv[index + 1]
@@ -154,7 +176,7 @@ export function parseCli(argv) {
     }
     else throw new Error(`Unknown command or option: ${arg}`)
   }
-  return { command, noBrowser, json, allowHttp, force, updateManifest, progressJson }
+  return { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs }
 }
 
 function comparable(value, platform = process.platform) {
@@ -538,6 +560,19 @@ export async function acquireLaunchLock(layout, adapters = {}) {
     }
   }
   throw new Error('Another portable launcher is already starting or stopping DSH.')
+}
+
+export async function acquireLaunchLockWithWait(layout, waitForLockMs = 0, adapters = {}) {
+  const timeout = Math.max(0, Number(waitForLockMs) || 0)
+  const deadline = Date.now() + timeout
+  while (true) {
+    try {
+      return await acquireLaunchLock(layout, adapters)
+    } catch (error) {
+      if (!String(error?.message ?? error).includes('Another portable launcher is already starting or stopping DSH.') || Date.now() >= deadline) throw error
+      await new Promise((resolve) => setTimeout(resolve, Math.min(100, Math.max(1, deadline - Date.now()))))
+    }
+  }
 }
 
 export const PORT_RANGE = Object.freeze({ first: DEFAULT_PORT, last: MAX_PORT })

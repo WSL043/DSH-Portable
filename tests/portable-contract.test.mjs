@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -9,6 +9,7 @@ import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 import {
   acquireLaunchLock,
+  acquireLaunchLockWithWait,
   browserLaunchSpec,
   buildDshEnv,
   isOwnedPortableBrowserProcess,
@@ -154,6 +155,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     force: false,
     updateManifest: '',
     progressJson: false,
+    waitForLockMs: 0,
   })
   assert.deepEqual(parseCli(['start', '--no-browser', '--json']), {
     command: 'start',
@@ -163,6 +165,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     force: false,
     updateManifest: '',
     progressJson: false,
+    waitForLockMs: 0,
   })
   assert.deepEqual(parseCli(['check-update', '--json', '--force', '--allow-http', '--update-manifest', 'http://127.0.0.1/update.json']), {
     command: 'check-update',
@@ -172,7 +175,10 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     force: true,
     updateManifest: 'http://127.0.0.1/update.json',
     progressJson: false,
+    waitForLockMs: 0,
   })
+  assert.equal(parseCli(['stop', '--wait-for-lock-ms', '30000']).waitForLockMs, 30000)
+  assert.throws(() => parseCli(['stop', '--wait-for-lock-ms', '60001']), /integer from 0 to 60000/)
   assert.equal(parseCli(['update', '--json', '--progress-json']).progressJson, true)
   assert.equal(parseCli(['defer-update', '--json']).command, 'defer-update')
   assert.equal(parseCli(['ignore-update', '--json']).command, 'ignore-update')
@@ -189,6 +195,13 @@ test('portable startup owns the desktop surface without allowing official DSH to
       && source.indexOf("'--no-open'") < source.indexOf("'--host', '127.0.0.1'"),
     'global patch options must precede the official web-profile no-open flag',
   )
+})
+
+test('a post-spawn startup failure cannot leave the owned DSH host running', async () => {
+  const source = await readFile(path.join(projectRoot, 'launcher', 'portable-cli.mjs'), 'utf8')
+  const startBody = source.slice(source.indexOf('async function start('), source.indexOf('async function stop()'))
+  assert.match(startBody, /catch \(error\) \{[\s\S]+ownedState\(state\)[\s\S]+await stop\(\)/)
+  assert.match(startBody, /cleanup failed/i)
 })
 
 test('a stale or recycled PID is never treated as our DSH host', () => {
@@ -287,6 +300,33 @@ test('launcher reclaims a dead lock but never bypasses a live owned launcher', a
         executablePath: layout.nodeExe,
         commandLine: `"${layout.nodeExe}" "${layout.portableCli}" start`,
       }),
+      pidExists: () => true,
+    }),
+    /already starting or stopping/,
+  )
+})
+
+test('bounded lock waiting lets uninstall continue only after the active launcher releases ownership', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-lock-wait-'))
+  const layout = layoutForRoot(root)
+  await mkdir(layout.stateDir, { recursive: true })
+  await writeFile(layout.launchLock, '515151\n')
+  const liveOwner = () => ({
+    executablePath: layout.nodeExe,
+    commandLine: `"${layout.nodeExe}" "${layout.portableCli}" start`,
+  })
+  setTimeout(() => void rm(layout.launchLock, { force: true }), 45)
+  const release = await acquireLaunchLockWithWait(layout, 500, {
+    processQuery: liveOwner,
+    pidExists: () => true,
+  })
+  assert.equal(Number((await readFile(layout.launchLock, 'utf8')).trim()), process.pid)
+  await release()
+
+  await writeFile(layout.launchLock, '616161\n')
+  await assert.rejects(
+    acquireLaunchLockWithWait(layout, 30, {
+      processQuery: liveOwner,
       pidExists: () => true,
     }),
     /already starting or stopping/,

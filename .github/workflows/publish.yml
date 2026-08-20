@@ -47,6 +47,10 @@ jobs:
           path: artifacts
       - name: Stage a small user release and a separate update channel
         run: node scripts/stage-release-assets.mjs artifacts release-staging
+      - name: Render immutable download links for this release
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: node scripts/render-release-notes.mjs templates/RELEASE-NOTES.md release-staging/RELEASE-NOTES.md "$RELEASE_TAG"
       - name: Publish machine-readable update channel
         env:
           GH_TOKEN: ${{ github.token }}
@@ -68,7 +72,7 @@ jobs:
           else
             FLAGS=(--draft)
             if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file templates/RELEASE-NOTES.md "${FLAGS[@]}"
+            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file release-staging/RELEASE-NOTES.md "${FLAGS[@]}"
           fi
           gh release upload "$RELEASE_TAG" release-staging/user-assets/* --clobber
           if [ "$PRERELEASE" = true ]; then

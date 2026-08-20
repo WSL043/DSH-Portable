@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$Installer = (Join-Path (Join-Path $PSScriptRoot '..') 'artifacts\DeepSeek-Herness-Setup.exe')
+    [string]$Installer = (Join-Path (Join-Path $PSScriptRoot '..') 'artifacts\DeepSeek-Herness-Setup.exe'),
+    [switch]$UseRealKnownFolder
 )
 
 $ErrorActionPreference = 'Stop'
@@ -45,6 +46,32 @@ function Write-RuntimeDiagnostics {
     }
 }
 
+function Get-InstalledProductStatus {
+    $PreviousStateRoot = $env:DSH_PORTABLE_STATE_ROOT
+    try {
+        $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
+        $Deadline = [DateTime]::UtcNow.AddSeconds(20)
+        do {
+            $PreviousErrorActionPreference = $ErrorActionPreference
+            try {
+                $ErrorActionPreference = 'Continue'
+                $Lines = @(& $Node $Cli status --json 2>&1 | ForEach-Object { [string]$_ })
+                $ExitCode = $LASTEXITCODE
+            } finally {
+                $ErrorActionPreference = $PreviousErrorActionPreference
+            }
+            $Raw = ($Lines -join [Environment]::NewLine).Trim()
+            if ($ExitCode -eq 0) { return ($Raw | ConvertFrom-Json) }
+            if ($Raw -notmatch 'Another portable launcher is already starting or stopping DSH' -or [DateTime]::UtcNow -ge $Deadline) {
+                throw "installed status command failed (${ExitCode}): $Raw"
+            }
+            Start-Sleep -Milliseconds 100
+        } while ($true)
+    } finally {
+        $env:DSH_PORTABLE_STATE_ROOT = $PreviousStateRoot
+    }
+}
+
 function Assert-ProductShortcut {
     param(
         [Parameter(Mandatory = $true)][string]$ShortcutPath,
@@ -71,15 +98,23 @@ $TestId = [Guid]::NewGuid().ToString('N').Substring(0, 12)
 $TempRoot = [System.IO.Path]::GetTempPath()
 $InstallRoot = Join-Path $TempRoot ("dsh-i-$TestId")
 $LocalAppData = Join-Path $TempRoot ("dsh-la-$TestId")
-$StateRoot = Join-Path $LocalAppData 'DeepSeek-Herness'
+$StateRoot = if ($UseRealKnownFolder) {
+    Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'DeepSeek-Herness'
+} else {
+    Join-Path $LocalAppData 'DeepSeek-Herness'
+}
 $SetupLog = Join-Path $TempRoot ("dsh-setup-$TestId.log")
 $LauncherDiagnostic = Join-Path $TempRoot ("dsh-launcher-$TestId.log")
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
 $PriorLauncherDiagnostic = $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC
 $PriorLocalAppData = $env:LOCALAPPDATA
+$PriorTestHidden = $env:DSH_PORTABLE_TEST_HIDDEN
 
 try {
-    $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
+    if ($UseRealKnownFolder -and (Test-Path -LiteralPath $StateRoot)) {
+        throw "real installed-mode smoke state already exists: $StateRoot"
+    }
+    $env:DSH_PORTABLE_STATE_ROOT = if ($UseRealKnownFolder) { $null } else { $StateRoot }
     $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $LauncherDiagnostic
     $Setup = Invoke-BoundedProcess -Stage 'Install package' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
             '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
@@ -112,15 +147,15 @@ try {
         throw 'installer exposed a redundant Stop shortcut'
     }
 
-    $env:LOCALAPPDATA = $LocalAppData
-    $env:DSH_PORTABLE_STATE_ROOT = $null
+    $env:LOCALAPPDATA = if ($UseRealKnownFolder) { $PriorLocalAppData } else { $LocalAppData }
+    $env:DSH_PORTABLE_STATE_ROOT = if ($UseRealKnownFolder) { $null } else { $StateRoot }
     & (Join-Path $PSScriptRoot 'smoke-windows-plugins.ps1') `
         -Root $InstallRoot `
         -Fixture (Join-Path (Join-Path $PSScriptRoot '..') 'tests\fixtures\dsh-portable-smoke-plugin') `
         -ExpectedStateRoot $StateRoot `
         -InstalledMode
     if ($LASTEXITCODE -ne 0) { throw "installed plugin management smoke failed with exit code $LASTEXITCODE" }
-    $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
+    $env:DSH_PORTABLE_STATE_ROOT = if ($UseRealKnownFolder) { $null } else { $StateRoot }
 
     $Started = Invoke-BoundedProcess -Stage 'Start installed runtime' -TimeoutSeconds 90 `
         -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
@@ -134,7 +169,7 @@ try {
     }
     $Node = Join-Path $InstallRoot 'runtime\node\node.exe'
     $Cli = Join-Path $InstallRoot 'launcher\portable-cli.mjs'
-    $Status = (& $Node $Cli status --json | ConvertFrom-Json)
+    $Status = Get-InstalledProductStatus
     if ($Status.status -ne 'running') { throw "installed runtime status is $($Status.status)" }
     $Response = Invoke-WebRequest -UseBasicParsing -Uri $Status.url -TimeoutSec 10
     if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 500) { throw "installed Web returned $($Response.StatusCode)" }
@@ -146,19 +181,106 @@ try {
         Write-RuntimeDiagnostics
         throw "installed stop entry exited with code $($Stopped.ExitCode)"
     }
-    if ((& $Node $Cli status --json | ConvertFrom-Json).status -ne 'stopped') { throw 'installed runtime did not stop' }
+    if ((Get-InstalledProductStatus).status -ne 'stopped') { throw 'installed runtime did not stop' }
     if (-not (Test-Path -LiteralPath (Join-Path $StateRoot 'data\portable.json'))) { throw 'installed state was not written outside the app' }
+
+    $RepairStateSentinel = Join-Path $StateRoot 'data\repair-state-sentinel.txt'
+    $RepairStateText = 'preserve-user-state-across-repeat-install'
+    [System.IO.File]::WriteAllText($RepairStateSentinel, $RepairStateText, [System.Text.UTF8Encoding]::new($false))
+    $RepairTarget = Join-Path $InstallRoot 'README.txt'
+    $RepairDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $RepairTarget).Hash
+    [System.IO.File]::WriteAllText($RepairTarget, 'corrupted-for-repair-smoke', [System.Text.UTF8Encoding]::new($false))
+    $RepairLog = Join-Path $TempRoot ("dsh-repair-$TestId.log")
+    $Repair = Invoke-BoundedProcess -Stage 'Repair existing installation' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
+            '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
+            "/DIR=$InstallRoot", "/LOG=$RepairLog"
+        )
+    if ($Repair.ExitCode -ne 0) {
+        if (Test-Path -LiteralPath $RepairLog) {
+            Get-Content -LiteralPath $RepairLog -Tail 240 | ForEach-Object { Write-Host $_ }
+        }
+        throw "repair install exited with code $($Repair.ExitCode)"
+    }
+    if ((Get-FileHash -Algorithm SHA256 -LiteralPath $RepairTarget).Hash -ne $RepairDigest) {
+        throw 'repair did not restore packaged files'
+    }
+    if ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -ne $RepairStateText) {
+        throw 'repair changed durable user state'
+    }
+
+    $Restarted = Invoke-BoundedProcess -Stage 'Restart repaired installation' -TimeoutSeconds 90 `
+        -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
+    if ($Restarted.ExitCode -ne 0) {
+        Write-RuntimeDiagnostics
+        throw "repaired launcher exited with code $($Restarted.ExitCode)"
+    }
+    if ((Get-InstalledProductStatus).status -ne 'running') { throw 'repaired runtime did not start' }
+    $RunningRepairLog = Join-Path $TempRoot ("dsh-running-repair-$TestId.log")
+    $RunningRepair = Invoke-BoundedProcess -Stage 'Repair running installation' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
+            '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
+            "/DIR=$InstallRoot", "/LOG=$RunningRepairLog"
+        )
+    if ($RunningRepair.ExitCode -ne 0) {
+        if (Test-Path -LiteralPath $RunningRepairLog) {
+            Get-Content -LiteralPath $RunningRepairLog -Tail 240 | ForEach-Object { Write-Host $_ }
+        }
+        throw "running repair exited with code $($RunningRepair.ExitCode)"
+    }
+    if ((Get-InstalledProductStatus).status -ne 'stopped') { throw 'running repair did not stop the prior runtime' }
+    if ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -ne $RepairStateText) {
+        throw 'running repair changed durable user state'
+    }
+
+    $env:DSH_PORTABLE_TEST_HIDDEN = '1'
+    $NativeBeforeUninstall = Start-Process -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -PassThru
+    $NativeDeadline = [DateTime]::UtcNow.AddSeconds(90)
+    do {
+        Start-Sleep -Milliseconds 250
+        $NativeBeforeUninstall.Refresh()
+        if ($NativeBeforeUninstall.HasExited) { throw "native installed host exited before uninstall: $($NativeBeforeUninstall.ExitCode)" }
+        $NativeStatus = (Get-InstalledProductStatus).status
+    } while ($NativeStatus -ne 'running' -and [DateTime]::UtcNow -lt $NativeDeadline)
+    if ($NativeStatus -ne 'running') { throw 'native installed host did not become ready before uninstall' }
 
     $Uninstall = Invoke-BoundedProcess -Stage 'Uninstall package' -TimeoutSeconds 300 `
         -FilePath (Join-Path $InstallRoot 'unins000.exe') `
         -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART')
     if ($Uninstall.ExitCode -ne 0) { throw "uninstaller exited with code $($Uninstall.ExitCode)" }
+    if (-not $NativeBeforeUninstall.WaitForExit(45000)) { throw 'uninstaller left the native desktop host running' }
+    $env:DSH_PORTABLE_TEST_HIDDEN = $PriorTestHidden
     if (Test-Path -LiteralPath (Join-Path $InstallRoot 'DeepSeek-Herness.exe')) { throw 'uninstaller retained application binaries' }
     if (-not (Test-Path -LiteralPath $StateRoot)) { throw 'uninstaller deleted user state' }
+    if ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -ne $RepairStateText) { throw 'uninstaller changed retained user data' }
+
+    $ProcessExitDeadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        $RemainingOwned = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.CommandLine -and $_.CommandLine.IndexOf($InstallRoot, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
+        })
+        if ($RemainingOwned.Count -eq 0) { break }
+        Start-Sleep -Milliseconds 200
+    } while ([DateTime]::UtcNow -lt $ProcessExitDeadline)
+    if ($RemainingOwned.Count -ne 0) { throw "uninstaller left product processes running: $($RemainingOwned.ProcessId -join ', ')" }
+    $ResolvedStateRoot = [System.IO.Path]::GetFullPath($StateRoot)
+    $ResolvedTempRoot = [System.IO.Path]::GetFullPath($TempRoot).TrimEnd('\') + '\'
+    $ResolvedKnownFolderState = [System.IO.Path]::GetFullPath(
+        (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) 'DeepSeek-Herness')
+    )
+    $InsideTemporaryRoot = ($ResolvedStateRoot + '\').StartsWith($ResolvedTempRoot, [System.StringComparison]::OrdinalIgnoreCase)
+    $IsIsolatedKnownFolder = $UseRealKnownFolder -and
+        $ResolvedStateRoot.Equals($ResolvedKnownFolderState, [System.StringComparison]::OrdinalIgnoreCase) -and
+        (Test-Path -LiteralPath $RepairStateSentinel) -and
+        ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -eq $RepairStateText)
+    if (-not ($InsideTemporaryRoot -or $IsIsolatedKnownFolder)) {
+        throw "refusing to remove unverified smoke state: $ResolvedStateRoot"
+    }
+    Remove-Item -LiteralPath $ResolvedStateRoot -Recurse -Force
+    if (Test-Path -LiteralPath $ResolvedStateRoot) { throw 'retained test state could not be deleted after uninstall' }
 
     [pscustomobject]@{ Installer = $Installer; InstallRoot = $InstallRoot; StateRoot = $StateRoot; Status = 'passed' }
 } finally {
     $env:DSH_PORTABLE_STATE_ROOT = $PriorStateRoot
     $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $PriorLauncherDiagnostic
     $env:LOCALAPPDATA = $PriorLocalAppData
+    $env:DSH_PORTABLE_TEST_HIDDEN = $PriorTestHidden
 }

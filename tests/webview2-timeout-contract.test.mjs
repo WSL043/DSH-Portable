@@ -6,14 +6,34 @@ import test from 'node:test'
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const launcherSource = path.join(projectRoot, 'launcher', 'windows', 'DSH-Portable.cs')
 
-test('Windows desktop host allows one minute for WebView2 workspace navigation', async () => {
+test('Windows desktop host waits for the usable DOM and reports the failing boundary', async () => {
   const source = await readFile(launcherSource, 'utf8')
   assert.match(source, /WorkspaceNavigationTimeoutMs\s*=\s*60000/)
-  assert.equal((source.match(/Task\.Delay\(WorkspaceNavigationTimeoutMs\)/g) ?? []).length, 2)
+  assert.match(source, /DOMContentLoaded\s*\+=/)
+  assert.match(source, /ProbeWorkspaceDocument/)
+  assert.match(source, /Stopwatch probeBudget = Stopwatch\.StartNew\(\)/)
+  assert.match(source, /stream\.ReadTimeout = Math\.Max\(1, remaining\)/)
+  assert.match(source, /BrowserVersionString/)
+  assert.match(source, /string webViewSnapshot = WebViewEnvironmentSnapshot\(\)/)
+  assert.match(source, /WorkspaceFailureDiagnostics\(url, webViewSnapshot\)/)
+  assert.match(source, /dsh\.stderr\.log/)
   assert.doesNotMatch(source, /Task\.Delay\(30000\)/)
   assert.doesNotMatch(source, /工作台未能在 30 秒内打开|workspace did not open within 30 seconds/)
-  assert.equal((source.match(/60 秒内打开/g) ?? []).length, 2)
-  assert.equal((source.match(/within 60 seconds/g) ?? []).length, 2)
+  assert.match(source, /60 秒内打开/)
+  assert.match(source, /within 60 seconds/)
+})
+
+test('Windows overlaps cold WebView2 initialization with the first DSH start', async () => {
+  const source = await readFile(launcherSource, 'utf8')
+  const runLauncher = source.slice(
+    source.indexOf('private async Task RunLauncherAsync()'),
+    source.indexOf('private async Task CheckForDesktopUpdateAsync'),
+  )
+  const webViewStart = runLauncher.indexOf('Task webViewInitialization = InitializeWebViewAsync()')
+  const backendStart = runLauncher.indexOf('InvokePortableCli(new[] { "start", "--no-browser", "--json" })')
+  const webViewAwait = runLauncher.indexOf('await webViewInitialization')
+  assert.ok(webViewStart >= 0 && webViewStart < backendStart)
+  assert.ok(webViewAwait > backendStart)
 })
 
 test('Windows cold start shows the local workspace before checking for updates in the background', async () => {

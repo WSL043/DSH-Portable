@@ -65,6 +65,8 @@ cp "$PROJECT_ROOT/launcher/portable-cli.mjs" "$STAGE/launcher/portable-cli.mjs"
 cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs"
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
 cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
+cp "$PROJECT_ROOT/launcher/extension-operations.mjs" "$STAGE/launcher/extension-operations.mjs"
+cp "$PROJECT_ROOT/launcher/http-readiness.mjs" "$STAGE/launcher/http-readiness.mjs"
 cp "$PROJECT_ROOT/launcher/macos/dsh" "$STAGE/dsh"
 chmod 755 "$STAGE/dsh"
 cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
@@ -108,7 +110,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 11
+  "shellSchema": 12
 }
 EOF
 
@@ -164,7 +166,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "portableVersion": "$PORTABLE_VERSION",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 11,
+  "requiredShellSchema": 12,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

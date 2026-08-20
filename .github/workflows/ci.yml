@@ -191,6 +191,16 @@ jobs:
           New-Item -ItemType Directory -Force -Path $Root | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          & (Join-Path $Root 'DSH-Portable\runtime\node\node.exe') `
+            scripts/smoke-portable-extensions.mjs `
+            (Join-Path $Root 'DSH-Portable') `
+            'tests\fixtures\dsh-portable-smoke-plugin'
+          if ($LASTEXITCODE -ne 0) { throw "Windows Portable Extensions smoke failed with exit code $LASTEXITCODE" }
+          & (Join-Path $Root 'DSH-Portable\runtime\node\node.exe') `
+            scripts/smoke-portable-catalog-extension.mjs `
+            (Join-Path $Root 'DSH-Portable') `
+            session-delete
+          if ($LASTEXITCODE -ne 0) { throw "Windows catalog extension smoke failed with exit code $LASTEXITCODE" }
           ./scripts/smoke-windows-plugins.ps1 `
             -Root (Join-Path $Root 'DSH-Portable') `
             -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
@@ -213,7 +223,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $Root | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
-          ./scripts/smoke-windows-desktop-host.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          ./scripts/smoke-windows-desktop-move.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-native-tray.ps1 -Root (Join-Path $Root 'DSH-Portable')
           node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable')
           # WebView2 can keep the previous user-data browser process alive after
@@ -300,7 +310,7 @@ jobs:
           name: windows-x64-installer
           path: artifacts
       - shell: powershell
-        run: ./scripts/smoke-windows-installer.ps1
+        run: ./scripts/smoke-windows-installer.ps1 -UseRealKnownFolder
 
   macos-build:
     name: Build macOS (${{ matrix.arch }})
@@ -390,6 +400,38 @@ jobs:
           mkdir -p "$ROOT"
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
           bash scripts/smoke-macos-desktop-host.sh "$ROOT/DSH-Portable"
+
+  macos-plugin-smoke:
+    name: macOS Portable Extensions (${{ matrix.arch }})
+    needs: macos-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: macos-${{ matrix.arch }}-build
+          path: artifacts
+      - name: Install, compose, record, and remove an independent extension from the finished product
+        run: |
+          ROOT="$RUNNER_TEMP/dsh-macos-extensions"
+          mkdir -p "$ROOT"
+          ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
+          "$ROOT/DSH-Portable/runtime/node/bin/node" \
+            scripts/smoke-portable-extensions.mjs \
+            "$ROOT/DSH-Portable" \
+            tests/fixtures/dsh-portable-smoke-plugin
+          "$ROOT/DSH-Portable/runtime/node/bin/node" \
+            scripts/smoke-portable-catalog-extension.mjs \
+            "$ROOT/DSH-Portable" \
+            session-delete
 
   macos-dmg-smoke:
     name: macOS DMG (${{ matrix.arch }})
@@ -512,6 +554,14 @@ jobs:
           ROOT="$RUNNER_TEMP/dsh-linux-plugins"
           mkdir -p "$ROOT"
           tar -xzf "artifacts/DSH-Portable-linux-${{ matrix.arch }}.tar.gz" -C "$ROOT"
+          "$ROOT/DSH-Portable/runtime/node/bin/node" \
+            scripts/smoke-portable-extensions.mjs \
+            "$ROOT/DSH-Portable" \
+            tests/fixtures/dsh-portable-smoke-plugin
+          "$ROOT/DSH-Portable/runtime/node/bin/node" \
+            scripts/smoke-portable-catalog-extension.mjs \
+            "$ROOT/DSH-Portable" \
+            session-delete
           bash scripts/smoke-linux-plugins.sh "$ROOT/DSH-Portable" tests/fixtures/dsh-portable-smoke-plugin
       - name: Repeat plugin lifecycle through the one-click AppImage
         run: |

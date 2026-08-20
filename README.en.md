@@ -106,6 +106,20 @@ contains a complete `DSH-Portable` directory; extract it and run `DeepSeek-Herne
 
 ## Plugin management
 
+The 0.3 test candidate adds **Settings → Plugins → Portable extensions** for a small set of
+optional extensions pinned to the current Portable build. A confirmed change never restarts the
+current task. It waits for a normal exit, then downloads, verifies, composes, and health-checks the
+profile on the next start; failures restore the previous profile. Permanent session deletion is
+experimental, absent by default, and requires a separate acknowledgement of its irreversible data
+capability.
+
+<p align="center">
+  <img src="assets/dsh-portable-extensions-en.png" width="960" alt="Portable Extensions in DSH-Portable">
+</p>
+
+The graphical catalog is deliberately small and does not represent every community plugin. Use the
+generic commands below for other extensions.
+
 Windows and Linux products include their plugin command. On Windows, open PowerShell in the DSH-Portable folder:
 
 ```powershell
@@ -130,9 +144,9 @@ In a complete Linux portable folder, use `./dsh`. With the AppImage, use
 Plugins and settings travel with the portable data. Plugin changes never restart a running task;
 save your work and restart the app when convenient. Install only plugins you trust.
 
-To use ChatGPT / Codex subscription models, follow the optional plugin repository:
+For the capabilities and sign-in boundary of the ChatGPT / Codex subscription extension, see:
 [**WSL043/dsh-codex-subscription**](https://github.com/WSL043/dsh-codex-subscription).
-It is not bundled with DSH-Portable and can be installed or removed independently.
+It is not installed by default and can be added or removed from the graphical catalog or command line.
 
 ## Updates
 

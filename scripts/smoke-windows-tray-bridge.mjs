@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -11,6 +11,8 @@ const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
 if (!process.argv[2]) throw new Error('usage: node smoke-windows-tray-bridge.mjs <DSH-Portable root>')
 if (process.platform !== 'win32') throw new Error('the native tray bridge smoke is Windows-only')
+const targetLocale = process.env.DSH_SMOKE_LOCALE === 'en' ? 'en' : 'zh'
+const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? path.resolve(process.env.DSH_SMOKE_SCREENSHOT) : ''
 
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
@@ -222,6 +224,7 @@ try {
     '--disable-background-networking',
     '--disable-component-update',
     '--disable-gpu',
+    '--window-size=1440,900',
     'about:blank',
   ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
   chrome.stdout.on('data', chunk => { chromeOutput.stdout = `${chromeOutput.stdout}${chunk}`.slice(-8000) })
@@ -255,6 +258,24 @@ try {
       'onboarding dismissal',
     )
   }
+  const testingNotice = await evaluate(client, clickButton(['Continue', '继续']))
+  if (testingNotice?.clicked) {
+    await waitForValue(
+      client,
+      `![...document.querySelectorAll('button')].some(item => ['Continue', '继续'].includes((item.textContent || '').trim()))`,
+      Boolean,
+      'testing notice dismissal',
+    )
+  }
+  const providerOnboarding = await evaluate(client, clickButton(['稍后配置', 'Set up later', 'Configure later']))
+  if (providerOnboarding?.clicked) {
+    await waitForValue(
+      client,
+      `![...document.querySelectorAll('button')].some(item => ['稍后配置', 'Set up later', 'Configure later'].includes((item.textContent || '').trim()))`,
+      Boolean,
+      'provider onboarding dismissal',
+    )
+  }
   let settings = await evaluate(client, clickButton(['Settings', '设置']))
   if (!settings?.clicked) {
     const sidebar = await evaluate(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']))
@@ -263,18 +284,36 @@ try {
   }
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /Settings|设置/.test(item.textContent || '')))`, Boolean, 'Settings dialog')
 
-  if (state.locale !== 'zh') {
-    await waitForValue(client, clickButton(['English', '英文']), value => value?.clicked, 'language menu button')
-    await waitForValue(client, clickChoice(['中文']), value => value?.clicked, 'Chinese language choice')
-    state = await waitForValue(client, stateExpression, value => value?.locale === 'zh', 'locale zh')
+  if (state.locale !== targetLocale) {
+    await waitForValue(client, clickButton(['English', '英文', '中文', 'Chinese']), value => value?.clicked, 'language menu button')
+    await waitForValue(client, clickChoice(targetLocale === 'zh' ? ['中文'] : ['English']), value => value?.clicked, `${targetLocale} language choice`)
+    state = await waitForValue(client, stateExpression, value => value?.locale === targetLocale, `locale ${targetLocale}`)
   }
-  assert.equal(state.locale, 'zh')
+  assert.equal(state.locale, targetLocale)
 
   if (state.theme !== 'light') {
     await waitForValue(client, clickButton(['Light', '浅色', '亮色']), value => value?.clicked, 'light theme button')
     state = await waitForValue(client, stateExpression, value => value?.theme === 'light', 'theme light')
   }
   assert.equal(state.theme, 'light')
+
+  await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab')
+  await waitForValue(client, clickButton(['Portable extensions', '便携扩展']), value => value?.clicked, 'Portable Extensions subtab')
+  const extensionUi = await waitForValue(client, `(() => {
+    const root = document.querySelector('.dspx-root')
+    if (!root) return null
+    return {
+      title: root.querySelector('h3')?.textContent?.trim() || '',
+      cards: root.querySelectorAll('.dspx-card').length,
+      actions: [...root.querySelectorAll('.dspx-action')].map(item => (item.textContent || '').trim()),
+    }
+  })()`, value => value?.cards === 2 && /Portable extensions|便携扩展/.test(value.title), 'Portable Extensions settings UI')
+  assert.equal(extensionUi.cards, 2)
+  if (screenshotPath) {
+    const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+    await mkdir(path.dirname(screenshotPath), { recursive: true })
+    await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
+  }
 
   const stateCountExpression = `window.__dshTrayMessages?.filter(item => item.type === 'dsh-portable/state').length || 0`
   const beforeClear = await evaluate(client, stateCountExpression)

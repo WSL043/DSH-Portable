@@ -1,6 +1,6 @@
 {
   "name": "@wsl043/dsh-portable-desktop-bridge",
-  "version": "0.2.6",
+  "version": "0.3.0-rc.1",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
@@ -16,6 +16,7 @@
         "@deepseek-ai/dsh-client-locale",
         "@deepseek-ai/dsh-client-ui-theme",
         "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-session-log-export"
       ],
       "platform": "web"
@@ -24,6 +25,8 @@
   "files": [
     "lib/index.js",
     "lib/client.js",
+    "lib/extensions.js",
+    "extensions/catalog.json",
     "cordis.patch.yml"
   ],
   "license": "MIT"
