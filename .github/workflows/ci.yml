@@ -205,9 +205,17 @@ jobs:
             -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
 
   windows-desktop-host:
-    name: Windows native desktop identity and lifecycle
+    name: Windows native desktop identity and lifecycle (${{ matrix.label }})
     needs: windows-build
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            label: windows-2022
+          - runner: windows-2025
+            label: windows-2025
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
+import { createRequire } from 'node:module'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import path from 'node:path'
 
@@ -39,8 +40,9 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
       '@wsl043',
       'dsh-portable-desktop-bridge',
     ),
-    pluginMarketRoot: paths.join(appDir, 'node_modules', 'dshmarket'),
-    pluginMarketFallback: paths.join(dshHome, 'profiles', 'node_modules', 'dshmarket'),
+    desktopExe: platform === 'win32' ? paths.join(portableRoot, 'DeepSeek-Herness.exe') : null,
+    pluginMarketRoot: paths.join(appDir, 'node_modules', '@wsl043', 'dsh-portable-plugin-market'),
+    pluginMarketFallback: paths.join(dshHome, 'profiles', 'node_modules', '@wsl043', 'dsh-portable-plugin-market'),
     dshBin: paths.join(appDir, 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'),
     dshHome,
     extensionCache: paths.join(stateDir, 'extension-cache'),
@@ -63,12 +65,17 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     portableCli: paths.join(portableRoot, 'launcher', 'portable-cli.mjs'),
     portableMeta: paths.join(dataDir, 'portable.json'),
     processState: paths.join(stateDir, 'process.json'),
+    repairRequest: paths.join(stateDir, 'repair-requested.json'),
+    repairResult: paths.join(stateDir, 'repair-result.json'),
     runtimeDir,
     stateRoot: durableRoot,
     stateDir,
     updateCheckCache: paths.join(stateDir, 'update-check.json'),
     updateDir: paths.join(portableRoot, '.dsh-portable-update'),
     updateJournal: paths.join(stateDir, 'update.json'),
+    webView2Core: platform === 'win32' ? paths.join(portableRoot, 'Microsoft.Web.WebView2.Core.dll') : null,
+    webView2Loader: platform === 'win32' ? paths.join(portableRoot, 'WebView2Loader.dll') : null,
+    webView2WinForms: platform === 'win32' ? paths.join(portableRoot, 'Microsoft.Web.WebView2.WinForms.dll') : null,
     workspace: paths.join(durableRoot, 'workspace'),
   }
 }
@@ -152,6 +159,252 @@ export async function ensureDesktopBridgeFallback(layout) {
   return bridgeChanged || marketChanged
 }
 
+function packageDirectoryFromAnchor(anchor, packageName) {
+  for (const searchRoot of createRequire(anchor).resolve.paths(packageName) ?? []) {
+    const candidate = path.join(searchRoot, packageName)
+    if (existsSync(path.join(candidate, 'package.json'))) return candidate
+  }
+  return null
+}
+
+async function packagedDshDependencyClosure(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const dshRoot = paths.join(layout.appDir, 'node_modules', '@deepseek-ai', 'dsh')
+  const dshManifestPath = paths.join(dshRoot, 'package.json')
+  if (!existsSync(dshManifestPath)) {
+    throw new Error(`The packaged DSH runtime is incomplete: missing @deepseek-ai/dsh (${dshManifestPath}).`)
+  }
+
+  const links = new Map([['@deepseek-ai/dsh', dshRoot]])
+  const queue = [{ anchor: dshManifestPath, manifest: JSON.parse(await readFile(dshManifestPath, 'utf8')) }]
+  const missing = []
+  while (queue.length) {
+    const current = queue.shift()
+    const requiredPeers = Object.keys(current.manifest.peerDependencies ?? {})
+      .filter(name => current.manifest.peerDependenciesMeta?.[name]?.optional !== true)
+    const required = new Set([
+      ...Object.keys(current.manifest.dependencies ?? {}),
+      ...requiredPeers,
+    ])
+    const optional = new Set([
+      ...Object.keys(current.manifest.optionalDependencies ?? {}),
+      ...Object.keys(current.manifest.peerDependencies ?? {})
+        .filter(name => current.manifest.peerDependenciesMeta?.[name]?.optional === true),
+    ])
+    for (const name of [...required, ...optional]) {
+      // DefinitelyTyped packages describe source types only. Some production
+      // packages publish them as dependencies or required peers even though
+      // Node never loads them at runtime, and production pruning legitimately
+      // removes them from a finished application bundle.
+      if (name.startsWith('@types/')) continue
+      if (links.has(name)) continue
+      const target = packageDirectoryFromAnchor(current.anchor, name)
+      if (!target) {
+        if (required.has(name)) missing.push(name)
+        continue
+      }
+      const manifestPath = paths.join(target, 'package.json')
+      let manifest
+      try {
+        manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+      } catch (error) {
+        throw new Error(`The packaged DSH runtime is incomplete: ${name} has an unreadable package manifest (${manifestPath}).`, { cause: error })
+      }
+      links.set(name, target)
+      queue.push({ anchor: manifestPath, manifest })
+    }
+  }
+  if (missing.length) {
+    throw new Error(`The packaged DSH runtime is incomplete: missing ${[...new Set(missing)].sort().join(', ')}.`)
+  }
+  return links
+}
+
+export async function inspectPackagedDshRuntime(layout) {
+  try {
+    const closure = await packagedDshDependencyClosure(layout)
+    return { ok: true, packages: closure.size, detail: `${closure.size} packages verified` }
+  } catch (error) {
+    return { ok: false, packages: 0, detail: error?.message ?? String(error) }
+  }
+}
+
+function managedProfileExpectedPackages(layout, links) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const expected = new Set(links.keys())
+  if (existsSync(paths.join(paths.dirname(layout.desktopBridgePatch), 'package.json'))) {
+    expected.add('@wsl043/dsh-portable-desktop-bridge')
+  }
+  if (existsSync(paths.join(layout.pluginMarketRoot, 'package.json'))) {
+    expected.add('@wsl043/dsh-portable-plugin-market')
+  }
+  return expected
+}
+
+async function managedProfileResolverEntries(fallbackRoot, paths) {
+  const packages = []
+  let topLevel = []
+  try {
+    topLevel = await readdir(fallbackRoot, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code === 'ENOENT') return packages
+    throw error
+  }
+  for (const entry of topLevel) {
+    if (entry.name.startsWith('@') && entry.isDirectory()) {
+      for (const child of await readdir(paths.join(fallbackRoot, entry.name), { withFileTypes: true })) {
+        packages.push(`${entry.name}/${child.name}`)
+      }
+    } else {
+      packages.push(entry.name)
+    }
+  }
+  return packages
+}
+
+function resolverDetail({ missing, wrongTarget, stale }) {
+  const parts = []
+  const describe = (label, names) => {
+    if (!names.length) return
+    const shown = names.slice(0, 8)
+    const suffix = names.length > shown.length ? ` (+${names.length - shown.length} more)` : ''
+    parts.push(`${label}: ${shown.join(', ')}${suffix}`)
+  }
+  describe('missing', missing)
+  describe('wrong-target', wrongTarget)
+  describe('stale', stale)
+  return parts.length ? parts.join('; ') : 'all managed profile packages resolve to the packaged runtime'
+}
+
+export async function inspectManagedProfileModuleFallback(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const fallbackRoot = paths.join(layout.dshHome, 'profiles', 'node_modules')
+  let links
+  try {
+    links = await packagedDshDependencyClosure(layout)
+  } catch (error) {
+    return {
+      ok: false,
+      repairable: false,
+      expected: 0,
+      missing: [],
+      wrongTarget: [],
+      stale: [],
+      detail: error?.message ?? String(error),
+    }
+  }
+
+  const expectedPackages = managedProfileExpectedPackages(layout, links)
+  const missing = []
+  const wrongTarget = []
+  for (const [packageName, target] of links) {
+    const fallback = paths.join(fallbackRoot, packageName)
+    let info
+    try {
+      info = await lstat(fallback)
+    } catch (error) {
+      if (error?.code === 'ENOENT') {
+        missing.push(packageName)
+        continue
+      }
+      throw error
+    }
+    if (!info.isSymbolicLink()) {
+      wrongTarget.push(packageName)
+      continue
+    }
+    try {
+      if (!sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) {
+        wrongTarget.push(packageName)
+      }
+    } catch {
+      wrongTarget.push(packageName)
+    }
+  }
+
+  const presentPackages = await managedProfileResolverEntries(fallbackRoot, paths)
+  const stale = presentPackages.filter(packageName => !expectedPackages.has(packageName)).sort()
+  missing.sort()
+  wrongTarget.sort()
+  const result = { missing, wrongTarget, stale }
+  return {
+    ok: missing.length === 0 && wrongTarget.length === 0 && stale.length === 0,
+    repairable: true,
+    expected: links.size,
+    ...result,
+    detail: resolverDetail(result),
+  }
+}
+
+export async function repairManagedProfileModuleFallback(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const fallbackRoot = paths.join(layout.dshHome, 'profiles', 'node_modules')
+  const links = await packagedDshDependencyClosure(layout)
+  let changed = false
+
+  // This root is DSH's generated module resolver, not a profile's plugin
+  // installation directory. Reconcile stale packages left by an older app
+  // component while preserving the two Portable-owned private bridges that
+  // are refreshed immediately after this step.
+  const expectedPackages = managedProfileExpectedPackages(layout, links)
+  let topLevel = []
+  try {
+    topLevel = await readdir(fallbackRoot, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+  for (const entry of topLevel) {
+    if (entry.name.startsWith('@') && entry.isDirectory()) {
+      const scopeRoot = paths.join(fallbackRoot, entry.name)
+      for (const child of await readdir(scopeRoot, { withFileTypes: true })) {
+        const packageName = `${entry.name}/${child.name}`
+        if (expectedPackages.has(packageName)) continue
+        const candidate = paths.join(scopeRoot, child.name)
+        const info = await lstat(candidate)
+        if (info.isSymbolicLink()) await unlink(candidate)
+        else await rm(candidate, { recursive: true, force: true })
+        changed = true
+      }
+      if ((await readdir(scopeRoot)).length === 0) await rmdir(scopeRoot)
+      continue
+    }
+    if (expectedPackages.has(entry.name)) continue
+    const candidate = paths.join(fallbackRoot, entry.name)
+    const info = await lstat(candidate)
+    if (info.isSymbolicLink()) await unlink(candidate)
+    else await rm(candidate, { recursive: true, force: true })
+    changed = true
+  }
+
+  for (const [packageName, target] of links) {
+    const fallback = paths.join(fallbackRoot, packageName)
+    await mkdir(paths.dirname(fallback), { recursive: true })
+    let current = null
+    try {
+      current = await lstat(fallback)
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    if (current) {
+      if (current.isSymbolicLink()) {
+        try {
+          if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) continue
+        } catch {
+          // A moved or partially updated portable directory leaves a dangling link.
+        }
+        await unlink(fallback)
+      } else {
+        // This location is DSH's generated installation fallback, never the
+        // profile-local third-party plugin directory. Replace only this leaf.
+        await rm(fallback, { recursive: true, force: true })
+      }
+    }
+    await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
+    changed = true
+  }
+  return changed
+}
+
 export function buildDshEnv(layout, source = process.env) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const separator = layout.platform === 'win32' ? ';' : ':'
@@ -201,6 +454,7 @@ export function parseCli(argv) {
   let updateManifest = ''
   let progressJson = false
   let waitForLockMs = 0
+  let output
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--no-browser') noBrowser = true
@@ -219,14 +473,21 @@ export function parseCli(argv) {
       updateManifest = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (arg === '--output') {
+      if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--output requires a value.')
+      output = argv[index + 1]
+      index += 1
+    }
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
     }
     else throw new Error(`Unknown command or option: ${arg}`)
   }
-  return { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs }
+  const result = { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs }
+  if (output !== undefined) result.output = output
+  return result
 }
 
 function comparable(value, platform = process.platform) {

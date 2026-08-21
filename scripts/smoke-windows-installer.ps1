@@ -37,8 +37,9 @@ function Invoke-BoundedProcess {
 }
 
 function Write-RuntimeDiagnostics {
+    $LogRoot = Join-Path $StateRoot 'data\logs'
     foreach ($LogName in @('dsh.stderr.log', 'dsh.stdout.log')) {
-        $Log = Join-Path $StateRoot ("logs\$LogName")
+        $Log = Join-Path $LogRoot $LogName
         if (Test-Path -LiteralPath $Log) {
             Write-Host "--- $LogName ---"
             Get-Content -LiteralPath $Log -Tail 160 | ForEach-Object { Write-Host $_ }
@@ -70,6 +71,23 @@ function Get-InstalledProductStatus {
     } finally {
         $env:DSH_PORTABLE_STATE_ROOT = $PreviousStateRoot
     }
+}
+
+function Wait-InstalledProductStatus {
+    param(
+        [Parameter(Mandatory = $true)][ValidateSet('running', 'stopped')][string]$ExpectedStatus,
+        [int]$TimeoutSeconds = 45
+    )
+
+    $Deadline = [DateTime]::UtcNow.AddSeconds($TimeoutSeconds)
+    do {
+        $Status = Get-InstalledProductStatus
+        if ($Status.status -eq $ExpectedStatus) { return $Status }
+        Start-Sleep -Milliseconds 250
+    } while ([DateTime]::UtcNow -lt $Deadline)
+
+    Write-RuntimeDiagnostics
+    throw "installed runtime did not reach $ExpectedStatus within $TimeoutSeconds seconds; last status was $($Status.status)"
 }
 
 function Assert-ProductShortcut {
@@ -155,10 +173,15 @@ try {
         -ExpectedStateRoot $StateRoot `
         -InstalledMode
     if ($LASTEXITCODE -ne 0) { throw "installed plugin management smoke failed with exit code $LASTEXITCODE" }
-    $env:DSH_PORTABLE_STATE_ROOT = if ($UseRealKnownFolder) { $null } else { $StateRoot }
+    # portable-cli.mjs is the internal headless lifecycle entry. Unlike the
+    # product GUI and dsh.exe, it deliberately receives its state root from the
+    # caller instead of interpreting installed-mode.json.
+    $env:DSH_PORTABLE_STATE_ROOT = $StateRoot
 
+    $Node = Join-Path $InstallRoot 'runtime\node\node.exe'
+    $Cli = Join-Path $InstallRoot 'launcher\portable-cli.mjs'
     $Started = Invoke-BoundedProcess -Stage 'Start installed runtime' -TimeoutSeconds 90 `
-        -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
+        -FilePath $Node -ArgumentList @($Cli, 'start', '--no-browser', '--json')
     if ($Started.ExitCode -ne 0) {
         if (Test-Path -LiteralPath $LauncherDiagnostic) {
             Write-Host '--- launcher diagnostic ---'
@@ -167,21 +190,17 @@ try {
         Write-RuntimeDiagnostics
         throw "installed launcher exited with code $($Started.ExitCode)"
     }
-    $Node = Join-Path $InstallRoot 'runtime\node\node.exe'
-    $Cli = Join-Path $InstallRoot 'launcher\portable-cli.mjs'
-    $Status = Get-InstalledProductStatus
-    if ($Status.status -ne 'running') { throw "installed runtime status is $($Status.status)" }
+    $Status = Wait-InstalledProductStatus -ExpectedStatus 'running'
     $Response = Invoke-WebRequest -UseBasicParsing -Uri $Status.url -TimeoutSec 10
     if ($Response.StatusCode -lt 200 -or $Response.StatusCode -ge 500) { throw "installed Web returned $($Response.StatusCode)" }
 
     $Stopped = Invoke-BoundedProcess -Stage 'Stop installed runtime' -TimeoutSeconds 60 `
-        -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') `
-        -ArgumentList @('stop', '--no-browser', '--json')
+        -FilePath $Node -ArgumentList @($Cli, 'stop', '--json')
     if ($Stopped.ExitCode -ne 0) {
         Write-RuntimeDiagnostics
         throw "installed stop entry exited with code $($Stopped.ExitCode)"
     }
-    if ((Get-InstalledProductStatus).status -ne 'stopped') { throw 'installed runtime did not stop' }
+    $null = Wait-InstalledProductStatus -ExpectedStatus 'stopped'
     if (-not (Test-Path -LiteralPath (Join-Path $StateRoot 'data\portable.json'))) { throw 'installed state was not written outside the app' }
 
     $RepairStateSentinel = Join-Path $StateRoot 'data\repair-state-sentinel.txt'
@@ -208,13 +227,26 @@ try {
         throw 'repair changed durable user state'
     }
 
+    # Reproduce an app/profile version skew from a prior installed build. The
+    # resolver tree is generated product state, while sessions and third-party
+    # profile packages live elsewhere and must survive the repair.
+    $ManagedFallback = Join-Path $StateRoot 'data\dsh-home\profiles\node_modules'
+    $MissingUiPackage = Join-Path $ManagedFallback '@deepseek-ai\dsh-client-ui-jobs'
+    $StaleUiPackage = Join-Path $ManagedFallback '@deepseek-ai\dsh-client-ui-jobs.stale-smoke'
+    if (-not (Test-Path -LiteralPath $MissingUiPackage)) {
+        throw 'installed smoke did not create the managed DSH module fallback'
+    }
+    Move-Item -LiteralPath $MissingUiPackage -Destination $StaleUiPackage
+
     $Restarted = Invoke-BoundedProcess -Stage 'Restart repaired installation' -TimeoutSeconds 90 `
-        -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -ArgumentList @('--no-browser', '--json')
+        -FilePath $Node -ArgumentList @($Cli, 'start', '--no-browser', '--json')
     if ($Restarted.ExitCode -ne 0) {
         Write-RuntimeDiagnostics
         throw "repaired launcher exited with code $($Restarted.ExitCode)"
     }
-    if ((Get-InstalledProductStatus).status -ne 'running') { throw 'repaired runtime did not start' }
+    $null = Wait-InstalledProductStatus -ExpectedStatus 'running'
+    if (-not (Test-Path -LiteralPath $MissingUiPackage)) { throw 'startup did not rebuild the managed DSH module fallback' }
+    if (Test-Path -LiteralPath $StaleUiPackage) { throw 'startup retained the stale managed DSH module fallback' }
     $RunningRepairLog = Join-Path $TempRoot ("dsh-running-repair-$TestId.log")
     $RunningRepair = Invoke-BoundedProcess -Stage 'Repair running installation' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
             '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
@@ -226,11 +258,13 @@ try {
         }
         throw "running repair exited with code $($RunningRepair.ExitCode)"
     }
-    if ((Get-InstalledProductStatus).status -ne 'stopped') { throw 'running repair did not stop the prior runtime' }
+    $null = Wait-InstalledProductStatus -ExpectedStatus 'stopped'
     if ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -ne $RepairStateText) {
         throw 'running repair changed durable user state'
     }
 
+    # The real installed GUI must resolve installed-mode.json on its own.
+    $env:DSH_PORTABLE_STATE_ROOT = $null
     $env:DSH_PORTABLE_TEST_HIDDEN = '1'
     $NativeBeforeUninstall = Start-Process -FilePath (Join-Path $InstallRoot 'DeepSeek-Herness.exe') -PassThru
     $NativeDeadline = [DateTime]::UtcNow.AddSeconds(90)

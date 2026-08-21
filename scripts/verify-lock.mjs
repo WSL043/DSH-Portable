@@ -19,7 +19,7 @@ const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'
 assert.deepEqual(root?.dependencies, {
   [upstream.dsh.package]: upstream.dsh.version,
   [desktopBridgePackage]: 'file:../desktop-bridge',
-  [upstream.pluginMarket.package]: upstream.pluginMarket.version,
+  [upstream.pluginMarket.package]: 'file:vendor/dsh-portable-plugin-market',
   [upstream.pnpm.package]: upstream.pnpm.version,
 })
 const installed = lockfile.packages?.[`node_modules/${upstream.dsh.package}`]
@@ -32,9 +32,11 @@ assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm in
 assert.equal(packageManager?.license, 'MIT', 'pnpm npm license')
 assert.equal(packageManager?.bin?.pnpm, 'bin/pnpm.mjs', 'pnpm executable entry')
 const pluginMarket = lockfile.packages?.[`node_modules/${upstream.pluginMarket.package}`]
-assert.equal(pluginMarket?.version, upstream.pluginMarket.version, 'pinned plugin market version')
-assert.equal(pluginMarket?.integrity, upstream.pluginMarket.integrity, 'pinned plugin market integrity')
-assert.equal(pluginMarket?.license, 'MIT', 'plugin market npm license')
+assert.equal(pluginMarket?.resolved, 'vendor/dsh-portable-plugin-market', 'plugin market must resolve only to the reviewed Portable component')
+assert.equal(pluginMarket?.link, true, 'plugin market must stay a local link')
+const pluginMarketSource = lockfile.packages?.['vendor/dsh-portable-plugin-market']
+assert.equal(pluginMarketSource?.version, upstream.pluginMarket.version, 'pinned Portable plugin market version')
+assert.equal(pluginMarketSource?.license, 'MIT', 'plugin market license')
 const desktopBridge = lockfile.packages?.[`node_modules/${desktopBridgePackage}`]
 assert.equal(desktopBridge?.resolved, '../desktop-bridge', 'desktop bridge must resolve only to the local product component')
 assert.equal(desktopBridge?.link, true, 'desktop bridge must stay an npm local link')
@@ -42,16 +44,15 @@ const desktopBridgeSource = lockfile.packages?.['../desktop-bridge']
 assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge link target identity')
 assert.equal(desktopBridgeSource?.license, 'MIT', 'desktop bridge license')
 
-assert.deepEqual(upstream.defaultPlugins?.sessionDelete, {
-  package: 'dsh-native-session-delete',
-  version: '1.0.0',
-  url: 'https://github.com/WSL043/dsh-session-delete/releases/download/v1.0.0/dsh-native-session-delete.tgz',
-  sha256: 'e51bbe07ca27f87b742438d15afc16319074a338688f8e28480bff084d74462e',
-  integrity: 'sha512-PMcKj2vxJQbmWiXTnuuYRcAKWVqmGY1dRnbzYQDNgBhrgK2HmODWloFHFiS9t4EuWpSp7q5SsPfSjzlhdigYzg==',
-  license: 'MIT',
-  reviewedCommit: '5842dc611884da08c8a95e306a9e41ac0bcb7c7e',
-  filename: 'dsh-native-session-delete.tgz',
-}, 'locked default session-delete plugin')
+const sessionDelete = upstream.defaultPlugins?.sessionDelete
+assert.equal(sessionDelete?.package, 'dsh-native-session-delete', 'locked default session-delete package')
+assert.match(sessionDelete?.version ?? '', /^\d+\.\d+\.\d+$/, 'default session-delete must use a stable version')
+assert.equal(sessionDelete?.url, `https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-${sessionDelete.version}.tgz`, 'default session-delete npm archive')
+assert.match(sessionDelete?.sha256 ?? '', /^[0-9a-f]{64}$/, 'default session-delete SHA-256')
+assert.match(sessionDelete?.integrity ?? '', /^sha512-/, 'default session-delete npm integrity')
+assert.equal(sessionDelete?.license, 'MIT', 'default session-delete license')
+assert.match(sessionDelete?.reviewedCommit ?? '', /^[0-9a-f]{40}$/, 'default session-delete reviewed release commit')
+assert.equal(sessionDelete?.filename, 'dsh-native-session-delete.tgz', 'default session-delete bundled filename')
 
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
@@ -60,7 +61,7 @@ for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent
 
 console.log(JSON.stringify({
   dshVersion: installed.version,
-  pluginMarketVersion: pluginMarket.version,
+  pluginMarketVersion: pluginMarketSource.version,
   pnpmVersion: packageManager.version,
   integrity: installed.integrity,
   packages: Object.keys(lockfile.packages).length,

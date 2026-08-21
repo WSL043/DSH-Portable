@@ -38,15 +38,15 @@ test('stable and release-candidate versions have unambiguous GitHub channels', (
 test('release notes always link to the immutable release tag being published', () => {
   const source = '[download](https://github.com/WSL043/DSH-Portable/releases/latest/download/file.zip)'
   assert.equal(
-    renderReleaseNotes(source, 'v0.3.0-rc.1'),
+    renderReleaseNotes(source, 'v0.3.0-rc.1', '0.1.1-rc.1'),
     '[download](https://github.com/WSL043/DSH-Portable/releases/download/v0.3.0-rc.1/file.zip)',
   )
-  assert.throws(() => renderReleaseNotes(source, 'latest'), /tag/i)
+  assert.throws(() => renderReleaseNotes(source, 'latest', '0.1.1-rc.1'), /tag/i)
 })
 
 test('candidate notes recommend a self-contained candidate package instead of the stable bootstrap', () => {
   const source = '{{PRODUCT_VERSION}}\n{{CHANNEL_UPGRADE_NOTICE_ZH}}\n{{CHANNEL_UPGRADE_NOTICE_EN}}\n[download](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})\n{{WINDOWS_PRIMARY_GUIDE_ZH}}\n{{WINDOWS_PRIMARY_GUIDE_EN}}'
-  const candidate = renderReleaseNotes(source, 'v0.4.0-rc.2')
+  const candidate = renderReleaseNotes(source, 'v0.4.0-rc.2', '0.1.1-rc.1')
   assert.match(candidate, /^0\.4\.0-rc\.2$/m)
   assert.match(candidate, /v0\.4\.0-rc\.2\/DSH-Portable-windows-x64-offline\.zip/)
   assert.doesNotMatch(candidate, /DSH-Portable-windows-x64\.exe/)
@@ -56,7 +56,7 @@ test('candidate notes recommend a self-contained candidate package instead of th
   assert.match(candidate, /Extract/)
   assert.doesNotMatch(candidate, /\{\{[^}]+\}\}/)
 
-  const stable = renderReleaseNotes(source, 'v0.4.0')
+  const stable = renderReleaseNotes(source, 'v0.4.0', '0.1.1-rc.1')
   assert.match(stable, /^0\.4\.0$/m)
   assert.match(stable, /v0\.4\.0\/DSH-Portable-windows-x64\.exe/)
   assert.match(stable, /双击/)
@@ -67,7 +67,9 @@ test('candidate notes recommend a self-contained candidate package instead of th
 
 test('stable release notes never describe the product as a candidate', async () => {
   const template = await read('templates/RELEASE-NOTES.md')
-  const stable = renderReleaseNotes(template, 'v0.4.0')
+  const stable = renderReleaseNotes(template, 'v0.4.0', '0.1.1-rc.1')
+  assert.doesNotMatch(stable, /\{\{DSH_VERSION\}\}/)
+  assert.match(stable, /0\.1\.1-rc\.1/)
   assert.doesNotMatch(stable, /候选版|candidate(?: release| build| version)?/i)
   assert.match(stable, /0\.4\.0 是正式版/)
   assert.match(stable, /0\.4\.0 is a stable release/i)

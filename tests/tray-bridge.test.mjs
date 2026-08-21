@@ -226,10 +226,28 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*13/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*13/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*17/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*16/)
   assert.match(macBuild, /"shellSchema": 13/)
   assert.match(macBuild, /"requiredShellSchema": 13/)
+})
+
+test('Portable maintenance is a native General settings item backed by same-origin product routes', async () => {
+  const [client, host] = await Promise.all([
+    readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8'),
+    readFile(new URL('../desktop-bridge/lib/index.js', import.meta.url), 'utf8'),
+  ])
+  assert.match(client, /settings\.general\.item/)
+  assert.doesNotMatch(client, /settings\.section/)
+  assert.match(client, /id:\s*'portable'/)
+  assert.match(client, /\/dsh-portable\/settings/)
+  assert.match(client, /\/dsh-portable\/doctor/)
+  assert.match(client, /\/dsh-portable\/repair/)
+  assert.match(client, /\/dsh-portable\/support-report/)
+  assert.match(client, /默认关闭|Off by default/)
+  assert.match(host, /sameOrigin\(request\)/)
+  assert.match(host, /MAX_BODY\s*=\s*16 \* 1024/)
+  assert.match(host, /repair-requested\.json/)
 })
 
 test('portable bridge fallback follows the moved product without entering a user plugin manifest', async () => {
@@ -241,9 +259,9 @@ test('portable bridge fallback follows the moved product without entering a user
   try {
     const layout = core.layoutForRoot(first, process.platform)
     await mkdir(path.join(first, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge'), { recursive: true })
-    await mkdir(path.join(first, 'app', 'node_modules', 'dshmarket'), { recursive: true })
+    await mkdir(path.join(first, 'app', 'node_modules', '@wsl043', 'dsh-portable-plugin-market'), { recursive: true })
     await writeFile(path.join(first, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'package.json'), '{}\n')
-    await writeFile(path.join(first, 'app', 'node_modules', 'dshmarket', 'package.json'), '{}\n')
+    await writeFile(path.join(first, 'app', 'node_modules', '@wsl043', 'dsh-portable-plugin-market', 'package.json'), '{}\n')
     await core.ensureDesktopBridgeFallback(layout)
     assert.equal(
       await realpath(layout.desktopBridgeFallback),
@@ -271,6 +289,9 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /WebMessageAsJson/)
   assert.match(source, /PostWebMessageAsJson/)
   assert.match(source, /dsh-portable\/state/)
+  assert.match(source, /dsh-portable\/preferences/)
+  assert.match(source, /updateCheckEnabled = \(bool\)value/)
+  assert.match(source, /SaveLauncherSettings\(\);[\s\S]+RebuildTrayMenu\(\);/)
   assert.match(source, /open-session/)
   assert.match(source, /new-session/)
   assert.doesNotMatch(source, /TrayTaskFlyout/)

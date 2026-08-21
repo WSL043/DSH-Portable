@@ -13,6 +13,8 @@ $BrowserState = Join-Path $Root 'data\runtime\browser.json'
 $WorkspaceMarker = Join-Path $Root 'workspace\desktop-host-smoke.txt'
 $HomeMarker = Join-Path $Root 'data\dsh-home\desktop-host-smoke.txt'
 $LauncherSettings = Join-Path $Root 'data\launcher-settings.json'
+$LauncherLog = Join-Path $Root 'data\logs\launcher.log'
+$LauncherLogOffset = if (Test-Path -LiteralPath $LauncherLog) { (Get-Item -LiteralPath $LauncherLog).Length } else { 0L }
 
 foreach ($File in @(
     $StartExe,
@@ -277,6 +279,23 @@ try {
     if (-not $Process.CloseMainWindow()) { throw 'Close-to-exit could not request a native close.' }
     if (-not $Process.WaitForExit(45000)) { throw 'Close-to-exit setting left the host running.' }
     if ((Get-ProductStatus).Status -ne 'stopped') { throw 'Close-to-exit setting left the backend running.' }
+
+    if (Test-Path -LiteralPath $LauncherLog) {
+        $Stream = [System.IO.FileStream]::new($LauncherLog, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
+        try {
+            [void]$Stream.Seek([Math]::Min($LauncherLogOffset, $Stream.Length), [System.IO.SeekOrigin]::Begin)
+            $Reader = [System.IO.StreamReader]::new($Stream, [System.Text.Encoding]::UTF8, $true, 4096, $true)
+            try { $LifecycleLog = $Reader.ReadToEnd() } finally { $Reader.Dispose() }
+        } finally { $Stream.Dispose() }
+        if ($LifecycleLog -match 'watchdog-fired|taskkill exit=') {
+            throw "Native desktop shutdown used forced WebView2 termination:`n$LifecycleLog"
+        }
+        if ($LifecycleLog -notmatch 'controller-close-requested' -or $LifecycleLog -notmatch 'browser-process-exited|process-tree-empty-without-event') {
+            throw "Native desktop shutdown did not prove WebView2 resource release:`n$LifecycleLog"
+        }
+    } else {
+        throw 'Native desktop shutdown did not write launcher lifecycle evidence.'
+    }
 
     [pscustomobject]@{
         Root = $Root

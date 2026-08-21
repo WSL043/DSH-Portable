@@ -1,0 +1,187 @@
+import { existsSync } from 'node:fs'
+import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+
+import {
+  ensureDesktopBridgeFallback,
+  ensurePortableDirectories,
+  inspectManagedProfileModuleFallback,
+  inspectPackagedDshRuntime,
+  repairManagedProfileModuleFallback,
+} from './portable-core.mjs'
+
+const REPORT_SCHEMA = 1
+const LOG_TAIL_BYTES = 64 * 1024
+const LOG_NAMES = Object.freeze(['launcher.log', 'dsh.stdout.log', 'dsh.stderr.log'])
+
+async function runtimeChecks(layout) {
+  const required = [
+    ['runtime.node', layout.nodeExe],
+    ['runtime.dsh', layout.dshBin],
+    ['runtime.host', layout.hostBin],
+    ['runtime.desktopBridge', layout.desktopBridgePatch],
+    ['runtime.pluginMarket', path.join(layout.pluginMarketRoot, 'package.json')],
+    ['runtime.packageManager', layout.packageManagerBin],
+  ]
+  if (layout.platform === 'win32') required.push(
+    ['shell.desktopHost', layout.desktopExe],
+    ['shell.webView2Core', layout.webView2Core],
+    ['shell.webView2WinForms', layout.webView2WinForms],
+    ['shell.webView2Loader', layout.webView2Loader],
+  )
+  const checks = required.map(([id, filename]) => ({
+    id,
+    status: existsSync(filename) ? 'ok' : 'error',
+    repairable: false,
+    detail: existsSync(filename) ? 'present' : 'missing-from-package',
+  }))
+  const closure = await inspectPackagedDshRuntime(layout)
+  checks.push({
+    id: 'runtime.dshDependencyClosure',
+    status: closure.ok ? 'ok' : 'error',
+    repairable: false,
+    detail: closure.detail,
+  })
+  return checks
+}
+
+async function generatedChecks(layout) {
+  const profileResolver = await inspectManagedProfileModuleFallback(layout)
+  return [
+    {
+      id: 'generated.dshProfileResolver',
+      status: profileResolver.ok ? 'ok' : 'error',
+      repairable: profileResolver.repairable,
+      detail: profileResolver.detail,
+    },
+    {
+      id: 'generated.desktopBridgeResolver',
+      status: 'ok',
+      repairable: true,
+      detail: existsSync(layout.desktopBridgeFallback) ? 'present' : 'created-on-start',
+    },
+    {
+      id: 'generated.pluginMarketResolver',
+      status: 'ok',
+      repairable: true,
+      detail: existsSync(path.join(layout.pluginMarketRoot, 'package.json'))
+        ? (existsSync(layout.pluginMarketFallback) ? 'present' : 'created-on-start')
+        : 'not-packaged',
+    },
+  ]
+}
+
+export async function diagnosePortable(layout) {
+  const checks = [...await runtimeChecks(layout), ...await generatedChecks(layout)]
+  const needsFullPackage = checks.some((check) => check.status === 'error' && !check.repairable)
+  return {
+    schemaVersion: REPORT_SCHEMA,
+    ok: !checks.some((check) => check.status === 'error'),
+    needsFullPackage,
+    checks,
+  }
+}
+
+export async function repairPortable(layout, { running = false } = {}) {
+  const before = await diagnosePortable(layout)
+  if (running) {
+    return {
+      schemaVersion: REPORT_SCHEMA,
+      ok: false,
+      deferred: true,
+      needsFullPackage: before.needsFullPackage,
+      actions: [],
+      checks: before.checks,
+    }
+  }
+  if (before.needsFullPackage) {
+    return {
+      schemaVersion: REPORT_SCHEMA,
+      ok: false,
+      deferred: false,
+      needsFullPackage: true,
+      actions: [],
+      checks: before.checks,
+    }
+  }
+
+  await ensurePortableDirectories(layout)
+  const actions = []
+  if (await repairManagedProfileModuleFallback(layout)) actions.push('rebuild-managed-profile-resolver')
+  if (await ensureDesktopBridgeFallback(layout)) actions.push('rebuild-portable-plugin-resolvers')
+  const after = await diagnosePortable(layout)
+  return { ...after, deferred: false, actions }
+}
+
+function redact(source) {
+  let value = String(source ?? '')
+  value = value.replace(/\b(Bearer\s+)[^\s"']+/gi, '$1[REDACTED]')
+  value = value.replace(/\b(api[_-]?key|token|password|secret|authorization|cookie)\b\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
+  value = value.replace(/\bsk-[A-Za-z0-9_-]{6,}\b/g, '[REDACTED]')
+  const home = os.homedir()
+  if (home) value = value.replaceAll(home, '<USER_HOME>')
+  return value
+}
+
+async function logTail(filename) {
+  try {
+    const source = await readFile(filename)
+    return redact(source.subarray(Math.max(0, source.length - LOG_TAIL_BYTES)).toString('utf8'))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return ''
+    return `unreadable: ${error?.code || error?.message || 'unknown'}`
+  }
+}
+
+async function componentInventory(layout) {
+  try {
+    return JSON.parse(await readFile(path.join(layout.root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
+async function fileInventory(layout) {
+  const result = {}
+  for (const [name, filename] of Object.entries({
+    node: layout.nodeExe,
+    dsh: layout.dshBin,
+    host: layout.hostBin,
+    desktopBridge: layout.desktopBridgePatch,
+  })) {
+    try {
+      const info = await stat(filename)
+      result[name] = { present: true, bytes: info.size }
+    } catch {
+      result[name] = { present: false }
+    }
+  }
+  try {
+    result.logNames = (await readdir(layout.logsDir)).filter((name) => LOG_NAMES.includes(name)).sort()
+  } catch {
+    result.logNames = []
+  }
+  return result
+}
+
+export async function exportPortableSupportReport(layout, output) {
+  if (!output) throw new Error('A support report output path is required.')
+  const logs = {}
+  for (const name of LOG_NAMES) logs[name] = await logTail(path.join(layout.logsDir, name))
+  const report = {
+    schemaVersion: REPORT_SCHEMA,
+    generatedAt: new Date().toISOString(),
+    platform: { os: process.platform, arch: process.arch, release: os.release() },
+    mode: layout.root === layout.stateRoot ? 'portable' : 'installed',
+    diagnosis: await diagnosePortable(layout),
+    components: await componentInventory(layout),
+    files: await fileInventory(layout),
+    logs,
+  }
+  const bytes = Buffer.from(`${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  if (bytes.length >= 512 * 1024) throw new Error('Support report exceeded its privacy-safe size limit.')
+  await mkdir(path.dirname(output), { recursive: true })
+  await writeFile(output, bytes, { mode: 0o600 })
+  return { schemaVersion: REPORT_SCHEMA, output, bytes: bytes.length }
+}

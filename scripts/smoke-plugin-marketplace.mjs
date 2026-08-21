@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process'
 import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 
 const runFile = promisify(execFile)
@@ -11,6 +12,9 @@ if (!rootArgument) throw new Error('usage: node smoke-plugin-marketplace.mjs <fi
 
 const root = path.resolve(rootArgument)
 const cli = path.join(root, 'launcher', 'portable-cli.mjs')
+const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
+const defaultSessionDelete = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-native-session-delete')
+assert.ok(defaultSessionDelete?.version, 'the finished product does not declare its bundled session-delete version')
 const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-plugin-smoke-'))
 const environment = {
   ...process.env,
@@ -70,7 +74,7 @@ try {
   running = true
 
   const status = await getJson(host.url, '/dsh-market/status')
-  assert.equal(status.version, '1.16.0')
+  assert.equal(status.version, '0.1.0-beta.1')
   assert.equal(status.restart, false, 'the Portable shell owns restart and update lifecycle')
   assert.equal(status.pnpm === true || status.pnpm?.available === true, true, 'the market must see Portable bundled pnpm')
 
@@ -88,9 +92,14 @@ try {
   )
   assert.equal(
     String(profileManifest.dependencies['dsh-native-session-delete']).replaceAll('\\', '/'),
-    'file:.dsh-portable-archives/dsh-native-session-delete.tgz',
-    'the installed archive reference must stay relative after a product folder move',
+    defaultSessionDelete.version,
+    'the offline seed must enter the normal npm plugin lifecycle after installation',
   )
+  const updates = await getJson(host.url, '/dsh-market/updates?force=1', 3)
+  const defaultUpdate = updates.updates?.['dsh-native-session-delete']
+  assert.equal(defaultUpdate?.kind, 'npm', 'the default plugin is outside the market update lifecycle')
+  assert.equal(defaultUpdate?.version, defaultSessionDelete.version, 'the market did not resolve the installed default version')
+  assert.equal(defaultUpdate?.updateAvailable, false, 'the market must not offer the installed default version as an update')
 
   const node = process.platform === 'win32'
     ? path.join(root, 'runtime', 'node', 'node.exe')

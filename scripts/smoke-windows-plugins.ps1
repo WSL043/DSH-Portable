@@ -78,7 +78,11 @@ function Product-Status {
 function Start-Product {
     $Stdout = Join-Path $TestRoot 'launcher.stdout.log'
     $Stderr = Join-Path $TestRoot 'launcher.stderr.log'
-    $Process = Start-Process -FilePath $Launcher -ArgumentList @('--no-browser', '--json') -PassThru -NoNewWindow `
+    # Plugin lifecycle is a headless host contract. The GUI launcher owns a
+    # Windows Job Object so closing its window reliably tears down DSH; using
+    # that shell with --no-browser would correctly end the child with the shell.
+    # Exercise the finished product's supported headless CLI instead.
+    $Process = Start-Process -FilePath $Node -ArgumentList @($PortableCli, 'start', '--no-browser', '--json') -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
@@ -103,7 +107,7 @@ function Start-Product {
 function Stop-Product {
     $Stdout = Join-Path $TestRoot 'stop.stdout.log'
     $Stderr = Join-Path $TestRoot 'stop.stderr.log'
-    $Process = Start-Process -FilePath $Launcher -ArgumentList @('stop', '--no-browser', '--json') -PassThru -NoNewWindow `
+    $Process = Start-Process -FilePath $Node -ArgumentList @($PortableCli, 'stop', '--json') -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue

@@ -138,15 +138,15 @@ try {
             $AutomaticItem = [Windows.Forms.ToolStripMenuItem]$WindowType.GetField('automaticUpdateCheckItem', $AllFields).GetValue($Window)
             $UpdateEnabledField = $WindowType.GetField('updateCheckEnabled', $AllFields)
             $SettingsPath = Join-Path $ResolvedRoot 'data\launcher-settings.json'
-            if (-not [bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
-                throw 'Automatic update checks must default to On'
+            if ([bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
+                throw 'Automatic update checks must default to Off until the user opts in'
             }
             $AutomaticItem.PerformClick()
             [Windows.Forms.Application]::DoEvents()
-            if ([bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
+            if (-not [bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
                 throw 'Automatic update check status did not change immediately after click'
             }
-            if (-not (Test-Path -LiteralPath $SettingsPath) -or (Get-Content -Raw -LiteralPath $SettingsPath) -notmatch '"updateCheckEnabled":false') {
+            if (-not (Test-Path -LiteralPath $SettingsPath) -or (Get-Content -Raw -LiteralPath $SettingsPath) -notmatch '"updateCheckEnabled":true') {
                 throw 'Automatic update check preference was not saved'
             }
 
@@ -157,7 +157,7 @@ try {
                 $UpdateEnabledField.SetValue($ReloadedWindow, $ReloadedEnabled)
                 $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers).Invoke($ReloadedWindow, $null) | Out-Null
                 $ReloadedItem = [Windows.Forms.ToolStripMenuItem]$WindowType.GetField('automaticUpdateCheckItem', $AllFields).GetValue($ReloadedWindow)
-                if ([bool]$UpdateEnabledField.GetValue($ReloadedWindow) -or $ReloadedItem.ShortcutKeyDisplayString -ne 'Off') {
+                if (-not [bool]$UpdateEnabledField.GetValue($ReloadedWindow) -or $ReloadedItem.ShortcutKeyDisplayString -ne 'On') {
                     throw 'Automatic update check preference was not restored after restart'
                 }
             }
@@ -167,8 +167,8 @@ try {
 
             $AutomaticItem.PerformClick()
             [Windows.Forms.Application]::DoEvents()
-            if (-not [bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
-                throw 'Automatic update check preference could not be re-enabled'
+            if ([bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
+                throw 'Automatic update check preference could not be disabled again'
             }
         }
 

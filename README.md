@@ -55,7 +55,7 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 - **备份简单**：退出应用后复制整个文件夹，不用分别寻找配置和插件目录。
 - **原生桌面体验**：独立应用窗口、任务栏身份和系统托盘，并记住上次窗口大小与位置。
 - **更新不打散数据**：经过测试的更新会保留本地会话、凭据、插件和工作区。
-- **在线与离线都能准备**：日常使用轻量便携启动器；受限网络可直接下载完整 ZIP。
+- **在线与离线都能准备**：日常使用轻量便携启动器；受限网络可用单文件离线版直接准备便携文件夹。
 
 ## 迁移、备份与同步
 
@@ -73,12 +73,13 @@ Windows 启动器和安装界面会跟随系统显示中文或英文；DSH 工�
 | 你想怎么用 | 下载 |
 | --- | --- |
 | **便携使用（推荐）** | [便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) — 首次运行后得到可移动文件夹 |
-| **目标电脑首次准备时无法联网** | [便携完整 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) — 解压后直接使用 |
+| **目标电脑首次准备时无法联网** | [单文件离线版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — 双击后选择位置，自动准备完整便携文件夹 |
+| **需要手动解压或批量部署** | [便携完整 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 | **像普通软件一样安装** | [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — 开始菜单、桌面快捷方式和标准卸载 |
 
 > [!TIP]
 > **国内网络加速**：GitHub 直连下载在国内可能较慢，可直接下载下方社区镜像的
-> **Windows 离线版完整 ZIP**（解压后直接使用，免安装）。镜像是社区维护的加速
+> **Windows 离线版完整 ZIP**（适合手动解压或批量部署）。镜像是社区维护的加速
 > 服务，非官方部署；失效时请换用备用路线或 GitHub 原链接，并核对
 > [checksums.txt](https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt)。
 
@@ -118,7 +119,7 @@ AppImage 会把会话、设置、插件和工作区保存在同目录的 `DSH-Po
 
 ## 插件管理
 
-当前候选版内置 **插件市场**：在 DSH 设置中浏览由
+当前候选版内置 **插件市场**：打开 **设置 → 插件 → 插件市场**，即可浏览由
 [awesome-dsh-plugin](https://awesome-dsh-plugin.com) 持续整理的千余个社区插件，按名称、分类、
 热度和更新时间筛选。相同仓库只显示一次；有素材的插件直接显示作者提供的真实截图，
 其他图片只在打开详情后按需加载。每个插件都可以打开自己的项目页面，不由 Portable
@@ -127,7 +128,7 @@ AppImage 会把会话、设置、插件和工作区保存在同目录的 `DSH-Po
 市场跟随 DSH 的中文/英文与明暗外观，安装、更新、停用和卸载都作用于当前 `web`
 配置。Portable 外壳继续负责程序生命周期，市场不会为了安装插件静默打断正在运行的任务。
 全新安装会在 **已安装** 中提供默认启用、可自行停用或卸载的
-[永久删除会话](https://github.com/WSL043/dsh-session-delete) 扩展；删除前必须再次确认，且不会
+[永久删除会话](https://github.com/WSL043/dsh-native-session-delete) 扩展；删除前必须再次确认，且不会
 取代仍可恢复的“归档”。为了尊重已有配置，普通升级不会把用户已经移除的扩展重新装回。
 
 插件、设置与会话都保存在 Portable 数据目录中，移动或备份时会一起保留。`dsh.exe` 是
@@ -171,7 +172,7 @@ DSH-Portable 会先打开本地工作台，再在后台检查更新并询问是�
 随后依次显示验证、安装与重新打开阶段。若新版不能正常启动，会自动恢复到更新前版本。
 
 Windows 和 Linux 可以从系统托盘手动 **检查更新**，macOS 可以从应用菜单检查。不想接收主动提醒时，
-可以在同一菜单里关闭 **启动时检查更新**；手动检查入口仍会保留。发现更新时可以选择
+自动检查更新默认关闭；可在同一菜单里按需开启 **启动时检查更新**，手动检查入口始终保留。发现更新时可以选择
 更新、**稍后** 或 **跳过此版本**。Windows 只在确认没有任务运行时直接更新；macOS 与 Linux
 会把更新安排在下次启动前安装。跳过只对当前版本生效，后续新版仍会正常提示；有任务运行时不会为了更新中断任务。
 

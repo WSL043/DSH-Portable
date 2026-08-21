@@ -25,6 +25,14 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /SignalExistingDesktopHost/)
   assert.match(host, /NavigationCompleted/)
   assert.match(host, /TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>/)
+  assert.match(host, /private void FitWebViewToClient\(\)/)
+  assert.match(host, /ClientSizeChanged\s*\+=\s*delegate\s*\{\s*FitWebViewToClient\(\);\s*\}/)
+  const desktopReveal = host.slice(host.indexOf('private async Task ShowDesktopAsync'), host.indexOf('private void OnNewWindowRequested'))
+  assert.ok(
+    desktopReveal.lastIndexOf('FitWebViewToClient();') > desktopReveal.indexOf('RestoreDesktopWindowState();'),
+    'the embedded WebView viewport must be refit after restoring the full desktop window size',
+  )
+  assert.match(desktopReveal, /BeginInvoke\(new Action\(FitWebViewToClient\)\)/)
   assert.ok(
     host.indexOf('NavigationCompleted') < host.indexOf('launchPanel.Visible = false'),
     'the native loading view must remain until the embedded app finishes navigating',
@@ -34,6 +42,8 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /Path\.GetFullPath\(process\.MainModule\.FileName\)/)
   assert.match(host, /PostMessage\(window, WmPortableExit/)
   assert.match(host, /process\.WaitForExit\(45000\)/)
+  const externalHostClose = host.slice(host.indexOf('private void CloseOwnedDesktopHost()'), host.indexOf('private delegate bool EnumWindowsCallback'))
+  assert.doesNotMatch(externalHostClose, /process\.ExitCode/)
   assert.doesNotMatch(host, /--app=/)
 
   assert.equal(lock.webview2.package, 'Microsoft.Web.WebView2')
@@ -54,13 +64,68 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
 
   assert.match(host, /private CoreWebView2Environment webViewEnvironment;/)
   assert.match(host, /TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>/)
-  assert.match(host, /webView\.Dispose\(\)/)
+  assert.match(host, /private int ownedWebViewBrowserProcessId;/)
+  assert.match(host, /webView\.CoreWebView2\.BrowserProcessId/)
+  assert.doesNotMatch(host, /private readonly WebView2 webView;/)
   assert.match(host, /await WaitForWebViewExitAsync\(/)
   assert.match(host, /Owned WebView2 processes still hold the portable folder/)
   const webViewExit = host.slice(host.indexOf('private async Task WaitForWebViewExitAsync'), host.indexOf('private List<string> OwnedWebViewProcessDiagnostics'))
+  assert.match(webViewExit, /WebView2 closingWebView\s*=\s*webView;/)
+  assert.match(webViewExit, /webView\s*=\s*null;/)
+  assert.match(webViewExit, /closingWebView\.CoreWebView2\.ProcessFailed\s*-=\s*OnWebViewProcessFailed/)
+  assert.match(webViewExit, /Controls\.Remove\(closingWebView\)/)
+  assert.match(webViewExit, /closingWebView\.Dispose\(\)/)
+  assert.ok(
+    webViewExit.indexOf('Controls.Remove(closingWebView)') < webViewExit.indexOf('closingWebView.Dispose()'),
+    'the WinForms control must leave the visual tree before its controller is disposed',
+  )
+  assert.match(webViewExit, /DateTime deadline\s*=\s*DateTime\.UtcNow\.AddMilliseconds\(timeoutMs\)/)
+  assert.match(webViewExit, /while \(DateTime\.UtcNow < deadline\)/)
+  assert.match(webViewExit, /Task\.WhenAny\(exited, Task\.Delay\(pollDelayMs\)\)/)
+  assert.match(webViewExit, /exitEventObserved/)
   assert.match(webViewExit, /remaining\s*=\s*await Task\.Run\(\(\) => OwnedWebViewProcessDiagnostics\(\)\)/)
   assert.match(webViewExit, /if \(remaining\.Count == 0\)/)
-  assert.doesNotMatch(webViewExit, /if \(exited\.IsCompleted\)\s*\{\s*remaining\s*=/)
+  assert.match(webViewExit, /restart Windows/i)
+  assert.match(webViewExit, /TryForceReleaseOwnedWebViewProcesses\(remaining\)/)
+  const forceRelease = host.slice(host.indexOf('private bool TryForceReleaseOwnedWebViewProcesses'), host.indexOf('private void WriteLauncherLog'))
+  assert.match(forceRelease, /ownedWebViewBrowserProcessId/)
+  assert.match(forceRelease, /Process\.GetCurrentProcess\(\)\.Id/)
+  assert.match(forceRelease, /"pid="[\s\S]+" ppid="[\s\S]+" name=msedgewebview2\.exe"/i)
+  assert.match(forceRelease, /ParseOwnedWebViewProcessDiagnostics/)
+  assert.match(forceRelease, /SelectOwnedWebViewProcessTree/)
+  assert.match(forceRelease, /OrderByDescending\([\s\S]*OwnedWebViewProcessDepth/)
+  assert.match(forceRelease, /process\.Kill\(\)/)
+  assert.match(forceRelease, /kill-requested pid=/)
+  assert.doesNotMatch(forceRelease, /taskkill\.exe/)
+  assert.doesNotMatch(forceRelease, /Process\.GetProcessesByName|Name = 'msedgewebview2\.exe'/)
+  assert.match(host, /launcher\.log/)
+  assert.match(host, /shutdown-webview/)
+  assert.match(host, /begin hostPid=/)
+  assert.match(host, /Application\.ExecutablePath/)
+  assert.match(host, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/)
+  assert.match(host, /CreateJobObject/)
+  assert.match(host, /SetInformationJobObject/)
+  assert.match(host, /AssignProcessToJobObject/)
+  assert.match(host, /PortableProcessJob\.Initialize\(\)/)
+  assert.ok(
+    host.indexOf('PortableProcessJob.Initialize();') < host.indexOf('Application.Run(new LauncherWindow(args))'),
+    'the native host must enter its job before WebView2 and DSH child processes are created',
+  )
+  assert.match(webViewExit, /PortableProcessJob\.ExitOwnedTree/)
+  assert.match(webViewExit, /job-close-requested/)
+  assert.match(host, /日志 \/ Log:/)
+
+  const webViewDataRoot = host.slice(host.indexOf('private string ResolveWebViewDataRoot()'), host.indexOf('private static bool IsTrustedLoopbackUrl'))
+  assert.match(webViewDataRoot, /Environment\.SpecialFolder\.LocalApplicationData/)
+  assert.match(webViewDataRoot, /ResolvePortableInstanceId\(\)/)
+  assert.match(webViewDataRoot, /ResolvePortableLocationKey\(\)/)
+  assert.doesNotMatch(webViewDataRoot, /Path\.Combine\(root, "data", "webview2"\)/)
+  assert.match(host, /private string ResolvePortableLocationKey\(\)/)
+  assert.match(host, /private string ResolveLauncherLogDirectory\(\)/)
+  assert.match(host, /Path\.Combine\(root, "data", "logs"\)/)
+
+  const releaseFailure = host.slice(host.indexOf('await WaitForWebViewExitAsync'), host.indexOf('allowClose = true;', host.indexOf('await WaitForWebViewExitAsync')))
+  assert.doesNotMatch(releaseFailure, /shutdownRunning\s*=\s*false/)
 
   const externalExit = host.slice(host.indexOf('if (message.Msg == WmPortableExit)'), host.indexOf('if (message.Msg == WmPortableRestore)'))
   assert.match(externalExit, /BeginDesktopShutdown\(/)
@@ -162,6 +227,8 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /windows-desktop-host:/)
   assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
   assert.match(workflow, /smoke-windows-native-tray\.ps1/)
+  assert.match(workflow, /runner:\s*windows-2022/)
+  assert.match(workflow, /runner:\s*windows-2025/)
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
   assert.match(workflow, /\$DownloadRoot = Join-Path \$env:RUNNER_TEMP 'dsh-native-download-host'/)
   assert.match(workflow, /smoke-windows-native-download\.mjs \(Join-Path \$DownloadRoot 'DSH-Portable'\)/)
@@ -171,9 +238,12 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeDownloadSmoke, /async function waitForDocumentBody/)
   assert.match(nativeDownloadSmoke, /document\.body\s*&&\s*document\.readyState\s*!==\s*['"]loading['"]/)
   assert.ok(
-    nativeDownloadSmoke.indexOf('await waitForDocumentBody') < nativeDownloadSmoke.indexOf('document.body.appendChild(anchor)'),
+    nativeDownloadSmoke.indexOf('await waitForDocumentBody') < nativeDownloadSmoke.indexOf('await triggerDownload'),
     'the real native download smoke must wait for the embedded document before injecting a download',
   )
+  assert.match(nativeDownloadSmoke, /const target = document\.body/)
+  assert.match(nativeDownloadSmoke, /if \(!target \|\| document\.readyState === ['"]loading['"]\) return false/)
+  assert.match(nativeDownloadSmoke, /target\.appendChild\(anchor\)/)
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)

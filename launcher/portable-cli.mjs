@@ -1,7 +1,7 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync } from 'node:fs'
-import { mkdir, readFile } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
 import os from 'node:os'
@@ -15,6 +15,7 @@ import {
   browserLaunchSpec,
   buildDshEnv,
   ensureDesktopBridgeFallback,
+  repairManagedProfileModuleFallback,
   ensurePortableDirectories,
   isOwnedDshProcess,
   isOwnedPortableBrowserProcess,
@@ -35,6 +36,7 @@ import {
 } from './update-core.mjs'
 import { workspaceDocumentReady } from './http-readiness.mjs'
 import { seedDefaultPlugins } from './default-plugins.mjs'
+import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
@@ -187,7 +189,7 @@ function terminateBrowserProcess(processInfo, force) {
   if (layout.platform === 'win32') {
     const args = ['/PID', String(pid), '/T']
     if (force) args.push('/F')
-    execFileSync('taskkill.exe', args, { encoding: 'utf8', windowsHide: true })
+    execFileSync('taskkill.exe', args, { stdio: 'ignore', windowsHide: true })
   } else {
     const processGroupId = Number(processInfo.processGroupId)
     const target = Number.isSafeInteger(processGroupId) && processGroupId > 0 && processGroupId === pid
@@ -261,6 +263,16 @@ function tailSince(filename, offset, maxBytes = 8000) {
 async function start(noBrowser) {
   requireRuntime({ desktopBridge: true })
   await ensurePortableDirectories(layout)
+  let requestedRepair = null
+  if (existsSync(layout.repairRequest)) {
+    requestedRepair = {
+      ...await repairPortable(layout, { running: false }),
+      completedAt: new Date().toISOString(),
+    }
+    await writeJsonAtomic(layout.repairResult, requestedRepair)
+    await rm(layout.repairRequest, { force: true })
+  }
+  const repairedProfileFallback = await repairManagedProfileModuleFallback(layout)
   await ensureDesktopBridgeFallback(layout)
   const migration = await migratePortableRoot(layout)
   const prior = readProcessState()
@@ -335,7 +347,7 @@ async function start(noBrowser) {
       if (child.pid) {
         try {
           if (process.platform === 'win32') {
-            execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { encoding: 'utf8', windowsHide: true })
+            execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
           } else {
             process.kill(-child.pid, 'SIGKILL')
           }
@@ -350,7 +362,7 @@ async function start(noBrowser) {
 
     const url = `http://127.0.0.1:${port}`
     const browser = noBrowser ? null : await openBrowser(url)
-    return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins }
+    return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }
   } catch (error) {
     let cleanupError = null
     if (ownedState(state)) {
@@ -386,7 +398,7 @@ async function stop() {
   if (ownedState(state)) {
     forced = true
     if (process.platform === 'win32') {
-      execFileSync('taskkill.exe', ['/PID', String(state.pid), '/T', '/F'], { encoding: 'utf8', windowsHide: true })
+      execFileSync('taskkill.exe', ['/PID', String(state.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
     } else {
       process.kill(-Number(state.pid), 'SIGKILL')
     }
@@ -416,6 +428,21 @@ async function openExisting() {
   const current = await status()
   if (current.status !== 'running') return start(false)
   return { ...current, browser: await openBrowser(current.url) }
+}
+
+async function doctor() {
+  return diagnosePortable(layout)
+}
+
+async function repair() {
+  const current = await status()
+  return repairPortable(layout, { running: current.status !== 'stopped' })
+}
+
+async function supportReport(options) {
+  const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
+  const output = path.resolve(options.output || path.join(layout.logsDir, `DSH-Portable-support-${stamp}.json`))
+  return exportPortableSupportReport(layout, output)
 }
 
 async function checkUpdate(options) {
@@ -513,6 +540,9 @@ async function main() {
     else if (options.command === 'stop') result = await stop()
     else if (options.command === 'status') result = await status()
     else if (options.command === 'open') result = await openExisting()
+    else if (options.command === 'doctor') result = await doctor()
+    else if (options.command === 'repair') result = await repair()
+    else if (options.command === 'support-report') result = await supportReport(options)
     else if (options.command === 'check-update') result = await checkUpdate(options)
     else if (options.command === 'defer-update') result = await deferUpdate(layout)
     else if (options.command === 'ignore-update') result = await ignoreUpdate(layout)

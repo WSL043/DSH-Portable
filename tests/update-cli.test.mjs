@@ -53,6 +53,9 @@ async function makeComponentArchive(root, version, portableVersion) {
   await mkdir(path.dirname(bridgePatch), { recursive: true })
   await mkdir(path.join(source, 'licenses'), { recursive: true })
   await writeFile(dshBin, fakeDsh(version))
+  await writeFile(path.join(path.dirname(path.dirname(dshBin)), 'package.json'), JSON.stringify({
+    name: '@deepseek-ai/dsh', version, dependencies: {},
+  }))
   await writeFile(bridgePatch, '- insert: []\n')
   await writeFile(path.join(path.dirname(bridgePatch), 'package.json'), '{"name":"@wsl043/dsh-portable-desktop-bridge"}\n')
   await writeFile(path.join(source, 'app', 'package.json'), '{"name":"updated-fixture"}\n')
@@ -109,11 +112,14 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))
     await writeFile(oldDsh, fakeDsh('0.1.0-rc.6'))
+    await writeFile(path.join(path.dirname(path.dirname(oldDsh)), 'package.json'), JSON.stringify({
+      name: '@deepseek-ai/dsh', version: '0.1.0-rc.6', dependencies: {},
+    }))
     await writeFile(oldBridgePatch, '- insert: []\n')
     await writeFile(path.join(path.dirname(oldBridgePatch), 'package.json'), '{"name":"@wsl043/dsh-portable-desktop-bridge"}\n')
     await writeFile(path.join(root, 'app', 'package.json'), '{"name":"old-fixture"}\n')

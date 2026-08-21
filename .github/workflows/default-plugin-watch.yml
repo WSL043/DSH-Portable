@@ -1,0 +1,59 @@
+name: Watch bundled default plugin
+
+on:
+  schedule:
+    - cron: '7 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - id: candidate
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-default-plugin.mjs
+      - name: Run the complete repository contract
+        if: steps.candidate.outputs.changed == 'true'
+        run: npm test
+      - name: Package the tested candidate without creating a branch
+        if: steps.candidate.outputs.changed == 'true'
+        run: git diff --binary -- launcher/default-plugins.mjs upstream.lock.json > default-plugin-candidate.patch
+      - name: Upload the tested candidate
+        if: steps.candidate.outputs.changed == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: session-delete-${{ steps.candidate.outputs.version }}-candidate
+          path: default-plugin-candidate.patch
+          if-no-files-found: error
+          retention-days: 30
+      - name: Create or refresh the tested candidate issue
+        if: steps.candidate.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.candidate.outputs.version }}
+          COMMIT: ${{ steps.candidate.outputs.commit }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          TITLE="Bundled session delete ${VERSION} candidate"
+          BODY=$(mktemp)
+          printf '%s\n' \
+            'Verified candidate for the removable session-delete plugin bundled into new Portable profiles.' \
+            '' "- package: \`dsh-native-session-delete@${VERSION}\`" "- immutable release commit: \`${COMMIT}\`" \
+            "- tested candidate patch: ${RUN_URL} (Artifacts)" \
+            '' 'Existing profiles remain user-controlled. This candidate still requires the normal product release gate.' > "$BODY"
+          ISSUE=$(gh issue list --state open --search "${TITLE} in:title" --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)
+          if [ -n "$ISSUE" ]; then
+            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY"
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY"
+          fi

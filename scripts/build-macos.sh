@@ -28,6 +28,7 @@ DSH_COMMIT="$(lock_value dsh.reviewedCommit)"
 DSH_NOTICES_SHA256="$(lock_value dsh.noticesSha256)"
 PORTABLE_VERSION="$("$BUILD_NODE" -p 'require(process.argv[1]).version' "$PROJECT_ROOT/package.json")"
 DEFAULT_PLUGIN_URL="$(lock_value defaultPlugins.sessionDelete.url)"
+DEFAULT_PLUGIN_VERSION="$(lock_value defaultPlugins.sessionDelete.version)"
 DEFAULT_PLUGIN_FILENAME="$(lock_value defaultPlugins.sessionDelete.filename)"
 DEFAULT_PLUGIN_SHA256="$(lock_value defaultPlugins.sessionDelete.sha256)"
 VERSION_POLICY="$("$BUILD_NODE" "$PROJECT_ROOT/scripts/version-policy.mjs" "$PORTABLE_VERSION")"
@@ -67,8 +68,10 @@ NPM_CLI="$NODE_FOLDER/lib/node_modules/npm/bin/npm-cli.js"
 
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
+cp -R "$PROJECT_ROOT/app/vendor" "$STAGE/app/vendor"
 cp "$PROJECT_ROOT/launcher/portable-core.mjs" "$STAGE/launcher/portable-core.mjs"
 cp "$PROJECT_ROOT/launcher/portable-cli.mjs" "$STAGE/launcher/portable-cli.mjs"
+cp "$PROJECT_ROOT/launcher/repair-core.mjs" "$STAGE/launcher/repair-core.mjs"
 cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs"
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
 cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
@@ -84,7 +87,7 @@ cp "$NODE_EXE" "$STAGE/runtime/node/bin/node"
 chmod 755 "$STAGE/runtime/node/bin/node"
 cp "$NODE_FOLDER/LICENSE" "$STAGE/licenses/Node.js-LICENSE.txt"
 
-DEFAULT_PLUGIN_ARCHIVE="$DOWNLOAD_DIR/$DEFAULT_PLUGIN_FILENAME"
+DEFAULT_PLUGIN_ARCHIVE="$DOWNLOAD_DIR/$DEFAULT_PLUGIN_VERSION-$DEFAULT_PLUGIN_FILENAME"
 if [[ ! -f "$DEFAULT_PLUGIN_ARCHIVE" ]]; then
   curl --fail --location --retry 3 --output "$DEFAULT_PLUGIN_ARCHIVE" "$DEFAULT_PLUGIN_URL"
 fi
@@ -105,7 +108,7 @@ rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 
 cp "$STAGE/app/node_modules/@deepseek-ai/dsh/LICENSE" "$STAGE/licenses/DeepSeek-Harness-LICENSE.txt"
-cp "$STAGE/app/node_modules/dshmarket/LICENSE" "$STAGE/licenses/dsh-market-LICENSE.txt"
+cp "$STAGE/app/node_modules/@wsl043/dsh-portable-plugin-market/LICENSE" "$STAGE/licenses/dsh-market-LICENSE.txt"
 cp "$STAGE/app/node_modules/pnpm/LICENSE" "$STAGE/licenses/pnpm-LICENSE.txt"
 NOTICES="$DOWNLOAD_DIR/DeepSeek-Harness-THIRD_PARTY_NOTICES-$DSH_COMMIT.md"
 if [[ ! -f "$NOTICES" ]]; then
@@ -123,8 +126,8 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "dshPackage": "@deepseek-ai/dsh",
   "dshVersion": "$DSH_VERSION",
   "dshCommit": "$DSH_COMMIT",
-  "pluginMarketPackage": "dshmarket",
-  "pluginMarketVersion": "1.16.0",
+  "pluginMarketPackage": "@wsl043/dsh-portable-plugin-market",
+  "pluginMarketVersion": "$(lock_value pluginMarket.version)",
   "defaultPluginPackage": "$(lock_value defaultPlugins.sessionDelete.package)",
   "defaultPluginVersion": "$(lock_value defaultPlugins.sessionDelete.version)",
   "defaultPluginSha256": "$DEFAULT_PLUGIN_SHA256",

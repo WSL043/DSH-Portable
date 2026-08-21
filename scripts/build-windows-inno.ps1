@@ -25,6 +25,7 @@ if (-not $IsccPath) {
 }
 if (-not $IsccPath) {
     foreach ($Candidate in @(
+        (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Inno Setup 7\ISCC.exe'),
         (Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'),
         (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
     )) {
@@ -96,6 +97,7 @@ try {
     }
 
     $Arguments = @(
+        '--quiet',
         "/DStage=$MappedStage",
         "/DOutputDir=$MappedOutput",
         "/DProjectRoot=$ProjectRoot",
