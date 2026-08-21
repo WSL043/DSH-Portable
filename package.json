@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
+    "site:build": "node scripts/build-site.mjs",
     "check:upstream": "node scripts/check-upstream.mjs",
     "icons": "node scripts/render-icons.mjs app assets/DSH-Portable.svg assets",
     "version:set": "node scripts/set-product-version.mjs"

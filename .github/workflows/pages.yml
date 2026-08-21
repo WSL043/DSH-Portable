@@ -1,0 +1,58 @@
+name: Website
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "assets/DSH-Portable.svg"
+      - "assets/DSH-Portable-512.png"
+      - "assets/dsh-interface-zh.png"
+      - "assets/dsh-interface-en.png"
+      - "scripts/build-site.mjs"
+      - ".github/workflows/pages.yml"
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "assets/DSH-Portable.svg"
+      - "assets/DSH-Portable-512.png"
+      - "assets/dsh-interface-zh.png"
+      - "assets/dsh-interface-en.png"
+      - "scripts/build-site.mjs"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/build-site.mjs
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: build/site
+
+  deploy:
+    if: github.event_name == 'push'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
