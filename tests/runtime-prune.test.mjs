@@ -54,6 +54,28 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, 'yaml/dist/doc/directives.js', 'module.exports = true')
   await fixtureFile(appDir, 'example-package/CHANGELOG.md')
   await fixtureFile(appDir, 'example-package/NOTICE.md', 'must remain too')
+  await fixtureFile(appDir, '@mistralai/mistralai/package.json', '{"name":"@mistralai/mistralai","main":"./esm/index.js"}')
+  await fixtureFile(appDir, '@mistralai/mistralai/esm/index.js', 'export default true')
+  await fixtureFile(appDir, '@mistralai/mistralai/src/generated/models/temporaryattributevalue.ts', 'export type SourceOnly = true')
+  await fixtureFile(appDir, '@mistralai/mistralai/packages/azure/src/index.ts', 'source only')
+  await fixtureFile(appDir, '@mistralai/mistralai/examples/chat.ts', 'example only')
+  await fixtureFile(appDir, '@mistralai/mistralai/tests/client.test.ts', 'test only')
+  await fixtureFile(appDir, '@mistralai/mistralai/FUNCTIONS.md', 'generated reference only')
+  await fixtureFile(appDir, '@mistralai/mistralai/RUNTIMES.md', 'generated reference only')
+  await fixtureFile(appDir, '@mistralai/mistralai/jsr.json', '{"exports":"./src/index.ts"}')
+  await fixtureFile(appDir, '@mixmark-io/domino/package.json', '{"name":"@mixmark-io/domino","main":"./lib"}')
+  await fixtureFile(appDir, '@mixmark-io/domino/lib/index.js', 'module.exports = true')
+  await fixtureFile(appDir, '@mixmark-io/domino/test/index.js', 'test only')
+  await fixtureFile(appDir, '@mixmark-io/domino/.yarn/plugins/plugin-version.cjs', 'packaging only')
+  await fixtureFile(appDir, 'openai/package.json', '{"name":"openai","main":"index.js"}')
+  await fixtureFile(appDir, 'openai/index.js', 'export default true')
+  await fixtureFile(appDir, 'openai/src/internal.ts', 'export type SourceOnly = true')
+  await fixtureFile(appDir, 'runtime-ts/package.json', '{"name":"runtime-ts","main":"src/index.ts"}')
+  await fixtureFile(appDir, 'runtime-ts/src/index.ts', 'export default true')
+  await fixtureFile(appDir, '@wsl043/dsh-portable-plugin-market/package.json', '{"name":"@wsl043/dsh-portable-plugin-market","main":"lib/index.js"}')
+  await fixtureFile(appDir, '@wsl043/dsh-portable-plugin-market/lib/index.js', 'export default true')
+  await mkdir(path.join(appDir, 'vendor', 'dsh-portable-plugin-market', 'src'), { recursive: true })
+  await writeFile(path.join(appDir, 'vendor', 'dsh-portable-plugin-market', 'src', 'maintenance.ts'), 'source only')
 
   const result = spawnSync(process.execPath, [pruneScript, appDir, 'win32', 'x64'], {
     encoding: 'utf8',
@@ -80,6 +102,11 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'yaml/dist/doc/directives.js',
     '@earendil-works/pi-ai/dist/providers/data/amazon-bedrock.json',
     'example-package/NOTICE.md',
+    '@mistralai/mistralai/esm/index.js',
+    '@mixmark-io/domino/lib/index.js',
+    'openai/index.js',
+    'runtime-ts/src/index.ts',
+    '@wsl043/dsh-portable-plugin-market/lib/index.js',
   ]) {
     assert.equal(await exists(path.join(appDir, 'node_modules', ...relative.split('/'))), true, relative)
   }
@@ -96,6 +123,17 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'example-package/dist/index.js.map',
     'example-package/dist/index.d.mts',
     'example-package/CHANGELOG.md',
+    '@mistralai/mistralai/src',
+    '@mistralai/mistralai/packages',
+    '@mistralai/mistralai/examples',
+    '@mistralai/mistralai/tests',
+    '@mistralai/mistralai/FUNCTIONS.md',
+    '@mistralai/mistralai/RUNTIMES.md',
+    '@mistralai/mistralai/jsr.json',
+    '@mixmark-io/domino/test',
+    '@mixmark-io/domino/.yarn',
+    'openai/src',
+    '../vendor',
   ]) {
     assert.equal(await exists(path.join(appDir, 'node_modules', ...relative.split('/'))), false, relative)
   }

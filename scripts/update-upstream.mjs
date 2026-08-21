@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
 import { appendFile, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -68,16 +69,40 @@ if (changed) {
   const noticesSha256 = createHash('sha256')
     .update(Buffer.from(await noticesResponse.arrayBuffer()))
     .digest('hex')
+  const marketManifestPath = path.join(root, 'app', 'vendor', 'dsh-portable-plugin-market', 'package.json')
+  const marketManifest = JSON.parse(await readFile(marketManifestPath, 'utf8'))
+  const settingsPeer = String(marketManifest.peerDependencies?.['@deepseek-ai/dsh-settings'] ?? '').trim()
+  const verifiedTrain = `^${version}`
+  const verifiedRanges = settingsPeer.split(/\s*\|\|\s*/).filter(Boolean)
+  if (!verifiedRanges.includes(verifiedTrain)) {
+    marketManifest.peerDependencies ??= {}
+    marketManifest.peerDependencies['@deepseek-ai/dsh-settings'] = [...verifiedRanges, verifiedTrain].join(' || ')
+    await writeFile(marketManifestPath, `${JSON.stringify(marketManifest, null, 2)}\n`, 'utf8')
+  }
+
   const installArgs = [
     'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact',
     `@deepseek-ai/dsh@${version}`, `pnpm@${currentLock.pnpm.version}`,
   ]
-  const npmCli = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js')
+  const npmCliCandidates = [
+    process.env.npm_execpath,
+    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(path.dirname(path.dirname(process.execPath)), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ].filter(Boolean)
+  const npmCli = npmCliCandidates.find((candidate) => existsSync(candidate))
+  if (process.platform === 'win32' && !npmCli) {
+    throw new Error(`npm CLI was not found beside the active Node runtime. Checked:\n${npmCliCandidates.join('\n')}`)
+  }
   const command = process.platform === 'win32' ? process.execPath : 'npm'
   const args = process.platform === 'win32' ? [npmCli, ...installArgs] : installArgs
-  const install = spawnSync(command, args, { cwd: path.join(root, 'app'), encoding: 'utf8' })
+  const install = spawnSync(command, args, {
+    cwd: path.join(root, 'app'),
+    encoding: 'utf8',
+    timeout: 30 * 60 * 1000,
+  })
   if (install.error || install.status !== 0) {
-    throw new Error(`npm lock refresh failed:\n${install.error?.message || install.stderr || install.stdout}`)
+    const signal = install.signal ? ` signal=${install.signal}` : ''
+    throw new Error(`npm lock refresh failed${signal}:\n${install.error?.message || install.stderr || install.stdout}`)
   }
 
   const runtimeManifestPath = path.join(root, 'app', 'package.json')
@@ -88,19 +113,20 @@ if (changed) {
   if (lockedDsh?.version !== version || lockedDsh?.integrity !== state.integrity) {
     throw new Error('refreshed package lock does not match the official npm version and integrity')
   }
-  const lockedSubprocess = packageLock.packages?.['node_modules/@deepseek-ai/dsh-subprocess-local']?.version
-  const lockedNodePty = packageLock.packages?.['node_modules/node-pty']?.version
-  if (!lockedSubprocess || !lockedNodePty) {
-    throw new Error('refreshed package lock is missing a required native runtime dependency')
+  const scriptPackages = ['@deepseek-ai/dsh-subprocess-local', '@google/genai', 'koffi', 'node-pty', 'protobufjs']
+  const lockedScriptVersions = Object.fromEntries(scriptPackages.map((name) => [
+    name,
+    packageLock.packages?.[`node_modules/${name}`]?.version,
+  ]))
+  const missingScriptPackages = scriptPackages.filter((name) => !lockedScriptVersions[name])
+  if (missingScriptPackages.length > 0) {
+    throw new Error(`refreshed package lock is missing required runtime dependencies: ${missingScriptPackages.join(', ')}`)
   }
   runtimeManifest.version = version
-  for (const key of Object.keys(runtimeManifest.allowScripts ?? {})) {
-    if (key.startsWith('@deepseek-ai/dsh-subprocess-local@') || key.startsWith('node-pty@')) {
-      delete runtimeManifest.allowScripts[key]
-    }
-  }
-  runtimeManifest.allowScripts[`@deepseek-ai/dsh-subprocess-local@${lockedSubprocess}`] = true
-  runtimeManifest.allowScripts[`node-pty@${lockedNodePty}`] = true
+  runtimeManifest.allowScripts = Object.fromEntries(scriptPackages.map((name) => [
+    `${name}@${lockedScriptVersions[name]}`,
+    true,
+  ]))
   packageLock.version = version
   packageLock.packages[''].version = version
   await writeFile(runtimeManifestPath, `${JSON.stringify(runtimeManifest, null, 2)}\n`, 'utf8')

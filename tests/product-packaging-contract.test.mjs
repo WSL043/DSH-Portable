@@ -141,10 +141,10 @@ test('update guidance describes the component update path without exposing inter
   const chinese = await read('README.md')
   const english = await read('README.en.md')
   const userReadme = await read('templates/USER-README.txt')
-  const releaseNotes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0-rc.2')
+  const releaseNotes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0-rc.2', '0.1.1-rc.1')
 
   assert.match(chinese, /启动时检查更新/)
-  assert.match(chinese, /Windows.+macOS.+关闭.+启动时检查更新/s)
+  assert.match(chinese, /自动检查更新默认关闭.+启动时检查更新/s)
   assert.match(chinese, /每次提示的是 DSH-Portable 的产品版本/)
   assert.match(chinese, /内置官方 DSH/)
   assert.match(chinese, /真实下载百分比/)
@@ -153,7 +153,7 @@ test('update guidance describes the component update path without exposing inter
   assert.match(chinese, /兼容性变化.+直接下载.+完整版本.+原地/s)
   assert.match(chinese, /跳过此版本/)
   assert.match(english, /opens the local workspace first.+checks for updates in the background/is)
-  assert.match(english, /Windows.+macOS.+Turn off.+updates at startup/is)
+  assert.match(english, /Automatic update checks are off by default.+Check for updates at startup/is)
   assert.match(english, /Every notification names the DSH-Portable product version/)
   assert.match(english, /bundled official DSH/i)
   assert.match(english, /real download percentage/i)
@@ -191,7 +191,7 @@ test('GitHub gives Chinese and English users direct, privacy-safe feedback forms
 })
 
 test('release notes prioritize downloads and keep verification optional', async () => {
-  const notes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0')
+  const notes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0', '0.1.1-rc.1')
   assert.match(notes, /^>\s+打包官方 DeepSeek Harness 预览版/m)
   assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
   assert.match(notes, /DSH-Portable-windows-x64\.exe/)
@@ -275,10 +275,37 @@ test('installable official preview updates become tested issue artifacts without
   assert.match(updater, /upstream\.lock\.json/)
   assert.match(updater, /process\.execPath/)
   assert.match(updater, /npm-cli\.js/)
+  assert.match(updater, /timeout:\s*\d+/)
+  assert.match(updater, /install\.signal/)
+  assert.match(workflow, /timeout-minutes:\s*\d+/)
   assert.match(updater, /THIRD_PARTY_NOTICES\.md/)
   assert.match(updater, /createHash\(['"]sha256['"]\)/)
   assert.match(updater, /noticesSha256/)
   assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
+})
+
+test('the bundled session-delete default is monitored as a verified candidate dependency', async () => {
+  const [workflow, updater] = await Promise.all([
+    read('.github/workflows/default-plugin-watch.yml'),
+    read('scripts/update-default-plugin.mjs'),
+  ])
+
+  assert.match(workflow, /schedule:/)
+  assert.match(workflow, /workflow_dispatch:/)
+  assert.match(workflow, /node scripts\/update-default-plugin\.mjs/)
+  assert.match(workflow, /npm test/)
+  assert.match(workflow, /actions\/upload-artifact@v7/)
+  assert.match(workflow, /gh issue (?:create|edit)/)
+  assert.match(workflow, /timeout-minutes:\s*\d+/)
+  assert.doesNotMatch(workflow, /git (?:switch|push)/)
+  assert.match(updater, /registry\.npmjs\.org\/\$\{packageName\}/)
+  assert.match(updater, /repository\s*=\s*['"]WSL043\/dsh-native-session-delete['"]/)
+  assert.match(updater, /repos\/\$\{repository\}\/releases\/tags/)
+  assert.match(updater, /assets[\s\S]+digest/)
+  assert.match(updater, /createHash\(['"]sha256['"]\)/)
+  assert.match(updater, /upstream\.lock\.json/)
+  assert.match(updater, /path\.join\(root, ['"]launcher['"], ['"]default-plugins\.mjs['"]\)/)
+  assert.match(updater, /GITHUB_OUTPUT/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
@@ -373,8 +400,8 @@ test('Windows package exposes real GUI executables with matching icon and no pat
   assert.match(build, /portable-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*13/)
-  assert.match(build, /requiredShellSchema\s*=\s*13/)
+  assert.match(build, /shellSchema\s*=\s*17/)
+  assert.match(build, /requiredShellSchema\s*=\s*16/)
   assert.match(source, new RegExp(`AssemblyFileVersion\\("${regexEscape(policy.windowsVersion)}"\\)`))
   assert.match(bootstrap, /ZipArchive/)
   assert.match(bootstrap, /progressPercentLabel/)
@@ -438,6 +465,7 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /Invoke-BoundedProcess/)
   assert.match(smoke, /WaitForExit/)
   assert.match(smoke, /LauncherDiagnostic/)
+  assert.match(smoke, /Join-Path \$StateRoot 'data\\logs'/)
   assert.match(smoke, /WScript\.Shell/)
   assert.match(smoke, /CreateShortcut/)
   assert.match(smoke, /IconLocation/)
@@ -446,8 +474,18 @@ test('Windows setup is a per-user offline installer with durable data outside th
   for (const stage of ['Install package', 'Start installed runtime', 'Stop installed runtime', 'Repair existing installation', 'Restart repaired installation', 'Repair running installation', 'Uninstall package']) {
     assert.match(smoke, new RegExp(stage))
   }
+  assert.match(smoke, /-FilePath \$Node\s+-ArgumentList @\(\$Cli, 'start', '--no-browser', '--json'\)/)
+  assert.match(smoke, /-FilePath \$Node\s+-ArgumentList @\(\$Cli, 'stop', '--json'\)/)
+  assert.match(smoke, /-Stage 'Restart repaired installation'[\s\S]+-FilePath \$Node\s+-ArgumentList @\(\$Cli, 'start', '--no-browser', '--json'\)/)
+  assert.match(smoke, /function Wait-InstalledProductStatus/)
+  assert.match(smoke, /Wait-InstalledProductStatus -ExpectedStatus 'running'/)
+  assert.match(smoke, /Wait-InstalledProductStatus -ExpectedStatus 'stopped'/)
+  assert.match(smoke, /\$env:DSH_PORTABLE_STATE_ROOT\s*=\s*\$StateRoot[\s\S]+Start installed runtime/)
+  assert.match(smoke, /\$env:DSH_PORTABLE_STATE_ROOT\s*=\s*\$null[\s\S]+\$NativeBeforeUninstall\s*=\s*Start-Process/)
   assert.match(smoke, /repair-state-sentinel/)
   assert.match(smoke, /repair did not restore packaged files/)
+  assert.match(smoke, /dsh-client-ui-jobs\.stale-smoke/)
+  assert.match(smoke, /startup did not rebuild the managed DSH module fallback/)
   assert.match(smoke, /uninstaller changed retained user data/)
   assert.match(smoke, /retained test state could not be deleted after uninstall/)
   assert.match(smoke, /\$IsIsolatedKnownFolder\s*=\s*\$UseRealKnownFolder/)
@@ -504,16 +542,15 @@ test('session delete is a removable offline default only for a newly created web
     read('launcher/portable-cli.mjs'),
     read('launcher/default-plugins.mjs'),
   ])
-  assert.deepEqual(lock.defaultPlugins.sessionDelete, {
-    package: 'dsh-native-session-delete',
-    version: '1.0.0',
-    url: 'https://github.com/WSL043/dsh-session-delete/releases/download/v1.0.0/dsh-native-session-delete.tgz',
-    sha256: 'e51bbe07ca27f87b742438d15afc16319074a338688f8e28480bff084d74462e',
-    integrity: 'sha512-PMcKj2vxJQbmWiXTnuuYRcAKWVqmGY1dRnbzYQDNgBhrgK2HmODWloFHFiS9t4EuWpSp7q5SsPfSjzlhdigYzg==',
-    license: 'MIT',
-    reviewedCommit: '5842dc611884da08c8a95e306a9e41ac0bcb7c7e',
-    filename: 'dsh-native-session-delete.tgz',
-  })
+  const sessionDelete = lock.defaultPlugins.sessionDelete
+  assert.equal(sessionDelete.package, 'dsh-native-session-delete')
+  assert.match(sessionDelete.version, /^\d+\.\d+\.\d+$/)
+  assert.equal(sessionDelete.url, `https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-${sessionDelete.version}.tgz`)
+  assert.match(sessionDelete.sha256, /^[0-9a-f]{64}$/)
+  assert.match(sessionDelete.integrity, /^sha512-/)
+  assert.equal(sessionDelete.license, 'MIT')
+  assert.match(sessionDelete.reviewedCommit, /^[0-9a-f]{40}$/)
+  assert.equal(sessionDelete.filename, 'dsh-native-session-delete.tgz')
   for (const build of [windows, macos, linux]) {
     assert.match(build, /default-plugins/)
     assert.match(build, /sessionDelete/)
@@ -576,8 +613,10 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
     assert.doesNotMatch(compilerConsumer, /--version/)
     assert.match(compilerConsumer, /['"]\/\?['"]/)
     assert.match(compilerConsumer, /Command-Line Compiler/)
+    assert.match(compilerConsumer, /--quiet/)
   }
   assert.match(build, /Inno Setup 7 or newer/)
+  assert.match(build, /LocalApplicationData[\s\S]+Inno Setup 7[\\/]ISCC\.exe/)
   assert.doesNotMatch(build, /Inno Setup 6/)
   assert.match(smoke, /DSH-Portable-windows-x64-offline\.exe/)
   assert.match(smoke, /\/DIR=/)
@@ -641,6 +680,7 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(app, /presentUpdateProgress/)
   assert.match(app, /receivedBytes/)
   assert.match(app, /totalBytes/)
+  assert.match(app, /FileHandle\.standardError\.write/)
   assert.doesNotMatch(app, /--app=/)
 
   const launchDesktop = app.slice(

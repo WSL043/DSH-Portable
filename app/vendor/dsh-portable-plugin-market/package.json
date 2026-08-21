@@ -1,0 +1,77 @@
+{
+  "name": "@wsl043/dsh-portable-plugin-market",
+  "description": "Portable-native DSH plugin market backed by the Awesome DSH Plugin catalog.",
+  "version": "0.1.0-beta.1",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WSL043/DSH-Portable.git",
+    "directory": "app/vendor/dsh-portable-plugin-market"
+  },
+  "homepage": "https://github.com/WSL043/DSH-Portable",
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "marketplace",
+    "market",
+    "plugin-manager"
+  ],
+  "scripts": {
+    "build:client": "tsdown && node scripts/normalize-client-banner.mjs"
+  },
+  "devDependencies": {
+    "lightningcss": "1.33.0",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "tsdown": "0.22.14"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "undici": "^7.29.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-settings": "^0.1.0-rc.7 || ^0.1.1-rc.1 || ^0.1.1-rc.2"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/*.js",
+    "client/client.js",
+    "cordis.patch.yml",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-settings": {
+      "optional": true
+    }
+  }
+}

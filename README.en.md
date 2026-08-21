@@ -56,7 +56,7 @@ workspace language can also be changed in **Settings**, and that choice is remem
 - **Simple backup**: exit the app, then copy one folder instead of finding separate data directories.
 - **Native desktop ownership**: a dedicated window, taskbar identity, system tray, and remembered window placement.
 - **Data-safe updates**: tested releases preserve local sessions, credentials, plugins, and workspace.
-- **Online or offline preparation**: use the small launcher normally or the complete ZIP on a restricted network.
+- **Online or offline preparation**: use the small launcher normally or a single-file offline extractor on a restricted network.
 
 ## Moving, backing up, and syncing
 
@@ -74,7 +74,8 @@ When syncing between two computers, exit the app on both before syncing the whol
 | Use case | Download |
 | --- | --- |
 | **Portable use (recommended)** | [Portable launcher](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) — creates a movable folder on first run |
-| **First setup must work offline** | [Complete portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| **First setup must work offline** | [Single-file offline edition](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.exe) — choose a location and get a complete movable folder |
+| **Manual extraction or managed deployment** | [Complete portable ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 | **Install like a normal app** | [Windows installer](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) — Start menu, shortcut, and standard uninstall |
 
 ### macOS
@@ -107,7 +108,7 @@ contains a complete `DSH-Portable` directory; extract it and run `DeepSeek-Herne
 
 ## Plugin management
 
-The current candidate includes a visual **Plugin Market** in DSH Settings. It browses the thousand-plus
+The current candidate includes a visual **Plugin Market** under **Settings → Plugins → Plugin Market**. It browses the thousand-plus
 community catalog maintained by [awesome-dsh-plugin](https://awesome-dsh-plugin.com), with search,
 categories, popularity, and publish-time filters. The same repository is listed only once. Curated
 author screenshots appear directly on cards; other images load only after details are opened. Every
@@ -116,7 +117,7 @@ plugin links to its own project page instead of being copied into a hand-maintai
 The market follows the DSH language and theme. Install, update, disable, and uninstall actions target
 the current `web` profile, while the Portable shell keeps process ownership and never interrupts an
 active task silently. A fresh install includes the removable
-[permanent session deletion](https://github.com/WSL043/dsh-session-delete) extension in **Installed**.
+[permanent session deletion](https://github.com/WSL043/dsh-native-session-delete) extension in **Installed**.
 It is enabled by default, always asks for a second confirmation, and does not replace recoverable
 Archive. Ordinary upgrades never reinstall an extension that an existing user already removed.
 
@@ -163,7 +164,7 @@ The window shows the real download percentage and transferred size, followed by 
 verification, installation, and reopen stages. A failed launch restores the previous version.
 
 On Windows and Linux, you can **Check for updates** from the system tray; on macOS, use the application menu.
-Turn off **Check for updates at startup** from the same menu if you do not want automatic prompts.
+Automatic update checks are off by default. Turn on **Check for updates at startup** from the same menu if you want them; manual checks remain available.
 The manual check remains available. When an update is available, choose to update, handle it **Later**,
 or **Skip this version**. Windows installs immediately only after it can confirm that no task is running;
 macOS and Linux schedule the component for installation before the next launch. Skipping affects only that release,

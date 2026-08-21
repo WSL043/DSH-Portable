@@ -1,7 +1,20 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { readFile } from 'node:fs/promises'
 
 import { evaluateUpstream } from '../scripts/upstream-state.mjs'
+
+test('the upstream refresher supports both standard and bundled Windows Node layouts', async () => {
+  const source = await readFile(new URL('../scripts/update-upstream.mjs', import.meta.url), 'utf8')
+  assert.match(source, /process\.env\.npm_execpath/)
+  assert.match(source, /path\.dirname\(process\.execPath\)[\s\S]*node_modules[\s\S]*npm-cli\.js/)
+  assert.match(source, /path\.dirname\(path\.dirname\(process\.execPath\)\)[\s\S]*node_modules[\s\S]*npm-cli\.js/)
+  assert.match(source, /npm CLI was not found beside the active Node runtime/)
+  assert.match(source, /timeout:\s*30 \* 60 \* 1000/)
+  assert.doesNotMatch(source, /'--legacy-peer-deps'/)
+  assert.match(source, /dsh-portable-plugin-market[\s\S]*@deepseek-ai\/dsh-settings/)
+  assert.match(source, /const verifiedTrain = `\^\$\{version\}`/)
+})
 
 const lock = {
   dsh: {

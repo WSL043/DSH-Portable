@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { writeFileSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -7,15 +8,16 @@ import test from 'node:test'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
 
+const lock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8'))
 const expected = Object.freeze({
-  name: 'dsh-native-session-delete',
-  version: '1.0.0',
-  filename: 'dsh-native-session-delete.tgz',
-  url: 'https://github.com/WSL043/dsh-session-delete/releases/download/v1.0.0/dsh-native-session-delete.tgz',
-  sha256: 'e51bbe07ca27f87b742438d15afc16319074a338688f8e28480bff084d74462e',
-  integrity: 'sha512-PMcKj2vxJQbmWiXTnuuYRcAKWVqmGY1dRnbzYQDNgBhrgK2HmODWloFHFiS9t4EuWpSp7q5SsPfSjzlhdigYzg==',
-  license: 'MIT',
-  reviewedCommit: '5842dc611884da08c8a95e306a9e41ac0bcb7c7e',
+  name: lock.defaultPlugins.sessionDelete.package,
+  version: lock.defaultPlugins.sessionDelete.version,
+  filename: lock.defaultPlugins.sessionDelete.filename,
+  url: lock.defaultPlugins.sessionDelete.url,
+  sha256: lock.defaultPlugins.sessionDelete.sha256,
+  integrity: lock.defaultPlugins.sessionDelete.integrity,
+  license: lock.defaultPlugins.sessionDelete.license,
+  reviewedCommit: lock.defaultPlugins.sessionDelete.reviewedCommit,
 })
 
 async function fixture(t) {
@@ -38,6 +40,9 @@ test('fresh web profile is seeded through official plugin add with a move-safe p
     verifyArchive: async () => true,
     spawnSync(command, args, options) {
       calls.push({ command, args, options })
+      writeFileSync(path.join(options.cwd, 'package.json'), JSON.stringify({
+        dependencies: { 'dsh-native-session-delete': 'file:.dsh-portable-archives/dsh-native-session-delete.tgz' },
+      }))
       return { status: 0 }
     },
   })
@@ -57,6 +62,8 @@ test('fresh web profile is seeded through official plugin add with a move-safe p
     await readFile(path.join(calls[0].options.cwd, '.dsh-portable-archives', expected.filename), 'utf8'),
     'verified archive fixture',
   )
+  const manifest = JSON.parse(await readFile(path.join(calls[0].options.cwd, 'package.json'), 'utf8'))
+  assert.equal(manifest.dependencies['dsh-native-session-delete'], expected.version)
 })
 
 test('an existing profile is never inspected, changed, or re-seeded after removal', async (t) => {
@@ -86,7 +93,13 @@ test('an interrupted Portable-owned seed is recovered without treating it as use
 
   const result = await seedDefaultPlugins(layout, {
     verifyArchive: async () => true,
-    spawnSync() { calls += 1; return { status: 0 } },
+    spawnSync(command, args, options) {
+      calls += 1
+      writeFileSync(path.join(options.cwd, 'package.json'), JSON.stringify({
+        dependencies: { 'dsh-native-session-delete': 'file:.dsh-portable-archives/dsh-native-session-delete.tgz' },
+      }))
+      return { status: 0 }
+    },
   })
 
   assert.equal(result.status, 'seeded')

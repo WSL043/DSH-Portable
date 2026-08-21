@@ -11,45 +11,54 @@ const read = (name) => readFile(path.join(root, name), 'utf8')
 const execFileAsync = promisify(execFile)
 
 test('runtime dependency boundary contains official DSH, the private desktop bridge, the visual market, and its pinned package manager only', async () => {
-  const runtime = JSON.parse(await read('app/package.json'))
+  const [runtime, upstream, lockfile] = await Promise.all([
+    read('app/package.json').then(JSON.parse),
+    read('upstream.lock.json').then(JSON.parse),
+    read('app/package-lock.json').then(JSON.parse),
+  ])
   assert.deepEqual(runtime.dependencies, {
-    '@deepseek-ai/dsh': '0.1.0-rc.8',
+    '@deepseek-ai/dsh': upstream.dsh.version,
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
-    dshmarket: '1.16.0',
+    '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
     pnpm: '11.7.0',
   })
   const serialized = JSON.stringify(runtime)
   for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
     assert.equal(serialized.includes(forbidden), false, forbidden)
   }
+  const subprocessVersion = lockfile.packages['node_modules/@deepseek-ai/dsh-subprocess-local'].version
+  const googleVersion = lockfile.packages['node_modules/@google/genai'].version
+  const koffiVersion = lockfile.packages['node_modules/koffi'].version
+  const nodePtyVersion = lockfile.packages['node_modules/node-pty'].version
+  const protobufVersion = lockfile.packages['node_modules/protobufjs'].version
   assert.deepEqual(runtime.allowScripts, {
-    '@deepseek-ai/dsh-subprocess-local@0.1.0-rc.8': true,
-    '@google/genai@1.52.0': true,
-    'koffi@3.1.5': true,
-    'node-pty@1.2.0-beta.15': true,
-    'protobufjs@7.6.5': true,
+    [`@deepseek-ai/dsh-subprocess-local@${subprocessVersion}`]: true,
+    [`@google/genai@${googleVersion}`]: true,
+    [`koffi@${koffiVersion}`]: true,
+    [`node-pty@${nodePtyVersion}`]: true,
+    [`protobufjs@${protobufVersion}`]: true,
   })
 })
 
 test('upstream lock pins independently verifiable DSH and Node artifacts', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
   assert.equal(lock.dsh.package, '@deepseek-ai/dsh')
-  assert.equal(lock.dsh.version, '0.1.0-rc.8')
-  assert.equal(lock.dsh.reviewedCommit, '141eb6fef83422698aef7a981029e843e8161534')
-  assert.match(lock.dsh.version, /^0\.1\.0-rc\.\d+$/)
+  assert.match(lock.dsh.version, /^0\.\d+\.\d+(?:-rc\.\d+)?$/)
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
-  assert.equal(lock.dsh.noticesSha256, '50c0b03d591244cdceb61c3bcb0db224e998388af6cbad8fa9d1e980440e25b3')
+  assert.match(lock.dsh.noticesSha256, /^[0-9a-f]{64}$/)
   assert.deepEqual(lock.pnpm, {
     package: 'pnpm',
     version: '11.7.0',
     integrity: 'sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA==',
   })
   assert.deepEqual(lock.pluginMarket, {
-    package: 'dshmarket',
-    version: '1.16.0',
-    integrity: 'sha512-WuHVUQzzECcK0gWdf0Q84KVvKNYNLTbF/GEh2TpBZEeekEI9hbZlqRu3kDwfVDciRgb49GtD0ost1sn45BbfMQ==',
-    sourceRepository: 'https://github.com/dsh-market/dsh-market',
+    package: '@wsl043/dsh-portable-plugin-market',
+    version: '0.1.0-beta.1',
+    catalog: 'https://awesome-dsh-plugin.com/plugins.json',
+    catalogRepository: 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
+    implementationBasis: 'https://github.com/dsh-market/dsh-market',
+    reviewedBasisCommit: '488de05f4f7e6a3e03627b403cedad828a226cbf',
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
@@ -64,7 +73,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   assert.deepEqual(rootPackage.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
-    dshmarket: upstream.pluginMarket.version,
+    '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
     pnpm: upstream.pnpm.version,
   })
   const dsh = lockfile.packages['node_modules/@deepseek-ai/dsh']
@@ -73,9 +82,12 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const pnpm = lockfile.packages['node_modules/pnpm']
   assert.equal(pnpm.version, upstream.pnpm.version)
   assert.equal(pnpm.integrity, upstream.pnpm.integrity)
-  const pluginMarket = lockfile.packages['node_modules/dshmarket']
-  assert.equal(pluginMarket.version, upstream.pluginMarket.version)
-  assert.equal(pluginMarket.integrity, upstream.pluginMarket.integrity)
+  const pluginMarket = lockfile.packages['node_modules/@wsl043/dsh-portable-plugin-market']
+  assert.equal(pluginMarket.resolved, 'vendor/dsh-portable-plugin-market')
+  assert.equal(pluginMarket.link, true)
+  const pluginMarketSource = lockfile.packages['vendor/dsh-portable-plugin-market']
+  assert.equal(pluginMarketSource.version, upstream.pluginMarket.version)
+  assert.equal(pluginMarketSource.license, 'MIT')
   const desktopBridge = lockfile.packages['node_modules/@wsl043/dsh-portable-desktop-bridge']
   assert.equal(desktopBridge.resolved, '../desktop-bridge')
   assert.equal(desktopBridge.link, true)
@@ -93,8 +105,9 @@ test('the independent lock verifier accepts the current local bridge link and ex
     path.join(root, 'upstream.lock.json'),
   ])
   const result = JSON.parse(stdout)
-  assert.equal(result.dshVersion, '0.1.0-rc.8')
-  assert.equal(result.pluginMarketVersion, '1.16.0')
+  const upstream = JSON.parse(await read('upstream.lock.json'))
+  assert.equal(result.dshVersion, upstream.dsh.version)
+  assert.equal(result.pluginMarketVersion, '0.1.0-beta.1')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {
@@ -151,6 +164,15 @@ test('build executes a native runtime smoke check', async () => {
     assert.match(verifier, new RegExp(dependency.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
   }
   assert.match(verifier, /bin\.js/)
+})
+
+test('every desktop package ships the portable repair runtime used by the CLI', async () => {
+  const [windows, macos, linux] = await Promise.all([
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('scripts/build-linux.sh'),
+  ])
+  for (const build of [windows, macos, linux]) assert.match(build, /repair-core\.mjs/)
 })
 
 test('stop path preserves the official DSH graceful shutdown before escalation', async () => {

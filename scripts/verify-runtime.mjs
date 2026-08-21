@@ -67,10 +67,10 @@ const piAiProviderData = path.join(
 )
 const desktopBridgeManifestPath = requireFromApp.resolve('@wsl043/dsh-portable-desktop-bridge/package.json')
 const desktopBridgeRoot = path.dirname(desktopBridgeManifestPath)
-const marketManifestPath = requireFromApp.resolve('dshmarket/package.json')
+const marketManifestPath = requireFromApp.resolve('@wsl043/dsh-portable-plugin-market/package.json')
 const marketManifest = JSON.parse(readFileSync(marketManifestPath, 'utf8'))
 const marketRoot = path.dirname(marketManifestPath)
-const marketClientPath = requireFromApp.resolve('dshmarket/client')
+const marketClientPath = requireFromApp.resolve('@wsl043/dsh-portable-plugin-market/client')
 const sessionExportClientPath = requireFromApp.resolve('@deepseek-ai/dsh-session-log-export/client')
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
 assert.equal(existsSync(dshBin), true, `official DSH CLI is missing: ${dshBin}`)
@@ -80,10 +80,16 @@ assert.equal(existsSync(piAiProviderData), true, `pi-ai provider data is missing
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'client.js')), true, 'desktop bridge client is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'index.js')), true, 'desktop bridge host entry is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'cordis.patch.yml')), true, 'desktop bridge patch is missing')
-assert.equal(marketManifest.name, 'dshmarket')
-assert.equal(marketManifest.version, '1.16.0', 'pinned visual market version')
-assert.equal(existsSync(marketClientPath), true, 'dshmarket/client is missing')
-assert.equal(existsSync(path.join(marketRoot, 'LICENSE')), true, 'dshmarket license is missing')
+assert.equal(marketManifest.name, '@wsl043/dsh-portable-plugin-market')
+assert.match(marketManifest.version, /^0\.1\.0-beta\.\d+$/, 'pinned Portable visual market version')
+assert.equal(existsSync(marketClientPath), true, 'Portable plugin market client is missing')
+assert.match(
+  readFileSync(marketClientPath, 'utf8'),
+  /^window\.__ModuleLoader__\.load\(\{\s*id:\s*"@wsl043\/dsh-portable-plugin-market"/,
+  'Portable plugin market client registered the wrong module id',
+)
+assert.equal(existsSync(path.join(marketRoot, 'LICENSE')), true, 'Portable plugin market license is missing')
+assert.equal(existsSync(path.join(marketRoot, 'NOTICE.md')), true, 'Portable plugin market attribution notice is missing')
 assert.match(
   readFileSync(sessionExportClientPath, 'utf8'),
   /dsh-portable-native-download-v1/,

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, readdir, rm, stat } from 'node:fs/promises'
+import { access, readFile, readdir, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 
 const appDir = path.resolve(process.argv[2] ?? '')
@@ -46,6 +46,26 @@ async function treeStats(root) {
 
 const removableDocument = /^(?:readme|changelog|changes|history|contributing|code_of_conduct)(?:\..*)?$/i
 const removableBuildArtifact = /(?:\.map|\.d\.(?:ts|mts|cts)|\.tsbuildinfo)$/i
+const sourceOnlyPackages = [
+  ['@mistralai', 'mistralai', 'src'],
+  ['@anthropic-ai', 'sdk', 'src'],
+  ['openai', 'src'],
+  ['zod', 'src'],
+  ['ajv', 'lib'],
+  ['@wsl043', 'dsh-portable-plugin-market', 'src'],
+]
+const reviewedPackagingOnlyPayloads = [
+  {
+    packagePath: ['@mistralai', 'mistralai'],
+    runtimeEntry: /^\.\/esm\/index\.js$/,
+    remove: ['packages', 'examples', 'tests', 'FUNCTIONS.md', 'RUNTIMES.md', 'jsr.json'],
+  },
+  {
+    packagePath: ['@mixmark-io', 'domino'],
+    runtimeEntry: /^\.\/lib\/?$/,
+    remove: ['test', '.yarn'],
+  },
+]
 const removed = { bytes: 0, files: 0, directories: 0 }
 
 async function removeTree(filename) {
@@ -120,9 +140,51 @@ await rm(path.join(ptyRoot, 'binding.gyp'), { force: true })
 // like development material. Only remove file formats that Node cannot execute
 // at runtime, plus the package-specific node-pty build inputs above.
 await prunePackagePayload(nodeModules)
+for (const segments of sourceOnlyPackages) {
+  const packageRoot = path.join(nodeModules, ...segments.slice(0, -1))
+  const sourceRoot = path.join(nodeModules, ...segments)
+  try {
+    const manifest = JSON.parse(await (await import('node:fs/promises')).readFile(path.join(packageRoot, 'package.json'), 'utf8'))
+    const runtimeEntry = String(manifest.main ?? manifest.module ?? '')
+    if (/\.tsx?$/i.test(runtimeEntry)) continue
+    await removeTree(sourceRoot)
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+}
+for (const rule of reviewedPackagingOnlyPayloads) {
+  const packageRoot = path.join(nodeModules, ...rule.packagePath)
+  try {
+    const manifest = JSON.parse(await readFile(path.join(packageRoot, 'package.json'), 'utf8'))
+    if (!rule.runtimeEntry.test(String(manifest.main ?? ''))) {
+      throw new Error(`refusing to prune an unreviewed ${manifest.name ?? rule.packagePath.join('/')} runtime layout`)
+    }
+    for (const relative of rule.remove) {
+      try {
+        await removeTree(path.join(packageRoot, relative))
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error
+      }
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+}
 const typePackages = path.join(nodeModules, '@types')
 try {
   await removeTree(typePackages)
+} catch (error) {
+  if (error?.code !== 'ENOENT') throw error
+}
+
+// Local package sources are installation inputs only. npm has already copied
+// and validated their runtime products in node_modules, so keeping a second
+// source tree in every portable package only increases transfer and extraction
+// cost. Future component updates deliver a complete, verified app directory.
+const vendorRoot = path.join(appDir, 'vendor')
+try {
+  await access(path.join(nodeModules, '@wsl043', 'dsh-portable-plugin-market', 'package.json'))
+  await removeTree(vendorRoot)
 } catch (error) {
   if (error?.code !== 'ENOENT') throw error
 }

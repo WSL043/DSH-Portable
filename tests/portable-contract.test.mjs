@@ -22,10 +22,108 @@ import {
   queryPosixBrowserProcesses,
   queryWindowsBrowserProcesses,
   queryWindowsProcess,
+  repairManagedProfileModuleFallback,
 } from '../launcher/portable-core.mjs'
+
+test('Windows task cleanup suppresses localized taskkill output', async () => {
+  const cli = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
+  const taskkillCalls = [...cli.matchAll(/execFileSync\('taskkill\.exe',[\s\S]*?\}\)/g)].map((match) => match[0])
+  assert.ok(taskkillCalls.length >= 3)
+  for (const call of taskkillCalls) {
+    assert.match(call, /stdio:\s*'ignore'/)
+    assert.doesNotMatch(call, /encoding:\s*'utf8'/)
+  }
+})
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const usbRoot = path.win32.resolve('R:\\AI Tools\\深度求索 Harness')
+
+test('startup rebuilds the managed module fallback from the packaged dependency closure', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-fallback-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const stateRoot = path.join(root, 'installed-state')
+  const layout = layoutForRoot(root, process.platform, stateRoot)
+  const packaged = path.join(layout.appDir, 'node_modules')
+  const fallback = path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai')
+  await mkdir(layout.appDir, { recursive: true })
+  await writeFile(path.join(layout.appDir, 'package.json'), JSON.stringify({
+    name: 'portable-runtime',
+    dependencies: { '@deepseek-ai/dsh': '1.0.0' },
+  }))
+  await mkdir(path.join(packaged, '@deepseek-ai', 'dsh'), { recursive: true })
+  await mkdir(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-jobs'), { recursive: true })
+  await mkdir(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-goal'), { recursive: true })
+  await writeFile(path.join(packaged, '@deepseek-ai', 'dsh', 'package.json'), JSON.stringify({
+    name: '@deepseek-ai/dsh',
+    dependencies: {
+      '@deepseek-ai/dsh-client-ui-jobs': '1.0.0',
+      '@deepseek-ai/dsh-client-ui-goal': '1.0.0',
+    },
+  }))
+  await writeFile(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-jobs', 'package.json'), '{"name":"@deepseek-ai/dsh-client-ui-jobs"}')
+  await writeFile(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-goal', 'package.json'), '{"name":"@deepseek-ai/dsh-client-ui-goal"}')
+  await mkdir(path.join(fallback, 'dsh-client-ui-jobs'), { recursive: true })
+  await writeFile(path.join(fallback, 'dsh-client-ui-jobs', 'package.json'), '{}')
+  await mkdir(path.join(fallback, 'dsh-client-ui-jobs.stale'), { recursive: true })
+  await writeFile(path.join(fallback, 'dsh-client-ui-jobs.stale', 'package.json'), '{}')
+
+  assert.equal(await repairManagedProfileModuleFallback(layout), true)
+  assert.equal(
+    realpathSync(path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai', 'dsh')),
+    realpathSync(path.join(packaged, '@deepseek-ai', 'dsh')),
+  )
+  assert.equal(
+    realpathSync(path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-client-ui-jobs')),
+    realpathSync(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-jobs')),
+  )
+  assert.equal(
+    realpathSync(path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-client-ui-goal')),
+    realpathSync(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-goal')),
+  )
+  assert.throws(() => realpathSync(
+    path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-client-ui-jobs.stale'),
+  ))
+})
+
+test('runtime closure ignores build-time type packages that production npm installs may prune', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-type-only-dependency-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  const packaged = path.join(layout.appDir, 'node_modules')
+  await mkdir(path.join(packaged, '@deepseek-ai', 'dsh'), { recursive: true })
+  await mkdir(path.join(packaged, 'runtime-package'), { recursive: true })
+  await writeFile(path.join(packaged, '@deepseek-ai', 'dsh', 'package.json'), JSON.stringify({
+    name: '@deepseek-ai/dsh',
+    dependencies: { 'runtime-package': '1.0.0' },
+  }))
+  await writeFile(path.join(packaged, 'runtime-package', 'package.json'), JSON.stringify({
+    name: 'runtime-package',
+    dependencies: { '@types/retry': '0.12.0' },
+    peerDependencies: { '@types/node': '>=20' },
+  }))
+
+  assert.equal(await repairManagedProfileModuleFallback(layout), true)
+  assert.equal(
+    realpathSync(path.join(layout.dshHome, 'profiles', 'node_modules', 'runtime-package')),
+    realpathSync(path.join(packaged, 'runtime-package')),
+  )
+})
+
+test('startup rejects an incomplete packaged dependency closure before launching DSH', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-incomplete-runtime-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(layout.appDir, { recursive: true })
+  await writeFile(path.join(layout.appDir, 'package.json'), JSON.stringify({
+    name: 'portable-runtime',
+    dependencies: { '@deepseek-ai/dsh': '1.0.0' },
+  }))
+
+  await assert.rejects(
+    repairManagedProfileModuleFallback(layout),
+    /packaged DSH runtime is incomplete[\s\S]+@deepseek-ai\/dsh/i,
+  )
+})
 
 test('all durable application paths stay under the movable root', () => {
   const layout = layoutForRoot(usbRoot, 'win32')
@@ -182,9 +280,17 @@ test('CLI defaults to start and supports bounded automation flags', () => {
   assert.equal(parseCli(['update', '--json', '--progress-json']).progressJson, true)
   assert.equal(parseCli(['defer-update', '--json']).command, 'defer-update')
   assert.equal(parseCli(['ignore-update', '--json']).command, 'ignore-update')
+  assert.equal(parseCli(['doctor', '--json']).command, 'doctor')
+  assert.equal(parseCli(['repair', '--json']).command, 'repair')
+  assert.deepEqual(parseCli(['support-report', '--output', 'C:\\Temp\\dsh-support.json']), {
+    ...parseCli([]),
+    command: 'support-report',
+    output: 'C:\\Temp\\dsh-support.json',
+  })
   assert.throws(() => parseCli(['start', 'stop']), /more than one command/)
   assert.throws(() => parseCli(['erase-data']), /Unknown command/)
   assert.throws(() => parseCli(['--update-manifest']), /requires a value/)
+  assert.throws(() => parseCli(['support-report', '--output']), /requires a value/)
 })
 
 test('portable startup owns the desktop surface without allowing official DSH to open a browser', async () => {
@@ -195,6 +301,7 @@ test('portable startup owns the desktop surface without allowing official DSH to
       && source.indexOf("'--no-open'") < source.indexOf("'--host', '127.0.0.1'"),
     'global patch options must precede the official web-profile no-open flag',
   )
+  assert.match(source, /existsSync\(layout\.repairRequest\)[\s\S]+repairPortable\(layout, \{ running: false \}\)[\s\S]+writeJsonAtomic\(layout\.repairResult[\s\S]+rm\(layout\.repairRequest/)
 })
 
 test('a post-spawn startup failure cannot leave the owned DSH host running', async () => {

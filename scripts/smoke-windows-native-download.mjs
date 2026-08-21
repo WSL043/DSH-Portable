@@ -106,6 +106,33 @@ async function waitForDocumentBody(client, launcher, timeoutMs = 60000) {
   throw new Error(`timed out waiting for the embedded DSH document body; latest=${latest}`)
 }
 
+async function triggerDownload(client, launcher, filename, body, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
+  let latest = 'document changed before the download could be attached'
+  while (Date.now() < deadline) {
+    if (launcher.exitCode !== null) throw new Error(`desktop host exited before the download was triggered: ${launcher.exitCode}`)
+    try {
+      const triggered = await evaluate(client, `(() => {
+        const target = document.body
+        if (!target || document.readyState === 'loading') return false
+        const blob = new Blob([${JSON.stringify(body)}], { type: 'text/plain;charset=utf-8' })
+        const anchor = document.createElement('a')
+        anchor.href = URL.createObjectURL(blob)
+        anchor.download = ${JSON.stringify(filename)}
+        target.appendChild(anchor)
+        anchor.click()
+        anchor.remove()
+        return true
+      })()`)
+      if (triggered) return
+    } catch (error) {
+      latest = error instanceof Error ? error.message : String(error)
+    }
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  throw new Error(`timed out triggering the native download; latest=${latest}`)
+}
+
 async function portable(args) {
   return execFileAsync(portableNode, [portableCli, ...args], {
     cwd: root,
@@ -142,16 +169,7 @@ try {
   await waitForDocumentBody(client, launcher)
   const filename = 'dsh-native-download-smoke.txt'
   const body = 'DSH native WebView2 download passed.'
-  await evaluate(client, `(() => {
-    const blob = new Blob([${JSON.stringify(body)}], { type: 'text/plain;charset=utf-8' })
-    const anchor = document.createElement('a')
-    anchor.href = URL.createObjectURL(blob)
-    anchor.download = ${JSON.stringify(filename)}
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    return true
-  })()`)
+  await triggerDownload(client, launcher, filename, body)
 
   const downloaded = path.join(downloadRoot, filename)
   const deadline = Date.now() + 30000

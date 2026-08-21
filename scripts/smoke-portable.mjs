@@ -150,25 +150,25 @@ if (process.platform === 'win32') {
   for (const name of ['DeepSeek-Herness.exe']) {
     assert.equal(await exists(path.join(originalRoot, name)), true, `missing Windows entry: ${name}`)
   }
-  const launched = await run(path.join(originalRoot, 'DeepSeek-Herness.exe'), ['--no-browser', '--json'], { cwd: originalRoot })
+  const launched = await invokeCli(originalRoot, 'start', '--no-browser', '--json')
   assert.equal(launched.code, 0, launched.stderr || launched.stdout)
-  } else if (process.platform === 'darwin') {
+} else if (process.platform === 'darwin') {
   const app = path.join(originalRoot, 'DSH-Portable.app')
   const executable = path.join(app, 'Contents', 'MacOS', 'DSH-Portable')
   assert.equal(await exists(executable), true, `missing macOS entry: ${executable}`)
   assert.equal(await exists(path.join(app, 'Contents', 'Resources', 'DSH-Portable.icns')), true)
-    nativeHost = startNativeHost('/usr/bin/open', ['-n', '-W', app, '--args', '--skip-update-check'], {
+  nativeHost = startNativeHost('/usr/bin/open', ['-n', '-W', app, '--args', '--skip-update-check'], {
     cwd: originalRoot,
     env: { ...process.env, DSH_PORTABLE_NO_BROWSER: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
-    })
-  } else if (process.platform === 'linux') {
-    const executable = path.join(originalRoot, 'DeepSeek-Herness')
-    assert.equal(await exists(executable), true, `missing Linux entry: ${executable}`)
-    nativeHost = startNativeHost(executable, [], {
-      cwd: originalRoot,
-      env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
-    })
-  } else {
+  })
+} else if (process.platform === 'linux') {
+  const executable = path.join(originalRoot, 'DeepSeek-Herness')
+  assert.equal(await exists(executable), true, `missing Linux entry: ${executable}`)
+  nativeHost = startNativeHost(executable, [], {
+    cwd: originalRoot,
+    env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
+  })
+} else {
   throw new Error(`unsupported smoke-test platform: ${process.platform}`)
 }
 
@@ -179,7 +179,7 @@ assert.equal(running.status, 'running')
 await assertWebReady(running.url)
 
 if (process.platform === 'win32') {
-  const stopped = await run(path.join(originalRoot, 'DeepSeek-Herness.exe'), ['stop', '--no-browser', '--json'], { cwd: originalRoot })
+  const stopped = await invokeCli(originalRoot, 'stop', '--json')
   assert.equal(stopped.code, 0, stopped.stderr || stopped.stdout)
 } else {
   const stopped = process.platform === 'darwin'

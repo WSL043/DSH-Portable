@@ -31,7 +31,7 @@ $WebView2WinForms = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebVi
 $WebView2Loader = Join-Path $WebView2Extracted 'runtimes\win-x64\native\WebView2Loader.dll'
 $WebView2License = Join-Path $WebView2Extracted 'LICENSE.txt'
 $DefaultPlugin = $Lock.defaultPlugins.sessionDelete
-$DefaultPluginArchive = Join-Path $Downloads $DefaultPlugin.filename
+$DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
 
 function Assert-Sha256([string]$Filename, [string]$Expected) {
     $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Filename).Hash.ToLowerInvariant()
@@ -47,7 +47,8 @@ function Copy-PortableSources([string]$Target) {
     Copy-Item -Recurse (Join-Path $ProjectRoot 'desktop-bridge') (Join-Path $Target 'desktop-bridge')
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs')) {
+    Copy-Item -Recurse (Join-Path $ProjectRoot 'app\vendor') (Join-Path $Target 'app\vendor')
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.txt') (Join-Path $Target 'README.txt')
@@ -153,7 +154,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "runtime verification failed with exit code $LASTEXITCODE" }
 
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
-    Copy-Item (Join-Path $Stage 'app\node_modules\dshmarket\LICENSE') (Join-Path $Stage 'licenses\dsh-market-LICENSE.txt')
+    Copy-Item (Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-plugin-market\LICENSE') (Join-Path $Stage 'licenses\dsh-market-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\pnpm\LICENSE') (Join-Path $Stage 'licenses\pnpm-LICENSE.txt')
     $DefaultPluginLicenseText = (& tar.exe -xOf $DefaultPluginArchive package/LICENSE) -join [Environment]::NewLine
     if ($LASTEXITCODE -ne 0 -or -not $DefaultPluginLicenseText) { throw 'Default session-delete plugin archive contains no LICENSE.' }
@@ -188,8 +189,8 @@ try {
         dshPackage = $Lock.dsh.package
         dshVersion = $Lock.dsh.version
         dshCommit = $Lock.dsh.reviewedCommit
-        pluginMarketPackage = 'dshmarket'
-        pluginMarketVersion = '1.16.0'
+        pluginMarketPackage = '@wsl043/dsh-portable-plugin-market'
+        pluginMarketVersion = $Lock.pluginMarket.version
         defaultPluginPackage = $DefaultPlugin.package
         defaultPluginVersion = $DefaultPlugin.version
         defaultPluginSha256 = $DefaultPlugin.sha256
@@ -202,7 +203,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 13
+        shellSchema = 17
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -315,7 +316,7 @@ try {
             releaseChannel = $ReleaseChannel
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 13
+            requiredShellSchema = 16
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
@@ -416,6 +417,7 @@ try {
         }
         if (-not $IsccPath) {
             foreach ($Candidate in @(
+                (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Inno Setup 7\ISCC.exe'),
                 (Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'),
                 (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
             )) {
@@ -463,6 +465,7 @@ try {
             $ShortOutputDir = Join-Path $InstallerDriveRoot 'installer-output'
 
             $PortableIsccArguments = @(
+                '--quiet',
                 "/DStage=$ShortStage",
                 "/DOutputDir=$ShortPortableOutputDir",
                 "/DProjectRoot=$ProjectRoot",
@@ -486,6 +489,7 @@ try {
             )
 
             $IsccArguments = @(
+                '--quiet',
                 "/DStage=$ShortStage",
                 "/DOutputDir=$ShortOutputDir",
                 "/DProjectRoot=$ProjectRoot",

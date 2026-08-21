@@ -2,13 +2,17 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export function renderReleaseNotes(source, tag) {
+export function renderReleaseNotes(source, tag, dshVersion) {
   if (!/^v\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(String(tag))) {
     throw new Error('A stable or release-candidate tag is required to render release notes.')
+  }
+  if (!/^\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(String(dshVersion))) {
+    throw new Error('The pinned official DSH version is required to render release notes.')
   }
   const candidate = /-rc\./.test(tag)
   const replacements = {
     '{{PRODUCT_VERSION}}': tag.slice(1),
+    '{{DSH_VERSION}}': dshVersion,
     '{{RELEASE_INTRO_ZH}}': candidate
       ? `${tag.slice(1)} 是插件市场候选版，不会推送给稳定版用户：`
       : `${tag.slice(1)} 是正式版：`,
@@ -50,6 +54,8 @@ const invokedDirectly = process.argv[1]
 if (invokedDirectly) {
   const [, , input, output, tag] = process.argv
   if (!input || !output || !tag) throw new Error('usage: node render-release-notes.mjs <input> <output> <tag>')
-  const rendered = renderReleaseNotes(await readFile(input, 'utf8'), tag)
+  const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+  const upstream = JSON.parse(await readFile(path.join(projectRoot, 'upstream.lock.json'), 'utf8'))
+  const rendered = renderReleaseNotes(await readFile(input, 'utf8'), tag, upstream.dsh.version)
   await writeFile(output, rendered, 'utf8')
 }

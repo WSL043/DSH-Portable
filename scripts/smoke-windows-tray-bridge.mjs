@@ -13,6 +13,9 @@ if (!process.argv[2]) throw new Error('usage: node smoke-windows-tray-bridge.mjs
 if (process.platform !== 'win32') throw new Error('the native tray bridge smoke is Windows-only')
 const targetLocale = process.env.DSH_SMOKE_LOCALE === 'en' ? 'en' : 'zh'
 const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? path.resolve(process.env.DSH_SMOKE_SCREENSHOT) : ''
+const generalScreenshotPath = process.env.DSH_SMOKE_GENERAL_SCREENSHOT
+  ? path.resolve(process.env.DSH_SMOKE_GENERAL_SCREENSHOT)
+  : ''
 
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
@@ -276,6 +279,17 @@ try {
       'provider onboarding dismissal',
     )
   }
+  await waitForValue(client, `(() => {
+    const labels = [...document.querySelectorAll('button')].map(item => (item.textContent || '').trim())
+    return {
+      ready: labels.some(label => ['Settings', '设置', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label)),
+      labels: labels.slice(0, 20),
+      url: location.href,
+      title: document.title,
+      bodyText: (document.body?.innerText || '').trim().slice(0, 500),
+      htmlBytes: document.documentElement?.outerHTML?.length || 0,
+    }
+  })()`, value => value?.ready, 'DSH shell controls', 60000)
   let settings = await evaluate(client, clickButton(['Settings', '设置']))
   if (!settings?.clicked) {
     const sidebar = await evaluate(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']))
@@ -288,6 +302,15 @@ try {
     await waitForValue(client, clickButton(['English', '英文', '中文', 'Chinese']), value => value?.clicked, 'language menu button')
     await waitForValue(client, clickChoice(targetLocale === 'zh' ? ['中文'] : ['English']), value => value?.clicked, `${targetLocale} language choice`)
     state = await waitForValue(client, stateExpression, value => value?.locale === targetLocale, `locale ${targetLocale}`)
+    const translatedTestingNotice = await evaluate(client, clickButton(['Continue', '继续']))
+    if (translatedTestingNotice?.clicked) {
+      await waitForValue(
+        client,
+        `![...document.querySelectorAll('button')].some(item => ['Continue', '继续'].includes((item.textContent || '').trim()))`,
+        Boolean,
+        'translated testing notice dismissal',
+      )
+    }
   }
   assert.equal(state.locale, targetLocale)
 
@@ -296,6 +319,23 @@ try {
     state = await waitForValue(client, stateExpression, value => value?.theme === 'light', 'theme light')
   }
   assert.equal(state.theme, 'light')
+
+  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings tab')
+  const portableSettings = await waitForValue(client, `(() => {
+    const text = document.body?.innerText || ''
+    return {
+      title: /(?:^|\\n)(?:Portable|便携版)(?:\\n|$)/.test(text),
+      updates: /Automatic update checks|自动检查更新/.test(text),
+      notifications: /Task completion notifications|任务完成通知/.test(text),
+      maintenance: /Check and repair|检查与修复/.test(text),
+    }
+  })()`, value => value?.title && value.updates && value.notifications && value.maintenance, 'Portable controls in General settings')
+  assert.deepEqual(portableSettings, { title: true, updates: true, notifications: true, maintenance: true })
+  if (generalScreenshotPath) {
+    const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+    await mkdir(path.dirname(generalScreenshotPath), { recursive: true })
+    await writeFile(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  }
 
   await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab')
   const extensionUi = await evaluate(client, `({
@@ -316,11 +356,51 @@ try {
   })()`, value => value?.search && value.installButtons > 0 && value.ownerImages > 0, 'visual Plugin Market cards', 60000)
   assert.ok(marketUi.installButtons > 0)
   assert.ok(marketUi.ownerImages > 0)
+  const picturedPlugin = await evaluate(client, `(async () => {
+    const response = await fetch('/dsh-market/registry', { cache: 'no-store' })
+    const body = await response.json()
+    const plugin = body.registry?.plugins?.find(item => Array.isArray(item.screenshots)
+      && item.screenshots.some(value => /^[\\x00-\\x7F]+$/.test(value))
+      && (item.page || item.url))
+    return plugin ? { name: plugin.name, projectHref: plugin.page || plugin.url, screenshots: plugin.screenshots } : null
+  })()`)
+  assert.ok(picturedPlugin?.name)
+  assert.ok(picturedPlugin?.projectHref)
+  assert.ok(picturedPlugin?.screenshots?.length > 0)
+  await evaluate(client, `(() => {
+    const input = [...document.querySelectorAll('input')].find(item => item.placeholder === ${JSON.stringify(expectedMarketSearch)})
+    if (!input) return false
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+    setter?.call(input, ${JSON.stringify(picturedPlugin.name)})
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+    return true
+  })()`)
+  const picturedUi = await waitForValue(client, `(() => {
+    const projectHref = new URL(${JSON.stringify(picturedPlugin.projectHref)}, location.href).href
+    const screenshotUrls = ${JSON.stringify(picturedPlugin.screenshots)}.map(value => new URL(value, location.href).href)
+    const titleLink = [...document.querySelectorAll('a')].find(item => item.href === projectHref && (item.textContent || '').trim() === ${JSON.stringify(picturedPlugin.name)})
+    const cardShot = [...document.querySelectorAll('img')].find(item => screenshotUrls.includes(item.src) && item.complete && item.naturalWidth > 0)
+    const rect = cardShot?.getBoundingClientRect()
+    return { projectHref: titleLink?.href || '', cardShot: Boolean(cardShot), width: rect?.width || 0, height: rect?.height || 0 }
+  })()`, value => value?.projectHref && value.cardShot && value.width >= 200 && value.height >= 140, 'pictured plugin card and project link', 60000)
+  assert.equal(picturedUi.projectHref, new URL(picturedPlugin.projectHref, launch.url).href)
+  assert.ok(picturedUi.cardShot)
   if (screenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(screenshotPath), { recursive: true })
     await writeFile(screenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
+  await waitForValue(client, clickButton(['Compact', '紧凑']), value => value?.clicked, 'compact market view')
+  await waitForValue(client, `(() => {
+    const active = [...document.querySelectorAll('button[aria-pressed="true"]')].find(item => ['Compact', '紧凑'].includes((item.textContent || '').trim()))
+    const screenshot = [...document.querySelectorAll('img')].find(item => item.naturalWidth > 0 && item.getBoundingClientRect().width >= 200)
+    return { active: Boolean(active), saved: localStorage.getItem('dshm-market-view'), screenshotVisible: screenshot ? getComputedStyle(screenshot).display !== 'none' : false }
+  })()`, value => value?.active && value.saved === 'compact' && value.screenshotVisible === false, 'persisted compact market view')
+  await waitForValue(client, clickButton(['Cards', '图文']), value => value?.clicked, 'card market view')
+  await waitForValue(client, `(() => ({
+    active: [...document.querySelectorAll('button[aria-pressed="true"]')].some(item => ['Cards', '图文'].includes((item.textContent || '').trim())),
+    saved: localStorage.getItem('dshm-market-view'),
+  }))()`, value => value?.active && value.saved === 'cards', 'persisted card market view')
 
   const stateCountExpression = `window.__dshTrayMessages?.filter(item => item.type === 'dsh-portable/state').length || 0`
   const beforeClear = await evaluate(client, stateCountExpression)

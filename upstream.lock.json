@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "dsh": {
     "package": "@deepseek-ai/dsh",
-    "version": "0.1.0-rc.8",
-    "integrity": "sha512-VQU5NlomrKLRgcXuOf+sxWFvqxPA8q9vMhrKPlPPXiOJEhGlGlAdiyxZvZxkCVI+v0zbhe21cY3/luLyxpSzzA==",
+    "version": "0.1.1-rc.2",
+    "integrity": "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg==",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
-    "reviewedCommit": "141eb6fef83422698aef7a981029e843e8161534",
+    "reviewedCommit": "b150a551b8d465e31e418e1b2eaf5e79bbb7d28e",
     "noticesSha256": "50c0b03d591244cdceb61c3bcb0db224e998388af6cbad8fa9d1e980440e25b3"
   },
   "pnpm": {
@@ -14,20 +14,22 @@
     "integrity": "sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA=="
   },
   "pluginMarket": {
-    "package": "dshmarket",
-    "version": "1.16.0",
-    "integrity": "sha512-WuHVUQzzECcK0gWdf0Q84KVvKNYNLTbF/GEh2TpBZEeekEI9hbZlqRu3kDwfVDciRgb49GtD0ost1sn45BbfMQ==",
-    "sourceRepository": "https://github.com/dsh-market/dsh-market"
+    "package": "@wsl043/dsh-portable-plugin-market",
+    "version": "0.1.0-beta.1",
+    "catalog": "https://awesome-dsh-plugin.com/plugins.json",
+    "catalogRepository": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin",
+    "implementationBasis": "https://github.com/dsh-market/dsh-market",
+    "reviewedBasisCommit": "488de05f4f7e6a3e03627b403cedad828a226cbf"
   },
   "defaultPlugins": {
     "sessionDelete": {
       "package": "dsh-native-session-delete",
-      "version": "1.0.0",
-      "url": "https://github.com/WSL043/dsh-session-delete/releases/download/v1.0.0/dsh-native-session-delete.tgz",
-      "sha256": "e51bbe07ca27f87b742438d15afc16319074a338688f8e28480bff084d74462e",
-      "integrity": "sha512-PMcKj2vxJQbmWiXTnuuYRcAKWVqmGY1dRnbzYQDNgBhrgK2HmODWloFHFiS9t4EuWpSp7q5SsPfSjzlhdigYzg==",
+      "version": "1.0.7",
+      "url": "https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-1.0.7.tgz",
+      "sha256": "7b6660552ea6f14796f3e54b4d05caec2ae3cb9c3e9a9e22bed616ab84f440f9",
+      "integrity": "sha512-7x9B9CX3DMeiKhODBje/rat2pnYQUwVUNk5r+YOBXpS/Yv8XV48mm6ou+Eod9KA9sggTmdP3tv9de/z0Z9D6og==",
       "license": "MIT",
-      "reviewedCommit": "5842dc611884da08c8a95e306a9e41ac0bcb7c7e",
+      "reviewedCommit": "38c77d3765d81d5702202e68ed7b77f5ea0afe04",
       "filename": "dsh-native-session-delete.tgz"
     }
   },

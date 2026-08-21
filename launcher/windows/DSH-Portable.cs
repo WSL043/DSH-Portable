@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -22,8 +23,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.0.2")]
-[assembly: AssemblyFileVersion("0.4.0.2")]
+[assembly: AssemblyVersion("0.4.0.65534")]
+[assembly: AssemblyFileVersion("0.4.0.65534")]
 
 namespace DshPortable
 {
@@ -254,7 +255,8 @@ namespace DshPortable
         private enum DwmWindowCornerPreference { Default = 0, DoNotRound = 1, Round = 2, RoundSmall = 3 }
         private const int DwmwaWindowCornerPreference = 33;
         private const int WorkspaceNavigationTimeoutMs = 60000;
-        private const int WebViewShutdownTimeoutMs = 20000;
+        private const int WebViewShutdownTimeoutMs = 10000;
+        private const int WebViewGracefulShutdownMs = 1500;
 
         private static string L(string chinese, string english)
         {
@@ -280,7 +282,7 @@ namespace DshPortable
         private readonly Button laterButton;
         private readonly Button copyButton;
         private readonly Button closeButton;
-        private readonly WebView2 webView;
+        private WebView2 webView;
         private readonly NotifyIcon trayIcon;
         private readonly ContextMenuStrip trayMenu;
         private readonly ToolStripMenuItem closeBehaviorItem;
@@ -318,6 +320,7 @@ namespace DshPortable
         private TaskCompletionSource<string> webViewProcessFailure;
         private CoreWebView2Environment webViewEnvironment;
         private TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs> webViewBrowserExited;
+        private int ownedWebViewBrowserProcessId;
 
         internal LauncherWindow(string[] args)
         {
@@ -538,11 +541,18 @@ namespace DshPortable
                 if (!String.IsNullOrEmpty(sessionId)) PostBridgeAction("open-session", sessionId);
             };
 
-            webView = new WebView2 { Dock = DockStyle.Fill, Visible = true };
+            webView = new WebView2
+            {
+                Dock = DockStyle.None,
+                Location = Point.Empty,
+                Size = ClientSize,
+                Visible = true,
+            };
             Controls.Add(webView);
             Controls.Add(launchPanel);
             launchPanel.BringToFront();
             CenterLaunchContent();
+            ClientSizeChanged += delegate { FitWebViewToClient(); };
             ResizeEnd += delegate { SaveDesktopWindowState(); };
             Shown += async delegate { await RunLauncherAsync(); };
         }
@@ -914,6 +924,26 @@ namespace DshPortable
                 || source.Port != applicationUri.Port) return;
             try
             {
+                Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
+                object messageType;
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/preferences", StringComparison.Ordinal))
+                {
+                    BeginInvoke((MethodInvoker)delegate
+                    {
+                        object value;
+                        if (message.TryGetValue("updateCheckEnabled", out value) && value is bool)
+                            updateCheckEnabled = (bool)value;
+                        if (message.TryGetValue("taskNotificationsEnabled", out value) && value is bool)
+                            taskNotificationsEnabled = (bool)value;
+                        if (message.TryGetValue("closeBehavior", out value))
+                            closeBehavior = String.Equals(Convert.ToString(value), "exit", StringComparison.OrdinalIgnoreCase)
+                                ? WindowCloseBehavior.Exit : WindowCloseBehavior.Tray;
+                        SaveLauncherSettings();
+                        RebuildTrayMenu();
+                    });
+                    return;
+                }
                 TrayBridgeState state = json.Deserialize<TrayBridgeState>(eventArgs.WebMessageAsJson);
                 if (state == null || state.type != "dsh-portable/state" || state.schemaVersion != 1) return;
                 if (state.sessions == null) state.sessions = new List<TrayBridgeSession>();
@@ -1047,9 +1077,9 @@ namespace DshPortable
             try
             {
                 string source = File.ReadAllText(LauncherSettingsPath(), Encoding.UTF8);
-                return !Regex.IsMatch(source, "\\\"updateCheckEnabled\\\"\\s*:\\s*false", RegexOptions.IgnoreCase);
+                return Regex.IsMatch(source, "\\\"updateCheckEnabled\\\"\\s*:\\s*true", RegexOptions.IgnoreCase);
             }
-            catch { return true; }
+            catch { return false; }
         }
 
         private bool LoadTaskNotificationsEnabled()
@@ -1110,6 +1140,11 @@ namespace DshPortable
         {
             if (shutdownRunning) return;
             shutdownRunning = true;
+            WriteLauncherLog("shutdown", "begin hostPid="
+                + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture)
+                + " browserPid=" + ownedWebViewBrowserProcessId.ToString(CultureInfo.InvariantCulture)
+                + " executable=" + Application.ExecutablePath
+                + " processJob=" + PortableProcessJob.Status);
             trayIcon.Visible = true;
             webView.Enabled = false;
             Text = L("DeepSeek-Herness · 正在关闭", "DeepSeek-Herness · Closing");
@@ -1138,14 +1173,15 @@ namespace DshPortable
             }
             catch (Exception error)
             {
-                shutdownRunning = false;
                 Environment.ExitCode = 1;
+                WriteLauncherLog("shutdown", "failed " + error.GetBaseException().Message.Replace("\r", " ").Replace("\n", " | "));
                 ShowShutdownFailure(error.GetBaseException().Message);
                 return;
             }
 
             allowClose = true;
             DisposeTrayIcon();
+            WriteLauncherLog("shutdown", "complete");
             Close();
         }
 
@@ -1158,40 +1194,250 @@ namespace DshPortable
         private async Task WaitForWebViewExitAsync(int timeoutMs)
         {
             if (webViewEnvironment == null) return;
+            CoreWebView2Environment closingEnvironment = webViewEnvironment;
             Task exited = webViewBrowserExited == null
                 ? (Task)Task.FromResult<object>(null)
                 : webViewBrowserExited.Task;
 
-            if (!webView.IsDisposed)
+            WebView2 closingWebView = webView;
+            webView = null;
+            applicationUri = null;
+            Exception controllerCloseError = null;
+            if (closingWebView != null && !closingWebView.IsDisposed)
             {
-                webView.Visible = false;
-                if (webView.CoreWebView2 != null) webView.CoreWebView2.Stop();
-                webView.Dispose();
+                try
+                {
+                    closingWebView.Visible = false;
+                    if (closingWebView.CoreWebView2 != null)
+                    {
+                        closingWebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
+                        closingWebView.CoreWebView2.NewWindowRequested -= OnNewWindowRequested;
+                        closingWebView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                        closingWebView.CoreWebView2.DownloadStarting -= OnDownloadStarting;
+                        closingWebView.CoreWebView2.ProcessFailed -= OnWebViewProcessFailed;
+                        closingWebView.CoreWebView2.Stop();
+                    }
+                    WriteLauncherLog("shutdown-webview", "controller-close-requested runtime="
+                        + closingEnvironment.BrowserVersionString
+                        + " browserPid=" + ownedWebViewBrowserProcessId.ToString(CultureInfo.InvariantCulture));
+                    Controls.Remove(closingWebView);
+                    closingWebView.Dispose();
+                }
+                catch (Exception error)
+                {
+                    controllerCloseError = error.GetBaseException();
+                    WriteLauncherLog("shutdown-webview", "controller-close-error="
+                        + controllerCloseError.GetType().Name + ":" + controllerCloseError.Message.Replace("\r", " ").Replace("\n", " | "));
+                }
             }
+            webViewProcessFailure = null;
 
             DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            DateTime gracefulDeadline = DateTime.UtcNow.AddMilliseconds(Math.Min(WebViewGracefulShutdownMs, timeoutMs));
+            bool exitEventObserved = exited.IsCompleted;
+            bool forceAttempted = false;
             List<string> remaining = new List<string>();
             while (DateTime.UtcNow < deadline)
             {
-                if (!exited.IsCompleted)
-                    await Task.WhenAny(exited, Task.Delay(400));
                 remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
                 if (remaining.Count == 0)
                 {
-                    webViewEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
+                    closingEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
+                    webViewEnvironment = null;
+                    webViewBrowserExited = null;
+                    ownedWebViewBrowserProcessId = 0;
+                    WriteLauncherLog("shutdown-webview", exitEventObserved
+                        ? "browser-process-exited"
+                        : "process-tree-empty-without-event");
                     return;
                 }
-                await Task.Delay(200);
+
+                if (!forceAttempted && DateTime.UtcNow >= gracefulDeadline)
+                {
+                    forceAttempted = true;
+                    bool forced = await Task.Run(() => TryForceReleaseOwnedWebViewProcesses(remaining));
+                    WriteLauncherLog("shutdown-webview", forced
+                        ? "verified-owned-browser-force-requested"
+                        : "verified-owned-browser-force-refused");
+
+                    await Task.Delay(250);
+                    remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
+                    if (remaining.Count > 0 && PortableProcessJob.IsActive)
+                    {
+                        WriteLauncherLog("shutdown-webview", "job-close-requested remaining="
+                            + String.Join(";", remaining));
+                        PortableProcessJob.ExitOwnedTree();
+                        Environment.Exit(0);
+                        return;
+                    }
+                }
+
+                int pollDelayMs = Math.Max(1, Math.Min(100, (int)(deadline - DateTime.UtcNow).TotalMilliseconds));
+                if (exitEventObserved) await Task.Delay(pollDelayMs);
+                else
+                {
+                    Task winner = await Task.WhenAny(exited, Task.Delay(pollDelayMs));
+                    exitEventObserved = winner == exited;
+                }
             }
 
-            remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
-            if (remaining.Count == 0)
-            {
-                webViewEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
-                return;
-            }
-            string details = "Owned WebView2 processes still hold the portable folder:\r\n" + String.Join("\r\n", remaining);
+            string details = L(
+                "WebView2 未能在限定时间内释放便携目录。程序只会结束经 PID、父进程和便携数据目录确认的自有浏览器树；本次未能完成安全释放，也没有删除用户数据目录。请重启 Windows 后重试移动、更新或卸载。",
+                "WebView2 did not release the portable folder within the allowed time. The app only terminates its browser tree after verifying its PID, parent process, and portable data folder; safe release did not complete and the user data folder was not deleted. Restart Windows before moving, updating, or uninstalling.")
+                + (controllerCloseError == null ? "" : "\r\ncontroller-close-error=" + controllerCloseError.Message)
+                + "\r\n\r\nOwned WebView2 processes still hold the portable folder:\r\n"
+                + String.Join("\r\n", remaining);
             throw new TimeoutException(details);
+        }
+
+        private bool TryForceReleaseOwnedWebViewProcesses(List<string> remaining)
+        {
+            if (ownedWebViewBrowserProcessId <= 0 || remaining == null || remaining.Count == 0) return false;
+            int hostProcessId = Process.GetCurrentProcess().Id;
+            string expected = "pid=" + ownedWebViewBrowserProcessId.ToString(CultureInfo.InvariantCulture)
+                + " ppid=" + hostProcessId.ToString(CultureInfo.InvariantCulture) + " name=msedgewebview2.exe";
+            List<OwnedWebViewProcessRecord> records = ParseOwnedWebViewProcessDiagnostics(remaining);
+            if (!records.Any(record => record.ProcessId == ownedWebViewBrowserProcessId
+                && record.ParentProcessId == hostProcessId
+                && String.Equals(record.Name, "msedgewebview2.exe", StringComparison.OrdinalIgnoreCase)))
+            {
+                WriteLauncherLog("shutdown-webview", "force-refused ownership-mismatch expected=" + expected);
+                return false;
+            }
+            records = SelectOwnedWebViewProcessTree(records, ownedWebViewBrowserProcessId);
+
+            Dictionary<int, OwnedWebViewProcessRecord> byProcessId = records
+                .GroupBy(record => record.ProcessId)
+                .ToDictionary(group => group.Key, group => group.First());
+            List<OwnedWebViewProcessRecord> childFirst = records
+                .OrderByDescending(record => OwnedWebViewProcessDepth(record, byProcessId))
+                .ThenByDescending(record => record.ProcessId)
+                .ToList();
+            bool requested = false;
+            foreach (OwnedWebViewProcessRecord record in childFirst)
+            {
+                try
+                {
+                    using (Process process = Process.GetProcessById(record.ProcessId))
+                    {
+                        if (!String.Equals(process.ProcessName, "msedgewebview2", StringComparison.OrdinalIgnoreCase))
+                        {
+                            WriteLauncherLog("shutdown-webview", "kill-skipped pid="
+                                + record.ProcessId.ToString(CultureInfo.InvariantCulture)
+                                + " process-name=" + process.ProcessName);
+                            continue;
+                        }
+                        process.Kill();
+                        requested = true;
+                        WriteLauncherLog("shutdown-webview", "kill-requested pid="
+                            + record.ProcessId.ToString(CultureInfo.InvariantCulture)
+                            + " ppid=" + record.ParentProcessId.ToString(CultureInfo.InvariantCulture)
+                            + " depth=" + OwnedWebViewProcessDepth(record, byProcessId).ToString(CultureInfo.InvariantCulture));
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    WriteLauncherLog("shutdown-webview", "kill-already-exited pid="
+                        + record.ProcessId.ToString(CultureInfo.InvariantCulture));
+                }
+                catch (InvalidOperationException)
+                {
+                    WriteLauncherLog("shutdown-webview", "kill-already-exited pid="
+                        + record.ProcessId.ToString(CultureInfo.InvariantCulture));
+                }
+                catch (Exception error)
+                {
+                    WriteLauncherLog("shutdown-webview", "kill-error pid="
+                        + record.ProcessId.ToString(CultureInfo.InvariantCulture) + " "
+                        + error.GetBaseException().GetType().Name + ":"
+                        + error.GetBaseException().Message.Replace("\r", " ").Replace("\n", " | "));
+                }
+            }
+            return requested || childFirst.Count > 0;
+        }
+
+        private sealed class OwnedWebViewProcessRecord
+        {
+            internal int ProcessId;
+            internal int ParentProcessId;
+            internal string Name;
+        }
+
+        private static List<OwnedWebViewProcessRecord> ParseOwnedWebViewProcessDiagnostics(IEnumerable<string> lines)
+        {
+            List<OwnedWebViewProcessRecord> records = new List<OwnedWebViewProcessRecord>();
+            foreach (string line in lines ?? Enumerable.Empty<string>())
+            {
+                Match match = Regex.Match(line == null ? String.Empty : line.Trim(),
+                    "^pid=(?<pid>[0-9]+) ppid=(?<ppid>[0-9]+) name=(?<name>[^ ]+)$",
+                    RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                int processId;
+                int parentProcessId;
+                if (!match.Success
+                    || !Int32.TryParse(match.Groups["pid"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out processId)
+                    || !Int32.TryParse(match.Groups["ppid"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out parentProcessId))
+                    continue;
+                records.Add(new OwnedWebViewProcessRecord
+                {
+                    ProcessId = processId,
+                    ParentProcessId = parentProcessId,
+                    Name = match.Groups["name"].Value,
+                });
+            }
+            return records;
+        }
+
+        private static List<OwnedWebViewProcessRecord> SelectOwnedWebViewProcessTree(
+            IEnumerable<OwnedWebViewProcessRecord> records,
+            int rootProcessId)
+        {
+            List<OwnedWebViewProcessRecord> snapshot = records.ToList();
+            HashSet<int> selected = new HashSet<int> { rootProcessId };
+            bool changed;
+            do
+            {
+                changed = false;
+                foreach (OwnedWebViewProcessRecord record in snapshot)
+                {
+                    if (selected.Contains(record.ParentProcessId) && selected.Add(record.ProcessId)) changed = true;
+                }
+            } while (changed);
+            return snapshot.Where(record => selected.Contains(record.ProcessId)).ToList();
+        }
+
+        private static int OwnedWebViewProcessDepth(
+            OwnedWebViewProcessRecord record,
+            IDictionary<int, OwnedWebViewProcessRecord> byProcessId)
+        {
+            int depth = 0;
+            int parentProcessId = record.ParentProcessId;
+            HashSet<int> visited = new HashSet<int> { record.ProcessId };
+            OwnedWebViewProcessRecord parent;
+            while (byProcessId.TryGetValue(parentProcessId, out parent) && visited.Add(parent.ProcessId))
+            {
+                depth += 1;
+                parentProcessId = parent.ParentProcessId;
+            }
+            return depth;
+        }
+
+        private void WriteLauncherLog(string category, string message)
+        {
+            try
+            {
+                string directory = ResolveLauncherLogDirectory();
+                Directory.CreateDirectory(directory);
+                string filename = Path.Combine(directory, "launcher.log");
+                if (File.Exists(filename) && new FileInfo(filename).Length > 1024 * 1024)
+                {
+                    try { File.Delete(filename + ".previous"); } catch { }
+                    File.Move(filename, filename + ".previous");
+                }
+                File.AppendAllText(filename,
+                    DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + " [" + category + "] " + message + Environment.NewLine,
+                    new UTF8Encoding(false));
+            }
+            catch { }
         }
 
         private List<string> OwnedWebViewProcessDiagnostics()
@@ -1277,8 +1523,6 @@ namespace DshPortable
                         throw new TimeoutException(L("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。", "DeepSeek-Herness did not exit within 45 seconds.")
                             + (String.IsNullOrEmpty(details) ? "" : "\r\n" + details));
                     }
-                    if (process.ExitCode != 0)
-                        throw new InvalidOperationException(L("DeepSeek-Herness 未能安全释放 WebView2 资源。", "DeepSeek-Herness did not safely release its WebView2 resources."));
                 }
             }
         }
@@ -1833,7 +2077,7 @@ namespace DshPortable
             details.AppendLine(webViewSnapshot);
             lock (webViewStartupTrace)
                 details.AppendLine("phases=" + String.Join(" | ", webViewStartupTrace.ToArray()));
-            string logDirectory = Path.Combine(Path.GetDirectoryName(ResolveWebViewDataRoot()), "logs");
+            string logDirectory = ResolveLauncherLogDirectory();
             foreach (string name in new[] { "dsh.stderr.log", "dsh.stdout.log" })
             {
                 string tail = TailLog(Path.Combine(logDirectory, name), 2000).Trim();
@@ -1874,6 +2118,7 @@ namespace DshPortable
                 webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
                 webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
                 await webView.EnsureCoreWebView2Async(webViewEnvironment);
+                ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
                 RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
             }
             catch (WebView2RuntimeNotFoundException)
@@ -1922,13 +2167,24 @@ namespace DshPortable
             MinimizeBox = true;
             MinimumSize = new Size(900, 620);
             RestoreDesktopWindowState();
+            FitWebViewToClient();
             webView.Visible = true;
             webView.BringToFront();
             launchPanel.Visible = false;
             ResumeLayout(true);
+            FitWebViewToClient();
+            BeginInvoke(new Action(FitWebViewToClient));
             operationRunning = false;
             desktopReady = true;
             trayIcon.Visible = true;
+        }
+
+        private void FitWebViewToClient()
+        {
+            if (webView == null || webView.IsDisposed) return;
+            Rectangle target = ClientRectangle;
+            if (target.Width <= 0 || target.Height <= 0) return;
+            if (webView.Bounds != target) webView.Bounds = target;
         }
 
         private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs eventArgs)
@@ -2109,7 +2365,62 @@ namespace DshPortable
         {
             if (File.Exists(Path.Combine(root, "installed-mode.json")))
                 return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data", "webview2");
-            return Path.Combine(root, "data", "webview2");
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DSH-Portable",
+                "webview2",
+                ResolvePortableInstanceId(),
+                ResolvePortableLocationKey());
+        }
+
+        private string ResolveLauncherLogDirectory()
+        {
+            if (File.Exists(Path.Combine(root, "installed-mode.json")))
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data", "logs");
+            return Path.Combine(root, "data", "logs");
+        }
+
+        private string ResolvePortableInstanceId()
+        {
+            string dataDirectory = Path.Combine(root, "data");
+            string identityPath = Path.Combine(dataDirectory, "portable-instance.id");
+            try
+            {
+                if (File.Exists(identityPath))
+                {
+                    string existing = File.ReadAllText(identityPath, Encoding.ASCII).Trim();
+                    if (Regex.IsMatch(existing, "^[0-9a-f]{32}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                        return existing.ToLowerInvariant();
+                }
+
+                Directory.CreateDirectory(dataDirectory);
+                string created = Guid.NewGuid().ToString("N");
+                try
+                {
+                    using (FileStream stream = new FileStream(identityPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read))
+                    using (StreamWriter writer = new StreamWriter(stream, Encoding.ASCII))
+                        writer.Write(created);
+                    return created;
+                }
+                catch (IOException)
+                {
+                    string raced = File.ReadAllText(identityPath, Encoding.ASCII).Trim();
+                    if (Regex.IsMatch(raced, "^[0-9a-f]{32}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                        return raced.ToLowerInvariant();
+                }
+            }
+            catch { }
+
+            return ResolvePortableLocationKey();
+        }
+
+        private string ResolvePortableLocationKey()
+        {
+            using (SHA256 hash = SHA256.Create())
+            {
+                byte[] digest = hash.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(root).ToUpperInvariant()));
+                return BitConverter.ToString(digest, 0, 16).Replace("-", "").ToLowerInvariant();
+            }
         }
 
         private static bool IsTrustedLoopbackUrl(string value)
@@ -2358,7 +2669,8 @@ namespace DshPortable
             statusLabel.Size = new Size(480, 28);
             statusLabel.Text = L("DeepSeek Harness 停止失败。", "DeepSeek Harness could not stop.");
             statusLabel.ForeColor = Color.FromArgb(178, 38, 38);
-            detailsBox.Text = message ?? string.Empty;
+            string launcherLog = Path.Combine(ResolveLauncherLogDirectory(), "launcher.log");
+            detailsBox.Text = (message ?? string.Empty) + "\r\n\r\n" + L("日志 / Log: ", "Log: ") + launcherLog;
             detailsBox.Visible = true;
             copyButton.Visible = true;
             closeButton.Location = new Point(468, 252);
@@ -2433,6 +2745,112 @@ namespace DshPortable
         }
     }
 
+    internal static class PortableProcessJob
+    {
+        private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
+        private const int JobObjectExtendedLimitInformation = 9;
+        private static IntPtr jobHandle = IntPtr.Zero;
+        private static string status = "not-initialized";
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct JOBOBJECT_BASIC_LIMIT_INFORMATION
+        {
+            internal long PerProcessUserTimeLimit;
+            internal long PerJobUserTimeLimit;
+            internal uint LimitFlags;
+            internal UIntPtr MinimumWorkingSetSize;
+            internal UIntPtr MaximumWorkingSetSize;
+            internal uint ActiveProcessLimit;
+            internal UIntPtr Affinity;
+            internal uint PriorityClass;
+            internal uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct IO_COUNTERS
+        {
+            internal ulong ReadOperationCount;
+            internal ulong WriteOperationCount;
+            internal ulong OtherOperationCount;
+            internal ulong ReadTransferCount;
+            internal ulong WriteTransferCount;
+            internal ulong OtherTransferCount;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION
+        {
+            internal JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+            internal IO_COUNTERS IoInfo;
+            internal UIntPtr ProcessMemoryLimit;
+            internal UIntPtr JobMemoryLimit;
+            internal UIntPtr PeakProcessMemoryUsed;
+            internal UIntPtr PeakJobMemoryUsed;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern IntPtr CreateJobObject(IntPtr jobAttributes, string name);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetInformationJobObject(
+            IntPtr job,
+            int informationClass,
+            ref JOBOBJECT_EXTENDED_LIMIT_INFORMATION information,
+            uint informationLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AssignProcessToJobObject(IntPtr job, IntPtr process);
+
+        [DllImport("kernel32.dll")]
+        private static extern IntPtr GetCurrentProcess();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CloseHandle(IntPtr handle);
+
+        internal static bool IsActive { get { return jobHandle != IntPtr.Zero; } }
+        internal static string Status { get { return status; } }
+
+        internal static void Initialize()
+        {
+            IntPtr created = CreateJobObject(IntPtr.Zero, null);
+            if (created == IntPtr.Zero)
+            {
+                status = "create-error:" + Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture);
+                return;
+            }
+
+            JOBOBJECT_EXTENDED_LIMIT_INFORMATION information = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+            information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            uint informationLength = (uint)Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+            if (!SetInformationJobObject(created, JobObjectExtendedLimitInformation, ref information, informationLength))
+            {
+                status = "configure-error:" + Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture);
+                CloseHandle(created);
+                return;
+            }
+            if (!AssignProcessToJobObject(created, GetCurrentProcess()))
+            {
+                status = "assign-error:" + Marshal.GetLastWin32Error().ToString(CultureInfo.InvariantCulture);
+                CloseHandle(created);
+                return;
+            }
+
+            jobHandle = created;
+            status = "active";
+        }
+
+        internal static void ExitOwnedTree()
+        {
+            IntPtr closing = jobHandle;
+            jobHandle = IntPtr.Zero;
+            status = "closing";
+            if (closing != IntPtr.Zero) CloseHandle(closing);
+        }
+    }
+
     internal static class Program
     {
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
@@ -2441,6 +2859,7 @@ namespace DshPortable
         [STAThread]
         private static void Main(string[] args)
         {
+            PortableProcessJob.Initialize();
             SetCurrentProcessExplicitAppUserModelID("io.github.wsl043.dsh-portable");
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);

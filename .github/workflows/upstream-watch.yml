@@ -12,6 +12,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -37,7 +38,7 @@ jobs:
         run: npm test
       - name: Package the tested candidate without creating a branch
         if: steps.upstream.outputs.changed == 'true'
-        run: git diff --binary -- app/package.json app/package-lock.json upstream.lock.json > official-dsh-candidate.patch
+        run: git diff --binary -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json > official-dsh-candidate.patch
       - name: Upload the tested candidate
         if: steps.upstream.outputs.changed == 'true'
         uses: actions/upload-artifact@v7
@@ -63,7 +64,7 @@ jobs:
             '' 'This issue is not auto-merged or auto-released. The candidate still requires product adaptation and the normal Windows, macOS, and Linux release gate.' > "$BODY"
           ISSUE=$(gh issue list --state open --search "${TITLE} in:title" --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)
           if [ -n "$ISSUE" ]; then
-            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY"
+            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY" --add-assignee WSL043
           else
-            gh issue create --title "$TITLE" --body-file "$BODY"
+            gh issue create --title "$TITLE" --body-file "$BODY" --assignee WSL043
           fi

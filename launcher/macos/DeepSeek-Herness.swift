@@ -83,8 +83,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var updateCheckEnabled: Bool {
         get {
             guard let data = try? Data(contentsOf: launcherSettingsURL),
-                  let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return true }
-            return settings["updateCheckEnabled"] as? Bool ?? true
+                  let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return settings["updateCheckEnabled"] as? Bool ?? false
         }
         set {
             var settings: [String: Any] = [:]
@@ -370,6 +370,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             DispatchQueue.main.sync { [weak self] in self?.showWebView(url) }
             checkForUpdateAfterStartup()
         } catch {
+            if let diagnostic = ("DSH-Portable startup failed: \(error.localizedDescription)\n").data(using: .utf8) {
+                FileHandle.standardError.write(diagnostic)
+            }
             if backendStarted {
                 _ = try? runCLI(["stop", "--no-browser", "--json"])
                 backendStarted = false

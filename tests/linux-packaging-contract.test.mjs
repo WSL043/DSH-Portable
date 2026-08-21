@@ -27,7 +27,7 @@ test('Linux uses architecture-specific component update channels', () => {
   assert.throws(() => platformUpdateKey('linux', 'ia32'), /unsupported/i)
 })
 
-test('Linux requires the rc8-aware native shell before installing the app component', async () => {
+test('Linux requires a compatible native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
   assert.match(source, /"shellSchema": 5/)
   assert.match(source, /"requiredShellSchema": 5/)

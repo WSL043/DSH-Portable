@@ -50,7 +50,7 @@ struct ShellSettings {
 impl Default for ShellSettings {
     fn default() -> Self {
         Self {
-            check_updates_at_startup: true,
+            check_updates_at_startup: false,
             install_update_at_next_start: false,
         }
     }
