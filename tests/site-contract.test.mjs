@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 
 const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
 const app = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../site/styles.css", import.meta.url), "utf8");
-const cname = await readFile(new URL("../site/CNAME", import.meta.url), "utf8");
+const cname = new URL("../site/CNAME", import.meta.url);
 const robots = await readFile(new URL("../site/robots.txt", import.meta.url), "utf8");
 const sitemap = await readFile(new URL("../site/sitemap.xml", import.meta.url), "utf8");
 const workflow = await readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
@@ -70,18 +70,18 @@ test("common desktop widths keep the product proof in the hero composition", () 
   assert.match(css, /@media \(max-width: 1080px\)/);
 });
 
-test("website publishes its canonical custom domain", () => {
-  assert.equal(cname.trim(), "dsh-portable.js.org");
-  assert.match(html, /<link rel="canonical" href="https:\/\/dsh-portable\.js\.org\/">/);
-  assert.match(html, /<meta property="og:url" content="https:\/\/dsh-portable\.js\.org\/">/);
+test("website publishes only through the currently verified Pages domain", async () => {
+  await assert.rejects(access(cname), error => error?.code === "ENOENT");
+  assert.match(html, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/">/);
+  assert.match(html, /<meta property="og:url" content="https:\/\/wsl043\.github\.io\/DSH-Portable\/">/);
 });
 
 test("website exposes search-engine metadata without duplicating release files", () => {
   assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
   assert.match(html, /<script type="application\/ld\+json">[\s\S]*"@type":\s*"SoftwareApplication"/);
   assert.match(html, /"downloadUrl":\s*"https:\/\/github\.com\/WSL043\/DSH-Portable\/releases\/latest"/);
-  assert.match(robots, /User-agent:\s*\*[\s\S]*Allow:\s*\/[\s\S]*Sitemap:\s*https:\/\/dsh-portable\.js\.org\/sitemap\.xml/);
-  assert.match(sitemap, /<loc>https:\/\/dsh-portable\.js\.org\/<\/loc>/);
+  assert.match(robots, /User-agent:\s*\*[\s\S]*Allow:\s*\/[\s\S]*Sitemap:\s*https:\/\/wsl043\.github\.io\/DSH-Portable\/sitemap\.xml/);
+  assert.match(sitemap, /<loc>https:\/\/wsl043\.github\.io\/DSH-Portable\/<\/loc>/);
   assert.doesNotMatch(`${robots}\n${sitemap}`, /releases\/latest\/download/);
 });
 

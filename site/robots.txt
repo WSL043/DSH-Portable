@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://dsh-portable.js.org/sitemap.xml
+Sitemap: https://wsl043.github.io/DSH-Portable/sitemap.xml

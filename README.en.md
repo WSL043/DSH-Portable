@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://dsh-portable.js.org/"><strong>Website</strong></a>
+  <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
   · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>Download</strong></a>
   · <a href="#start-in-3-steps">Get started</a>
   · <a href="#plugins">Plugins</a>
