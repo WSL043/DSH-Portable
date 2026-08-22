@@ -9,6 +9,8 @@ const cname = new URL("../site/CNAME", import.meta.url);
 const robots = await readFile(new URL("../site/robots.txt", import.meta.url), "utf8");
 const sitemap = await readFile(new URL("../site/sitemap.xml", import.meta.url), "utf8");
 const workflow = await readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
+const privacy = await readFile(new URL("../PRIVACY.md", import.meta.url), "utf8");
+const signing = await readFile(new URL("../CODE_SIGNING.md", import.meta.url), "utf8");
 
 test("website uses only stable release asset names that the product publishes", () => {
   const assets = [
@@ -89,4 +91,15 @@ test("Pages workflow deploys only the staged website", () => {
   assert.match(workflow, /node scripts\/build-site\.mjs/);
   assert.match(workflow, /path: build\/site/);
   assert.doesNotMatch(workflow, /path:\s*\.\s*$/m);
+});
+
+test("website publishes truthful privacy and code-signing boundaries", () => {
+  assert.match(html, /https:\/\/github\.com\/WSL043\/DSH-Portable\/blob\/main\/PRIVACY\.md/);
+  assert.match(html, /https:\/\/github\.com\/WSL043\/DSH-Portable\/blob\/main\/CODE_SIGNING\.md/);
+  assert.match(app, /Privacy/);
+  assert.match(app, /Code signing/);
+  assert.match(privacy, /does not operate a telemetry or analytics service/i);
+  assert.match(signing, /application is in progress/i);
+  assert.match(signing, /current release files are unsigned/i);
+  assert.match(signing, /Free code signing provided by SignPath\.io, certificate by SignPath Foundation/);
 });

@@ -139,6 +139,8 @@ The installed edition keeps the same data under `%LOCALAPPDATA%\DeepSeek-Herness
 
 DSH can execute local code, so use trusted models, plugins, and projects. The local service binds only to `127.0.0.1`, and the Portable shell disables DSH telemetry by default. `data` may contain API credentials and private conversations; protect it accordingly and prefer NTFS on removable Windows drives.
 
+Read the full [privacy notice](PRIVACY.md) and [code-signing status](CODE_SIGNING.md). Current Windows releases are unsigned while the open-source signing application with SignPath Foundation is in progress.
+
 ## Get help
 
 - [Report a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
