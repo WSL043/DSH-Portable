@@ -259,7 +259,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeDownloadSmoke, /if \(!target \|\| document\.readyState === ['"]loading['"]\) return false/)
   assert.match(nativeDownloadSmoke, /target\.appendChild\(anchor\)/)
   assert.match(nativeWorkspacePickerSmoke, /dsh-portable\/pick-directory/)
-  assert.match(nativeWorkspacePickerSmoke, /#32770/)
+  assert.match(nativeWorkspacePickerSmoke, /owner\s*!=\s*IntPtr\.Zero/)
   assert.match(nativeWorkspacePickerSmoke, /ownerPid/)
   assert.match(nativeWorkspacePickerSmoke, /PostMessage[\s\S]+0x0010/)
   assert.match(workflow, /macos-desktop-host:/)

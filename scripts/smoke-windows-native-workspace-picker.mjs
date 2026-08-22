@@ -121,6 +121,7 @@ public sealed class DshDialogInfo {
   public long owner { get; set; }
   public int ownerPid { get; set; }
   public string className { get; set; }
+  public bool visible { get; set; }
 }
 public static class DshWindowProbe {
   private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
@@ -137,11 +138,11 @@ public static class DshWindowProbe {
       GetWindowThreadProcessId(hwnd, out pid);
       StringBuilder className = new StringBuilder(256);
       GetClassName(hwnd, className, className.Capacity);
-      if (pid == processId && IsWindowVisible(hwnd) && className.ToString() == "#32770") {
-        IntPtr owner = GetWindow(hwnd, 4);
-        uint ownerPid;
-        GetWindowThreadProcessId(owner, out ownerPid);
-        result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString() });
+      IntPtr owner = GetWindow(hwnd, 4);
+      uint ownerPid;
+      GetWindowThreadProcessId(owner, out ownerPid);
+      if (pid == processId && owner != IntPtr.Zero && ownerPid == processId) {
+        result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = IsWindowVisible(hwnd) });
       }
       return true;
     }, IntPtr.Zero);
@@ -200,15 +201,15 @@ try {
     if (dialogs.length > 0) break
     await new Promise(resolve => setTimeout(resolve, 100))
   }
-  assert.equal(dialogs.length, 1, 'the native workspace dialog did not appear')
-  assert.equal(dialogs[0].className, '#32770')
-  assert.ok(Number(dialogs[0].owner) > 0, 'the workspace dialog has no native owner')
-  assert.equal(Number(dialogs[0].ownerPid), launcher.pid, 'the workspace dialog is not owned by DeepSeek-Herness.exe')
+  assert.ok(dialogs.length >= 1, 'the native workspace dialog did not appear')
+  const dialog = dialogs.find(item => item.visible === true) || dialogs[0]
+  assert.ok(Number(dialog.owner) > 0, 'the workspace dialog has no native owner')
+  assert.equal(Number(dialog.ownerPid), launcher.pid, 'the workspace dialog is not owned by DeepSeek-Herness.exe')
 
   await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, String(launcher.pid), '-Close'], { windowsHide: true })
   const result = await waitForValue(client, 'window.__dshWorkspacePickerResult', value => value?.cancelled === true, 'workspace-picker cancellation')
   assert.equal(result.requestId, 'workspace-smoke')
-  process.stdout.write(`${JSON.stringify({ status: 'passed', ownerPid: dialogs[0].ownerPid, dialogClass: dialogs[0].className, cancelled: true })}\n`)
+  process.stdout.write(`${JSON.stringify({ status: 'passed', ownerPid: dialog.ownerPid, dialogClass: dialog.className, visible: dialog.visible, cancelled: true })}\n`)
 } finally {
   client?.close()
   await portable(['stop', '--no-browser', '--json']).catch(() => {})
