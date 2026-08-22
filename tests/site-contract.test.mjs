@@ -4,6 +4,7 @@ import test from "node:test";
 
 const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
 const app = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
+const css = await readFile(new URL("../site/styles.css", import.meta.url), "utf8");
 const workflow = await readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
 
 test("website uses only stable release asset names that the product publishes", () => {
@@ -32,6 +33,15 @@ test("website exposes accessible platform selection and bilingual content", () =
   assert.match(html, /data-language-switch/);
   assert.match(html, /data-i18n="heroTitle"/);
   assert.match(app, /setLanguage\(initialLanguage\)/);
+});
+
+test("website ships its cinematic product stage with motion safeguards", () => {
+  assert.match(html, /assets\/hero-atmosphere\.png/);
+  assert.match(html, /data-product-stage/);
+  assert.match(app, /IntersectionObserver/);
+  assert.match(app, /prefers-reduced-motion: reduce/);
+  assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(css, /hero-atmosphere/);
 });
 
 test("Pages workflow deploys only the staged website", () => {
