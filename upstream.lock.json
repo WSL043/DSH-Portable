@@ -24,12 +24,12 @@
   "defaultPlugins": {
     "sessionDelete": {
       "package": "dsh-native-session-delete",
-      "version": "1.1.0",
-      "url": "https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-1.1.0.tgz",
-      "sha256": "8ee17b942f11bf5ac240c37f3e45332be951d6b9ab93c1694278a7a1e84f4f07",
-      "integrity": "sha512-zfb1CBLPLUKFeHhehwylBSxZrPC8zOBvm+fGWKy2xX5uaxqZjwJpVfCN/PMGpuqlJ+YXJ+YrjgH4kxs1PvOQ5g==",
+      "version": "1.1.1",
+      "url": "https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-1.1.1.tgz",
+      "sha256": "bb8dd1d6c3fa81e0b811bb0b16fc198bb8426855c047f6cad9562cd620e49b36",
+      "integrity": "sha512-22fk0Zq3QJRzfclm0Svjat4QpgQZwCdVJCnO7pbfMdBBlyPsS1oGZpJ6HODde82risd0YlPtZQ9Bvs3Q/vqalg==",
       "license": "MIT",
-      "reviewedCommit": "df06a9d834dab181cb6841f87f242a52da0a6c0d",
+      "reviewedCommit": "966ff699012b7c939188c1bf99f075433831902f",
       "filename": "dsh-native-session-delete.tgz"
     }
   },
