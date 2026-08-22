@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "homepage": "https://wsl043.github.io/DSH-Portable/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WSL043/DSH-Portable.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WSL043/DSH-Portable/issues"
+  },
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "site:build": "node scripts/build-site.mjs",

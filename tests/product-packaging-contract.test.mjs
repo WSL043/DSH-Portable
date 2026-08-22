@@ -117,23 +117,29 @@ test('the GitHub landing page gives beginners one obvious download path', async 
 })
 
 test('redistribution metadata keeps the canonical project discoverable without a custom license', async () => {
-  const [license, chinese, english, citation, contributing] = await Promise.all([
+  const [license, notice, chinese, english, citation, contributing, windowsBuild, macBuild, linuxBuild] = await Promise.all([
     read('LICENSE'),
+    read('NOTICE.md'),
     read('README.md'),
     read('README.en.md'),
     read('CITATION.cff'),
     read('CONTRIBUTING.md'),
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('scripts/build-linux.sh'),
   ])
   const canonical = 'https://github.com/WSL043/DSH-Portable'
 
   assert.match(license, /MIT License/)
-  assert.match(license, new RegExp(regexEscape(canonical)))
+  assert.doesNotMatch(license, new RegExp(regexEscape(canonical)))
+  assert.match(notice, new RegExp(regexEscape(canonical)))
   assert.match(chinese, /github\/downloads\/WSL043\/DSH-Portable\/total/)
   assert.match(english, /github\/downloads\/WSL043\/DSH-Portable\/total/)
-  assert.match(chinese, /规范来源地址/)
-  assert.match(english, /canonical project URL/i)
+  assert.match(chinese, /NOTICE\.md/)
+  assert.match(english, /NOTICE\.md/)
   assert.match(citation, new RegExp(regexEscape(canonical)))
   assert.match(contributing, /npm test/)
+  for (const build of [windowsBuild, macBuild, linuxBuild]) assert.match(build, /DSH-Portable-NOTICE\.md/)
   assert.doesNotMatch(license, /Non-Commercial|Commons Clause|no commercial/i)
 })
 

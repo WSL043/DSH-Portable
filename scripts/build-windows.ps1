@@ -55,6 +55,7 @@ function Copy-PortableSources([string]$Target) {
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-README.txt') (Join-Path $Target 'data\README.txt')
     Copy-Item (Join-Path $ProjectRoot 'templates\WORKSPACE-README.txt') (Join-Path $Target 'workspace\README.txt')
     Copy-Item (Join-Path $ProjectRoot 'LICENSE') (Join-Path $Target 'licenses\DSH-Portable-LICENSE.txt')
+    Copy-Item (Join-Path $ProjectRoot 'NOTICE.md') (Join-Path $Target 'licenses\DSH-Portable-NOTICE.md')
 }
 
 New-Item -ItemType Directory -Force -Path $OutputDir, $CacheDir, $Downloads, $Stage | Out-Null

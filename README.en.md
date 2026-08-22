@@ -149,7 +149,7 @@ Do not paste API keys, login credentials, or private conversations into an issue
 
 ## Open source and contributing
 
-DSH-Portable is available under the [MIT License](LICENSE). You may use, modify, and redistribute it, provided that the copyright notice in the license remains intact. That notice includes the [canonical project URL](https://github.com/WSL043/DSH-Portable), so recipients can find the original project and its updates.
+DSH-Portable uses the standard [MIT License](LICENSE). You may use, modify, and redistribute it, provided that its copyright and license notice remains intact. The source and every platform package also carry [NOTICE.md](NOTICE.md), which identifies the canonical project and the boundary of third-party components.
 
 Fixes and improvements are welcome as pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) first so a contribution does not duplicate a capability already provided by official DSH.
 

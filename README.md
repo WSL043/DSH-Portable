@@ -149,7 +149,7 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 
 ## 开源与贡献
 
-DSH-Portable 使用 [MIT 许可证](LICENSE)。你可以使用、修改和再分发，但需要保留许可证中的版权声明；该声明包含本项目的[规范来源地址](https://github.com/WSL043/DSH-Portable)，方便使用者找到原项目与后续更新。
+DSH-Portable 使用标准 [MIT 许可证](LICENSE)。你可以使用、修改和再分发，但需要保留许可证中的版权与许可声明。源码和每个平台的成品还会携带 [NOTICE.md](NOTICE.md)，明确标出本项目的规范来源与第三方组件边界。
 
 修复和改进欢迎直接提交 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，避免重复实现官方 DSH 已有的能力。
 
