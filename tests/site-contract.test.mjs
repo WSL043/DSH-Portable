@@ -5,6 +5,7 @@ import test from "node:test";
 const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
 const app = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
 const css = await readFile(new URL("../site/styles.css", import.meta.url), "utf8");
+const cname = await readFile(new URL("../site/CNAME", import.meta.url), "utf8");
 const workflow = await readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
 
 test("website uses only stable release asset names that the product publishes", () => {
@@ -67,9 +68,10 @@ test("common desktop widths keep the product proof in the hero composition", () 
   assert.match(css, /@media \(max-width: 1080px\)/);
 });
 
-test("website publishes a canonical Pages domain", () => {
-  assert.match(html, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/">/);
-  assert.match(html, /<meta property="og:url" content="https:\/\/wsl043\.github\.io\/DSH-Portable\/">/);
+test("website publishes its canonical custom domain", () => {
+  assert.equal(cname.trim(), "dsh-portable.js.org");
+  assert.match(html, /<link rel="canonical" href="https:\/\/dsh-portable\.js\.org\/">/);
+  assert.match(html, /<meta property="og:url" content="https:\/\/dsh-portable\.js\.org\/">/);
 });
 
 test("Pages workflow deploys only the staged website", () => {
