@@ -1,0 +1,19 @@
+{
+  "version": "0.4.1",
+  "zh": {
+    "summary": "这次更新让刚发布的插件更快被发现，同时保留明确、可控的新包安全确认。",
+    "highlights": [
+      "插件更新现在会在打开市场时重新检查，不会因为旧的更新缓存漏掉已经适配新版 DSH 的插件。",
+      "发布不足 24 小时的新版本会正常显示；只有真正安装前才要求确认，并且只为这个插件的这一次操作放行。",
+      "全新环境升级到 DSH Native Session Manager 1.1.0，支持浏览和搜索归档、恢复到原工作区，以及二次确认后的永久删除。"
+    ]
+  },
+  "en": {
+    "summary": "This release discovers newly published plugin updates sooner while keeping the fresh-package safety decision explicit and scoped.",
+    "highlights": [
+      "Fresh plugin releases are rechecked when the market opens, so DSH-compatible updates are not hidden behind an old update cache.",
+      "Versions published within 24 hours remain visible; confirmation is requested only before installation and bypasses the wait for that plugin and that operation only.",
+      "Fresh environments now include DSH Native Session Manager 1.1.0 with archive browsing and search, restore to the original workspace, and confirmed permanent deletion."
+    ]
+  }
+}

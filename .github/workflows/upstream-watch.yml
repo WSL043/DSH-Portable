@@ -18,6 +18,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - id: default_plugin
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-default-plugin.mjs
       - id: upstream
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -38,7 +42,7 @@ jobs:
         run: npm test
       - name: Package the tested candidate without creating a branch
         if: steps.upstream.outputs.changed == 'true'
-        run: git diff --binary -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json > official-dsh-candidate.patch
+        run: git diff --binary -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json launcher/default-plugins.mjs upstream.lock.json > official-dsh-candidate.patch
       - name: Upload the tested candidate
         if: steps.upstream.outputs.changed == 'true'
         uses: actions/upload-artifact@v7

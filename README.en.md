@@ -109,7 +109,7 @@ Fresh installs include the removable [permanent session deletion](https://github
 .\dsh.exe --profile web --dump-config
 ```
 
-Plugin changes never restart a running DSH automatically. They take effect after you restart at a convenient time. Install only plugins you trust.
+Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
 ## Updates and repair
 

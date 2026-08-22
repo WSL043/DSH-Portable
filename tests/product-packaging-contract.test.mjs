@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -196,8 +196,42 @@ test('release notes prioritize downloads and keep verification optional', async 
   assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
   assert.match(notes, /DSH-Portable-windows-x64\.exe/)
   assert.ok(notes.indexOf('DSH-Portable-windows-x64.exe') < notes.indexOf('<details>'))
+  assert.doesNotMatch(notes, /DSH-Portable-windows-x64-offline\.exe/, 'release notes must not link to an unpublished asset')
   assert.doesNotMatch(notes, /\b[a-f0-9]{64}\b/i)
   assert.equal((notes.match(/SHA256SUMS|\b[a-f0-9]{64}\b/gi) || []).length, 0)
+})
+
+test('release notes are version-specific instead of replaying one fixed feature list', async () => {
+  const manifest = JSON.parse(await read('package.json'))
+  const tag = `v${manifest.version}`
+  const [template, current, files] = await Promise.all([
+    read('templates/RELEASE-NOTES.md'),
+    read(`release-notes/${tag}.json`).then(JSON.parse),
+    readdir(path.join(root, 'release-notes')),
+  ])
+  const notes = renderReleaseNotes(template, tag, '0.1.1-rc.2', current)
+  const currentFingerprint = JSON.stringify({ zh: current.zh, en: current.en })
+
+  assert.equal(current.version, manifest.version)
+  for (const filename of files.filter(name => name !== `${tag}.json` && /^v.+\.json$/.test(name))) {
+    const other = JSON.parse(await read(`release-notes/${filename}`))
+    assert.notEqual(currentFingerprint, JSON.stringify({ zh: other.zh, en: other.en }), `${tag} repeats ${filename}`)
+  }
+  assert.match(notes, new RegExp(regexEscape(current.zh.summary)))
+  assert.match(notes, new RegExp(regexEscape(current.en.summary)))
+  assert.doesNotMatch(template, /设置中新增实时插件市场|DSH Settings now includes a live Plugin Market/)
+  assert.doesNotMatch(template, /rc\.8|SQLite backend/)
+})
+
+test('0.4.1 notes describe its actual plugin-update and session-manager changes', async () => {
+  const [template, descriptor] = await Promise.all([
+    read('templates/RELEASE-NOTES.md'),
+    read('release-notes/v0.4.1.json').then(JSON.parse),
+  ])
+  const notes = renderReleaseNotes(template, 'v0.4.1', '0.1.1-rc.2', descriptor)
+  assert.match(notes, /插件更新现在会在打开市场时重新检查/)
+  assert.match(notes, /fresh plugin releases are rechecked when the market opens/i)
+  assert.match(notes, /DSH Native Session Manager 1\.1\.0/)
 })
 
 test('publishing separates beginner downloads from machine update assets', async () => {
@@ -285,9 +319,12 @@ test('installable official preview updates become tested issue artifacts without
 })
 
 test('the bundled session-delete default is monitored as a verified candidate dependency', async () => {
-  const [workflow, updater] = await Promise.all([
+  const [workflow, updater, ci, publish, upstreamWatch] = await Promise.all([
     read('.github/workflows/default-plugin-watch.yml'),
     read('scripts/update-default-plugin.mjs'),
+    read('.github/workflows/ci.yml'),
+    read('.github/workflows/publish.yml'),
+    read('.github/workflows/upstream-watch.yml'),
   ])
 
   assert.match(workflow, /schedule:/)
@@ -306,6 +343,11 @@ test('the bundled session-delete default is monitored as a verified candidate de
   assert.match(updater, /upstream\.lock\.json/)
   assert.match(updater, /path\.join\(root, ['"]launcher['"], ['"]default-plugins\.mjs['"]\)/)
   assert.match(updater, /GITHUB_OUTPUT/)
+  assert.match(updater, /--check/)
+  assert.match(ci, /node scripts\/update-default-plugin\.mjs --check/)
+  assert.match(publish, /node scripts\/update-default-plugin\.mjs --check/)
+  assert.match(upstreamWatch, /node scripts\/update-default-plugin\.mjs/)
+  assert.match(upstreamWatch, /launcher\/default-plugins\.mjs/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {

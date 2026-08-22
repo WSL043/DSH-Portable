@@ -1,0 +1,19 @@
+{
+  "version": "0.4.0",
+  "zh": {
+    "summary": "插件市场首次进入正式版，Portable 的插件发现、安装和管理现在都留在同一个工作台里。",
+    "highlights": [
+      "设置中新增插件市场，可搜索、筛选并直接打开每个插件的项目主页。",
+      "插件卡片显示作者提供或项目说明中的真实截图，并按需加载。",
+      "全新环境默认包含可停用、可卸载的会话删除插件；现有用户的插件选择不会被覆盖。"
+    ]
+  },
+  "en": {
+    "summary": "The Plugin Market reaches the stable channel, keeping plugin discovery, installation, and management inside the Portable workspace.",
+    "highlights": [
+      "A searchable, filterable Plugin Market now lives in Settings, with direct links to each plugin project.",
+      "Plugin cards use real author or project screenshots and load them only when needed.",
+      "Fresh environments include the removable session-deletion plugin without overriding existing users' plugin choices."
+    ]
+  }
+}

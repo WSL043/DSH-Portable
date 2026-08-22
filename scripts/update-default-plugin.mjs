@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const packageName = 'dsh-native-session-delete'
 const repository = 'WSL043/dsh-native-session-delete'
+const checkOnly = process.argv.includes('--check')
 const headers = {
   accept: 'application/vnd.github+json',
   'user-agent': 'DSH-Portable-default-plugin-candidate',
@@ -62,6 +63,9 @@ if (asset.digest.toLowerCase() !== `sha256:${sha256}`) {
 }
 
 const changed = current.version !== version
+if (changed && checkOnly) {
+  throw new Error(`Bundled ${packageName}@${current.version} is behind the verified latest stable v${version}. Run node scripts/update-default-plugin.mjs and rebuild before publishing.`)
+}
 if (changed) {
   const next = {
     ...current,

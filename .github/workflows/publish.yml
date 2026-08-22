@@ -24,6 +24,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Refuse a release with an outdated bundled session manager
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-default-plugin.mjs --check
       - name: Resolve the release channel from the canonical product version
         id: version
         env:

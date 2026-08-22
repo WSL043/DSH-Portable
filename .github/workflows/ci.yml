@@ -27,8 +27,22 @@ jobs:
           tar -xzf actionlint.tar.gz actionlint
           ./actionlint
 
+  release-prerequisites:
+    name: Current bundled dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Require the latest verified stable session manager
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-default-plugin.mjs --check
+
   contracts:
     name: Contracts (${{ matrix.label }})
+    needs: release-prerequisites
     strategy:
       fail-fast: false
       matrix:
@@ -53,6 +67,7 @@ jobs:
 
   windows-build:
     name: Build Windows base artifacts
+    needs: release-prerequisites
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -336,6 +351,7 @@ jobs:
 
   macos-build:
     name: Build macOS (${{ matrix.arch }})
+    needs: release-prerequisites
     strategy:
       fail-fast: false
       matrix:
@@ -476,6 +492,7 @@ jobs:
 
   linux-build:
     name: Build Linux (${{ matrix.arch }})
+    needs: release-prerequisites
     strategy:
       fail-fast: false
       matrix:
