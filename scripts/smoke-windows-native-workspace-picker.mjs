@@ -124,6 +124,8 @@ public sealed class DshDialogInfo {
   public bool visible { get; set; }
 }
 public static class DshWindowProbe {
+  private const uint WM_COMMAND = 0x0111;
+  private const int IDCANCEL = 2;
   private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
   [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
@@ -131,6 +133,9 @@ public static class DshWindowProbe {
   [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
   [DllImport("user32.dll")] private static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maximum);
   [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
+  public static void Cancel(IntPtr hwnd) {
+    PostMessage(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), IntPtr.Zero);
+  }
   public static DshDialogInfo[] Find(int processId) {
     List<DshDialogInfo> result = new List<DshDialogInfo>();
     EnumWindows(delegate(IntPtr hwnd, IntPtr ignored) {
@@ -151,7 +156,7 @@ public static class DshWindowProbe {
 }
 '@
 $dialogs = @([DshWindowProbe]::Find($ProcessId))
-if ($Close) { foreach ($dialog in $dialogs) { [void][DshWindowProbe]::PostMessage([IntPtr]$dialog.hwnd, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) } }
+if ($Close) { foreach ($dialog in $dialogs) { [DshWindowProbe]::Cancel([IntPtr]$dialog.hwnd) } }
 ConvertTo-Json -Compress -InputObject @($dialogs)
 `
 

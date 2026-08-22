@@ -144,6 +144,7 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
 test('Windows workspace selection is owned by the native DSH window instead of a Node child process', async () => {
   const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   const bridge = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+  const smoke = await readFile(new URL('../scripts/smoke-windows-native-workspace-picker.mjs', import.meta.url), 'utf8')
 
   assert.match(bridge, /dsh-portable\/pick-directory/)
   assert.match(bridge, /dsh-portable\/pick-directory-result/)
@@ -151,6 +152,8 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(host, /ShowDialog\(this\)/)
   assert.match(host, /dsh-portable\/pick-directory-result/)
   assert.match(host, /BeginInvoke/)
+  assert.match(smoke, /0x0111/)
+  assert.match(smoke, /IDCANCEL/)
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
@@ -261,7 +264,9 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeWorkspacePickerSmoke, /dsh-portable\/pick-directory/)
   assert.match(nativeWorkspacePickerSmoke, /owner\s*!=\s*IntPtr\.Zero/)
   assert.match(nativeWorkspacePickerSmoke, /ownerPid/)
-  assert.match(nativeWorkspacePickerSmoke, /PostMessage[\s\S]+0x0010/)
+  assert.match(nativeWorkspacePickerSmoke, /WM_COMMAND\s*=\s*0x0111/)
+  assert.match(nativeWorkspacePickerSmoke, /IDCANCEL\s*=\s*2/)
+  assert.match(nativeWorkspacePickerSmoke, /PostMessage\(hwnd, WM_COMMAND, new IntPtr\(IDCANCEL\)/)
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)
