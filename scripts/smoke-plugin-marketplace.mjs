@@ -74,7 +74,7 @@ try {
   running = true
 
   const status = await getJson(host.url, '/dsh-market/status')
-  assert.equal(status.version, '0.1.0-beta.1')
+  assert.equal(status.version, '0.1.0-beta.2')
   assert.equal(status.restart, false, 'the Portable shell owns restart and update lifecycle')
   assert.equal(status.pnpm === true || status.pnpm?.available === true, true, 'the market must see Portable bundled pnpm')
 

@@ -1,0 +1,19 @@
+{
+  "version": "0.4.2",
+  "zh": {
+    "summary": "插件更新与兼容性提示现在更准确，也更容易采取正确动作。",
+    "highlights": [
+      "刚发布的插件更新会明确显示插件名和目标版本，并以安全确认提示呈现，不再伪装成全局错误。",
+      "仅有宿主版本范围不匹配时，诊断修复提示会优先更新到明确兼容当前 DSH 的插件版本，不再误导用户修改 bundle 顺序或 profile patch。",
+      "官网补充搜索引擎可读取的软件信息、站点地图和抓取规则，下载仍直接使用 GitHub Release。"
+    ]
+  },
+  "en": {
+    "summary": "Plugin updates and compatibility guidance are now more precise and actionable.",
+    "highlights": [
+      "Fresh plugin updates identify the package and target version in a safety confirmation instead of appearing as a global error.",
+      "When the only issue is a host-version range mismatch, the repair prompt now directs users to a plugin release that explicitly supports the current DSH version instead of suggesting bundle-order or profile-patch changes.",
+      "The website now exposes software metadata, a sitemap, and crawler guidance while keeping downloads on GitHub Releases."
+    ]
+  }
+}

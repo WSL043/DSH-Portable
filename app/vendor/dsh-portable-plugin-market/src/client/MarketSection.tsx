@@ -524,6 +524,7 @@ export function MarketSection(props: MarketSectionProps) {
   const [updatingName, setUpdatingName] = useState<string | null>(null)
   // Plugin blocked by pnpm's fresh-release safety wait; arms the update-now button.
   const [staleName, setStaleName] = useState<string | null>(null)
+  const [freshReleaseConfirmation, setFreshReleaseConfirmation] = useState<{ name: string; version: string | null } | null>(null)
   /** 1-based discover page; reset to 1 whenever the list shape changes. */
   const [page, setPage] = useState(1)
   /** Cards per discover page; changing it jumps back to page 1. */
@@ -1216,6 +1217,7 @@ export function MarketSection(props: MarketSectionProps) {
     setInstallError(null)
     setActivationWarnings([])
     setStaleName(null)
+    setFreshReleaseConfirmation(null)
     setUpdatingName(name)
     return fetch('/dsh-market/update', {
       method: 'POST',
@@ -1241,8 +1243,7 @@ export function MarketSection(props: MarketSectionProps) {
         } else {
           if (status === 409) {
             if (body.confirmationRequired === true && body.staleReason === 'release-age') {
-              setStaleName(name)
-              setInstallError(typeof body.error === 'string' ? body.error : t('updateFail'))
+              setFreshReleaseConfirmation({ name, version: updates[name]?.latest ?? null })
               return
             }
             if (body.agentsBusy === true) {
@@ -1266,7 +1267,7 @@ export function MarketSection(props: MarketSectionProps) {
       })
       .catch(error => setInstallError(t('updateFail') + ': ' + String(error)))
       .finally(() => setUpdatingName(null))
-  }, [refreshInstalled, t])
+  }, [refreshInstalled, t, updates])
 
   const doUseSkin = useCallback((name: string) => {
     setInstallError(null)
@@ -2197,6 +2198,17 @@ export function MarketSection(props: MarketSectionProps) {
           </div>
         )}
         {tab === 'installed' && <HostDependencyDiagnostics findings={hostDependencyFindings} t={t} />}
+        {freshReleaseConfirmation !== null && (
+          <div className={css.banner}>
+            <IconWarningOutline16 size={14} className={css.bannerIcon} />
+            <span className={css.grow}>
+              {t('freshUpdateConfirm')
+                .replace('{0}', freshReleaseConfirmation.name)
+                .replace('{1}', freshReleaseConfirmation.version ?? '')}
+            </span>
+            <Button size="sm" onClick={() => doUpdate(freshReleaseConfirmation.name, true)}>{t('updateNow')}</Button>
+          </div>
+        )}
       </div>
       {buildsSkipped !== null && (
         <div className={css.banner}>

@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type
 import { Button, DisclosureRow, IconChevronDownOutline14, IconChevronRightOutline14, IconLoadingOutline16, IconRefreshOutline14, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './Market.module.css'
 import type { Translate } from './market-data.ts'
+import { buildAiFixPrompt } from './ai-fix.ts'
 
 /** Mirrors BundleLayer in src/check.ts. */
 interface BundleLayer {
@@ -396,28 +397,7 @@ export function Diagnostics(props: { t: Translate }) {
    * across host versions, so plain copy + toast is the contract.)
    */
   const startAgentFix = () => {
-    const lines: string[] = []
-    lines.push(t('aiFixIntro').replace('{0}', report.profile))
-    lines.push('')
-    if (summary.errors.length > 0) {
-      lines.push(`${t('checkErrors')}:`)
-      for (const e of summary.errors) lines.push(`- ${e}`)
-      lines.push('')
-    }
-    if (summary.warnings.length > 0) {
-      lines.push(`${t('checkWarnings')}:`)
-      for (const w of summary.warnings) lines.push(`- ${w}`)
-      lines.push('')
-    }
-    if ((report.orderConflicts ?? []).length > 0) {
-      lines.push(`${t('catOrder')}:`)
-      for (const c of report.orderConflicts ?? []) lines.push(`- ${c.name}: ${c.reason}`)
-      lines.push('')
-    }
-    lines.push(t('aiFixScope'))
-    lines.push('')
-    lines.push(t('aiFixConservative'))
-    const prompt = lines.join('\n')
+    const prompt = buildAiFixPrompt(report, t)
 
     // Clipboard-first; on any failure (missing API or a rejected promise) show
     // the prompt in a selectable block so the user can still copy it by hand —

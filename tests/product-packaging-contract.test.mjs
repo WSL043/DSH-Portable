@@ -234,6 +234,17 @@ test('0.4.1 notes describe its actual plugin-update and session-manager changes'
   assert.match(notes, /DSH Native Session Manager 1\.1\.0/)
 })
 
+test('0.4.2 notes describe targeted compatibility guidance and website discovery', async () => {
+  const [template, descriptor] = await Promise.all([
+    read('templates/RELEASE-NOTES.md'),
+    read('release-notes/v0.4.2.json').then(JSON.parse),
+  ])
+  const notes = renderReleaseNotes(template, 'v0.4.2', '0.1.1-rc.2', descriptor)
+  assert.match(notes, /明确显示插件名和目标版本/)
+  assert.match(notes, /host-version range mismatch/i)
+  assert.match(notes, /站点地图/)
+})
+
 test('publishing separates beginner downloads from machine update assets', async () => {
   const [workflow, staging, windowsBuild, macBuild, updateCore, bootstrap] = await Promise.all([
     read('.github/workflows/publish.yml'),

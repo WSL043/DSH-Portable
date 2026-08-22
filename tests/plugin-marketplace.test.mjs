@@ -195,7 +195,47 @@ test('a newly published plugin asks for confirmation before pnpm mutates the pro
   assert.match(builtRoutes, /confirmationRequired:\s*true/)
 
   const client = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
-  assert.match(client, /body\.confirmationRequired === true[\s\S]*setStaleName\(name\)/)
+  assert.match(client, /body\.confirmationRequired === true[\s\S]*setFreshReleaseConfirmation/)
+})
+
+test('fresh-release confirmation is a plugin-scoped warning rather than a global error', async () => {
+  const [client, locales, styles] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
+  ])
+
+  assert.match(client, /freshReleaseConfirmation/)
+  assert.match(client, /confirmationRequired === true[\s\S]*setFreshReleaseConfirmation/)
+  assert.match(client, /className=\{css\.banner\}[\s\S]*freshReleaseConfirmation[\s\S]*doUpdate\(freshReleaseConfirmation\.name, true\)/)
+  assert.match(locales, /freshUpdateConfirm:/)
+  assert.match(styles, /\.banner\s*\{/)
+})
+
+test('AI repair prompt does not recommend bundle surgery for peer-range-only warnings', async () => {
+  const [diagnostics, promptSource, locales] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/Diagnostics.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/ai-fix.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
+  ])
+
+  assert.match(diagnostics, /buildAiFixPrompt\(report, t\)/)
+  assert.match(promptSource, /peerRangeOnly/)
+  assert.match(promptSource, /peerRangeOnly \? 'aiFixPeerRange' : 'aiFixScope'/)
+  assert.match(locales, /aiFixPeerRange:/)
+
+  const { buildAiFixPrompt } = await import('../app/vendor/dsh-portable-plugin-market/src/client/ai-fix.ts')
+  const messages = {
+    aiFixIntro: 'repair {0}', checkErrors: 'errors', checkWarnings: 'warnings', catOrder: 'order',
+    aiFixPeerRange: 'UPDATE THE PLUGIN; DO NOT EDIT THE PROFILE', aiFixScope: 'EDIT BUNDLES', aiFixConservative: 'ONLY THIS ISSUE',
+  }
+  const prompt = buildAiFixPrompt({
+    profile: 'portable/web', duplicates: [], multiVersion: [], orderConflicts: [],
+    peerMismatches: [{ satisfied: false }, { satisfied: true }, { satisfied: null }],
+    summary: { errors: [], warnings: ['plugin peer range does not match host'] },
+  }, key => messages[key])
+  assert.match(prompt, /UPDATE THE PLUGIN/)
+  assert.doesNotMatch(prompt, /EDIT BUNDLES/)
 })
 
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
