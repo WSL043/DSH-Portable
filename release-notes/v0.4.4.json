@@ -1,0 +1,21 @@
+{
+  "version": "0.4.4",
+  "zh": {
+    "summary": "设置页的权限语言和便携版选择器现在完整对齐 DeepSeek Harness，不再混入英文或浏览器原生下拉样式。",
+    "highlights": [
+      "内置权限模式统一显示为“只读”“工作区写入”和“完全访问”，英文界面仍显示对应英文名称。",
+      "便携版设置改用 DSH 原生菜单与箭头组件，开关和关闭行为的选择器与官方设置保持一致。",
+      "权限确认对话框同步使用当前界面语言；第三方插件提供的自定义权限名称保持原样。",
+      "启动更新检查、手动检查、组件更新、数据保留和失败回滚均重新通过自动化验收。"
+    ]
+  },
+  "en": {
+    "summary": "Permission language and Portable selectors now align with DeepSeek Harness instead of mixing locales or browser-native dropdowns.",
+    "highlights": [
+      "Read only, Workspace write, and Full access now use consistent localized labels across both permission surfaces.",
+      "Portable settings now use the native DSH menu and chevron primitives for consistent controls and interaction.",
+      "Full-access confirmation dialogs follow the active locale while custom permission names supplied by plugins remain unchanged.",
+      "Startup checks, manual checks, component updates, data preservation, and rollback were revalidated."
+    ]
+  }
+}

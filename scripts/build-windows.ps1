@@ -146,6 +146,8 @@ try {
     }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-session-export-ui.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Session export UI adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-permission-localization.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw "Permission localization adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
 
     & $NodeExe (Join-Path $ProjectRoot 'scripts\prune-runtime.mjs') (Join-Path $Stage 'app') win32 x64

@@ -190,8 +190,11 @@ const clickButton = names => `(() => {
 
 const clickChoice = names => `(() => {
   const names = ${JSON.stringify(names)}
-  const candidates = [...document.querySelectorAll('button,[role="menuitem"],[role="option"],[data-radix-collection-item]')]
-  let target = candidates.find(item => names.includes((item.textContent || '').trim()))
+  const menuCandidates = [...document.querySelectorAll('[role="menuitem"],[role="option"],[data-radix-collection-item]')]
+  let target = menuCandidates.find(item => names.includes((item.textContent || '').trim()))
+  if (!target) {
+    target = [...document.querySelectorAll('button')].find(item => names.includes((item.textContent || '').trim()))
+  }
   if (!target) {
     const leaf = [...document.querySelectorAll('body *')].find(item => item.children.length === 0 && names.includes((item.textContent || '').trim()))
     target = leaf?.closest('button,[role="menuitem"],[role="option"]') || leaf?.parentElement
@@ -321,6 +324,18 @@ try {
   assert.equal(state.theme, 'light')
 
   await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings tab')
+  const permissionLabels = await waitForValue(client, `(() => {
+    const text = document.body?.innerText || ''
+    return {
+      localized: ${JSON.stringify(targetLocale)} === 'zh'
+        ? /只读|工作区写入|完全访问/.test(text)
+        : /Read only|Workspace write|Full access/.test(text),
+      mixed: ${JSON.stringify(targetLocale)} === 'zh'
+        ? /Read only|Workspace Write|Workspace write|Full access/.test(text)
+        : /只读|工作区写入|完全访问/.test(text),
+    }
+  })()`, value => value?.localized, 'localized permission label in General settings')
+  assert.deepEqual(permissionLabels, { localized: true, mixed: false })
   const portableSettings = await waitForValue(client, `(() => {
     const text = document.body?.innerText || ''
     return {
@@ -331,6 +346,16 @@ try {
     }
   })()`, value => value?.title && value.updates && value.notifications && value.maintenance, 'Portable controls in General settings')
   assert.deepEqual(portableSettings, { title: true, updates: true, notifications: true, maintenance: true })
+  const readPortableSettings = `fetch('/dsh-portable/settings', { cache: 'no-store' }).then(response => response.json()).then(body => body.settings)`
+  const originalSettings = await evaluate(client, readPortableSettings)
+  const updateTitle = targetLocale === 'zh' ? '自动检查更新' : 'Automatic update checks'
+  await waitForValue(client, clickButton([updateTitle]), value => value?.clicked, 'automatic update selector')
+  await waitForValue(client, clickChoice([originalSettings.updateCheckEnabled ? (targetLocale === 'zh' ? '关闭' : 'Off') : (targetLocale === 'zh' ? '开启' : 'On')]), value => value?.clicked, 'automatic update choice')
+  const changedSettings = await waitForValue(client, readPortableSettings, value => value?.updateCheckEnabled === !originalSettings.updateCheckEnabled, 'saved automatic update preference')
+  await waitForValue(client, clickButton([updateTitle]), value => value?.clicked, 'automatic update selector restore')
+  await waitForValue(client, clickChoice([originalSettings.updateCheckEnabled ? (targetLocale === 'zh' ? '开启' : 'On') : (targetLocale === 'zh' ? '关闭' : 'Off')]), value => value?.clicked, 'automatic update choice restore')
+  const settingsRoundTrip = await waitForValue(client, readPortableSettings, value => value?.updateCheckEnabled === originalSettings.updateCheckEnabled, 'restored automatic update preference')
+  assert.equal(changedSettings.updateCheckEnabled, !settingsRoundTrip.updateCheckEnabled)
   if (generalScreenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(generalScreenshotPath), { recursive: true })

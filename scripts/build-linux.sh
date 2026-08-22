@@ -105,6 +105,7 @@ tar -xOf "$DEFAULT_PLUGIN_ARCHIVE" package/THIRD_PARTY_NOTICES.md > "$STAGE/lice
     "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund --install-links
 )
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-session-export-ui.mjs" "$STAGE/app"
+"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
 rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" linux "$ARCH"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"

@@ -72,6 +72,8 @@ const marketManifest = JSON.parse(readFileSync(marketManifestPath, 'utf8'))
 const marketRoot = path.dirname(marketManifestPath)
 const marketClientPath = requireFromApp.resolve('@wsl043/dsh-portable-plugin-market/client')
 const sessionExportClientPath = requireFromApp.resolve('@deepseek-ai/dsh-session-log-export/client')
+const permissionSettingsClientPath = requireFromApp.resolve('@deepseek-ai/dsh-client-ui-permission-presets/client')
+const conversationClientPath = requireFromApp.resolve('@deepseek-ai/dsh-client-ui-conversation/client')
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
 assert.equal(existsSync(dshBin), true, `official DSH CLI is missing: ${dshBin}`)
 assert.equal(pnpmManifest.version, '11.7.0', 'bundled pnpm version')
@@ -95,6 +97,15 @@ assert.match(
   /dsh-portable-native-download-v1/,
   'Session export client is missing the native desktop download lifecycle adapter',
 )
+for (const [clientPath, label] of [
+  [permissionSettingsClientPath, 'Permission settings'],
+  [conversationClientPath, 'Conversation permission'],
+]) {
+  const client = readFileSync(clientPath, 'utf8')
+  assert.match(client, /dsh-portable-permission-locale-v1/, `${label} client is missing the locale adapter`)
+  assert.match(client, /工作区写入/, `${label} client is missing the Chinese workspace-write label`)
+  assert.match(client, /完全访问/, `${label} client is missing the Chinese full-access label`)
+}
 
 await new Promise((resolve) => {
   process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, marketVersion: marketManifest.version, pnpmVersion: pnpmManifest.version, pnpmBin, loaded })}\n`, resolve)

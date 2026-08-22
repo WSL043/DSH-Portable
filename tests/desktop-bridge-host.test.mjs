@@ -101,6 +101,12 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.match(client, /padding:\s*['"]16px 0['"]/);
   assert.match(client, /item:\s*\{[^}]*padding:\s*['"]16px 0['"]/s)
   assert.match(client, /text:\s*\{[^}]*gap:\s*4/s)
+  assert.match(client, /primitives\.Menu/)
+  assert.match(client, /primitives\.IconChevronDownOutline14/)
+  assert.match(client, /aria-haspopup['"]?:\s*['"]menu['"]/)
+  assert.doesNotMatch(client, /h\(['"]select['"]/)
+  const smoke = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
+  assert.match(smoke, /settingsRoundTrip/)
   assert.doesNotMatch(client, /row:\s*\{[^}]*minHeight:\s*44/s)
   assert.doesNotMatch(client, /borderRadius:\s*10|background:\s*['"]var\(--dsw-alias-bg-layer-1/)
   assert.match(client, /updateCheckEnabled/)

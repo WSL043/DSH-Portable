@@ -34,7 +34,23 @@ window.__ModuleLoader__.load({
 
     function format(template, value) { return String(template).replace('{0}', String(value)) }
 
-    function PortableSettings(ctx, Button) {
+    function PortableSelector({ value, items, onSelect, label, primitives }) {
+      const h = React.createElement
+      const [open, setOpen] = React.useState(false)
+      const selected = items.find(item => item.id === value)
+      const anchor = h('button', {
+        type: 'button', className: 'dshPortableSelector', 'aria-label': label,
+        'aria-haspopup': 'menu', 'aria-expanded': open,
+        onClick: () => setOpen(current => !current),
+      }, selected?.label || value, h(primitives.IconChevronDownOutline14, { className: 'dshPortableSelectorChevron' }))
+      return h(primitives.Menu, {
+        open, anchor, items, selectedId: value, align: 'end', portal: true,
+        onClose: () => setOpen(false),
+        onSelect: id => { setOpen(false); onSelect(id) },
+      })
+    }
+
+    function PortableSettings(ctx, primitives) {
       const h = React.createElement
       const useEffect = React.useEffect
       const useState = React.useState
@@ -84,29 +100,34 @@ window.__ModuleLoader__.load({
         text: { display: 'flex', flex: 1, minWidth: 0, paddingRight: 48, flexDirection: 'column', gap: 4 },
         label: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 400, lineHeight: '22px' },
         hint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px' },
-        selector: { background: 'var(--dsw-alias-bg-module-platform)', height: 36, minWidth: 108, border: 0, borderRadius: 18, padding: '0 14px', color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 14, lineHeight: '22px', cursor: 'pointer' },
         controls: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 },
         status: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', marginTop: 8, wordBreak: 'break-word' },
       }
       if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t('title')), h('div', { style: styles.hint }, t('checking')))
       const booleanRow = (key, title, hint) => h('div', { style: styles.item },
         h('div', { style: styles.text }, h('div', { style: styles.label }, title), h('div', { style: styles.hint }, hint)),
-        h('select', { style: styles.selector, value: settings[key] ? 'on' : 'off', onChange: event => update({ [key]: event.target.value === 'on' }), 'aria-label': title },
-          h('option', { value: 'off' }, t('off')), h('option', { value: 'on' }, t('on'))))
+        h(PortableSelector, {
+          primitives, value: settings[key] ? 'on' : 'off', label: title,
+          items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
+          onSelect: value => update({ [key]: value === 'on' }),
+        }))
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
         booleanRow('updateCheckEnabled', t('updates'), t('updatesHint')),
         booleanRow('taskNotificationsEnabled', t('notifications'), t('notificationsHint')),
         h('div', { style: styles.item }, h('div', { style: styles.text }, h('div', { style: styles.label }, t('close'))),
-          h('select', { style: styles.selector, value: settings.closeBehavior, onChange: event => update({ closeBehavior: event.target.value }), 'aria-label': t('close') },
-            h('option', { value: 'tray' }, t('tray')), h('option', { value: 'exit' }, t('exit')))),
+          h(PortableSelector, {
+            primitives, value: settings.closeBehavior, label: t('close'),
+            items: [{ id: 'tray', label: t('tray') }, { id: 'exit', label: t('exit') }],
+            onSelect: closeBehavior => update({ closeBehavior }),
+          })),
         h('div', { style: { ...styles.item, alignItems: 'flex-start' } },
           h('div', { style: { ...styles.text, paddingRight: 0 } },
             h('div', { style: styles.label }, t('maintenance')), h('div', { style: styles.hint }, t('maintenanceHint')),
             h('div', { style: styles.controls },
-              h(Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
-              h(Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('repair', '/dsh-portable/repair') }, t('repair')),
-              h(Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('report', '/dsh-portable/support-report') }, t('report'))))),
+              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
+              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('repair', '/dsh-portable/repair') }, t('repair')),
+              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('report', '/dsh-portable/support-report') }, t('report'))))),
         message && h('div', { style: styles.status, role: 'status' }, message))
     }
 
@@ -186,8 +207,14 @@ window.__ModuleLoader__.load({
       if (React?.createElement && React?.useState && React?.useEffect) {
         try {
           const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-          if (primitives?.Button) {
-            const SettingsSection = () => PortableSettings(ctx, primitives.Button)
+          if (primitives?.Button && primitives?.Menu && primitives?.IconChevronDownOutline14) {
+            if (!document.getElementById('dsh-portable-settings-controls')) {
+              const style = document.createElement('style')
+              style.id = 'dsh-portable-settings-controls'
+              style.textContent = '.dshPortableSelector{background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;border-radius:18px;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex;white-space:nowrap}.dshPortableSelector:hover{background:var(--dsw-alias-interactive-bg-hover)}.dshPortableSelectorChevron{flex:none}'
+              document.head.appendChild(style)
+            }
+            const SettingsSection = () => PortableSettings(ctx, primitives)
             ctx.slots.inject('settings.general.item', () => ctx.slots.register({
               name: 'settings.general.item', id: 'portable', order: 60,
             }, SettingsSection))
