@@ -124,17 +124,19 @@ public sealed class DshDialogInfo {
   public bool visible { get; set; }
 }
 public static class DshWindowProbe {
-  private const uint WM_COMMAND = 0x0111;
-  private const int IDCANCEL = 2;
+  private const uint WM_CLOSE = 0x0010;
+  private const uint SMTO_BLOCK = 0x0001;
+  private const uint SMTO_ABORTIFHUNG = 0x0002;
   private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
   [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
   [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
   [DllImport("user32.dll")] private static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maximum);
-  [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
-  public static void Cancel(IntPtr hwnd) {
-    PostMessage(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), IntPtr.Zero);
+  [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out UIntPtr result);
+  public static bool Cancel(IntPtr hwnd) {
+    UIntPtr result;
+    return SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero;
   }
   public static DshDialogInfo[] Find(int processId) {
     List<DshDialogInfo> result = new List<DshDialogInfo>();
@@ -146,7 +148,7 @@ public static class DshWindowProbe {
       IntPtr owner = GetWindow(hwnd, 4);
       uint ownerPid;
       GetWindowThreadProcessId(owner, out ownerPid);
-      if (pid == processId && owner != IntPtr.Zero && ownerPid == processId) {
+      if (pid == processId && owner != IntPtr.Zero && ownerPid == processId && IsWindowVisible(hwnd) && className.ToString() == "#32770") {
         result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = IsWindowVisible(hwnd) });
       }
       return true;
@@ -156,7 +158,10 @@ public static class DshWindowProbe {
 }
 '@
 $dialogs = @([DshWindowProbe]::Find($ProcessId))
-if ($Close) { foreach ($dialog in $dialogs) { [DshWindowProbe]::Cancel([IntPtr]$dialog.hwnd) } }
+if ($Close) {
+  if ($dialogs.Count -ne 1) { throw "Expected one owned workspace dialog, found $($dialogs.Count)." }
+  if (-not [DshWindowProbe]::Cancel([IntPtr]$dialogs[0].hwnd)) { throw "The workspace dialog did not process WM_CLOSE." }
+}
 ConvertTo-Json -Compress -InputObject @($dialogs)
 `
 

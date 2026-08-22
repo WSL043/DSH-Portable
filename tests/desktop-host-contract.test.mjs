@@ -152,8 +152,8 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(host, /ShowDialog\(this\)/)
   assert.match(host, /dsh-portable\/pick-directory-result/)
   assert.match(host, /BeginInvoke/)
-  assert.match(smoke, /0x0111/)
-  assert.match(smoke, /IDCANCEL/)
+  assert.match(smoke, /SendMessageTimeout/)
+  assert.match(smoke, /WM_CLOSE\s*=\s*0x0010/)
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
@@ -264,9 +264,9 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeWorkspacePickerSmoke, /dsh-portable\/pick-directory/)
   assert.match(nativeWorkspacePickerSmoke, /owner\s*!=\s*IntPtr\.Zero/)
   assert.match(nativeWorkspacePickerSmoke, /ownerPid/)
-  assert.match(nativeWorkspacePickerSmoke, /WM_COMMAND\s*=\s*0x0111/)
-  assert.match(nativeWorkspacePickerSmoke, /IDCANCEL\s*=\s*2/)
-  assert.match(nativeWorkspacePickerSmoke, /PostMessage\(hwnd, WM_COMMAND, new IntPtr\(IDCANCEL\)/)
+  assert.match(nativeWorkspacePickerSmoke, /SendMessageTimeout/)
+  assert.match(nativeWorkspacePickerSmoke, /WM_CLOSE\s*=\s*0x0010/)
+  assert.match(nativeWorkspacePickerSmoke, /className\.ToString\(\) == "#32770"/)
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)
