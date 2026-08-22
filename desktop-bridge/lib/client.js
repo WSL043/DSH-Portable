@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: '@wsl043/dsh-portable-desktop-bridge',
   factory: function (require) {
     const exports = {}
-    const inject = ['slots', 'locale', 'theme', 'sessions', 'sessionLogDownload']
+    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'sessionLogDownload']
     const React = require('react')
 
     const copy = {
@@ -198,12 +198,37 @@ window.__ModuleLoader__.load({
 
       ctx.effect(() => {
         let active = true
+        let workspaceRequestSequence = 0
+        const pendingWorkspaceRequests = new Map()
+        const originalPickDirectory = ctx.workspaces?.pickDirectory
+        let nativePickDirectory = null
+        if (ctx.workspaces && typeof originalPickDirectory === 'function') {
+          nativePickDirectory = () => new Promise((resolve, reject) => {
+            const requestId = `workspace-${Date.now().toString(36)}-${++workspaceRequestSequence}`
+            pendingWorkspaceRequests.set(requestId, { resolve, reject })
+            webview.postMessage({
+              type: 'dsh-portable/pick-directory',
+              schemaVersion: 1,
+              requestId,
+            })
+          })
+          ctx.workspaces.pickDirectory = nativePickDirectory
+        }
         const publish = () => {
           if (active) webview.postMessage(sessionState(ctx))
         }
         const receive = event => {
           const message = event?.data
           if (!message) return
+          if (message.type === 'dsh-portable/pick-directory-result' && message.schemaVersion === 1) {
+            const requestId = String(message.requestId || '')
+            const pending = pendingWorkspaceRequests.get(requestId)
+            if (!pending) return
+            pendingWorkspaceRequests.delete(requestId)
+            if (message.error) pending.reject(new Error(String(message.error)))
+            else pending.resolve(message.cancelled ? null : String(message.path || '') || null)
+            return
+          }
           if (message.type === 'dsh-portable/download') {
             applyNativeDownload(ctx, message)
             return
@@ -229,6 +254,11 @@ window.__ModuleLoader__.load({
 
         return () => {
           active = false
+          if (ctx.workspaces?.pickDirectory === nativePickDirectory && typeof originalPickDirectory === 'function') {
+            ctx.workspaces.pickDirectory = originalPickDirectory
+          }
+          for (const pending of pendingWorkspaceRequests.values()) pending.resolve(null)
+          pendingWorkspaceRequests.clear()
           webview.removeEventListener?.('message', receive)
           stopSessions?.()
           stopLocale?.()

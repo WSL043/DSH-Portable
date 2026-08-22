@@ -80,6 +80,9 @@ function fakeContext(initialSessions) {
       open(id) { opened.push(id) },
       clear() { cleared += 1 },
     },
+    workspaces: {
+      async pickDirectory() { return 'node-owned-picker' },
+    },
     sessionLogDownload: {
       store: {
         getSnapshot: () => downloadSnapshot,
@@ -122,6 +125,41 @@ function fakeContext(initialSessions) {
   }
 }
 
+test('Portable desktop bridge owns workspace picking through the WebView host and restores the runtime on dispose', async () => {
+  const client = await loadBridgeClient()
+  const runtime = fakeContext(sessionList(1))
+  const original = runtime.ctx.workspaces.pickDirectory
+
+  client.exports.apply(runtime.ctx)
+  assert.notEqual(runtime.ctx.workspaces.pickDirectory, original)
+
+  const picked = runtime.ctx.workspaces.pickDirectory()
+  const request = client.posted.at(-1)
+  assert.equal(request.type, 'dsh-portable/pick-directory')
+  assert.equal(request.schemaVersion, 1)
+  assert.match(request.requestId, /^workspace-/)
+  client.send({
+    type: 'dsh-portable/pick-directory-result',
+    schemaVersion: 1,
+    requestId: request.requestId,
+    path: 'C:\\Projects\\Harness',
+  })
+  assert.equal(await picked, 'C:\\Projects\\Harness')
+
+  const cancelled = runtime.ctx.workspaces.pickDirectory()
+  const cancelRequest = client.posted.at(-1)
+  client.send({
+    type: 'dsh-portable/pick-directory-result',
+    schemaVersion: 1,
+    requestId: cancelRequest.requestId,
+    cancelled: true,
+  })
+  assert.equal(await cancelled, null)
+
+  runtime.dispose()
+  assert.equal(runtime.ctx.workspaces.pickDirectory, original)
+})
+
 function sessionList(count = 12) {
   const byId = {}
   const ids = []
@@ -149,7 +187,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList())
 
-  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'sessionLogDownload'])
+  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'sessionLogDownload'])
   client.exports.apply(runtime.ctx)
   assert.equal(runtime.slotEntries.length, 0)
 
@@ -226,8 +264,8 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*17/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*16/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*18/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*18/)
   assert.match(macBuild, /"shellSchema": 13/)
   assert.match(macBuild, /"requiredShellSchema": 13/)
 })

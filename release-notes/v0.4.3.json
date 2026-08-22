@@ -1,0 +1,19 @@
+{
+  "version": "0.4.3",
+  "zh": {
+    "summary": "Windows 工作区选择现在属于 DeepSeek Harness 桌面窗口，不再显示 Node 图标或只在任务栏闪烁。",
+    "highlights": [
+      "选择工作区时使用由主窗口持有的原生文件夹对话框，会直接显示在 DeepSeek Harness 前方。",
+      "对话框跟随桌面程序的任务栏身份和窗口生命周期，不再产生 Node 子进程窗口。",
+      "该桌面壳修复需要一次完整包升级；会话、设置、插件和工作区数据保持不变。"
+    ]
+  },
+  "en": {
+    "summary": "Workspace selection on Windows now belongs to the DeepSeek Harness desktop window instead of flashing as a Node window.",
+    "highlights": [
+      "The workspace picker is now a native folder dialog owned by the main DeepSeek Harness window and opens in front of it.",
+      "The dialog shares the desktop app's taskbar identity and lifetime instead of creating a Node child-process window.",
+      "This desktop-shell fix requires one full-package update; sessions, settings, plugins, and workspace data are preserved."
+    ]
+  }
+}

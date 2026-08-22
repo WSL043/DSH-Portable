@@ -141,6 +141,18 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.match(moveSmoke, /lifecycle failed[\s\S]+Move-Item -LiteralPath \$Root -Destination \$MovedRoot/)
 })
 
+test('Windows workspace selection is owned by the native DSH window instead of a Node child process', async () => {
+  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const bridge = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+
+  assert.match(bridge, /dsh-portable\/pick-directory/)
+  assert.match(bridge, /dsh-portable\/pick-directory-result/)
+  assert.match(host, /FolderBrowserDialog/)
+  assert.match(host, /ShowDialog\(this\)/)
+  assert.match(host, /dsh-portable\/pick-directory-result/)
+  assert.match(host, /BeginInvoke/)
+})
+
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
   const host = await read('launcher/windows/DSH-Portable.cs')
 
@@ -216,11 +228,12 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
 })
 
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
-  const [workflow, windowsSmoke, traySmoke, nativeDownloadSmoke, macSmoke] = await Promise.all([
+  const [workflow, windowsSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, macSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-desktop-host.ps1'),
     read('scripts/smoke-windows-native-tray.ps1'),
     read('scripts/smoke-windows-native-download.mjs'),
+    read('scripts/smoke-windows-native-workspace-picker.mjs'),
     read('scripts/smoke-macos-desktop-host.sh'),
   ])
 
@@ -230,6 +243,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /runner:\s*windows-2022/)
   assert.match(workflow, /runner:\s*windows-2025/)
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
+  assert.match(workflow, /smoke-windows-native-workspace-picker\.mjs/)
   assert.match(workflow, /\$DownloadRoot = Join-Path \$env:RUNNER_TEMP 'dsh-native-download-host'/)
   assert.match(workflow, /smoke-windows-native-download\.mjs \(Join-Path \$DownloadRoot 'DSH-Portable'\)/)
   assert.doesNotMatch(traySmoke, /[^\x00-\x7F]/, 'Windows PowerShell 5.1 smoke scripts must remain encoding-safe without a BOM')
@@ -244,6 +258,10 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeDownloadSmoke, /const target = document\.body/)
   assert.match(nativeDownloadSmoke, /if \(!target \|\| document\.readyState === ['"]loading['"]\) return false/)
   assert.match(nativeDownloadSmoke, /target\.appendChild\(anchor\)/)
+  assert.match(nativeWorkspacePickerSmoke, /dsh-portable\/pick-directory/)
+  assert.match(nativeWorkspacePickerSmoke, /#32770/)
+  assert.match(nativeWorkspacePickerSmoke, /ownerPid/)
+  assert.match(nativeWorkspacePickerSmoke, /PostMessage[\s\S]+0x0010/)
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)

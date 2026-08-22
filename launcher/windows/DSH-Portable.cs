@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.2.65534")]
-[assembly: AssemblyFileVersion("0.4.2.65534")]
+[assembly: AssemblyVersion("0.4.3.65534")]
+[assembly: AssemblyFileVersion("0.4.3.65534")]
 
 namespace DshPortable
 {
@@ -944,6 +944,17 @@ namespace DshPortable
                     });
                     return;
                 }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/pick-directory", StringComparison.Ordinal))
+                {
+                    object requestValue;
+                    string requestId = message.TryGetValue("requestId", out requestValue)
+                        ? Convert.ToString(requestValue)
+                        : String.Empty;
+                    if (!Regex.IsMatch(requestId ?? String.Empty, "^workspace-[A-Za-z0-9-]{1,96}$")) return;
+                    BeginInvoke((MethodInvoker)delegate { ShowWorkspaceDirectoryPicker(requestId); });
+                    return;
+                }
                 TrayBridgeState state = json.Deserialize<TrayBridgeState>(eventArgs.WebMessageAsJson);
                 if (state == null || state.type != "dsh-portable/state" || state.schemaVersion != 1) return;
                 if (state.sessions == null) state.sessions = new List<TrayBridgeSession>();
@@ -962,6 +973,41 @@ namespace DshPortable
             {
                 // A malformed or future bridge payload cannot remove the native Open/Exit fallback.
             }
+        }
+
+        private void ShowWorkspaceDirectoryPicker(string requestId)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/pick-directory-result" },
+                { "schemaVersion", 1 },
+                { "requestId", requestId },
+            };
+            try
+            {
+                RestoreFromTray();
+                Activate();
+                BringToFront();
+                using (FolderBrowserDialog dialog = new FolderBrowserDialog())
+                {
+                    dialog.Description = L("选择工作区文件夹", "Select a workspace folder");
+                    dialog.ShowNewFolderButton = true;
+                    if (dialog.ShowDialog(this) == DialogResult.OK && Directory.Exists(dialog.SelectedPath))
+                        result["path"] = Path.GetFullPath(dialog.SelectedPath);
+                    else
+                        result["cancelled"] = true;
+                }
+            }
+            catch (Exception error)
+            {
+                result["error"] = error.Message;
+            }
+            try
+            {
+                if (webView != null && webView.CoreWebView2 != null)
+                    webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
+            }
+            catch { }
         }
 
         private void DisposeTrayIcon()

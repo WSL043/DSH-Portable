@@ -257,6 +257,11 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $DownloadRoot
           if ($LASTEXITCODE -ne 0) { throw "Windows download-smoke extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-windows-native-download.mjs (Join-Path $DownloadRoot 'DSH-Portable')
+          $WorkspacePickerRoot = Join-Path $env:RUNNER_TEMP 'dsh-native-workspace-picker-host'
+          New-Item -ItemType Directory -Force -Path $WorkspacePickerRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $WorkspacePickerRoot
+          if ($LASTEXITCODE -ne 0) { throw "Windows workspace-picker smoke extraction failed with exit code $LASTEXITCODE" }
+          node scripts/smoke-windows-native-workspace-picker.mjs (Join-Path $WorkspacePickerRoot 'DSH-Portable')
 
   windows-bootstrap-smoke:
     name: Windows lightweight bootstrap

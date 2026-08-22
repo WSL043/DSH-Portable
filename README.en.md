@@ -97,7 +97,7 @@ Managed paths repair themselves after a move; external projects remain where you
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
-Fresh installs include the removable [permanent session deletion](https://github.com/WSL043/dsh-native-session-delete) plugin. Permanent deletion always asks for a second confirmation and does not replace recoverable Archive. Normal upgrades do not reinstall a plugin an existing user removed.
+Fresh installs include the removable [permanent session deletion](https://github.com/WSL043/dsh-native-session-manager) plugin. Permanent deletion always asks for a second confirmation and does not replace recoverable Archive. Normal upgrades do not reinstall a plugin an existing user removed.
 
 `dsh.exe` is the command-line entry point for advanced users, not another desktop launcher:
 
