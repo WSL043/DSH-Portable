@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If DSH-Portable supports your work, please cite the canonical repository."
+title: "DSH-Portable"
+type: software
+authors:
+  - family-names: "WSL043"
+repository-code: "https://github.com/WSL043/DSH-Portable"
+url: "https://wsl043.github.io/DSH-Portable/"
+license: MIT

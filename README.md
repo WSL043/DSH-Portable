@@ -20,6 +20,7 @@
 
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=171717" alt="最新版本"></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=%E4%B8%8B%E8%BD%BD&color=171717" alt="GitHub 下载量"></a>
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-171717?style=flat-square" alt="支持 Windows、macOS 和 Linux">
   <a href="https://github.com/WSL043/DSH-Portable/stargazers"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="GitHub Star"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT 许可证"></a>
@@ -145,6 +146,12 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 - [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
 
 请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
+
+## 开源与贡献
+
+DSH-Portable 使用 [MIT 许可证](LICENSE)。你可以使用、修改和再分发，但需要保留许可证中的版权声明；该声明包含本项目的[规范来源地址](https://github.com/WSL043/DSH-Portable)，方便使用者找到原项目与后续更新。
+
+修复和改进欢迎直接提交 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，避免重复实现官方 DSH 已有的能力。
 
 <details>
 <summary><strong>从源码构建</strong></summary>

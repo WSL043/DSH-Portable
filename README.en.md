@@ -20,6 +20,7 @@
 
 <p align="center">
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=release&style=flat-square&color=171717" alt="Latest release"></a>
+  <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=downloads&color=171717" alt="GitHub downloads"></a>
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-171717?style=flat-square" alt="Windows, macOS, and Linux">
   <a href="https://github.com/WSL043/DSH-Portable/stargazers"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="GitHub stars"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT license"></a>
@@ -145,6 +146,12 @@ DSH can execute local code, so use trusted models, plugins, and projects. The lo
 - [Join a discussion](https://github.com/WSL043/DSH-Portable/discussions)
 
 Do not paste API keys, login credentials, or private conversations into an issue.
+
+## Open source and contributing
+
+DSH-Portable is available under the [MIT License](LICENSE). You may use, modify, and redistribute it, provided that the copyright notice in the license remains intact. That notice includes the [canonical project URL](https://github.com/WSL043/DSH-Portable), so recipients can find the original project and its updates.
+
+Fixes and improvements are welcome as pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) first so a contribution does not duplicate a capability already provided by official DSH.
 
 <details>
 <summary><strong>Build from source</strong></summary>

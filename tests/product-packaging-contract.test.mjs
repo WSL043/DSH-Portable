@@ -116,6 +116,27 @@ test('the GitHub landing page gives beginners one obvious download path', async 
   assert.doesNotMatch(chineseReadme, /codex|chatgpt|dsh-codex-subscription/i)
 })
 
+test('redistribution metadata keeps the canonical project discoverable without a custom license', async () => {
+  const [license, chinese, english, citation, contributing] = await Promise.all([
+    read('LICENSE'),
+    read('README.md'),
+    read('README.en.md'),
+    read('CITATION.cff'),
+    read('CONTRIBUTING.md'),
+  ])
+  const canonical = 'https://github.com/WSL043/DSH-Portable'
+
+  assert.match(license, /MIT License/)
+  assert.match(license, new RegExp(regexEscape(canonical)))
+  assert.match(chinese, /github\/downloads\/WSL043\/DSH-Portable\/total/)
+  assert.match(english, /github\/downloads\/WSL043\/DSH-Portable\/total/)
+  assert.match(chinese, /规范来源地址/)
+  assert.match(english, /canonical project URL/i)
+  assert.match(citation, new RegExp(regexEscape(canonical)))
+  assert.match(contributing, /npm test/)
+  assert.doesNotMatch(license, /Non-Commercial|Commons Clause|no commercial/i)
+})
+
 test('Simplified Chinese is the default GitHub landing page and English is a complete peer', async () => {
   const chinese = await read('README.md')
   const english = await read('README.en.md')
