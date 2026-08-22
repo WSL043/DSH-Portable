@@ -1223,6 +1223,20 @@ export function mountMarketRoutes(
                 })
                 return
               }
+              // pnpm intentionally delays very fresh registry releases. Do
+              // not run a command that will silently keep the old version and
+              // only explain that afterwards. Ask first, without touching the
+              // profile; the existing explicit retry scopes the age bypass to
+              // this package and this one command.
+              if (!force && !isGit && selfChannel === null && await latestPublishedRecently(name) === true) {
+                sendJson(response, 409, {
+                  error: '这个版本刚发布。为保留新包安全等待，Portable 不会自动绕过；如果你确认现在更新，请选择「立即更新」。 / This version was newly published. Portable keeps the fresh-package safety wait unless you explicitly choose "Update now".',
+                  stale: true,
+                  staleReason: 'release-age',
+                  confirmationRequired: true,
+                })
+                return
+              }
             }
             const repoKey = isGit ? spec.slice('github:'.length).replace(/#.*$/, '').toLowerCase() : null
             // Captured BEFORE pnpm replaces the files: afterwards the loader

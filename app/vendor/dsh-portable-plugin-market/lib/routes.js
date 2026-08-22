@@ -1167,14 +1167,28 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                             const refuse = selfChannel === null
                                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
                                 : installedVersion !== null && registryLatest !== null && installedVersion === registryLatest;
-                            if (refuse) {
+                if (refuse) {
                                 logEvent('info', 'update', `${name} refused: latest=${registryLatest} is not newer than installed=${installedVersion}`);
                                 sendJson(response, 400, {
                                     error: `已是最新：registry 的 latest 是 ${registryLatest}，不高于已装的 ${installedVersion}，更新会造成降级。 / Already current: the registry's latest (${registryLatest}) is not newer than the installed ${installedVersion}, so updating would downgrade it.`,
                                 });
-                                return;
-                            }
-                        }
+                    return;
+                }
+                // pnpm intentionally delays very fresh registry releases. Do
+                // not run a command that will silently keep the old version and
+                // only explain that afterwards. Ask first, without touching the
+                // profile; the existing explicit retry scopes the age bypass to
+                // this package and this one command.
+                if (!force && !isGit && selfChannel === null && await latestPublishedRecently(name) === true) {
+                    sendJson(response, 409, {
+                        error: '这个版本刚发布。为保留新包安全等待，Portable 不会自动绕过；如果你确认现在更新，请选择「立即更新」。 / This version was newly published. Portable keeps the fresh-package safety wait unless you explicitly choose "Update now".',
+                        stale: true,
+                        staleReason: 'release-age',
+                        confirmationRequired: true,
+                    });
+                    return;
+                }
+            }
                         const repoKey = isGit ? spec.slice('github:'.length).replace(/#.*$/, '').toLowerCase() : null;
                         // Captured BEFORE pnpm replaces the files: afterwards the loader
                         // inventory reads exactly the same, because replacing a package

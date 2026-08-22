@@ -753,7 +753,10 @@ export function MarketSection(props: MarketSectionProps) {
         setRestartEnabled(status.restart === true)
       })
       .catch(() => {})
-    refreshInstalled()
+    // Opening the market is an explicit freshness boundary. The server keeps
+    // a short cache for incidental status polling, but a user who opens this
+    // page should immediately see a plugin release that became available.
+    refreshInstalled(true)
   }, [refreshInstalled, loadCatalog])
 
   // Pending-restart flags survive tab switches and page reloads, scoped to
@@ -1237,6 +1240,11 @@ export function MarketSection(props: MarketSectionProps) {
           refreshInstalled()
         } else {
           if (status === 409) {
+            if (body.confirmationRequired === true && body.staleReason === 'release-age') {
+              setStaleName(name)
+              setInstallError(typeof body.error === 'string' ? body.error : t('updateFail'))
+              return
+            }
             if (body.agentsBusy === true) {
               const running = Array.isArray(body.runningAgents) && body.runningAgents.length > 0 ? ` (${body.runningAgents.join(', ')})` : ''
               setInstallError(t('agentBusyUpdate') + running)

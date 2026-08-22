@@ -18,7 +18,7 @@ test('the bundled market explicitly declares each verified official DSH preview 
   assert.ok(ranges.includes(`^${upstream.dsh.version}`))
 })
 
-test('the 0.4 market release pins one live visual catalog and no curated extension cards', async () => {
+test('the 0.4 product line pins one live visual catalog and no curated extension cards', async () => {
   const [product, app, lock, patch, chinese, english] = await Promise.all([
     read('package.json').then(JSON.parse),
     read('app/package.json').then(JSON.parse),
@@ -28,7 +28,7 @@ test('the 0.4 market release pins one live visual catalog and no curated extensi
     read('README.en.md'),
   ])
 
-  assert.match(product.version, /^0\.4\.0(?:-rc\.[1-9]\d*)?$/)
+  assert.match(product.version, /^0\.4\.\d+(?:-rc\.[1-9]\d*)?$/)
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(app.dependencies.dshmarket, undefined)
 
@@ -163,6 +163,39 @@ test('the Portable-owned market consumes Awesome directly without plugin-specifi
   assert.match(notice, /dsh-market/i)
   assert.match(notice, /MIT/i)
   assert.equal(manifest.homepage, 'https://github.com/WSL043/DSH-Portable')
+})
+
+test('opening the market revalidates installed-plugin updates instead of serving the 30-minute cache', async () => {
+  const [section, builtClient] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/client/client.js'),
+  ])
+  const initialEffect = section.match(/useEffect\(\(\) => \{\s*void loadCatalog\(\)[\s\S]*?\n\s*\}, \[refreshInstalled, loadCatalog\]\)/)?.[0] ?? ''
+
+  assert.match(initialEffect, /refreshInstalled\(true\)/)
+  assert.doesNotMatch(initialEffect, /refreshInstalled\(\)\s*$/m)
+  assert.match(builtClient, /refreshInstalled\(true\)/)
+})
+
+test('a newly published plugin asks for confirmation before pnpm mutates the profile', async () => {
+  const [routes, builtRoutes] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
+    read('app/vendor/dsh-portable-plugin-market/lib/routes.js'),
+  ])
+  const updateRoute = routes.slice(routes.indexOf("path: '/dsh-market/update'"), routes.indexOf("path: '/dsh-market/setup-pnpm'"))
+  const confirmation = updateRoute.indexOf('confirmationRequired: true')
+  const mutation = updateRoute.indexOf('await runPlugin(config.profile, addArgs)')
+
+  assert.ok(confirmation >= 0, 'fresh releases must produce an explicit confirmation response')
+  assert.ok(mutation >= 0, 'test fixture must include the real plugin mutation boundary')
+  assert.ok(confirmation < mutation, 'confirmation must happen before pnpm changes the profile')
+  assert.match(updateRoute, /if \(!force && !isGit[\s\S]*latestPublishedRecently\(name\)/)
+  assert.match(updateRoute, /staleReason:\s*'release-age'/)
+  assert.match(updateRoute, /force:[\s\S]*RELEASE_AGE_OVERRIDE/)
+  assert.match(builtRoutes, /confirmationRequired:\s*true/)
+
+  const client = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  assert.match(client, /body\.confirmationRequired === true[\s\S]*setStaleName\(name\)/)
 })
 
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
