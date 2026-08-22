@@ -10,7 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>下载</strong></a>
+  <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
+  · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>下载</strong></a>
   · <a href="#三步启动">开始使用</a>
   · <a href="#插件">插件</a>
   · <a href="#获取帮助">帮助</a>

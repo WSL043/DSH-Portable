@@ -8,7 +8,9 @@
   <meta property="og:title" content="DSH-Portable">
   <meta property="og:description" content="DeepSeek Harness, wherever you work.">
   <meta property="og:type" content="website">
-  <meta property="og:image" content="assets/dsh-interface-zh.png">
+  <meta property="og:url" content="https://wsl043.github.io/DSH-Portable/">
+  <meta property="og:image" content="https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png">
+  <link rel="canonical" href="https://wsl043.github.io/DSH-Portable/">
   <title>DSH-Portable</title>
   <link rel="icon" href="assets/DSH-Portable.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
@@ -22,6 +24,7 @@
       <a class="nav-link nav-link-wide" href="#portable" data-i18n="navPortable">便携体验</a>
       <a class="nav-link nav-link-wide" href="#downloads" data-i18n="navDownload">下载</a>
       <a class="nav-link nav-link-wide" href="https://github.com/WSL043/DSH-Portable" data-i18n="navGithub">GitHub</a>
+      <button class="motion-control" type="button" aria-pressed="false" data-motion-control>动效</button>
       <button class="language-switch" type="button" aria-label="Switch language" data-language-switch>EN</button>
       <a class="header-download" data-primary-download href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe" data-i18n="headerDownload">下载</a>
     </nav>
@@ -52,9 +55,9 @@
     <section class="portable-story reveal" id="portable">
       <div class="story-intro"><p class="section-kicker" data-i18n="portableKicker">随处继续</p><h2 data-i18n="portableTitle">一个目录。任何电脑。</h2><p data-i18n="portableIntro">平时照常工作。需要迁移时，从托盘完全退出，再复制整个 DSH-Portable 文件夹。</p></div>
       <ol class="journey" data-journey>
-        <li><span>01</span><strong data-i18n="journeyDesktop">在当前电脑工作</strong><p data-i18n="journeyDesktopText">会话、插件和工作区持续保存在便携目录。</p></li>
-        <li><span>02</span><strong data-i18n="journeyMove">复制整个目录</strong><p data-i18n="journeyMoveText">放进移动硬盘、U 盘或你选择的位置。</p></li>
-        <li><span>03</span><strong data-i18n="journeyContinue">在另一台电脑继续</strong><p data-i18n="journeyContinueText">重新打开后，程序会修复由自己管理的路径。</p></li>
+        <li data-journey-step><span>01</span><strong data-i18n="journeyDesktop">在当前电脑工作</strong><p data-i18n="journeyDesktopText">会话、插件和工作区持续保存在便携目录。</p></li>
+        <li data-journey-step><span>02</span><strong data-i18n="journeyMove">复制整个目录</strong><p data-i18n="journeyMoveText">放进移动硬盘、U 盘或你选择的位置。</p></li>
+        <li data-journey-step><span>03</span><strong data-i18n="journeyContinue">在另一台电脑继续</strong><p data-i18n="journeyContinueText">重新打开后，程序会修复由自己管理的路径。</p></li>
       </ol>
     </section>
 
