@@ -44,6 +44,34 @@ test("website ships its cinematic product stage with motion safeguards", () => {
   assert.match(css, /hero-atmosphere/);
 });
 
+test("website lets visitors override motion without discarding the system preference", () => {
+  assert.match(html, /data-motion-control/);
+  assert.match(app, /dsh-portable-motion/);
+  assert.match(app, /systemMotionPreference\.addEventListener\("change"/);
+  assert.match(app, /dataset\.motion = resolvedMotion/);
+  assert.match(css, /html\[data-motion="full"\]/);
+  assert.match(css, /html\[data-motion="reduced"\]/);
+});
+
+test("website motion tells the portable story instead of adding decorative noise", () => {
+  assert.match(html, /data-journey-step/);
+  assert.match(app, /data-journey-step/);
+  assert.match(app, /--journey-progress/);
+  assert.match(css, /@keyframes atmosphere-drift/);
+  assert.match(css, /@keyframes stage-float/);
+  assert.match(css, /--journey-progress/);
+});
+
+test("common desktop widths keep the product proof in the hero composition", () => {
+  assert.doesNotMatch(css, /@media \(max-width: 1280px\)[\s\S]{0,500}grid-template-columns:\s*1fr/);
+  assert.match(css, /@media \(max-width: 1080px\)/);
+});
+
+test("website publishes a canonical Pages domain", () => {
+  assert.match(html, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/">/);
+  assert.match(html, /<meta property="og:url" content="https:\/\/wsl043\.github\.io\/DSH-Portable\/">/);
+});
+
 test("Pages workflow deploys only the staged website", () => {
   assert.match(workflow, /node scripts\/build-site\.mjs/);
   assert.match(workflow, /path: build\/site/);

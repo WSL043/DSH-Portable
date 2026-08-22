@@ -21,7 +21,54 @@ const copy = {
 
 const zhCopy = new Map([...document.querySelectorAll("[data-i18n]")].map((element) => [element.dataset.i18n, element.innerHTML]));
 const languageSwitch = document.querySelector("[data-language-switch]");
+const motionControl = document.querySelector("[data-motion-control]");
 const productShot = document.querySelector("[data-product-shot]");
+const systemMotionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+function readSavedMotion() {
+  try { return localStorage.getItem("dsh-portable-motion"); }
+  catch { return null; }
+}
+
+function saveMotion(preference) {
+  try { localStorage.setItem("dsh-portable-motion", preference); }
+  catch { /* Storage is an enhancement, not a requirement. */ }
+}
+
+function motionEnabled() {
+  return document.documentElement.dataset.motion === "full";
+}
+
+function updateMotionControlCopy() {
+  const english = document.documentElement.lang.startsWith("en");
+  const enabled = motionEnabled();
+  motionControl.textContent = english ? `Motion ${enabled ? "on" : "off"}` : `动效${enabled ? "开" : "关"}`;
+  motionControl.setAttribute("aria-label", english
+    ? `${enabled ? "Disable" : "Enable"} page motion`
+    : `${enabled ? "关闭" : "开启"}页面动效`);
+  motionControl.setAttribute("aria-pressed", String(enabled));
+}
+
+function applyMotion(preference = "auto", persist = false) {
+  const resolvedMotion = preference === "full" || (preference === "auto" && !systemMotionPreference.matches)
+    ? "full"
+    : "reduced";
+  document.documentElement.dataset.motion = resolvedMotion;
+  if (persist) saveMotion(resolvedMotion);
+  updateMotionControlCopy();
+  if (resolvedMotion === "reduced") {
+    document.documentElement.style.setProperty("--pointer-x", "0px");
+    document.documentElement.style.setProperty("--pointer-y", "0px");
+    document.documentElement.style.setProperty("--stage-y", "0deg");
+    document.documentElement.style.setProperty("--stage-x", "0deg");
+  }
+}
+
+applyMotion(readSavedMotion() || "auto");
+motionControl.addEventListener("click", () => applyMotion(motionEnabled() ? "reduced" : "full", true));
+systemMotionPreference.addEventListener("change", () => {
+  if (!readSavedMotion()) applyMotion("auto");
+});
 
 function readSavedLanguage() {
   try { return localStorage.getItem("dsh-portable-language"); }
@@ -50,6 +97,7 @@ function setLanguage(language) {
   document.querySelector("[data-i18n='downloadFor']").textContent = primaryLabel(lang, platform);
   languageSwitch.textContent = lang === "en" ? "中" : "EN";
   languageSwitch.setAttribute("aria-label", lang === "en" ? "切换到中文" : "Switch to English");
+  updateMotionControlCopy();
   productShot.src = lang === "en" ? "assets/dsh-interface-en.png" : "assets/dsh-interface-zh.png";
   productShot.alt = lang === "en" ? "DeepSeek Harness workspace in DSH-Portable" : "DSH-Portable 中的 DeepSeek Harness 桌面工作台";
   saveLanguage(lang);
@@ -122,20 +170,25 @@ const primaryFiles = {
 };
 document.querySelectorAll("[data-primary-download]").forEach((link) => { link.href = releaseBase + primaryFiles[platform]; });
 
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const header = document.querySelector("[data-header]");
 const hero = document.querySelector("[data-hero]");
 const stage = document.querySelector("[data-product-stage]");
 const pathStack = document.querySelector(".path-stack");
+const journey = document.querySelector("[data-journey]");
+const journeySteps = [...document.querySelectorAll("[data-journey-step]")];
 let ticking = false;
 
 function updateScrollState() {
   const scrollTop = window.scrollY;
   header.classList.toggle("is-scrolled", scrollTop > 24);
-  if (!reducedMotion.matches) {
+  if (motionEnabled()) {
     const progress = Math.min(1, Math.max(0, scrollTop / Math.max(hero.offsetHeight, 1)));
     pathStack.style.transform = `translate3d(0, ${progress * 34}px, 0)`;
     stage.style.translate = `0 ${progress * 18}px`;
+    const journeyRect = journey.getBoundingClientRect();
+    const journeyProgress = Math.min(1, Math.max(0, (window.innerHeight * .78 - journeyRect.top) / (journeyRect.height + window.innerHeight * .48)));
+    journey.style.setProperty("--journey-progress", journeyProgress.toFixed(3));
+    journeySteps.forEach((step, index) => step.classList.toggle("is-active", journeyProgress >= index / Math.max(journeySteps.length - .35, 1)));
   }
   ticking = false;
 }
@@ -147,7 +200,7 @@ window.addEventListener("scroll", () => {
 }, { passive: true });
 
 hero.addEventListener("pointermove", (event) => {
-  if (reducedMotion.matches || event.pointerType === "touch") return;
+  if (!motionEnabled() || event.pointerType === "touch") return;
   const rect = hero.getBoundingClientRect();
   const x = (event.clientX - rect.left) / rect.width - .5;
   const y = (event.clientY - rect.top) / rect.height - .5;
@@ -164,7 +217,7 @@ hero.addEventListener("pointerleave", () => {
   document.documentElement.style.setProperty("--stage-x", "0deg");
 });
 
-if ("IntersectionObserver" in window && !reducedMotion.matches) {
+if ("IntersectionObserver" in window && motionEnabled()) {
   const observer = new IntersectionObserver((entries) => {
     entries.forEach((entry) => { if (entry.isIntersecting) { entry.target.classList.add("is-visible"); observer.unobserve(entry.target); } });
   }, { threshold: .13 });
