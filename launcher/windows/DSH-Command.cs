@@ -1,29 +1,29 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Reflection;
 using System.Text;
 
 [assembly: AssemblyTitle("DSH-Portable Command")]
 [assembly: AssemblyProduct("DSH-Portable")]
 [assembly: AssemblyCompany("WSL043")]
-[assembly: AssemblyVersion("0.4.4.65534")]
-[assembly: AssemblyFileVersion("0.4.4.65534")]
+[assembly: AssemblyVersion("0.4.5.65534")]
+[assembly: AssemblyFileVersion("0.4.5.65534")]
 
 internal static class DshCommand
 {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "MessageBoxW")]
-    private static extern int MessageBoxW(IntPtr window, string message, string title, uint type);
-
-    private static int ShowNoArgumentsGuidance()
+    private static int LaunchDshTerminal(string root)
     {
-        const string message =
-            "这是 DSH 命令行入口，需要在 PowerShell 或终端中带参数使用。\n\n" +
-            "若要打开 DeepSeek Harness，请运行同一文件夹中的 DeepSeek-Herness.exe。\n\n" +
-            "This is the DSH command-line entry point and requires arguments in PowerShell or a terminal.\n\n" +
-            "To open DeepSeek Harness, run DeepSeek-Herness.exe in the same folder.";
-        MessageBoxW(IntPtr.Zero, message, "DSH 命令行 / DSH command line", 0x00010040);
+        var terminal = Path.Combine(root, "launcher", "dsh-terminal.cmd");
+        if (!File.Exists(terminal)) throw new FileNotFoundException("DSH terminal launcher is missing.", terminal);
+        var start = new ProcessStartInfo
+        {
+            FileName = terminal,
+            WorkingDirectory = root,
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Normal,
+        };
+        if (Process.Start(start) == null) throw new InvalidOperationException("Could not open DSH Terminal.");
         return 0;
     }
 
@@ -72,13 +72,14 @@ internal static class DshCommand
     [STAThread]
     private static int Main(string[] arguments)
     {
-        if (arguments == null || arguments.Length == 0)
-            return ShowNoArgumentsGuidance();
-
         try
         {
             var executable = Process.GetCurrentProcess().MainModule.FileName;
             var root = Path.GetDirectoryName(executable);
+            if (arguments == null || arguments.Length == 0 ||
+                (arguments.Length == 1 && String.Equals(arguments[0], "--terminal", StringComparison.OrdinalIgnoreCase)))
+                return LaunchDshTerminal(root);
+
             var node = Path.Combine(root, "runtime", "node", "node.exe");
             var cli = Path.Combine(root, "launcher", "dsh-cli.mjs");
             if (!File.Exists(node)) throw new FileNotFoundException("Bundled Node.js is missing.", node);

@@ -146,6 +146,19 @@ try {
         }
     }
 
+    $IsolatedPath = $env:PATH
+    try {
+        $env:PATH = "$Root$([System.IO.Path]::PathSeparator)$IsolatedPath"
+        $BareDsh = Get-Command -Name 'dsh' -CommandType Application -ErrorAction Stop
+        if ([System.IO.Path]::GetFullPath($BareDsh.Source) -ne [System.IO.Path]::GetFullPath($Dsh)) {
+            throw "DSH Terminal resolved the wrong dsh executable: $($BareDsh.Source)"
+        }
+        $BareVersion = (& dsh --version 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or -not $BareVersion) { throw 'official bare dsh command failed inside the isolated DSH Terminal PATH' }
+    } finally {
+        $env:PATH = $IsolatedPath
+    }
+
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '..\tests\fixtures\dsh-plugin-registry.mjs') -Destination $RegistryScript
     Copy-Item -LiteralPath $PluginArchive -Destination $RegistryV1
     $PluginManifest = Join-Path $PluginRoot 'package.json'

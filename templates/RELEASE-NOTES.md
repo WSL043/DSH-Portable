@@ -1,20 +1,18 @@
-> 打包官方 DeepSeek Harness 预览版（`@deepseek-ai/dsh {{DSH_VERSION}}`）。DSH-Portable 是独立社区分发项目。
+> DSH-Portable 是独立社区发行版，内置官方 DeepSeek Harness `{{DSH_VERSION}}`。
 
-{{RELEASE_INTRO_ZH}}
+**{{RELEASE_INTRO_ZH}}**
 
 {{RELEASE_SUMMARY_ZH}}
 
 {{RELEASE_HIGHLIGHTS_ZH}}
 
-内置官方 DSH 为 `{{DSH_VERSION}}`。{{VERIFICATION_SCOPE_ZH}}
-
-从旧版升级时，会话、设置、凭据、插件与工作区都会继续保留。自动检查更新默认关闭，可按需开启“启动时检查更新”，也可以随时从设置或托盘手动检查。
+{{VERIFICATION_SCOPE_ZH}}升级会保留会话、设置、凭据、插件和工作区。
 
 {{CHANNEL_UPGRADE_NOTICE_ZH}}
 
-## Windows x64（推荐）
+## 下载
 
-[**下载便携版**](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})
+[**Windows x64 便携版（推荐）**](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})
 
 {{WINDOWS_PRIMARY_GUIDE_ZH}}
 
@@ -30,29 +28,25 @@
 
 </details>
 
-普通用户只需选择与系统对应的一个下载。`checksums.txt` 仅供需要独立校验下载的用户。
-
 ---
 
 ## English
 
-> Packages the official DeepSeek Harness preview (`@deepseek-ai/dsh {{DSH_VERSION}}`). DSH-Portable is an independent community distribution.
+> DSH-Portable is an independent community distribution bundled with official DeepSeek Harness `{{DSH_VERSION}}`.
 
-{{RELEASE_INTRO_EN}}
+**{{RELEASE_INTRO_EN}}**
 
 {{RELEASE_SUMMARY_EN}}
 
 {{RELEASE_HIGHLIGHTS_EN}}
 
-The bundled official DSH is `{{DSH_VERSION}}`. {{VERIFICATION_SCOPE_EN}}
-
-Upgrading preserves sessions, settings, credentials, plugins, and the workspace. Automatic update checks are off by default; **Check for updates at startup** is optional, and a manual check is always available from Settings or the tray.
+{{VERIFICATION_SCOPE_EN}} Upgrading preserves sessions, settings, credentials, plugins, and the workspace.
 
 {{CHANNEL_UPGRADE_NOTICE_EN}}
 
-### Windows x64 (recommended)
+### Downloads
 
-[**Download the portable edition**](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})
+[**Windows x64 portable edition (recommended)**](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})
 
 {{WINDOWS_PRIMARY_GUIDE_EN}}
 
@@ -67,5 +61,3 @@ Upgrading preserves sessions, settings, credentials, plugins, and the workspace.
 - Linux ARM64: [AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) · [complete portable folder](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz)
 
 </details>
-
-Choose one download for your system. `checksums.txt` is optional and intended only for users who want independent download verification.

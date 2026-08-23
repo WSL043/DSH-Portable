@@ -161,6 +161,7 @@ test('the product locks and packages the official pnpm required by arbitrary DSH
   assert.match(build, /dsh-cli\.mjs/)
   assert.match(build, /DSH-Command\.cs/)
   assert.match(build, /dsh\.exe/)
+  assert.match(build, /dsh-terminal\.cmd/)
   assert.match(build, /pnpm-LICENSE\.txt/)
   assert.match(runtimeVerifier, /pnpm(?:\.cmd)?/)
 })

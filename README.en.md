@@ -100,15 +100,17 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 Fresh installs include the removable [permanent session deletion](https://github.com/WSL043/dsh-native-session-manager) plugin. Permanent deletion always asks for a second confirmation and does not replace recoverable Archive. Normal upgrades do not reinstall a plugin an existing user removed.
 
-`dsh.exe` is the command-line entry point for advanced users, not another desktop launcher:
+Double-click `dsh.exe`, or choose **More → DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
 
 ```powershell
-.\dsh.exe plugin --profile web add <plugin>
-.\dsh.exe plugin --profile web list --depth 0
-.\dsh.exe plugin --profile web update <package-name>
-.\dsh.exe plugin --profile web remove <package-name>
-.\dsh.exe --profile web --dump-config
+dsh plugin --profile web add <plugin>
+dsh plugin --profile web list --depth 0
+dsh plugin --profile web update <package-name>
+dsh plugin --profile web remove <package-name>
+dsh --profile web --dump-config
 ```
+
+DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`.
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 

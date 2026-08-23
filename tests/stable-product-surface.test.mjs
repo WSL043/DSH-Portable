@@ -21,18 +21,35 @@ test('stable desktop bridge has no Portable extensions surface or built-in entri
   await assert.rejects(() => stat(new URL('../desktop-bridge/lib/extensions.js', import.meta.url)), /ENOENT/)
 })
 
-test('dsh.exe guides zero-argument users and preserves parameterized CLI forwarding', async () => {
-  const source = await read('launcher/windows/DSH-Command.cs')
+test('dsh.exe opens an isolated official-syntax terminal and preserves parameterized CLI forwarding', async () => {
+  const [source, terminal] = await Promise.all([
+    read('launcher/windows/DSH-Command.cs'),
+    read('launcher/windows/dsh-terminal.cmd'),
+  ])
   const zeroArgumentGuard = source.search(/arguments(?:\s*==\s*null|\.Length\s*==\s*0)/)
-  const cliLaunch = source.indexOf('Process.Start(start)')
+  const cliLaunch = source.indexOf('Arguments = BuildArguments(cli, arguments)')
 
   assert.ok(zeroArgumentGuard >= 0, 'the command launcher must handle zero arguments explicitly')
-  assert.ok(zeroArgumentGuard < cliLaunch, 'zero-argument guidance must happen before launching the CLI')
-  assert.match(source, /MessageBoxW/)
-  assert.match(source, /DeepSeek-Herness\.exe/)
-  assert.match(source, /命令行/)
-  assert.match(source, /command line/i)
+  assert.ok(zeroArgumentGuard < cliLaunch, 'zero-argument terminal routing must happen before launching the CLI')
+  assert.match(source, /LaunchDshTerminal/)
+  assert.match(source, /--terminal/)
+  assert.match(source, /dsh-terminal\.cmd/)
+  assert.match(terminal, /set "PATH=%~dp0\.\.;%PATH%"/i)
+  assert.match(terminal, /cd \/d "%~dp0\.\."/i)
+  assert.match(terminal, /pwsh\.exe[\s\S]+powershell\.exe/i)
+  assert.doesNotMatch(terminal, /\bsetx\b|EnvironmentVariableTarget|CurrentVersion\\Environment/i)
+  assert.doesNotMatch(source, /Environment\.SetEnvironmentVariable/)
   assert.match(source, /Arguments\s*=\s*BuildArguments\(cli, arguments\)/)
+})
+
+test('Windows tray exposes the isolated DSH terminal without changing global PATH', async () => {
+  const source = await read('launcher/windows/DSH-Portable.cs')
+  assert.match(source, /CreateTerminalItem/)
+  assert.match(source, /DSH 终端/)
+  assert.match(source, /DSH Terminal/)
+  assert.match(source, /dsh\.exe/)
+  assert.match(source, /--terminal/)
+  assert.doesNotMatch(source, /Environment\.SetEnvironmentVariable\([^,]+,[^,]+,\s*EnvironmentVariableTarget\.(?:User|Machine)/)
 })
 
 test('stable startup retires queued RC extension work without applying it', async () => {

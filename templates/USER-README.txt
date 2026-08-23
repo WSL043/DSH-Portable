@@ -22,13 +22,15 @@ AppImage 数据保存在同目录的 DSH-Portable-data，迁移时请把两者�
 Windows 与 Linux 托盘、macOS 应用菜单都可手动检查更新。自动检查默认关闭，需要时可在设置或菜单里开启。
 Windows 只在确认没有任务运行时直接更新；macOS 与 Linux 会在下次启动前安装，运行中的任务不会被中断。
 
-Windows 插件命令：
+Windows：双击 dsh.exe 或从托盘“更多”中打开 DSH 终端，然后可以原样粘贴插件提供的官方命令：
 
-  .\dsh.exe plugin --profile web add <插件>
-  .\dsh.exe plugin --profile web list --depth 0
-  .\dsh.exe plugin --profile web update <插件包名>
-  .\dsh.exe plugin --profile web remove <插件包名>
-  .\dsh.exe --profile web --dump-config
+  dsh plugin --profile web add <插件>
+  dsh plugin --profile web list --depth 0
+  dsh plugin --profile web update <插件包名>
+  dsh plugin --profile web remove <插件包名>
+  dsh --profile web --dump-config
+
+DSH 终端不会修改系统 PATH。
 
 插件变更不会自动重启 DSH。保存任务并手动退出、重新打开后生效。
 
@@ -67,13 +69,16 @@ Automatic checks are off by default and can be enabled from Settings or the menu
 when wanted. Windows updates only after confirming that no task is running;
 macOS and Linux install before the next launch. Updates never interrupt a running task.
 
-Windows plugin commands:
+Windows: double-click dsh.exe or open DSH Terminal from the tray's More menu,
+then paste the official commands published by plugins without editing them:
 
-  .\dsh.exe plugin --profile web add <plugin>
-  .\dsh.exe plugin --profile web list --depth 0
-  .\dsh.exe plugin --profile web update <package-name>
-  .\dsh.exe plugin --profile web remove <package-name>
-  .\dsh.exe --profile web --dump-config
+  dsh plugin --profile web add <plugin>
+  dsh plugin --profile web list --depth 0
+  dsh plugin --profile web update <package-name>
+  dsh plugin --profile web remove <package-name>
+  dsh --profile web --dump-config
+
+DSH Terminal never changes the system PATH.
 
 Plugin changes never restart DSH automatically. Save the task, exit, and reopen
 the app when convenient.

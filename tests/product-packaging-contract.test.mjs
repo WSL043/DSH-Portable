@@ -192,9 +192,8 @@ test('update guidance describes the component update path without exposing inter
   assert.match(userReadme, /^DSH-Portable\r?\n=+\r?\n\r?\n中文/m)
   assert.match(userReadme, /只下载.+DSH.+组件/s)
   assert.match(userReadme, /English[\s\S]+downloads only\s+the changed DSH application component/i)
-  assert.match(releaseNotes, /启动时检查更新/)
   assert.match(releaseNotes, /Linux x64 与 ARM64/)
-  assert.match(releaseNotes, /会话、设置、凭据、插件与工作区.+保留/s)
+  assert.match(releaseNotes, /保留会话、设置、凭据、插件和工作区/)
   assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
 })
 
@@ -219,7 +218,8 @@ test('GitHub gives Chinese and English users direct, privacy-safe feedback forms
 
 test('release notes prioritize downloads and keep verification optional', async () => {
   const notes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0', '0.1.1-rc.1')
-  assert.match(notes, /^>\s+打包官方 DeepSeek Harness 预览版/m)
+  assert.match(notes, /^>\s+DSH-Portable 是独立社区发行版，内置官方 DeepSeek Harness/m)
+  assert.match(notes, /0\.4\.0 是正式版/)
   assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
   assert.match(notes, /DSH-Portable-windows-x64\.exe/)
   assert.ok(notes.indexOf('DSH-Portable-windows-x64.exe') < notes.indexOf('<details>'))
@@ -584,10 +584,12 @@ test('plugin management is a generic finished-product capability and release gat
     read('scripts/smoke-windows-installer.ps1'),
   ])
   const docs = `${chinese}\n${english}\n${userReadme}\n${releaseNotes}`
-  assert.match(chinese, /\.\\dsh\.exe plugin --profile web add <插件>/)
-  assert.match(chinese, /\.\\dsh\.exe plugin --profile web (?:list|remove|update)/)
-  assert.match(chinese, /\.\\dsh\.exe --profile web --dump-config/)
-  assert.match(english, /\.\\dsh\.exe plugin --profile web add <plugin>/i)
+  assert.match(chinese, /dsh plugin --profile web add <插件>/)
+  assert.match(chinese, /dsh plugin --profile web (?:list|remove|update)/)
+  assert.match(chinese, /dsh --profile web --dump-config/)
+  assert.match(chinese, /DSH 终端[\s\S]+不会修改系统 `PATH`/)
+  assert.match(english, /dsh plugin --profile web add <plugin>/i)
+  assert.match(english, /DSH Terminal[\s\S]+never changes the system `PATH`/i)
   assert.match(docs, /不会自动重启|never restarts/i)
   assert.doesNotMatch(docs, /codex|chatgpt|openai-codex|zen\s*free/i)
 
@@ -601,6 +603,9 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(smoke, /plugin.+remove/s)
   assert.match(smoke, /--dump-config/)
   assert.match(smoke, /isolated PATH/i)
+  assert.match(smoke, /Get-Command -Name 'dsh'/)
+  assert.match(smoke, /& dsh --version/)
+  assert.match(smoke, /DSH Terminal resolved the wrong dsh executable/)
   assert.match(smoke, /Get-Command.+-CommandType\s+Application/s)
   assert.match(smoke, /PreviousErrorActionPreference/)
   assert.match(smoke, /\$ErrorActionPreference\s*=\s*'Continue'/)

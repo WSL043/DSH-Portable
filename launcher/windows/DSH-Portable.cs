@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.4.65534")]
-[assembly: AssemblyFileVersion("0.4.4.65534")]
+[assembly: AssemblyVersion("0.4.5.65534")]
+[assembly: AssemblyFileVersion("0.4.5.65534")]
 
 namespace DshPortable
 {
@@ -673,6 +673,36 @@ namespace DshPortable
             return new ToolStripMenuItem(L("打开 DeepSeek Harness", "Open DeepSeek Harness"), null, delegate { RestoreFromTray(); });
         }
 
+        private ToolStripMenuItem CreateTerminalItem()
+        {
+            return new ToolStripMenuItem(L("DSH 终端", "DSH Terminal"), null, delegate
+            {
+                try
+                {
+                    string root = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
+                    string command = Path.Combine(root, "dsh.exe");
+                    if (!File.Exists(command)) throw new FileNotFoundException("DSH command launcher is missing.", command);
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = command,
+                        Arguments = "--terminal",
+                        WorkingDirectory = root,
+                        UseShellExecute = true,
+                        WindowStyle = ProcessWindowStyle.Normal,
+                    });
+                }
+                catch (Exception error)
+                {
+                    MessageBox.Show(
+                        this,
+                        L("无法打开 DSH 终端。\n\n", "Could not open DSH Terminal.\n\n") + error.Message,
+                        "DeepSeek-Herness",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error);
+                }
+            });
+        }
+
         private ToolStripMenuItem CreateExitItem()
         {
             return new ToolStripMenuItem(L("退出 DeepSeek Harness", "Exit DeepSeek Harness"), null, delegate
@@ -731,6 +761,7 @@ namespace DshPortable
                 more.DropDownItems.Add(taskNotificationsItem);
                 more.DropDownItems.Add(closeBehaviorItem);
                 more.DropDownItems.Add(new ToolStripSeparator());
+                more.DropDownItems.Add(CreateTerminalItem());
                 more.DropDownItems.Add(CreateReportProblemItem());
                 ToolStripDropDownMenu moreMenu = more.DropDown as ToolStripDropDownMenu;
                 if (moreMenu != null)

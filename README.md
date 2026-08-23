@@ -100,15 +100,17 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 全新安装包含可停用或卸载的[永久删除会话](https://github.com/WSL043/dsh-native-session-manager)插件。永久删除始终需要二次确认，也不会替代可恢复的“归档”。普通升级不会重新安装用户已经移除的插件。
 
-`dsh.exe` 是高级用户的命令行入口，不是第二个桌面启动器：
+双击 `dsh.exe`，或从托盘的 **更多 → DSH 终端** 打开便携终端。在这个终端里，第三方插件提供的官方命令可以原样粘贴：
 
 ```powershell
-.\dsh.exe plugin --profile web add <插件>
-.\dsh.exe plugin --profile web list --depth 0
-.\dsh.exe plugin --profile web update <插件包名>
-.\dsh.exe plugin --profile web remove <插件包名>
-.\dsh.exe --profile web --dump-config
+dsh plugin --profile web add <插件>
+dsh plugin --profile web list --depth 0
+dsh plugin --profile web update <插件包名>
+dsh plugin --profile web remove <插件包名>
+dsh --profile web --dump-config
 ```
+
+DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。
 
 能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。市场不会在任务运行时更新、卸载或偷偷重启 DSH。只安装你信任的插件。
 
