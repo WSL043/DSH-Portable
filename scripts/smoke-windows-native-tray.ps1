@@ -88,8 +88,8 @@ try {
     $ZhExit = (-join ([char[]]@(0x9000, 0x51FA))) + ' DeepSeek Harness'
 
     foreach ($Case in @(
-        @{ Locale = 'en'; Theme = 'light'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
-        @{ Locale = 'zh'; Theme = 'dark'; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Feedback = $ZhFeedback; Exit = $ZhExit }
+        @{ Locale = 'en'; Theme = 'light'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Terminal = 'DSH Terminal'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
+        @{ Locale = 'zh'; Theme = 'dark'; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = 'DSH 终端'; Feedback = $ZhFeedback; Exit = $ZhExit }
     )) {
         Set-Property $StateType $State 'locale' $Case.Locale
         Set-Property $StateType $State 'theme' $Case.Theme
@@ -116,8 +116,9 @@ try {
         if ($Menu.Items[5].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
         if ($Menu.Items[7].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
         if ($Menu.Items[9].Text -ne $Case.Exit) { throw "Exit command is missing for $($Case.Locale)" }
-        if ($Menu.Items[5].DropDownItems.Count -ne 8) { throw "More submenu must contain bounded overflow and direct settings commands" }
-        if ($Menu.Items[5].DropDownItems[7].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
+        if ($Menu.Items[5].DropDownItems.Count -ne 9) { throw "More submenu must contain bounded overflow and direct settings commands" }
+        if ($Menu.Items[5].DropDownItems[7].Text -ne $Case.Terminal) { throw "DSH Terminal command must be in More for $($Case.Locale)" }
+        if ($Menu.Items[5].DropDownItems[8].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
         foreach ($MoreItem in $Menu.Items[5].DropDownItems) {
             if ($MoreItem -is [Windows.Forms.ToolStripMenuItem] -and $MoreItem.DropDownItems.Count -ne 0) {
                 throw "More submenu must stop at the second level"
