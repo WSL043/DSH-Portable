@@ -1,0 +1,17 @@
+{
+  "version": "0.4.7",
+  "zh": {
+    "summary": "修正 Windows 托盘菜单右侧多余留白，让主菜单和二级菜单在不同语言与缩放比例下保持紧凑。",
+    "highlights": [
+      "托盘菜单的外框与每一行现在使用同一内容宽度，不再留下空白边栏。",
+      "新增真实 Windows 菜单回归检查，覆盖主菜单、二级菜单以及中英文和明暗主题。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes the extra right-side gutter in the Windows tray menu so both menu levels stay compact across locales and display scales.",
+    "highlights": [
+      "Tray rows and their native menu container now share the same content-sized width without a blank trailing column.",
+      "The Windows tray regression gate now checks both menu levels across Chinese, English, light, and dark appearances."
+    ]
+  }
+}

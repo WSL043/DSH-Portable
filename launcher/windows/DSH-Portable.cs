@@ -23,8 +23,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.6.65534")]
-[assembly: AssemblyFileVersion("0.4.6.65534")]
+[assembly: AssemblyVersion("0.4.7.65534")]
+[assembly: AssemblyFileVersion("0.4.7.65534")]
 
 namespace DshPortable
 {
@@ -822,8 +822,8 @@ namespace DshPortable
             trayMenu.ForeColor = colors.TextColor;
             trayMenu.Padding = Padding.Empty;
             int rootWidth = MeasureTrayMenuWidth(trayMenu.Items, trayMenu.Font, 220, 282);
-            trayMenu.MinimumSize = new Size(rootWidth, 0);
             ApplyTrayItemTheme(trayMenu.Items, rootWidth, colors.TextColor, colors.CaptionColor, trayMenu.BackColor, colors.SelectedColor);
+            FixTrayDropDownSize(trayMenu, rootWidth);
         }
 
         private static int MeasureTrayMenuWidth(ToolStripItemCollection items, Font font, int minimum, int maximum)
@@ -861,10 +861,23 @@ namespace DshPortable
                 if (menuItem.DropDownItems.Count > 0)
                 {
                     int childWidth = MeasureTrayMenuWidth(menuItem.DropDownItems, font: item.Font, minimum: 196, maximum: 264);
-                    menuItem.DropDown.MinimumSize = new Size(childWidth, 0);
                     ApplyTrayItemTheme(menuItem.DropDownItems, childWidth, foreground, caption, background, selected);
+                    FixTrayDropDownSize(menuItem.DropDown, childWidth);
                 }
             }
+        }
+
+        private static void FixTrayDropDownSize(ToolStripDropDown dropDown, int width)
+        {
+            int preferredHeight = dropDown.Padding.Vertical + 4;
+            foreach (ToolStripItem item in dropDown.Items)
+            {
+                if (item.Available) preferredHeight += item.Height;
+            }
+            dropDown.AutoSize = false;
+            dropDown.MinimumSize = new Size(width, preferredHeight);
+            dropDown.MaximumSize = new Size(width, preferredHeight);
+            dropDown.Size = new Size(width, preferredHeight);
         }
 
         private void PostBridgeAction(string action, string sessionId)

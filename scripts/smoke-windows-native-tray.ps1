@@ -56,6 +56,17 @@ function Add-Session([object]$List, [string]$Id, [string]$Title, [string]$Preset
     $List.Add($Session)
 }
 
+function Assert-MenuRowsFillWidth([Windows.Forms.ToolStripDropDown]$DropDown, [string]$Name) {
+    $ContentRight = $DropDown.ClientSize.Width
+    foreach ($Item in $DropDown.Items) {
+        if (-not $Item.Available) { continue }
+        $Gap = $ContentRight - $Item.Bounds.Right
+        if ($Gap -gt 4) {
+            throw "$Name leaves an empty right gutter of $Gap px after '$($Item.Text)'"
+        }
+    }
+}
+
 try {
     $State = [Activator]::CreateInstance($StateType, $true)
     Set-Property $StateType $State 'type' 'dsh-portable/state'
@@ -178,6 +189,7 @@ try {
         [Windows.Forms.Application]::DoEvents()
         if ($Menu.Width -lt 220 -or $Menu.Width -gt 282) { throw "Tray menu width is outside the content-sized target: $($Menu.Width)" }
         if ($Menu.Height -lt 230 -or $Menu.Height -gt 330) { throw "Tray menu height is outside the compact target: $($Menu.Height)" }
+        Assert-MenuRowsFillWidth $Menu "Tray menu"
         if ($CaptureSelected -and $Case.Locale -eq 'zh' -and $Case.Theme -eq 'dark') {
             $Menu.Items[4].Select()
             [Windows.Forms.Application]::DoEvents()
@@ -205,12 +217,13 @@ try {
         }
 
         if ($CaptureDirectory -and $Case.Locale -eq 'zh' -and $Case.Theme -eq 'dark') {
-            $More = [Windows.Forms.ToolStripMenuItem]$Menu.Items[4]
+            $More = [Windows.Forms.ToolStripMenuItem]$Menu.Items[5]
             $Menu.Show([Drawing.Point]::new(-32000, -32000))
             $More.ShowDropDown()
             [Windows.Forms.Application]::DoEvents()
             $MoreMenu = $More.DropDown
             if ($MoreMenu.Width -lt 196 -or $MoreMenu.Width -gt 264) { throw "More menu width is outside the content-sized target: $($MoreMenu.Width)" }
+            Assert-MenuRowsFillWidth $MoreMenu "More menu"
             $MoreBitmap = New-Object Drawing.Bitmap($MoreMenu.Width, $MoreMenu.Height)
             try {
                 $MoreMenu.DrawToBitmap($MoreBitmap, [Drawing.Rectangle]::new(0, 0, $MoreMenu.Width, $MoreMenu.Height))
