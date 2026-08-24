@@ -23,10 +23,10 @@ import {
   BOOT_ID, cancelActive, probePnpm, progress, provisionPnpm, runDshPlugin,
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
-import { hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, restoreManifestDeps, setAllowBuilds } from './profile.ts'
-import { assessProfile, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
+import { addProfileBundle, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.ts'
+import { assessProfile, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
-import { analyzeProfile } from './check.ts'
+import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
 import { trialValidate } from './trial.ts'
 import { findInstalledAlias, gitAllowBuildsKey, installTargetFor } from './sources.ts'
@@ -36,13 +36,13 @@ import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPubli
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.ts'
-import { activationAfterReplace, hasHostHalf, verifyActivation } from './verify.ts'
+import { activationAfterReplace, checkClientBundle, hasHostHalf, verifyActivation } from './verify.ts'
 import {
-  disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags,
+  carrierDisableIds, disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags,
   readUserPatchState, removeRowBlocks, rowIdsForPackage,
 } from './patch.ts'
 import {
-  createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, uploadWebdav,
+  createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, unportableDeps, uploadWebdav,
   type ProfileBackup,
 } from './backup.ts'
 import {
@@ -349,7 +349,7 @@ export function mountMarketRoutes(
   }
 
   /** Every plugin command goes through the pnpm-drift recovery wrapper (#20). */
-  const runPlugin = (profile: string, args: string[]) => withHoistRecovery(commands.runPlugin, profile, args)
+  const runPlugin = (profile: string, args: string[]) => withHoistRecovery(commands.runPlugin, profile, args, activeProfileDir)
 
   /**
    * Undo a clean-exit update whose new build cannot boot. Restoring only the
@@ -422,9 +422,9 @@ export function mountMarketRoutes(
     if (result.exitCode !== 0 || result.timedOut || result.cancelled) {
       return { ok: false, hot: false, detail: (result.stderr || result.stdout).slice(-300) }
     }
-    let hot = false
-    hot = await hotUnmount(name)
-    if (!hot) hot = await themes.setEntryDisabled(name, true)
+    const unmounted = await hotUnmount(name)
+    const entryDisabled = await themes.setEntryDisabled(name, true)
+    const hot = unmounted || entryDisabled
     removeRowBlocks(userPatchPath, rowIdsForPackage(host, activeProfileDir, name))
     disabled.delete(name)
     removeFromGroups({ groups, groupOrder }, name)
@@ -432,7 +432,7 @@ export function mountMarketRoutes(
     return { ok: true, hot, detail: null }
   }
 
-  async function restoreBackup(value: unknown): Promise<{ files: number; errors: { name: string; error: string }[] }> {
+  async function restoreBackup(value: unknown): Promise<{ files: number; errors: { name: string; error: string }[]; unportable?: Array<{ name: string; spec: string }> }> {
     if (!await probePnpm()) throw new Error('pnpm is required to restore plugins')
     // Snapshot the target's manifest BEFORE the backup files overwrite it, so
     // the restore can merge rather than replace: plugins the target already
@@ -449,10 +449,11 @@ export function mountMarketRoutes(
         manifestBefore,
       )
       writeFileSync(join(activeProfileDir, 'package.json'), `${JSON.stringify(mergedManifest, null, 2)}\n`)
+      const unportable = unportableDeps(mergedManifest.dependencies)
       const result = await runPlugin(config.profile, ['install'])
       if (result.exitCode === 0 && !result.timedOut && !result.cancelled) {
         invalidateUpdates()
-        return { files: restored.files, errors: [] }
+        return { files: restored.files, errors: [], unportable }
       }
 
       // A bad dependency makes pnpm abort the whole install. Retry from an
@@ -504,7 +505,7 @@ export function mountMarketRoutes(
         restored.rollback()
       }
       invalidateUpdates()
-      return { files: restored.files, errors }
+      return { files: restored.files, errors, unportable: unportableDeps(manifest.dependencies) }
     } catch (error) {
       restored.rollback()
       throw error
@@ -932,6 +933,19 @@ export function mountMarketRoutes(
           // every boot. Client-only packages have no bundle rows — the
           // market's own state.json replay covers those.
           const patchRows = rowIdsForPackage(host, activeProfileDir, name)
+          const carrier = carrierDisableIds(activeProfileDir, name)
+          const isCarrier = carrier.length > 0
+          let bundleSwitch: { ok: boolean; reason: string | null } = { ok: true, reason: null }
+          if (isCarrier) {
+            try {
+              if (enabled) addProfileBundle(activeProfileDir, name)
+              else removeProfileBundle(activeProfileDir, name)
+            } catch (error) {
+              bundleSwitch = { ok: false, reason: error instanceof Error ? error.message : String(error) }
+              ok = false
+              reason = bundleSwitch.reason ?? reason
+            }
+          }
           let patchWrite: { ok: boolean; reason: string | null } | null = null
           if (patchRows.length > 0) {
             for (const rowId of patchRows) {
@@ -955,7 +969,7 @@ export function mountMarketRoutes(
           // change lands on the next boot via the patch layer + state.json —
           // the client reuses the market's pending-restart banner for it.
           const liveAfter = liveNames().has(name)
-          const restart = enabled ? !liveAfter : liveAfter
+          const restart = isCarrier ? true : enabled ? !liveAfter : liveAfter
           // A client-part plugin's UI is in the page already — toggling it
           // needs a browser refresh to show the change (same signal the
           // install flow uses for the hot banner).
@@ -970,6 +984,8 @@ export function mountMarketRoutes(
             reason,
             patchRows,
             patchWrite: patchWrite ?? { ok: true, reason: null },
+            carrier,
+            bundleSwitch,
             restart,
             refresh,
           })
@@ -1326,7 +1342,7 @@ export function mountMarketRoutes(
                   `${name}: trial validation failed — ${first}${rollback.ok ? '; previous build restored' : `; could not restore previous files: ${rollback.detail ?? 'unknown'}`}`)
               }
             }
-            let compatibility: { code: 'soft-incompatible'; risks: CompatibilityRisk[]; rollbackId: string } | undefined
+            let compatibility: { code: 'soft-incompatible'; risks: CompatibilityRisk[]; shadowedNames?: DuplicateName[]; brokenBundles?: Array<{ name: string; reason: string }>; rollbackId: string } | undefined
             if (ok) {
               invalidateUpdates()
               activation = {
@@ -1335,11 +1351,17 @@ export function mountMarketRoutes(
                   wasLive,
                 ),
               }
-              const risks = introducedRisks(compatibilityBefore, assessProfile(config.profile, activeProfileDir))
-              if (risks.length > 0) {
+              const after = assessProfile(config.profile, activeProfileDir)
+              const risks = introducedRisks(compatibilityBefore, after)
+              const shadowed = introducedDuplicateNames(compatibilityBefore, after)
+              const bundleCheck = checkClientBundle(config.profile, name, activeProfileDir)
+              const brokenBundles = bundleCheck.ok ? [] : [{ name, reason: bundleCheck.reason ?? 'parse failed' }]
+              if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
                 compatibility = {
                   code: 'soft-incompatible',
                   risks,
+                  shadowedNames: shadowed.length > 0 ? shadowed : undefined,
+                  brokenBundles: brokenBundles.length > 0 ? brokenBundles : undefined,
                   rollbackId: savePendingRollback({
                     kind: 'update',
                     names: [name],
@@ -1348,6 +1370,8 @@ export function mountMarketRoutes(
                   }),
                 }
                 logEvent('warn', 'update-compat', `${name}: introduced host-compatibility risks — ${risks.map(risk => `${risk.peer}@${risk.range} vs ${risk.resolved}`).join('; ')}`)
+                if (shadowed.length > 0) logEvent('warn', 'update-shadow', `${name}: introduced duplicate loader names — ${shadowed.map(entry => entry.name).join(', ')}`)
+                if (brokenBundles.length > 0) logEvent('error', 'update-bundle', `${name}: ${brokenBundles[0].reason}`)
               }
             }
             // Diagnose the stale outcome with EVIDENCE (#45 by @ayingQAQ):
@@ -1791,14 +1815,15 @@ export function mountMarketRoutes(
             let hot = false
             if (ok) {
               invalidateUpdates()
-              hot = await hotUnmount(name)
+              const unmounted = await hotUnmount(name)
               // Bundle-layer plugins never hot-mount, but their loader entry
               // is still LIVE in this process — after the remove deleted the
               // package, the next refresh would 404 on its client bundle and
               // wedge the whole page until a dsh restart (#37 by
               // @1123762794). Live-disable the entry so the refresh composes
               // without it; after a real restart the entry is gone anyway.
-              if (!hot) hot = await themes.setEntryDisabled(name, true)
+              const entryDisabled = await themes.setEntryDisabled(name, true)
+              hot = unmounted || entryDisabled
               // Patch-layer rows must not survive the remove either: a
               // `- id: X` + `disabled: true` row for a package that no longer
               // mounts is a boot-time orphan (port of dsh-plugin-hub).
@@ -2053,7 +2078,7 @@ export function mountMarketRoutes(
             const installed = readInstalled(config.profile, activeProfileDir)
             let hot = false
             let activation: Record<string, ReturnType<typeof verifyActivation>> | undefined
-            let compatibility: { code: 'soft-incompatible'; risks: CompatibilityRisk[]; rollbackId: string } | undefined
+            let compatibility: { code: 'soft-incompatible'; risks: CompatibilityRisk[]; shadowedNames?: DuplicateName[]; brokenBundles?: Array<{ name: string; reason: string }>; rollbackId: string } | undefined
             let addedPackages: string[] = []
             if (ok) {
               const added = Object.keys(installed).filter(name => !before.has(name))
@@ -2081,14 +2106,24 @@ export function mountMarketRoutes(
               }
             }
             if (ok && addedPackages.length > 0) {
-              const risks = introducedRisks(compatibilityBefore, assessProfile(config.profile, activeProfileDir))
-              if (risks.length > 0) {
+              const after = assessProfile(config.profile, activeProfileDir)
+              const risks = introducedRisks(compatibilityBefore, after)
+              const shadowed = introducedDuplicateNames(compatibilityBefore, after)
+              const brokenBundles = addedPackages
+                .map(name => ({ name, check: checkClientBundle(config.profile, name, activeProfileDir) }))
+                .filter(entry => !entry.check.ok)
+                .map(entry => ({ name: entry.name, reason: entry.check.reason ?? 'parse failed' }))
+              if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
                 compatibility = {
                   code: 'soft-incompatible',
                   risks,
+                  shadowedNames: shadowed.length > 0 ? shadowed : undefined,
+                  brokenBundles: brokenBundles.length > 0 ? brokenBundles : undefined,
                   rollbackId: savePendingRollback({ kind: 'install', names: addedPackages }),
                 }
                 logEvent('warn', 'install-compat', `${addedPackages.join(', ')}: introduced host-compatibility risks — ${risks.map(risk => `${risk.peer}@${risk.range} vs ${risk.resolved}`).join('; ')}`)
+                if (shadowed.length > 0) logEvent('warn', 'install-shadow', `${addedPackages.join(', ')}: introduced duplicate loader names — ${shadowed.map(entry => entry.name).join(', ')}`)
+                if (brokenBundles.length > 0) logEvent('error', 'install-bundle', brokenBundles.map(entry => `${entry.name}: ${entry.reason}`).join('; '))
               }
             }
             logEvent(ok || cancelled ? 'info' : 'error', 'install',

@@ -34,6 +34,8 @@ export interface ProgressSnapshot {
     seen: boolean;
     /** Last fatal error message carried by the stream, if any. */
     error: string | null;
+    /** pnpm's stable error code from the same event, when present. */
+    errorCode: string | null;
     /** Package names pnpm reported as having ignored build scripts. */
     ignoredBuilds: string[];
 }

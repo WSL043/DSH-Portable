@@ -36,6 +36,8 @@ export interface ProgressSnapshot {
   seen: boolean
   /** Last fatal error message carried by the stream, if any. */
   error: string | null
+  /** pnpm's stable error code from the same event, when present. */
+  errorCode: string | null
   /** Package names pnpm reported as having ignored build scripts. */
   ignoredBuilds: string[]
 }
@@ -50,6 +52,7 @@ export function emptyProgress(): ProgressSnapshot {
     size: null,
     seen: false,
     error: null,
+    errorCode: null,
     ignoredBuilds: [],
   }
 }
@@ -153,7 +156,8 @@ export function createProgressTracker(): ProgressTracker {
     if (name === 'pnpm' && msg.level === 'error') {
       const err = (msg.err ?? {}) as Record<string, unknown>
       const message = typeof err.message === 'string' ? err.message : ''
-      if (message !== '') snap.error = message.slice(0, 400)
+      if (message !== '') snap.error = message.slice(0, 2000)
+      if (typeof err.code === 'string' && err.code !== '') snap.errorCode = err.code
       return
     }
   }

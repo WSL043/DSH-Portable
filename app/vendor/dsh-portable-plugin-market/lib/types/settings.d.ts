@@ -35,7 +35,7 @@
 import type { Context } from '@deepseek-ai/cordis';
 import z from '@deepseek-ai/schemastery';
 /** Namespace the card on the browser side keys itself to. */
-export declare const MARKET_SETTINGS_NS: import("@deepseek-ai/dsh-settings/lib/types").SettingsNamespace;
+export declare const MARKET_SETTINGS_NS: import("@deepseek-ai/dsh-settings").SettingsNamespace;
 /** The market settings a user may edit at runtime. */
 export interface MarketSettings {
     allowRestart: boolean;

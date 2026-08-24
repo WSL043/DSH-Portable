@@ -32,7 +32,7 @@ export function secretFileCount(profile, explicitDir) {
 function profileFiles(root, dir = root) {
     const files = [];
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        if (SKIP_NAMES.has(entry.name) || /\.bak-\d+$/.test(entry.name))
+        if (SKIP_NAMES.has(entry.name) || /\.bak\b/.test(entry.name))
             continue;
         const path = resolve(dir, entry.name);
         if (entry.isSymbolicLink())
@@ -483,4 +483,25 @@ export function mergeRestoreManifest(backupManifest, current, selection) {
     const dshMerged = { ...(backupDsh ?? {}), ...(currentDsh ?? {}), profile: profileMerged };
     merged.dsh = dshMerged;
     return merged;
+}
+/** Absolute link:/file: specs that cannot travel with a profile backup. */
+export function unportableDeps(dependencies) {
+    if (dependencies === null || typeof dependencies !== 'object' || Array.isArray(dependencies))
+        return [];
+    const found = [];
+    for (const [name, raw] of Object.entries(dependencies)) {
+        if (typeof raw !== 'string')
+            continue;
+        const match = /^(?:link|file):(.+)$/i.exec(raw);
+        if (match === null)
+            continue;
+        let value = match[1];
+        try {
+            value = decodeURIComponent(value);
+        }
+        catch { /* keep literal */ }
+        if (/^\//.test(value) || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value))
+            found.push({ name, spec: raw });
+    }
+    return found;
 }

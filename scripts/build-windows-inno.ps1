@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet('portable', 'installer')]
+    [ValidateSet('portable')]
     [string]$Kind,
     [Parameter(Mandatory = $true)]
     [string]$Archive,
@@ -64,15 +64,6 @@ try {
         throw 'The Windows base archive does not contain a complete DSH-Portable stage.'
     }
 
-    if ($Kind -eq 'installer') {
-        Copy-Item -Force -LiteralPath (Join-Path $ProjectRoot 'templates\INSTALLED-README.txt') -Destination (Join-Path $Stage 'README.txt')
-        [System.IO.File]::WriteAllText(
-            (Join-Path $Stage 'installed-mode.json'),
-            (([ordered]@{ stateRoot = '%LOCALAPPDATA%\DeepSeek-Herness'; schemaVersion = 1 } | ConvertTo-Json) + [Environment]::NewLine),
-            [System.Text.UTF8Encoding]::new($false)
-        )
-    }
-
     foreach ($Letter in @('R', 'Q', 'P', 'O', 'N', 'M')) {
         $CandidateDrive = "${Letter}:"
         if (-not (Test-Path -LiteralPath ($CandidateDrive + '\'))) {
@@ -88,13 +79,8 @@ try {
     $MappedRoot = $MappedDrive + '\'
     $MappedStage = Join-Path $MappedRoot 'DSH-Portable'
     $MappedOutput = Join-Path $MappedRoot 'output'
-    if ($Kind -eq 'portable') {
-        $SetupScript = Join-Path $ProjectRoot 'installer\windows\DSH-Portable.iss'
-        $OutputName = 'DSH-Portable-windows-x64-offline.exe'
-    } else {
-        $SetupScript = Join-Path $ProjectRoot 'installer\windows\DeepSeek-Herness.iss'
-        $OutputName = 'DeepSeek-Herness-Setup.exe'
-    }
+    $SetupScript = Join-Path $ProjectRoot 'installer\windows\DSH-Portable.iss'
+    $OutputName = 'DSH-Portable-windows-x64-offline.exe'
 
     $Arguments = @(
         '--quiet',

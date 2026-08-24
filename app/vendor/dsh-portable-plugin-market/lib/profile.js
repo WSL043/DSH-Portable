@@ -3,7 +3,7 @@
  * profile directory (manifest, lockfile, installed package trees). Pure
  * functions of the directory contents; no processes, no network.
  */
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { githubRemoteIdentities, githubRepoIdentities } from './sources.js';
@@ -435,6 +435,40 @@ export function readProfileBundles(profileDirectory) {
     catch {
         return [];
     }
+}
+function writeManifestAtomic(manifestPath, manifest) {
+    const temp = `${manifestPath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`);
+    renameSync(temp, manifestPath);
+}
+export function removeProfileBundle(profileDirectory, name) {
+    const manifestPath = join(profileDirectory, 'package.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    const bundles = manifest.dsh?.profile?.bundles;
+    if (!Array.isArray(bundles))
+        return false;
+    const next = bundles.filter(entry => typeof entry !== 'string' || entry !== name);
+    if (next.length === bundles.length)
+        return false;
+    manifest.dsh ??= {};
+    manifest.dsh.profile ??= {};
+    manifest.dsh.profile.bundles = next;
+    writeManifestAtomic(manifestPath, manifest);
+    return true;
+}
+export function addProfileBundle(profileDirectory, name) {
+    const manifestPath = join(profileDirectory, 'package.json');
+    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    manifest.dsh ??= {};
+    manifest.dsh.profile ??= {};
+    const current = manifest.dsh.profile.bundles;
+    const bundles = Array.isArray(current) ? current.filter((entry) => typeof entry === 'string') : [];
+    if (bundles.includes(name))
+        return false;
+    bundles.push(name);
+    manifest.dsh.profile.bundles = bundles;
+    writeManifestAtomic(manifestPath, manifest);
+    return true;
 }
 /**
  * Loader entry ids a newly added package would collide on with bundles the

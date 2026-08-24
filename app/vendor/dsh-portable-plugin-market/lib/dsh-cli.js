@@ -478,12 +478,15 @@ export function runDshPlugin(profile, pluginArgs) {
             if (failed)
                 progress.error = tracker.snapshot.error;
             const ignoredBuilds = tracker.snapshot.ignoredBuilds;
+            const { error: pnpmError, errorCode: pnpmErrorCode } = tracker.snapshot;
             resolvePromise({
                 exitCode: code,
                 timedOut,
                 stdout,
                 stderr,
                 cancelled: cancelRequested,
+                ...(pnpmError !== null ? { pnpmError } : {}),
+                ...(pnpmErrorCode !== null ? { pnpmErrorCode } : {}),
                 ...(ignoredBuilds.length > 0 ? { ignoredBuilds } : {}),
             });
         });
@@ -563,12 +566,15 @@ export function createDesktopPluginRuntime(service, activeProfileDir, invokingDi
                 if (failed)
                     progress.error = tracker.snapshot.error;
                 const ignoredBuilds = tracker.snapshot.ignoredBuilds;
+                const { error: pnpmError, errorCode: pnpmErrorCode } = tracker.snapshot;
                 return {
                     exitCode: outcome.exitCode,
                     timedOut,
                     stdout,
                     stderr,
                     cancelled: active.userCancelled,
+                    ...(pnpmError !== null ? { pnpmError } : {}),
+                    ...(pnpmErrorCode !== null ? { pnpmErrorCode } : {}),
                     ...(ignoredBuilds.length > 0 ? { ignoredBuilds } : {}),
                 };
             }

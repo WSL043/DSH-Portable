@@ -120,6 +120,8 @@ export declare function parsePatchRows(text: string): {
 };
 /** The profile manifest's `dsh.profile.bundles` — what the CLI reconciled. */
 export declare function readProfileBundles(profileDirectory: string): string[];
+export declare function removeProfileBundle(profileDirectory: string, name: string): boolean;
+export declare function addProfileBundle(profileDirectory: string, name: string): boolean;
 /**
  * Loader entry ids a newly added package would collide on with bundles the
  * profile ALREADY loads (#122).

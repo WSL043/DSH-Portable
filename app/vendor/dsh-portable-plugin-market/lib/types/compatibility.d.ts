@@ -16,7 +16,7 @@
  * Everything else stays informational: `*`, prerelease-vs-`*` artifacts,
  * unparseable ranges, and optional peers never produce a risk here.
  */
-import { type CheckOptions } from './check.ts';
+import { type CheckOptions, type DuplicateName } from './check.ts';
 export interface CompatibilityRisk {
     plugin: string;
     peer: string;
@@ -34,6 +34,7 @@ export interface CompatibilityWarning {
 export interface CompatibilityAssessment {
     risks: CompatibilityRisk[];
     warnings: CompatibilityWarning[];
+    duplicateNames: DuplicateName[];
 }
 export type PeerVerdict = {
     kind: 'risk';
@@ -52,5 +53,7 @@ export declare function isOptionalPeer(profileDirectory: string, plugin: string,
 export declare function assessCompatibility(profileDirectory: string, options?: CheckOptions): CompatibilityAssessment;
 /** Risks present after a mutation but absent before it. */
 export declare function introducedRisks(before: CompatibilityAssessment, after: CompatibilityAssessment): CompatibilityRisk[];
+/** Cross-layer loader names introduced by this mutation, excluding pre-existing profile debt. */
+export declare function introducedDuplicateNames(before: CompatibilityAssessment, after: CompatibilityAssessment): DuplicateName[];
 /** Convenience wrapper matching the profile helper signature. */
 export declare function assessProfile(profile: string, explicitDir?: string): CompatibilityAssessment;

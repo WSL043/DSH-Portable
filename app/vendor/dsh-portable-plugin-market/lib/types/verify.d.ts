@@ -76,3 +76,10 @@ export declare function activationAfterReplace(result: ActivationResult, hostHal
  * update to one takes effect on refresh, with no restart to ask for.
  */
 export declare function hasHostHalf(profile: string, name: string, explicitDir?: string): boolean;
+export declare function clientBundlePath(exportsField: unknown, depth?: number): string | null;
+export interface BundleCheck {
+    ok: boolean;
+    reason: string | null;
+}
+/** Compile a declared browser bundle without executing plugin code. */
+export declare function checkClientBundle(profile: string, name: string, explicitDir?: string): BundleCheck;

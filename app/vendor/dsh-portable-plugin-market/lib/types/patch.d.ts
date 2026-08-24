@@ -97,3 +97,5 @@ export declare function enableRow(patchPath: string, rowId: string): Promise<{
 /** Remove every disable/force block the market (or the user) wrote for a
  * row — the uninstall cleanup, so a removed plugin leaves no orphan rows. */
 export declare function removeRowBlocks(patchPath: string, rowIds: readonly string[]): void;
+/** Other loader rows that this package disables at the top level of its patch. */
+export declare function carrierDisableIds(profileDirectory: string, packageName: string): string[];

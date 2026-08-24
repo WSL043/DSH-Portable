@@ -70,6 +70,8 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 			agentBusyUpdate: "有 agent 正在运行，请等待其完成或将其取消后再更新——更新会直接替换插件文件，运行中的 agent 可能中途报错或新旧版本混用。",
 			agentBusyInstall: "有 agent 正在运行，请等待其完成或将其取消后再安装——安装会修改插件文件，运行中的 agent 可能中途报错。",
 			compatRiskBanner: "安装后的兼容性检查发现需要确认的项目。重启前可以查看详情或撤销本次操作。",
+			shadowNameBanner: "本次操作造成同名插件跨层重复，重启后只有一个会生效：",
+			brokenBundleBanner: "插件的客户端代码无法解析，建议立即回滚：",
 			goDiagnose: "去诊断页修复",
 			rollbackNow: "一键回滚",
 			rollingBack: "回滚中…",
@@ -217,6 +219,7 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 			backupDone: "备份已上传",
 			restoreDone: "恢复完成，请重启 DeepSeek Harness",
 			restorePartial: "恢复已完成，但下列插件安装失败：",
+			restoreUnportable: "依赖指向另一台机器的绝对路径，需要改成本机路径或重新安装",
 			restoreConfirm: "恢复将覆盖当前 profile 配置并重新安装插件，确定继续吗？",
 			restorePreviewDone: "备份已导入，请在「已安装」中确认后开始恢复",
 			restoreMissing: "备份中有 {0} 个插件尚未安装",
@@ -393,6 +396,8 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 			agentBusyUpdate: "An agent is currently working — wait for it to finish (or cancel it) before updating. Updates replace plugin files in place, so a working agent can fail or mix versions mid-turn.",
 			agentBusyInstall: "An agent is currently working — wait for it to finish (or cancel it) before installing. Installing changes plugin files, so a working agent can fail mid-turn.",
 			compatRiskBanner: "The post-install compatibility check found items that need review. Inspect them or undo this operation before restarting.",
+			shadowNameBanner: "This operation duplicated one plugin name across layers; only one will load after restart:",
+			brokenBundleBanner: "The plugin client bundle does not parse; roll this operation back:",
 			goDiagnose: "Open Diagnostics",
 			rollbackNow: "Roll back",
 			rollingBack: "Rolling back…",
@@ -540,6 +545,7 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 			backupDone: "Backup uploaded",
 			restoreDone: "Restore complete — restart DeepSeek Harness",
 			restorePartial: "Restore completed, but these plugins failed to install:",
+			restoreUnportable: "points at an absolute path from another machine; repoint it locally or reinstall the plugin",
 			restoreConfirm: "Restore will overwrite this profile configuration and reinstall plugins. Continue?",
 			restorePreviewDone: "Backup imported. Review Installed, then start restore.",
 			restoreMissing: "{0} plugins from this backup are not installed",
@@ -1161,227 +1167,227 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 			document.head.appendChild(tag);
 		}
 		var Market_module_css_default = {
-			"metaInline": "SBb2HW_metaInline",
-			"reassure": "SBb2HW_reassure",
-			"body": "SBb2HW_body",
-			"lightboxDotOn": "SBb2HW_lightboxDotOn",
-			"metaTag": "SBb2HW_metaTag",
-			"opAggregate": "SBb2HW_opAggregate",
-			"banner": "SBb2HW_banner",
-			"rosterAuthor": "SBb2HW_rosterAuthor",
-			"opTop": "SBb2HW_opTop",
-			"irowMissing": "SBb2HW_irowMissing",
-			"switchKnob": "SBb2HW_switchKnob",
-			"pager": "SBb2HW_pager",
-			"groupName": "SBb2HW_groupName",
-			"groupHint": "SBb2HW_groupHint",
-			"fixFallback": "SBb2HW_fixFallback",
-			"opDot": "SBb2HW_opDot",
-			"opAggregateTop": "SBb2HW_opAggregateTop",
-			"diagKey": "SBb2HW_diagKey",
-			"backupWarn": "SBb2HW_backupWarn",
-			"opRowAlert": "SBb2HW_opRowAlert",
-			"rosterTagDrop": "SBb2HW_rosterTagDrop",
-			"ovRow": "SBb2HW_ovRow",
-			"subTabs": "SBb2HW_subTabs",
-			"backupCheck": "SBb2HW_backupCheck",
-			"rosterMain": "SBb2HW_rosterMain",
-			"choiceMain": "SBb2HW_choiceMain",
-			"backupGrid": "SBb2HW_backupGrid",
-			"opMain": "SBb2HW_opMain",
-			"diagSummaryItem": "SBb2HW_diagSummaryItem",
-			"diagBadgeShadow": "SBb2HW_diagBadgeShadow",
-			"root": "SBb2HW_root",
-			"opPanelTitle": "SBb2HW_opPanelTitle",
-			"depBadge": "SBb2HW_depBadge",
-			"conflictWhyText": "SBb2HW_conflictWhyText",
-			"lightbox": "SBb2HW_lightbox",
-			"pairGrid": "SBb2HW_pairGrid",
-			"assignRow": "SBb2HW_assignRow",
-			"stickyHead": "SBb2HW_stickyHead",
-			"cardAction": "SBb2HW_cardAction",
-			"byline": "SBb2HW_byline",
-			"actBroken": "SBb2HW_actBroken",
-			"opHead": "SBb2HW_opHead",
-			"opRow": "SBb2HW_opRow",
-			"opVerb": "SBb2HW_opVerb",
-			"choiceTitle": "SBb2HW_choiceTitle",
-			"opEntryAlert": "SBb2HW_opEntryAlert",
-			"lightboxClose": "SBb2HW_lightboxClose",
-			"opStatusBad": "SBb2HW_opStatusBad",
-			"meta": "SBb2HW_meta",
-			"rosterTagKeep": "SBb2HW_rosterTagKeep",
-			"irow": "SBb2HW_irow",
-			"notices": "SBb2HW_notices",
-			"choice": "SBb2HW_choice",
-			"nameLink": "SBb2HW_nameLink",
-			"opAggregateHint": "SBb2HW_opAggregateHint",
-			"opQueuedIcon": "SBb2HW_opQueuedIcon",
-			"actWarn": "SBb2HW_actWarn",
-			"bannerIcon": "SBb2HW_bannerIcon",
-			"opName": "SBb2HW_opName",
-			"topBtn": "SBb2HW_topBtn",
-			"tabs": "SBb2HW_tabs",
-			"dshmSlide": "SBb2HW_dshmSlide",
-			"actLive": "SBb2HW_actLive",
-			"barWave": "SBb2HW_barWave",
-			"opEmptyHint": "SBb2HW_opEmptyHint",
-			"dangerBtn": "SBb2HW_dangerBtn",
-			"specTagGit": "SBb2HW_specTagGit",
-			"pageEllipsis": "SBb2HW_pageEllipsis",
-			"groupActions": "SBb2HW_groupActions",
-			"groupMember": "SBb2HW_groupMember",
-			"groupCreate": "SBb2HW_groupCreate",
-			"hiddenFile": "SBb2HW_hiddenFile",
-			"cardShot": "SBb2HW_cardShot",
-			"opEntry": "SBb2HW_opEntry",
-			"opIcon": "SBb2HW_opIcon",
-			"lightboxDot": "SBb2HW_lightboxDot",
-			"stateDot": "SBb2HW_stateDot",
-			"diagVal": "SBb2HW_diagVal",
-			"opPanel": "SBb2HW_opPanel",
-			"diagBadgeOfficial": "SBb2HW_diagBadgeOfficial",
-			"switchOn": "SBb2HW_switchOn",
-			"ovArrow": "SBb2HW_ovArrow",
-			"sectionOverview": "SBb2HW_sectionOverview",
-			"conflictIcon": "SBb2HW_conflictIcon",
-			"collapseTitle": "SBb2HW_collapseTitle",
-			"grid": "SBb2HW_grid",
-			"conflictBody": "SBb2HW_conflictBody",
-			"opDecisionFoot": "SBb2HW_opDecisionFoot",
-			"opWrap": "SBb2HW_opWrap",
-			"tag": "SBb2HW_tag",
-			"diagCount": "SBb2HW_diagCount",
-			"diagSection": "SBb2HW_diagSection",
-			"ovByTag": "SBb2HW_ovByTag",
-			"orphBadge": "SBb2HW_orphBadge",
-			"empty": "SBb2HW_empty",
-			"grow": "SBb2HW_grow",
-			"lightboxImg": "SBb2HW_lightboxImg",
-			"owner": "SBb2HW_owner",
-			"diagnosticsActions": "SBb2HW_diagnosticsActions",
-			"cats": "SBb2HW_cats",
-			"descTight": "SBb2HW_descTight",
-			"dshmPlugFade": "SBb2HW_dshmPlugFade",
-			"catsWrap": "SBb2HW_catsWrap",
-			"err": "SBb2HW_err",
-			"cardBlocked": "SBb2HW_cardBlocked",
-			"progress": "SBb2HW_progress",
-			"reassureOk": "SBb2HW_reassureOk",
-			"conflictDetailsToggle": "SBb2HW_conflictDetailsToggle",
-			"catsToggle": "SBb2HW_catsToggle",
-			"deprecate": "SBb2HW_deprecate",
-			"src": "SBb2HW_src",
-			"cmd": "SBb2HW_cmd",
-			"switch": "SBb2HW_switch",
-			"backupCard": "SBb2HW_backupCard",
-			"backupActions": "SBb2HW_backupActions",
-			"diagBundle": "SBb2HW_diagBundle",
-			"top": "SBb2HW_top",
-			"diagRow": "SBb2HW_diagRow",
-			"orphRow": "SBb2HW_orphRow",
-			"lightboxNav": "SBb2HW_lightboxNav",
-			"act": "SBb2HW_act",
 			"conflictWhy": "SBb2HW_conflictWhy",
-			"viewBtn": "SBb2HW_viewBtn",
-			"dragHandle": "SBb2HW_dragHandle",
-			"barFill": "SBb2HW_barFill",
-			"groupMembers": "SBb2HW_groupMembers",
-			"fixFallbackText": "SBb2HW_fixFallbackText",
-			"lightboxNext": "SBb2HW_lightboxNext",
-			"specTag": "SBb2HW_specTag",
-			"row1": "SBb2HW_row1",
-			"dot": "SBb2HW_dot",
-			"collapseBody": "SBb2HW_collapseBody",
-			"assignSelect": "SBb2HW_assignSelect",
-			"foot": "SBb2HW_foot",
-			"opEmpty": "SBb2HW_opEmpty",
-			"swatches": "SBb2HW_swatches",
-			"lightboxDots": "SBb2HW_lightboxDots",
-			"diagList": "SBb2HW_diagList",
-			"logoMark": "SBb2HW_logoMark",
-			"diagAlert": "SBb2HW_diagAlert",
-			"diagArrow": "SBb2HW_diagArrow",
-			"specTagFile": "SBb2HW_specTagFile",
-			"tab": "SBb2HW_tab",
-			"shot": "SBb2HW_shot",
-			"collapseHead": "SBb2HW_collapseHead",
-			"rosterRowOut": "SBb2HW_rosterRowOut",
-			"choiceOn": "SBb2HW_choiceOn",
-			"cardBlockedMark": "SBb2HW_cardBlockedMark",
-			"inlineInput": "SBb2HW_inlineInput",
-			"panelNote": "SBb2HW_panelNote",
-			"okState": "SBb2HW_okState",
-			"opDecision": "SBb2HW_opDecision",
-			"catsRow": "SBb2HW_catsRow",
-			"dragOver": "SBb2HW_dragOver",
-			"modalNote": "SBb2HW_modalNote",
-			"collapseIcon": "SBb2HW_collapseIcon",
-			"pct": "SBb2HW_pct",
-			"compactCard": "SBb2HW_compactCard",
-			"nm": "SBb2HW_nm",
-			"bannerHint": "SBb2HW_bannerHint",
-			"spin": "SBb2HW_spin",
-			"sp": "SBb2HW_sp",
-			"star": "SBb2HW_star",
-			"choices": "SBb2HW_choices",
-			"choiceRadio": "SBb2HW_choiceRadio",
-			"opActions": "SBb2HW_opActions",
-			"viewOn": "SBb2HW_viewOn",
-			"roster": "SBb2HW_roster",
-			"backupMessage": "SBb2HW_backupMessage",
-			"lightboxPrev": "SBb2HW_lightboxPrev",
-			"desc": "SBb2HW_desc",
-			"installBtn": "SBb2HW_installBtn",
-			"stateTag": "SBb2HW_stateTag",
-			"opStatus": "SBb2HW_opStatus",
-			"cardShots": "SBb2HW_cardShots",
-			"catsCollapsed": "SBb2HW_catsCollapsed",
-			"compactGrid": "SBb2HW_compactGrid",
-			"loading": "SBb2HW_loading",
-			"tabSearchRow": "SBb2HW_tabSearchRow",
-			"backupCheckList": "SBb2HW_backupCheckList",
-			"viewBar": "SBb2HW_viewBar",
-			"groupAddPanel": "SBb2HW_groupAddPanel",
-			"diagEmpty": "SBb2HW_diagEmpty",
-			"choiceNote": "SBb2HW_choiceNote",
-			"diagIndex": "SBb2HW_diagIndex",
-			"ovFrom": "SBb2HW_ovFrom",
-			"viewBarInline": "SBb2HW_viewBarInline",
-			"av": "SBb2HW_av",
-			"bar": "SBb2HW_bar",
-			"rosterName": "SBb2HW_rosterName",
-			"opCloseBtn": "SBb2HW_opCloseBtn",
-			"actWhy": "SBb2HW_actWhy",
 			"irowActions": "SBb2HW_irowActions",
-			"pageInfo": "SBb2HW_pageInfo",
-			"diagPage": "SBb2HW_diagPage",
-			"shots": "SBb2HW_shots",
+			"backupMessage": "SBb2HW_backupMessage",
+			"diagIndex": "SBb2HW_diagIndex",
+			"viewBtn": "SBb2HW_viewBtn",
+			"groupAddPanel": "SBb2HW_groupAddPanel",
+			"opTop": "SBb2HW_opTop",
+			"diagSection": "SBb2HW_diagSection",
+			"choiceTitle": "SBb2HW_choiceTitle",
+			"specTag": "SBb2HW_specTag",
+			"tag": "SBb2HW_tag",
+			"metaInline": "SBb2HW_metaInline",
+			"opDecisionFoot": "SBb2HW_opDecisionFoot",
+			"pct": "SBb2HW_pct",
 			"groupRow": "SBb2HW_groupRow",
-			"backupInput": "SBb2HW_backupInput",
-			"rosterRow": "SBb2HW_rosterRow",
-			"tabSearch": "SBb2HW_tabSearch",
-			"diagSummary": "SBb2HW_diagSummary",
-			"on": "SBb2HW_on",
-			"groupHead": "SBb2HW_groupHead",
-			"warnLine": "SBb2HW_warnLine",
-			"metaTagOk": "SBb2HW_metaTagOk",
-			"dangerArmed": "SBb2HW_dangerArmed",
-			"themesGrid": "SBb2HW_themesGrid",
-			"spec": "SBb2HW_spec",
-			"staleAction": "SBb2HW_staleAction",
-			"rosterTag": "SBb2HW_rosterTag",
-			"themeViewRow": "SBb2HW_themeViewRow",
-			"retryBtn": "SBb2HW_retryBtn",
+			"dragOver": "SBb2HW_dragOver",
 			"diagSummaryMeta": "SBb2HW_diagSummaryMeta",
-			"card": "SBb2HW_card",
-			"diagMeta": "SBb2HW_diagMeta",
-			"diagBadgeCommunity": "SBb2HW_diagBadgeCommunity",
+			"opPanel": "SBb2HW_opPanel",
+			"groupMember": "SBb2HW_groupMember",
+			"body": "SBb2HW_body",
+			"rosterName": "SBb2HW_rosterName",
+			"diagList": "SBb2HW_diagList",
+			"panelNote": "SBb2HW_panelNote",
+			"shot": "SBb2HW_shot",
+			"pager": "SBb2HW_pager",
+			"pagerPages": "SBb2HW_pagerPages",
+			"groupHead": "SBb2HW_groupHead",
+			"act": "SBb2HW_act",
+			"av": "SBb2HW_av",
+			"swatches": "SBb2HW_swatches",
+			"empty": "SBb2HW_empty",
+			"cardBlocked": "SBb2HW_cardBlocked",
+			"collapseTitle": "SBb2HW_collapseTitle",
+			"warnLine": "SBb2HW_warnLine",
+			"src": "SBb2HW_src",
+			"conflictIcon": "SBb2HW_conflictIcon",
+			"nameLink": "SBb2HW_nameLink",
+			"cmd": "SBb2HW_cmd",
+			"opEntryAlert": "SBb2HW_opEntryAlert",
+			"notices": "SBb2HW_notices",
+			"lightboxDot": "SBb2HW_lightboxDot",
+			"spin": "SBb2HW_spin",
+			"irow": "SBb2HW_irow",
+			"rosterAuthor": "SBb2HW_rosterAuthor",
+			"stateTag": "SBb2HW_stateTag",
+			"opAggregateTop": "SBb2HW_opAggregateTop",
+			"opQueuedIcon": "SBb2HW_opQueuedIcon",
+			"opAggregateHint": "SBb2HW_opAggregateHint",
+			"cardAction": "SBb2HW_cardAction",
+			"actWarn": "SBb2HW_actWarn",
+			"meta": "SBb2HW_meta",
+			"opEntry": "SBb2HW_opEntry",
+			"root": "SBb2HW_root",
+			"opDot": "SBb2HW_opDot",
+			"opRowAlert": "SBb2HW_opRowAlert",
+			"opDecision": "SBb2HW_opDecision",
+			"opEmptyHint": "SBb2HW_opEmptyHint",
+			"backupCheckList": "SBb2HW_backupCheckList",
+			"switchOn": "SBb2HW_switchOn",
+			"modalNote": "SBb2HW_modalNote",
+			"dshmPlugFade": "SBb2HW_dshmPlugFade",
+			"groupName": "SBb2HW_groupName",
+			"groupCreate": "SBb2HW_groupCreate",
+			"cardShots": "SBb2HW_cardShots",
+			"opRow": "SBb2HW_opRow",
+			"actLive": "SBb2HW_actLive",
+			"lightboxNext": "SBb2HW_lightboxNext",
+			"specTagFile": "SBb2HW_specTagFile",
+			"backupInput": "SBb2HW_backupInput",
+			"shots": "SBb2HW_shots",
+			"diagSummary": "SBb2HW_diagSummary",
+			"diagSummaryItem": "SBb2HW_diagSummaryItem",
+			"diagAlert": "SBb2HW_diagAlert",
+			"ovArrow": "SBb2HW_ovArrow",
+			"choiceOn": "SBb2HW_choiceOn",
+			"compactGrid": "SBb2HW_compactGrid",
+			"rosterTagKeep": "SBb2HW_rosterTagKeep",
+			"choices": "SBb2HW_choices",
+			"barFill": "SBb2HW_barFill",
+			"opPanelTitle": "SBb2HW_opPanelTitle",
+			"dragHandle": "SBb2HW_dragHandle",
+			"top": "SBb2HW_top",
+			"choiceNote": "SBb2HW_choiceNote",
+			"backupActions": "SBb2HW_backupActions",
+			"metaTagOk": "SBb2HW_metaTagOk",
+			"metaTag": "SBb2HW_metaTag",
+			"lightboxPrev": "SBb2HW_lightboxPrev",
+			"barWave": "SBb2HW_barWave",
+			"tabSearchRow": "SBb2HW_tabSearchRow",
+			"opVerb": "SBb2HW_opVerb",
+			"spec": "SBb2HW_spec",
+			"pageInfo": "SBb2HW_pageInfo",
+			"lightboxImg": "SBb2HW_lightboxImg",
+			"viewBarInline": "SBb2HW_viewBarInline",
+			"hiddenFile": "SBb2HW_hiddenFile",
+			"diagBadgeShadow": "SBb2HW_diagBadgeShadow",
+			"conflictDetailsToggle": "SBb2HW_conflictDetailsToggle",
+			"opIcon": "SBb2HW_opIcon",
+			"logoMark": "SBb2HW_logoMark",
+			"topBtn": "SBb2HW_topBtn",
+			"ovRow": "SBb2HW_ovRow",
 			"dragging": "SBb2HW_dragging",
-			"switchMixed": "SBb2HW_switchMixed",
+			"groupHint": "SBb2HW_groupHint",
+			"backupWarn": "SBb2HW_backupWarn",
+			"viewBar": "SBb2HW_viewBar",
+			"choice": "SBb2HW_choice",
+			"choiceMain": "SBb2HW_choiceMain",
+			"roster": "SBb2HW_roster",
+			"err": "SBb2HW_err",
+			"choiceRadio": "SBb2HW_choiceRadio",
+			"lightboxDotOn": "SBb2HW_lightboxDotOn",
+			"row1": "SBb2HW_row1",
 			"rosterSplit": "SBb2HW_rosterSplit",
+			"opMain": "SBb2HW_opMain",
+			"depBadge": "SBb2HW_depBadge",
+			"loading": "SBb2HW_loading",
+			"groupMembers": "SBb2HW_groupMembers",
+			"lightbox": "SBb2HW_lightbox",
+			"opHead": "SBb2HW_opHead",
+			"assignSelect": "SBb2HW_assignSelect",
+			"dshmSlide": "SBb2HW_dshmSlide",
+			"opName": "SBb2HW_opName",
 			"depLine": "SBb2HW_depLine",
-			"pagerPages": "SBb2HW_pagerPages"
+			"diagPage": "SBb2HW_diagPage",
+			"diagBundle": "SBb2HW_diagBundle",
+			"diagBadgeCommunity": "SBb2HW_diagBadgeCommunity",
+			"inlineInput": "SBb2HW_inlineInput",
+			"groupActions": "SBb2HW_groupActions",
+			"diagEmpty": "SBb2HW_diagEmpty",
+			"orphBadge": "SBb2HW_orphBadge",
+			"diagArrow": "SBb2HW_diagArrow",
+			"fixFallbackText": "SBb2HW_fixFallbackText",
+			"rosterRow": "SBb2HW_rosterRow",
+			"collapseIcon": "SBb2HW_collapseIcon",
+			"grid": "SBb2HW_grid",
+			"compactCard": "SBb2HW_compactCard",
+			"rosterMain": "SBb2HW_rosterMain",
+			"subTabs": "SBb2HW_subTabs",
+			"descTight": "SBb2HW_descTight",
+			"ovByTag": "SBb2HW_ovByTag",
+			"collapseHead": "SBb2HW_collapseHead",
+			"conflictWhyText": "SBb2HW_conflictWhyText",
+			"diagKey": "SBb2HW_diagKey",
+			"dot": "SBb2HW_dot",
+			"actBroken": "SBb2HW_actBroken",
+			"tab": "SBb2HW_tab",
+			"dangerBtn": "SBb2HW_dangerBtn",
+			"lightboxClose": "SBb2HW_lightboxClose",
+			"okState": "SBb2HW_okState",
+			"themeViewRow": "SBb2HW_themeViewRow",
+			"foot": "SBb2HW_foot",
+			"rosterRowOut": "SBb2HW_rosterRowOut",
+			"tabs": "SBb2HW_tabs",
+			"catsWrap": "SBb2HW_catsWrap",
+			"byline": "SBb2HW_byline",
+			"diagBadgeOfficial": "SBb2HW_diagBadgeOfficial",
+			"bannerHint": "SBb2HW_bannerHint",
+			"actWhy": "SBb2HW_actWhy",
+			"opCloseBtn": "SBb2HW_opCloseBtn",
+			"backupCard": "SBb2HW_backupCard",
+			"owner": "SBb2HW_owner",
+			"sp": "SBb2HW_sp",
+			"diagRow": "SBb2HW_diagRow",
+			"reassure": "SBb2HW_reassure",
+			"opAggregate": "SBb2HW_opAggregate",
+			"lightboxDots": "SBb2HW_lightboxDots",
+			"bannerIcon": "SBb2HW_bannerIcon",
+			"catsToggle": "SBb2HW_catsToggle",
+			"themesGrid": "SBb2HW_themesGrid",
+			"card": "SBb2HW_card",
+			"progress": "SBb2HW_progress",
+			"bar": "SBb2HW_bar",
+			"conflictBody": "SBb2HW_conflictBody",
+			"diagnosticsActions": "SBb2HW_diagnosticsActions",
+			"rosterTag": "SBb2HW_rosterTag",
+			"installBtn": "SBb2HW_installBtn",
+			"reassureOk": "SBb2HW_reassureOk",
+			"stateDot": "SBb2HW_stateDot",
+			"opStatus": "SBb2HW_opStatus",
+			"cardBlockedMark": "SBb2HW_cardBlockedMark",
+			"specTagGit": "SBb2HW_specTagGit",
+			"deprecate": "SBb2HW_deprecate",
+			"dangerArmed": "SBb2HW_dangerArmed",
+			"pageEllipsis": "SBb2HW_pageEllipsis",
+			"star": "SBb2HW_star",
+			"stickyHead": "SBb2HW_stickyHead",
+			"cats": "SBb2HW_cats",
+			"catsCollapsed": "SBb2HW_catsCollapsed",
+			"pairGrid": "SBb2HW_pairGrid",
+			"nm": "SBb2HW_nm",
+			"grow": "SBb2HW_grow",
+			"rosterTagDrop": "SBb2HW_rosterTagDrop",
+			"opStatusBad": "SBb2HW_opStatusBad",
+			"catsRow": "SBb2HW_catsRow",
+			"opWrap": "SBb2HW_opWrap",
+			"opEmpty": "SBb2HW_opEmpty",
+			"opActions": "SBb2HW_opActions",
+			"lightboxNav": "SBb2HW_lightboxNav",
+			"retryBtn": "SBb2HW_retryBtn",
+			"tabSearch": "SBb2HW_tabSearch",
+			"switchKnob": "SBb2HW_switchKnob",
+			"diagMeta": "SBb2HW_diagMeta",
+			"on": "SBb2HW_on",
+			"assignRow": "SBb2HW_assignRow",
+			"diagVal": "SBb2HW_diagVal",
+			"irowMissing": "SBb2HW_irowMissing",
+			"cardShot": "SBb2HW_cardShot",
+			"backupGrid": "SBb2HW_backupGrid",
+			"desc": "SBb2HW_desc",
+			"backupCheck": "SBb2HW_backupCheck",
+			"diagCount": "SBb2HW_diagCount",
+			"ovFrom": "SBb2HW_ovFrom",
+			"orphRow": "SBb2HW_orphRow",
+			"viewOn": "SBb2HW_viewOn",
+			"switch": "SBb2HW_switch",
+			"fixFallback": "SBb2HW_fixFallback",
+			"staleAction": "SBb2HW_staleAction",
+			"banner": "SBb2HW_banner",
+			"sectionOverview": "SBb2HW_sectionOverview",
+			"switchMixed": "SBb2HW_switchMixed",
+			"collapseBody": "SBb2HW_collapseBody"
 		};
 		//#endregion
 		//#region src/client/operations.ts
@@ -3070,7 +3076,16 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 						})
 					] })
 				]
-			}), document.body);
+			}), marketPortalHost());
+		}
+		let portalHost = null;
+		function marketPortalHost() {
+			if (portalHost === null) {
+				portalHost = document.createElement("div");
+				portalHost.setAttribute("data-dsh-market-portal", "");
+			}
+			document.body.appendChild(portalHost);
+			return portalHost;
 		}
 		/** Reuse DSH's real whale asset so the built-in market belongs to the host. */
 		function MarketLogo({ size = 16, style }) {
@@ -3699,6 +3714,11 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 				const first = risks[0];
 				return `${first.plugin}: ${first.peer} ${first.range} vs ${first.resolved}`;
 			};
+			const shadowSummary = (entries) => {
+				if (entries.length === 0) return "";
+				const first = entries[0];
+				return `${first.name} — ${first.layers.join(" / ")}${entries.length > 1 ? ` (+${entries.length - 1})` : ""}`;
+			};
 			const doInstall = (0, react.useCallback)((plugin) => {
 				setBuildsSkipped(null);
 				setConfirming(null);
@@ -3940,6 +3960,13 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 				setStaleName(null);
 				setFreshReleaseConfirmation(null);
 				setUpdatingName(name);
+				const updateRecordId = nextRecordId();
+				setRecords((list) => enqueue(list, {
+					id: updateRecordId,
+					kind: "update",
+					name,
+					state: "running"
+				}));
 				return fetch("/dsh-market/update", {
 					method: "POST",
 					headers: { "content-type": "application/json" },
@@ -3952,11 +3979,13 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 					body
 				}))).then(({ status, body }) => {
 					if (body.cancelled === true) {
+						setRecords((list) => drop(list, updateRecordId));
 						refreshInstalled();
 						if (body.partial === true) setInstallError(t("partialNote"));
 						return;
 					}
 					if (status === 200 && body.ok) {
+						setRecords((list) => patch(list, updateRecordId, { state: "done" }));
 						setUpdatedNames((names) => names.concat(name));
 						if (body.activation && typeof body.activation === "object") setActivations((prev) => ({
 							...prev,
@@ -3967,6 +3996,7 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 					} else {
 						if (status === 409) {
 							if (body.confirmationRequired === true && body.staleReason === "release-age") {
+								setRecords((list) => drop(list, updateRecordId));
 								setFreshReleaseConfirmation({
 									name,
 									version: updates[name]?.latest ?? null
@@ -3975,9 +4005,17 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 							}
 							if (body.agentsBusy === true) {
 								const running = Array.isArray(body.runningAgents) && body.runningAgents.length > 0 ? ` (${body.runningAgents.join(", ")})` : "";
+								setRecords((list) => patch(list, updateRecordId, {
+									state: "failed",
+									reason: t("agentBusyUpdate") + running
+								}));
 								setInstallError(t("agentBusyUpdate") + running);
 								return;
 							}
+							setRecords((list) => patch(list, updateRecordId, {
+								state: "failed",
+								reason: t("busyWait")
+							}));
 							setInstallError(t("busyWait"));
 							return;
 						}
@@ -3988,10 +4026,22 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 						});
 						const text = (v) => typeof v === "string" ? v : v && typeof v.text === "string" ? v.text : v == null ? "" : JSON.stringify(v);
 						const detail = text(body.error) || humanOutput([text(body.stderr), text(body.stdout)].filter(Boolean).join("\n")) || "exit " + body.exitCode;
+						setRecords((list) => patch(list, updateRecordId, {
+							state: "failed",
+							reason: detail.trim().slice(-600)
+						}));
 						setInstallError(t("updateFail") + ": " + name + " — " + detail.trim().slice(-600));
 					}
-				}).catch((error) => setInstallError(t("updateFail") + ": " + String(error))).finally(() => setUpdatingName(null));
+				}).catch((error) => {
+					const detail = String(error);
+					setRecords((list) => patch(list, updateRecordId, {
+						state: "failed",
+						reason: detail.slice(-600)
+					}));
+					setInstallError(t("updateFail") + ": " + detail);
+				}).finally(() => setUpdatingName(null));
 			}, [
+				nextRecordId,
 				refreshInstalled,
 				t,
 				updates
@@ -4219,7 +4269,8 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 			}, [updatableNames, doUpdate]);
 			const finishRestore = (0, react.useCallback)((body) => {
 				const errors = Array.isArray(body.errors) ? body.errors : [];
-				setRestoreErrors(errors.map((item) => `${String(item.name)}: ${String(item.error)}`));
+				const unportable = Array.isArray(body.unportable) ? body.unportable : [];
+				setRestoreErrors([...errors.map((item) => `${String(item.name)}: ${String(item.error)}`), ...unportable.map((item) => `${String(item.name)}: ${t("restoreUnportable")} (${String(item.spec)})`)]);
 				setBackupRestored(true);
 				setBackupMessage(t("restoreDone"));
 				if (errors.length === 0) {
@@ -5206,9 +5257,23 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
 								className: Market_module_css_default.grow,
 								children: [
-									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", { children: t("compatRiskBanner") }),
-									" ",
-									compatibilitySummary(compatibilityNotice.risks)
+									compatibilityNotice.risks.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", { children: t("compatRiskBanner") }),
+										" ",
+										compatibilitySummary(compatibilityNotice.risks)
+									] }),
+									compatibilityNotice.shadowedNames !== void 0 && compatibilityNotice.shadowedNames.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+										compatibilityNotice.risks.length > 0 && " · ",
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", { children: t("shadowNameBanner") }),
+										" ",
+										shadowSummary(compatibilityNotice.shadowedNames)
+									] }),
+									compatibilityNotice.brokenBundles !== void 0 && compatibilityNotice.brokenBundles.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+										(compatibilityNotice.risks.length > 0 || (compatibilityNotice.shadowedNames?.length ?? 0) > 0) && " · ",
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("b", { children: t("brokenBundleBanner") }),
+										" ",
+										compatibilityNotice.brokenBundles[0].name
+									] })
 								]
 							}),
 							/* @__PURE__ */ (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.Button, {

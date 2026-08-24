@@ -163,7 +163,7 @@ export function assessCompatibility(profileDirectory, options) {
         else if (verdict.kind === 'warning')
             warnings.push(verdict.warning);
     }
-    return { risks, warnings };
+    return { risks, warnings, duplicateNames: report.duplicateNames };
 }
 function riskId(risk) {
     return `${risk.plugin}\u0000${risk.peer}\u0000${risk.direction}`;
@@ -172,6 +172,11 @@ function riskId(risk) {
 export function introducedRisks(before, after) {
     const seen = new Set(before.risks.map(riskId));
     return after.risks.filter(risk => !seen.has(riskId(risk)));
+}
+/** Cross-layer loader names introduced by this mutation, excluding pre-existing profile debt. */
+export function introducedDuplicateNames(before, after) {
+    const seen = new Set(before.duplicateNames.map(entry => entry.name));
+    return after.duplicateNames.filter(entry => !seen.has(entry.name));
 }
 /** Convenience wrapper matching the profile helper signature. */
 export function assessProfile(profile, explicitDir) {

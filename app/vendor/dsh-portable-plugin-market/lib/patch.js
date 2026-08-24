@@ -388,3 +388,35 @@ export function removeRowBlocks(patchPath, rowIds) {
         logEvent('info', 'patch', `removed patch rows for ${rowIds.join(', ')}`);
     }
 }
+function foreignDisableIds(rows) {
+    const ids = [];
+    for (const row of rows) {
+        if (row === null || typeof row !== 'object' || Array.isArray(row))
+            continue;
+        const value = row;
+        if (typeof value.id === 'string' && value.disabled === true && !ids.includes(value.id))
+            ids.push(value.id);
+    }
+    return ids;
+}
+/** Other loader rows that this package disables at the top level of its patch. */
+export function carrierDisableIds(profileDirectory, packageName) {
+    const packageDir = join(profileDirectory, 'node_modules', packageName);
+    const disabled = new Set();
+    const collect = (patchPath) => {
+        const rows = parsePatchFile(patchPath);
+        if (rows === null)
+            return;
+        for (const id of foreignDisableIds(rows))
+            disabled.add(id);
+    };
+    try {
+        const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'));
+        const declared = manifest.dsh?.bundle?.patch;
+        if (typeof declared === 'string' && declared !== '')
+            collect(join(packageDir, declared));
+    }
+    catch { /* package absent */ }
+    collect(join(packageDir, 'cordis.patch.yml'));
+    return [...disabled];
+}

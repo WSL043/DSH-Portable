@@ -168,6 +168,9 @@ export interface InstallResult {
   busy?: boolean
   /** Package names pnpm reported as having ignored build scripts (ndjson). */
   ignoredBuilds?: string[]
+  /** Structured pnpm failure carried on stdout by the ndjson reporter. */
+  pnpmError?: string
+  pnpmErrorCode?: string
 }
 
 /** The shape every orchestration function takes to run plugin commands (injectable in tests). */
@@ -569,12 +572,15 @@ export function runDshPlugin(profile: string, pluginArgs: string[]): Promise<Ins
       const failed = code !== 0 || timedOut
       if (failed) progress.error = tracker.snapshot.error
       const ignoredBuilds = tracker.snapshot.ignoredBuilds
+      const { error: pnpmError, errorCode: pnpmErrorCode } = tracker.snapshot
       resolvePromise({
         exitCode: code,
         timedOut,
         stdout,
         stderr,
         cancelled: cancelRequested,
+        ...(pnpmError !== null ? { pnpmError } : {}),
+        ...(pnpmErrorCode !== null ? { pnpmErrorCode } : {}),
         ...(ignoredBuilds.length > 0 ? { ignoredBuilds } : {}),
       })
     })
@@ -662,12 +668,15 @@ export function createDesktopPluginRuntime(
         const failed = outcome.exitCode !== 0 || outcome.signal !== null || timedOut
         if (failed) progress.error = tracker.snapshot.error
         const ignoredBuilds = tracker.snapshot.ignoredBuilds
+        const { error: pnpmError, errorCode: pnpmErrorCode } = tracker.snapshot
         return {
           exitCode: outcome.exitCode,
           timedOut,
           stdout,
           stderr,
           cancelled: active.userCancelled,
+          ...(pnpmError !== null ? { pnpmError } : {}),
+          ...(pnpmErrorCode !== null ? { pnpmErrorCode } : {}),
           ...(ignoredBuilds.length > 0 ? { ignoredBuilds } : {}),
         }
       } catch (error) {

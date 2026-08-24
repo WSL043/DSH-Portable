@@ -61,14 +61,13 @@ The close button sends the app to the system tray by default, so an active task 
 | --- | --- |
 | You want a movable folder prepared automatically | [**Portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended, about 55 KB) |
 | The destination computer is offline, or you need manual extraction | [Complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| You want a conventional install and uninstall flow | [Windows installer](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) |
 
 ### macOS
 
-| Mac | DMG (recommended) | Portable ZIP |
-| --- | --- | --- |
-| Apple Silicon (M1–M4) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
-| Intel | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) |
+| Mac | Portable ZIP |
+| --- | --- |
+| Apple Silicon (M1–M4) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
+| Intel | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) |
 
 macOS packages are ad-hoc signed and not notarized by Apple. If first launch is blocked, Control-click the app and choose **Open**.
 
@@ -110,7 +109,9 @@ dsh plugin --profile web remove <package-name>
 dsh --profile web --dump-config
 ```
 
-The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables. The Windows installer can optionally add `dsh` to the current user's `PATH`; deselecting the option or uninstalling removes only the entry managed by the installer.
+The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
+
+DSH-Portable focuses on a movable, offline-ready, repairable distribution and no longer publishes a conventional installer. If a conventional installer is the priority, use the full-featured [DeepSeek Harness Desktop (Electron)](https://github.com/anywhere-labs/deepseek-harness-desktop) or the smaller [DeepSeek Harness Desktop (Tauri)](https://github.com/dsh-tauri-desk/deepseek-harness-desktop).
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 

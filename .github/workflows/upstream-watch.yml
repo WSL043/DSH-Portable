@@ -26,6 +26,30 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/update-upstream.mjs
+      - id: market
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-market-upstream.mjs
+      - name: Create or refresh the plugin-market review issue
+        if: steps.market.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.market.outputs.pinned }}
+          LATEST: ${{ steps.market.outputs.latest }}
+          RELEASE_URL: ${{ steps.market.outputs.url }}
+        run: |
+          TITLE="Review dsh-market ${LATEST} for Portable"
+          BODY=$(mktemp)
+          printf '%s\n' \
+            'A newer dsh-market release is available for a selective Portable review.' \
+            '' "- reviewed baseline: \`${PINNED}\`" "- latest release: [\`${LATEST}\`](${RELEASE_URL})" \
+            '' 'Use .github/PLUGIN-MARKET-UPSTREAM.md as the decision matrix. Port only applicable behavior with tests; do not merge the upstream working tree or auto-release.' > "$BODY"
+          ISSUE=$(gh issue list --state open --search "Review dsh-market in:title" --json number,title --jq '.[] | select(.title | startswith("Review dsh-market")) | .number' | head -n 1)
+          if [ -n "$ISSUE" ]; then
+            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY" --add-assignee WSL043
+          else
+            gh issue create --title "$TITLE" --body-file "$BODY" --assignee WSL043
+          fi
       - name: Summarize source-only upstream activity
         if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.source_changed == 'true'
         env:

@@ -1,0 +1,23 @@
+{
+  "version": "0.4.9",
+  "zh": {
+    "summary": "插件市场补齐安全安装与更新反馈，发行下载重新聚焦真正可搬迁的 Portable 成品。",
+    "highlights": [
+      "插件安装会校验依赖目录和补丁结果；遇到尚未发布的官方 DSH peer 时只进行一次受限重试，不会放宽第三方依赖。",
+      "插件更新会显示在任务面板中；取消、失败、完成与刚发布版本确认都有明确状态，不再像后台无响应。",
+      "备份恢复会识别无法随目录迁移的绝对 file 和 link 依赖，避免恢复后留下指向旧电脑或旧目录的链接。",
+      "内置市场选择性跟进 dsh-market v1.21.1，并增加每日上游差异提醒；只吸收适合 Portable 的修复，不自动覆盖本地实现。",
+      "新版下载只保留便携启动器、离线包和各平台便携成品；需要传统安装流程的用户可从文档前往成熟桌面客户端。"
+    ]
+  },
+  "en": {
+    "summary": "Completes safe plugin installation and update feedback while refocusing downloads on genuinely movable Portable builds.",
+    "highlights": [
+      "Plugin installs validate the dependency store and patch result; an unpublished official DSH peer gets one bounded retry without relaxing third-party dependencies.",
+      "Plugin updates now appear in the activity panel with explicit cancelled, failed, completed, and fresh-release confirmation states.",
+      "Backup restore reports absolute file and link dependencies that cannot move with the folder instead of silently reconnecting to an old machine path.",
+      "The bundled market selectively adopts dsh-market v1.21.1 and adds a daily upstream review signal without overwriting Portable-specific behavior.",
+      "New releases publish only the bootstrap, offline archive, and portable builds for each platform; users who prefer a conventional installer are directed to mature desktop clients."
+    ]
+  }
+}

@@ -54,11 +54,12 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   })
   assert.deepEqual(lock.pluginMarket, {
     package: '@wsl043/dsh-portable-plugin-market',
-    version: '0.1.0-beta.2',
+    version: '0.1.0-beta.3',
     catalog: 'https://awesome-dsh-plugin.com/plugins.json',
     catalogRepository: 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
     implementationBasis: 'https://github.com/dsh-market/dsh-market',
-    reviewedBasisCommit: '488de05f4f7e6a3e03627b403cedad828a226cbf',
+    reviewedBasisTag: 'v1.21.1',
+    reviewedBasisCommit: '567ab09e2e170f17ac79f26f4d00df3e8fb74965',
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
@@ -107,7 +108,7 @@ test('the independent lock verifier accepts the current local bridge link and ex
   const result = JSON.parse(stdout)
   const upstream = JSON.parse(await read('upstream.lock.json'))
   assert.equal(result.dshVersion, upstream.dsh.version)
-  assert.equal(result.pluginMarketVersion, '0.1.0-beta.2')
+  assert.equal(result.pluginMarketVersion, '0.1.0-beta.3')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {
@@ -173,6 +174,25 @@ test('every desktop package ships the portable repair runtime used by the CLI', 
     read('scripts/build-linux.sh'),
   ])
   for (const build of [windows, macos, linux]) assert.match(build, /repair-core\.mjs/)
+})
+
+test('the release surface is Portable-only and does not publish traditional installers', async () => {
+  const [staging, publish, workflow, chinese, english, site] = await Promise.all([
+    read('scripts/stage-release-assets.mjs'),
+    read('.github/workflows/publish.yml'),
+    read('.github/workflows/ci.yml'),
+    read('README.md'),
+    read('README.en.md'),
+    read('site/index.html'),
+  ])
+  for (const text of [staging, publish, workflow, chinese, english, site]) {
+    assert.doesNotMatch(text, /DeepSeek-Herness-Setup\.exe/)
+    assert.doesNotMatch(text, /DeepSeek-Herness-macos-(?:arm64|x64)\.dmg/)
+  }
+  assert.doesNotMatch(workflow, /windows-installer-smoke|macos-dmg-smoke|kind:\s*installer/)
+  assert.doesNotMatch(publish, /winget/i)
+  assert.match(chinese, /传统安装版/)
+  assert.match(english, /conventional installer/i)
 })
 
 test('stop path preserves the official DSH graceful shutdown before escalation', async () => {

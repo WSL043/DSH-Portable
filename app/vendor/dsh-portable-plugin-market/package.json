@@ -1,7 +1,7 @@
 {
   "name": "@wsl043/dsh-portable-plugin-market",
   "description": "Portable-native DSH plugin market backed by the Awesome DSH Plugin catalog.",
-  "version": "0.1.0-beta.2",
+  "version": "0.1.0-beta.3",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
@@ -22,13 +22,19 @@
     "plugin-manager"
   ],
   "scripts": {
+    "build": "pnpm run build:server && pnpm run build:client",
+    "build:server": "tsc -p tsconfig.json",
     "build:client": "tsdown && node scripts/normalize-client-banner.mjs"
   },
   "devDependencies": {
+    "@types/js-yaml": "4.0.9",
+    "@types/node": "26.0.0",
+    "@deepseek-ai/schemastery": "3.18.1",
     "lightningcss": "1.33.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "tsdown": "0.22.14"
+    "tsdown": "0.22.14",
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "js-yaml": "^4.1.0",

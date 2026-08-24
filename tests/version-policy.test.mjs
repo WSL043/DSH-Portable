@@ -85,13 +85,10 @@ test('all finished-product manifests use the same declared product version', asy
 
   const productSources = await Promise.all([
     read('installer/windows/DSH-Portable.iss'),
-    read('installer/windows/DeepSeek-Herness.iss'),
     read('launcher/linux/Cargo.toml'),
     read('launcher/linux/package.json'),
     read('launcher/linux/tauri.conf.json'),
     read('launcher/macos/Info.plist'),
-    read('launcher/macos/Info-installed.plist'),
-    read('launcher/macos/Info-stop-installed.plist'),
   ])
   const productVersion = new RegExp(regexEscape(policy.version))
   for (const source of productSources) assert.match(source, productVersion)

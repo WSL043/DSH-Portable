@@ -17,7 +17,7 @@
  * unparseable ranges, and optional peers never produce a risk here.
  */
 
-import { analyzeProfile, compareSemver, type CheckOptions, type PeerMismatch } from './check.ts'
+import { analyzeProfile, compareSemver, type CheckOptions, type DuplicateName, type PeerMismatch } from './check.ts'
 import { profileDir, readInstalledManifest } from './profile.ts'
 
 export interface CompatibilityRisk {
@@ -39,6 +39,7 @@ export interface CompatibilityWarning {
 export interface CompatibilityAssessment {
   risks: CompatibilityRisk[]
   warnings: CompatibilityWarning[]
+  duplicateNames: DuplicateName[]
 }
 
 export type PeerVerdict =
@@ -200,7 +201,7 @@ export function assessCompatibility(profileDirectory: string, options?: CheckOpt
     if (verdict.kind === 'risk') risks.push(verdict.risk)
     else if (verdict.kind === 'warning') warnings.push(verdict.warning)
   }
-  return { risks, warnings }
+  return { risks, warnings, duplicateNames: report.duplicateNames }
 }
 
 function riskId(risk: CompatibilityRisk): string {
@@ -211,6 +212,15 @@ function riskId(risk: CompatibilityRisk): string {
 export function introducedRisks(before: CompatibilityAssessment, after: CompatibilityAssessment): CompatibilityRisk[] {
   const seen = new Set(before.risks.map(riskId))
   return after.risks.filter(risk => !seen.has(riskId(risk)))
+}
+
+/** Cross-layer loader names introduced by this mutation, excluding pre-existing profile debt. */
+export function introducedDuplicateNames(
+  before: CompatibilityAssessment,
+  after: CompatibilityAssessment,
+): DuplicateName[] {
+  const seen = new Set(before.duplicateNames.map(entry => entry.name))
+  return after.duplicateNames.filter(entry => !seen.has(entry.name))
 }
 
 /** Convenience wrapper matching the profile helper signature. */

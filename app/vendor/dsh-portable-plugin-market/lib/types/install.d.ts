@@ -15,6 +15,9 @@ export declare const RELEASE_AGE_OVERRIDE = "--config.minimumReleaseAge=0";
  * this override once. Scoped to a single command like RELEASE_AGE_OVERRIDE.
  */
 export declare const FETCH_TIMEOUT_OVERRIDE = "--config.fetchTimeout=600000";
+/** One-command retry used only when pnpm tries to fetch a peer supplied by DSH itself. */
+export declare const AUTO_INSTALL_PEERS_OFF = "--config.auto-install-peers=false";
+export declare function isUnpublishedHostPeer(pkg: string | undefined, profile: string, explicitDir?: string): boolean;
 /**
  * Run one plugin command with automatic recovery from three known pnpm traps:
  *
@@ -35,7 +38,8 @@ export declare const FETCH_TIMEOUT_OVERRIDE = "--config.fetchTimeout=600000";
  * appended to stderr so the UI shows an actionable message instead of a
  * wall of text (#20 bug 3). Cancelled runs are never recovered.
  */
-export declare function withHoistRecovery(run: PluginRunner, profile: string, pluginArgs: string[]): Promise<InstallResult>;
+export declare function withHoistRecovery(run: PluginRunner, profile: string, pluginArgs: string[], profileDirectory?: string): Promise<InstallResult>;
+export declare function failureDetail(result: InstallResult, limit?: number): string;
 /**
  * Some registry entries point at collection repos whose actual plugin lives
  * in a subdirectory — the root has no package.json (or a workspace root with

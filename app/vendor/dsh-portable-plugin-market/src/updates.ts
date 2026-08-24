@@ -201,17 +201,16 @@ export async function fetchNpmLatest(name: string): Promise<string | null> {
   }
 }
 
-/** Per-plugin update checks; a failed check reports no update rather than failing the listing. */
+/**
+ * Per-plugin update checks; a failed check reports no update rather than
+ * failing the listing. `channelFor` is deliberately scoped to the market
+ * package: opting into its preview channel must not pull prereleases from
+ * unrelated plugin authors.
+ */
 export async function checkUpdates(
   profile: string,
   force = false,
   explicitDir?: string,
-  /**
-   * Packages that follow a release channel instead of plain `latest`. Only
-   * ever the market itself: opting into early builds is volunteering to try
-   * THIS plugin early, not a licence to pull every other author's
-   * unreleased work.
-   */
   channelFor: ReadonlyMap<string, Channel> = new Map(),
 ): Promise<Record<string, UpdateStatus>> {
   const activeProfileDir = profileDir(profile, explicitDir)

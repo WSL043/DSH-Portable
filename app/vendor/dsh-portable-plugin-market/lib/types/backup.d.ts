@@ -105,4 +105,9 @@ export declare function extractPluginSelection(backup: ProfileBackup, includeDep
  * `selection` is given, only the selected plugins are merged in.
  */
 export declare function mergeRestoreManifest(backupManifest: Record<string, unknown>, current: Record<string, unknown>, selection?: PluginSelection): Record<string, unknown>;
+/** Absolute link:/file: specs that cannot travel with a profile backup. */
+export declare function unportableDeps(dependencies: unknown): Array<{
+    name: string;
+    spec: string;
+}>;
 export {};

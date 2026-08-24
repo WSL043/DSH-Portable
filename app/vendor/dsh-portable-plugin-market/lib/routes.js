@@ -15,8 +15,8 @@ import { createGroup, deleteGroup, removeFromGroups, renameGroup, setGroupMember
 import { logEvent } from './log.js';
 import { diagnosePackageManifests } from './diagnostics.js';
 import { BOOT_ID, cancelActive, probePnpm, progress, provisionPnpm, runDshPlugin, } from './dsh-cli.js';
-import { hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, restoreManifestDeps, setAllowBuilds } from './profile.js';
-import { assessProfile, introducedRisks } from './compatibility.js';
+import { addProfileBundle, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.js';
+import { assessProfile, introducedDuplicateNames, introducedRisks } from './compatibility.js';
 import { runningAgentIds } from './agents.js';
 import { analyzeProfile } from './check.js';
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.js';
@@ -28,9 +28,9 @@ import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPubli
 import { createThemeManager } from './themes.js';
 import { readJsonBody, sameOrigin, sendJson } from './http.js';
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.js';
-import { activationAfterReplace, hasHostHalf, verifyActivation } from './verify.js';
-import { disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags, readUserPatchState, removeRowBlocks, rowIdsForPackage, } from './patch.js';
-import { createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, uploadWebdav, } from './backup.js';
+import { activationAfterReplace, checkClientBundle, hasHostHalf, verifyActivation } from './verify.js';
+import { carrierDisableIds, disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags, readUserPatchState, removeRowBlocks, rowIdsForPackage, } from './patch.js';
+import { createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, unportableDeps, uploadWebdav, } from './backup.js';
 import { createGist, fitsGistLimit, GistError, gistErrorCode, parseGistId, readGist, resolveGistTokenSource, updateGist, verifyGistToken, } from './gist.js';
 const PROFILE_RE = /^[A-Za-z0-9_-]+$/;
 /**
@@ -307,7 +307,7 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
         }
     }
     /** Every plugin command goes through the pnpm-drift recovery wrapper (#20). */
-    const runPlugin = (profile, args) => withHoistRecovery(commands.runPlugin, profile, args);
+    const runPlugin = (profile, args) => withHoistRecovery(commands.runPlugin, profile, args, activeProfileDir);
     /**
      * Undo a clean-exit update whose new build cannot boot. Restoring only the
      * manifest pin (the original #159 behavior) leaves the bad package files
@@ -362,10 +362,9 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
         if (result.exitCode !== 0 || result.timedOut || result.cancelled) {
             return { ok: false, hot: false, detail: (result.stderr || result.stdout).slice(-300) };
         }
-        let hot = false;
-        hot = await hotUnmount(name);
-        if (!hot)
-            hot = await themes.setEntryDisabled(name, true);
+        const unmounted = await hotUnmount(name);
+        const entryDisabled = await themes.setEntryDisabled(name, true);
+        const hot = unmounted || entryDisabled;
         removeRowBlocks(userPatchPath, rowIdsForPackage(host, activeProfileDir, name));
         disabled.delete(name);
         removeFromGroups({ groups, groupOrder }, name);
@@ -387,10 +386,11 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
             // lists are unioned. Full exports merge to the backup view unchanged.
             const mergedManifest = mergeRestoreManifest(JSON.parse(readFileSync(join(activeProfileDir, 'package.json'), 'utf8')), manifestBefore);
             writeFileSync(join(activeProfileDir, 'package.json'), `${JSON.stringify(mergedManifest, null, 2)}\n`);
+            const unportable = unportableDeps(mergedManifest.dependencies);
             const result = await runPlugin(config.profile, ['install']);
             if (result.exitCode === 0 && !result.timedOut && !result.cancelled) {
                 invalidateUpdates();
-                return { files: restored.files, errors: [] };
+                return { files: restored.files, errors: [], unportable };
             }
             // A bad dependency makes pnpm abort the whole install. Retry from an
             // empty dependency list so one broken plugin cannot block the rest.
@@ -441,7 +441,7 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                 restored.rollback();
             }
             invalidateUpdates();
-            return { files: restored.files, errors };
+            return { files: restored.files, errors, unportable: unportableDeps(manifest.dependencies) };
         }
         catch (error) {
             restored.rollback();
@@ -884,6 +884,22 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                     // every boot. Client-only packages have no bundle rows — the
                     // market's own state.json replay covers those.
                     const patchRows = rowIdsForPackage(host, activeProfileDir, name);
+                    const carrier = carrierDisableIds(activeProfileDir, name);
+                    const isCarrier = carrier.length > 0;
+                    let bundleSwitch = { ok: true, reason: null };
+                    if (isCarrier) {
+                        try {
+                            if (enabled)
+                                addProfileBundle(activeProfileDir, name);
+                            else
+                                removeProfileBundle(activeProfileDir, name);
+                        }
+                        catch (error) {
+                            bundleSwitch = { ok: false, reason: error instanceof Error ? error.message : String(error) };
+                            ok = false;
+                            reason = bundleSwitch.reason ?? reason;
+                        }
+                    }
                     let patchWrite = null;
                     if (patchRows.length > 0) {
                         for (const rowId of patchRows) {
@@ -909,7 +925,7 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                     // change lands on the next boot via the patch layer + state.json —
                     // the client reuses the market's pending-restart banner for it.
                     const liveAfter = liveNames().has(name);
-                    const restart = enabled ? !liveAfter : liveAfter;
+                    const restart = isCarrier ? true : enabled ? !liveAfter : liveAfter;
                     // A client-part plugin's UI is in the page already — toggling it
                     // needs a browser refresh to show the change (same signal the
                     // install flow uses for the hot banner).
@@ -924,6 +940,8 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                         reason,
                         patchRows,
                         patchWrite: patchWrite ?? { ok: true, reason: null },
+                        carrier,
+                        bundleSwitch,
                         restart,
                         refresh,
                     });
@@ -1167,28 +1185,28 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                             const refuse = selfChannel === null
                                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
                                 : installedVersion !== null && registryLatest !== null && installedVersion === registryLatest;
-                if (refuse) {
+                            if (refuse) {
                                 logEvent('info', 'update', `${name} refused: latest=${registryLatest} is not newer than installed=${installedVersion}`);
                                 sendJson(response, 400, {
                                     error: `已是最新：registry 的 latest 是 ${registryLatest}，不高于已装的 ${installedVersion}，更新会造成降级。 / Already current: the registry's latest (${registryLatest}) is not newer than the installed ${installedVersion}, so updating would downgrade it.`,
                                 });
-                    return;
-                }
-                // pnpm intentionally delays very fresh registry releases. Do
-                // not run a command that will silently keep the old version and
-                // only explain that afterwards. Ask first, without touching the
-                // profile; the existing explicit retry scopes the age bypass to
-                // this package and this one command.
-                if (!force && !isGit && selfChannel === null && await latestPublishedRecently(name) === true) {
-                    sendJson(response, 409, {
-                        error: '这个版本刚发布。为保留新包安全等待，Portable 不会自动绕过；如果你确认现在更新，请选择「立即更新」。 / This version was newly published. Portable keeps the fresh-package safety wait unless you explicitly choose "Update now".',
-                        stale: true,
-                        staleReason: 'release-age',
-                        confirmationRequired: true,
-                    });
-                    return;
-                }
-            }
+                                return;
+                            }
+                            // pnpm intentionally delays very fresh registry releases. Do
+                            // not run a command that will silently keep the old version and
+                            // only explain that afterwards. Ask first, without touching the
+                            // profile; the existing explicit retry scopes the age bypass to
+                            // this package and this one command.
+                            if (!force && !isGit && selfChannel === null && await latestPublishedRecently(name) === true) {
+                                sendJson(response, 409, {
+                                    error: '这个版本刚发布。为保留新包安全等待，Portable 不会自动绕过；如果你确认现在更新，请选择「立即更新」。 / This version was newly published. Portable keeps the fresh-package safety wait unless you explicitly choose "Update now".',
+                                    stale: true,
+                                    staleReason: 'release-age',
+                                    confirmationRequired: true,
+                                });
+                                return;
+                            }
+                        }
                         const repoKey = isGit ? spec.slice('github:'.length).replace(/#.*$/, '').toLowerCase() : null;
                         // Captured BEFORE pnpm replaces the files: afterwards the loader
                         // inventory reads exactly the same, because replacing a package
@@ -1283,11 +1301,17 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                             activation = {
                                 [name]: activationAfterReplace(verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)), wasLive),
                             };
-                            const risks = introducedRisks(compatibilityBefore, assessProfile(config.profile, activeProfileDir));
-                            if (risks.length > 0) {
+                            const after = assessProfile(config.profile, activeProfileDir);
+                            const risks = introducedRisks(compatibilityBefore, after);
+                            const shadowed = introducedDuplicateNames(compatibilityBefore, after);
+                            const bundleCheck = checkClientBundle(config.profile, name, activeProfileDir);
+                            const brokenBundles = bundleCheck.ok ? [] : [{ name, reason: bundleCheck.reason ?? 'parse failed' }];
+                            if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
                                 compatibility = {
                                     code: 'soft-incompatible',
                                     risks,
+                                    shadowedNames: shadowed.length > 0 ? shadowed : undefined,
+                                    brokenBundles: brokenBundles.length > 0 ? brokenBundles : undefined,
                                     rollbackId: savePendingRollback({
                                         kind: 'update',
                                         names: [name],
@@ -1296,6 +1320,10 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                                     }),
                                 };
                                 logEvent('warn', 'update-compat', `${name}: introduced host-compatibility risks — ${risks.map(risk => `${risk.peer}@${risk.range} vs ${risk.resolved}`).join('; ')}`);
+                                if (shadowed.length > 0)
+                                    logEvent('warn', 'update-shadow', `${name}: introduced duplicate loader names — ${shadowed.map(entry => entry.name).join(', ')}`);
+                                if (brokenBundles.length > 0)
+                                    logEvent('error', 'update-bundle', `${name}: ${brokenBundles[0].reason}`);
                             }
                         }
                         // Diagnose the stale outcome with EVIDENCE (#45 by @ayingQAQ):
@@ -1734,15 +1762,15 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                         let hot = false;
                         if (ok) {
                             invalidateUpdates();
-                            hot = await hotUnmount(name);
+                            const unmounted = await hotUnmount(name);
                             // Bundle-layer plugins never hot-mount, but their loader entry
                             // is still LIVE in this process — after the remove deleted the
                             // package, the next refresh would 404 on its client bundle and
                             // wedge the whole page until a dsh restart (#37 by
                             // @1123762794). Live-disable the entry so the refresh composes
                             // without it; after a real restart the entry is gone anyway.
-                            if (!hot)
-                                hot = await themes.setEntryDisabled(name, true);
+                            const entryDisabled = await themes.setEntryDisabled(name, true);
+                            hot = unmounted || entryDisabled;
                             // Patch-layer rows must not survive the remove either: a
                             // `- id: X` + `disabled: true` row for a package that no longer
                             // mounts is a boot-time orphan (port of dsh-plugin-hub).
@@ -2031,14 +2059,26 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                             }
                         }
                         if (ok && addedPackages.length > 0) {
-                            const risks = introducedRisks(compatibilityBefore, assessProfile(config.profile, activeProfileDir));
-                            if (risks.length > 0) {
+                            const after = assessProfile(config.profile, activeProfileDir);
+                            const risks = introducedRisks(compatibilityBefore, after);
+                            const shadowed = introducedDuplicateNames(compatibilityBefore, after);
+                            const brokenBundles = addedPackages
+                                .map(name => ({ name, check: checkClientBundle(config.profile, name, activeProfileDir) }))
+                                .filter(entry => !entry.check.ok)
+                                .map(entry => ({ name: entry.name, reason: entry.check.reason ?? 'parse failed' }));
+                            if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
                                 compatibility = {
                                     code: 'soft-incompatible',
                                     risks,
+                                    shadowedNames: shadowed.length > 0 ? shadowed : undefined,
+                                    brokenBundles: brokenBundles.length > 0 ? brokenBundles : undefined,
                                     rollbackId: savePendingRollback({ kind: 'install', names: addedPackages }),
                                 };
                                 logEvent('warn', 'install-compat', `${addedPackages.join(', ')}: introduced host-compatibility risks — ${risks.map(risk => `${risk.peer}@${risk.range} vs ${risk.resolved}`).join('; ')}`);
+                                if (shadowed.length > 0)
+                                    logEvent('warn', 'install-shadow', `${addedPackages.join(', ')}: introduced duplicate loader names — ${shadowed.map(entry => entry.name).join(', ')}`);
+                                if (brokenBundles.length > 0)
+                                    logEvent('error', 'install-bundle', brokenBundles.map(entry => `${entry.name}: ${entry.reason}`).join('; '));
                             }
                         }
                         logEvent(ok || cancelled ? 'info' : 'error', 'install', `${target} exit=${String(result.exitCode)}${result.timedOut ? ' TIMEOUT' : ''}${cancelled ? ' CANCELLED' : ''}${ok ? ` hot=${String(hot)}` : cancelled ? '' : ` stderr=${result.stderr.slice(-300)}`}`);

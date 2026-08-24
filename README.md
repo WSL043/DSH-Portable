@@ -61,14 +61,13 @@
 | --- | --- |
 | 想要可移动、自动准备的工作文件夹 | [**便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐，约 55 KB） |
 | 目标电脑无法联网，或需要手动解压 | [完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
-| 想像普通软件一样安装和卸载 | [Windows 安装版](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-Setup.exe) |
 
 ### macOS
 
-| 电脑 | DMG（推荐） | 便携 ZIP |
-| --- | --- | --- |
-| Apple Silicon（M1–M4） | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-arm64.dmg) | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
-| Intel Mac | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-macos-x64.dmg) | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) |
+| 电脑 | 便携 ZIP |
+| --- | --- |
+| Apple Silicon（M1–M4） | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
+| Intel Mac | [下载](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) |
 
 macOS 包采用临时签名，尚未经过 Apple 公证。首次打开若被阻止，请按住 Control 点按应用，再选择 **打开**。
 
@@ -110,7 +109,9 @@ dsh plugin --profile web remove <插件包名>
 dsh --profile web --dump-config
 ```
 
-便携版的 DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。移动整个 Portable 文件夹后，新开的 DSH 终端会自动使用新位置，不需要修复环境变量。Windows 安装版可以在安装时选择把 `dsh` 加入当前用户的 `PATH`；取消选择或卸载时只移除由安装器管理的那一项。
+便携版的 DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。移动整个 Portable 文件夹后，新开的 DSH 终端会自动使用新位置，不需要修复环境变量。
+
+DSH-Portable 专注于可搬迁、可离线和可修复的发行体验，不再提供传统安装版。更需要标准安装/卸载流程时，可选择功能完整的 [DeepSeek Harness Desktop（Electron）](https://github.com/anywhere-labs/deepseek-harness-desktop)，或体积更小的 [DeepSeek Harness Desktop（Tauri）](https://github.com/dsh-tauri-desk/deepseek-harness-desktop)。
 
 能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。市场不会在任务运行时更新、卸载或偷偷重启 DSH。只安装你信任的插件。
 
@@ -135,7 +136,6 @@ dsh --profile web --dump-config
 | `workspace/` | 默认工作区 |
 | `data/logs/` | 本地服务与启动日志 |
 
-安装版把相同数据放在 `%LOCALAPPDATA%\DeepSeek-Herness`，卸载应用时不会自动删除。
 
 ## 安全
 

@@ -6,8 +6,8 @@
  */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { classifyPnpmFailure } from './pnpm-compat.js';
-import { conflictingEntryIds, hasDshManifest, hasLoadableEntry, pluginSubdirs, profileDir, readInstalled, readProfileBundles } from './profile.js';
+import { classifyPnpmFailure, HOST_NAMESPACE_RE } from './pnpm-compat.js';
+import { conflictingEntryIds, hasDshManifest, hasLoadableEntry, pluginSubdirs, profileDir, readInstalled, readManifestDeps, readProfileBundles } from './profile.js';
 import { logEvent } from './log.js';
 import { cleanOrphanedStore } from './store.js';
 /** One-shot bypass for pnpm's fresh-release hold; scoped to a single command. */
@@ -20,6 +20,13 @@ export const RELEASE_AGE_OVERRIDE = '--config.minimumReleaseAge=0';
  * this override once. Scoped to a single command like RELEASE_AGE_OVERRIDE.
  */
 export const FETCH_TIMEOUT_OVERRIDE = '--config.fetchTimeout=600000';
+/** One-command retry used only when pnpm tries to fetch a peer supplied by DSH itself. */
+export const AUTO_INSTALL_PEERS_OFF = '--config.auto-install-peers=false';
+export function isUnpublishedHostPeer(pkg, profile, explicitDir) {
+    if (pkg === undefined || !HOST_NAMESPACE_RE.test(pkg))
+        return false;
+    return !Object.hasOwn(readManifestDeps(profile, explicitDir), pkg);
+}
 /**
  * Run one plugin command with automatic recovery from three known pnpm traps:
  *
@@ -40,7 +47,7 @@ export const FETCH_TIMEOUT_OVERRIDE = '--config.fetchTimeout=600000';
  * appended to stderr so the UI shows an actionable message instead of a
  * wall of text (#20 bug 3). Cancelled runs are never recovered.
  */
-export async function withHoistRecovery(run, profile, pluginArgs) {
+export async function withHoistRecovery(run, profile, pluginArgs, profileDirectory) {
     let result = await run(profile, pluginArgs);
     const ok = (r) => r.exitCode === 0 && !r.timedOut && !r.cancelled;
     if (!ok(result) && !result.cancelled) {
@@ -58,6 +65,13 @@ export async function withHoistRecovery(run, profile, pluginArgs) {
             && !pluginArgs.includes(RELEASE_AGE_OVERRIDE)) {
             logEvent('warn', 'install', `a too-young release blocks pnpm's lockfile verification (#39) — retrying once with ${RELEASE_AGE_OVERRIDE}`);
             result = await run(profile, [pluginArgs[0], RELEASE_AGE_OVERRIDE, ...pluginArgs.slice(1)]);
+        }
+        else if (failure?.code === 'fetch-404'
+            && isUnpublishedHostPeer(failure.pkg, profile, profileDirectory)
+            && (pluginArgs[0] === 'add' || pluginArgs[0] === 'remove')
+            && !pluginArgs.includes(AUTO_INSTALL_PEERS_OFF)) {
+            logEvent('warn', 'install', `${failure.pkg ?? 'a DSH host package'} is supplied by the runtime — retrying once without pnpm peer auto-install`);
+            result = await run(profile, [pluginArgs[0], AUTO_INSTALL_PEERS_OFF, ...pluginArgs.slice(1)]);
         }
         else if (failure?.code === 'transient-network'
             && (pluginArgs[0] === 'add' || pluginArgs[0] === 'remove')) {
@@ -85,10 +99,22 @@ export async function withHoistRecovery(run, profile, pluginArgs) {
         // gone (the name carries it), so a live download is never touched.
         await cleanOrphanedStore(run, profile);
         const failure = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`);
-        if (failure !== null)
+        if (failure !== null) {
             result = { ...result, stderr: `${result.stderr}\n\n${failure.message}` };
+        }
+        else if (result.pnpmError !== undefined && result.pnpmError !== '') {
+            const code = result.pnpmErrorCode === undefined ? '' : `${result.pnpmErrorCode}: `;
+            result = { ...result, stderr: `${result.stderr}\n\n${code}${result.pnpmError}` };
+        }
     }
     return result;
+}
+export function failureDetail(result, limit = 300) {
+    if (result.pnpmError !== undefined && result.pnpmError !== '') {
+        const code = result.pnpmErrorCode === undefined ? '' : `${result.pnpmErrorCode}: `;
+        return `${code}${result.pnpmError}`.slice(0, limit);
+    }
+    return (result.stderr || result.stdout).slice(-limit);
 }
 /**
  * Some registry entries point at collection repos whose actual plugin lives

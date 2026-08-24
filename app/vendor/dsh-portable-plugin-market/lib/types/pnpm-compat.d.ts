@@ -24,12 +24,15 @@
  */
 export declare function pluginArgsFor(profileDir: string, pluginArgs: string[]): string[];
 /** One recognized pnpm failure, with a bilingual explanation for the UI. */
+export declare const HOST_NAMESPACE_RE: RegExp;
 export interface PnpmFailure {
-    code: 'adding-to-root' | 'not-a-workspace' | 'hoist-pattern-diff' | 'pnpm-missing' | 'release-age-violation' | 'ignored-builds' | 'git-prepare-not-allowed' | 'fetch-404' | 'transient-network' | 'fetch-timeout';
+    code: 'adding-to-root' | 'not-a-workspace' | 'hoist-pattern-diff' | 'pnpm-missing' | 'release-age-violation' | 'ignored-builds' | 'git-prepare-not-allowed' | 'fetch-404' | 'transient-network' | 'fetch-timeout' | 'unexpected-store' | 'patch-failed';
     /** Bilingual, actionable message shown to the user instead of the raw wall of text. */
     message: string;
     /** True when re-running `pnpm install` in the profile is the documented recovery. */
     recoverable: boolean;
+    /** Package named by a registry 404, when pnpm supplied one. */
+    pkg?: string;
 }
 /**
  * Momentary network failures — worth exactly one automatic retry (#83).

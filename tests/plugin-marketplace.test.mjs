@@ -166,6 +166,121 @@ test('the Portable-owned market consumes Awesome directly without plugin-specifi
   assert.equal(manifest.homepage, 'https://github.com/WSL043/DSH-Portable')
 })
 
+test('market provenance is explicit in the distribution notice without occupying product UI', async () => {
+  const notice = await read('NOTICE.md')
+  assert.match(notice, /https:\/\/github\.com\/dsh-market\/dsh-market/)
+  assert.match(notice, /https:\/\/github\.com\/deepseek-ai\/awesome-dsh-plugin/)
+})
+
+test('the screenshot lightbox owns its portal container instead of sharing document.body with the host root', async () => {
+  const [section, builtClient] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/client/client.js'),
+  ])
+  assert.match(section, /data-dsh-market-portal/)
+  assert.match(section, /marketPortalHost\(\)/)
+  assert.doesNotMatch(section, /createPortal\([\s\S]{0,1800}document\.body/)
+  assert.match(builtClient, /data-dsh-market-portal/)
+})
+
+test('the Portable market carries applicable upstream safety fixes as independently tested contracts', async () => {
+  const [{ classifyPnpmFailure }, verify, backup, patchSource, compatibilitySource] = await Promise.all([
+    import('../app/vendor/dsh-portable-plugin-market/src/pnpm-compat.ts'),
+    import('../app/vendor/dsh-portable-plugin-market/src/verify.ts'),
+    import('../app/vendor/dsh-portable-plugin-market/src/backup.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/patch.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/compatibility.ts'),
+  ])
+
+  assert.equal(classifyPnpmFailure('ERR_PNPM_UNEXPECTED_STORE Unexpected store location')?.code, 'unexpected-store')
+  assert.equal(classifyPnpmFailure('ERR_PNPM_PATCH_FAILED Could not apply patch C:/p/a.patch')?.code, 'patch-failed')
+
+  assert.match(compatibilitySource, /export function introducedDuplicateNames/)
+  assert.match(compatibilitySource, /before\.duplicateNames[\s\S]+after\.duplicateNames\.filter/)
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dshm-safety-'))
+  try {
+    assert.match(patchSource, /export function carrierDisableIds/)
+    assert.match(patchSource, /disabled === true/)
+
+    const profile = path.join(root, 'profile')
+    const client = path.join(profile, 'node_modules', 'broken-client')
+    await mkdir(client, { recursive: true })
+    await writeFile(path.join(client, 'package.json'), JSON.stringify({ name: 'broken-client', dsh: { client: {} }, exports: { './client': './client.js' } }))
+    await writeFile(path.join(client, 'client.js'), 'function {')
+    assert.equal(verify.checkClientBundle('web', 'broken-client', profile).ok, false)
+
+    const files = path.join(root, 'backup-source')
+    await mkdir(files, { recursive: true })
+    await writeFile(path.join(files, 'package.json'), JSON.stringify({ name: 'profile' }))
+    await writeFile(path.join(files, 'keep.txt'), 'ok')
+    await writeFile(path.join(files, 'package.json.bak-asm'), 'stale')
+    const archive = backup.createProfileBackup('web', files)
+    assert.ok(archive.files.some((file) => file.path === 'keep.txt'))
+    assert.equal(archive.files.some((file) => /\.bak\b/.test(file.path)), false)
+
+    assert.deepEqual(backup.unportableDeps({
+      portable: '^1.0.0',
+      absoluteFile: 'file:C:\\work\\plugin',
+      absoluteLink: 'link:/opt/plugin',
+      relativeFile: 'file:../plugin',
+    }), [
+      { name: 'absoluteFile', spec: 'file:C:\\work\\plugin' },
+      { name: 'absoluteLink', spec: 'link:/opt/plugin' },
+    ])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('all activation cleanups run on uninstall and unpublished host peers get one scoped retry', async () => {
+  const [routes, install] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/install.ts'),
+  ])
+  assert.match(routes, /const unmounted = await hotUnmount\(name\)[\s\S]{0,240}await themes\.setEntryDisabled\(name, true\)/)
+  assert.match(install, /AUTO_INSTALL_PEERS_OFF\s*=\s*'--config\.auto-install-peers=false'/)
+  assert.match(install, /isUnpublishedHostPeer/)
+})
+
+test('the host-peer retry is scoped to DSH runtime peers and runs at most once', async () => {
+  const { withHoistRecovery, AUTO_INSTALL_PEERS_OFF } = await import('../app/vendor/dsh-portable-plugin-market/src/install.ts')
+  const profile = await mkdtemp(path.join(os.tmpdir(), 'dshm-host-peer-'))
+  try {
+    await writeFile(path.join(profile, 'package.json'), JSON.stringify({ dependencies: {} }))
+    const calls = []
+    const run = async (_profile, args) => {
+      calls.push(args)
+      if (calls.length === 1) {
+        return {
+          exitCode: 1, timedOut: false, cancelled: false, stdout: '',
+          stderr: 'ERR_PNPM_FETCH_404 GET https://registry.npmjs.org/@deepseek-ai%2Fdsh-runtime: Not Found - 404\nThis error happened while installing a direct dependency',
+        }
+      }
+      return { exitCode: 0, timedOut: false, cancelled: false, stdout: 'ok', stderr: '' }
+    }
+    const result = await withHoistRecovery(run, 'web', ['add', 'demo'], profile)
+    assert.equal(result.exitCode, 0)
+    assert.deepEqual(calls, [
+      ['add', 'demo'],
+      ['add', AUTO_INSTALL_PEERS_OFF, 'demo'],
+    ])
+
+    calls.length = 0
+    const ordinary = async (_profile, args) => {
+      calls.push(args)
+      return {
+        exitCode: 1, timedOut: false, cancelled: false, stdout: '',
+        stderr: 'ERR_PNPM_FETCH_404 GET https://registry.npmjs.org/ordinary-missing: Not Found - 404',
+      }
+    }
+    await withHoistRecovery(ordinary, 'web', ['add', 'ordinary-missing'], profile)
+    assert.deepEqual(calls.filter((args) => args[0] === 'add'), [['add', 'ordinary-missing']])
+  } finally {
+    await rm(profile, { recursive: true, force: true })
+  }
+})
+
 test('opening the market revalidates installed-plugin updates instead of serving the 30-minute cache', async () => {
   const [section, builtClient] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
@@ -176,6 +291,16 @@ test('opening the market revalidates installed-plugin updates instead of serving
   assert.match(initialEffect, /refreshInstalled\(true\)/)
   assert.doesNotMatch(initialEffect, /refreshInstalled\(\)\s*$/m)
   assert.match(builtClient, /refreshInstalled\(true\)/)
+})
+
+test('plugin updates remain visible in the market activity panel', async () => {
+  const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  const updateFlow = section.slice(section.indexOf('const doUpdate ='), section.indexOf('const doUseSkin ='))
+  assert.match(updateFlow, /kind:\s*'update'/)
+  assert.match(updateFlow, /state:\s*'running'/)
+  assert.match(updateFlow, /state:\s*'done'/)
+  assert.match(updateFlow, /state:\s*'failed'/)
+  assert.match(updateFlow, /drop\(list, updateRecordId\)/)
 })
 
 test('a newly published plugin asks for confirmation before pnpm mutates the profile', async () => {

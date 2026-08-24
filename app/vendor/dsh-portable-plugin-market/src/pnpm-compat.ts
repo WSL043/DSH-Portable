@@ -34,13 +34,18 @@ export function pluginArgsFor(profileDir: string, pluginArgs: string[]): string[
 }
 
 /** One recognized pnpm failure, with a bilingual explanation for the UI. */
+export const HOST_NAMESPACE_RE = /^@deepseek-ai\//
+
 export interface PnpmFailure {
   code: 'adding-to-root' | 'not-a-workspace' | 'hoist-pattern-diff' | 'pnpm-missing' | 'release-age-violation'
     | 'ignored-builds' | 'git-prepare-not-allowed' | 'fetch-404' | 'transient-network' | 'fetch-timeout'
+    | 'unexpected-store' | 'patch-failed'
   /** Bilingual, actionable message shown to the user instead of the raw wall of text. */
   message: string
   /** True when re-running `pnpm install` in the profile is the documented recovery. */
   recoverable: boolean
+  /** Package named by a registry 404, when pnpm supplied one. */
+  pkg?: string
 }
 
 /**
@@ -81,6 +86,28 @@ export function classifyPnpmFailure(output: string): PnpmFailure | null {
       code: 'hoist-pattern-diff',
       recoverable: true,
       message: 'profile 的 node_modules 是旧版 pnpm 创建的，与当前 pnpm 的默认配置不兼容，需要重建后重试 / this profile\'s node_modules was created by a different pnpm major; it must be rebuilt (pnpm install) before changes can be applied',
+    }
+  }
+  if (output.includes('ERR_PNPM_UNEXPECTED_STORE')) {
+    const linked = /currently linked from the store at "([^"]+)"/.exec(output)?.[1]
+    const wanted = /wants to use the store at "([^"]+)"/.exec(output)?.[1]
+    const detail = linked !== undefined && wanted !== undefined
+      ? `\n  node_modules → ${linked}\n  pnpm 现在想用 / pnpm now wants → ${wanted}`
+      : ''
+    return {
+      code: 'unexpected-store',
+      recoverable: false,
+      message: `这个 profile 的 node_modules 连接到了另一个 pnpm store，安装和卸载会被拒绝。${detail}\n请先在 profile 目录使用上面原 store 路径重新执行 pnpm install；不要让市场猜测并自动改写整个依赖树 / this profile's node_modules is linked to a different pnpm store, so install and remove are refused.${detail}\nRelink it explicitly with pnpm install and the original store path; the market will not guess and rewrite the dependency tree automatically`,
+    }
+  }
+  if (output.includes('ERR_PNPM_PATCH_FAILED')) {
+    const patch = /Could not apply patch (\S+)/.exec(output)?.[1]
+    const which = patch === undefined ? '' : `（${patch}）`
+    const whichEn = patch === undefined ? '' : ` (${patch})`
+    return {
+      code: 'patch-failed',
+      recoverable: false,
+      message: `profile 里的 pnpm 补丁无法应用${which}。包可能已经以未打补丁的状态写入；请更新或删除补丁文件及 package.json 中 pnpm.patchedDependencies 的对应项 / a pnpm patch no longer applies${whichEn}. The package may already have been written unpatched; update or remove the patch and its pnpm.patchedDependencies entry`,
     }
   }
   if (output.includes('ERR_PNPM_ADDING_TO_ROOT')) {
@@ -145,6 +172,7 @@ export function classifyPnpmFailure(output: string): PnpmFailure | null {
     return {
       code: 'fetch-404',
       recoverable: false,
+      pkg,
       message: `有一个依赖在 registry 上不存在${zh}，pnpm 因此拒绝任何安装操作。它可能是之前失败操作残留在 profile package.json 里的幽灵依赖（可手动删除该行），也可能是需要登录的私有包 / a dependency cannot be resolved from the registry${en}; pnpm refuses every install while it is present. It may be a ghost entry left in the profile's package.json by an earlier failed operation (remove that line by hand), or a private package needing registry credentials`,
     }
   }

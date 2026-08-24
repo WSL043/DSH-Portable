@@ -73,6 +73,9 @@ export interface InstallResult {
     busy?: boolean;
     /** Package names pnpm reported as having ignored build scripts (ndjson). */
     ignoredBuilds?: string[];
+    /** Structured pnpm failure carried on stdout by the ndjson reporter. */
+    pnpmError?: string;
+    pnpmErrorCode?: string;
 }
 /** The shape every orchestration function takes to run plugin commands (injectable in tests). */
 export type PluginRunner = (profile: string, pluginArgs: string[]) => Promise<InstallResult>;

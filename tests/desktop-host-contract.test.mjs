@@ -306,10 +306,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
 })
 
 test('macOS package smokes treat the native app as a long-lived desktop process', async () => {
-  const [portableSmoke, dmgSmoke] = await Promise.all([
-    read('scripts/smoke-portable.mjs'),
-    read('scripts/smoke-macos-dmg.sh'),
-  ])
+  const portableSmoke = await read('scripts/smoke-portable.mjs')
 
   assert.match(portableSmoke, /startNativeHost/)
   assert.match(portableSmoke, /['"]\/usr\/bin\/open['"]/)
@@ -317,10 +314,6 @@ test('macOS package smokes treat the native app as a long-lived desktop process'
   assert.match(portableSmoke, /waitForPortableStatus/)
   assert.match(portableSmoke, /Another portable launcher is already starting or stopping DSH/)
   assert.match(portableSmoke, /requestMacAppQuit/)
-  assert.match(dmgSmoke, /HOST_PID=\$!/)
-  assert.match(dmgSmoke, /status --json/)
-  assert.match(dmgSmoke, /tell application id "io\.github\.wsl043\.dsh-portable\.installed" to quit/)
-  assert.doesNotMatch(dmgSmoke, /^"\$APP\/Contents\/MacOS\/DeepSeek-Herness"$/m)
 })
 
 test('native hosts preserve only safe on-screen window placement in product data', async () => {

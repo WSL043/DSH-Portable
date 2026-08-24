@@ -49,7 +49,6 @@ await Promise.all([
   stageJsonVersion('launcher/linux/package-lock.json', 2),
   stageJsonVersion('launcher/linux/tauri.conf.json'),
   stageReplace('installer/windows/DSH-Portable.iss', /#define AppVersion "[^"]+"([\s\S]*?)VersionInfoVersion=[^\r\n]+/, `#define AppVersion "${policy.version}"$1VersionInfoVersion=${policy.windowsVersion}`),
-  stageReplace('installer/windows/DeepSeek-Herness.iss', /#define AppVersion "[^"]+"([\s\S]*?)VersionInfoVersion=[^\r\n]+/, `#define AppVersion "${policy.version}"$1VersionInfoVersion=${policy.windowsVersion}`),
   ...['launcher/windows/DSH-Bootstrap.cs', 'launcher/windows/DSH-Portable.cs', 'launcher/windows/DSH-Command.cs'].map((filename) =>
     stageReplaceMany(filename, [
       [/AssemblyVersion\("[^"]+"\)/, `AssemblyVersion("${policy.windowsVersion}")`],
@@ -57,7 +56,7 @@ await Promise.all([
     ])),
   stageReplace('launcher/linux/Cargo.toml', /(^name = "deepseek-herness-linux"\r?\nversion = ")[^"]+/m, `$1${policy.version}`),
   stageReplace('launcher/linux/Cargo.lock', /(^name = "deepseek-herness-linux"\r?\nversion = ")[^"]+/m, `$1${policy.version}`),
-  ...['launcher/macos/Info.plist', 'launcher/macos/Info-installed.plist', 'launcher/macos/Info-stop-installed.plist'].map((filename) =>
+  ...['launcher/macos/Info.plist'].map((filename) =>
     stageReplaceMany(filename, [
       [/(<key>CFBundleShortVersionString<\/key>\s*<string>)[^<]+/, `$1${policy.version}`],
       [/(<key>CFBundleVersion<\/key>\s*<string>)[^<]+/, `$1${policy.macBuildVersion}`],

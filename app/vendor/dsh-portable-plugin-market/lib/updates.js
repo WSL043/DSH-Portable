@@ -166,15 +166,13 @@ export async function fetchNpmLatest(name) {
         return null;
     }
 }
-/** Per-plugin update checks; a failed check reports no update rather than failing the listing. */
-export async function checkUpdates(profile, force = false, explicitDir,
 /**
- * Packages that follow a release channel instead of plain `latest`. Only
- * ever the market itself: opting into early builds is volunteering to try
- * THIS plugin early, not a licence to pull every other author's
- * unreleased work.
+ * Per-plugin update checks; a failed check reports no update rather than
+ * failing the listing. `channelFor` is deliberately scoped to the market
+ * package: opting into its preview channel must not pull prereleases from
+ * unrelated plugin authors.
  */
-channelFor = new Map()) {
+export async function checkUpdates(profile, force = false, explicitDir, channelFor = new Map()) {
     const activeProfileDir = profileDir(profile, explicitDir);
     // The channel is part of the key: switching to betas has to change the
     // answer immediately, and a cache keyed on the profile alone would serve

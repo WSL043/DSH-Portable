@@ -49,7 +49,7 @@ export interface ProfileBackup {
 function profileFiles(root: string, dir = root): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (SKIP_NAMES.has(entry.name) || /\.bak-\d+$/.test(entry.name)) continue
+    if (SKIP_NAMES.has(entry.name) || /\.bak\b/.test(entry.name)) continue
     const path = resolve(dir, entry.name)
     if (entry.isSymbolicLink()) continue
     if (entry.isDirectory()) files.push(...profileFiles(root, path))
@@ -499,4 +499,19 @@ export function mergeRestoreManifest(
   const dshMerged: Record<string, unknown> = { ...(backupDsh ?? {}), ...(currentDsh ?? {}), profile: profileMerged }
   merged.dsh = dshMerged
   return merged
+}
+
+/** Absolute link:/file: specs that cannot travel with a profile backup. */
+export function unportableDeps(dependencies: unknown): Array<{ name: string; spec: string }> {
+  if (dependencies === null || typeof dependencies !== 'object' || Array.isArray(dependencies)) return []
+  const found: Array<{ name: string; spec: string }> = []
+  for (const [name, raw] of Object.entries(dependencies as Record<string, unknown>)) {
+    if (typeof raw !== 'string') continue
+    const match = /^(?:link|file):(.+)$/i.exec(raw)
+    if (match === null) continue
+    let value = match[1]
+    try { value = decodeURIComponent(value) } catch { /* keep literal */ }
+    if (/^\//.test(value) || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value)) found.push({ name, spec: raw })
+  }
+  return found
 }

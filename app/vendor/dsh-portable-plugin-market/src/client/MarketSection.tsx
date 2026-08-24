@@ -265,11 +265,9 @@ function ScreenshotLightbox({ shots, startIndex, onClose, t }: { shots: string[]
     return () => window.removeEventListener('keydown', onKey, true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index])
-  // The primitives' own Modal (the confirm/settings dialog underneath)
-  // portals itself to document.body too, so plain in-tree rendering here
-  // put the lightbox BEHIND it regardless of z-index — a portal only wins a
-  // stacking tie against another portal by mounting later, not by CSS alone.
-  // Reported on a real host: "大的预览图层级不对，现在在弹窗的后面".
+  // Use a container owned by this plugin rather than sharing document.body
+  // with the host's React root. Separate roots mutating the same container can
+  // otherwise race during unmount and blank the entire settings section.
   return createPortal(
     <div className={css.lightbox} onClick={onClose}>
       {/* A literal "×" rather than IconCloseOutline16: the primitives
@@ -303,8 +301,27 @@ function ScreenshotLightbox({ shots, startIndex, onClose, t }: { shots: string[]
         </>
       )}
     </div>,
-    document.body,
+    marketPortalHost(),
   )
+}
+
+let portalHost: HTMLElement | null = null
+
+function marketPortalHost(): HTMLElement {
+  if (portalHost === null) {
+    portalHost = document.createElement('div')
+    portalHost.setAttribute('data-dsh-market-portal', '')
+  }
+  // Moving our own node to the end keeps the lightbox above the host modal
+  // without letting either React root manage the other's children.
+  document.body.appendChild(portalHost)
+  return portalHost
+}
+
+/** Test hook for browser-level lifecycle tests. */
+export function resetMarketPortalHost(): void {
+  portalHost?.remove()
+  portalHost = null
 }
 
 /** Reuse DSH's real whale asset so the built-in market belongs to the host. */
@@ -516,6 +533,8 @@ export function MarketSection(props: MarketSectionProps) {
   interface CompatibilityNotice {
     code: 'soft-incompatible'
     risks: Array<{ plugin: string; peer: string; range: string; resolved: string; direction: string }>
+    shadowedNames?: Array<{ name: string; layers: string[]; count: number }>
+    brokenBundles?: Array<{ name: string; reason: string }>
     rollbackId: string
   }
   const [compatibilityNotice, setCompatibilityNotice] = useState<CompatibilityNotice | null>(null)
@@ -980,6 +999,12 @@ export function MarketSection(props: MarketSectionProps) {
     return `${first.plugin}: ${first.peer} ${first.range} vs ${first.resolved}`
   }
 
+  const shadowSummary = (entries: NonNullable<CompatibilityNotice['shadowedNames']>): string => {
+    if (entries.length === 0) return ''
+    const first = entries[0]
+    return `${first.name} — ${first.layers.join(' / ')}${entries.length > 1 ? ` (+${entries.length - 1})` : ''}`
+  }
+
   const doInstall = useCallback((plugin: RegistryPlugin) => {
     setBuildsSkipped(null)
     setConfirming(null)
@@ -1219,6 +1244,8 @@ export function MarketSection(props: MarketSectionProps) {
     setStaleName(null)
     setFreshReleaseConfirmation(null)
     setUpdatingName(name)
+    const updateRecordId = nextRecordId()
+    setRecords(list => enqueue(list, { id: updateRecordId, kind: 'update', name, state: 'running' }))
     return fetch('/dsh-market/update', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1227,11 +1254,13 @@ export function MarketSection(props: MarketSectionProps) {
       .then(res => res.json().then(body => ({ status: res.status, body })))
       .then(({ status, body }) => {
         if (body.cancelled === true) {
+          setRecords(list => drop(list, updateRecordId))
           refreshInstalled()
           if (body.partial === true) setInstallError(t('partialNote'))
           return
         }
         if (status === 200 && body.ok) {
+          setRecords(list => patchRecord(list, updateRecordId, { state: 'done' }))
           setUpdatedNames(names => names.concat(name))
           if (body.activation && typeof body.activation === 'object') {
             setActivations(prev => ({ ...prev, ...body.activation }))
@@ -1243,14 +1272,17 @@ export function MarketSection(props: MarketSectionProps) {
         } else {
           if (status === 409) {
             if (body.confirmationRequired === true && body.staleReason === 'release-age') {
+              setRecords(list => drop(list, updateRecordId))
               setFreshReleaseConfirmation({ name, version: updates[name]?.latest ?? null })
               return
             }
             if (body.agentsBusy === true) {
               const running = Array.isArray(body.runningAgents) && body.runningAgents.length > 0 ? ` (${body.runningAgents.join(', ')})` : ''
+              setRecords(list => patchRecord(list, updateRecordId, { state: 'failed', reason: t('agentBusyUpdate') + running }))
               setInstallError(t('agentBusyUpdate') + running)
               return
             }
+            setRecords(list => patchRecord(list, updateRecordId, { state: 'failed', reason: t('busyWait') }))
             setInstallError(t('busyWait'))
             return
           }
@@ -1262,12 +1294,17 @@ export function MarketSection(props: MarketSectionProps) {
           }
           const text = (v: unknown) => typeof v === 'string' ? v : (v && typeof (v as any).text === 'string') ? (v as any).text : v == null ? '' : JSON.stringify(v)
           const detail = text(body.error) || humanOutput([text(body.stderr), text(body.stdout)].filter(Boolean).join('\n')) || ('exit ' + body.exitCode)
+          setRecords(list => patchRecord(list, updateRecordId, { state: 'failed', reason: detail.trim().slice(-600) }))
           setInstallError(t('updateFail') + ': ' + name + ' — ' + detail.trim().slice(-600))
         }
       })
-      .catch(error => setInstallError(t('updateFail') + ': ' + String(error)))
+      .catch(error => {
+        const detail = String(error)
+        setRecords(list => patchRecord(list, updateRecordId, { state: 'failed', reason: detail.slice(-600) }))
+        setInstallError(t('updateFail') + ': ' + detail)
+      })
       .finally(() => setUpdatingName(null))
-  }, [refreshInstalled, t, updates])
+  }, [nextRecordId, refreshInstalled, t, updates])
 
   const doUseSkin = useCallback((name: string) => {
     setInstallError(null)
@@ -1498,11 +1535,15 @@ export function MarketSection(props: MarketSectionProps) {
     next()
   }, [updatableNames, doUpdate])
 
-  const finishRestore = useCallback((body: { errors?: unknown }) => {
+  const finishRestore = useCallback((body: { errors?: unknown; unportable?: unknown }) => {
     const errors = Array.isArray(body.errors) ? body.errors as { name?: unknown; error?: unknown }[] : []
+    const unportable = Array.isArray(body.unportable) ? body.unportable as { name?: unknown; spec?: unknown }[] : []
     // Partial failures surface inline in the Backup tab (previously a
     // window.alert); the restore itself still completes.
-    setRestoreErrors(errors.map(item => `${String(item.name)}: ${String(item.error)}`))
+    setRestoreErrors([
+      ...errors.map(item => `${String(item.name)}: ${String(item.error)}`),
+      ...unportable.map(item => `${String(item.name)}: ${t('restoreUnportable')} (${String(item.spec)})`),
+    ])
     setBackupRestored(true)
     setBackupMessage(t('restoreDone'))
     if (errors.length === 0) {
@@ -2239,7 +2280,13 @@ export function MarketSection(props: MarketSectionProps) {
       {compatibilityNotice !== null && (
         <div className={css.banner}>
           <span className={css.grow}>
-            <b>{t('compatRiskBanner')}</b> {compatibilitySummary(compatibilityNotice.risks)}
+            {compatibilityNotice.risks.length > 0 && <><b>{t('compatRiskBanner')}</b> {compatibilitySummary(compatibilityNotice.risks)}</>}
+            {compatibilityNotice.shadowedNames !== undefined && compatibilityNotice.shadowedNames.length > 0 && (
+              <>{compatibilityNotice.risks.length > 0 && ' · '}<b>{t('shadowNameBanner')}</b> {shadowSummary(compatibilityNotice.shadowedNames)}</>
+            )}
+            {compatibilityNotice.brokenBundles !== undefined && compatibilityNotice.brokenBundles.length > 0 && (
+              <>{(compatibilityNotice.risks.length > 0 || (compatibilityNotice.shadowedNames?.length ?? 0) > 0) && ' · '}<b>{t('brokenBundleBanner')}</b> {compatibilityNotice.brokenBundles[0].name}</>
+            )}
           </span>
           <Button variant="outline" size="sm" onClick={() => setTab('diagnostics')}>{t('goDiagnose')}</Button>
           <Button variant="primary" size="sm" disabled={rollingBack} onClick={() => void doRollback(compatibilityNotice.rollbackId)}>

@@ -27,6 +27,7 @@ export function emptyProgress() {
         size: null,
         seen: false,
         error: null,
+        errorCode: null,
         ignoredBuilds: [],
     };
 }
@@ -129,7 +130,9 @@ export function createProgressTracker() {
             const err = (msg.err ?? {});
             const message = typeof err.message === 'string' ? err.message : '';
             if (message !== '')
-                snap.error = message.slice(0, 400);
+                snap.error = message.slice(0, 2000);
+            if (typeof err.code === 'string' && err.code !== '')
+                snap.errorCode = err.code;
             return;
         }
     }

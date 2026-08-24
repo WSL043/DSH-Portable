@@ -9,9 +9,9 @@ const copy = {
     downloadFor: "Download for Windows", downloadMeta: "Latest stable · Portable · No install", otherPlatforms: "Other platforms", heroNote: "Open-source community project · Windows / macOS / Linux", stageCaption: "DeepSeek Harness running in DSH-Portable", scrollCue: "See how it moves",
     portableKicker: "Works where you do", portableTitle: "One directory. Any machine.", portableIntro: "Work normally. When it is time to move, exit fully from the tray and copy the whole DSH-Portable folder.",
     journeyDesktop: "Work on this computer", journeyDesktopText: "Sessions, plugins, and workspace keep saving inside the portable directory.", journeyMove: "Copy the whole directory", journeyMoveText: "Put it on a portable drive, USB drive, or any location you choose.", journeyContinue: "Continue on another computer", journeyContinueText: "Open it again and the app repairs paths it owns.",
-    downloadsKicker: "Get DSH-Portable", downloadsTitle: "Choose your platform", downloadsIntro: "Your system is selected automatically. Offline archives, installers, and other builds remain directly available.", recommended: "Recommended",
-    windowsPortable: "Windows portable", windowsPortableText: "The small bootstrap prepares the complete folder in the location you choose.", downloadNow: "Download", offlineEdition: "Complete offline ZIP", offlineText: "For an offline computer or manual extraction", installerEdition: "Installer", installerText: "Shortcuts and standard uninstall", completeArchive: "All files", archiveText: "Release notes and other builds",
-    macDmg: "macOS DMG", macDmgText: "Drag it into Applications. The current build is not Apple-notarized.", portableZip: "Portable ZIP", portableZipText: "Extract and run", linuxAppText: "Grant execute permission and run. Data stays in the adjacent directory.", completeFolder: "Complete portable directory", allDownloads: "View Release", checksums: "Checksums",
+    downloadsKicker: "Get DSH-Portable", downloadsTitle: "Choose your platform", downloadsIntro: "Your system is selected automatically. Each platform keeps a portable entry point and a complete offline package.", recommended: "Recommended",
+    windowsPortable: "Windows portable", windowsPortableText: "The small bootstrap prepares the complete folder in the location you choose.", downloadNow: "Download", offlineEdition: "Complete offline ZIP", offlineText: "For an offline computer or manual extraction", completeArchive: "All files", archiveText: "Release notes and other builds",
+    portableZip: "Portable ZIP", portableZipText: "Extract and run. Data stays in the same directory.", linuxAppText: "Grant execute permission and run. Data stays in the adjacent directory.", completeFolder: "Complete portable directory", allDownloads: "View Release", checksums: "Checksums",
     insideKicker: "Ready when opened", insideTitle: "A desktop experience without extra setup.", insideIntro: "Portable does not mean stripped down. The window, tray, notifications, plugin market, updates, and repair tools stay in the product.",
     marketTitle: "Plugin market", marketText: "Browse, install, update, and disable community plugins from DSH Settings.", trayTitle: "Tray and notifications", trayText: "Return to recent sessions, create a new one, and receive a notification when work completes.", repairTitle: "Check and repair", repairText: "Preserve user data, rebuild reproducible components, and export a credential-free support report.", testedTitle: "Finished-product tests", testedText: "Install, start, exit, move, plugin, and update paths are continuously verified on all three platforms.",
     faqTitle: "Common questions", faqOfficialQ: "Is this an official DeepSeek desktop app?", faqOfficialA: "No. DSH-Portable is an independent community distribution that packages a product-tested preview of official DeepSeek Harness.", faqNodeQ: "Do I need Node.js first?", faqNodeA: "No. The runtime and plugin tools are included and do not modify the system PATH.", faqDataQ: "Will copying the folder lose my sessions?", faqDataA: "Fully exit from the tray, then copy the whole DSH-Portable folder. Sessions, settings, plugins, and the default workspace move together.", faqUpdateQ: "Will an update overwrite my data?", faqUpdateA: "No. Updates replace application components while user data and workspace remain in place.",
@@ -142,7 +142,6 @@ function bindArchitecture(panelName, fileMap) {
 }
 
 const setMacArchitecture = bindArchitecture("macos", {
-  "[data-mac-download='dmg']": { arm64: "DeepSeek-Herness-macos-arm64.dmg", x64: "DeepSeek-Herness-macos-x64.dmg" },
   "[data-mac-download='zip']": { arm64: "DSH-Portable-macos-arm64.zip", x64: "DSH-Portable-macos-x64.zip" }
 });
 const setLinuxArchitecture = bindArchitecture("linux", {
@@ -165,7 +164,7 @@ setLinuxArchitecture(isArm ? "arm64" : "x64");
 
 const primaryFiles = {
   windows: "DSH-Portable-windows-x64.exe",
-  macos: isArm ? "DeepSeek-Herness-macos-arm64.dmg" : "DeepSeek-Herness-macos-x64.dmg",
+  macos: isArm ? "DSH-Portable-macos-arm64.zip" : "DSH-Portable-macos-x64.zip",
   linux: isArm ? "DeepSeek-Herness-linux-arm64.AppImage" : "DeepSeek-Herness-linux-x64.AppImage"
 };
 document.querySelectorAll("[data-primary-download]").forEach((link) => { link.href = releaseBase + primaryFiles[platform]; });

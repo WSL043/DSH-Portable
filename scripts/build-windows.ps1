@@ -1,9 +1,7 @@
 [CmdletBinding()]
 param(
     [string]$OutputDir,
-    [string]$CacheDir,
-    [switch]$BuildInstaller,
-    [string]$IsccPath
+    [string]$CacheDir
 )
 
 $ErrorActionPreference = 'Stop'
@@ -410,135 +408,6 @@ try {
     $BootstrapHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Bootstrap).Hash.ToLowerInvariant()
     "$BootstrapHash  DSH-Portable-windows-x64.exe" | Set-Content -LiteralPath ($Bootstrap + '.sha256') -Encoding ascii -NoNewline
 
-    $PortableExtractor = $null
-    $PortableExtractorHash = $null
-    $Installer = $null
-    $InstallerHash = $null
-    if ($BuildInstaller) {
-        if (-not $IsccPath) {
-            $Command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
-            if ($Command) { $IsccPath = $Command.Source }
-        }
-        if (-not $IsccPath) {
-            foreach ($Candidate in @(
-                (Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\Inno Setup 7\ISCC.exe'),
-                (Join-Path $env:ProgramFiles 'Inno Setup 7\ISCC.exe'),
-                (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
-            )) {
-                if ($Candidate -and (Test-Path -LiteralPath $Candidate)) {
-                    $IsccPath = $Candidate
-                    break
-                }
-            }
-        }
-        if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath)) {
-            throw 'BuildInstaller requires Inno Setup 7 or newer (ISCC.exe).'
-        }
-        $IsccVersion = [string]((& $IsccPath '/?' 2>&1 | Select-Object -First 1))
-        $IsccVersionMatch = [regex]::Match($IsccVersion.Trim(), '^Inno Setup (?<major>\d+) Command-Line Compiler$')
-        if (-not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
-            throw "BuildInstaller requires Inno Setup 7 or newer; found '$IsccVersion'."
-        }
-
-        $PortableExtractorBuildDir = Join-Path $StageParent 'portable-extractor-output'
-        $InstallerBuildDir = Join-Path $StageParent 'installer-output'
-        New-Item -ItemType Directory -Force -Path $PortableExtractorBuildDir, $InstallerBuildDir | Out-Null
-        $PortableSetupScript = Join-Path $ProjectRoot 'installer\windows\DSH-Portable.iss'
-        $SetupScript = Join-Path $ProjectRoot 'installer\windows\DeepSeek-Herness.iss'
-        $InstallerDrive = $null
-        $InstallerDriveMounted = $false
-        try {
-            foreach ($Letter in @('R', 'Q', 'P', 'O', 'N', 'M')) {
-                $CandidateDrive = "${Letter}:"
-                if (-not (Test-Path -LiteralPath ($CandidateDrive + '\'))) {
-                    $InstallerDrive = $CandidateDrive
-                    break
-                }
-            }
-            if (-not $InstallerDrive) { throw 'No unused drive letter is available for the installer build.' }
-
-            # Inno Setup still encounters legacy source-path limits while walking
-            # deeply nested node_modules. Map only this private staging root to a
-            # short temporary drive and always release it below.
-            & subst.exe $InstallerDrive $StageParent
-            if ($LASTEXITCODE -ne 0) { throw "Could not map the installer staging drive ($InstallerDrive)." }
-            $InstallerDriveMounted = $true
-            $InstallerDriveRoot = $InstallerDrive + '\'
-            $ShortStage = Join-Path $InstallerDriveRoot 'DSH-Portable'
-            $ShortPortableOutputDir = Join-Path $InstallerDriveRoot 'portable-extractor-output'
-            $ShortOutputDir = Join-Path $InstallerDriveRoot 'installer-output'
-
-            $PortableIsccArguments = @(
-                '--quiet',
-                "/DStage=$ShortStage",
-                "/DOutputDir=$ShortPortableOutputDir",
-                "/DProjectRoot=$ProjectRoot",
-                "/DAppVersion=$PortableVersion",
-                $PortableSetupScript
-            )
-            & $IsccPath $PortableIsccArguments
-            $PortableIsccExitCode = $LASTEXITCODE
-            if ($null -ne $PortableIsccExitCode -and $PortableIsccExitCode -ne 0) {
-                throw "Portable self-extractor build failed with exit code $PortableIsccExitCode"
-            }
-
-            # Only the installed package receives an external state root. The
-            # portable self-extractor above is compiled from the clean movable
-            # stage, including its local data and workspace directories.
-            Copy-Item -Force (Join-Path $ProjectRoot 'templates\INSTALLED-README.txt') (Join-Path $Stage 'README.txt')
-            [System.IO.File]::WriteAllText(
-                (Join-Path $Stage 'installed-mode.json'),
-                (([ordered]@{ stateRoot = '%LOCALAPPDATA%\DeepSeek-Herness'; schemaVersion = 1 } | ConvertTo-Json) + [Environment]::NewLine),
-                [System.Text.UTF8Encoding]::new($false)
-            )
-
-            $IsccArguments = @(
-                '--quiet',
-                "/DStage=$ShortStage",
-                "/DOutputDir=$ShortOutputDir",
-                "/DProjectRoot=$ProjectRoot",
-                "/DAppVersion=$PortableVersion",
-                $SetupScript
-            )
-            & $IsccPath $IsccArguments
-            $InstallerIsccExitCode = $LASTEXITCODE
-            if ($null -ne $InstallerIsccExitCode -and $InstallerIsccExitCode -ne 0) {
-                throw "Inno Setup failed with exit code $InstallerIsccExitCode"
-            }
-        } finally {
-            if ($InstallerDriveMounted) {
-                & subst.exe $InstallerDrive /D
-                if ($LASTEXITCODE -ne 0) { Write-Warning "Could not release temporary installer drive $InstallerDrive" }
-            }
-        }
-
-        $PortableExtractorCandidate = Join-Path $PortableExtractorBuildDir 'DSH-Portable-windows-x64-offline.exe'
-        if (-not (Test-Path -LiteralPath $PortableExtractorCandidate)) { throw 'Inno Setup did not produce DSH-Portable-windows-x64-offline.exe.' }
-        $PortableExtractor = Join-Path $OutputDir 'DSH-Portable-windows-x64-offline.exe'
-        $PortableExtractorBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-offline-$BuildId.previous.exe")
-        if (Test-Path -LiteralPath $PortableExtractor) {
-            [System.IO.File]::Replace($PortableExtractorCandidate, $PortableExtractor, $PortableExtractorBackup, $true)
-        } else {
-            [System.IO.File]::Move($PortableExtractorCandidate, $PortableExtractor)
-        }
-        if (Test-Path -LiteralPath $PortableExtractorBackup) { Remove-Item -LiteralPath $PortableExtractorBackup -Force }
-        $PortableExtractorHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $PortableExtractor).Hash.ToLowerInvariant()
-        "$PortableExtractorHash  DSH-Portable-windows-x64-offline.exe" | Set-Content -LiteralPath ($PortableExtractor + '.sha256') -Encoding ascii -NoNewline
-
-        $InstallerCandidate = Join-Path $InstallerBuildDir 'DeepSeek-Herness-Setup.exe'
-        if (-not (Test-Path -LiteralPath $InstallerCandidate)) { throw 'Inno Setup did not produce DeepSeek-Herness-Setup.exe.' }
-        $Installer = Join-Path $OutputDir 'DeepSeek-Herness-Setup.exe'
-        $InstallerBackup = Join-Path $OutputDir (".DeepSeek-Herness-Setup-$BuildId.previous.exe")
-        if (Test-Path -LiteralPath $Installer) {
-            [System.IO.File]::Replace($InstallerCandidate, $Installer, $InstallerBackup, $true)
-        } else {
-            [System.IO.File]::Move($InstallerCandidate, $Installer)
-        }
-        if (Test-Path -LiteralPath $InstallerBackup) { Remove-Item -LiteralPath $InstallerBackup -Force }
-        $InstallerHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Installer).Hash.ToLowerInvariant()
-        "$InstallerHash  DeepSeek-Herness-Setup.exe" | Set-Content -LiteralPath ($Installer + '.sha256') -Encoding ascii -NoNewline
-    }
-
     [pscustomobject]@{
         Archive = $Zip
         Sha256 = $Hash
@@ -548,10 +417,6 @@ try {
         UpdateComponent = $UpdateComponent
         UpdateComponentSha256 = $UpdateComponentHash
         UpdateManifest = $UpdateManifest
-        PortableExtractor = $PortableExtractor
-        PortableExtractorSha256 = $PortableExtractorHash
-        Installer = $Installer
-        InstallerSha256 = $InstallerHash
         Stage = $Stage
         DshVersion = $Lock.dsh.version
     }

@@ -105,10 +105,6 @@ jobs:
             label: portable self-extractor
             artifact: windows-x64-extractor
             filename: DSH-Portable-windows-x64-offline.exe
-          - kind: installer
-            label: installer
-            artifact: windows-x64-installer
-            filename: DeepSeek-Herness-Setup.exe
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -341,20 +337,6 @@ jobs:
       - shell: powershell
         run: ./scripts/smoke-windows-portable-extractor.ps1
 
-  windows-installer-smoke:
-    name: Windows installer
-    needs: windows-inno-build
-    runs-on: windows-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: windows-x64-installer
-          path: artifacts
-      - shell: powershell
-        run: ./scripts/smoke-windows-installer.ps1 -UseRealKnownFolder
-
   macos-build:
     name: Build macOS (${{ matrix.arch }})
     needs: release-prerequisites
@@ -384,8 +366,6 @@ jobs:
             artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip
             artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip.sha256
             artifacts/portable-update-macos-${{ matrix.arch }}.json
-            artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg
-            artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg.sha256
           if-no-files-found: error
           compression-level: 0
 
@@ -475,26 +455,6 @@ jobs:
           "$ROOT/DSH-Portable/runtime/node/bin/node" \
             scripts/smoke-plugin-marketplace.mjs \
             "$ROOT/DSH-Portable"
-
-  macos-dmg-smoke:
-    name: macOS DMG (${{ matrix.arch }})
-    needs: macos-build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: macos-${{ matrix.arch }}-build
-          path: artifacts
-      - run: bash scripts/smoke-macos-dmg.sh "artifacts/DeepSeek-Herness-macos-${{ matrix.arch }}.dmg"
 
   linux-build:
     name: Build Linux (${{ matrix.arch }})

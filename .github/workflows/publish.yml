@@ -55,22 +55,6 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/render-release-notes.mjs templates/RELEASE-NOTES.md release-staging/RELEASE-NOTES.md "$RELEASE_TAG"
-      - name: Generate a WinGet submission bundle for stable releases
-        if: steps.version.outputs.channel == 'stable'
-        run: |
-          INSTALLER_SHA256="$(awk '$2 == "DeepSeek-Herness-Setup.exe" { print toupper($1) }' release-staging/user-assets/checksums.txt)"
-          test -n "$INSTALLER_SHA256"
-          node scripts/render-winget-manifests.mjs \
-            "${{ steps.version.outputs.version }}" \
-            "$INSTALLER_SHA256" \
-            "$(date -u +%F)" \
-            release-staging/winget
-      - uses: actions/upload-artifact@v7
-        if: steps.version.outputs.channel == 'stable'
-        with:
-          name: winget-submission-${{ steps.version.outputs.version }}
-          path: release-staging/winget
-          if-no-files-found: error
       - name: Publish curated user downloads
         env:
           GH_TOKEN: ${{ github.token }}

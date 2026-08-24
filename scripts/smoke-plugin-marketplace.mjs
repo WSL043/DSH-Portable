@@ -12,6 +12,10 @@ if (!rootArgument) throw new Error('usage: node smoke-plugin-marketplace.mjs <fi
 
 const root = path.resolve(rootArgument)
 const cli = path.join(root, 'launcher', 'portable-cli.mjs')
+const marketManifest = JSON.parse(await readFile(
+  path.join(root, 'app', 'node_modules', '@wsl043', 'dsh-portable-plugin-market', 'package.json'),
+  'utf8',
+))
 const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
 const defaultSessionDelete = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-native-session-delete')
 assert.ok(defaultSessionDelete?.version, 'the finished product does not declare its bundled session-delete version')
@@ -74,7 +78,7 @@ try {
   running = true
 
   const status = await getJson(host.url, '/dsh-market/status')
-  assert.equal(status.version, '0.1.0-beta.2')
+  assert.equal(status.version, marketManifest.version)
   assert.equal(status.restart, false, 'the Portable shell owns restart and update lifecycle')
   assert.equal(status.pnpm === true || status.pnpm?.available === true, true, 'the market must see Portable bundled pnpm')
 

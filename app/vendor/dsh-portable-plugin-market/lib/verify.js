@@ -24,6 +24,7 @@
  *   missing – not present in node_modules
  */
 import { readFileSync } from 'node:fs';
+import { Script } from 'node:vm';
 import { join } from 'node:path';
 import { listHotMounts, parseSimplePatch } from './hot.js';
 import { bundlePatchInsertedIds, hasDshManifest, hasLoadableEntry, profileDir } from './profile.js';
@@ -272,4 +273,53 @@ export function hasHostHalf(profile, name, explicitDir) {
     // the bundle layer still loads) as client-only, and quietly disable the
     // correction for it.
     return !(dsh.bundle === undefined && dsh.client !== undefined);
+}
+export function clientBundlePath(exportsField, depth = 0) {
+    if (depth > 4)
+        return null;
+    if (typeof exportsField === 'string')
+        return exportsField.startsWith('./') ? exportsField : null;
+    if (exportsField === null || typeof exportsField !== 'object' || Array.isArray(exportsField))
+        return null;
+    const conditions = exportsField;
+    for (const key of ['browser', 'default']) {
+        if (conditions[key] === undefined)
+            continue;
+        const resolved = clientBundlePath(conditions[key], depth + 1);
+        if (resolved !== null)
+            return resolved;
+    }
+    return null;
+}
+/** Compile a declared browser bundle without executing plugin code. */
+export function checkClientBundle(profile, name, explicitDir) {
+    const root = join(profileDir(profile, explicitDir), 'node_modules', name);
+    let manifest;
+    try {
+        manifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+    }
+    catch {
+        return { ok: true, reason: null };
+    }
+    if (manifest.dsh?.client === undefined)
+        return { ok: true, reason: null };
+    const relative = manifest.exports !== null && typeof manifest.exports === 'object' && !Array.isArray(manifest.exports)
+        ? clientBundlePath(manifest.exports['./client'])
+        : null;
+    if (relative === null)
+        return { ok: true, reason: null };
+    let source;
+    try {
+        source = readFileSync(join(root, relative), 'utf8');
+    }
+    catch {
+        return { ok: true, reason: null };
+    }
+    try {
+        new Script(source, { filename: relative });
+        return { ok: true, reason: null };
+    }
+    catch (error) {
+        return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+    }
 }
