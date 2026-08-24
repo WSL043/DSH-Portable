@@ -294,7 +294,7 @@ fn read_shell_settings(layout: &ProductLayout) -> ShellSettings {
     let raw = source
         .as_ref()
         .and_then(|value| serde_json::from_str::<Value>(value).ok());
-    let mut settings = source
+    let mut settings: ShellSettings = source
         .and_then(|value| serde_json::from_str(&value).ok())
         .unwrap_or_default();
     let object = raw.as_ref().and_then(Value::as_object);
