@@ -127,6 +127,7 @@ public sealed class DshDialogInfo {
 public static class DshWindowProbe {
   private const uint WM_CLOSE = 0x0010;
   private const uint WM_COMMAND = 0x0111;
+  private const uint BM_CLICK = 0x00F5;
   private const int IDCANCEL = 2;
   private const uint SMTO_BLOCK = 0x0001;
   private const uint SMTO_ABORTIFHUNG = 0x0002;
@@ -134,6 +135,7 @@ public static class DshWindowProbe {
   [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
   [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+  [DllImport("user32.dll")] private static extern IntPtr GetDlgItem(IntPtr hwnd, int identifier);
   [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
   [DllImport("user32.dll")] private static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maximum);
   [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out UIntPtr result);
@@ -141,11 +143,12 @@ public static class DshWindowProbe {
   public static bool Cancel(IntPtr hwnd) {
     UIntPtr result;
     // The Windows 11 / Server 2025 common-item dialog can acknowledge WM_CLOSE
-    // without completing FolderBrowserDialog.ShowDialog(). Invoke its native
-    // Cancel command first so the managed dialog returns Cancel and the host
-    // can deliver the normal pick-directory result. WM_CLOSE remains a bounded
-    // fallback for older dialog implementations.
-    if (SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero) return true;
+    // or a bare WM_COMMAND without completing FolderBrowserDialog.ShowDialog().
+    // Invoke the dialog's own Cancel button so this is equivalent to a user
+    // click and the managed host can deliver the normal cancellation result.
+    IntPtr cancel = GetDlgItem(hwnd, IDCANCEL);
+    if (cancel != IntPtr.Zero && SendMessageTimeout(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero) return true;
+    if (SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), cancel, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero) return true;
     return SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero;
   }
   public static DshDialogInfo[] Find(int processId) {
