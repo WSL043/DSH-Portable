@@ -117,6 +117,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 public sealed class DshDialogInfo {
   public long hwnd { get; set; }
   public long owner { get; set; }
@@ -131,6 +132,7 @@ public static class DshWindowProbe {
   private const int IDCANCEL = 2;
   private const uint SMTO_BLOCK = 0x0001;
   private const uint SMTO_ABORTIFHUNG = 0x0002;
+  [DllImport("user32.dll")] private static extern bool IsWindow(IntPtr hwnd);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
   [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
@@ -140,6 +142,11 @@ public static class DshWindowProbe {
   [DllImport("user32.dll")] private static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maximum);
   [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out UIntPtr result);
   private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr parameter);
+  private static bool WaitUntilClosed(IntPtr hwnd, int timeoutMs = 1500) {
+    int deadline = Environment.TickCount + timeoutMs;
+    while (IsWindow(hwnd) && Environment.TickCount < deadline) Thread.Sleep(25);
+    return !IsWindow(hwnd);
+  }
   public static bool Cancel(IntPtr hwnd) {
     UIntPtr result;
     // The Windows 11 / Server 2025 common-item dialog can acknowledge WM_CLOSE
@@ -147,9 +154,14 @@ public static class DshWindowProbe {
     // Invoke the dialog's own Cancel button so this is equivalent to a user
     // click and the managed host can deliver the normal cancellation result.
     IntPtr cancel = GetDlgItem(hwnd, IDCANCEL);
-    if (cancel != IntPtr.Zero && SendMessageTimeout(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero) return true;
-    if (SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), cancel, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero) return true;
-    return SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero;
+    if (cancel != IntPtr.Zero) {
+      SendMessageTimeout(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result);
+      if (WaitUntilClosed(hwnd)) return true;
+    }
+    SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), cancel, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result);
+    if (WaitUntilClosed(hwnd)) return true;
+    SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result);
+    return WaitUntilClosed(hwnd, 5000);
   }
   public static DshDialogInfo[] Find(int processId) {
     List<DshDialogInfo> result = new List<DshDialogInfo>();

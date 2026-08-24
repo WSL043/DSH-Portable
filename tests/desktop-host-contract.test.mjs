@@ -158,6 +158,9 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(smoke, /IDCANCEL\s*=\s*2/)
   assert.match(smoke, /BM_CLICK\s*=\s*0x00F5/)
   assert.match(smoke, /GetDlgItem\(hwnd, IDCANCEL\)/)
+  assert.match(smoke, /WaitUntilClosed\(hwnd/)
+  assert.match(smoke, /WM_CLOSE[\s\S]+WaitUntilClosed\(hwnd/)
+  assert.doesNotMatch(smoke, /SendMessageTimeout\(cancel, BM_CLICK[^\n]+\) return true;/)
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
