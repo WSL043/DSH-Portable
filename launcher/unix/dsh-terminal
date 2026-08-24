@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+STATE_ROOT="$ROOT"
+case "$ROOT" in
+  */DeepSeek-Herness.app/Contents/Resources)
+    STATE_ROOT="$HOME/Library/Application Support/DeepSeek-Herness/data"
+    ;;
+  */product)
+    if [ -d "$ROOT/../data" ]; then
+      STATE_ROOT=$(CDPATH= cd -- "$ROOT/.." && pwd)
+    fi
+    ;;
+esac
+
+export DSH_PORTABLE=1
+export DSH_PORTABLE_STATE_ROOT="$STATE_ROOT"
+export PATH="$ROOT/launcher/terminal-bin:$PATH"
+cd "$ROOT"
+
+SHELL_BIN=${DSH_PORTABLE_TERMINAL_SHELL:-${SHELL:-/bin/sh}}
+if [ ! -x "$SHELL_BIN" ]; then
+  SHELL_BIN=/bin/sh
+fi
+
+printf '%s\n' 'DSH Terminal - official dsh commands are ready in this window.'
+exec "$SHELL_BIN" -i

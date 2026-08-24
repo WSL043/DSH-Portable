@@ -152,6 +152,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         automaticUpdateMenuItem.state = updateCheckEnabled ? .on : .off
         applicationMenu.addItem(automaticUpdateMenuItem)
 
+        let terminal = NSMenuItem(title: L("DSH 终端…", "DSH Terminal…"),
+                                  action: #selector(openDshTerminal(_:)), keyEquivalent: "")
+        terminal.target = self
+        applicationMenu.addItem(terminal)
+
         let report = NSMenuItem(title: L("反馈问题", "Report a Problem"),
                                 action: #selector(reportProblem(_:)), keyEquivalent: "")
         report.target = self
@@ -183,6 +188,19 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     @objc private func reportProblem(_ sender: NSMenuItem) {
         NSWorkspace.shared.open(URL(string: "https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml")!)
+    }
+
+    @objc private func openDshTerminal(_ sender: NSMenuItem) {
+        let helper = runtimeRoot.appendingPathComponent("launcher/dsh-terminal.command")
+        guard FileManager.default.isExecutableFile(atPath: helper.path),
+              NSWorkspace.shared.open(helper) else {
+            let alert = NSAlert()
+            alert.messageText = L("无法打开 DSH 终端", "Could not open DSH Terminal")
+            alert.informativeText = L("便携终端文件缺失或无法运行，请重新下载并完整解压。",
+                                      "The Portable terminal is missing or cannot run. Download and extract the package again.")
+            alert.runModal()
+            return
+        }
     }
 
     @objc private func checkForUpdatesFromMenu(_ sender: NSMenuItem) {

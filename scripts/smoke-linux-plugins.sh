@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(realpath "${1:?usage: smoke-linux-plugins.sh ROOT [FIXTURE]}")"
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+"$PROJECT_ROOT/scripts/smoke-unix-dsh-terminal.sh" "$ROOT"
 FIXTURE="$(realpath "${2:-$PROJECT_ROOT/tests/fixtures/dsh-portable-smoke-plugin}")"
 TEST_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dsh-linux-plugin.XXXXXX")"
 TOOLS="$TEST_ROOT/tools"

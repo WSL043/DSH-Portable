@@ -1,0 +1,19 @@
+{
+  "version": "0.4.6",
+  "zh": {
+    "summary": "macOS 与 Linux 现在也提供可随目录移动的 DSH 终端，官方插件命令在三个桌面平台都能原样运行。",
+    "highlights": [
+      "macOS 可从应用菜单、Linux 可从托盘打开 DSH 终端，直接粘贴第三方插件提供的 `dsh` 命令。",
+      "命令只在专用终端窗口内生效，不修改系统 PATH 或 shell 配置，也不会与系统安装的 DSH 冲突。",
+      "便携目录移动后会自动解析新位置；macOS 安装版与 Linux AppImage 也会继续使用各自正确的用户数据目录。"
+    ]
+  },
+  "en": {
+    "summary": "macOS and Linux now include a move-safe DSH Terminal, so official plugin commands work unchanged across all three desktop platforms.",
+    "highlights": [
+      "Open DSH Terminal from the macOS application menu or Linux tray and paste the `dsh` commands published by third-party plugins.",
+      "The command is available only inside that terminal window; system PATH and shell profiles remain untouched, avoiding conflicts with another DSH installation.",
+      "Moving the Portable folder resolves the new location automatically, while the macOS installed edition and Linux AppImage continue targeting their correct user data roots."
+    ]
+  }
+}

@@ -29,12 +29,12 @@ test('Linux uses architecture-specific component update channels', () => {
 
 test('Linux requires a compatible native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
-  assert.match(source, /"shellSchema": 5/)
-  assert.match(source, /"requiredShellSchema": 5/)
+  assert.match(source, /"shellSchema": 6/)
+  assert.match(source, /"requiredShellSchema": 6/)
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
-  const [cargo, cargoLock, source, config, build, cli, rootCli, pnpmCli, attributes, workflow] = await Promise.all([
+  const [cargo, cargoLock, source, config, build, cli, rootCli, pnpmCli, terminal, terminalShim, attributes, workflow] = await Promise.all([
     read('launcher/linux/Cargo.toml'),
     read('launcher/linux/Cargo.lock'),
     read('launcher/linux/src/main.rs'),
@@ -43,6 +43,8 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
     read('launcher/portable-cli.mjs'),
     read('launcher/linux/dsh'),
     read('launcher/linux/pnpm'),
+    read('launcher/unix/dsh-terminal'),
+    read('launcher/unix/terminal-bin/dsh'),
     read('.gitattributes'),
     read('.github/workflows/ci.yml'),
   ])
@@ -54,6 +56,10 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /--no-browser/)
   assert.match(source, /navigate\(/)
   assert.match(source, /check-update/)
+  assert.match(source, /dsh-terminal/)
+  assert.match(source, /open_dsh_terminal/)
+  assert.match(source, /xdg-terminal-exec/)
+  assert.match(source, /x-terminal-emulator/)
   assert.match(source, /defer-update/)
   assert.match(source, /ignore-update/)
   assert.match(source, /YesNoCancel/)
@@ -92,6 +98,11 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(pnpmCli, /app\/node_modules\/pnpm\/bin\/pnpm\.mjs/)
   assert.doesNotMatch(pnpmCli, /node_modules\/\.bin/)
   assert.match(build, /launcher\/linux\/pnpm[\s\S]+STAGE\/launcher\/pnpm/)
+  assert.match(build, /launcher\/unix\/dsh-terminal[\s\S]+STAGE\/launcher\/dsh-terminal/)
+  assert.match(build, /launcher\/unix\/terminal-bin\/dsh[\s\S]+STAGE\/launcher\/terminal-bin\/dsh/)
+  assert.match(terminal, /PATH="\$ROOT\/launcher\/terminal-bin:\$PATH"/)
+  assert.match(terminalShim, /runtime\/node\/bin\/node[\s\S]+launcher\/dsh-cli\.mjs/)
+  assert.doesNotMatch(`${source}\n${terminal}`, /\.profile|\.bashrc|\.zshrc|setx|EnvironmentVariableTarget/)
   assert.match(attributes, /^launcher\/linux\/dsh text eol=lf$/m)
   assert.match(attributes, /^launcher\/linux\/pnpm text eol=lf$/m)
   assert.match(attributes, /^\*\.rs text eol=lf$/m)
@@ -186,7 +197,8 @@ test('Chinese-first product docs explain Linux launch, portable data, plugins, a
   }
   assert.match(chinese, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
   assert.match(english, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
-  assert.match(bundled, /Linux[\s\S]+\.\/dsh plugin/)
+  assert.match(bundled, /Linux[\s\S]+DSH 终端[\s\S]+dsh plugin/)
+  assert.match(bundled, /Linux[\s\S]+\.\/dsh/)
   assert.match(chinese, /Windows%20%7C%20macOS%20%7C%20Linux/)
 })
 

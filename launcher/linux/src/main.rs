@@ -446,6 +446,51 @@ fn stop_and_exit(app: tauri::AppHandle) {
     });
 }
 
+fn open_dsh_terminal(layout: &ProductLayout) -> Result<(), String> {
+    let helper = layout.root.join("launcher/dsh-terminal");
+    if !helper.is_file() {
+        return Err(text(
+            layout,
+            "便携终端文件缺失，请重新下载并完整解压。",
+            "The Portable terminal is missing. Download and extract the package again.",
+        ));
+    }
+
+    let candidates: [(&str, &[&str]); 8] = [
+        ("xdg-terminal-exec", &["--"]),
+        ("x-terminal-emulator", &["-e"]),
+        ("gnome-terminal", &["--"]),
+        ("kgx", &["--"]),
+        ("konsole", &["-e"]),
+        ("xterm", &["-e"]),
+        ("kitty", &[]),
+        ("alacritty", &["-e"]),
+    ];
+    let mut last_error = None;
+    for (program, prefix) in candidates {
+        let mut command = Command::new(program);
+        command
+            .args(prefix)
+            .arg(&helper)
+            .current_dir(&layout.root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        match command.spawn() {
+            Ok(_) => return Ok(()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+            Err(error) => last_error = Some(format!("{program}: {error}")),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| {
+        text(
+            layout,
+            "未找到可用的终端程序。仍可在便携目录运行 ./dsh。",
+            "No supported terminal application was found. You can still run ./dsh from the Portable folder.",
+        )
+    }))
+}
+
 fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<()> {
     let open = MenuItem::with_id(
         app,
@@ -469,6 +514,13 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
         read_shell_settings(layout).check_updates_at_startup,
         None::<&str>,
     )?;
+    let terminal = MenuItem::with_id(
+        app,
+        "dsh-terminal",
+        text(layout, "DSH 终端", "DSH Terminal"),
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(
         app,
         "quit",
@@ -476,7 +528,7 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
         true,
         None::<&str>,
     )?;
-    let menu = Menu::with_items(app, &[&open, &update, &startup, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &update, &startup, &terminal, &quit])?;
     let startup_for_event = startup.clone();
     TrayIconBuilder::new()
         .icon(
@@ -501,6 +553,13 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
                     let mut settings = read_shell_settings(layout);
                     settings.check_updates_at_startup = checked;
                     let _ = write_shell_settings(layout, &settings);
+                }
+            }
+            "dsh-terminal" => {
+                if let Some(layout) = LAYOUT.get() {
+                    if let Err(error) = open_dsh_terminal(layout) {
+                        dialog(PRODUCT_NAME, &error, MessageLevel::Error);
+                    }
                 }
             }
             "quit" => stop_and_exit(app.clone()),

@@ -52,6 +52,28 @@ test('Windows tray exposes the isolated DSH terminal without changing global PAT
   assert.doesNotMatch(source, /Environment\.SetEnvironmentVariable\([^,]+,[^,]+,\s*EnvironmentVariableTarget\.(?:User|Machine)/)
 })
 
+test('macOS application menu opens a move-safe isolated DSH Terminal', async () => {
+  const [source, build, terminal, shim] = await Promise.all([
+    read('launcher/macos/DeepSeek-Herness.swift'),
+    read('scripts/build-macos.sh'),
+    read('launcher/unix/dsh-terminal'),
+    read('launcher/unix/terminal-bin/dsh'),
+  ])
+  assert.match(source, /DSH 终端…|DSH Terminal…/)
+  assert.match(source, /openDshTerminal/)
+  assert.match(source, /runtimeRoot\.appendingPathComponent\("launcher\/dsh-terminal\.command"\)/)
+  assert.match(source, /NSWorkspace\.shared\.open/)
+  assert.match(build, /launcher\/unix\/dsh-terminal[\s\S]+STAGE\/launcher\/dsh-terminal\.command/)
+  assert.match(build, /launcher\/unix\/terminal-bin\/dsh[\s\S]+STAGE\/launcher\/terminal-bin\/dsh/)
+  assert.match(terminal, /PATH="\$ROOT\/launcher\/terminal-bin:\$PATH"/)
+  assert.match(terminal, /DSH_PORTABLE_STATE_ROOT/)
+  assert.match(terminal, /DeepSeek-Herness\.app\/Contents\/Resources/)
+  assert.match(terminal, /\/product\)/)
+  assert.match(terminal, /DSH_PORTABLE_TERMINAL_SHELL/)
+  assert.doesNotMatch(terminal, /\.zprofile|\.zshrc|\.bashrc|\/etc\/paths|path_helper/)
+  assert.match(shim, /runtime\/node\/bin\/node[\s\S]+launcher\/dsh-cli\.mjs/)
+})
+
 test('stable startup retires queued RC extension work without applying it', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-stable-extension-retire-'))
   const pending = path.join(root, 'pending-extension.json')

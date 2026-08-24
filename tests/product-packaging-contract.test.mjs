@@ -618,6 +618,26 @@ test('plugin management is a generic finished-product capability and release gat
   assert.doesNotMatch(smoke, /codex|openai-codex|zen/i)
 })
 
+test('macOS and Linux finished products verify official bare dsh syntax in an isolated terminal', async () => {
+  const [smoke, workflow, macSmoke, linuxSmoke, chinese, english] = await Promise.all([
+    read('scripts/smoke-unix-dsh-terminal.sh'),
+    read('.github/workflows/ci.yml'),
+    read('scripts/smoke-macos-desktop-host.sh'),
+    read('scripts/smoke-linux-plugins.sh'),
+    read('README.md'),
+    read('README.en.md'),
+  ])
+  assert.match(smoke, /command -v dsh/)
+  assert.match(smoke, /dsh --version/)
+  assert.match(smoke, /USER_PATH_UNCHANGED|shell configuration/i)
+  assert.match(workflow, /smoke-macos-desktop-host\.sh/)
+  assert.match(workflow, /smoke-linux-plugins\.sh/)
+  assert.match(macSmoke, /smoke-unix-dsh-terminal\.sh/)
+  assert.match(linuxSmoke, /smoke-unix-dsh-terminal\.sh/)
+  assert.match(chinese, /macOS[\s\S]+Linux[\s\S]+DSH 终端[\s\S]+dsh plugin/)
+  assert.match(english, /macOS[\s\S]+Linux[\s\S]+DSH Terminal[\s\S]+dsh plugin/i)
+})
+
 test('session delete is a removable offline default only for a newly created web profile', async () => {
   const [lock, windows, macos, linux, cli, core] = await Promise.all([
     read('upstream.lock.json').then(JSON.parse),
@@ -746,8 +766,8 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-macos-\$ARCH\.zip/)
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 13/)
-  assert.match(build, /"requiredShellSchema": 13/)
+  assert.match(build, /"shellSchema": 14/)
+  assert.match(build, /"requiredShellSchema": 14/)
   assert.match(plist, new RegExp(`<key>CFBundleVersion<\\/key>\\s*<string>${regexEscape(policy.macBuildVersion)}<\\/string>`, 's'))
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)

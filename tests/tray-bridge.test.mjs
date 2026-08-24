@@ -266,8 +266,8 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(macBuild, /desktop-bridge/)
   assert.match(windowsBuild, /shellSchema\s*=\s*18/)
   assert.match(windowsBuild, /requiredShellSchema\s*=\s*18/)
-  assert.match(macBuild, /"shellSchema": 13/)
-  assert.match(macBuild, /"requiredShellSchema": 13/)
+  assert.match(macBuild, /"shellSchema": 14/)
+  assert.match(macBuild, /"requiredShellSchema": 14/)
 })
 
 test('Portable maintenance is a native General settings item backed by same-origin product routes', async () => {

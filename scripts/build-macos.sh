@@ -79,6 +79,10 @@ cp "$PROJECT_ROOT/launcher/http-readiness.mjs" "$STAGE/launcher/http-readiness.m
 cp "$PROJECT_ROOT/launcher/default-plugins.mjs" "$STAGE/launcher/default-plugins.mjs"
 cp "$PROJECT_ROOT/launcher/macos/dsh" "$STAGE/dsh"
 chmod 755 "$STAGE/dsh"
+mkdir -p "$STAGE/launcher/terminal-bin"
+cp "$PROJECT_ROOT/launcher/unix/dsh-terminal" "$STAGE/launcher/dsh-terminal.command"
+cp "$PROJECT_ROOT/launcher/unix/terminal-bin/dsh" "$STAGE/launcher/terminal-bin/dsh"
+chmod 755 "$STAGE/launcher/dsh-terminal.command" "$STAGE/launcher/terminal-bin/dsh"
 cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
 cp "$PROJECT_ROOT/templates/DATA-README.txt" "$STAGE/data/README.txt"
 cp "$PROJECT_ROOT/templates/WORKSPACE-README.txt" "$STAGE/workspace/README.txt"
@@ -139,7 +143,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 13
+  "shellSchema": 14
 }
 EOF
 
@@ -198,7 +202,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 13,
+  "requiredShellSchema": 14,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

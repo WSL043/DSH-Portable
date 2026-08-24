@@ -79,6 +79,10 @@ for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs
 done
 cp "$PROJECT_ROOT/launcher/linux/dsh" "$STAGE/dsh"
 chmod 755 "$STAGE/dsh"
+mkdir -p "$STAGE/launcher/terminal-bin"
+cp "$PROJECT_ROOT/launcher/unix/dsh-terminal" "$STAGE/launcher/dsh-terminal"
+cp "$PROJECT_ROOT/launcher/unix/terminal-bin/dsh" "$STAGE/launcher/terminal-bin/dsh"
+chmod 755 "$STAGE/launcher/dsh-terminal" "$STAGE/launcher/terminal-bin/dsh"
 cp "$PROJECT_ROOT/launcher/linux/pnpm" "$STAGE/launcher/pnpm"
 chmod 755 "$STAGE/launcher/pnpm"
 cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
@@ -141,7 +145,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 5
+  "shellSchema": 6
 }
 EOF
 
@@ -178,7 +182,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "linux-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 5,
+  "requiredShellSchema": 6,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

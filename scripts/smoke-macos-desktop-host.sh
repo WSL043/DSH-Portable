@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(CDPATH= cd -- "${1:?usage: smoke-macos-desktop-host.sh <extracted-DSH-Portable-root>}" && pwd)"
+"$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)/smoke-unix-dsh-terminal.sh" "$ROOT"
 NODE="$ROOT/runtime/node/bin/node"
 CLI="$ROOT/launcher/portable-cli.mjs"
 APP="$ROOT/DSH-Portable.app"

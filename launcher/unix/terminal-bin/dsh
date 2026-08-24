@@ -1,0 +1,14 @@
+#!/bin/sh
+set -eu
+
+BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(CDPATH= cd -- "$BIN_DIR/../.." && pwd)
+NODE="$ROOT/runtime/node/bin/node"
+CLI="$ROOT/launcher/dsh-cli.mjs"
+
+if [ ! -x "$NODE" ] || [ ! -f "$CLI" ]; then
+  echo "DSH-Portable is incomplete. Download and extract the package again." >&2
+  exit 1
+fi
+
+exec "$NODE" "$CLI" "$@"
