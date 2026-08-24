@@ -61,7 +61,7 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /productUpdateCheckEnabled/)
   assert.match(source, /engineUpdateCheckEnabled/)
   assert.match(source, /check-update", "--scope", scope/)
-  assert.match(source, /update", "--scope", settings\.pending_update_scope\.as_str\(\)/)
+  assert.match(source, /"update",\s*"--scope",\s*settings\.pending_update_scope\.as_str\(\)/s)
   assert.match(source, /dsh-terminal/)
   assert.match(source, /open_dsh_terminal/)
   assert.match(source, /xdg-terminal-exec/)
@@ -78,7 +78,7 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(startup, /apply_pending_update/)
   assert.ok(startup.indexOf('apply_pending_update') < startup.indexOf('["start", "--no-browser", "--json"]'))
   const pendingUpdate = source.slice(source.indexOf('fn apply_pending_update('), source.indexOf('fn start_dsh('))
-  const pendingRunIndex = pendingUpdate.indexOf('run_portable_cli(layout, &["update"')
+  const pendingRunIndex = pendingUpdate.search(/run_portable_cli\([\s\S]*?"update"/)
   const pendingClearIndex = pendingUpdate.indexOf('install_update_at_next_start = false')
   assert.ok(
     pendingRunIndex >= 0 && pendingClearIndex > pendingRunIndex,
