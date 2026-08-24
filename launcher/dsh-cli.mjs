@@ -80,6 +80,27 @@ export function normalizeDshArgvForWindowsShell(argv, cwd = process.cwd()) {
   })
 }
 
+const RELEASE_AGE_REMOVAL_OVERRIDE = '--config.minimumReleaseAge=0'
+
+export function normalizeFreshReleaseRemovalArgv(argv) {
+  const output = [...argv]
+  const pluginIndex = output.indexOf('plugin')
+  if (pluginIndex < 0 || output.includes(RELEASE_AGE_REMOVAL_OVERRIDE)) return output
+
+  let operationIndex = pluginIndex + 1
+  while (operationIndex < output.length) {
+    if (output[operationIndex] === '--profile') {
+      operationIndex += 2
+      continue
+    }
+    break
+  }
+  if (!['remove', 'rm', 'uninstall'].includes(output[operationIndex])) return output
+
+  output.splice(operationIndex + 1, 0, RELEASE_AGE_REMOVAL_OVERRIDE)
+  return output
+}
+
 export function buildPluginCliSpec(root, stateRoot, argv, platform = process.platform, source = process.env) {
   const layout = layoutForRoot(root, platform, stateRoot)
   const forwardedArgv = platform === 'win32' ? normalizeDshArgvForWindowsShell(argv) : [...argv]
@@ -293,8 +314,9 @@ export async function main(argv = process.argv.slice(2), source = process.env) {
   const release = await acquirePluginLock(spec.layout)
   try {
     const materializedArgv = await materializeRemotePluginArchives(argv, stateRoot, process.platform)
-    spec = buildPluginCliSpec(root, stateRoot, materializedArgv, process.platform, source)
-    await relinkMovedProfileIfNeeded(spec, materializedArgv)
+    const normalizedArgv = normalizeFreshReleaseRemovalArgv(materializedArgv)
+    spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source)
+    await relinkMovedProfileIfNeeded(spec, normalizedArgv)
 
     const result = spawnSync(spec.command, spec.args, {
       cwd: spec.cwd,

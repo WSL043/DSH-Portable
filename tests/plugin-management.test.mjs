@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url'
 import {
   buildPluginCliSpec,
   materializeRemotePluginArchives,
+  normalizeFreshReleaseRemovalArgv,
   normalizeDshArgvForWindowsShell,
   profileNeedsRelink,
   resolveProductStateRoot,
@@ -114,6 +115,26 @@ test('Windows plugin forwarding preserves a local path with spaces through the o
   assert.deepEqual(
     normalizeDshArgvForWindowsShell(['plugin', '--profile', 'web', 'list', '--depth', '0'], 'C:\\Work'),
     ['plugin', '--profile', 'web', 'list', '--depth', '0'],
+  )
+})
+
+test('removing an installed plugin cannot be blocked by pnpm fresh-release verification', () => {
+  assert.deepEqual(
+    normalizeFreshReleaseRemovalArgv(['plugin', '--profile', 'web', 'remove', 'new-plugin']),
+    ['plugin', '--profile', 'web', 'remove', '--config.minimumReleaseAge=0', 'new-plugin'],
+  )
+  assert.deepEqual(
+    normalizeFreshReleaseRemovalArgv(['plugin', '--profile', 'web', 'rm', 'new-plugin']),
+    ['plugin', '--profile', 'web', 'rm', '--config.minimumReleaseAge=0', 'new-plugin'],
+  )
+  assert.deepEqual(
+    normalizeFreshReleaseRemovalArgv(['plugin', '--profile', 'web', 'uninstall', 'new-plugin']),
+    ['plugin', '--profile', 'web', 'uninstall', '--config.minimumReleaseAge=0', 'new-plugin'],
+  )
+  assert.deepEqual(
+    normalizeFreshReleaseRemovalArgv(['plugin', '--profile', 'web', 'add', 'new-plugin']),
+    ['plugin', '--profile', 'web', 'add', 'new-plugin'],
+    'installing new code must retain the normal release-age protection',
   )
 })
 
