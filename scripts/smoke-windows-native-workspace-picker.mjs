@@ -128,33 +128,34 @@ public static class DshWindowProbe {
   private const uint WM_CLOSE = 0x0010;
   private const uint SMTO_BLOCK = 0x0001;
   private const uint SMTO_ABORTIFHUNG = 0x0002;
-  private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
-  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr parameter);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
   [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+  [DllImport("user32.dll")] private static extern IntPtr GetAncestor(IntPtr hwnd, uint flags);
   [DllImport("user32.dll")] private static extern int GetClassName(IntPtr hwnd, StringBuilder className, int maximum);
   [DllImport("user32.dll", SetLastError = true)] private static extern IntPtr SendMessageTimeout(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam, uint flags, uint timeout, out UIntPtr result);
+  private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr parameter);
   public static bool Cancel(IntPtr hwnd) {
     UIntPtr result;
     return SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero;
   }
   public static DshDialogInfo[] Find(int processId) {
     List<DshDialogInfo> result = new List<DshDialogInfo>();
-    IntPtr mainWindow = Process.GetProcessById(processId).MainWindowHandle;
     EnumWindows(delegate(IntPtr hwnd, IntPtr ignored) {
       uint pid;
       GetWindowThreadProcessId(hwnd, out pid);
+      IntPtr rootOwner = GetAncestor(hwnd, 3);
+      uint rootOwnerPid;
+      GetWindowThreadProcessId(rootOwner, out rootOwnerPid);
       StringBuilder className = new StringBuilder(256);
       GetClassName(hwnd, className, className.Capacity);
-      IntPtr owner = GetWindow(hwnd, 4);
-      uint ownerPid;
-      GetWindowThreadProcessId(owner, out ownerPid);
       // FolderBrowserDialog can use different native window classes across
-      // supported Windows images. Direct ownership by the DSH main window and
-      // visibility are the stable product contract; the class is not.
-      if (pid == processId && mainWindow != IntPtr.Zero && owner == mainWindow && IsWindowVisible(hwnd)) {
-        result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = IsWindowVisible(hwnd) });
+      // supported Windows images. A modal popup is the visible same-process
+      // window whose root owner is another window in the DSH process. This is
+      // stable even when the test intentionally hides the main host window.
+      if (pid == processId && rootOwner != IntPtr.Zero && rootOwner != hwnd && rootOwnerPid == processId && IsWindowVisible(hwnd)) {
+        result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = rootOwner.ToInt64(), ownerPid = (int)rootOwnerPid, className = className.ToString(), visible = true });
       }
       return true;
     }, IntPtr.Zero);
@@ -165,7 +166,7 @@ public static class DshWindowProbe {
 $dialogs = @([DshWindowProbe]::Find($ProcessId))
 if ($Close) {
   $target = @($dialogs | Where-Object { $_.hwnd -eq $WindowHandle })
-  if ($target.Count -ne 1) { throw "The captured workspace dialog is no longer directly owned by the DSH window." }
+  if ($target.Count -ne 1) { throw "The captured workspace dialog is no longer the active popup owned by the DSH window." }
   if (-not [DshWindowProbe]::Cancel([IntPtr]$target[0].hwnd)) { throw "The workspace dialog did not process WM_CLOSE." }
 }
 ConvertTo-Json -Compress -InputObject @($dialogs)
