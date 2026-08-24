@@ -225,6 +225,29 @@ test('release notes prioritize downloads and keep verification optional', async 
   assert.equal((notes.match(/SHA256SUMS|\b[a-f0-9]{64}\b/gi) || []).length, 0)
 })
 
+test('public downloads expose a truthful security and code-signing policy', async () => {
+  const [chinese, english, releaseNotes, signing, security] = await Promise.all([
+    read('README.md'),
+    read('README.en.md'),
+    read('templates/RELEASE-NOTES.md'),
+    read('CODE_SIGNING.md'),
+    read('SECURITY.md'),
+  ])
+
+  assert.match(chinese, /代码签名策略.*CODE_SIGNING\.md/)
+  assert.match(english, /code-signing policy.*CODE_SIGNING\.md/i)
+  assert.match(releaseNotes, /代码签名策略.*CODE_SIGNING\.md/)
+  assert.match(releaseNotes, /code-signing policy.*CODE_SIGNING\.md/i)
+  assert.match(signing, /GitHub Actions/)
+  assert.match(signing, /Get-AuthenticodeSignature/)
+  assert.match(signing, /current release files are unsigned/i)
+  assert.match(signing, /Authors and reviewers.+WSL043/is)
+  assert.match(signing, /Approver.+WSL043/is)
+  assert.match(signing, /PRIVACY\.md/)
+  assert.match(security, /private vulnerability reporting/i)
+  assert.match(security, /API key|credentials/i)
+})
+
 test('release notes are version-specific instead of replaying one fixed feature list', async () => {
   const manifest = JSON.parse(await read('package.json'))
   const tag = `v${manifest.version}`

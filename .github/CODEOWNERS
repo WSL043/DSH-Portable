@@ -1,0 +1,7 @@
+# Release, security, and signing controls
+/.github/workflows/ @WSL043
+/.signpath/ @WSL043
+/CODE_SIGNING.md @WSL043
+/SECURITY.md @WSL043
+/scripts/build-*.ps1 @WSL043
+/scripts/build-*.sh @WSL043

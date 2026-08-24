@@ -141,7 +141,7 @@ DSH-Portable 专注于可搬迁、可离线和可修复的发行体验，不再�
 
 DSH 具备本地代码执行能力，请只使用可信模型、插件和项目。本地服务只绑定 `127.0.0.1`，便携外壳默认关闭 DSH 遥测。`data` 可能包含 API 凭据和私人会话；请妥善保管，Windows 移动盘优先使用 NTFS。
 
-查看完整的[隐私说明](PRIVACY.md)和[代码签名状态](CODE_SIGNING.md)。当前 Windows Release 尚未签名；SignPath Foundation 的开源签名申请正在进行中。
+查看完整的[隐私说明](PRIVACY.md)、[安全策略](SECURITY.md)和[代码签名策略](CODE_SIGNING.md)。当前 Windows Release 尚未签名；SignPath Foundation 的开源签名申请正在进行中。
 
 ## 获取帮助
 

@@ -27,6 +27,8 @@
 
 </details>
 
+[安全策略](https://github.com/WSL043/DSH-Portable/blob/main/SECURITY.md) · [代码签名策略](https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md)
+
 ---
 
 ## English
@@ -59,3 +61,5 @@
 - Linux ARM64: [AppImage](https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-arm64.AppImage) · [complete portable folder](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-arm64.tar.gz)
 
 </details>
+
+[Security policy](https://github.com/WSL043/DSH-Portable/blob/main/SECURITY.md) · [Code-signing policy](https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md)
