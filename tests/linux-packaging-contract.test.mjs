@@ -29,8 +29,8 @@ test('Linux uses architecture-specific component update channels', () => {
 
 test('Linux requires a compatible native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
-  assert.match(source, /"shellSchema": 6/)
-  assert.match(source, /"requiredShellSchema": 6/)
+  assert.match(source, /"shellSchema": 7/)
+  assert.match(source, /"requiredShellSchema": 7/)
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
@@ -56,6 +56,12 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /--no-browser/)
   assert.match(source, /navigate\(/)
   assert.match(source, /check-update/)
+  assert.match(source, /check-product-update/)
+  assert.match(source, /check-engine-update/)
+  assert.match(source, /productUpdateCheckEnabled/)
+  assert.match(source, /engineUpdateCheckEnabled/)
+  assert.match(source, /check-update", "--scope", scope/)
+  assert.match(source, /update", "--scope", settings\.pending_update_scope\.as_str\(\)/)
   assert.match(source, /dsh-terminal/)
   assert.match(source, /open_dsh_terminal/)
   assert.match(source, /xdg-terminal-exec/)
@@ -179,6 +185,7 @@ test('release staging exposes two obvious Linux choices per architecture', async
     assert.match(staging, new RegExp(`DeepSeek-Herness-linux-${arch}\\.AppImage`))
     assert.match(staging, new RegExp(`DSH-Portable-update-linux-${arch}\\.zip`))
     assert.match(staging, new RegExp(`portable-update-linux-${arch}\\.json`))
+    assert.match(staging, new RegExp(`dsh-core-update-linux-${arch}\\.json`))
   }
 })
 

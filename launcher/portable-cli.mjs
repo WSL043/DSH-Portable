@@ -453,6 +453,7 @@ async function checkUpdate(options) {
   await migratePortableRoot(layout)
   return checkForUpdate({
     layout,
+    scope: options.updateScope,
     manifestUrl: options.updateManifest || undefined,
     allowHttp: options.allowHttp,
     force: options.force,
@@ -465,6 +466,7 @@ async function update(options) {
   await migratePortableRoot(layout)
   const available = await checkForUpdate({
     layout,
+    scope: options.updateScope,
     manifestUrl: options.updateManifest || undefined,
     allowHttp: options.allowHttp,
     force: true,
@@ -503,7 +505,7 @@ async function update(options) {
     const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null
     return { ...applied, running, browser }
   } catch (error) {
-    await deferUpdate(layout).catch(() => {})
+    await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     let recovery = null
     try {
       recovery = await start(options.noBrowser)
@@ -546,8 +548,8 @@ async function main() {
     else if (options.command === 'repair') result = await repair()
     else if (options.command === 'support-report') result = await supportReport(options)
     else if (options.command === 'check-update') result = await checkUpdate(options)
-    else if (options.command === 'defer-update') result = await deferUpdate(layout)
-    else if (options.command === 'ignore-update') result = await ignoreUpdate(layout)
+    else if (options.command === 'defer-update') result = await deferUpdate(layout, { scope: options.updateScope })
+    else if (options.command === 'ignore-update') result = await ignoreUpdate(layout, '', { scope: options.updateScope })
     else if (options.command === 'update') result = await update(options)
     else throw new Error(`Unsupported command: ${options.command}`)
     print(result, options.json)

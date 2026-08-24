@@ -1,0 +1,66 @@
+name: Publish verified DSH core
+
+on:
+  workflow_run:
+    workflows: [Build and smoke test]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: write
+
+jobs:
+  publish:
+    if: >-
+      (github.event.workflow_run.event == 'push' ||
+      github.event.workflow_run.event == 'workflow_dispatch') &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+      - name: Detect an independently publishable dependency update
+        id: changed
+        run: |
+          if ! git diff --quiet HEAD^ HEAD -- package.json; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          elif git diff --quiet HEAD^ HEAD -- upstream.lock.json app/package-lock.json; then
+            echo 'publish=false' >> "$GITHUB_OUTPUT"
+          else
+            echo 'publish=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@v7
+        if: steps.changed.outputs.publish == 'true'
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        if: steps.changed.outputs.publish == 'true'
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          merge-multiple: true
+          path: artifacts
+      - name: Verify every finished core component again
+        if: steps.changed.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for platform in windows-x64 macos-arm64 macos-x64 linux-x64 linux-arm64; do
+            node scripts/verify-update-artifact.mjs "artifacts/dsh-core-update-${platform}.json" "artifacts/DSH-Portable-update-${platform}.zip" engine
+          done
+      - name: Publish stable and candidate core channels atomically after product acceptance
+        if: steps.changed.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSETS=()
+          for platform in windows-x64 macos-arm64 macos-x64 linux-x64 linux-arm64; do
+            ASSETS+=("artifacts/dsh-core-update-${platform}.json" "artifacts/DSH-Portable-update-${platform}.zip")
+          done
+          for channel in update-channel-core-stable update-channel-core-candidate; do
+            gh release view "$channel" >/dev/null 2>&1 || gh release create "$channel" --prerelease --title "Verified DeepSeek Harness core channel" --notes "Machine-readable official DeepSeek Harness updates verified against DSH-Portable."
+            gh release upload "$channel" "${ASSETS[@]}" --clobber
+          done

@@ -1,0 +1,21 @@
+{
+  "version": "0.4.11",
+  "zh": {
+    "summary": "更新设置和更新流程现在能清楚区分 DSH-Portable 与官方 DeepSeek Harness。",
+    "highlights": [
+      "设置页可分别开启或手动检查产品更新与官方内核更新，两个启动检查都继续默认关闭。",
+      "修复托盘检查完成后仍显示“正在检查”的状态问题，并为等待选择与实际安装提供独立状态。",
+      "官方 DeepSeek Harness 可在完整跨平台成品验收通过后独立更新，不必等待下一次 Portable 功能版本。",
+      "Windows、macOS 与 Linux 共享同一份更新偏好和迁移规则，旧设置会自动保留。"
+    ]
+  },
+  "en": {
+    "summary": "Update settings and flows now distinguish DSH-Portable from the official DeepSeek Harness core.",
+    "highlights": [
+      "Settings can enable or run product and official-core checks independently; both startup checks remain off by default.",
+      "The tray no longer stays on Checking after the network request finishes; decisions and installation have separate states.",
+      "Official DeepSeek Harness builds can ship after full cross-platform product acceptance without waiting for another Portable feature release.",
+      "Windows, macOS, and Linux now share the same update preferences and migration behavior, preserving existing settings."
+    ]
+  }
+}

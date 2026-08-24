@@ -205,7 +205,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 19
+        shellSchema = 20
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -318,7 +318,7 @@ try {
             releaseChannel = $ReleaseChannel
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 19
+            requiredShellSchema = 20
             component = [ordered]@{
                 kind = 'dsh-app'
                 dshVersion = $Lock.dsh.version
@@ -327,6 +327,30 @@ try {
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
                 sha256 = $UpdateComponentHash
                 urls = @("https://github.com/WSL043/DSH-Portable/releases/download/$UpdateChannelTag/DSH-Portable-update-windows-x64.zip")
+            }
+        } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
+        [System.Text.UTF8Encoding]::new($false)
+    )
+
+    $EngineUpdateManifest = Join-Path $OutputDir 'dsh-core-update-windows-x64.json'
+    [System.IO.File]::WriteAllText(
+        $EngineUpdateManifest,
+        (([ordered]@{
+            schemaVersion = 1
+            updateKind = 'engine'
+            portableVersion = $PortableVersion
+            releaseChannel = $ReleaseChannel
+            platform = 'windows-x64'
+            minimumUpdaterSchema = 1
+            requiredShellSchema = 20
+            component = [ordered]@{
+                kind = 'dsh-app'
+                dshVersion = $Lock.dsh.version
+                dshCommit = $Lock.dsh.reviewedCommit
+                requiredNodeVersion = $Lock.node.version
+                bytes = (Get-Item -LiteralPath $UpdateComponent).Length
+                sha256 = $UpdateComponentHash
+                urls = @("https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-$ReleaseChannel/DSH-Portable-update-windows-x64.zip")
             }
         } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
         [System.Text.UTF8Encoding]::new($false)
@@ -417,6 +441,7 @@ try {
         UpdateComponent = $UpdateComponent
         UpdateComponentSha256 = $UpdateComponentHash
         UpdateManifest = $UpdateManifest
+        EngineUpdateManifest = $EngineUpdateManifest
         Stage = $Stage
         DshVersion = $Lock.dsh.version
     }

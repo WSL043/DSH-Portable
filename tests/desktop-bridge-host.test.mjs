@@ -42,20 +42,56 @@ test('Portable settings routes default to privacy-safe updates and preserve unre
   await routes.get('/dsh-portable/settings').handler(request('GET'), getBefore)
   assert.equal(getBefore.status, 200)
   assert.deepEqual(getBefore.json().settings, {
-    schemaVersion: 1,
+    schemaVersion: 2,
     updateCheckEnabled: false,
+    productUpdateCheckEnabled: false,
+    engineUpdateCheckEnabled: false,
     taskNotificationsEnabled: true,
     closeBehavior: 'tray',
   })
+  assert.deepEqual(getBefore.json().versions, { portable: '', engine: '' })
   assert.equal(getBefore.json().lastRepair, null)
 
   const update = response()
-  await routes.get('/dsh-portable/settings').handler(request('POST', { updateCheckEnabled: true }), update)
+  await routes.get('/dsh-portable/settings').handler(request('POST', {
+    productUpdateCheckEnabled: true,
+    engineUpdateCheckEnabled: true,
+  }), update)
   assert.equal(update.status, 200)
   const saved = JSON.parse(await readFile(path.join(stateRoot, 'data', 'launcher-settings.json'), 'utf8'))
   assert.equal(saved.updateCheckEnabled, true)
+  assert.equal(saved.productUpdateCheckEnabled, true)
+  assert.equal(saved.engineUpdateCheckEnabled, true)
   assert.equal(saved.taskNotificationsEnabled, true)
   assert.equal(saved.closeBehavior, 'tray')
+})
+
+test('Portable settings expose product and official DSH checks as separate bounded actions', async (t) => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-settings-'))
+  t.after(() => rm(stateRoot, { recursive: true, force: true }))
+  const calls = []
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, {
+    root: stateRoot,
+    stateRoot,
+    async runCli(args) { calls.push(args); return { status: 'current', updateKind: args[2] } },
+  })
+
+  const product = response()
+  await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'product' }), product)
+  assert.equal(product.status, 200)
+  assert.deepEqual(product.json(), { status: 'current', updateKind: 'product' })
+  assert.deepEqual(calls[0], ['check-update', '--scope', 'product', '--json', '--force'])
+
+  const engine = response()
+  await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'engine' }), engine)
+  assert.equal(engine.status, 200)
+  assert.deepEqual(calls[1], ['check-update', '--scope', 'engine', '--json', '--force'])
+
+  const invalid = response()
+  await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'all' }), invalid)
+  assert.equal(invalid.status, 400)
+  assert.equal(calls.length, 2)
 })
 
 test('Portable maintenance routes are same-origin, bounded, and delegate only official CLI commands', async (t) => {
@@ -99,7 +135,7 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.doesNotMatch(client, /id:\s*['"]portable['"][\s\S]+label:/)
   assert.match(client, /borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"]/);
   assert.match(client, /padding:\s*['"]16px 0['"]/);
-  assert.match(client, /item:\s*\{[^}]*padding:\s*['"]16px 0['"]/s)
+  assert.match(client, /item:\s*\{[^}]*padding:\s*['"]18px 0['"][^}]*flexWrap:\s*['"]wrap['"]/s)
   assert.match(client, /text:\s*\{[^}]*gap:\s*4/s)
   assert.match(client, /primitives\.Menu/)
   assert.match(client, /primitives\.IconChevronDownOutline14/)
@@ -109,7 +145,10 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.match(smoke, /settingsRoundTrip/)
   assert.doesNotMatch(client, /row:\s*\{[^}]*minHeight:\s*44/s)
   assert.doesNotMatch(client, /borderRadius:\s*10|background:\s*['"]var\(--dsw-alias-bg-layer-1/)
-  assert.match(client, /updateCheckEnabled/)
+  assert.match(client, /productUpdateCheckEnabled/)
+  assert.match(client, /engineUpdateCheckEnabled/)
+  assert.match(client, /DeepSeek Harness/)
+  assert.match(client, /\/dsh-portable\/check-update/)
   assert.match(client, /taskNotificationsEnabled/)
   assert.match(client, /closeBehavior/)
   assert.match(client, /\/dsh-portable\/doctor/)

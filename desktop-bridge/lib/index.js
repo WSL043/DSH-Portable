@@ -1,11 +1,13 @@
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { copyFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 export const name = 'dsh-portable-desktop-bridge'
 export const inject = ['webServer']
 
 const MAX_BODY = 16 * 1024
+const execFileAsync = promisify(execFile)
 
 function sendJson(response, status, value) {
   response.writeHead(status, { 'cache-control': 'no-store', 'content-type': 'application/json; charset=utf-8' })
@@ -37,10 +39,19 @@ async function readJson(request) {
 function readSettings(filename) {
   let source = {}
   try { source = JSON.parse(readFileSync(filename, 'utf8')) } catch {}
+  const legacyUpdateCheck = source.updateCheckEnabled === true
+  const productUpdateCheckEnabled = typeof source.productUpdateCheckEnabled === 'boolean'
+    ? source.productUpdateCheckEnabled
+    : legacyUpdateCheck
+  const engineUpdateCheckEnabled = typeof source.engineUpdateCheckEnabled === 'boolean'
+    ? source.engineUpdateCheckEnabled
+    : legacyUpdateCheck
   return {
     ...source,
-    schemaVersion: 1,
-    updateCheckEnabled: source.updateCheckEnabled === true,
+    schemaVersion: 2,
+    updateCheckEnabled: productUpdateCheckEnabled,
+    productUpdateCheckEnabled,
+    engineUpdateCheckEnabled,
     taskNotificationsEnabled: source.taskNotificationsEnabled !== false,
     closeBehavior: source.closeBehavior === 'exit' ? 'exit' : 'tray',
   }
@@ -58,14 +69,15 @@ function writeSettings(filename, settings) {
   finally { try { unlinkSync(temporary) } catch {} }
 }
 
-function defaultRunCli(root, stateRoot, args) {
-  const output = execFileSync(process.execPath, [path.join(root, 'launcher', 'portable-cli.mjs'), ...args], {
+async function defaultRunCli(root, stateRoot, args) {
+  const { stdout = '' } = await execFileAsync(process.execPath, [path.join(root, 'launcher', 'portable-cli.mjs'), ...args], {
     cwd: root,
     env: { ...process.env, DSH_PORTABLE_STATE_ROOT: stateRoot },
     encoding: 'utf8',
     windowsHide: true,
     timeout: 30000,
-  }).trim()
+  })
+  const output = stdout.trim()
   return output ? JSON.parse(output.split(/\r?\n/).at(-1)) : {}
 }
 
@@ -73,6 +85,7 @@ export function mountPortableRoutes(webServer, options = {}) {
   const root = path.resolve(options.root || process.env.DSH_PORTABLE_ROOT || path.join(import.meta.dirname, '..', '..'))
   const stateRoot = path.resolve(options.stateRoot || process.env.DSH_PORTABLE_STATE_ROOT || root)
   const settingsFile = path.join(stateRoot, 'data', 'launcher-settings.json')
+  const componentsFile = path.join(root, 'licenses', 'COMPONENTS.json')
   const repairRequest = path.join(stateRoot, 'data', 'runtime', 'repair-requested.json')
   const repairResult = path.join(stateRoot, 'data', 'runtime', 'repair-result.json')
   const runCli = options.runCli || ((args) => defaultRunCli(root, stateRoot, args))
@@ -82,6 +95,13 @@ export function mountPortableRoutes(webServer, options = {}) {
   register({ kind: 'exact', path: '/dsh-portable/settings', handler: async (request, response) => {
     if (request.method === 'GET') return sendJson(response, 200, {
       settings: readSettings(settingsFile),
+      versions: (() => {
+        const components = readJsonFile(componentsFile)
+        return {
+          portable: String(components?.portableVersion || ''),
+          engine: String(components?.dshVersion || ''),
+        }
+      })(),
       lastRepair: readJsonFile(repairResult),
     })
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
@@ -89,7 +109,10 @@ export function mountPortableRoutes(webServer, options = {}) {
     try {
       const body = await readJson(request)
       const current = readSettings(settingsFile)
-      if (typeof body.updateCheckEnabled === 'boolean') current.updateCheckEnabled = body.updateCheckEnabled
+      if (typeof body.updateCheckEnabled === 'boolean') current.productUpdateCheckEnabled = body.updateCheckEnabled
+      if (typeof body.productUpdateCheckEnabled === 'boolean') current.productUpdateCheckEnabled = body.productUpdateCheckEnabled
+      if (typeof body.engineUpdateCheckEnabled === 'boolean') current.engineUpdateCheckEnabled = body.engineUpdateCheckEnabled
+      current.updateCheckEnabled = current.productUpdateCheckEnabled
       if (typeof body.taskNotificationsEnabled === 'boolean') current.taskNotificationsEnabled = body.taskNotificationsEnabled
       if (body.closeBehavior === 'tray' || body.closeBehavior === 'exit') current.closeBehavior = body.closeBehavior
       writeSettings(settingsFile, current)
@@ -97,10 +120,20 @@ export function mountPortableRoutes(webServer, options = {}) {
     } catch (error) { sendJson(response, 400, { error: String(error?.message || error) }) }
   } })
 
+  register({ kind: 'exact', path: '/dsh-portable/check-update', handler: async (request, response) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try {
+      const body = await readJson(request)
+      if (!['product', 'engine'].includes(body.scope)) return sendJson(response, 400, { error: 'invalid update scope' })
+      sendJson(response, 200, await runCli(['check-update', '--scope', body.scope, '--json', '--force']))
+    } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+  } })
+
   register({ kind: 'exact', path: '/dsh-portable/doctor', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-    try { sendJson(response, 200, runCli(['doctor', '--json'])) }
+    try { sendJson(response, 200, await runCli(['doctor', '--json'])) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 
@@ -115,7 +148,7 @@ export function mountPortableRoutes(webServer, options = {}) {
   register({ kind: 'exact', path: '/dsh-portable/support-report', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-    try { sendJson(response, 200, runCli(['support-report', '--json'])) }
+    try { sendJson(response, 200, await runCli(['support-report', '--json'])) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 

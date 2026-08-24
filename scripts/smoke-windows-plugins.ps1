@@ -37,6 +37,7 @@ $RegistryV2 = Join-Path $TestRoot 'plugin-v2.tgz'
 $RegistryChannel = Join-Path $TestRoot 'registry-channel.txt'
 $RegistryReady = Join-Path $TestRoot 'registry-ready.json'
 $ClsxArchive = Join-Path $TestRoot 'clsx.tgz'
+$DefaultPluginRegistryArchive = Join-Path $TestRoot 'default-plugin.tgz'
 $RegistryProcess = $null
 $PriorPath = $env:PATH
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
@@ -82,7 +83,8 @@ function Start-Product {
     # Windows Job Object so closing its window reliably tears down DSH; using
     # that shell with --no-browser would correctly end the child with the shell.
     # Exercise the finished product's supported headless CLI instead.
-    $Process = Start-Process -FilePath $Node -ArgumentList @($PortableCli, 'start', '--no-browser', '--json') -PassThru -NoNewWindow `
+    $ArgumentLine = '"{0}" start --no-browser --json' -f $PortableCli
+    $Process = Start-Process -FilePath $Node -ArgumentList $ArgumentLine -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
@@ -107,7 +109,8 @@ function Start-Product {
 function Stop-Product {
     $Stdout = Join-Path $TestRoot 'stop.stdout.log'
     $Stderr = Join-Path $TestRoot 'stop.stderr.log'
-    $Process = Start-Process -FilePath $Node -ArgumentList @($PortableCli, 'stop', '--json') -PassThru -NoNewWindow `
+    $ArgumentLine = '"{0}" stop --json' -f $PortableCli
+    $Process = Start-Process -FilePath $Node -ArgumentList $ArgumentLine -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
         Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
@@ -176,8 +179,13 @@ try {
     $ClsxManifest = Get-Content -Raw -LiteralPath (Join-Path $ClsxRoot 'package.json') | ConvertFrom-Json
     & tar.exe -czf $ClsxArchive -C (Split-Path -Parent $ClsxRoot) 'clsx'
     if ($LASTEXITCODE -ne 0) { throw 'could not create the clsx fixture archive' }
+    $Components = Get-Content -Raw -LiteralPath (Join-Path $Root 'licenses\COMPONENTS.json') | ConvertFrom-Json
+    $DefaultPluginArchive = Join-Path $Root 'default-plugins\dsh-native-session-delete.tgz'
+    if (-not (Test-Path -LiteralPath $DefaultPluginArchive -PathType Leaf)) { throw 'finished product is missing the default plugin archive' }
+    if (-not $Components.defaultPluginVersion) { throw 'finished product does not declare the default plugin version' }
+    Copy-Item -LiteralPath $DefaultPluginArchive -Destination $DefaultPluginRegistryArchive
     [System.IO.File]::WriteAllText($RegistryChannel, "1.0.0`n", [System.Text.UTF8Encoding]::new($false))
-    $RegistryProcess = Start-Process -FilePath $Node -ArgumentList @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version) -PassThru -WindowStyle Hidden
+    $RegistryProcess = Start-Process -FilePath $Node -ArgumentList @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version, $DefaultPluginRegistryArchive, [string]$Components.defaultPluginVersion) -PassThru -WindowStyle Hidden
     $ReadyDeadline = [DateTime]::UtcNow.AddSeconds(15)
     while (-not (Test-Path -LiteralPath $RegistryReady)) {
         if ($RegistryProcess.HasExited) { throw "fixture registry exited with code $($RegistryProcess.ExitCode)" }

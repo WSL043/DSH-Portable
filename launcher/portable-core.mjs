@@ -71,6 +71,8 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     stateRoot: durableRoot,
     stateDir,
     updateCheckCache: paths.join(stateDir, 'update-check.json'),
+    productUpdateCheckCache: paths.join(stateDir, 'update-check.json'),
+    engineUpdateCheckCache: paths.join(stateDir, 'engine-update-check.json'),
     updateDir: paths.join(portableRoot, '.dsh-portable-update'),
     updateJournal: paths.join(stateDir, 'update.json'),
     webView2Core: platform === 'win32' ? paths.join(portableRoot, 'Microsoft.Web.WebView2.Core.dll') : null,
@@ -477,6 +479,7 @@ export function parseCli(argv) {
   let allowHttp = false
   let force = false
   let updateManifest = ''
+  let updateScope = 'product'
   let progressJson = false
   let waitForLockMs = 0
   let output
@@ -498,6 +501,12 @@ export function parseCli(argv) {
       updateManifest = argv[index + 1]
       index += 1
     }
+    else if (arg === '--scope') {
+      const value = argv[index + 1]
+      if (!['product', 'engine'].includes(value)) throw new Error('--scope requires product or engine.')
+      updateScope = value
+      index += 1
+    }
     else if (arg === '--output') {
       if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--output requires a value.')
       output = argv[index + 1]
@@ -510,7 +519,7 @@ export function parseCli(argv) {
     }
     else throw new Error(`Unknown command or option: ${arg}`)
   }
-  const result = { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs }
+  const result = { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs, updateScope }
   if (output !== undefined) result.output = output
   return result
 }

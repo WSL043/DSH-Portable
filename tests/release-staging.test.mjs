@@ -21,14 +21,19 @@ const required = [
   'portable-manifest.json',
   'DSH-Portable-update-windows-x64.zip',
   'portable-update-windows-x64.json',
+  'dsh-core-update-windows-x64.json',
   'DSH-Portable-update-macos-arm64.zip',
   'portable-update-macos-arm64.json',
+  'dsh-core-update-macos-arm64.json',
   'DSH-Portable-update-macos-x64.zip',
   'portable-update-macos-x64.json',
+  'dsh-core-update-macos-x64.json',
   'DSH-Portable-update-linux-x64.zip',
   'portable-update-linux-x64.json',
+  'dsh-core-update-linux-x64.json',
   'DSH-Portable-update-linux-arm64.zip',
   'portable-update-linux-arm64.json',
+  'dsh-core-update-linux-arm64.json',
 ]
 
 async function stageRelease(channel) {
@@ -48,12 +53,15 @@ test('stable release staging exposes obvious packages for every platform and kee
   try {
     const user = (await readdir(path.join(output, 'user-assets'))).sort()
     const update = (await readdir(path.join(output, 'update-assets'))).sort()
+    const engineUpdate = (await readdir(path.join(output, 'engine-update-assets'))).sort()
     assert.equal(user.length, 10)
     assert.ok(user.includes('portable-manifest.json'), 'the immutable version release must publish the exact full-package manifest used by desktop updates')
     assert.ok(user.includes('checksums.txt'))
     assert.ok(!user.some((name) => name.endsWith('.sha256')))
     assert.ok(!user.includes('DSH-Portable-windows-x64-offline.exe'))
     assert.equal(update.length, 12)
+    assert.equal(engineUpdate.length, 10)
+    assert.equal(engineUpdate.filter(name => name.startsWith('dsh-core-update-')).length, 5)
     await assert.rejects(readdir(path.join(output, 'compat-assets')), { code: 'ENOENT' })
     const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
     assert.equal(checksums.trim().split(/\r?\n/).length, 9)

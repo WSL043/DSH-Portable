@@ -8,6 +8,7 @@ const artifacts = path.resolve(artifactArg)
 const output = path.resolve(outputArg)
 const userDir = path.join(output, 'user-assets')
 const updateDir = path.join(output, 'update-assets')
+const engineUpdateDir = path.join(output, 'engine-update-assets')
 
 const userAssets = [
   ...(channel === 'candidate' ? [] : ['DSH-Portable-windows-x64.exe']),
@@ -34,6 +35,18 @@ const updateAssets = [
   'DSH-Portable-update-linux-arm64.zip',
   'portable-update-linux-arm64.json',
 ]
+const engineUpdateAssets = [
+  'DSH-Portable-update-windows-x64.zip',
+  'dsh-core-update-windows-x64.json',
+  'DSH-Portable-update-macos-arm64.zip',
+  'dsh-core-update-macos-arm64.json',
+  'DSH-Portable-update-macos-x64.zip',
+  'dsh-core-update-macos-x64.json',
+  'DSH-Portable-update-linux-x64.zip',
+  'dsh-core-update-linux-x64.json',
+  'DSH-Portable-update-linux-arm64.zip',
+  'dsh-core-update-linux-arm64.json',
+]
 async function requireFile(name) {
   const filename = path.join(artifacts, name)
   const info = await stat(filename).catch(() => null)
@@ -50,6 +63,7 @@ await rm(output, { recursive: true, force: true })
 await Promise.all([
   copySet(userAssets, userDir),
   copySet(updateAssets, updateDir),
+  copySet(engineUpdateAssets, engineUpdateDir),
 ])
 
 const checksums = []
@@ -59,4 +73,8 @@ for (const name of userAssets) {
 }
 await writeFile(path.join(userDir, 'checksums.txt'), `${checksums.join('\n')}\n`, 'ascii')
 
-console.log(JSON.stringify({ userAssets: userAssets.length + 1, updateAssets: updateAssets.length }))
+console.log(JSON.stringify({
+  userAssets: userAssets.length + 1,
+  updateAssets: updateAssets.length,
+  engineUpdateAssets: engineUpdateAssets.length,
+}))

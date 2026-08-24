@@ -66,18 +66,19 @@ test('Windows cold start shows the local workspace before checking for updates i
   )
   const startIndex = runLauncher.indexOf('InvokePortableCli(new[] { "start", "--no-browser", "--json" })')
   const desktopIndex = runLauncher.indexOf('await ShowDesktopAsync(url)')
-  const automaticCheckIndex = runLauncher.indexOf('CheckForDesktopUpdateAsync(false)')
+  const automaticCheckIndex = runLauncher.indexOf('CheckForDesktopUpdateAsync(false, "product")')
   assert.ok(startIndex >= 0, 'the native host must start the local DSH service')
   assert.ok(desktopIndex > startIndex, 'the WebView must open after the service is ready')
   assert.ok(automaticCheckIndex > desktopIndex, 'automatic update checking must begin only after the workspace is visible')
   assert.doesNotMatch(runLauncher.slice(0, desktopIndex), /CheckAndApplyUpdateAsync/)
-  assert.match(source, /checkUpdateItem\.Click\s*\+=\s*async delegate \{ await CheckForDesktopUpdateAsync\(true\); \}/)
+  assert.match(source, /checkUpdateItem\.Click\s*\+=\s*async delegate \{ await CheckForDesktopUpdateAsync\(true, "product"\); \}/)
+  assert.match(source, /checkEngineUpdateItem\.Click\s*\+=\s*async delegate \{ await CheckForDesktopUpdateAsync\(true, "engine"\); \}/)
 })
 
 test('Windows never treats an unavailable tray bridge state as permission to replace the running product', async () => {
   const source = await readFile(launcherSource, 'utf8')
   const updateCheck = source.slice(
-    source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual)'),
+    source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual, string scope)'),
     source.indexOf('private void ShowDesktopOperation'),
   )
   const fullPackageBranch = updateCheck.slice(
@@ -101,14 +102,16 @@ test('Windows update checking and update interaction use separate states', async
     source.indexOf('private void RebuildRecentSessionItems'),
   )
   const updateCheck = source.slice(
-    source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual)'),
+    source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual, string scope)'),
     source.indexOf('private void ShowDesktopOperation'),
   )
 
   assert.match(source, /private bool updateCheckRunning;/)
   assert.match(source, /private bool updateInteractionRunning;/)
-  assert.match(rebuild, /updateCheckRunning[\s\S]*正在检查…/)
-  assert.doesNotMatch(rebuild, /updateInteractionRunning[\s\S]*正在检查…/)
+  assert.match(rebuild, /checkUpdateItem\.Text = updateCheckRunning\s*\? L\("正在检查…"/)
+  assert.match(rebuild, /checkUpdateItem\.Enabled = !updateCheckRunning && !updateInteractionRunning/)
+  assert.match(rebuild, /checkEngineUpdateItem\.Text = updateCheckRunning\s*\? L\("正在检查…"/)
+  assert.match(rebuild, /checkEngineUpdateItem\.Enabled = !updateCheckRunning && !updateInteractionRunning/)
   assert.match(updateCheck, /FinishUpdateCheckPhase\(\);/)
   assert.ok(
     updateCheck.indexOf('FinishUpdateCheckPhase();') < updateCheck.indexOf('ShowUpdateChoiceAsync'),

@@ -13,6 +13,7 @@ import {
   applyStagedAppUpdate,
   checkForUpdate,
   comparePortableVersions,
+  defaultEngineUpdateManifestUrl,
   defaultUpdateManifestUrl,
   deferUpdate,
   downloadVerifiedComponent,
@@ -58,6 +59,20 @@ function updateManifest(overrides = {}) {
     },
     ...overrides,
   }
+}
+
+function engineUpdateManifest(overrides = {}) {
+  return updateManifest({
+    updateKind: 'engine',
+    portableVersion: '0.4.10',
+    releaseChannel: 'stable',
+    component: {
+      ...updateManifest().component,
+      dshVersion: '0.1.1-rc.3',
+      dshCommit: 'c'.repeat(40),
+    },
+    ...overrides,
+  })
 }
 
 test('portable preview versions compare monotonically without lexical mistakes', () => {
@@ -109,6 +124,44 @@ test('update evaluation distinguishes current, component update, full package, a
   assert.throws(() => evaluateUpdate(missingCompatibility, installed, 'windows-x64'), /compatibility/i)
 })
 
+test('an independently published official DSH component updates without changing the Portable version', () => {
+  const installed = {
+    portableVersion: '0.4.10',
+    releaseChannel: 'stable',
+    dshVersion: '0.1.1-rc.2',
+    updaterSchema: 1,
+    shellSchema: 1,
+    nodeVersion: '24.19.0',
+  }
+  const result = evaluateUpdate(engineUpdateManifest(), installed, 'windows-x64')
+  assert.equal(result.status, 'available')
+  assert.equal(result.updateKind, 'engine')
+  assert.equal(result.delivery, 'component')
+  assert.equal(result.productCurrent, '0.4.10')
+  assert.equal(result.productLatest, '0.4.10')
+  assert.equal(result.engineCurrent, '0.1.1-rc.2')
+  assert.equal(result.engineLatest, '0.1.1-rc.3')
+  assert.equal(result.updateIdentity, `engine:0.1.1-rc.3:${'c'.repeat(40)}`)
+})
+
+test('the engine channel is monotonic and never crosses an unverified Portable compatibility baseline', () => {
+  const installed = {
+    portableVersion: '0.4.10',
+    releaseChannel: 'stable',
+    dshVersion: '0.1.1-rc.3',
+    updaterSchema: 1,
+    shellSchema: 1,
+    nodeVersion: '24.19.0',
+  }
+  assert.equal(evaluateUpdate(engineUpdateManifest(), installed, 'windows-x64').status, 'current')
+  assert.equal(evaluateUpdate(engineUpdateManifest({
+    component: { ...engineUpdateManifest().component, dshVersion: '0.1.1-rc.2' },
+  }), installed, 'windows-x64').status, 'current')
+  const incompatible = evaluateUpdate(engineUpdateManifest({ portableVersion: '0.4.11' }), installed, 'windows-x64')
+  assert.equal(incompatible.status, 'core-incompatible')
+  assert.equal(incompatible.delivery, 'none')
+})
+
 test('platform update keys are explicit and unsupported targets fail closed', () => {
   assert.equal(platformUpdateKey('win32', 'x64'), 'windows-x64')
   assert.equal(platformUpdateKey('darwin', 'arm64'), 'macos-arm64')
@@ -128,6 +181,67 @@ test('installed release channel selects an isolated machine update feed', () => 
     'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-candidate/portable-update-macos-arm64.json',
   )
   assert.throws(() => defaultUpdateManifestUrl('preview', 'linux', 'x64'), /release channel/i)
+  assert.equal(
+    defaultEngineUpdateManifestUrl('stable', 'win32', 'x64'),
+    'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-stable/dsh-core-update-windows-x64.json',
+  )
+})
+
+test('product and official DSH checks use isolated feeds and caches', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-split-'))
+  const layout = layoutForRoot(root)
+  const requested = []
+  try {
+    await mkdir(path.join(root, 'licenses'), { recursive: true })
+    await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+      portableVersion: '0.4.10', releaseChannel: 'stable', dshVersion: '0.1.1-rc.2',
+      updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+    })}\n`)
+    const fetchImpl = async (url) => {
+      requested.push(String(url))
+      const manifest = String(url).includes('core-stable')
+        ? engineUpdateManifest({ platform: platformUpdateKey(process.platform, process.arch) })
+        : updateManifest({ portableVersion: '0.4.10', releaseChannel: 'stable', platform: platformUpdateKey(process.platform, process.arch) })
+      return new Response(JSON.stringify(manifest), { status: 200 })
+    }
+    const product = await checkForUpdate({ layout, scope: 'product', force: true, fetchImpl })
+    const engine = await checkForUpdate({ layout, scope: 'engine', force: true, fetchImpl })
+    assert.equal(product.status, 'current')
+    assert.equal(engine.status, 'available')
+    assert.equal(engine.updateKind, 'engine')
+    assert.match(requested[0], /update-channel-stable/)
+    assert.match(requested[1], /update-channel-core-stable/)
+    assert.notEqual(layout.productUpdateCheckCache, layout.engineUpdateCheckCache)
+    assert.equal(JSON.parse(await readFile(layout.engineUpdateCheckCache, 'utf8')).manifest.updateKind, 'engine')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('each update feed fails closed when it serves the other update kind', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-kind-mismatch-'))
+  const layout = layoutForRoot(root)
+  try {
+    await mkdir(path.join(root, 'licenses'), { recursive: true })
+    await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+      portableVersion: '0.4.10', releaseChannel: 'stable', dshVersion: '0.1.1-rc.2',
+      updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+    })}\n`)
+    const result = await checkForUpdate({
+      layout,
+      scope: 'engine',
+      force: true,
+      manifestUrl: 'https://updates.invalid/engine.json',
+      fetchImpl: async () => new Response(JSON.stringify(updateManifest({
+        portableVersion: '0.4.11',
+        platform: platformUpdateKey(process.platform, process.arch),
+      })), { status: 200 }),
+    })
+    assert.equal(result.status, 'unavailable')
+    assert.match(result.message, /update kind/i)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('automatic checks derive the feed from installed channel metadata', async () => {

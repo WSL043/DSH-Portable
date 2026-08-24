@@ -117,15 +117,15 @@ Plugins that can be mounted safely take effect immediately, while client-only pl
 
 ## Updates and repair
 
-- DSH-Portable opens the local workspace first, then checks for updates in the background. Automatic update checks are off by default; check manually or enable **Check for updates at startup** from the tray.
-- The update window distinguishes the DSH-Portable product version from the bundled official DSH version.
-- Every notification names the DSH-Portable product version; the bundled official DSH version and whether it changes are listed separately.
+- DSH-Portable opens the local workspace first, then checks in the background. Product updates and official DeepSeek Harness core updates are independent, and **Check for updates at startup** is off by default for both; enable or run either one from **Settings → General → Portable**.
+- The tray also exposes both manual checks. Network checking, waiting for a decision, and applying an update are separate states, so the menu does not remain stuck on “Checking”.
+- Every prompt names the target—DSH-Portable or DeepSeek Harness—and shows that target's current and next version.
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.
 - When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
 - Choose Later or **Skip this version**; installation waits for active tasks and a failed update rolls back.
 - **Settings → General → Portable** provides checks, repair, and a support report. Repair keeps user data and rebuilds only reproducible components.
 
-An official DSH update never replaces a working environment directly. It reaches the Portable channel only after Windows, macOS, Linux x64, and Linux ARM64 finished-product tests.
+An official DSH update does not need to wait for a DSH-Portable feature release, but it never replaces a working environment directly. Finished-product tests on Windows, macOS, Linux x64, and Linux ARM64 must all pass before the independent core channel is published.
 
 ## Portable data
 

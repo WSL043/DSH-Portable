@@ -41,11 +41,14 @@ async function archiveText(archive, rawEntry) {
 }
 
 async function main() {
-  const [manifestFile, archive] = process.argv.slice(2)
-  if (!manifestFile || !archive) fail('Usage: node scripts/verify-update-artifact.mjs <manifest.json> <component.zip>')
+  const [manifestFile, archive, expectedKind] = process.argv.slice(2)
+  if (!manifestFile || !archive) fail('Usage: node scripts/verify-update-artifact.mjs <manifest.json> <component.zip> [product|engine]')
 
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   if (manifest.schemaVersion !== 1 || !manifest.portableVersion || !manifest.platform) fail('Update manifest is incomplete.')
+  const updateKind = manifest.updateKind ?? 'product'
+  if (!['product', 'engine'].includes(updateKind)) fail('Update manifest kind is invalid.')
+  if (expectedKind && updateKind !== expectedKind) fail(`Expected an ${expectedKind} update manifest, received ${updateKind}.`)
   const minimumUpdaterSchema = Number(manifest.minimumUpdaterSchema)
   const requiredShellSchema = Number(manifest.requiredShellSchema)
   if (!Number.isSafeInteger(minimumUpdaterSchema) || minimumUpdaterSchema < 1
@@ -109,6 +112,7 @@ async function main() {
 
   process.stdout.write(`${JSON.stringify({
     status: 'verified',
+    updateKind,
     platform: manifest.platform,
     portableVersion: manifest.portableVersion,
     dshVersion: component.dshVersion,

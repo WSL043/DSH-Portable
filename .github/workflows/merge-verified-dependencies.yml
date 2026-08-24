@@ -1,0 +1,31 @@
+name: Merge verified dependencies
+
+on:
+  workflow_run:
+    workflows: [Build and smoke test]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'automation/verified-dependencies' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge the fully verified dependency update and remove its branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head automation/verified-dependencies --json number,headRefOid --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number" | head -n 1)
+          test -n "$PR" || { echo "No matching open dependency PR for $HEAD_SHA"; exit 0; }
+          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main

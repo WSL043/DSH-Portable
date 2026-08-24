@@ -3,6 +3,7 @@ use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
+    collections::BTreeMap,
     env, fs, io,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
@@ -41,17 +42,28 @@ struct Components {
 
 #[derive(Debug, Deserialize, Serialize)]
 struct ShellSettings {
-    #[serde(rename = "checkUpdatesAtStartup")]
-    check_updates_at_startup: bool,
+    #[serde(rename = "productUpdateCheckEnabled", alias = "checkUpdatesAtStartup", alias = "updateCheckEnabled", default)]
+    product_update_check_enabled: bool,
+    #[serde(rename = "engineUpdateCheckEnabled", default)]
+    engine_update_check_enabled: bool,
     #[serde(rename = "installUpdateAtNextStart", default)]
     install_update_at_next_start: bool,
+    #[serde(rename = "pendingUpdateScope", default = "default_update_scope")]
+    pending_update_scope: String,
+    #[serde(flatten)]
+    extra: BTreeMap<String, Value>,
 }
+
+fn default_update_scope() -> String { "product".to_owned() }
 
 impl Default for ShellSettings {
     fn default() -> Self {
         Self {
-            check_updates_at_startup: false,
+            product_update_check_enabled: false,
+            engine_update_check_enabled: false,
             install_update_at_next_start: false,
+            pending_update_scope: default_update_scope(),
+            extra: BTreeMap::new(),
         }
     }
 }
@@ -265,14 +277,27 @@ fn resolve_layout(resource_hint: Option<&Path>) -> io::Result<ProductLayout> {
 }
 
 fn settings_file(layout: &ProductLayout) -> PathBuf {
-    layout.state_root.join("data/runtime/linux-shell.json")
+    layout.state_root.join("data/launcher-settings.json")
 }
 
 fn read_shell_settings(layout: &ProductLayout) -> ShellSettings {
-    fs::read_to_string(settings_file(layout))
-        .ok()
-        .and_then(|source| serde_json::from_str(&source).ok())
-        .unwrap_or_default()
+    let current = fs::read_to_string(settings_file(layout)).ok();
+    let legacy = fs::read_to_string(layout.state_root.join("data/runtime/linux-shell.json")).ok();
+    let source = current.or(legacy);
+    let raw = source.as_ref().and_then(|value| serde_json::from_str::<Value>(value).ok());
+    let mut settings = source
+        .and_then(|value| serde_json::from_str(&value).ok())
+        .unwrap_or_default();
+    let object = raw.as_ref().and_then(Value::as_object);
+    if object.is_some_and(|value| !value.contains_key("engineUpdateCheckEnabled")) {
+        settings.engine_update_check_enabled = settings.product_update_check_enabled;
+    }
+    settings.pending_update_scope = if settings.pending_update_scope == "engine" {
+        "engine".to_owned()
+    } else {
+        "product".to_owned()
+    };
+    settings
 }
 
 fn write_shell_settings(layout: &ProductLayout, settings: &ShellSettings) -> io::Result<()> {
@@ -338,17 +363,16 @@ fn dialog(title: &str, description: &str, level: MessageLevel) {
         .show();
 }
 
-fn check_updates(_app: tauri::AppHandle, interactive: bool) {
+fn check_updates(_app: tauri::AppHandle, interactive: bool, scope: &'static str) {
     if UPDATE_PROMPT_OPEN.swap(true, Ordering::SeqCst) {
         return;
     }
     thread::spawn(move || {
         let layout = LAYOUT.get().expect("layout is initialized").clone();
-        let force = if interactive { "--force" } else { "--json" };
         let args = if interactive {
-            vec!["check-update", "--json", force]
+            vec!["check-update", "--scope", scope, "--json", "--force"]
         } else {
-            vec!["check-update", "--json"]
+            vec!["check-update", "--scope", scope, "--json"]
         };
         let result = run_portable_cli(&layout, &args)
             .map_err(|error| error.to_string())
@@ -356,8 +380,9 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
         match result {
             Ok(value) if value.get("status").and_then(Value::as_str) == Some("available") => {
                 let latest = value.get("latest").and_then(Value::as_str).unwrap_or("new");
+                let target = if scope == "engine" { "DeepSeek Harness" } else { "DSH-Portable" };
                 let choice = MessageDialog::new()
-                    .set_title(text(&layout, "DSH-Portable 更新", "DSH-Portable update"))
+                    .set_title(format!("{target} {}", text(&layout, "更新", "update")))
                     .set_description(text(
                         &layout,
                         &format!("发现新版本 {latest}。更新只替换应用组件，会保留会话、设置、插件与工作区。"),
@@ -369,6 +394,7 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
                 if choice == MessageDialogResult::Yes {
                     let mut settings = read_shell_settings(&layout);
                     settings.install_update_at_next_start = true;
+                    settings.pending_update_scope = scope.to_owned();
                     match write_shell_settings(&layout, &settings) {
                         Ok(()) => dialog(
                             PRODUCT_NAME,
@@ -382,9 +408,9 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
                         Err(error) => dialog(PRODUCT_NAME, &error.to_string(), MessageLevel::Error),
                     }
                 } else if choice == MessageDialogResult::Cancel {
-                    let _ = run_portable_cli(&layout, &["ignore-update", "--json"]);
+                    let _ = run_portable_cli(&layout, &["ignore-update", "--scope", scope, "--json"]);
                 } else {
-                    let _ = run_portable_cli(&layout, &["defer-update", "--json"]);
+                    let _ = run_portable_cli(&layout, &["defer-update", "--scope", scope, "--json"]);
                 }
             }
             Ok(value)
@@ -394,6 +420,20 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
                 dialog(
                     PRODUCT_NAME,
                     &text(&layout, "已经是最新版本。", "You are up to date."),
+                    MessageLevel::Info,
+                );
+            }
+            Ok(value)
+                if interactive
+                    && value.get("status").and_then(Value::as_str) == Some("core-incompatible") =>
+            {
+                dialog(
+                    PRODUCT_NAME,
+                    &text(
+                        &layout,
+                        "此 DeepSeek Harness 版本需要较新的 DSH-Portable。请先更新 DSH-Portable。",
+                        "This DeepSeek Harness version needs a newer DSH-Portable. Update DSH-Portable first.",
+                    ),
                     MessageLevel::Info,
                 );
             }
@@ -412,9 +452,9 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool) {
                     .set_buttons(MessageButtons::YesNoCancel)
                     .show();
                 if choice == MessageDialogResult::Cancel {
-                    let _ = run_portable_cli(&layout, &["ignore-update", "--json"]);
+                    let _ = run_portable_cli(&layout, &["ignore-update", "--scope", scope, "--json"]);
                 } else if choice == MessageDialogResult::No {
-                    let _ = run_portable_cli(&layout, &["defer-update", "--json"]);
+                    let _ = run_portable_cli(&layout, &["defer-update", "--scope", scope, "--json"]);
                 } else {
                     let release_url = value
                         .get("releaseUrl")
@@ -501,8 +541,15 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
     )?;
     let update = MenuItem::with_id(
         app,
-        "check-update",
-        text(layout, "检查更新", "Check for Updates"),
+        "check-product-update",
+        text(layout, "检查 DSH-Portable 更新", "Check DSH-Portable Updates"),
+        true,
+        None::<&str>,
+    )?;
+    let engine_update = MenuItem::with_id(
+        app,
+        "check-engine-update",
+        text(layout, "检查 DeepSeek Harness 更新", "Check DeepSeek Harness Updates"),
         true,
         None::<&str>,
     )?;
@@ -511,7 +558,10 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
         "startup-update",
         text(layout, "启动时检查更新", "Check for updates at startup"),
         true,
-        read_shell_settings(layout).check_updates_at_startup,
+        {
+            let settings = read_shell_settings(layout);
+            settings.product_update_check_enabled && settings.engine_update_check_enabled
+        },
         None::<&str>,
     )?;
     let terminal = MenuItem::with_id(
@@ -528,7 +578,7 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
         true,
         None::<&str>,
     )?;
-    let menu = Menu::with_items(app, &[&open, &update, &startup, &terminal, &quit])?;
+    let menu = Menu::with_items(app, &[&open, &update, &engine_update, &startup, &terminal, &quit])?;
     let startup_for_event = startup.clone();
     TrayIconBuilder::new()
         .icon(
@@ -546,12 +596,14 @@ fn setup_tray(app: &tauri::AppHandle, layout: &ProductLayout) -> tauri::Result<(
                     let _ = window.set_focus();
                 }
             }
-            "check-update" => check_updates(app.clone(), true),
+            "check-product-update" => check_updates(app.clone(), true, "product"),
+            "check-engine-update" => check_updates(app.clone(), true, "engine"),
             "startup-update" => {
                 if let Some(layout) = LAYOUT.get() {
                     let checked = startup_for_event.is_checked().unwrap_or(true);
                     let mut settings = read_shell_settings(layout);
-                    settings.check_updates_at_startup = checked;
+                    settings.product_update_check_enabled = checked;
+                    settings.engine_update_check_enabled = checked;
                     let _ = write_shell_settings(layout, &settings);
                 }
             }
@@ -586,7 +638,7 @@ fn apply_pending_update(layout: &ProductLayout) -> Result<(), String> {
     if !settings.install_update_at_next_start {
         return Ok(());
     }
-    run_portable_cli(layout, &["update", "--json", "--no-browser"])
+    run_portable_cli(layout, &["update", "--scope", settings.pending_update_scope.as_str(), "--json", "--no-browser"])
         .map_err(|error| error.to_string())
         .and_then(|output| output_json(&output))?;
     settings.install_update_at_next_start = false;
@@ -616,11 +668,25 @@ fn start_dsh(app: tauri::AppHandle) {
                         let _ = window.navigate(url);
                     }
                 }
-                if read_shell_settings(&layout).check_updates_at_startup
-                    && env::var_os("DSH_PORTABLE_SKIP_UPDATE_CHECK").is_none()
-                {
+                let update_settings = read_shell_settings(&layout);
+                if env::var_os("DSH_PORTABLE_SKIP_UPDATE_CHECK").is_none()
+                    && (update_settings.product_update_check_enabled || update_settings.engine_update_check_enabled) {
                     thread::sleep(Duration::from_secs(2));
-                    check_updates(app, false);
+                    if update_settings.product_update_check_enabled {
+                        check_updates(app.clone(), false, "product");
+                    }
+                    if update_settings.engine_update_check_enabled {
+                        let engine_app = app.clone();
+                        thread::spawn(move || {
+                            for _ in 0..300 {
+                                if !UPDATE_PROMPT_OPEN.load(Ordering::SeqCst) {
+                                    check_updates(engine_app, false, "engine");
+                                    return;
+                                }
+                                thread::sleep(Duration::from_millis(100));
+                            }
+                        });
+                    }
                 }
             }
             Err(error) => {

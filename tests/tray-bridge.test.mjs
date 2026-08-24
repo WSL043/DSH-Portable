@@ -264,10 +264,10 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*19/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*19/)
-  assert.match(macBuild, /"shellSchema": 14/)
-  assert.match(macBuild, /"requiredShellSchema": 14/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*20/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*20/)
+  assert.match(macBuild, /"shellSchema": 15/)
+  assert.match(macBuild, /"requiredShellSchema": 15/)
 })
 
 test('Portable maintenance is a native General settings item backed by same-origin product routes', async () => {
@@ -354,11 +354,11 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /automaticUpdateCheckItem\.ShortcutKeyDisplayString\s*=\s*updateCheckEnabled/)
   assert.match(
     source,
-    /automaticUpdateCheckItem\.Click \+= delegate[\s\S]+updateCheckEnabled = !updateCheckEnabled;[\s\S]+RefreshAutomaticUpdateCheckItem\(\);[\s\S]+SaveLauncherSettings\(\);/,
+    /automaticUpdateCheckItem\.Click \+= delegate[\s\S]+updateCheckEnabled = enabled;[\s\S]+engineUpdateCheckEnabled = enabled;[\s\S]+RefreshAutomaticUpdateCheckItem\(\);[\s\S]+SaveLauncherSettings\(\);/,
   )
   assert.match(
     source,
-    /private void RefreshAutomaticUpdateCheckItem\(\)[\s\S]+ShortcutKeyDisplayString = updateCheckEnabled/,
+    /private void RefreshAutomaticUpdateCheckItem\(\)[\s\S]+ShortcutKeyDisplayString = updateCheckEnabled && engineUpdateCheckEnabled/,
   )
   assert.match(source, /closeBehaviorItem\.ShortcutKeyDisplayString\s*=\s*closeBehavior/)
   assert.match(source, /Equals\("standard"[\s\S]*chinese\s*\?\s*"标准"\s*:\s*"Standard"/)
@@ -385,7 +385,8 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /updateCheckEnabled/)
   assert.match(source, /反馈问题|Report a problem/)
   assert.match(source, /issues\/new\?template=bug-report\.yml/)
-  assert.match(source, /check-update", "--json", "--force/)
+  assert.match(source, /check-update", "--scope", scope, "--json", "--force/)
+  assert.match(source, /update", "--scope", scope, "--no-browser", "--json", "--progress-json/)
   assert.match(source, /hasRunningSession/)
   assert.match(source, /任务仍在运行|task is still running/i)
   assert.match(source, /现在更新|Update now/)

@@ -43,6 +43,11 @@ export function defaultUpdateManifestUrl(releaseChannel = 'stable', platform = p
   return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${releaseChannel}/portable-update-${platformUpdateKey(platform, arch)}.json`
 }
 
+export function defaultEngineUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
+  normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-${releaseChannel}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
+}
+
 function parseSemanticVersion(value) {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(String(value ?? ''))
   if (!match) throw new Error(`${value} is not a valid semantic version.`)
@@ -92,17 +97,26 @@ function assertManifestShape(manifest) {
   }
   parseSemanticVersion(manifest.portableVersion)
   normalizeReleaseChannel(manifest.releaseChannel, manifest.portableVersion)
+  if (manifest.updateKind != null && !['product', 'engine'].includes(manifest.updateKind)) {
+    throw new Error(`Unsupported update kind: ${manifest.updateKind}`)
+  }
 }
 
 export function evaluateUpdate(manifest, installed, platform) {
   assertManifestShape(manifest)
+  const updateKind = manifest.updateKind || 'product'
   const installedReleaseChannel = normalizeReleaseChannel(installed.releaseChannel, installed.portableVersion)
   const manifestReleaseChannel = normalizeReleaseChannel(manifest.releaseChannel, manifest.portableVersion)
   const engineCurrent = String(installed.dshVersion ?? '')
   const engineLatest = String(manifest.component?.dshVersion ?? engineCurrent)
   const releaseTag = `v${manifest.portableVersion}`
+  const updateIdentity = updateKind === 'engine'
+    ? `engine:${engineLatest}:${String(manifest.component?.dshCommit || manifest.component?.sha256 || '')}`
+    : `product:${manifest.portableVersion}`
   const describe = (status, delivery) => ({
     status,
+    updateKind,
+    updateIdentity,
     current: installed.portableVersion,
     latest: manifest.portableVersion,
     productCurrent: installed.portableVersion,
@@ -129,7 +143,11 @@ export function evaluateUpdate(manifest, installed, platform) {
   if (installedReleaseChannel === 'stable' && manifestReleaseChannel !== 'stable') {
     return describe('channel-mismatch', 'none')
   }
-  if (comparePortableVersions(installed.portableVersion, manifest.portableVersion) >= 0) {
+  const productComparison = comparePortableVersions(installed.portableVersion, manifest.portableVersion)
+  if (updateKind === 'engine') {
+    if (productComparison !== 0) return describe('core-incompatible', 'none')
+    if (engineCurrent && comparePortableVersions(engineCurrent, engineLatest) >= 0) return describe('current', 'none')
+  } else if (productComparison >= 0) {
     return describe('current', 'none')
   }
   if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0) || manifest.component?.kind !== 'dsh-app') {
@@ -153,6 +171,12 @@ export function evaluateUpdate(manifest, installed, platform) {
     requiredShellSchema: Number(manifest.requiredShellSchema),
     component,
   }
+}
+
+function updateCacheForScope(layout, scope) {
+  if (scope === 'engine') return layout.engineUpdateCheckCache
+  if (scope === 'product') return layout.productUpdateCheckCache || layout.updateCheckCache
+  throw new Error(`Unsupported update scope: ${scope}`)
 }
 
 function validateRemoteUrl(value, allowHttp) {
@@ -316,6 +340,7 @@ export async function readInstalledUpdateState(layout) {
 export async function checkForUpdate({
   layout,
   manifestUrl,
+  scope = 'product',
   allowHttp = false,
   force = false,
   fetchImpl = fetch,
@@ -323,15 +348,24 @@ export async function checkForUpdate({
   now = Date.now(),
 }) {
   const installed = await readInstalledUpdateState(layout)
-  manifestUrl ||= defaultUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
+  const updateCheckCache = updateCacheForScope(layout, scope)
+  manifestUrl ||= scope === 'engine'
+    ? defaultEngineUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
+    : defaultUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
   const platform = platformUpdateKey(layout.platform, process.arch)
-  const cached = await readJson(layout.updateCheckCache, null)
+  const cached = await readJson(updateCheckCache, null)
   if (!force && cached?.manifestUrl === manifestUrl && cached?.retryAfter > now) {
-    return { status: 'unavailable', current: installed.portableVersion, cached: true, checkedAt: cached.checkedAt, message: cached.error }
+    return {
+      status: 'unavailable', updateKind: scope,
+      current: scope === 'engine' ? installed.dshVersion : installed.portableVersion,
+      cached: true, checkedAt: cached.checkedAt, message: cached.error,
+    }
   }
-  if (!force && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
+  const cachedKind = cached?.manifest?.updateKind || 'product'
+  if (!force && cachedKind === scope && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
     const evaluated = evaluateUpdate(cached.manifest, installed, platform)
-    if (evaluated.latest && cached.ignoredVersion === evaluated.latest) {
+    const ignoredIdentity = cached.ignoredIdentity || (cached.ignoredVersion ? `product:${cached.ignoredVersion}` : '')
+    if (evaluated.updateIdentity && ignoredIdentity === evaluated.updateIdentity) {
       return { ...evaluated, status: 'ignored', cached: true, checkedAt: cached.checkedAt }
     }
     if (evaluated.status === 'available' && cached.deferredUntil > now) {
@@ -341,11 +375,16 @@ export async function checkForUpdate({
   }
   try {
     const manifest = await fetchJson(manifestUrl, { allowHttp, fetchImpl, timeoutMs })
+    const manifestKind = manifest.updateKind || 'product'
+    if (manifestKind !== scope) throw new Error(`Update kind mismatch: expected ${scope}, received ${manifestKind}.`)
     const result = evaluateUpdate(manifest, installed, platform)
-    const deferredUntil = cached?.manifest?.portableVersion === manifest.portableVersion ? Number(cached.deferredUntil ?? 0) : 0
-    const ignoredVersion = cached?.ignoredVersion === manifest.portableVersion ? cached.ignoredVersion : ''
-    await writeJsonAtomic(layout.updateCheckCache, { schemaVersion: 1, checkedAt: now, manifestUrl, manifest, deferredUntil, ignoredVersion })
-    if (!force && result.latest && ignoredVersion === result.latest) {
+    const cachedResult = cached?.manifest ? evaluateUpdate(cached.manifest, installed, platform) : null
+    const deferredUntil = cachedResult?.updateIdentity === result.updateIdentity ? Number(cached.deferredUntil ?? 0) : 0
+    const ignoredIdentity = (cached?.ignoredIdentity || (cached?.ignoredVersion ? `product:${cached.ignoredVersion}` : '')) === result.updateIdentity
+      ? result.updateIdentity
+      : ''
+    await writeJsonAtomic(updateCheckCache, { schemaVersion: 2, checkedAt: now, manifestUrl, manifest, deferredUntil, ignoredIdentity })
+    if (!force && result.updateIdentity && ignoredIdentity === result.updateIdentity) {
       return { ...result, status: 'ignored', cached: false, checkedAt: now }
     }
     if (!force && result.status === 'available' && deferredUntil > now) {
@@ -354,8 +393,8 @@ export async function checkForUpdate({
     return { ...result, cached: false, checkedAt: now }
   } catch (error) {
     const message = error?.message ?? String(error)
-    await writeJsonAtomic(layout.updateCheckCache, {
-      schemaVersion: 1,
+    await writeJsonAtomic(updateCheckCache, {
+      schemaVersion: 2,
       checkedAt: now,
       manifestUrl,
       error: message,
@@ -363,7 +402,8 @@ export async function checkForUpdate({
     }).catch(() => {})
     return {
       status: 'unavailable',
-      current: installed.portableVersion,
+      updateKind: scope,
+      current: scope === 'engine' ? installed.dshVersion : installed.portableVersion,
       cached: false,
       checkedAt: now,
       message,
@@ -371,21 +411,29 @@ export async function checkForUpdate({
   }
 }
 
-export async function deferUpdate(layout, { now = Date.now(), durationMs = 24 * 60 * 60 * 1000 } = {}) {
-  const cached = await readJson(layout.updateCheckCache, null)
+export async function deferUpdate(layout, { now = Date.now(), durationMs = 24 * 60 * 60 * 1000, scope = 'product' } = {}) {
+  const updateCheckCache = updateCacheForScope(layout, scope)
+  const cached = await readJson(updateCheckCache, null)
   if (!cached?.manifest) return { status: 'none' }
   const deferredUntil = now + Math.max(60 * 1000, Number(durationMs) || 0)
-  await writeJsonAtomic(layout.updateCheckCache, { ...cached, deferredUntil, ignoredVersion: '' })
-  return { status: 'deferred', latest: cached.manifest.portableVersion, deferredUntil }
+  await writeJsonAtomic(updateCheckCache, { ...cached, deferredUntil, ignoredIdentity: '', ignoredVersion: '' })
+  const latest = scope === 'engine' ? cached.manifest.component?.dshVersion : cached.manifest.portableVersion
+  return { status: 'deferred', updateKind: scope, latest, deferredUntil }
 }
 
-export async function ignoreUpdate(layout, version = '') {
-  const cached = await readJson(layout.updateCheckCache, null)
-  const ignoredVersion = String(version || cached?.manifest?.portableVersion || '')
-  if (!ignoredVersion) return { status: 'none' }
-  parseSemanticVersion(ignoredVersion)
-  await writeJsonAtomic(layout.updateCheckCache, { ...cached, schemaVersion: 1, ignoredVersion, deferredUntil: 0 })
-  return { status: 'ignored', latest: ignoredVersion }
+export async function ignoreUpdate(layout, version = '', { scope = 'product' } = {}) {
+  const updateCheckCache = updateCacheForScope(layout, scope)
+  const cached = await readJson(updateCheckCache, null)
+  const latest = String(version || (scope === 'engine' ? cached?.manifest?.component?.dshVersion : cached?.manifest?.portableVersion) || '')
+  if (!latest) return { status: 'none' }
+  parseSemanticVersion(latest)
+  const evaluatedIdentity = cached?.manifest
+    ? (scope === 'engine'
+        ? `engine:${cached.manifest.component?.dshVersion}:${String(cached.manifest.component?.dshCommit || cached.manifest.component?.sha256 || '')}`
+        : `product:${cached.manifest.portableVersion}`)
+    : `${scope}:${latest}`
+  await writeJsonAtomic(updateCheckCache, { ...cached, schemaVersion: 2, ignoredIdentity: evaluatedIdentity, ignoredVersion: '', deferredUntil: 0 })
+  return { status: 'ignored', updateKind: scope, latest }
 }
 
 function operationFromStage(layout, stagedRoot) {
@@ -559,7 +607,7 @@ export async function installAvailableAppUpdate({
     onProgress({ phase: 'installing' })
     const applied = await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
     onProgress({ phase: 'complete', percent: 100 })
-    return applied
+    return { ...applied, updateKind: update.updateKind || 'product' }
   } catch (error) {
     if (!await readJson(layout.updateJournal, null)) await rm(operationRoot, { recursive: true, force: true })
     throw error

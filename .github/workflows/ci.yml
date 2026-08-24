@@ -91,6 +91,7 @@ jobs:
             artifacts/DSH-Portable-update-windows-x64.zip
             artifacts/DSH-Portable-update-windows-x64.zip.sha256
             artifacts/portable-update-windows-x64.json
+            artifacts/dsh-core-update-windows-x64.json
           if-no-files-found: error
           compression-level: 0
 
@@ -366,6 +367,7 @@ jobs:
             artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip
             artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip.sha256
             artifacts/portable-update-macos-${{ matrix.arch }}.json
+            artifacts/dsh-core-update-macos-${{ matrix.arch }}.json
           if-no-files-found: error
           compression-level: 0
 
@@ -498,6 +500,7 @@ jobs:
             artifacts/DSH-Portable-update-linux-${{ matrix.arch }}.zip
             artifacts/DSH-Portable-update-linux-${{ matrix.arch }}.zip.sha256
             artifacts/portable-update-linux-${{ matrix.arch }}.json
+            artifacts/dsh-core-update-linux-${{ matrix.arch }}.json
           if-no-files-found: error
           compression-level: 0
 

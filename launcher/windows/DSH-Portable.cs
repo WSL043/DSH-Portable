@@ -24,8 +24,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.10.65534")]
-[assembly: AssemblyFileVersion("0.4.10.65534")]
+[assembly: AssemblyVersion("0.4.11.65534")]
+[assembly: AssemblyFileVersion("0.4.11.65534")]
 
 namespace DshPortable
 {
@@ -288,6 +288,7 @@ namespace DshPortable
         private readonly ContextMenuStrip trayMenu;
         private readonly ToolStripMenuItem closeBehaviorItem;
         private readonly ToolStripMenuItem checkUpdateItem;
+        private readonly ToolStripMenuItem checkEngineUpdateItem;
         private readonly ToolStripMenuItem automaticUpdateCheckItem;
         private readonly ToolStripMenuItem taskNotificationsItem;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
@@ -309,6 +310,7 @@ namespace DshPortable
         private bool updateCheckRunning;
         private bool updateInteractionRunning;
         private bool updateCheckEnabled;
+        private bool engineUpdateCheckEnabled;
         private bool taskNotificationsEnabled;
         private bool taskCompletionBaselineReady;
         private WindowCloseBehavior closeBehavior;
@@ -475,7 +477,8 @@ namespace DshPortable
             launchPanel.Controls.Add(launchContent);
 
             closeBehavior = LoadCloseBehavior();
-            updateCheckEnabled = LoadUpdateCheckEnabled();
+            updateCheckEnabled = LoadUpdateCheckEnabled("productUpdateCheckEnabled");
+            engineUpdateCheckEnabled = LoadUpdateCheckEnabled("engineUpdateCheckEnabled");
             taskNotificationsEnabled = LoadTaskNotificationsEnabled();
             closeBehaviorItem = new ToolStripMenuItem(L("关闭窗口时", "When closing"));
             closeBehaviorItem.Click += delegate
@@ -485,8 +488,10 @@ namespace DshPortable
                     : WindowCloseBehavior.Tray);
                 RebuildTrayMenu();
             };
-            checkUpdateItem = new ToolStripMenuItem(L("检查更新", "Check for updates"));
-            checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(true); };
+            checkUpdateItem = new ToolStripMenuItem(L("检查 DSH-Portable 更新", "Check DSH-Portable updates"));
+            checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(true, "product"); };
+            checkEngineUpdateItem = new ToolStripMenuItem(L("检查 DSH 内核更新", "Check DSH core updates"));
+            checkEngineUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(true, "engine"); };
             automaticUpdateCheckItem = new ToolStripMenuItem(L("启动时检查更新", "Check for updates at startup"))
             {
                 Checked = updateCheckEnabled,
@@ -494,7 +499,9 @@ namespace DshPortable
             };
             automaticUpdateCheckItem.Click += delegate
             {
-                updateCheckEnabled = !updateCheckEnabled;
+                bool enabled = !(updateCheckEnabled && engineUpdateCheckEnabled);
+                updateCheckEnabled = enabled;
+                engineUpdateCheckEnabled = enabled;
                 RefreshAutomaticUpdateCheckItem();
                 SaveLauncherSettings();
             };
@@ -732,8 +739,12 @@ namespace DshPortable
             closeBehaviorItem.Text = L("关闭窗口时", "When closing");
             checkUpdateItem.Text = updateCheckRunning
                 ? L("正在检查…", "Checking…")
-                : L("检查更新", "Check for updates");
+                : L("检查 DSH-Portable 更新", "Check DSH-Portable updates");
             checkUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
+            checkEngineUpdateItem.Text = updateCheckRunning
+                ? L("正在检查…", "Checking…")
+                : L("检查 DSH 内核更新", "Check DSH core updates");
+            checkEngineUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
             RefreshAutomaticUpdateCheckItem();
             RefreshTaskNotificationsItem();
             closeBehaviorItem.Checked = false;
@@ -759,6 +770,7 @@ namespace DshPortable
                     more.DropDownItems.Add(CreateSessionMenuItem(session));
                 if (more.DropDownItems.Count > 0) more.DropDownItems.Add(new ToolStripSeparator());
                 more.DropDownItems.Add(checkUpdateItem);
+                more.DropDownItems.Add(checkEngineUpdateItem);
                 more.DropDownItems.Add(automaticUpdateCheckItem);
                 more.DropDownItems.Add(taskNotificationsItem);
                 more.DropDownItems.Add(closeBehaviorItem);
@@ -798,9 +810,11 @@ namespace DshPortable
             automaticUpdateCheckItem.Text = L("启动时检查更新", "Check for updates at startup");
             automaticUpdateCheckItem.Checked = false;
             automaticUpdateCheckItem.ShowShortcutKeys = true;
-            automaticUpdateCheckItem.ShortcutKeyDisplayString = updateCheckEnabled
+            automaticUpdateCheckItem.ShortcutKeyDisplayString = updateCheckEnabled && engineUpdateCheckEnabled
                 ? L("已开启", "On")
-                : L("已关闭", "Off");
+                : !updateCheckEnabled && !engineUpdateCheckEnabled
+                    ? L("已关闭", "Off")
+                    : L("部分开启", "Custom");
             automaticUpdateCheckItem.Invalidate();
         }
 
@@ -978,8 +992,12 @@ namespace DshPortable
                     BeginInvoke((MethodInvoker)delegate
                     {
                         object value;
-                        if (message.TryGetValue("updateCheckEnabled", out value) && value is bool)
-                            updateCheckEnabled = (bool)value;
+                        bool hasProduct = message.TryGetValue("productUpdateCheckEnabled", out value) && value is bool;
+                        if (hasProduct) updateCheckEnabled = (bool)value;
+                        if (message.TryGetValue("engineUpdateCheckEnabled", out value) && value is bool)
+                            engineUpdateCheckEnabled = (bool)value;
+                        if (!hasProduct && message.TryGetValue("updateCheckEnabled", out value) && value is bool)
+                            updateCheckEnabled = engineUpdateCheckEnabled = (bool)value;
                         if (message.TryGetValue("taskNotificationsEnabled", out value) && value is bool)
                             taskNotificationsEnabled = (bool)value;
                         if (message.TryGetValue("closeBehavior", out value))
@@ -1164,11 +1182,13 @@ namespace DshPortable
             catch { return WindowCloseBehavior.Tray; }
         }
 
-        private bool LoadUpdateCheckEnabled()
+        private bool LoadUpdateCheckEnabled(string key)
         {
             try
             {
                 string source = File.ReadAllText(LauncherSettingsPath(), Encoding.UTF8);
+                Match explicitValue = Regex.Match(source, "\\\"" + Regex.Escape(key) + "\\\"\\s*:\\s*(true|false)", RegexOptions.IgnoreCase);
+                if (explicitValue.Success) return String.Equals(explicitValue.Groups[1].Value, "true", StringComparison.OrdinalIgnoreCase);
                 return Regex.IsMatch(source, "\\\"updateCheckEnabled\\\"\\s*:\\s*true", RegexOptions.IgnoreCase);
             }
             catch { return false; }
@@ -1197,8 +1217,10 @@ namespace DshPortable
             Directory.CreateDirectory(Path.GetDirectoryName(filename));
             string close = closeBehavior == WindowCloseBehavior.Exit ? "exit" : "tray";
             File.WriteAllText(temporary,
-                "{\"schemaVersion\":1,\"closeBehavior\":\"" + close + "\",\"updateCheckEnabled\":"
-                    + (updateCheckEnabled ? "true" : "false") + ",\"taskNotificationsEnabled\":"
+                "{\"schemaVersion\":2,\"closeBehavior\":\"" + close + "\",\"updateCheckEnabled\":"
+                    + (updateCheckEnabled ? "true" : "false") + ",\"productUpdateCheckEnabled\":"
+                    + (updateCheckEnabled ? "true" : "false") + ",\"engineUpdateCheckEnabled\":"
+                    + (engineUpdateCheckEnabled ? "true" : "false") + ",\"taskNotificationsEnabled\":"
                     + (taskNotificationsEnabled ? "true" : "false") + "}\r\n",
                 new UTF8Encoding(false));
             if (File.Exists(filename))
@@ -1716,7 +1738,8 @@ namespace DshPortable
                         && startupHold > 0)
                         await Task.Delay(Math.Min(startupHold, 10000));
                     await ShowDesktopAsync(url);
-                    await CheckForDesktopUpdateAsync(false);
+                    if (updateCheckEnabled) await CheckForDesktopUpdateAsync(false, "product");
+                    if (engineUpdateCheckEnabled) await CheckForDesktopUpdateAsync(false, "engine");
                     return;
                 }
 
@@ -1765,9 +1788,13 @@ namespace DshPortable
             }
         }
 
-        private async Task CheckForDesktopUpdateAsync(bool manual)
+        private async Task CheckForDesktopUpdateAsync(bool manual, string scope)
         {
-            if (!manual && (!updateCheckEnabled
+            bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
+            string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
+            bool scopeEnabled = String.Equals(scope, "engine", StringComparison.Ordinal)
+                ? engineUpdateCheckEnabled : updateCheckEnabled;
+            if (!manual && (!scopeEnabled
                 || string.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK"), "1", StringComparison.Ordinal))) return;
             if (updateCheckRunning || updateInteractionRunning) return;
             if (manual) RestoreFromTray();
@@ -1776,8 +1803,8 @@ namespace DshPortable
             try
             {
                 string[] checkArguments = manual
-                    ? new[] { "check-update", "--json", "--force" }
-                    : new[] { "check-update", "--json" };
+                    ? new[] { "check-update", "--scope", scope, "--json", "--force" }
+                    : new[] { "check-update", "--scope", scope, "--json" };
                 Tuple<int, string> check = await Task.Run(() => InvokePortableCli(checkArguments));
                 if (check.Item1 != 0)
                 {
@@ -1800,9 +1827,19 @@ namespace DshPortable
                     if (!manual) return;
                     MessageBox.Show(this,
                         L("你使用的已经是最新版。", "You're already using the latest version.")
-                            + (String.IsNullOrEmpty(current) ? "" : "\r\n\r\nDSH-Portable " + current)
-                            + (String.IsNullOrEmpty(engineCurrent) ? "" : "\r\n" + L("内置官方 DSH ", "Bundled official DSH ") + engineCurrent),
+                            + (engineScope
+                                ? (String.IsNullOrEmpty(engineCurrent) ? "" : "\r\n\r\nDeepSeek Harness " + engineCurrent)
+                                : (String.IsNullOrEmpty(current) ? "" : "\r\n\r\nDSH-Portable " + current)),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (updateStatus == "core-incompatible")
+                {
+                    if (!manual) return;
+                    MessageBox.Show(this,
+                        L("这项 DeepSeek Harness 更新需要较新的 DSH-Portable。请先更新 DSH-Portable，再重新检查内核更新。",
+                          "This DeepSeek Harness update needs a newer DSH-Portable. Update DSH-Portable first, then check the engine again."),
+                        L("需要先更新 DSH-Portable", "Update DSH-Portable first"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 if (updateStatus == "unavailable")
@@ -1835,8 +1872,8 @@ namespace DshPortable
                     }
                     int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, true);
                     if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl);
-                    else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--json" }));
-                    else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
+                    else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--scope", scope, "--json" }));
+                    else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
                     return;
                 }
                 if (updateStatus != "available") return;
@@ -1845,10 +1882,10 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        UpdateDescription(current, latest, engineCurrent, engineLatest, false) + "\r\n\r\n"
+                        UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
                             + L("为了确认不会中断任务，请稍后退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
                                 "To avoid interrupting work, exit and reopen when convenient; startup will offer Update now or Later."),
-                        L("DSH-Portable 更新", "DSH-Portable update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        targetName + L(" 更新", " update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 if (trayState != null && trayState.hasRunningSession)
@@ -1862,16 +1899,16 @@ namespace DshPortable
                 }
 
                 DialogResult accepted = MessageBox.Show(this,
-                    UpdateDescription(current, latest, engineCurrent, engineLatest, false) + "\r\n\r\n"
+                    UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
                         + L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
                             "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later."),
-                    L("DSH-Portable 更新", "DSH-Portable update"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+                    targetName + L(" 更新", " update"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
                 if (accepted != DialogResult.Yes)
                 {
-                    await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--json" }));
+                    await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
                     return;
                 }
-                await ApplyDesktopUpdateAsync();
+                await ApplyDesktopUpdateAsync(scope);
             }
             catch (Exception error)
             {
@@ -1920,12 +1957,16 @@ namespace DshPortable
             CenterLaunchContent();
         }
 
-        private async Task ApplyDesktopUpdateAsync()
+        private async Task ApplyDesktopUpdateAsync(string scope)
         {
-            ShowDesktopOperation(L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
+            bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
+            string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
+            ShowDesktopOperation(engineScope
+                ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
+                : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
             trayBridgeReady = false;
             Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(
-                new[] { "update", "--no-browser", "--json", "--progress-json" }, HandleUpdateProgress));
+                new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }, HandleUpdateProgress));
             if (updated.Item1 != 0)
             {
                 await RestoreDesktopAfterUpdateAttemptAsync();
@@ -1943,8 +1984,8 @@ namespace DshPortable
             await NavigateDesktopAsync(url);
             HideDesktopOperation();
             MessageBox.Show(this,
-                L("DSH-Portable 更新已完成。", "The DSH-Portable update is complete."),
-                L("DSH-Portable 已更新", "DSH-Portable updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                targetName + L(" 更新已完成。", " update is complete."),
+                targetName + L(" 已更新", " updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void StartFullPackageUpdate(string manifestUrl)
@@ -2535,8 +2576,16 @@ namespace DshPortable
                 && parsed.Port >= 3080 && parsed.Port <= 3180;
         }
 
-        private static string UpdateDescription(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
+        private static string UpdateDescription(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage, string scope = "product")
         {
+            if (String.Equals(scope, "engine", StringComparison.Ordinal))
+            {
+                return "DeepSeek Harness"
+                    + (String.IsNullOrEmpty(engineCurrent) ? "" : " " + engineCurrent)
+                    + (String.IsNullOrEmpty(engineLatest) ? "" : "  →  " + engineLatest)
+                    + "\r\n"
+                    + L("交付方式：轻量内核更新", "Delivery: lightweight engine update");
+            }
             string product = "DSH-Portable" + (String.IsNullOrEmpty(current) ? "" : " " + current)
                 + (String.IsNullOrEmpty(latest) ? "" : "  →  " + latest);
             string engine;

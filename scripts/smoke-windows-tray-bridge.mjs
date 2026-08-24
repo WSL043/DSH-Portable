@@ -340,22 +340,31 @@ try {
     const text = document.body?.innerText || ''
     return {
       title: /(?:^|\\n)(?:Portable|便携版)(?:\\n|$)/.test(text),
-      updates: /Automatic update checks|自动检查更新/.test(text),
+      updates: /(?:^|\\n)(?:Updates|更新)(?:\\n|$)/.test(text),
+      product: /DSH-Portable/.test(text),
+      engine: /DeepSeek Harness/.test(text),
       notifications: /Task completion notifications|任务完成通知/.test(text),
       maintenance: /Check and repair|检查与修复/.test(text),
     }
-  })()`, value => value?.title && value.updates && value.notifications && value.maintenance, 'Portable controls in General settings')
-  assert.deepEqual(portableSettings, { title: true, updates: true, notifications: true, maintenance: true })
+  })()`, value => value?.title && value.updates && value.product && value.engine && value.notifications && value.maintenance, 'Portable controls in General settings')
+  assert.deepEqual(portableSettings, { title: true, updates: true, product: true, engine: true, notifications: true, maintenance: true })
   const readPortableSettings = `fetch('/dsh-portable/settings', { cache: 'no-store' }).then(response => response.json()).then(body => body.settings)`
   const originalSettings = await evaluate(client, readPortableSettings)
-  const updateTitle = targetLocale === 'zh' ? '自动检查更新' : 'Automatic update checks'
-  await waitForValue(client, clickButton([updateTitle]), value => value?.clicked, 'automatic update selector')
-  await waitForValue(client, clickChoice([originalSettings.updateCheckEnabled ? (targetLocale === 'zh' ? '关闭' : 'Off') : (targetLocale === 'zh' ? '开启' : 'On')]), value => value?.clicked, 'automatic update choice')
-  const changedSettings = await waitForValue(client, readPortableSettings, value => value?.updateCheckEnabled === !originalSettings.updateCheckEnabled, 'saved automatic update preference')
-  await waitForValue(client, clickButton([updateTitle]), value => value?.clicked, 'automatic update selector restore')
-  await waitForValue(client, clickChoice([originalSettings.updateCheckEnabled ? (targetLocale === 'zh' ? '开启' : 'On') : (targetLocale === 'zh' ? '关闭' : 'Off')]), value => value?.clicked, 'automatic update choice restore')
-  const settingsRoundTrip = await waitForValue(client, readPortableSettings, value => value?.updateCheckEnabled === originalSettings.updateCheckEnabled, 'restored automatic update preference')
-  assert.equal(changedSettings.updateCheckEnabled, !settingsRoundTrip.updateCheckEnabled)
+  const updatePreference = async (title, key) => {
+    const selectorLabel = `${title} · ${targetLocale === 'zh' ? '启动时检查' : 'Check at startup'}`
+    const original = Boolean(originalSettings[key])
+    await waitForValue(client, clickButton([selectorLabel]), value => value?.clicked, `${title} startup selector`)
+    await waitForValue(client, clickChoice([original ? (targetLocale === 'zh' ? '关闭' : 'Off') : (targetLocale === 'zh' ? '开启' : 'On')]), value => value?.clicked, `${title} startup choice`)
+    const changed = await waitForValue(client, readPortableSettings, value => value?.[key] === !original, `saved ${title} startup preference`)
+    await waitForValue(client, clickButton([selectorLabel]), value => value?.clicked, `${title} startup selector restore`)
+    await waitForValue(client, clickChoice([original ? (targetLocale === 'zh' ? '开启' : 'On') : (targetLocale === 'zh' ? '关闭' : 'Off')]), value => value?.clicked, `${title} startup choice restore`)
+    const restored = await waitForValue(client, readPortableSettings, value => value?.[key] === original, `restored ${title} startup preference`)
+    assert.equal(changed[key], !restored[key])
+    return restored
+  }
+  await updatePreference('DSH-Portable', 'productUpdateCheckEnabled')
+  const settingsRoundTrip = await updatePreference('DeepSeek Harness', 'engineUpdateCheckEnabled')
+  assert.equal(settingsRoundTrip.productUpdateCheckEnabled, originalSettings.productUpdateCheckEnabled)
   if (generalScreenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(generalScreenshotPath), { recursive: true })

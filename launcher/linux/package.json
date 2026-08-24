@@ -1,6 +1,6 @@
 {
   "name": "dsh-portable-linux-shell-build",
-  "version": "0.4.10",
+  "version": "0.4.11",
   "private": true,
   "devDependencies": {
     "@tauri-apps/cli": "2.11.4"

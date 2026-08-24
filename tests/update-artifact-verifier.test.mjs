@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 
-async function buildFixture(root, { componentsOverrides = {}, requiredShellSchema = 1 } = {}) {
+async function buildFixture(root, { componentsOverrides = {}, requiredShellSchema = 1, updateKind } = {}) {
   const source = path.join(root, 'source')
   const archive = path.join(root, 'DSH-Portable-update-windows-x64.zip')
   await mkdir(path.join(source, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib'), { recursive: true })
@@ -50,6 +50,7 @@ async function buildFixture(root, { componentsOverrides = {}, requiredShellSchem
   const manifest = path.join(root, 'portable-update-windows-x64.json')
   await writeFile(manifest, `${JSON.stringify({
     schemaVersion: 1,
+    ...(updateKind ? { updateKind } : {}),
     portableVersion: metadata.portableVersion,
     platform: 'windows-x64',
     minimumUpdaterSchema: 1,
@@ -112,6 +113,24 @@ test('release update verifier accepts a newer positive shell compatibility bound
       fixture.archive,
     ])
     assert.equal(JSON.parse(result.stdout).status, 'verified')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('release update verifier can require an engine-specific manifest', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-engine-kind-'))
+  try {
+    const engine = await buildFixture(path.join(root, 'engine'), { updateKind: 'engine' })
+    const accepted = await execFileAsync(process.execPath, [
+      path.join(projectRoot, 'scripts', 'verify-update-artifact.mjs'), engine.manifest, engine.archive, 'engine',
+    ])
+    assert.equal(JSON.parse(accepted.stdout).updateKind, 'engine')
+
+    const product = await buildFixture(path.join(root, 'product'))
+    await assert.rejects(execFileAsync(process.execPath, [
+      path.join(projectRoot, 'scripts', 'verify-update-artifact.mjs'), product.manifest, product.archive, 'engine',
+    ]), /Expected an engine update manifest/)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

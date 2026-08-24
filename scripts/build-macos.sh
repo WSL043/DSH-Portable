@@ -143,7 +143,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 14
+  "shellSchema": 15
 }
 EOF
 
@@ -173,6 +173,7 @@ fi
 UPDATE_COMPONENT_ROOT="$BUILD_ROOT/update-component"
 UPDATE_COMPONENT="$OUTPUT_DIR/DSH-Portable-update-macos-$ARCH.zip"
 UPDATE_MANIFEST="$OUTPUT_DIR/portable-update-macos-$ARCH.json"
+ENGINE_UPDATE_MANIFEST="$OUTPUT_DIR/dsh-core-update-macos-$ARCH.json"
 mkdir -p "$UPDATE_COMPONENT_ROOT/licenses"
 ditto "$STAGE/app" "$UPDATE_COMPONENT_ROOT/app"
 cp "$STAGE/licenses/COMPONENTS.json" "$UPDATE_COMPONENT_ROOT/licenses/COMPONENTS.json"
@@ -202,7 +203,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 14,
+  "requiredShellSchema": 15,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",
@@ -212,6 +213,28 @@ cat > "$UPDATE_MANIFEST" <<EOF
     "sha256": "$UPDATE_COMPONENT_HASH",
     "urls": [
       "https://github.com/WSL043/DSH-Portable/releases/download/$UPDATE_CHANNEL_TAG/DSH-Portable-update-macos-$ARCH.zip"
+    ]
+  }
+}
+EOF
+cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
+{
+  "schemaVersion": 1,
+  "updateKind": "engine",
+  "portableVersion": "$PORTABLE_VERSION",
+  "releaseChannel": "$RELEASE_CHANNEL",
+  "platform": "macos-$ARCH",
+  "minimumUpdaterSchema": 1,
+  "requiredShellSchema": 15,
+  "component": {
+    "kind": "dsh-app",
+    "dshVersion": "$DSH_VERSION",
+    "dshCommit": "$DSH_COMMIT",
+    "requiredNodeVersion": "$NODE_VERSION",
+    "bytes": $UPDATE_COMPONENT_BYTES,
+    "sha256": "$UPDATE_COMPONENT_HASH",
+    "urls": [
+      "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-$RELEASE_CHANNEL/DSH-Portable-update-macos-$ARCH.zip"
     ]
   }
 }

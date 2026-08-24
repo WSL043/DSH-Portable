@@ -8,7 +8,12 @@ window.__ModuleLoader__.load({
     const copy = {
       zh: {
         title: '便携版',
-        updates: '自动检查更新', updatesHint: '默认关闭。开启后仅在启动时检查，仍由你决定是否更新。',
+        updates: '更新',
+        product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。启动检查默认关闭。',
+        engine: 'DeepSeek Harness', engineHint: '官方内核。仅推送通过 Portable 兼容验证的版本；启动检查默认关闭。',
+        startupCheck: '启动时检查', checkUpdate: '检查更新',
+        currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用；可从系统托盘选择安装。',
+        incompatible: '此内核需要先更新 DSH-Portable。', updateUnavailable: '暂时无法连接更新服务。',
         notifications: '任务完成通知', notificationsHint: '任务在后台完成时显示系统通知。',
         close: '关闭窗口时', tray: '最小化到托盘', exit: '退出程序',
         on: '开启', off: '关闭',
@@ -20,7 +25,12 @@ window.__ModuleLoader__.load({
       },
       en: {
         title: 'Portable',
-        updates: 'Automatic update checks', updatesHint: 'Off by default. When enabled, startup only checks; you still choose whether to update.',
+        updates: 'Updates',
+        product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations. Startup checks are off by default.',
+        engine: 'DeepSeek Harness', engineHint: 'Official core. Only Portable-verified builds are offered; startup checks are off by default.',
+        startupCheck: 'Check at startup', checkUpdate: 'Check for updates',
+        currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available; install it from the system tray.',
+        incompatible: 'Update DSH-Portable before installing this core.', updateUnavailable: 'The update service is unavailable right now.',
         notifications: 'Task completion notifications', notificationsHint: 'Show a system notification when a background task finishes.',
         close: 'When closing the window', tray: 'Minimize to tray', exit: 'Exit application',
         on: 'On', off: 'Off',
@@ -57,6 +67,7 @@ window.__ModuleLoader__.load({
       const lang = localeOf(ctx)
       const t = key => copy[lang][key] || key
       const [settings, setSettings] = useState(null)
+      const [versions, setVersions] = useState({ portable: '', engine: '' })
       const [busy, setBusy] = useState('')
       const [message, setMessage] = useState('')
       useEffect(() => {
@@ -65,6 +76,7 @@ window.__ModuleLoader__.load({
           .then(res => res.json()).then(body => {
             if (!active) return
             setSettings(body.settings)
+            setVersions(body.versions || { portable: '', engine: '' })
             if (body.lastRepair?.needsFullPackage) setMessage(t('fullPackage'))
             else if (body.lastRepair?.ok) setMessage(t('repaired'))
           })
@@ -93,15 +105,30 @@ window.__ModuleLoader__.load({
           else setMessage(format(t('exported'), body.output || ''))
         }).catch(error => setMessage(format(t('failed'), error.message || error))).finally(() => setBusy(''))
       }
+      const checkUpdate = scope => {
+        const name = `update-${scope}`
+        setBusy(name); setMessage('')
+        fetch('/dsh-portable/check-update', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope }),
+        }).then(res => res.json()).then(body => {
+          if (body.error) throw new Error(body.error)
+          if (body.status === 'current') setMessage(t('current'))
+          else if (body.status === 'available' || body.status === 'full-package-required') setMessage(format(t('available'), body.latest || ''))
+          else if (body.status === 'core-incompatible') setMessage(t('incompatible'))
+          else setMessage(t('updateUnavailable'))
+        }).catch(error => setMessage(format(t('failed'), error.message || error))).finally(() => setBusy(''))
+      }
       const styles = {
         group: { borderBottom: '1px solid var(--dsw-alias-border-l2)', display: 'flex', flexDirection: 'column', padding: '16px 0' },
         heading: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 400, lineHeight: '22px', marginBottom: 0 },
-        item: { display: 'flex', gap: 8, alignItems: 'center', padding: '16px 0' },
-        text: { display: 'flex', flex: 1, minWidth: 0, paddingRight: 48, flexDirection: 'column', gap: 4 },
+        item: { display: 'flex', gap: 16, alignItems: 'center', padding: '18px 0', flexWrap: 'wrap' },
+        text: { display: 'flex', flex: '1 1 260px', minWidth: 0, flexDirection: 'column', gap: 4 },
         label: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 400, lineHeight: '22px' },
         hint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px' },
         controls: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 },
         status: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', marginTop: 8, wordBreak: 'break-word' },
+        version: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', whiteSpace: 'nowrap' },
+        rowActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 1 auto' },
       }
       if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t('title')), h('div', { style: styles.hint }, t('checking')))
       const booleanRow = (key, title, hint) => h('div', { style: styles.item },
@@ -111,9 +138,23 @@ window.__ModuleLoader__.load({
           items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
           onSelect: value => update({ [key]: value === 'on' }),
         }))
+      const updateRow = (scope, key, title, version, hint) => h('div', { style: styles.item },
+        h('div', { style: styles.text }, h('div', { style: styles.label }, title),
+          h('div', { style: styles.hint }, hint),
+          version && h('div', { style: styles.version }, format(t('currentVersion'), version))),
+        h('div', { style: styles.rowActions },
+          h(PortableSelector, {
+            primitives, value: settings[key] ? 'on' : 'off', label: `${title} · ${t('startupCheck')}`,
+            items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
+            onSelect: value => update({ [key]: value === 'on' }),
+          }),
+          h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => checkUpdate(scope) },
+            busy === `update-${scope}` ? t('checking') : t('checkUpdate'))))
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
-        booleanRow('updateCheckEnabled', t('updates'), t('updatesHint')),
+        h('div', { style: { ...styles.heading, paddingTop: 12 } }, t('updates')),
+        updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
+        updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint')),
         booleanRow('taskNotificationsEnabled', t('notifications'), t('notificationsHint')),
         h('div', { style: styles.item }, h('div', { style: styles.text }, h('div', { style: styles.label }, t('close'))),
           h(PortableSelector, {

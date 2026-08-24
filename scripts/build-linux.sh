@@ -145,13 +145,14 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 6
+  "shellSchema": 7
 }
 EOF
 
 UPDATE_COMPONENT_ROOT="$BUILD_ROOT/update-component"
 UPDATE_COMPONENT="$OUTPUT_DIR/DSH-Portable-update-linux-$ARCH.zip"
 UPDATE_MANIFEST="$OUTPUT_DIR/portable-update-linux-$ARCH.json"
+ENGINE_UPDATE_MANIFEST="$OUTPUT_DIR/dsh-core-update-linux-$ARCH.json"
 mkdir -p "$UPDATE_COMPONENT_ROOT/licenses"
 cp -R "$STAGE/app" "$UPDATE_COMPONENT_ROOT/app"
 for file in COMPONENTS.json DeepSeek-Harness-LICENSE.txt DeepSeek-Harness-THIRD_PARTY_NOTICES.md dsh-market-LICENSE.txt pnpm-LICENSE.txt; do
@@ -182,7 +183,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "linux-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 6,
+  "requiredShellSchema": 7,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",
@@ -192,6 +193,28 @@ cat > "$UPDATE_MANIFEST" <<EOF
     "sha256": "$UPDATE_COMPONENT_HASH",
     "urls": [
       "https://github.com/WSL043/DSH-Portable/releases/download/$UPDATE_CHANNEL_TAG/DSH-Portable-update-linux-$ARCH.zip"
+    ]
+  }
+}
+EOF
+cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
+{
+  "schemaVersion": 1,
+  "updateKind": "engine",
+  "portableVersion": "$PORTABLE_VERSION",
+  "releaseChannel": "$RELEASE_CHANNEL",
+  "platform": "linux-$ARCH",
+  "minimumUpdaterSchema": 1,
+  "requiredShellSchema": 7,
+  "component": {
+    "kind": "dsh-app",
+    "dshVersion": "$DSH_VERSION",
+    "dshCommit": "$DSH_COMMIT",
+    "requiredNodeVersion": "$NODE_VERSION",
+    "bytes": $UPDATE_COMPONENT_BYTES,
+    "sha256": "$UPDATE_COMPONENT_HASH",
+    "urls": [
+      "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-$RELEASE_CHANNEL/DSH-Portable-update-linux-$ARCH.zip"
     ]
   }
 }

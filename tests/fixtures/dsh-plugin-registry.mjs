@@ -3,9 +3,9 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 
-const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1'] = process.argv.slice(2)
-if (!v1Archive || !v2Archive || !channelFile || !readyFile || !clsxArchive) {
-  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> [clsx-version]')
+const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1', defaultPluginArchive, defaultPluginVersion] = process.argv.slice(2)
+if (!v1Archive || !v2Archive || !channelFile || !readyFile || !clsxArchive || !defaultPluginArchive || !defaultPluginVersion) {
+  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> <clsx-version> <default-plugin.tgz> <default-plugin-version>')
 }
 
 const packageName = 'dsh-portable-smoke-plugin'
@@ -14,6 +14,8 @@ const releases = new Map([
   ['1.0.1', archiveRelease('1.0.1', v2Archive)],
 ])
 const clsxRelease = archiveRelease(clsxVersion, clsxArchive)
+const defaultPluginName = 'dsh-native-session-delete'
+const defaultPluginRelease = archiveRelease(defaultPluginVersion, defaultPluginArchive)
 
 function archiveRelease(version, filename) {
   const body = readFileSync(filename)
@@ -72,6 +74,26 @@ function clsxMetadata(origin) {
   }
 }
 
+function defaultPluginMetadata(origin) {
+  return {
+    _id: defaultPluginName,
+    name: defaultPluginName,
+    'dist-tags': { latest: defaultPluginVersion },
+    versions: {
+      [defaultPluginVersion]: {
+        name: defaultPluginName,
+        version: defaultPluginVersion,
+        license: 'MIT',
+        dist: {
+          tarball: `${origin}/${defaultPluginName}/-/${defaultPluginName}-${defaultPluginVersion}.tgz`,
+          shasum: defaultPluginRelease.shasum,
+          integrity: defaultPluginRelease.integrity,
+        },
+      },
+    },
+  }
+}
+
 const server = http.createServer((request, response) => {
   const origin = `http://127.0.0.1:${server.address().port}`
   const pathname = new URL(request.url, origin).pathname
@@ -86,6 +108,15 @@ const server = http.createServer((request, response) => {
   }
   if (request.method === 'GET' && pathname === '/clsx') {
     const body = Buffer.from(JSON.stringify(clsxMetadata(origin)), 'utf8')
+    response.writeHead(200, {
+      'content-type': 'application/json',
+      'content-length': body.length,
+      'cache-control': 'no-store',
+    }).end(body)
+    return
+  }
+  if (request.method === 'GET' && pathname === `/${defaultPluginName}`) {
+    const body = Buffer.from(JSON.stringify(defaultPluginMetadata(origin)), 'utf8')
     response.writeHead(200, {
       'content-type': 'application/json',
       'content-length': body.length,
@@ -109,6 +140,14 @@ const server = http.createServer((request, response) => {
       'content-length': clsxRelease.body.length,
       'cache-control': 'no-store',
     }).end(clsxRelease.body)
+    return
+  }
+  if (request.method === 'GET' && pathname === `/${defaultPluginName}/-/${defaultPluginName}-${defaultPluginVersion}.tgz`) {
+    response.writeHead(200, {
+      'content-type': 'application/octet-stream',
+      'content-length': defaultPluginRelease.body.length,
+      'cache-control': 'no-store',
+    }).end(defaultPluginRelease.body)
     return
   }
   response.writeHead(404, { 'content-type': 'text/plain' }).end('not found')

@@ -6,8 +6,9 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   issues: write
+  pull-requests: write
 
 jobs:
   check:
@@ -62,37 +63,37 @@ jobs:
             "- official master is now: \`${COMMIT}\`" \
             '' 'No candidate issue was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
-        if: steps.upstream.outputs.changed == 'true'
+        if: steps.upstream.outputs.changed == 'true' || steps.default_plugin.outputs.changed == 'true'
         run: npm test
-      - name: Package the tested candidate without creating a branch
-        if: steps.upstream.outputs.changed == 'true'
-        run: git diff --binary -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json launcher/default-plugins.mjs upstream.lock.json > official-dsh-candidate.patch
-      - name: Upload the tested candidate
-        if: steps.upstream.outputs.changed == 'true'
-        uses: actions/upload-artifact@v7
-        with:
-          name: official-dsh-${{ steps.upstream.outputs.version }}-candidate
-          path: official-dsh-candidate.patch
-          if-no-files-found: error
-          retention-days: 30
-      - name: Create or refresh the tested candidate issue
-        if: steps.upstream.outputs.changed == 'true'
+      - name: Open or refresh the short-lived verified dependency pull request
+        if: steps.upstream.outputs.changed == 'true' || steps.default_plugin.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.upstream.outputs.version }}
-          COMMIT: ${{ steps.upstream.outputs.commit }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DSH_VERSION: ${{ steps.upstream.outputs.version }}
+          DSH_CHANGED: ${{ steps.upstream.outputs.changed }}
+          DEFAULT_PLUGIN_VERSION: ${{ steps.default_plugin.outputs.version }}
+          DEFAULT_PLUGIN_CHANGED: ${{ steps.default_plugin.outputs.changed }}
         run: |
-          TITLE="Official DSH ${VERSION} candidate"
+          set -euo pipefail
+          BRANCH=automation/verified-dependencies
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -B "$BRANCH"
+          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json launcher/default-plugins.mjs upstream.lock.json
+          git commit -m "chore: verify current DSH dependencies"
+          git push --force origin "$BRANCH"
           BODY=$(mktemp)
-          printf '%s\n' \
-            'Automated candidate from the official DeepSeek Harness preview channel.' \
-            '' "- npm package: \`${VERSION}\`" "- matching official tag commit: \`${COMMIT}\`" \
-            "- tested candidate patch: ${RUN_URL} (Artifacts)" \
-            '' 'This issue is not auto-merged or auto-released. The candidate still requires product adaptation and the normal Windows, macOS, and Linux release gate.' > "$BODY"
-          ISSUE=$(gh issue list --state open --search "${TITLE} in:title" --json number,title --jq ".[] | select(.title == \"${TITLE}\") | .number" | head -n 1)
-          if [ -n "$ISSUE" ]; then
-            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY" --add-assignee WSL043
+          cat > "$BODY" <<EOF
+          Keeps the packaged dependency closure current without coupling it to a DSH-Portable feature release.
+
+          - DeepSeek Harness: ${DSH_VERSION} (changed: ${DSH_CHANGED})
+          - Native Session Manager: ${DEFAULT_PLUGIN_VERSION} (changed: ${DEFAULT_PLUGIN_CHANGED})
+
+          This pull request is merged only after the full Windows, macOS, and Linux product gate succeeds. Its branch is deleted after merge.
+          EOF
+          PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            gh pr edit "$PR" --title "Keep verified DSH dependencies current" --body-file "$BODY"
           else
-            gh issue create --title "$TITLE" --body-file "$BODY" --assignee WSL043
+            gh pr create --base main --head "$BRANCH" --title "Keep verified DSH dependencies current" --body-file "$BODY"
           fi

@@ -46,6 +46,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var backendStarted = false
     private var manualUpdateRunning = false
     private var automaticUpdateMenuItem: NSMenuItem!
+    private var productUpdateMenuItem: NSMenuItem!
+    private var engineUpdateMenuItem: NSMenuItem!
 
     private var installedMode: Bool {
         Bundle.main.bundleIdentifier == "io.github.wsl043.dsh-portable.installed"
@@ -84,7 +86,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         get {
             guard let data = try? Data(contentsOf: launcherSettingsURL),
                   let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
-            return settings["updateCheckEnabled"] as? Bool ?? false
+            return settings["productUpdateCheckEnabled"] as? Bool
+                ?? settings["updateCheckEnabled"] as? Bool ?? false
         }
         set {
             var settings: [String: Any] = [:]
@@ -92,8 +95,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 settings = existing
             }
-            settings["schemaVersion"] = 1
+            settings["schemaVersion"] = 2
             settings["updateCheckEnabled"] = newValue
+            settings["productUpdateCheckEnabled"] = newValue
             guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]) else { return }
             try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
             try? data.write(to: launcherSettingsURL, options: .atomic)
@@ -112,7 +116,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 settings = existing
             }
-            settings["schemaVersion"] = 1
+            settings["schemaVersion"] = 2
             settings["installUpdateAtNextLaunch"] = newValue
             guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]) else { return }
             try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
@@ -142,14 +146,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         applicationMenu.addItem(about)
         applicationMenu.addItem(.separator())
 
-        let check = NSMenuItem(title: L("检查更新…", "Check for Updates…"),
-                               action: #selector(checkForUpdatesFromMenu(_:)), keyEquivalent: "")
-        check.target = self
-        applicationMenu.addItem(check)
+        productUpdateMenuItem = NSMenuItem(title: L("检查 DSH-Portable 更新…", "Check DSH-Portable Updates…"),
+                                           action: #selector(checkForUpdatesFromMenu(_:)), keyEquivalent: "")
+        productUpdateMenuItem.target = self
+        productUpdateMenuItem.representedObject = "product"
+        applicationMenu.addItem(productUpdateMenuItem)
+        engineUpdateMenuItem = NSMenuItem(title: L("检查 DeepSeek Harness 更新…", "Check DeepSeek Harness Updates…"),
+                                          action: #selector(checkForUpdatesFromMenu(_:)), keyEquivalent: "")
+        engineUpdateMenuItem.target = self
+        engineUpdateMenuItem.representedObject = "engine"
+        applicationMenu.addItem(engineUpdateMenuItem)
         automaticUpdateMenuItem = NSMenuItem(title: L("启动时检查更新", "Check for updates at startup"),
                                              action: #selector(toggleAutomaticUpdateChecks(_:)), keyEquivalent: "")
         automaticUpdateMenuItem.target = self
-        automaticUpdateMenuItem.state = updateCheckEnabled ? .on : .off
+        refreshAutomaticUpdateMenuItem()
         applicationMenu.addItem(automaticUpdateMenuItem)
 
         let terminal = NSMenuItem(title: L("DSH 终端…", "DSH Terminal…"),
@@ -182,12 +192,56 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     @objc private func toggleAutomaticUpdateChecks(_ sender: NSMenuItem) {
-        updateCheckEnabled.toggle()
-        sender.state = updateCheckEnabled ? .on : .off
+        let enabled = !(updateCheckEnabled && engineUpdateCheckEnabled)
+        updateCheckEnabled = enabled
+        engineUpdateCheckEnabled = enabled
+        refreshAutomaticUpdateMenuItem()
+    }
+
+    private func refreshAutomaticUpdateMenuItem() {
+        automaticUpdateMenuItem.state = updateCheckEnabled && engineUpdateCheckEnabled ? .on
+            : (!updateCheckEnabled && !engineUpdateCheckEnabled ? .off : .mixed)
     }
 
     @objc private func reportProblem(_ sender: NSMenuItem) {
         NSWorkspace.shared.open(URL(string: "https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml")!)
+    }
+
+    private var engineUpdateCheckEnabled: Bool {
+        get {
+            guard let data = try? Data(contentsOf: launcherSettingsURL),
+                  let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return settings["engineUpdateCheckEnabled"] as? Bool
+                ?? settings["updateCheckEnabled"] as? Bool ?? false
+        }
+        set {
+            var settings: [String: Any] = [:]
+            if let data = try? Data(contentsOf: launcherSettingsURL),
+               let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { settings = existing }
+            settings["schemaVersion"] = 2
+            settings["engineUpdateCheckEnabled"] = newValue
+            guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]) else { return }
+            try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
+            try? data.write(to: launcherSettingsURL, options: .atomic)
+        }
+    }
+
+    private var pendingUpdateScope: String {
+        get {
+            guard let data = try? Data(contentsOf: launcherSettingsURL),
+                  let settings = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "product" }
+            return settings["pendingUpdateScope"] as? String == "engine" ? "engine" : "product"
+        }
+        set {
+            var settings: [String: Any] = [:]
+            if let data = try? Data(contentsOf: launcherSettingsURL),
+               let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { settings = existing }
+            settings["schemaVersion"] = 2
+            settings["pendingUpdateScope"] = newValue == "engine" ? "engine" : "product"
+            guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]) else { return }
+            try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
+            try? data.write(to: launcherSettingsURL, options: .atomic)
+        }
     }
 
     @objc private func openDshTerminal(_ sender: NSMenuItem) {
@@ -205,27 +259,40 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     @objc private func checkForUpdatesFromMenu(_ sender: NSMenuItem) {
         guard !manualUpdateRunning else { return }
+        let scope = sender.representedObject as? String == "engine" ? "engine" : "product"
         manualUpdateRunning = true
-        sender.isEnabled = false
+        productUpdateMenuItem.isEnabled = false
+        engineUpdateMenuItem.isEnabled = false
+        let originalTitle = sender.title
         sender.title = L("正在检查…", "Checking…")
         DispatchQueue.global(qos: .userInitiated).async { [weak self, weak sender] in
             guard let self = self else { return }
-            let result = try? self.runCLI(["check-update", "--json", "--force"])
+            let result = try? self.runCLI(["check-update", "--scope", scope, "--json", "--force"])
             DispatchQueue.main.async {
-                self.presentManualUpdateResult(result)
+                self.presentManualUpdateResult(result, scope: scope)
                 self.manualUpdateRunning = false
-                sender?.isEnabled = true
-                sender?.title = L("检查更新…", "Check for Updates…")
+                self.productUpdateMenuItem.isEnabled = true
+                self.engineUpdateMenuItem.isEnabled = true
+                sender?.title = originalTitle
             }
         }
     }
 
-    private func presentManualUpdateResult(_ update: [String: Any]?) {
+    private func presentManualUpdateResult(_ update: [String: Any]?, scope: String) {
         let alert = NSAlert()
+        let engineScope = scope == "engine"
+        let target = engineScope ? "DeepSeek Harness" : "DSH-Portable"
         let status = update?["status"] as? String ?? "unavailable"
         if status == "current" {
-            alert.messageText = L("DSH-Portable 已是最新版", "DSH-Portable is up to date")
-            alert.informativeText = updateDescription(update, fullPackage: false)
+            alert.messageText = target + L(" 已是最新版", " is up to date")
+            alert.informativeText = updateDescription(update, fullPackage: false, scope: scope)
+            alert.runModal()
+            return
+        }
+        if status == "core-incompatible" {
+            alert.messageText = L("需要先更新 DSH-Portable", "Update DSH-Portable first")
+            alert.informativeText = L("此 DeepSeek Harness 版本需要较新的 DSH-Portable。",
+                                      "This DeepSeek Harness version needs a newer DSH-Portable.")
             alert.runModal()
             return
         }
@@ -245,15 +312,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     NSWorkspace.shared.open(target)
                 }
             } else if choice == .alertThirdButtonReturn {
-                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--json"]) }
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--scope", scope, "--json"]) }
             } else {
-                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["defer-update", "--json"]) }
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["defer-update", "--scope", scope, "--json"]) }
             }
             return
         }
         if status == "available" {
-            alert.messageText = L("DSH-Portable 有可用更新", "A DSH-Portable update is available")
-            alert.informativeText = updateDescription(update, fullPackage: false) + "\n\n" +
+            alert.messageText = target + L(" 有可用更新", " update is available")
+            alert.informativeText = updateDescription(update, fullPackage: false, scope: scope) + "\n\n" +
                 L("为避免中断正在运行的任务，可选择在下次启动前安装。当前任务不会被停止。",
                   "To avoid interrupting running work, install before the next launch. The current task will not be stopped.")
             alert.addButton(withTitle: L("下次启动时更新", "Update at Next Launch"))
@@ -261,11 +328,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             alert.addButton(withTitle: L("跳过此版本", "Skip This Version"))
             let choice = alert.runModal()
             if choice == .alertFirstButtonReturn {
+                pendingUpdateScope = scope
                 installUpdateAtNextLaunch = true
             } else if choice == .alertThirdButtonReturn {
-                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--json"]) }
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["ignore-update", "--scope", scope, "--json"]) }
             } else {
-                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["defer-update", "--json"]) }
+                DispatchQueue.global().async { [weak self] in _ = try? self?.runCLI(["defer-update", "--scope", scope, "--json"]) }
             }
             return
         }
@@ -274,11 +342,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         alert.runModal()
     }
 
-    private func updateDescription(_ update: [String: Any]?, fullPackage: Bool) -> String {
+    private func updateDescription(_ update: [String: Any]?, fullPackage: Bool, scope: String = "product") -> String {
         let productCurrent = update?["productCurrent"] as? String ?? update?["current"] as? String ?? ""
         let productLatest = update?["productLatest"] as? String ?? update?["latest"] as? String ?? productCurrent
         let engineCurrent = update?["engineCurrent"] as? String ?? ""
         let engineLatest = update?["engineLatest"] as? String ?? engineCurrent
+        if scope == "engine" {
+            return "DeepSeek Harness \(engineCurrent)  →  \(engineLatest)\n" +
+                L("交付方式：轻量内核更新", "Delivery: lightweight engine update")
+        }
         let product = "DSH-Portable \(productCurrent)  →  \(productLatest)"
         let engine = engineCurrent != engineLatest
             ? L("内置官方 DSH \(engineCurrent)  →  \(engineLatest)", "Bundled official DSH \(engineCurrent)  →  \(engineLatest)")
@@ -402,7 +474,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private func applyPendingUpdateBeforeStartup() {
         guard installUpdateAtNextLaunch else { return }
         do {
-            _ = try runCLI(["update", "--no-browser", "--json", "--progress-json"], progressHandler: { [weak self] progress in
+            _ = try runCLI(["update", "--scope", pendingUpdateScope, "--no-browser", "--json", "--progress-json"], progressHandler: { [weak self] progress in
                 self?.presentUpdateProgress(progress)
             })
             installUpdateAtNextLaunch = false
@@ -412,20 +484,24 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     private func checkForUpdateAfterStartup() {
-        if !updateCheckEnabled
-            || ProcessInfo.processInfo.environment["DSH_PORTABLE_SKIP_UPDATE_CHECK"] == "1"
+        if ProcessInfo.processInfo.environment["DSH_PORTABLE_SKIP_UPDATE_CHECK"] == "1"
             || CommandLine.arguments.contains("--skip-update-check") { return }
-        guard let update = try? runCLI(["check-update", "--json"]),
+        if updateCheckEnabled { checkForUpdateAfterStartup(scope: "product") }
+        if engineUpdateCheckEnabled { checkForUpdateAfterStartup(scope: "engine") }
+    }
+
+    private func checkForUpdateAfterStartup(scope: String) {
+        guard let update = try? runCLI(["check-update", "--scope", scope, "--json"]),
               let status = update["status"] as? String,
               status == "available" || status == "full-package-required" else { return }
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
             if status == "available" && !self.installedMode {
-                self.presentManualUpdateResult(update)
+                self.presentManualUpdateResult(update, scope: scope)
             } else {
                 var complete = update
                 complete["status"] = "full-package-required"
-                self.presentManualUpdateResult(complete)
+                self.presentManualUpdateResult(complete, scope: scope)
             }
         }
     }

@@ -277,6 +277,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     updateManifest: '',
     progressJson: false,
     waitForLockMs: 0,
+    updateScope: 'product',
   })
   assert.deepEqual(parseCli(['start', '--no-browser', '--json']), {
     command: 'start',
@@ -287,6 +288,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     updateManifest: '',
     progressJson: false,
     waitForLockMs: 0,
+    updateScope: 'product',
   })
   assert.deepEqual(parseCli(['check-update', '--json', '--force', '--allow-http', '--update-manifest', 'http://127.0.0.1/update.json']), {
     command: 'check-update',
@@ -297,7 +299,11 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     updateManifest: 'http://127.0.0.1/update.json',
     progressJson: false,
     waitForLockMs: 0,
+    updateScope: 'product',
   })
+  assert.equal(parseCli(['check-update', '--scope', 'engine', '--json']).updateScope, 'engine')
+  assert.equal(parseCli(['update', '--scope', 'product', '--json']).updateScope, 'product')
+  assert.throws(() => parseCli(['check-update', '--scope', 'everything']), /product or engine/)
   assert.equal(parseCli(['stop', '--wait-for-lock-ms', '30000']).waitForLockMs, 30000)
   assert.throws(() => parseCli(['stop', '--wait-for-lock-ms', '60001']), /integer from 0 to 60000/)
   assert.equal(parseCli(['update', '--json', '--progress-json']).progressJson, true)
