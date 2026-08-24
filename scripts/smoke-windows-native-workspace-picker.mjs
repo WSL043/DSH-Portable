@@ -110,10 +110,11 @@ async function portable(args) {
 }
 
 const probeSource = String.raw`
-param([int]$ProcessId, [switch]$Close)
+param([int]$ProcessId, [long]$WindowHandle = 0, [switch]$Close)
 Add-Type @'
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 public sealed class DshDialogInfo {
@@ -140,6 +141,7 @@ public static class DshWindowProbe {
   }
   public static DshDialogInfo[] Find(int processId) {
     List<DshDialogInfo> result = new List<DshDialogInfo>();
+    IntPtr mainWindow = Process.GetProcessById(processId).MainWindowHandle;
     EnumWindows(delegate(IntPtr hwnd, IntPtr ignored) {
       uint pid;
       GetWindowThreadProcessId(hwnd, out pid);
@@ -149,9 +151,9 @@ public static class DshWindowProbe {
       uint ownerPid;
       GetWindowThreadProcessId(owner, out ownerPid);
       // FolderBrowserDialog can use different native window classes across
-      // supported Windows/WebView2 images. Ownership and visibility are the
-      // stable product contract; the implementation class is not.
-      if (pid == processId && owner != IntPtr.Zero && ownerPid == processId && IsWindowVisible(hwnd)) {
+      // supported Windows images. Direct ownership by the DSH main window and
+      // visibility are the stable product contract; the class is not.
+      if (pid == processId && mainWindow != IntPtr.Zero && owner == mainWindow && IsWindowVisible(hwnd)) {
         result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = IsWindowVisible(hwnd) });
       }
       return true;
@@ -162,8 +164,9 @@ public static class DshWindowProbe {
 '@
 $dialogs = @([DshWindowProbe]::Find($ProcessId))
 if ($Close) {
-  if ($dialogs.Count -ne 1) { throw "Expected one owned workspace dialog, found $($dialogs.Count)." }
-  if (-not [DshWindowProbe]::Cancel([IntPtr]$dialogs[0].hwnd)) { throw "The workspace dialog did not process WM_CLOSE." }
+  $target = @($dialogs | Where-Object { $_.hwnd -eq $WindowHandle })
+  if ($target.Count -ne 1) { throw "The captured workspace dialog is no longer directly owned by the DSH window." }
+  if (-not [DshWindowProbe]::Cancel([IntPtr]$target[0].hwnd)) { throw "The workspace dialog did not process WM_CLOSE." }
 }
 ConvertTo-Json -Compress -InputObject @($dialogs)
 `
@@ -219,7 +222,7 @@ try {
   assert.ok(Number(dialog.owner) > 0, 'the workspace dialog has no native owner')
   assert.equal(Number(dialog.ownerPid), launcher.pid, 'the workspace dialog is not owned by DeepSeek-Herness.exe')
 
-  await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, String(launcher.pid), '-Close'], { windowsHide: true })
+  await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, String(launcher.pid), '-WindowHandle', String(dialog.hwnd), '-Close'], { windowsHide: true })
   const result = await waitForValue(client, 'window.__dshWorkspacePickerResult', value => value?.cancelled === true, 'workspace-picker cancellation')
   assert.equal(result.requestId, 'workspace-smoke')
   process.stdout.write(`${JSON.stringify({ status: 'passed', ownerPid: dialog.ownerPid, dialogClass: dialog.className, visible: dialog.visible, cancelled: true })}\n`)
