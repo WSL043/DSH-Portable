@@ -1,9 +1,9 @@
 {
   "name": "dsh-portable",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "private": true,
   "type": "module",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://wsl043.github.io/DSH-Portable/",
   "repository": {
     "type": "git",

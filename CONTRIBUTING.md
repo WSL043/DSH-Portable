@@ -25,7 +25,7 @@ npm test
 
 Pull Request 请说明用户可见的问题、实现边界和实际完成的验证。无关重构请拆分提交。
 
-提交贡献即表示你同意按本仓库的 MIT 许可证授权该贡献。
+提交贡献即表示你同意按本仓库的 Apache-2.0 许可证授权该贡献。
 
 ---
 
@@ -43,4 +43,4 @@ Run `npm test` before opening a pull request. Platform or packaging changes must
 
 Explain the user-visible problem, the implementation boundary, and the verification performed. Keep unrelated refactoring in a separate pull request.
 
-By contributing, you agree that your contribution is licensed under the repository's MIT License.
+By contributing, you agree that your contribution is licensed under the repository's Apache-2.0 License.

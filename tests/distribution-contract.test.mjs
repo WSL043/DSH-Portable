@@ -95,7 +95,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const desktopBridgeManifest = JSON.parse(await read('desktop-bridge/package.json'))
   assert.equal(desktopBridgeSource.name, '@wsl043/dsh-portable-desktop-bridge')
   assert.equal(desktopBridgeSource.version, desktopBridgeManifest.version)
-  assert.equal(desktopBridgeSource.license, 'MIT')
+  assert.equal(desktopBridgeSource.license, 'Apache-2.0')
 })
 
 test('the independent lock verifier accepts the current local bridge link and exact upstream pins', async () => {

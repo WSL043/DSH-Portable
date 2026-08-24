@@ -1,10 +1,10 @@
 [package]
 name = "deepseek-herness-linux"
-version = "0.4.7"
+version = "0.4.8"
 description = "Native Linux shell for DSH-Portable"
 authors = ["DSH-Portable contributors"]
 edition = "2021"
-license = "MIT"
+license = "Apache-2.0"
 rust-version = "1.88"
 
 [build-dependencies]

@@ -23,7 +23,7 @@
   <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=downloads&color=171717" alt="GitHub downloads"></a>
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-171717?style=flat-square" alt="Windows, macOS, and Linux">
   <a href="https://github.com/WSL043/DSH-Portable/stargazers"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="GitHub stars"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT license"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2f855a?style=flat-square" alt="Apache-2.0 license"></a>
 </p>
 
 <p align="center">
@@ -110,7 +110,7 @@ dsh plugin --profile web remove <package-name>
 dsh --profile web --dump-config
 ```
 
-DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
+The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables. The Windows installer can optionally add `dsh` to the current user's `PATH`; deselecting the option or uninstalling removes only the entry managed by the installer.
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
@@ -153,7 +153,7 @@ Do not paste API keys, login credentials, or private conversations into an issue
 
 ## Open source and contributing
 
-DSH-Portable uses the standard [MIT License](LICENSE). You may use, modify, and redistribute it, provided that its copyright and license notice remains intact. The source and every platform package also carry [NOTICE.md](NOTICE.md), which identifies the canonical project and the boundary of third-party components.
+DSH-Portable uses the standard [Apache-2.0 License](LICENSE). You may use, modify, and redistribute it, provided that the license, copyright, and change notices remain intact. The source and every platform package also carry [NOTICE.md](NOTICE.md), which identifies the canonical project and the boundary of third-party components.
 
 Fixes and improvements are welcome as pull requests. Read [CONTRIBUTING.md](CONTRIBUTING.md) first so a contribution does not duplicate a capability already provided by official DSH.
 

@@ -1,10 +1,12 @@
 # DSH-Portable notices
 
+Copyright 2026 WSL043
+
 DSH-Portable is independently maintained by WSL043.
 
 - Canonical source: https://github.com/WSL043/DSH-Portable
 - Project website: https://wsl043.github.io/DSH-Portable/
-- License for DSH-Portable source: MIT, in `LICENSE`
+- License for DSH-Portable source: Apache-2.0, in `LICENSE`
 
 DeepSeek Harness is a separate upstream project distributed under its own MIT license. Node.js, pnpm, WebView2, the built-in plugin market, and bundled plugins also remain under their respective licenses. Finished DSH-Portable packages keep the applicable license texts and component inventory in their `licenses` directory.
 

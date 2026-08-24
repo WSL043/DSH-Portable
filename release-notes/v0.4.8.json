@@ -1,0 +1,17 @@
+{
+  "version": "0.4.8",
+  "zh": {
+    "summary": "让 Windows 安装版可以直接在常用终端中使用官方 dsh 命令，同时保持便携版不修改系统环境。",
+    "highlights": [
+      "安装时可以选择把 dsh 加入当前用户 PATH；新开的 PowerShell 和命令提示符可直接粘贴官方插件命令。",
+      "修复安装不会产生重复项；更换安装目录会迁移旧项，取消选择或卸载只清理由安装器管理的路径。"
+    ]
+  },
+  "en": {
+    "summary": "Lets the installed Windows edition use official dsh commands directly in everyday terminals while keeping the Portable edition registration-free.",
+    "highlights": [
+      "Setup can add dsh to the current user's PATH so official plugin commands work in newly opened PowerShell and Command Prompt windows.",
+      "Repair never duplicates the entry; moving the installation migrates it, while deselection and uninstall remove only the installer-owned path."
+    ]
+  }
+}

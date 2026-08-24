@@ -23,7 +23,7 @@
   <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=%E4%B8%8B%E8%BD%BD&color=171717" alt="GitHub 下载量"></a>
   <img src="https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-171717?style=flat-square" alt="支持 Windows、macOS 和 Linux">
   <a href="https://github.com/WSL043/DSH-Portable/stargazers"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&label=Star&color=171717" alt="GitHub Star"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-2f855a?style=flat-square" alt="MIT 许可证"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-2f855a?style=flat-square" alt="Apache-2.0 许可证"></a>
 </p>
 
 <p align="center">
@@ -110,7 +110,7 @@ dsh plugin --profile web remove <插件包名>
 dsh --profile web --dump-config
 ```
 
-DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。移动整个 Portable 文件夹后，新开的 DSH 终端会自动使用新位置，不需要修复环境变量。
+便携版的 DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。移动整个 Portable 文件夹后，新开的 DSH 终端会自动使用新位置，不需要修复环境变量。Windows 安装版可以在安装时选择把 `dsh` 加入当前用户的 `PATH`；取消选择或卸载时只移除由安装器管理的那一项。
 
 能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。市场不会在任务运行时更新、卸载或偷偷重启 DSH。只安装你信任的插件。
 
@@ -153,7 +153,7 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 
 ## 开源与贡献
 
-DSH-Portable 使用标准 [MIT 许可证](LICENSE)。你可以使用、修改和再分发，但需要保留许可证中的版权与许可声明。源码和每个平台的成品还会携带 [NOTICE.md](NOTICE.md)，明确标出本项目的规范来源与第三方组件边界。
+DSH-Portable 使用标准 [Apache-2.0 许可证](LICENSE)。你可以使用、修改和再分发，但需要保留许可证、版权与变更声明。源码和每个平台的成品还会携带 [NOTICE.md](NOTICE.md)，明确标出本项目的规范来源与第三方组件边界。
 
 修复和改进欢迎直接提交 Pull Request。开始前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)，避免重复实现官方 DSH 已有的能力。
 

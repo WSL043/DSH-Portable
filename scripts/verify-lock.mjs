@@ -42,7 +42,7 @@ assert.equal(desktopBridge?.resolved, '../desktop-bridge', 'desktop bridge must 
 assert.equal(desktopBridge?.link, true, 'desktop bridge must stay an npm local link')
 const desktopBridgeSource = lockfile.packages?.['../desktop-bridge']
 assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge link target identity')
-assert.equal(desktopBridgeSource?.license, 'MIT', 'desktop bridge license')
+assert.equal(desktopBridgeSource?.license, 'Apache-2.0', 'desktop bridge license')
 
 const sessionDelete = upstream.defaultPlugins?.sessionDelete
 assert.equal(sessionDelete?.package, 'dsh-native-session-delete', 'locked default session-delete package')

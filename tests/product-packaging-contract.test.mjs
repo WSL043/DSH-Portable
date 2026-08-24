@@ -130,7 +130,7 @@ test('redistribution metadata keeps the canonical project discoverable without a
   ])
   const canonical = 'https://github.com/WSL043/DSH-Portable'
 
-  assert.match(license, /MIT License/)
+  assert.match(license, /Apache License[\s\S]+Version 2\.0/)
   assert.doesNotMatch(license, new RegExp(regexEscape(canonical)))
   assert.match(notice, new RegExp(regexEscape(canonical)))
   assert.match(chinese, /github\/downloads\/WSL043\/DSH-Portable\/total/)
@@ -417,7 +417,7 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
   }
 })
 
-test('Windows package exposes real GUI executables with matching icon and no path install', async () => {
+test('Windows package exposes real GUI executables with matching icon and an isolated portable launch', async () => {
   const source = await read('launcher/windows/DSH-Portable.cs')
   const bootstrap = await read('launcher/windows/DSH-Bootstrap.cs')
   const manifest = await read('launcher/windows/DSH-Portable.manifest')
@@ -506,6 +506,11 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(setup, /OutputBaseFilename=DeepSeek-Herness-Setup/)
   assert.match(setup, /DefaultDirName=\{localappdata\}\\Programs\\DeepSeek-Herness/)
   assert.match(setup, /PrivilegesRequired=lowest/)
+  assert.match(setup, /ChangesEnvironment=yes/)
+  assert.match(setup, /Name:\s*"addtopath"/)
+  assert.match(setup, /AddInstallDirectoryToUserPath/)
+  assert.match(setup, /RemoveManagedInstallDirectoryFromUserPath/)
+  assert.match(setup, /CurUninstallStepChanged/)
   assert.match(setup, /CloseApplications=yes/)
   assert.match(setup, /RestartApplications=no/)
   assert.match(setup, /SetupIconFile=.*DSH-Portable\.ico/)
@@ -539,6 +544,11 @@ test('Windows setup is a per-user offline installer with durable data outside th
   assert.match(smoke, /unins000\.exe/)
   assert.match(smoke, /\/SP-/)
   assert.match(smoke, /\/NOCANCEL/)
+  assert.match(smoke, /\/TASKS=addtopath/)
+  assert.match(smoke, /installed dsh command path was not registered exactly once/)
+  assert.match(smoke, /previously managed command path after moving the installation/)
+  assert.match(smoke, /uninstaller did not remove its user PATH entry/)
+  assert.match(smoke, /uninstaller retained its command path ownership value/)
   assert.match(smoke, /\/LOG=/)
   assert.match(smoke, /Get-Content[\s\S]+SetupLog/)
   assert.match(smoke, /dsh-i-/)

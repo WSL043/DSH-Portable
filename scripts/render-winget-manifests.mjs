@@ -77,7 +77,7 @@ PublisherUrl: https://github.com/WSL043
 PublisherSupportUrl: https://github.com/WSL043/DSH-Portable/issues
 PackageName: DSH-Portable
 PackageUrl: https://wsl043.github.io/DSH-Portable/
-License: MIT
+License: Apache-2.0
 LicenseUrl: https://github.com/WSL043/DSH-Portable/blob/main/LICENSE
 Copyright: Copyright (c) 2026 WSL043
 ShortDescription: Portable-first desktop distribution of DeepSeek Harness
@@ -102,7 +102,7 @@ PublisherUrl: https://github.com/WSL043
 PublisherSupportUrl: https://github.com/WSL043/DSH-Portable/issues
 PackageName: DSH-Portable
 PackageUrl: https://wsl043.github.io/DSH-Portable/
-License: MIT
+License: Apache-2.0
 LicenseUrl: https://github.com/WSL043/DSH-Portable/blob/main/LICENSE
 Copyright: Copyright (c) 2026 WSL043
 ShortDescription: 便携优先的 DeepSeek Harness 桌面发行版

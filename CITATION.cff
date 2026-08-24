@@ -6,4 +6,4 @@ authors:
   - family-names: "WSL043"
 repository-code: "https://github.com/WSL043/DSH-Portable"
 url: "https://wsl043.github.io/DSH-Portable/"
-license: MIT
+license: Apache-2.0

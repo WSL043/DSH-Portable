@@ -127,6 +127,16 @@ $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
 $PriorLauncherDiagnostic = $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC
 $PriorLocalAppData = $env:LOCALAPPDATA
 $PriorTestHidden = $env:DSH_PORTABLE_TEST_HIDDEN
+$UserEnvironmentKey = 'Registry::HKEY_CURRENT_USER\Environment'
+$PriorUserPathProperty = Get-ItemProperty -LiteralPath $UserEnvironmentKey -Name Path -ErrorAction SilentlyContinue
+$PriorUserPathExisted = $null -ne $PriorUserPathProperty
+$PriorUserPath = if ($PriorUserPathExisted) { [string]$PriorUserPathProperty.Path } else { '' }
+$CommandOwnershipKey = 'Registry::HKEY_CURRENT_USER\Software\WSL043\DSH-Portable'
+$PriorCommandKeyExisted = Test-Path -LiteralPath $CommandOwnershipKey
+$PriorCommandPathProperty = Get-ItemProperty -LiteralPath $CommandOwnershipKey -Name InstalledCommandPath -ErrorAction SilentlyContinue
+$PriorCommandPathExisted = $null -ne $PriorCommandPathProperty
+$PriorCommandPath = if ($PriorCommandPathExisted) { [string]$PriorCommandPathProperty.InstalledCommandPath } else { '' }
+$PreviousManagedRoot = Join-Path $TempRoot 'previous-installed-location'
 
 try {
     if ($UseRealKnownFolder -and (Test-Path -LiteralPath $StateRoot)) {
@@ -134,9 +144,13 @@ try {
     }
     $env:DSH_PORTABLE_STATE_ROOT = if ($UseRealKnownFolder) { $null } else { $StateRoot }
     $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $LauncherDiagnostic
+    $SeededUserPath = (@($PriorUserPath.TrimEnd(';'), $PreviousManagedRoot) | Where-Object { $_ }) -join ';'
+    Set-ItemProperty -LiteralPath $UserEnvironmentKey -Name Path -Value $SeededUserPath
+    New-Item -ItemType Directory -Force -Path $CommandOwnershipKey | Out-Null
+    Set-ItemProperty -LiteralPath $CommandOwnershipKey -Name InstalledCommandPath -Value $PreviousManagedRoot
     $Setup = Invoke-BoundedProcess -Stage 'Install package' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
             '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',
-            "/DIR=$InstallRoot", "/LOG=$SetupLog"
+            '/TASKS=addtopath', "/DIR=$InstallRoot", "/LOG=$SetupLog"
         )
     if ($Setup.ExitCode -ne 0) {
         Write-Host "Inno Setup exited with code $($Setup.ExitCode). Setup log follows:"
@@ -155,6 +169,20 @@ try {
         'app\node_modules\@earendil-works\pi-ai\dist\providers\data\amazon-bedrock.json'
     )) {
         if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot $Name))) { throw "installed file is missing: $Name" }
+    }
+
+    $RegisteredUserPath = [string](Get-ItemPropertyValue -LiteralPath $UserEnvironmentKey -Name Path)
+    $RegisteredEntries = @($RegisteredUserPath -split ';' | ForEach-Object { $_.Trim().Trim('"').TrimEnd('\') } | Where-Object {
+        $_.Equals($InstallRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($RegisteredEntries.Count -ne 1) { throw 'installed dsh command path was not registered exactly once' }
+    $OldRegisteredEntries = @($RegisteredUserPath -split ';' | ForEach-Object { $_.Trim().Trim('"').TrimEnd('\') } | Where-Object {
+        $_.Equals($PreviousManagedRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($OldRegisteredEntries.Count -ne 0) { throw 'installer retained the previously managed command path after moving the installation' }
+    $CommandPath = [string](Get-ItemPropertyValue -LiteralPath $CommandOwnershipKey -Name InstalledCommandPath)
+    if (-not $CommandPath.Equals($InstallRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw "installed dsh command path ownership was not recorded: $CommandPath"
     }
 
     $ProgramGroup = Join-Path ([Environment]::GetFolderPath('Programs')) 'DeepSeek-Herness'
@@ -226,6 +254,11 @@ try {
     if ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -ne $RepairStateText) {
         throw 'repair changed durable user state'
     }
+    $RepairedUserPath = [string](Get-ItemPropertyValue -LiteralPath $UserEnvironmentKey -Name Path)
+    $RepairedEntries = @($RepairedUserPath -split ';' | ForEach-Object { $_.Trim().Trim('"').TrimEnd('\') } | Where-Object {
+        $_.Equals($InstallRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($RepairedEntries.Count -ne 1) { throw 'repair duplicated or removed the installed dsh command path' }
 
     # Reproduce an app/profile version skew from a prior installed build. The
     # resolver tree is generated product state, while sessions and third-party
@@ -285,6 +318,12 @@ try {
     if (Test-Path -LiteralPath (Join-Path $InstallRoot 'DeepSeek-Herness.exe')) { throw 'uninstaller retained application binaries' }
     if (-not (Test-Path -LiteralPath $StateRoot)) { throw 'uninstaller deleted user state' }
     if ((Get-Content -Raw -LiteralPath $RepairStateSentinel) -ne $RepairStateText) { throw 'uninstaller changed retained user data' }
+    $UninstalledUserPath = [string](Get-ItemPropertyValue -LiteralPath $UserEnvironmentKey -Name Path -ErrorAction SilentlyContinue)
+    if (@($UninstalledUserPath -split ';' | ForEach-Object { $_.Trim().Trim('"').TrimEnd('\') } | Where-Object {
+        $_.Equals($InstallRoot.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)
+    }).Count -ne 0) { throw 'uninstaller did not remove its user PATH entry' }
+    $UninstalledCommandPath = Get-ItemProperty -LiteralPath $CommandOwnershipKey -Name InstalledCommandPath -ErrorAction SilentlyContinue
+    if ($null -ne $UninstalledCommandPath) { throw 'uninstaller retained its command path ownership value' }
 
     $ProcessExitDeadline = [DateTime]::UtcNow.AddSeconds(30)
     do {
@@ -317,4 +356,18 @@ try {
     $env:DSH_PORTABLE_LAUNCHER_DIAGNOSTIC = $PriorLauncherDiagnostic
     $env:LOCALAPPDATA = $PriorLocalAppData
     $env:DSH_PORTABLE_TEST_HIDDEN = $PriorTestHidden
+    if ($PriorUserPathExisted) {
+        Set-ItemProperty -LiteralPath $UserEnvironmentKey -Name Path -Value $PriorUserPath
+    } else {
+        Remove-ItemProperty -LiteralPath $UserEnvironmentKey -Name Path -ErrorAction SilentlyContinue
+    }
+    if ($PriorCommandPathExisted) {
+        New-Item -ItemType Directory -Force -Path $CommandOwnershipKey | Out-Null
+        Set-ItemProperty -LiteralPath $CommandOwnershipKey -Name InstalledCommandPath -Value $PriorCommandPath
+    } else {
+        Remove-ItemProperty -LiteralPath $CommandOwnershipKey -Name InstalledCommandPath -ErrorAction SilentlyContinue
+        if ((-not $PriorCommandKeyExisted) -and (Test-Path -LiteralPath $CommandOwnershipKey)) {
+            Remove-Item -LiteralPath $CommandOwnershipKey -ErrorAction SilentlyContinue
+        }
+    }
 }
