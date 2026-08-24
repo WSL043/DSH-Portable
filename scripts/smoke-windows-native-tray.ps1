@@ -84,12 +84,13 @@ try {
     $ZhCompleted = -join ([char[]]@(0x5DF2, 0x5B8C, 0x6210))
     $ZhMore = -join ([char[]]@(0x66F4, 0x591A))
     $ZhNew = -join ([char[]]@(0x65B0, 0x4F1A, 0x8BDD))
+    $ZhTerminal = 'DSH ' + (-join ([char[]]@(0x7EC8, 0x7AEF)))
     $ZhFeedback = -join ([char[]]@(0x53CD, 0x9988, 0x95EE, 0x9898))
     $ZhExit = (-join ([char[]]@(0x9000, 0x51FA))) + ' DeepSeek Harness'
 
     foreach ($Case in @(
         @{ Locale = 'en'; Theme = 'light'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Terminal = 'DSH Terminal'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
-        @{ Locale = 'zh'; Theme = 'dark'; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = 'DSH 终端'; Feedback = $ZhFeedback; Exit = $ZhExit }
+        @{ Locale = 'zh'; Theme = 'dark'; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = $ZhTerminal; Feedback = $ZhFeedback; Exit = $ZhExit }
     )) {
         Set-Property $StateType $State 'locale' $Case.Locale
         Set-Property $StateType $State 'theme' $Case.Theme
