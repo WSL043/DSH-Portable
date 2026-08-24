@@ -36,8 +36,23 @@ $ConstructorArgs = New-Object 'System.Object[]' 1
 $ConstructorArgs[0] = [string[]]@('--desktop')
 $Window = $Constructor.Invoke($ConstructorArgs)
 $WindowType.GetField('root', $AllFields).SetValue($Window, $ResolvedRoot)
-$InitialUpdateEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers).Invoke($Window, $null)
-$WindowType.GetField('updateCheckEnabled', $AllFields).SetValue($Window, $InitialUpdateEnabled)
+$LoadUpdateCheckEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers)
+$InitialProductUpdateEnabled = $LoadUpdateCheckEnabled.Invoke(
+    $Window,
+    [Reflection.BindingFlags]::Default,
+    $null,
+    [object[]]@('productUpdateCheckEnabled'),
+    [Globalization.CultureInfo]::InvariantCulture
+)
+$InitialEngineUpdateEnabled = $LoadUpdateCheckEnabled.Invoke(
+    $Window,
+    [Reflection.BindingFlags]::Default,
+    $null,
+    [object[]]@('engineUpdateCheckEnabled'),
+    [Globalization.CultureInfo]::InvariantCulture
+)
+$WindowType.GetField('updateCheckEnabled', $AllFields).SetValue($Window, $InitialProductUpdateEnabled)
+$WindowType.GetField('engineUpdateCheckEnabled', $AllFields).SetValue($Window, $InitialEngineUpdateEnabled)
 if ($CaptureDirectory) {
     New-Item -ItemType Directory -Force -Path $CaptureDirectory | Out-Null
 }
@@ -113,7 +128,13 @@ try {
         }
         $WindowType.GetField('uiLanguage', $AllFields).SetValue($null, $Case.Locale)
         $WindowType.GetField('trayTheme', $AllFields).SetValue($Window, $Case.Theme)
-        $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers).Invoke($Window, $null) | Out-Null
+        $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers).Invoke(
+            $Window,
+            [Reflection.BindingFlags]::Default,
+            $null,
+            [object[]]::new(0),
+            [Globalization.CultureInfo]::InvariantCulture
+        ) | Out-Null
         $Menu = [Windows.Forms.ContextMenuStrip]$WindowType.GetField('trayMenu', $AllFields).GetValue($Window)
 
         if ($Menu.Items.Count -ne 10) { throw "The tray menu must expose exactly ten bounded rows for $($Case.Locale)" }
@@ -128,9 +149,9 @@ try {
         if ($Menu.Items[5].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
         if ($Menu.Items[7].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
         if ($Menu.Items[9].Text -ne $Case.Exit) { throw "Exit command is missing for $($Case.Locale)" }
-        if ($Menu.Items[5].DropDownItems.Count -ne 9) { throw "More submenu must contain bounded overflow and direct settings commands" }
-        if ($Menu.Items[5].DropDownItems[7].Text -ne $Case.Terminal) { throw "DSH Terminal command must be in More for $($Case.Locale)" }
-        if ($Menu.Items[5].DropDownItems[8].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
+        if ($Menu.Items[5].DropDownItems.Count -ne 10) { throw "More submenu must contain bounded overflow and direct settings commands" }
+        if ($Menu.Items[5].DropDownItems[8].Text -ne $Case.Terminal) { throw "DSH Terminal command must be in More for $($Case.Locale)" }
+        if ($Menu.Items[5].DropDownItems[9].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
         foreach ($MoreItem in $Menu.Items[5].DropDownItems) {
             if ($MoreItem -is [Windows.Forms.ToolStripMenuItem] -and $MoreItem.DropDownItems.Count -ne 0) {
                 throw "More submenu must stop at the second level"
@@ -149,28 +170,50 @@ try {
 
         if ($Case.Locale -eq 'en') {
             $AutomaticItem = [Windows.Forms.ToolStripMenuItem]$WindowType.GetField('automaticUpdateCheckItem', $AllFields).GetValue($Window)
-            $UpdateEnabledField = $WindowType.GetField('updateCheckEnabled', $AllFields)
+            $ProductUpdateEnabledField = $WindowType.GetField('updateCheckEnabled', $AllFields)
+            $EngineUpdateEnabledField = $WindowType.GetField('engineUpdateCheckEnabled', $AllFields)
             $SettingsPath = Join-Path $ResolvedRoot 'data\launcher-settings.json'
-            if ([bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
+            if ([bool]$ProductUpdateEnabledField.GetValue($Window) -or [bool]$EngineUpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
                 throw 'Automatic update checks must default to Off until the user opts in'
             }
             $AutomaticItem.PerformClick()
             [Windows.Forms.Application]::DoEvents()
-            if (-not [bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
+            if (-not [bool]$ProductUpdateEnabledField.GetValue($Window) -or -not [bool]$EngineUpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'On') {
                 throw 'Automatic update check status did not change immediately after click'
             }
-            if (-not (Test-Path -LiteralPath $SettingsPath) -or (Get-Content -Raw -LiteralPath $SettingsPath) -notmatch '"updateCheckEnabled":true') {
+            $SavedSettings = Get-Content -Raw -LiteralPath $SettingsPath
+            if (-not (Test-Path -LiteralPath $SettingsPath) -or $SavedSettings -notmatch '"productUpdateCheckEnabled":true' -or $SavedSettings -notmatch '"engineUpdateCheckEnabled":true') {
                 throw 'Automatic update check preference was not saved'
             }
 
             $ReloadedWindow = $Constructor.Invoke($ConstructorArgs)
             try {
                 $WindowType.GetField('root', $AllFields).SetValue($ReloadedWindow, $ResolvedRoot)
-                $ReloadedEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers).Invoke($ReloadedWindow, $null)
-                $UpdateEnabledField.SetValue($ReloadedWindow, $ReloadedEnabled)
-                $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers).Invoke($ReloadedWindow, $null) | Out-Null
+                $ReloadedProductEnabled = $LoadUpdateCheckEnabled.Invoke(
+                    $ReloadedWindow,
+                    [Reflection.BindingFlags]::Default,
+                    $null,
+                    [object[]]@('productUpdateCheckEnabled'),
+                    [Globalization.CultureInfo]::InvariantCulture
+                )
+                $ReloadedEngineEnabled = $LoadUpdateCheckEnabled.Invoke(
+                    $ReloadedWindow,
+                    [Reflection.BindingFlags]::Default,
+                    $null,
+                    [object[]]@('engineUpdateCheckEnabled'),
+                    [Globalization.CultureInfo]::InvariantCulture
+                )
+                $ProductUpdateEnabledField.SetValue($ReloadedWindow, $ReloadedProductEnabled)
+                $EngineUpdateEnabledField.SetValue($ReloadedWindow, $ReloadedEngineEnabled)
+                $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers).Invoke(
+                    $ReloadedWindow,
+                    [Reflection.BindingFlags]::Default,
+                    $null,
+                    [object[]]::new(0),
+                    [Globalization.CultureInfo]::InvariantCulture
+                ) | Out-Null
                 $ReloadedItem = [Windows.Forms.ToolStripMenuItem]$WindowType.GetField('automaticUpdateCheckItem', $AllFields).GetValue($ReloadedWindow)
-                if (-not [bool]$UpdateEnabledField.GetValue($ReloadedWindow) -or $ReloadedItem.ShortcutKeyDisplayString -ne 'On') {
+                if (-not [bool]$ProductUpdateEnabledField.GetValue($ReloadedWindow) -or -not [bool]$EngineUpdateEnabledField.GetValue($ReloadedWindow) -or $ReloadedItem.ShortcutKeyDisplayString -ne 'On') {
                     throw 'Automatic update check preference was not restored after restart'
                 }
             }
@@ -180,7 +223,7 @@ try {
 
             $AutomaticItem.PerformClick()
             [Windows.Forms.Application]::DoEvents()
-            if ([bool]$UpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
+            if ([bool]$ProductUpdateEnabledField.GetValue($Window) -or [bool]$EngineUpdateEnabledField.GetValue($Window) -or $AutomaticItem.ShortcutKeyDisplayString -ne 'Off') {
                 throw 'Automatic update check preference could not be disabled again'
             }
         }
