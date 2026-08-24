@@ -148,7 +148,10 @@ public static class DshWindowProbe {
       IntPtr owner = GetWindow(hwnd, 4);
       uint ownerPid;
       GetWindowThreadProcessId(owner, out ownerPid);
-      if (pid == processId && owner != IntPtr.Zero && ownerPid == processId && IsWindowVisible(hwnd) && className.ToString() == "#32770") {
+      // FolderBrowserDialog can use different native window classes across
+      // supported Windows/WebView2 images. Ownership and visibility are the
+      // stable product contract; the implementation class is not.
+      if (pid == processId && owner != IntPtr.Zero && ownerPid == processId && IsWindowVisible(hwnd)) {
         result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = IsWindowVisible(hwnd) });
       }
       return true;
