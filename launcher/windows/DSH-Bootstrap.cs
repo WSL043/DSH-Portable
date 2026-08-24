@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Net;
 using System.Net.Http;
@@ -22,11 +23,21 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.4.9.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.4.9.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.4.10.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.4.10.65534")]
 
 namespace DshPortableBootstrap
 {
+    internal static class BootstrapText
+    {
+        private static readonly string UiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+
+        internal static string L(string chinese, string english)
+        {
+            return String.Equals(UiLanguage, "zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
+        }
+    }
+
     [DataContract]
     internal sealed class PortableManifest
     {
@@ -176,7 +187,7 @@ namespace DshPortableBootstrap
             {
                 if (String.IsNullOrWhiteSpace(installedVersion))
                 {
-                    reportStatus("现有 DSH-Portable 缺少版本信息，正在直接启动…");
+                    reportStatus(BootstrapText.L("现有 DSH-Portable 缺少版本信息，正在直接启动…", "Version information is unavailable. Starting DSH-Portable…"));
                     LaunchIfRequested();
                     return Result("ready", null, "Installed version metadata is unavailable; automatic update was skipped.");
                 }
@@ -185,7 +196,7 @@ namespace DshPortableBootstrap
                 {
                     ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
                     ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
-                    reportStatus("正在检查 DSH-Portable 更新…");
+                    reportStatus(BootstrapText.L("正在检查 DSH-Portable 更新…", "Checking for DSH-Portable updates…"));
                     manifest = await DownloadManifestAsync(
                         options.ManifestUrl,
                         cancellationToken,
@@ -195,30 +206,30 @@ namespace DshPortableBootstrap
                     int compared = ComparePortableVersions(installedVersion, manifest.Version);
                     if (compared >= 0)
                     {
-                        reportStatus("DSH-Portable 已是最新版，正在启动…");
+                        reportStatus(BootstrapText.L("DSH-Portable 已是最新版，正在启动…", "DSH-Portable is up to date. Starting…"));
                         LaunchIfRequested();
                         return Result("ready", installedVersion, null);
                     }
                     upgradeExisting = true;
-                    reportStatus("发现新版本 " + manifest.Version + "，正在准备安全升级…");
+                    reportStatus(BootstrapText.L("发现新版本 " + manifest.Version + "，正在准备安全升级…", "Version " + manifest.Version + " is available. Preparing a safe update…"));
                 }
                 catch (Exception error)
                 {
                     if (error is OperationCanceledException && cancellationToken.IsCancellationRequested) throw;
-                    reportStatus("暂时无法检查更新，正在启动现有版本…");
+                    reportStatus(BootstrapText.L("暂时无法检查更新，正在启动现有版本…", "Could not check for updates. Starting the installed version…"));
                     LaunchIfRequested();
                     return Result("ready", installedVersion, FriendlyMessage(error));
                 }
             }
 
             if (Directory.Exists(options.Destination) && !upgradeExisting)
-                throw new InvalidOperationException("目标目录已经存在但内容不完整。为避免覆盖数据，请删除该空目录或把下载器移到其他位置后重试。");
+                throw new InvalidOperationException(BootstrapText.L("目标目录已经存在但内容不完整。为避免覆盖数据，请删除该空目录或把下载器移到其他位置后重试。", "The destination folder exists but is incomplete. To protect your data, remove the empty folder or move the downloader elsewhere and try again."));
 
             ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             string destinationParent = Path.GetDirectoryName(options.Destination);
-            if (String.IsNullOrEmpty(destinationParent)) throw new InvalidOperationException("目标目录无效。");
+            if (String.IsNullOrEmpty(destinationParent)) throw new InvalidOperationException(BootstrapText.L("目标目录无效。", "The destination folder is invalid."));
             Directory.CreateDirectory(destinationParent);
 
             string operationId = Guid.NewGuid().ToString("N");
@@ -229,45 +240,47 @@ namespace DshPortableBootstrap
             {
                 if (manifest == null || payload == null)
                 {
-                    reportStatus("正在获取 DSH-Portable 版本信息…");
+                    reportStatus(BootstrapText.L("正在获取 DSH-Portable 版本信息…", "Getting DSH-Portable version information…"));
                     manifest = await DownloadManifestAsync(options.ManifestUrl, cancellationToken).ConfigureAwait(false);
                     payload = ValidateManifest(manifest);
                     ValidateRemoteUri(payload.Url, options.AllowHttp, "payload");
                 }
 
-                reportStatus("正在下载运行环境，完成后可离线使用…");
+                reportStatus(BootstrapText.L("正在下载运行环境，完成后可离线使用…", "Downloading the runtime for offline use…"));
                 await DownloadFileAsync(payload.Url, temporaryArchive, payload.Bytes, cancellationToken).ConfigureAwait(false);
 
-                reportStatus("正在验证下载内容…");
+                reportStatus(BootstrapText.L("正在验证下载内容…", "Verifying the download…"));
                 string actualHash = ComputeSha256(temporaryArchive);
                 if (!String.Equals(actualHash, payload.Sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidDataException("下载内容校验失败；没有修改目标目录。请重新运行下载器。");
+                    throw new InvalidDataException(BootstrapText.L("下载内容校验失败；没有修改目标目录。请重新运行下载器。", "The download failed verification. The destination was not changed. Run the downloader again."));
 
-                reportStatus("正在准备可移动文件夹…");
+                reportStatus(BootstrapText.L("正在准备可移动文件夹…", "Preparing the movable folder…"));
                 EnsureDirectory(stagingRoot);
                 ExtractZipArchive(temporaryArchive, stagingRoot);
                 string extracted = Path.Combine(stagingRoot, "DSH-Portable");
                 if (!IsCompletePortable(extracted))
-                    throw new InvalidDataException("下载包缺少启动器或运行环境；没有修改目标目录。");
+                    throw new InvalidDataException(BootstrapText.L("下载包缺少启动器或运行环境；没有修改目标目录。", "The package is missing the launcher or runtime. The destination was not changed."));
                 if (upgradeExisting)
                 {
                     if (!IsCompletePortable(options.Destination))
-                        throw new InvalidOperationException("现有 DSH-Portable 目录不完整；没有修改任何文件。");
-                    reportStatus("正在停止当前版本…");
+                        throw new InvalidOperationException(BootstrapText.L("现有 DSH-Portable 目录不完整；没有修改任何文件。", "The existing DSH-Portable folder is incomplete. No files were changed."));
+                    reportStatus(BootstrapText.L("正在停止当前版本…", "Stopping the current version…"));
                     StopRunningPortable();
-                    reportStatus("正在刷新 DSH profile 模块映射…");
+                    reportStatus(BootstrapText.L("正在刷新 DSH profile 模块映射…", "Refreshing the DSH profile module mapping…"));
                     ResetManagedProfileModuleFallback();
-                    reportStatus("正在安装新版本并保留个人数据…");
+                    reportStatus(BootstrapText.L("正在安装新版本并保留个人数据…", "Installing the new version and preserving your data…"));
                     ReplacePortableTransactionally(extracted, Path.Combine(destinationParent, ".dsh-portable-backup-" + operationId));
                 }
                 else
                 {
                     if (Directory.Exists(options.Destination))
-                        throw new IOException("目标目录在安装过程中被创建；为避免覆盖数据，操作已停止。");
+                        throw new IOException(BootstrapText.L("目标目录在安装过程中被创建；为避免覆盖数据，操作已停止。", "The destination folder was created during installation. The operation stopped to protect its contents."));
                     Directory.Move(extracted, options.Destination);
                 }
                 reportProgress(payload.Bytes, payload.Bytes);
-                reportStatus(upgradeExisting ? "DSH-Portable 已更新完成。" : "DSH-Portable 已准备完成。");
+                reportStatus(upgradeExisting
+                    ? BootstrapText.L("DSH-Portable 已更新完成。", "DSH-Portable has been updated.")
+                    : BootstrapText.L("DSH-Portable 已准备完成。", "DSH-Portable is ready."));
                 LaunchIfRequested();
                 return Result(upgradeExisting ? "updated" : "installed", manifest.Version, null);
             }
@@ -420,12 +433,12 @@ namespace DshPortableBootstrap
             }))
             {
                 if (process == null || !process.WaitForExit(30000) || process.ExitCode != 0)
-                    throw new InvalidOperationException("当前 DSH 服务未能安全停止；没有替换程序文件。");
+                    throw new InvalidOperationException(BootstrapText.L("当前 DSH 服务未能安全停止；没有替换程序文件。", "The running DSH service could not be stopped safely. No program files were replaced."));
             }
             DateTime deadline = DateTime.UtcNow.AddSeconds(15);
             while (HasRunningLauncher(launcher) && DateTime.UtcNow < deadline) Thread.Sleep(100);
             if (HasRunningLauncher(launcher))
-                throw new InvalidOperationException("DSH-Portable 仍在运行；请关闭窗口后重试更新。");
+                throw new InvalidOperationException(BootstrapText.L("DSH-Portable 仍在运行；请关闭窗口后重试更新。", "DSH-Portable is still running. Close its window and try the update again."));
         }
 
         private static bool HasRunningLauncher(string launcher)
@@ -450,7 +463,7 @@ namespace DshPortableBootstrap
             if (Directory.Exists(fallback)) TryDeleteDirectory(fallback);
             else TryDeleteFile(fallback);
             if (Directory.Exists(fallback) || File.Exists(fallback))
-                throw new IOException("无法刷新 DSH profile 的可再生模块映射；没有替换程序文件。");
+                throw new IOException(BootstrapText.L("无法刷新 DSH profile 的可再生模块映射；没有替换程序文件。", "The regenerable DSH profile module mapping could not be refreshed. No program files were replaced."));
         }
 
         private void ReplacePortableTransactionally(string extracted, string backupRoot)
@@ -477,7 +490,7 @@ namespace DshPortableBootstrap
                     MoveEntry(item, target);
                     movedNew.Add(name);
                 }
-                if (!IsCompletePortable(options.Destination)) throw new InvalidDataException("新版本安装后缺少必要文件。");
+                if (!IsCompletePortable(options.Destination)) throw new InvalidDataException(BootstrapText.L("新版本安装后缺少必要文件。", "Required files are missing after the update."));
                 TryDeleteDirectory(backupRoot);
             }
             catch
@@ -515,7 +528,7 @@ namespace DshPortableBootstrap
                 response.EnsureSuccessStatusCode();
                 byte[] bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
                 if (bytes.Length == 0 || bytes.Length > 1024 * 1024)
-                    throw new InvalidDataException("版本信息大小无效。");
+                    throw new InvalidDataException(BootstrapText.L("版本信息大小无效。", "The version information has an invalid size."));
                 using (MemoryStream stream = new MemoryStream(bytes))
                 {
                     DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(PortableManifest));
@@ -532,9 +545,9 @@ namespace DshPortableBootstrap
                 response.EnsureSuccessStatusCode();
                 long? contentLength = response.Content.Headers.ContentLength;
                 if (contentLength.HasValue && expectedBytes > 0 && contentLength.Value != expectedBytes)
-                    throw new InvalidDataException("下载文件大小与发布信息不一致。");
+                    throw new InvalidDataException(BootstrapText.L("下载文件大小与发布信息不一致。", "The downloaded file size does not match the release information."));
                 if (contentLength.HasValue && contentLength.Value > 1024L * 1024L * 1024L)
-                    throw new InvalidDataException("下载文件异常过大，操作已停止。");
+                    throw new InvalidDataException(BootstrapText.L("下载文件异常过大，操作已停止。", "The download is unexpectedly large. The operation was stopped."));
 
                 using (Stream input = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
                 using (FileStream output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1024 * 128, true))
@@ -551,7 +564,7 @@ namespace DshPortableBootstrap
                     }
                     await output.FlushAsync(cancellationToken).ConfigureAwait(false);
                     if (expectedBytes > 0 && total != expectedBytes)
-                        throw new EndOfStreamException("下载未完成；没有修改目标目录。");
+                        throw new EndOfStreamException(BootstrapText.L("下载未完成；没有修改目标目录。", "The download did not finish. The destination was not changed."));
                 }
             }
         }
@@ -567,24 +580,24 @@ namespace DshPortableBootstrap
         private static PortablePayload ValidateManifest(PortableManifest manifest)
         {
             if (manifest == null || manifest.SchemaVersion != 1 || manifest.Payloads == null || manifest.Payloads.WindowsX64 == null)
-                throw new InvalidDataException("发布信息不兼容，请下载最新版启动器。");
+                throw new InvalidDataException(BootstrapText.L("发布信息不兼容，请下载最新版启动器。", "The release information is incompatible. Download the latest bootstrap."));
             PortablePayload payload = manifest.Payloads.WindowsX64;
             if (String.IsNullOrWhiteSpace(manifest.Version)
                 || String.IsNullOrWhiteSpace(payload.Filename)
                 || String.IsNullOrWhiteSpace(payload.Url)
                 || payload.Bytes <= 0
                 || !Regex.IsMatch(payload.Sha256 ?? String.Empty, "^[0-9a-fA-F]{64}$"))
-                throw new InvalidDataException("发布信息缺少必要字段。");
+                throw new InvalidDataException(BootstrapText.L("发布信息缺少必要字段。", "The release information is missing required fields."));
             return payload;
         }
 
         private static void ValidateRemoteUri(string value, bool allowHttp, string label)
         {
             Uri uri;
-            if (!Uri.TryCreate(value, UriKind.Absolute, out uri)) throw new InvalidDataException(label + " URL 无效。");
+            if (!Uri.TryCreate(value, UriKind.Absolute, out uri)) throw new InvalidDataException(BootstrapText.L(label + " URL 无效。", label + " URL is invalid."));
             if (uri.Scheme == Uri.UriSchemeHttps) return;
             if (allowHttp && uri.Scheme == Uri.UriSchemeHttp && (uri.IsLoopback || uri.Host == "127.0.0.1")) return;
-            throw new InvalidDataException(label + " URL 必须使用 HTTPS。");
+            throw new InvalidDataException(BootstrapText.L(label + " URL 必须使用 HTTPS。", label + " URL must use HTTPS."));
         }
 
         private static string ComputeSha256(string filename)
@@ -633,14 +646,14 @@ namespace DshPortableBootstrap
         {
             string normalized = (value ?? String.Empty).Replace('\\', '/');
             if (normalized.StartsWith("/", StringComparison.Ordinal) || normalized.IndexOf('\0') >= 0)
-                throw new InvalidDataException("下载包包含不安全的路径；没有修改目标目录。");
+                throw new InvalidDataException(BootstrapText.L("下载包包含不安全的路径；没有修改目标目录。", "The package contains an unsafe path. The destination was not changed."));
 
             string safe = String.Empty;
             foreach (string segment in normalized.Split('/'))
             {
                 if (segment.Length == 0 || segment == ".") continue;
                 if (segment == ".." || segment.IndexOf(':') >= 0)
-                    throw new InvalidDataException("下载包包含不安全的路径；没有修改目标目录。");
+                    throw new InvalidDataException(BootstrapText.L("下载包包含不安全的路径；没有修改目标目录。", "The package contains an unsafe path. The destination was not changed."));
                 safe = safe.Length == 0 ? segment : safe + Path.DirectorySeparatorChar + segment;
             }
             return safe;
@@ -654,7 +667,7 @@ namespace DshPortableBootstrap
             if (attributes != InvalidFileAttributes)
             {
                 if ((attributes & FileAttributeDirectory) != 0) return;
-                throw new IOException("目标路径中存在同名文件：" + fullPath);
+                throw new IOException(BootstrapText.L("目标路径中存在同名文件：", "A file already exists at the destination path: ") + fullPath);
             }
 
             string parent = ParentDirectory(fullPath);
@@ -664,7 +677,7 @@ namespace DshPortableBootstrap
             if (CreateDirectoryW(extendedPath, IntPtr.Zero)) return;
             int error = Marshal.GetLastWin32Error();
             if (error == ErrorAlreadyExists && (GetFileAttributesW(extendedPath) & FileAttributeDirectory) != 0) return;
-            throw new IOException("无法创建目录：" + fullPath, new Win32Exception(error));
+            throw new IOException(BootstrapText.L("无法创建目录：", "Could not create the folder: ") + fullPath, new Win32Exception(error));
         }
 
         private static FileStream CreateOutputFile(string value)
@@ -682,7 +695,7 @@ namespace DshPortableBootstrap
             {
                 int error = Marshal.GetLastWin32Error();
                 handle.Dispose();
-                throw new IOException("无法写入下载包中的文件：" + fullPath, new Win32Exception(error));
+                throw new IOException(BootstrapText.L("无法写入下载包中的文件：", "Could not write a file from the package: ") + fullPath, new Win32Exception(error));
             }
             return new FileStream(handle, FileAccess.Write, 1024 * 128, false);
         }
@@ -749,9 +762,9 @@ namespace DshPortableBootstrap
 
         private static string FriendlyMessage(Exception error)
         {
-            if (error is OperationCanceledException) return "下载已取消；没有修改目标目录。";
+            if (error is OperationCanceledException) return BootstrapText.L("下载已取消；没有修改目标目录。", "The download was cancelled. The destination was not changed.");
             if (error is HttpRequestException || error is WebException)
-                return "无法下载运行环境。请检查网络后重试，或使用离线完整包。";
+                return BootstrapText.L("无法下载运行环境。请检查网络后重试，或使用离线完整包。", "Could not download the runtime. Check your connection and try again, or use the full offline package.");
             return error.Message;
         }
 
@@ -911,21 +924,21 @@ namespace DshPortableBootstrap
 
             titleLabel = new Label
             {
-                Text = "准备 DSH-Portable",
+                Text = BootstrapText.L("准备 DSH-Portable", "Preparing DSH-Portable"),
                 Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point),
                 Location = new Point(28, 22),
                 Size = new Size(464, 30),
             };
             statusLabel = new Label
             {
-                Text = "正在检查本地运行环境…",
+                Text = BootstrapText.L("正在检查本地运行环境…", "Checking the local runtime…"),
                 Location = new Point(28, 65),
                 Size = new Size(464, 24),
                 AutoEllipsis = true,
             };
             locationLabel = new Label
             {
-                Text = "保存到：" + options.Destination,
+                Text = BootstrapText.L("保存到：", "Save to: ") + options.Destination,
                 ForeColor = Color.FromArgb(95, 95, 95),
                 Location = new Point(28, 91),
                 Size = new Size(276, 23),
@@ -948,7 +961,7 @@ namespace DshPortableBootstrap
             };
             actionButton = new Button
             {
-                Text = "取消",
+                Text = BootstrapText.L("取消", "Cancel"),
                 Location = new Point(400, 157),
                 Size = new Size(92, 32),
             };
@@ -957,14 +970,14 @@ namespace DshPortableBootstrap
                 if (running)
                 {
                     actionButton.Enabled = false;
-                    statusLabel.Text = "正在取消…";
+                    statusLabel.Text = BootstrapText.L("正在取消…", "Cancelling…");
                     cancellation.Cancel();
                 }
                 else Close();
             };
             offlineLink = new LinkLabel
             {
-                Text = "网络有问题？下载离线完整包",
+                Text = BootstrapText.L("网络有问题？下载离线完整包", "Network issue? Download the full offline package"),
                 Location = new Point(28, 164),
                 Size = new Size(280, 24),
                 Visible = false,
@@ -1002,13 +1015,13 @@ namespace DshPortableBootstrap
                 running = false;
                 progress.Visible = false;
                 progressPercentLabel.Visible = false;
-                titleLabel.Text = "未能准备 DSH-Portable";
+                titleLabel.Text = BootstrapText.L("未能准备 DSH-Portable", "Could not prepare DSH-Portable");
                 statusLabel.Text = result.Message;
                 statusLabel.ForeColor = Color.FromArgb(176, 38, 38);
                 statusLabel.Size = new Size(464, 48);
                 offlineLink.Visible = true;
                 actionButton.Enabled = true;
-                actionButton.Text = "关闭";
+                actionButton.Text = BootstrapText.L("关闭", "Close");
                 ActiveControl = actionButton;
             }
         }

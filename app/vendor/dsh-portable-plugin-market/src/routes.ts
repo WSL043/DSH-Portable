@@ -36,7 +36,7 @@ import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPubli
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.ts'
-import { activationAfterReplace, checkClientBundle, hasHostHalf, verifyActivation } from './verify.ts'
+import { activationAfterReplace, brokenClientBundles, checkClientBundle, hasHostHalf, newlyBrokenBundles, verifyActivation } from './verify.ts'
 import {
   carrierDisableIds, disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags,
   readUserPatchState, removeRowBlocks, rowIdsForPackage,
@@ -1275,6 +1275,7 @@ export function mountMarketRoutes(
             // ghost/bumped entries that break every later pnpm run.
             pendingRollbacks.clear()
             const compatibilityBefore = assessProfile(config.profile, activeProfileDir)
+            const bundlesBefore = brokenClientBundles(config.profile, activeProfileDir)
             const manifestBefore = readManifestDeps(config.profile, activeProfileDir)
             const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
@@ -1355,7 +1356,13 @@ export function mountMarketRoutes(
               const risks = introducedRisks(compatibilityBefore, after)
               const shadowed = introducedDuplicateNames(compatibilityBefore, after)
               const bundleCheck = checkClientBundle(config.profile, name, activeProfileDir)
-              const brokenBundles = bundleCheck.ok ? [] : [{ name, reason: bundleCheck.reason ?? 'parse failed' }]
+              const brokenBundles = newlyBrokenBundles(
+                bundlesBefore,
+                [
+                  ...(bundleCheck.ok ? [] : [{ name, reason: bundleCheck.reason ?? 'parse failed' }]),
+                  ...brokenClientBundles(config.profile, activeProfileDir),
+                ].filter((entry, index, all) => all.findIndex(other => other.name === entry.name) === index),
+              )
               if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
                 compatibility = {
                   code: 'soft-incompatible',
@@ -2030,6 +2037,7 @@ export function mountMarketRoutes(
             if (retryAlias !== null) before.delete(retryAlias)
             pendingRollbacks.clear()
             const compatibilityBefore = assessProfile(config.profile, activeProfileDir)
+            const bundlesBefore = brokenClientBundles(config.profile, activeProfileDir)
             // RAW manifest snapshot for failure rollback (#65): pnpm writes
             // package.json before the build-script check / registry fetches
             // run, so a hard-failed add leaves ghost dependencies that break
@@ -2109,10 +2117,16 @@ export function mountMarketRoutes(
               const after = assessProfile(config.profile, activeProfileDir)
               const risks = introducedRisks(compatibilityBefore, after)
               const shadowed = introducedDuplicateNames(compatibilityBefore, after)
-              const brokenBundles = addedPackages
-                .map(name => ({ name, check: checkClientBundle(config.profile, name, activeProfileDir) }))
-                .filter(entry => !entry.check.ok)
-                .map(entry => ({ name: entry.name, reason: entry.check.reason ?? 'parse failed' }))
+              const brokenBundles = newlyBrokenBundles(
+                bundlesBefore,
+                [
+                  ...addedPackages
+                    .map(name => ({ name, check: checkClientBundle(config.profile, name, activeProfileDir) }))
+                    .filter(entry => !entry.check.ok)
+                    .map(entry => ({ name: entry.name, reason: entry.check.reason ?? 'parse failed' })),
+                  ...brokenClientBundles(config.profile, activeProfileDir),
+                ].filter((entry, index, all) => all.findIndex(other => other.name === entry.name) === index),
+              )
               if (risks.length > 0 || shadowed.length > 0 || brokenBundles.length > 0) {
                 compatibility = {
                   code: 'soft-incompatible',

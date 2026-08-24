@@ -28,7 +28,7 @@ import { readFileSync } from 'node:fs'
 import { Script } from 'node:vm'
 import { join } from 'node:path'
 import { listHotMounts, parseSimplePatch } from './hot.ts'
-import { bundlePatchInsertedIds, hasDshManifest, hasLoadableEntry, profileDir } from './profile.ts'
+import { bundlePatchInsertedIds, hasDshManifest, hasLoadableEntry, profileDir, readInstalled } from './profile.ts'
 
 export type ActivationState = 'live' | 'restart' | 'inert' | 'broken' | 'missing' | 'disabled'
 
@@ -324,6 +324,27 @@ export function clientBundlePath(exportsField: unknown, depth = 0): string | nul
 
 export interface BundleCheck { ok: boolean; reason: string | null }
 
+const MODULE_SYNTAX_ERROR = /Unexpected token 'export'|Cannot use import statement outside a module|await is only valid in async functions and the top level bodies of modules/
+
+/** Every installed client bundle this classic-script parser can prove broken. */
+export function brokenClientBundles(profile: string, explicitDir?: string): { name: string; reason: string }[] {
+  const broken: { name: string; reason: string }[] = []
+  for (const name of Object.keys(readInstalled(profile, explicitDir))) {
+    const check = checkClientBundle(profile, name, explicitDir)
+    if (!check.ok) broken.push({ name, reason: check.reason ?? 'parse failed' })
+  }
+  return broken
+}
+
+/** Return only client bundles that became broken during the current operation. */
+export function newlyBrokenBundles(
+  before: readonly { name: string; reason: string }[],
+  after: readonly { name: string; reason: string }[],
+): { name: string; reason: string }[] {
+  const seen = new Set(before.map(entry => entry.name))
+  return after.filter(entry => !seen.has(entry.name))
+}
+
 /** Compile a declared browser bundle without executing plugin code. */
 export function checkClientBundle(profile: string, name: string, explicitDir?: string): BundleCheck {
   const root = join(profileDir(profile, explicitDir), 'node_modules', name)
@@ -348,6 +369,11 @@ export function checkClientBundle(profile: string, name: string, explicitDir?: s
     new Script(source, { filename: relative })
     return { ok: true, reason: null }
   } catch (error) {
-    return { ok: false, reason: error instanceof Error ? error.message : String(error) }
+    const message = error instanceof Error ? error.message : String(error)
+    // `vm.Script` parses classic scripts. Valid ESM syntax is therefore
+    // unknown rather than corrupt; fail silent instead of offering a false
+    // rollback for a healthy plugin.
+    if (MODULE_SYNTAX_ERROR.test(message)) return { ok: true, reason: null }
+    return { ok: false, reason: message }
   }
 }

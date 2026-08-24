@@ -58,8 +58,8 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
     catalog: 'https://awesome-dsh-plugin.com/plugins.json',
     catalogRepository: 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
     implementationBasis: 'https://github.com/dsh-market/dsh-market',
-    reviewedBasisTag: 'v1.21.1',
-    reviewedBasisCommit: '567ab09e2e170f17ac79f26f4d00df3e8fb74965',
+    reviewedBasisTag: 'v1.21.2',
+    reviewedBasisCommit: 'bb0f128ad14ee5de383412a817d53e21e6a0d7c6',
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)

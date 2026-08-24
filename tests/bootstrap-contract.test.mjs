@@ -18,6 +18,16 @@ test('bootstrap failure help opens the offline package that is actually publishe
   assert.doesNotMatch(bootstrap, /OfflineDownloadUrl\s*=\s*"[^"]+DSH-Portable-windows-x64-offline\.exe"/)
 })
 
+test('bootstrap UI follows the Windows display language with English fallback', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  assert.match(bootstrap, /CultureInfo\.InstalledUICulture\.TwoLetterISOLanguageName/)
+  assert.match(bootstrap, /internal static string L\(string chinese, string english\)/)
+  assert.match(bootstrap, /BootstrapText\.L\("准备 DSH-Portable", "Preparing DSH-Portable"\)/)
+  assert.match(bootstrap, /BootstrapText\.L\("取消", "Cancel"\)/)
+  assert.match(bootstrap, /BootstrapText\.L\("关闭", "Close"\)/)
+  assert.match(bootstrap, /BootstrapText\.L\("网络有问题？下载离线完整包", "Network issue\? Download the full offline package"\)/)
+})
+
 function cscPath() {
   const windows = process.env.WINDIR || 'C:\\Windows'
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')

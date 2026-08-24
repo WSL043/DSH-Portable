@@ -81,5 +81,21 @@ export interface BundleCheck {
     ok: boolean;
     reason: string | null;
 }
+/** Every installed client bundle this classic-script parser can prove broken. */
+export declare function brokenClientBundles(profile: string, explicitDir?: string): {
+    name: string;
+    reason: string;
+}[];
+/** Return only client bundles that became broken during the current operation. */
+export declare function newlyBrokenBundles(before: readonly {
+    name: string;
+    reason: string;
+}[], after: readonly {
+    name: string;
+    reason: string;
+}[]): {
+    name: string;
+    reason: string;
+}[];
 /** Compile a declared browser bundle without executing plugin code. */
 export declare function checkClientBundle(profile: string, name: string, explicitDir?: string): BundleCheck;

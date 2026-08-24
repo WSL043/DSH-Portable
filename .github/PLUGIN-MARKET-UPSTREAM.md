@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.21.1`
-(`567ab09e2e170f17ac79f26f4d00df3e8fb74965`).
+Reviewed upstream baseline: `dsh-market` `v1.21.2`
+(`bb0f128ad14ee5de383412a817d53e21e6a0d7c6`).
 
 ## Compatibility matrix
 
@@ -16,6 +16,8 @@ Reviewed upstream baseline: `dsh-market` `v1.21.1`
 | Exclude backup files from exports | Adopted |
 | Reject newly introduced duplicate loader names | Adopted |
 | Compile-check client bundles before accepting an install or update | Adopted |
+| Detect client bundles elsewhere in the profile that the current pnpm operation newly broke | Adopted |
+| Treat ESM syntax as unknown instead of falsely reporting corruption with a classic-script parser | Adopted |
 | Report non-portable absolute `file:` and `link:` restore dependencies | Adopted |
 | Classify pnpm store and patch failures with actionable messages | Adopted |
 | Retry unpublished DSH host peers without pnpm auto-install | Adopted, scoped to `@deepseek-ai/*` and one retry |

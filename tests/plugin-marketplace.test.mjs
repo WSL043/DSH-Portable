@@ -210,6 +210,23 @@ test('the Portable market carries applicable upstream safety fixes as independen
     await writeFile(path.join(client, 'client.js'), 'function {')
     assert.equal(verify.checkClientBundle('web', 'broken-client', profile).ok, false)
 
+    const esmClient = path.join(profile, 'node_modules', 'esm-client')
+    await mkdir(esmClient, { recursive: true })
+    await writeFile(path.join(esmClient, 'package.json'), JSON.stringify({ name: 'esm-client', dsh: { client: {} }, exports: { './client': './client.js' } }))
+    await writeFile(path.join(esmClient, 'client.js'), 'export const ready = true')
+    await writeFile(path.join(profile, 'package.json'), JSON.stringify({ dependencies: { 'broken-client': '1.0.0', 'esm-client': '1.0.0' } }))
+
+    assert.equal(typeof verify.brokenClientBundles, 'function')
+    assert.equal(typeof verify.newlyBrokenBundles, 'function')
+    assert.deepEqual(verify.brokenClientBundles('web', profile).map(entry => entry.name), ['broken-client'])
+    assert.deepEqual(
+      verify.newlyBrokenBundles(
+        [{ name: 'already-broken', reason: 'old' }],
+        [{ name: 'already-broken', reason: 'old' }, { name: 'newly-broken', reason: 'new' }],
+      ),
+      [{ name: 'newly-broken', reason: 'new' }],
+    )
+
     const files = path.join(root, 'backup-source')
     await mkdir(files, { recursive: true })
     await writeFile(path.join(files, 'package.json'), JSON.stringify({ name: 'profile' }))

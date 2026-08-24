@@ -1,0 +1,23 @@
+{
+  "version": "0.4.10",
+  "zh": {
+    "summary": "插件安装与更新现在会检查整个配置中的新损坏，同时不再误报合法的 ESM 界面插件。",
+    "highlights": [
+      "安装或更新插件后，Portable 会对操作前后整个 profile 的客户端包进行对比；pnpm 重建依赖树时意外损坏的其他插件也会被发现。",
+      "已经存在的问题不会被错误归因给本次操作，只有这次操作新引入的损坏才会触发兼容提示和回滚选择。",
+      "合法的 ESM import、export 和顶层 await 不再被经典脚本解析器误判为文件损坏。",
+      "Windows 便携下载器现在跟随系统显示语言：中文系统显示中文，其余语言使用英文；下载、校验、升级和错误提示保持一致。",
+      "该修复选择性吸收自 dsh-market v1.21.2，保留 Portable 自己的生命周期、更新和轻量界面实现。"
+    ]
+  },
+  "en": {
+    "summary": "Plugin operations now detect newly broken client bundles across the profile without falsely flagging valid ESM plugins.",
+    "highlights": [
+      "After an install or update, Portable compares client bundles across the whole profile so damage caused when pnpm rebuilds the dependency tree is not missed.",
+      "Pre-existing problems are not blamed on the current operation; only newly introduced damage triggers compatibility guidance and a rollback choice.",
+      "Valid ESM import, export, and top-level await syntax is no longer misreported as corruption by the classic-script parser.",
+      "The Windows portable bootstrap now follows the system display language: Chinese on Chinese systems and English elsewhere, across download, verification, update, and error states.",
+      "This fix is selectively adopted from dsh-market v1.21.2 while retaining Portable-owned lifecycle, update, and lightweight UI behavior."
+    ]
+  }
+}
