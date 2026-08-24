@@ -126,6 +126,8 @@ public sealed class DshDialogInfo {
 }
 public static class DshWindowProbe {
   private const uint WM_CLOSE = 0x0010;
+  private const uint WM_COMMAND = 0x0111;
+  private const int IDCANCEL = 2;
   private const uint SMTO_BLOCK = 0x0001;
   private const uint SMTO_ABORTIFHUNG = 0x0002;
   [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
@@ -138,6 +140,12 @@ public static class DshWindowProbe {
   private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr parameter);
   public static bool Cancel(IntPtr hwnd) {
     UIntPtr result;
+    // The Windows 11 / Server 2025 common-item dialog can acknowledge WM_CLOSE
+    // without completing FolderBrowserDialog.ShowDialog(). Invoke its native
+    // Cancel command first so the managed dialog returns Cancel and the host
+    // can deliver the normal pick-directory result. WM_CLOSE remains a bounded
+    // fallback for older dialog implementations.
+    if (SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero) return true;
     return SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result) != IntPtr.Zero;
   }
   public static DshDialogInfo[] Find(int processId) {
@@ -167,7 +175,7 @@ $dialogs = @([DshWindowProbe]::Find($ProcessId))
 if ($Close) {
   $target = @($dialogs | Where-Object { $_.hwnd -eq $WindowHandle })
   if ($target.Count -ne 1) { throw "The captured workspace dialog is no longer the active popup owned by the DSH window." }
-  if (-not [DshWindowProbe]::Cancel([IntPtr]$target[0].hwnd)) { throw "The workspace dialog did not process WM_CLOSE." }
+  if (-not [DshWindowProbe]::Cancel([IntPtr]$target[0].hwnd)) { throw "The workspace dialog did not process its native cancel command." }
 }
 ConvertTo-Json -Compress -InputObject @($dialogs)
 `

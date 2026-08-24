@@ -154,7 +154,8 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(host, /dsh-portable\/pick-directory-result/)
   assert.match(host, /BeginInvoke/)
   assert.match(smoke, /SendMessageTimeout/)
-  assert.match(smoke, /WM_CLOSE\s*=\s*0x0010/)
+  assert.match(smoke, /WM_COMMAND\s*=\s*0x0111/)
+  assert.match(smoke, /IDCANCEL\s*=\s*2/)
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
@@ -267,7 +268,8 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeWorkspacePickerSmoke, /dsh-portable\/pick-directory/)
   assert.match(nativeWorkspacePickerSmoke, /ownerPid/)
   assert.match(nativeWorkspacePickerSmoke, /SendMessageTimeout/)
-  assert.match(nativeWorkspacePickerSmoke, /WM_CLOSE\s*=\s*0x0010/)
+  assert.match(nativeWorkspacePickerSmoke, /WM_COMMAND\s*=\s*0x0111/)
+  assert.match(nativeWorkspacePickerSmoke, /IDCANCEL\s*=\s*2/)
   assert.match(nativeWorkspacePickerSmoke, /EnumWindows\(delegate\(IntPtr hwnd/)
   assert.match(nativeWorkspacePickerSmoke, /GetWindow\(hwnd, 4\)/)
   assert.match(nativeWorkspacePickerSmoke, /owner != hwnd && ownerPid == processId/)
