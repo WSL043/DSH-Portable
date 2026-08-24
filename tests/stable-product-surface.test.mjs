@@ -21,6 +21,19 @@ test('stable desktop bridge has no Portable extensions surface or built-in entri
   await assert.rejects(() => stat(new URL('../desktop-bridge/lib/extensions.js', import.meta.url)), /ENOENT/)
 })
 
+test('current support surfaces list only packages that are still published', async () => {
+  const [readme, englishReadme, bugReport] = await Promise.all([
+    read('README.md'),
+    read('README.en.md'),
+    read('.github/ISSUE_TEMPLATE/bug-report.yml'),
+  ])
+
+  assert.doesNotMatch(englishReadme, /The installed edition keeps/i)
+  assert.doesNotMatch(bugReport, /Windows installer|Windows 安装版/i)
+  assert.doesNotMatch(bugReport, /macOS DMG/i)
+  assert.match(`${readme}\n${englishReadme}`, /no longer publishes a conventional installer|不再提供传统安装版/i)
+})
+
 test('dsh.exe opens an isolated official-syntax terminal and preserves parameterized CLI forwarding', async () => {
   const [source, terminal] = await Promise.all([
     read('launcher/windows/DSH-Command.cs'),

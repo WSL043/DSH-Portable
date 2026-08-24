@@ -136,8 +136,6 @@ An official DSH update never replaces a working environment directly. It reaches
 | `workspace/` | Default workspace |
 | `data/logs/` | Local service and launcher logs |
 
-The installed edition keeps the same data under `%LOCALAPPDATA%\DeepSeek-Herness` and does not remove it during uninstall.
-
 ## Security
 
 DSH can execute local code, so use trusted models, plugins, and projects. The local service binds only to `127.0.0.1`, and the Portable shell disables DSH telemetry by default. `data` may contain API credentials and private conversations; protect it accordingly and prefer NTFS on removable Windows drives.

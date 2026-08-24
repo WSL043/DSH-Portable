@@ -9,9 +9,7 @@ body:
       label: 使用方式 / Package
       options:
         - Windows 便携版 / Windows portable
-        - Windows 安装版 / Windows installer
         - macOS 便携 ZIP / macOS portable ZIP
-        - macOS DMG / macOS DMG
         - Linux AppImage
         - Linux 完整便携目录 / Linux portable folder
     validations:
