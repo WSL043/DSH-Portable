@@ -169,7 +169,7 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.doesNotMatch(client, /id:\s*['"]portable['"][\s\S]+label:/)
   assert.match(client, /borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"]/);
   assert.match(client, /padding:\s*['"]16px 0['"]/);
-  assert.match(client, /item:\s*\{[^}]*padding:\s*['"]18px 0['"][^}]*flexWrap:\s*['"]wrap['"]/s)
+  assert.match(client, /item:\s*\{[^}]*padding:\s*['"]12px 0['"][^}]*flexWrap:\s*['"]wrap['"]/s)
   assert.match(client, /text:\s*\{[^}]*gap:\s*4/s)
   assert.match(client, /primitives\.Menu/)
   assert.match(client, /primitives\.IconChevronDownOutline14/)
@@ -189,4 +189,17 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.match(client, /\/dsh-portable\/repair/)
   assert.match(client, /\/dsh-portable\/support-report/)
   assert.match(client, /\/dsh-portable\/data-export/)
+})
+
+test('Portable settings keep action feedback beside its source and group related controls', async () => {
+  const client = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+
+  assert.match(client, /const \[messages, setMessages\] = useState\(\{\}\)/)
+  assert.match(client, /aria-live['"]?:\s*['"]polite['"]/)
+  assert.match(client, /inlineStatus\(`update-\$\{scope\}`\)/)
+  assert.match(client, /inlineStatus\(['"]maintenance['"]\)/)
+  assert.match(client, /inlineStatus\(['"]data['"]\)/)
+  assert.match(client, /sectionHeading/)
+  assert.match(client, /t\(['"]desktop['"]\)/)
+  assert.doesNotMatch(client, /message\s*&&\s*h\(['"]div['"],\s*\{\s*style:\s*styles\.status/)
 })

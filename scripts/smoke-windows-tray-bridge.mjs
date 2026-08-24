@@ -16,6 +16,10 @@ const screenshotPath = process.env.DSH_SMOKE_SCREENSHOT ? path.resolve(process.e
 const generalScreenshotPath = process.env.DSH_SMOKE_GENERAL_SCREENSHOT
   ? path.resolve(process.env.DSH_SMOKE_GENERAL_SCREENSHOT)
   : ''
+const generalBottomScreenshotPath = process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT
+  ? path.resolve(process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT)
+  : ''
+const checkPortableUpdate = process.env.DSH_SMOKE_CHECK_PORTABLE_UPDATE === '1'
 
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
@@ -365,10 +369,35 @@ try {
   await updatePreference('DSH-Portable', 'productUpdateCheckEnabled')
   const settingsRoundTrip = await updatePreference('DeepSeek Harness', 'engineUpdateCheckEnabled')
   assert.equal(settingsRoundTrip.productUpdateCheckEnabled, originalSettings.productUpdateCheckEnabled)
+  if (checkPortableUpdate) {
+    await waitForValue(client, clickButton(['Check for updates', '检查更新']), value => value?.clicked, 'Portable update check')
+    const updateFeedback = await waitForValue(client, `(() => {
+      const button = [...document.querySelectorAll('button')].find(item => ['Check for updates', '检查更新'].includes((item.textContent || '').trim()))
+      let row = button?.parentElement
+      while (row && !/DSH-Portable/.test(row.innerText || '')) row = row.parentElement
+      const status = row?.querySelector('[role="status"]')
+      return { nearby: Boolean(status), text: (status?.textContent || '').trim() }
+    })()`, value => value?.nearby && Boolean(value.text), 'Portable update feedback beside its row')
+    assert.equal(updateFeedback.nearby, true)
+  }
   if (generalScreenshotPath) {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(generalScreenshotPath), { recursive: true })
     await writeFile(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  }
+  if (generalBottomScreenshotPath) {
+    await evaluate(client, `(() => {
+      const marker = [...document.querySelectorAll('*')].find(item => ['Portable', '便携版'].includes((item.textContent || '').trim()))
+      let scroller = marker?.parentElement
+      while (scroller && scroller.scrollHeight <= scroller.clientHeight + 20) scroller = scroller.parentElement
+      if (!scroller) return false
+      scroller.scrollTop = scroller.scrollHeight
+      return true
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+    await mkdir(path.dirname(generalBottomScreenshotPath), { recursive: true })
+    await writeFile(generalBottomScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
 
   await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab')

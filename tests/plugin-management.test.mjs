@@ -12,6 +12,8 @@ import {
   normalizeDshArgvForWindowsShell,
   portableDataArgv,
   profileNeedsRelink,
+  retryFreshReleaseViolationArgv,
+  runPluginCommandWithFreshReleaseRecovery,
   resolveProductStateRoot,
 } from '../launcher/dsh-cli.mjs'
 
@@ -146,6 +148,51 @@ test('removing an installed plugin cannot be blocked by pnpm fresh-release verif
     ['plugin', '--profile', 'web', 'add', 'new-plugin'],
     'installing new code must retain the normal release-age protection',
   )
+})
+
+test('direct add and update retry once only for pnpm minimum-release-age lock failures', () => {
+  const failure = 'ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION dsh-codex-subscription@1.7.1 is too young'
+  assert.deepEqual(
+    retryFreshReleaseViolationArgv(['plugin', '--profile', 'web', 'add', 'new-plugin'], failure),
+    ['plugin', '--profile', 'web', 'add', '--config.minimumReleaseAge=0', 'new-plugin'],
+  )
+  assert.deepEqual(
+    retryFreshReleaseViolationArgv(['plugin', '--profile', 'web', 'update', 'new-plugin'], failure),
+    ['plugin', '--profile', 'web', 'update', '--config.minimumReleaseAge=0', 'new-plugin'],
+  )
+  assert.deepEqual(
+    retryFreshReleaseViolationArgv(['plugin', '--profile', 'web', 'remove', 'new-plugin'], failure),
+    ['plugin', '--profile', 'web', 'remove', '--config.minimumReleaseAge=0', 'new-plugin'],
+  )
+  assert.equal(retryFreshReleaseViolationArgv(['plugin', '--profile', 'web', 'add', 'new-plugin'], 'ERR_PNPM_FETCH_404'), null)
+  assert.equal(retryFreshReleaseViolationArgv([
+    'plugin', '--profile', 'web', 'add', '--config.minimumReleaseAge=0', 'new-plugin',
+  ], failure), null)
+})
+
+test('direct plugin runner keeps the safety policy on the first attempt and scopes recovery to one retry', async () => {
+  const calls = []
+  const writes = []
+  const specFor = (argv) => ({ command: 'node', args: ['dsh.js', ...argv], cwd: 'C:\\Portable', env: {} })
+  const result = await runPluginCommandWithFreshReleaseRecovery(
+    specFor(['plugin', '--profile', 'web', 'add', 'slider']),
+    ['plugin', '--profile', 'web', 'add', 'slider'],
+    specFor,
+    {
+      run: async (_spec, options) => {
+        calls.push(options)
+        if (calls.length === 1) return { status: 1, stdout: 'resolving\n', stderr: 'ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION' }
+        return { status: 0, stdout: 'installed\n', stderr: '' }
+      },
+      stdout: { write: (value) => writes.push(['out', value]) },
+      stderr: { write: (value) => writes.push(['err', value]) },
+    },
+  )
+  assert.equal(result.status, 0)
+  assert.equal(calls.length, 2)
+  assert.equal(calls[0].args.includes('--config.minimumReleaseAge=0'), false)
+  assert.equal(calls[1].args.includes('--config.minimumReleaseAge=0'), true)
+  assert.match(writes.map(([, value]) => value).join('\n'), /retrying once/i)
 })
 
 test('remote plugin archives become content-addressed profile files that survive repeat installs and moves', async (t) => {

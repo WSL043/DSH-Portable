@@ -1,4 +1,4 @@
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
@@ -81,24 +81,87 @@ export function normalizeDshArgvForWindowsShell(argv, cwd = process.cwd()) {
 }
 
 const RELEASE_AGE_REMOVAL_OVERRIDE = '--config.minimumReleaseAge=0'
+const RELEASE_AGE_VIOLATION = 'ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION'
+const CAPTURE_LIMIT = 1024 * 1024
 
-export function normalizeFreshReleaseRemovalArgv(argv) {
-  const output = [...argv]
-  const pluginIndex = output.indexOf('plugin')
-  if (pluginIndex < 0 || output.includes(RELEASE_AGE_REMOVAL_OVERRIDE)) return output
-
+function pluginOperationIndex(argv) {
+  const pluginIndex = argv.indexOf('plugin')
+  if (pluginIndex < 0) return -1
   let operationIndex = pluginIndex + 1
-  while (operationIndex < output.length) {
-    if (output[operationIndex] === '--profile') {
+  while (operationIndex < argv.length) {
+    if (argv[operationIndex] === '--profile') {
       operationIndex += 2
       continue
     }
     break
   }
+  return operationIndex
+}
+
+export function normalizeFreshReleaseRemovalArgv(argv) {
+  const output = [...argv]
+  const operationIndex = pluginOperationIndex(output)
+  if (operationIndex < 0 || output.includes(RELEASE_AGE_REMOVAL_OVERRIDE)) return output
   if (!['remove', 'rm', 'uninstall'].includes(output[operationIndex])) return output
 
   output.splice(operationIndex + 1, 0, RELEASE_AGE_REMOVAL_OVERRIDE)
   return output
+}
+
+export function retryFreshReleaseViolationArgv(argv, output) {
+  if (!String(output ?? '').includes(RELEASE_AGE_VIOLATION)) return null
+  if (argv.includes(RELEASE_AGE_REMOVAL_OVERRIDE)) return null
+  const operationIndex = pluginOperationIndex(argv)
+  if (operationIndex < 0 || !['add', 'install', 'update', 'up', 'remove', 'rm', 'uninstall'].includes(argv[operationIndex])) return null
+  const retry = [...argv]
+  retry.splice(operationIndex + 1, 0, RELEASE_AGE_REMOVAL_OVERRIDE)
+  return retry
+}
+
+function appendBounded(current, chunk) {
+  const combined = current + chunk
+  return combined.length <= CAPTURE_LIMIT ? combined : combined.slice(-CAPTURE_LIMIT)
+}
+
+async function runPluginProcess(spec, options) {
+  return await new Promise((resolve, reject) => {
+    const child = spawn(spec.command, spec.args, {
+      cwd: spec.cwd,
+      env: spec.env,
+      stdio: ['inherit', 'pipe', 'pipe'],
+      windowsHide: false,
+    })
+    let stdout = ''
+    let stderr = ''
+    child.stdout.on('data', (chunk) => {
+      const text = chunk.toString()
+      stdout = appendBounded(stdout, text)
+      options.stdout.write(text)
+    })
+    child.stderr.on('data', (chunk) => {
+      const text = chunk.toString()
+      stderr = appendBounded(stderr, text)
+      if (options.mirrorStderr) options.stderr.write(text)
+    })
+    child.once('error', reject)
+    child.once('close', (status) => resolve({ status, stdout, stderr }))
+  })
+}
+
+export async function runPluginCommandWithFreshReleaseRecovery(spec, argv, makeSpec, adapters = {}) {
+  const stdout = adapters.stdout ?? process.stdout
+  const stderr = adapters.stderr ?? process.stderr
+  const run = adapters.run ?? runPluginProcess
+  const first = await run(spec, { args: spec.args, stdout, stderr, mirrorStderr: false })
+  const retryArgv = retryFreshReleaseViolationArgv(argv, `${first.stderr ?? ''}\n${first.stdout ?? ''}`)
+  if (retryArgv === null) {
+    if (first.stderr) stderr.write(first.stderr)
+    return first
+  }
+
+  stderr.write('A newly published package already present in this profile blocked pnpm lockfile verification; retrying once for this command only.\n')
+  const retrySpec = makeSpec(retryArgv)
+  return await run(retrySpec, { args: retrySpec.args, stdout, stderr, mirrorStderr: true })
 }
 
 export function buildPluginCliSpec(root, stateRoot, argv, platform = process.platform, source = process.env) {
@@ -338,13 +401,11 @@ export async function main(argv = process.argv.slice(2), source = process.env) {
     spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source)
     await relinkMovedProfileIfNeeded(spec, normalizedArgv)
 
-    const result = spawnSync(spec.command, spec.args, {
-      cwd: spec.cwd,
-      env: spec.env,
-      stdio: 'inherit',
-      windowsHide: false,
-    })
-    if (result.error) throw result.error
+    const result = await runPluginCommandWithFreshReleaseRecovery(
+      spec,
+      normalizedArgv,
+      (retryArgv) => buildPluginCliSpec(root, stateRoot, retryArgv, process.platform, source),
+    )
     const exitCode = Number.isInteger(result.status) ? result.status : 1
     if (exitCode === 0 && isMutatingPluginCommand(argv)) {
       process.stderr.write('\n插件已写入当前 DSH 配置。若 DSH 正在运行，请保存任务并手动停止、重新启动后加载；本工具不会自动重启。\n')

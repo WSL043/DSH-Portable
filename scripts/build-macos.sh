@@ -145,7 +145,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeVersion": "$NODE_VERSION",
   "nodeSha256": "$NODE_SHA256",
   "updaterSchema": 1,
-  "shellSchema": 15
+  "shellSchema": 16
 }
 EOF
 
@@ -205,7 +205,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 15,
+  "requiredShellSchema": 16,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",
@@ -227,7 +227,7 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 15,
+  "requiredShellSchema": 16,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

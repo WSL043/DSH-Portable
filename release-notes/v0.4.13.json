@@ -1,0 +1,21 @@
+{
+  "version": "0.4.13",
+  "zh": {
+    "summary": "插件直连命令和便携版设置反馈更可靠。",
+    "highlights": [
+      "当 pnpm 仅因 profile 中已有插件仍处于发布时间安全等待期而拒绝 add、update 或 remove 时，Portable 会只为当前命令精确重试一次。",
+      "默认供应链等待策略保持开启；其他安装错误不会自动重试，也不会修改全局或 profile 配置。",
+      "通用设置按更新、桌面行为、检查与修复、数据迁移重新分组；检查更新和维护结果会显示在对应操作旁。",
+      "本次包含 Portable 运行层更新；从旧版本升级时会使用完整包并保留 data 中的用户数据。"
+    ]
+  },
+  "en": {
+    "summary": "Direct plugin commands and Portable settings feedback are more reliable.",
+    "highlights": [
+      "When pnpm rejects add, update, or remove solely because an existing profile dependency is still inside the release-age safety window, Portable retries that command once.",
+      "The default supply-chain wait remains enabled. Other installation errors are not retried, and no global or profile setting is changed.",
+      "General settings now group updates, desktop behavior, maintenance, and data migration. Update and maintenance results stay beside the action that produced them.",
+      "This release updates the Portable runtime layer. Upgrades from older versions use the complete package while preserving user data in data."
+    ]
+  }
+}
