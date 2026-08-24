@@ -145,17 +145,17 @@ public static class DshWindowProbe {
     EnumWindows(delegate(IntPtr hwnd, IntPtr ignored) {
       uint pid;
       GetWindowThreadProcessId(hwnd, out pid);
-      IntPtr rootOwner = GetAncestor(hwnd, 3);
-      uint rootOwnerPid;
-      GetWindowThreadProcessId(rootOwner, out rootOwnerPid);
+      IntPtr owner = GetWindow(hwnd, 4);
+      uint ownerPid;
+      GetWindowThreadProcessId(owner, out ownerPid);
       StringBuilder className = new StringBuilder(256);
       GetClassName(hwnd, className, className.Capacity);
       // FolderBrowserDialog can use different native window classes across
       // supported Windows images. A modal popup is the visible same-process
-      // window whose root owner is another window in the DSH process. This is
+      // window whose direct owner is another window in the DSH process. This is
       // stable even when the test intentionally hides the main host window.
-      if (pid == processId && rootOwner != IntPtr.Zero && rootOwner != hwnd && rootOwnerPid == processId && IsWindowVisible(hwnd)) {
-        result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = rootOwner.ToInt64(), ownerPid = (int)rootOwnerPid, className = className.ToString(), visible = true });
+      if (pid == processId && owner != IntPtr.Zero && owner != hwnd && ownerPid == processId && IsWindowVisible(hwnd)) {
+        result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = true });
       }
       return true;
     }, IntPtr.Zero);
