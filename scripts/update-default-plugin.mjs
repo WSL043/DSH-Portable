@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const packageName = 'dsh-native-session-delete'
-const repository = 'WSL043/dsh-native-session-delete'
+const repository = 'WSL043/dsh-native-session-manager'
 const checkOnly = process.argv.includes('--check')
 const headers = {
   accept: 'application/vnd.github+json',

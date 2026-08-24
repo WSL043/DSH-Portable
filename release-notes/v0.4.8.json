@@ -6,7 +6,9 @@
       "安装时可以选择把 dsh 加入当前用户 PATH；新开的 PowerShell 和命令提示符可直接粘贴官方插件命令。",
       "修复安装不会产生重复项；更换安装目录会迁移旧项，取消选择或卸载只清理由安装器管理的路径。",
       "修复刚发布的插件已经安装后，发布时间保护仍会阻止用户卸载的问题；安装新代码时的保护保持不变。",
-      "退出时清理可重建的绝对链接，避免部分 Windows 版本在移动整个便携文件夹时失败。"
+      "退出时清理可重建的绝对链接，避免部分 Windows 版本在移动整个便携文件夹时失败。",
+      "修复完整包升级时托盘长时间停在“正在检查”的状态；检查、确认、下载和安装现在是独立阶段，更新器会在 DSH 安全退出后校验并替换程序，再自动打开新版本且保留用户数据。",
+      "插件市场中的插件名称现在直接打开原作者仓库，Awesome 目录只负责发现和索引。"
     ]
   },
   "en": {
@@ -15,7 +17,9 @@
       "Setup can add dsh to the current user's PATH so official plugin commands work in newly opened PowerShell and Command Prompt windows.",
       "Repair never duplicates the entry; moving the installation migrates it, while deselection and uninstall remove only the installer-owned path.",
       "Fresh-release protection no longer blocks removal after a plugin has been installed; protection remains active when installing new code.",
-      "Shutdown clears rebuildable absolute links so moving the complete Portable folder works consistently across Windows versions."
+      "Shutdown clears rebuildable absolute links so moving the complete Portable folder works consistently across Windows versions.",
+      "Complete-package upgrades no longer leave the tray stuck on Checking; checking, confirmation, download, and installation are separate stages, and the independent updater safely exits DSH, verifies and replaces program files, reopens the new version, and preserves user data.",
+      "Plugin names in the market now open the original author's repository; the Awesome catalog remains discovery and index data only."
     ]
   }
 }

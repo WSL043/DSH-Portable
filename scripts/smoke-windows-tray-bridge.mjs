@@ -386,8 +386,8 @@ try {
     const body = await response.json()
     const plugin = body.registry?.plugins?.find(item => Array.isArray(item.screenshots)
       && item.screenshots.some(value => /^[\\x00-\\x7F]+$/.test(value))
-      && (item.page || item.url))
-    return plugin ? { name: plugin.name, projectHref: plugin.page || plugin.url, screenshots: plugin.screenshots } : null
+      && item.url)
+    return plugin ? { name: plugin.name, projectHref: plugin.url, screenshots: plugin.screenshots } : null
   })()`)
   assert.ok(picturedPlugin?.name)
   assert.ok(picturedPlugin?.projectHref)

@@ -260,16 +260,14 @@ try {
     })
     if ($RepairedEntries.Count -ne 1) { throw 'repair duplicated or removed the installed dsh command path' }
 
-    # Reproduce an app/profile version skew from a prior installed build. The
-    # resolver tree is generated product state, while sessions and third-party
-    # profile packages live elsewhere and must survive the repair.
+    # A normal stop removes the generated absolute resolver tree so the product
+    # directory remains movable. The next start must rebuild it without touching
+    # sessions or third-party profile packages.
     $ManagedFallback = Join-Path $StateRoot 'data\dsh-home\profiles\node_modules'
     $MissingUiPackage = Join-Path $ManagedFallback '@deepseek-ai\dsh-client-ui-jobs'
-    $StaleUiPackage = Join-Path $ManagedFallback '@deepseek-ai\dsh-client-ui-jobs.stale-smoke'
-    if (-not (Test-Path -LiteralPath $MissingUiPackage)) {
-        throw 'installed smoke did not create the managed DSH module fallback'
+    if (Test-Path -LiteralPath $ManagedFallback) {
+        throw 'installed stop retained the generated DSH module fallback'
     }
-    Move-Item -LiteralPath $MissingUiPackage -Destination $StaleUiPackage
 
     $Restarted = Invoke-BoundedProcess -Stage 'Restart repaired installation' -TimeoutSeconds 90 `
         -FilePath $Node -ArgumentList @($Cli, 'start', '--no-browser', '--json')
@@ -279,7 +277,6 @@ try {
     }
     $null = Wait-InstalledProductStatus -ExpectedStatus 'running'
     if (-not (Test-Path -LiteralPath $MissingUiPackage)) { throw 'startup did not rebuild the managed DSH module fallback' }
-    if (Test-Path -LiteralPath $StaleUiPackage) { throw 'startup retained the stale managed DSH module fallback' }
     $RunningRepairLog = Join-Path $TempRoot ("dsh-running-repair-$TestId.log")
     $RunningRepair = Invoke-BoundedProcess -Stage 'Repair running installation' -TimeoutSeconds 300 -FilePath $Installer -ArgumentList @(
             '/SP-', '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NOCANCEL', '/NORESTART', '/CURRENTUSER',

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -305,7 +306,8 @@ namespace DshPortable
         private bool trayBridgeReady;
         private bool trayMenuOpen;
         private bool trayMenuRefreshPending;
-        private bool manualUpdateRunning;
+        private bool updateCheckRunning;
+        private bool updateInteractionRunning;
         private bool updateCheckEnabled;
         private bool taskNotificationsEnabled;
         private bool taskCompletionBaselineReady;
@@ -728,10 +730,10 @@ namespace DshPortable
             }
 
             closeBehaviorItem.Text = L("关闭窗口时", "When closing");
-            checkUpdateItem.Text = manualUpdateRunning
+            checkUpdateItem.Text = updateCheckRunning
                 ? L("正在检查…", "Checking…")
                 : L("检查更新", "Check for updates");
-            checkUpdateItem.Enabled = !manualUpdateRunning;
+            checkUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
             RefreshAutomaticUpdateCheckItem();
             RefreshTaskNotificationsItem();
             closeBehaviorItem.Checked = false;
@@ -1767,9 +1769,9 @@ namespace DshPortable
         {
             if (!manual && (!updateCheckEnabled
                 || string.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK"), "1", StringComparison.Ordinal))) return;
-            if (manualUpdateRunning) return;
+            if (updateCheckRunning || updateInteractionRunning) return;
             if (manual) RestoreFromTray();
-            manualUpdateRunning = true;
+            updateCheckRunning = true;
             RebuildTrayMenu();
             try
             {
@@ -1792,6 +1794,7 @@ namespace DshPortable
                 string engineCurrent = JsonString(check.Item2, "engineCurrent");
                 string engineLatest = JsonString(check.Item2, "engineLatest");
                 string fullPackageManifestUrl = JsonString(check.Item2, "fullPackageManifestUrl");
+                FinishUpdateCheckPhase();
                 if (updateStatus == "current")
                 {
                     if (!manual) return;
@@ -1878,9 +1881,17 @@ namespace DshPortable
             }
             finally
             {
-                manualUpdateRunning = false;
+                updateCheckRunning = false;
+                updateInteractionRunning = false;
                 RebuildTrayMenu();
             }
+        }
+
+        private void FinishUpdateCheckPhase()
+        {
+            updateCheckRunning = false;
+            updateInteractionRunning = true;
+            RebuildTrayMenu();
         }
 
         private void ShowDesktopOperation(string message)
@@ -1953,13 +1964,16 @@ namespace DshPortable
                 "The full update component is missing. Reinstall this version and try again."), source);
             string helper = Path.Combine(Path.GetTempPath(), "DSH-FullUpdater-" + Process.GetCurrentProcess().Id + ".exe");
             File.Copy(source, helper, true);
-            Process.Start(new ProcessStartInfo
+            PortableProcessJob.StartDetachedUpdater(helper, new[]
             {
-                FileName = helper,
-                Arguments = "--upgrade-existing --destination \"" + root.Replace("\"", "\\\"") + "\" --manifest \"" + manifest.AbsoluteUri.Replace("\"", "\\\"") + "\"",
-                WorkingDirectory = Path.GetTempPath(),
-                UseShellExecute = true,
+                "--upgrade-existing",
+                "--destination", root,
+                "--manifest", manifest.AbsoluteUri,
             });
+            ShowDesktopOperation(L(
+                "正在交给独立更新器，当前窗口将安全关闭…",
+                "Handing off to the updater; this window will close safely…"));
+            BeginDesktopShutdown();
         }
 
         private async Task RestoreDesktopAfterUpdateAttemptAsync()
@@ -2838,6 +2852,9 @@ namespace DshPortable
     internal static class PortableProcessJob
     {
         private const uint JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000;
+        private const uint JOB_OBJECT_LIMIT_BREAKAWAY_OK = 0x00000800;
+        private const uint CREATE_BREAKAWAY_FROM_JOB = 0x01000000;
+        private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
         private const int JobObjectExtendedLimitInformation = 9;
         private static IntPtr jobHandle = IntPtr.Zero;
         private static string status = "not-initialized";
@@ -2896,6 +2913,52 @@ namespace DshPortable
         [DllImport("kernel32.dll")]
         private static extern IntPtr GetCurrentProcess();
 
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct STARTUPINFO
+        {
+            internal int cb;
+            internal string lpReserved;
+            internal string lpDesktop;
+            internal string lpTitle;
+            internal int dwX;
+            internal int dwY;
+            internal int dwXSize;
+            internal int dwYSize;
+            internal int dwXCountChars;
+            internal int dwYCountChars;
+            internal int dwFillAttribute;
+            internal int dwFlags;
+            internal short wShowWindow;
+            internal short cbReserved2;
+            internal IntPtr lpReserved2;
+            internal IntPtr hStdInput;
+            internal IntPtr hStdOutput;
+            internal IntPtr hStdError;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct PROCESS_INFORMATION
+        {
+            internal IntPtr hProcess;
+            internal IntPtr hThread;
+            internal uint dwProcessId;
+            internal uint dwThreadId;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool CreateProcess(
+            string applicationName,
+            StringBuilder commandLine,
+            IntPtr processAttributes,
+            IntPtr threadAttributes,
+            bool inheritHandles,
+            uint creationFlags,
+            IntPtr environment,
+            string currentDirectory,
+            ref STARTUPINFO startupInfo,
+            out PROCESS_INFORMATION processInformation);
+
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool CloseHandle(IntPtr handle);
@@ -2913,7 +2976,7 @@ namespace DshPortable
             }
 
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION information = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
-            information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+            information.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE | JOB_OBJECT_LIMIT_BREAKAWAY_OK;
             uint informationLength = (uint)Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
             if (!SetInformationJobObject(created, JobObjectExtendedLimitInformation, ref information, informationLength))
             {
@@ -2930,6 +2993,73 @@ namespace DshPortable
 
             jobHandle = created;
             status = "active";
+        }
+
+        private static string QuoteArgument(string value)
+        {
+            if (value == null) return "\"\"";
+            if (value.Length > 0 && value.IndexOfAny(new[] { ' ', '\t', '\n', '\v', '\"' }) < 0) return value;
+            StringBuilder quoted = new StringBuilder("\"");
+            int slashes = 0;
+            foreach (char character in value)
+            {
+                if (character == '\\')
+                {
+                    slashes += 1;
+                    continue;
+                }
+                if (character == '\"')
+                {
+                    quoted.Append('\\', slashes * 2 + 1);
+                    quoted.Append('\"');
+                    slashes = 0;
+                    continue;
+                }
+                quoted.Append('\\', slashes);
+                slashes = 0;
+                quoted.Append(character);
+            }
+            quoted.Append('\\', slashes * 2);
+            quoted.Append('\"');
+            return quoted.ToString();
+        }
+
+        internal static void StartDetachedUpdater(string executable, IEnumerable<string> arguments)
+        {
+            List<string> argumentList = arguments.ToList();
+            if (!IsActive)
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = executable,
+                    Arguments = String.Join(" ", argumentList.Select(QuoteArgument)),
+                    WorkingDirectory = Path.GetTempPath(),
+                    UseShellExecute = true,
+                });
+                return;
+            }
+            StringBuilder commandLine = new StringBuilder(QuoteArgument(executable));
+            foreach (string argument in argumentList)
+            {
+                commandLine.Append(' ');
+                commandLine.Append(QuoteArgument(argument));
+            }
+            STARTUPINFO startup = new STARTUPINFO { cb = Marshal.SizeOf(typeof(STARTUPINFO)) };
+            PROCESS_INFORMATION process;
+            if (!CreateProcess(
+                executable,
+                commandLine,
+                IntPtr.Zero,
+                IntPtr.Zero,
+                false,
+                CREATE_BREAKAWAY_FROM_JOB | CREATE_UNICODE_ENVIRONMENT,
+                IntPtr.Zero,
+                Path.GetTempPath(),
+                ref startup,
+                out process))
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "The independent updater could not start.");
+            CloseHandle(process.hThread);
+            CloseHandle(process.hProcess);
         }
 
         internal static void ExitOwnedTree()

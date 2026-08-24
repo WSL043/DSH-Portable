@@ -132,8 +132,9 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.doesNotMatch(externalExit, /Close\(\)/)
 
   const fullPackageUpdate = host.slice(host.indexOf('private void StartFullPackageUpdate('), host.indexOf('private async Task RestoreDesktopAfterUpdateAttemptAsync'))
-  assert.doesNotMatch(fullPackageUpdate, /allowClose\s*=\s*true|Close\(\)/)
   assert.match(fullPackageUpdate, /--manifest/)
+  assert.match(fullPackageUpdate, /StartDetachedUpdater/)
+  assert.match(fullPackageUpdate, /BeginDesktopShutdown\(\)/)
   assert.match(host, /JsonString\(check\.Item2, "fullPackageManifestUrl"\)/)
   assert.doesNotMatch(fullPackageUpdate, /DefaultManifestUrl|update-channel-stable/)
 
@@ -231,9 +232,10 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
 })
 
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
-  const [workflow, windowsSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, macSmoke] = await Promise.all([
+  const [workflow, windowsSmoke, detachedUpdaterSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, macSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-desktop-host.ps1'),
+    read('scripts/smoke-windows-detached-updater.ps1'),
     read('scripts/smoke-windows-native-tray.ps1'),
     read('scripts/smoke-windows-native-download.mjs'),
     read('scripts/smoke-windows-native-workspace-picker.mjs'),
@@ -242,6 +244,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
 
   assert.match(workflow, /windows-desktop-host:/)
   assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
+  assert.match(workflow, /smoke-windows-detached-updater\.ps1/)
   assert.match(workflow, /smoke-windows-native-tray\.ps1/)
   assert.match(workflow, /runner:\s*windows-2022/)
   assert.match(workflow, /runner:\s*windows-2025/)
@@ -270,6 +273,8 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeWorkspacePickerSmoke, /rootOwner != hwnd && rootOwnerPid == processId/)
   assert.match(nativeWorkspacePickerSmoke, /-WindowHandle', String\(dialog\.hwnd\)/)
   assert.doesNotMatch(nativeWorkspacePickerSmoke, /className\.ToString\(\) == "#32770"/)
+  assert.match(detachedUpdaterSmoke, /StartDetachedUpdater/)
+  assert.match(detachedUpdaterSmoke, /survived/)
   assert.match(workflow, /macos-desktop-host:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)

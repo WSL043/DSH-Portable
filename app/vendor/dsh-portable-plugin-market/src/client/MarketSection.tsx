@@ -1787,7 +1787,7 @@ export function MarketSection(props: MarketSectionProps) {
               the same name without either card needing a qualifier. */}
           <div style={{ minWidth: 0 }}>
             <div className={css.nm} title={p.name}>
-              <a className={css.nameLink} href={p.page || p.url} target="_blank" rel="noreferrer">
+              <a className={css.nameLink} href={p.url} target="_blank" rel="noreferrer">
                 {pluginName(p.name)}
               </a>
               {p.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}

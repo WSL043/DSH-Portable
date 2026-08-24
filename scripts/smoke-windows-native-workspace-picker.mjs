@@ -209,7 +209,10 @@ try {
     return true
   })()`)
 
-  const deadline = Date.now() + 15000
+  // Windows Server 2025 can take longer to create the system folder picker on
+  // the first invocation even after the embedded page is ready. This remains
+  // bounded and still verifies the real owned native dialog rather than a mock.
+  const deadline = Date.now() + 45000
   let dialogs = []
   while (Date.now() < deadline) {
     const output = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, String(launcher.pid)], { windowsHide: true })

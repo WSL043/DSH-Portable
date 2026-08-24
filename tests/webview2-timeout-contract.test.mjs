@@ -93,3 +93,25 @@ test('Windows never treats an unavailable tray bridge state as permission to rep
   assert.match(fullPackageBranch, /if \(!manual\) return/)
   assert.match(fullPackageBranch, /正在读取任务状态|reading the current task state/i)
 })
+
+test('Windows update checking and update interaction use separate states', async () => {
+  const source = await readFile(launcherSource, 'utf8')
+  const rebuild = source.slice(
+    source.indexOf('private void RebuildTrayMenu()'),
+    source.indexOf('private void RebuildRecentSessionItems'),
+  )
+  const updateCheck = source.slice(
+    source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual)'),
+    source.indexOf('private void ShowDesktopOperation'),
+  )
+
+  assert.match(source, /private bool updateCheckRunning;/)
+  assert.match(source, /private bool updateInteractionRunning;/)
+  assert.match(rebuild, /updateCheckRunning[\s\S]*正在检查…/)
+  assert.doesNotMatch(rebuild, /updateInteractionRunning[\s\S]*正在检查…/)
+  assert.match(updateCheck, /FinishUpdateCheckPhase\(\);/)
+  assert.ok(
+    updateCheck.indexOf('FinishUpdateCheckPhase();') < updateCheck.indexOf('ShowUpdateChoiceAsync'),
+    'the checking label must be cleared before waiting for the user update choice',
+  )
+})

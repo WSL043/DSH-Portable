@@ -4532,7 +4532,7 @@ window.__ModuleLoader__.load({ id: "@wsl043/dsh-portable-plugin-market", factory
 										title: p.name,
 										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("a", {
 											className: Market_module_css_default.nameLink,
-											href: p.page || p.url,
+											href: p.url,
 											target: "_blank",
 											rel: "noreferrer",
 											children: pluginName(p.name)
