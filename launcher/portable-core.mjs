@@ -483,9 +483,15 @@ export function parseCli(argv) {
   let progressJson = false
   let waitForLockMs = 0
   let output
+  let input
+  let passwordFile
+  let categories
+  let conflict
+  let allowUnencryptedCredentials = false
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--no-browser') noBrowser = true
+    else if (arg === '--allow-unencrypted-credentials') allowUnencryptedCredentials = true
     else if (arg === '--json') json = true
     else if (arg === '--allow-http') allowHttp = true
     else if (arg === '--force') force = true
@@ -512,7 +518,27 @@ export function parseCli(argv) {
       output = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (arg === '--input') {
+      if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--input requires a value.')
+      input = argv[index + 1]
+      index += 1
+    }
+    else if (arg === '--password-file') {
+      if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--password-file requires a value.')
+      passwordFile = argv[index + 1]
+      index += 1
+    }
+    else if (arg === '--categories') {
+      if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--categories requires a comma-separated value.')
+      categories = argv[index + 1].split(',').map(value => value.trim()).filter(Boolean)
+      index += 1
+    }
+    else if (arg === '--conflict') {
+      if (!['keep', 'replace'].includes(argv[index + 1])) throw new Error('--conflict requires keep or replace.')
+      conflict = argv[index + 1]
+      index += 1
+    }
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
@@ -521,6 +547,11 @@ export function parseCli(argv) {
   }
   const result = { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs, updateScope }
   if (output !== undefined) result.output = output
+  if (input !== undefined) result.input = input
+  if (passwordFile !== undefined) result.passwordFile = passwordFile
+  if (categories !== undefined) result.categories = categories
+  if (conflict !== undefined) result.conflict = conflict
+  if (allowUnencryptedCredentials) result.allowUnencryptedCredentials = true
   return result
 }
 

@@ -311,6 +311,13 @@ test('CLI defaults to start and supports bounded automation flags', () => {
   assert.equal(parseCli(['ignore-update', '--json']).command, 'ignore-update')
   assert.equal(parseCli(['doctor', '--json']).command, 'doctor')
   assert.equal(parseCli(['repair', '--json']).command, 'repair')
+  assert.deepEqual(parseCli(['backup-data', '--output', 'backup.dshdata', '--categories', 'settings,sessions', '--password-file', 'password.txt']), {
+    ...parseCli([]), command: 'backup-data', output: 'backup.dshdata', categories: ['settings', 'sessions'], passwordFile: 'password.txt',
+  })
+  assert.deepEqual(parseCli(['restore-data', '--input', 'backup.dshdata', '--conflict', 'replace']), {
+    ...parseCli([]), command: 'restore-data', input: 'backup.dshdata', conflict: 'replace',
+  })
+  assert.equal(parseCli(['inspect-data', '--input', 'backup.dshdata']).command, 'inspect-data')
   assert.deepEqual(parseCli(['support-report', '--output', 'C:\\Temp\\dsh-support.json']), {
     ...parseCli([]),
     command: 'support-report',
@@ -320,6 +327,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
   assert.throws(() => parseCli(['erase-data']), /Unknown command/)
   assert.throws(() => parseCli(['--update-manifest']), /requires a value/)
   assert.throws(() => parseCli(['support-report', '--output']), /requires a value/)
+  assert.throws(() => parseCli(['restore-data', '--conflict', 'merge']), /keep or replace/)
 })
 
 test('portable startup owns the desktop surface without allowing official DSH to open a browser', async () => {

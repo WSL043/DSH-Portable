@@ -38,6 +38,7 @@ import {
 import { workspaceDocumentReady } from './http-readiness.mjs'
 import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
+import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
@@ -447,6 +448,35 @@ async function supportReport(options) {
   return exportPortableSupportReport(layout, output)
 }
 
+function dataPassword(options) {
+  if (!options.passwordFile) return undefined
+  const password = readFileSync(path.resolve(options.passwordFile), 'utf8').replace(/[\r\n]+$/, '')
+  if (!password) throw new Error('The password file is empty.')
+  return password
+}
+
+async function backupData(options) {
+  const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
+  const output = path.resolve(options.output || path.join(layout.dataDir, 'backups', `DSH-Portable-data-${stamp}.dshdata`))
+  return createDataArchive(layout, output, {
+    categories: options.categories,
+    password: dataPassword(options),
+    allowUnencryptedCredentials: options.allowUnencryptedCredentials,
+  })
+}
+
+async function inspectData(options) {
+  if (!options.input) throw new Error('inspect-data requires --input.')
+  return inspectDataArchive(path.resolve(options.input), { password: dataPassword(options) })
+}
+
+async function restoreData(options) {
+  if (!options.input) throw new Error('restore-data requires --input.')
+  const current = await status()
+  if (current.status !== 'stopped') throw new Error('Close DSH-Portable before importing user data.')
+  return restoreDataArchive(layout, path.resolve(options.input), { password: dataPassword(options), conflict: options.conflict })
+}
+
 async function checkUpdate(options) {
   requireRuntime()
   await ensurePortableDirectories(layout)
@@ -547,6 +577,9 @@ async function main() {
     else if (options.command === 'doctor') result = await doctor()
     else if (options.command === 'repair') result = await repair()
     else if (options.command === 'support-report') result = await supportReport(options)
+    else if (options.command === 'backup-data') result = await backupData(options)
+    else if (options.command === 'inspect-data') result = await inspectData(options)
+    else if (options.command === 'restore-data') result = await restoreData(options)
     else if (options.command === 'check-update') result = await checkUpdate(options)
     else if (options.command === 'defer-update') result = await deferUpdate(layout, { scope: options.updateScope })
     else if (options.command === 'ignore-update') result = await ignoreUpdate(layout, '', { scope: options.updateScope })

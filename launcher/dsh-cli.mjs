@@ -293,6 +293,17 @@ export async function acquirePluginLock(layout) {
   throw new Error('Another DSH plugin command is already running.')
 }
 
+export function portableDataArgv(argv) {
+  if (argv[0] !== 'portable') return null
+  const commands = { backup: 'backup-data', inspect: 'inspect-data', restore: 'restore-data' }
+  const command = commands[argv[1]]
+  if (!command) throw new Error('Use dsh portable backup, inspect, or restore.')
+  if (command === 'backup-data') {
+    return [command, '--categories', 'settings,sessions,plugins,credentials', '--allow-unencrypted-credentials', ...argv.slice(2)]
+  }
+  return [command, ...argv.slice(2)]
+}
+
 function isMutatingPluginCommand(argv) {
   const pluginIndex = argv.indexOf('plugin')
   if (pluginIndex < 0) return false
@@ -302,6 +313,15 @@ function isMutatingPluginCommand(argv) {
 export async function main(argv = process.argv.slice(2), source = process.env) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   const stateRoot = await resolveProductStateRoot(root, process.platform, source)
+  const portableArgv = portableDataArgv(argv)
+  if (portableArgv !== null) {
+    const layout = layoutForRoot(root, process.platform, stateRoot)
+    const result = spawnSync(layout.nodeExe, [layout.portableCli, ...portableArgv], {
+      cwd: process.cwd(), env: buildDshEnv(layout, source), stdio: 'inherit', windowsHide: false,
+    })
+    if (result.error) throw result.error
+    return Number.isInteger(result.status) ? result.status : 1
+  }
   let spec = buildPluginCliSpec(root, stateRoot, argv, process.platform, source)
   for (const [label, filename] of [
     ['bundled Node.js', spec.command],

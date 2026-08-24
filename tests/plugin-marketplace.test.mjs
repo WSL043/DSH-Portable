@@ -381,6 +381,14 @@ test('AI repair prompt does not recommend bundle surgery for peer-range-only war
   assert.doesNotMatch(prompt, /EDIT BUNDLES/)
 })
 
+test('plugin profile transfer is presented as plugin sync, not full Portable backup', async () => {
+  const locales = await read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts')
+  assert.match(locales, /tabBackup:\s*'插件同步'/)
+  assert.match(locales, /tabBackup:\s*'Plugin sync'/)
+  assert.match(locales, /会话、通用设置和凭据请使用 Portable/)
+  assert.match(locales, /Use Portable Data and migration for sessions, general settings, and credentials/)
+})
+
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
   const [runtime, smoke, browserSmoke, workflow, windows, mac, linux] = await Promise.all([
     read('scripts/verify-runtime.mjs'),

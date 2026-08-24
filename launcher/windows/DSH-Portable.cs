@@ -24,8 +24,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.11.65534")]
-[assembly: AssemblyFileVersion("0.4.11.65534")]
+[assembly: AssemblyVersion("0.4.12.65534")]
+[assembly: AssemblyFileVersion("0.4.12.65534")]
 
 namespace DshPortable
 {
@@ -277,10 +277,6 @@ namespace DshPortable
         private readonly ProgressBar progress;
         private readonly Label progressDetail;
         private readonly TextBox detailsBox;
-        private readonly Label updateDescription;
-        private readonly Button updateButton;
-        private readonly Button skipUpdateButton;
-        private readonly Button laterButton;
         private readonly Button copyButton;
         private readonly Button closeButton;
         private WebView2 webView;
@@ -297,7 +293,6 @@ namespace DshPortable
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
         private readonly bool desktopStart;
-        private TaskCompletionSource<int> updateChoice;
         private bool operationRunning = true;
         private bool desktopReady;
         private bool shutdownRunning;
@@ -386,20 +381,6 @@ namespace DshPortable
                 Style = ProgressBarStyle.Marquee,
                 MarqueeAnimationSpeed = 24,
             };
-            updateDescription = new Label
-            {
-                Location = new Point(24, 91),
-                Size = new Size(456, 48),
-                ForeColor = Color.FromArgb(80, 80, 80),
-                Visible = false,
-            };
-            updateButton = new Button
-            {
-                Text = L("现在更新", "Update now"),
-                Size = new Size(108, 34),
-                Location = new Point(184, 154),
-                Visible = false,
-            };
             progressDetail = new Label
             {
                 AutoEllipsis = true,
@@ -409,24 +390,6 @@ namespace DshPortable
                 TextAlign = ContentAlignment.MiddleLeft,
                 Visible = false,
             };
-            updateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(1); };
-            skipUpdateButton = new Button
-            {
-                Text = L("跳过此版本", "Skip this version"),
-                Size = new Size(108, 34),
-                Location = new Point(304, 154),
-                Visible = false,
-            };
-            skipUpdateButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(-1); };
-            laterButton = new Button
-            {
-                Text = L("稍后", "Later"),
-                Size = new Size(80, 34),
-                Location = new Point(424, 154),
-                Visible = false,
-            };
-            laterButton.Click += delegate { if (updateChoice != null) updateChoice.TrySetResult(0); };
-
             detailsBox = new TextBox
             {
                 Location = new Point(24, 92),
@@ -467,10 +430,6 @@ namespace DshPortable
             launchContent.Controls.Add(statusLabel);
             launchContent.Controls.Add(progressDetail);
             launchContent.Controls.Add(progress);
-            launchContent.Controls.Add(updateDescription);
-            launchContent.Controls.Add(updateButton);
-            launchContent.Controls.Add(skipUpdateButton);
-            launchContent.Controls.Add(laterButton);
             launchContent.Controls.Add(detailsBox);
             launchContent.Controls.Add(copyButton);
             launchContent.Controls.Add(closeButton);
@@ -1870,7 +1829,7 @@ namespace DshPortable
                             L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
-                    int choice = await ShowUpdateChoiceAsync(current, latest, engineCurrent, engineLatest, true);
+                    int choice = ShowUpdateChoiceDialog(current, latest, engineCurrent, engineLatest, true);
                     if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl);
                     else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--scope", scope, "--json" }));
                     else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
@@ -1945,10 +1904,6 @@ namespace DshPortable
             progress.MarqueeAnimationSpeed = 24;
             progressDetail.Text = L("正在准备…", "Preparing…");
             progressDetail.Visible = true;
-            updateDescription.Visible = false;
-            updateButton.Visible = false;
-            skipUpdateButton.Visible = false;
-            laterButton.Visible = false;
             detailsBox.Visible = false;
             copyButton.Visible = false;
             closeButton.Visible = false;
@@ -2602,34 +2557,66 @@ namespace DshPortable
             return product + "\r\n" + engine + "\r\n" + delivery;
         }
 
-        private Task<int> ShowUpdateChoiceAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
+        private int ShowUpdateChoiceDialog(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
         {
-            progress.Visible = false;
-            progressDetail.Visible = false;
-            ClientSize = new Size(560, 280);
-            launchContent.Size = new Size(504, 224);
-            CenterLaunchContent();
-            statusLabel.AutoEllipsis = false;
-            statusLabel.Size = new Size(400, 34);
-            statusLabel.Text = L("DSH-Portable 更新", "DSH-Portable update");
-            updateDescription.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage);
-            updateDescription.Size = new Size(456, 64);
-            updateDescription.Visible = true;
-            updateButton.Location = new Point(184, 174);
-            skipUpdateButton.Location = new Point(304, 174);
-            laterButton.Location = new Point(424, 174);
-            updateButton.Text = L("现在更新", "Update now");
-            updateButton.Visible = true;
-            skipUpdateButton.Visible = true;
-            laterButton.Visible = true;
-            updateChoice = new TaskCompletionSource<int>();
-            updateButton.Focus();
-            return updateChoice.Task;
+            using (Form dialog = new Form())
+            using (Label title = new Label())
+            using (Label description = new Label())
+            using (Button updateNow = new Button())
+            using (Button skip = new Button())
+            using (Button later = new Button())
+            {
+                dialog.Text = L("DSH-Portable 更新", "DSH-Portable update");
+                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
+                dialog.StartPosition = FormStartPosition.CenterParent;
+                dialog.ClientSize = new Size(520, 230);
+                dialog.MinimizeBox = false;
+                dialog.MaximizeBox = false;
+                dialog.ShowInTaskbar = false;
+                dialog.Font = Font;
+
+                title.AutoSize = false;
+                title.Font = new Font(dialog.Font, FontStyle.Bold);
+                title.Location = new Point(28, 24);
+                title.Size = new Size(464, 28);
+                title.Text = L("发现可用更新", "An update is available");
+
+                description.AutoSize = false;
+                description.Location = new Point(28, 64);
+                description.Size = new Size(464, 86);
+                description.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage);
+
+                updateNow.DialogResult = DialogResult.Yes;
+                updateNow.Location = new Point(160, 174);
+                updateNow.Size = new Size(104, 34);
+                updateNow.Text = L("现在更新", "Update now");
+
+                skip.DialogResult = DialogResult.No;
+                skip.Location = new Point(274, 174);
+                skip.Size = new Size(104, 34);
+                skip.Text = L("跳过此版本", "Skip version");
+
+                later.DialogResult = DialogResult.Cancel;
+                later.Location = new Point(388, 174);
+                later.Size = new Size(104, 34);
+                later.Text = L("稍后", "Later");
+
+                dialog.AcceptButton = updateNow;
+                dialog.CancelButton = later;
+                dialog.Controls.Add(title);
+                dialog.Controls.Add(description);
+                dialog.Controls.Add(updateNow);
+                dialog.Controls.Add(skip);
+                dialog.Controls.Add(later);
+                DialogResult result = dialog.ShowDialog(this);
+                if (result == DialogResult.Yes) return 1;
+                if (result == DialogResult.No) return -1;
+                return 0;
+            }
         }
 
         private void ResetOperationUi()
         {
-            updateChoice = null;
             ClientSize = new Size(560, 220);
             launchContent.Size = new Size(504, 144);
             CenterLaunchContent();
@@ -2640,14 +2627,6 @@ namespace DshPortable
             statusLabel.Text = IsStopCommand(launcherArgs)
                 ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
                 : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
-            updateDescription.Visible = false;
-            updateDescription.Size = new Size(456, 48);
-            updateButton.Location = new Point(184, 154);
-            skipUpdateButton.Location = new Point(304, 154);
-            laterButton.Location = new Point(424, 154);
-            updateButton.Visible = false;
-            skipUpdateButton.Visible = false;
-            laterButton.Visible = false;
             progressDetail.Visible = false;
             progress.Style = ProgressBarStyle.Marquee;
             progress.MarqueeAnimationSpeed = 24;

@@ -22,6 +22,10 @@ window.__ModuleLoader__.load({
         repair: '下次启动时安全修复', scheduled: '已安排，下次启动时执行', repaired: '上次修复已完成',
         fullPackage: '程序文件不完整，自动修复未改动用户数据。请使用完整版本覆盖安装。',
         report: '导出支持报告', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
+        data: '数据与迁移', dataHint: '两种包的内容相同：会话、设置、插件配置和 API 凭据。不包含缓存、运行环境和工作区文件。',
+        dataStandard: '导出迁移包', dataPrivate: '导出加密私密包', dataPassword: '加密密码（至少 8 位）',
+        dataPrivateHint: '迁移包不加密，拿到文件的人都能读取，只保存到你信任的设备。加密私密包内容相同，但必须输入正确密码才能恢复。',
+        dataSaved: '数据包已保存：{0}',
       },
       en: {
         title: 'Portable',
@@ -39,6 +43,10 @@ window.__ModuleLoader__.load({
         repair: 'Repair safely on next start', scheduled: 'Scheduled for the next start', repaired: 'The last repair completed',
         fullPackage: 'Program files are incomplete. Automatic repair preserved user data; reinstall the complete package.',
         report: 'Export support report', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
+        data: 'Data and migration', dataHint: 'Both packages contain the same sessions, settings, plugin configuration, and API credentials. Caches, runtimes, and workspace files stay out.',
+        dataStandard: 'Export migration package', dataPrivate: 'Export encrypted private package', dataPassword: 'Encryption password (8+ characters)',
+        dataPrivateHint: 'The migration package is not encrypted: anyone with the file can read it, so keep it only on a trusted device. The private package contains the same data and requires its password to restore.',
+        dataSaved: 'Data package saved: {0}',
       },
     }
 
@@ -70,6 +78,7 @@ window.__ModuleLoader__.load({
       const [versions, setVersions] = useState({ portable: '', engine: '' })
       const [busy, setBusy] = useState('')
       const [message, setMessage] = useState('')
+      const [privatePassword, setPrivatePassword] = useState('')
       useEffect(() => {
         let active = true
         fetch('/dsh-portable/settings', { cache: 'no-store' })
@@ -118,6 +127,18 @@ window.__ModuleLoader__.load({
           else setMessage(t('updateUnavailable'))
         }).catch(error => setMessage(format(t('failed'), error.message || error))).finally(() => setBusy(''))
       }
+      const exportData = kind => {
+        const name = `data-${kind}`
+        setBusy(name); setMessage('')
+        fetch('/dsh-portable/data-export', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ kind, password: kind === 'private' ? privatePassword : undefined }),
+        }).then(res => res.json()).then(body => {
+          if (body.error) throw new Error(body.error)
+          setMessage(format(t('dataSaved'), body.output || ''))
+          if (kind === 'private') setPrivatePassword('')
+        }).catch(error => setMessage(format(t('failed'), error.message || error))).finally(() => setBusy(''))
+      }
       const styles = {
         group: { borderBottom: '1px solid var(--dsw-alias-border-l2)', display: 'flex', flexDirection: 'column', padding: '16px 0' },
         heading: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 400, lineHeight: '22px', marginBottom: 0 },
@@ -127,6 +148,7 @@ window.__ModuleLoader__.load({
         hint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px' },
         controls: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 },
         status: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', marginTop: 8, wordBreak: 'break-word' },
+        password: { boxSizing: 'border-box', width: '100%', maxWidth: 320, height: 36, border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, background: 'var(--dsw-alias-bg-module-platform)', color: 'var(--dsw-alias-label-primary)', padding: '0 12px', font: 'inherit' },
         version: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', whiteSpace: 'nowrap' },
         rowActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 1 auto' },
       }
@@ -169,6 +191,16 @@ window.__ModuleLoader__.load({
               h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
               h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('repair', '/dsh-portable/repair') }, t('repair')),
               h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('report', '/dsh-portable/support-report') }, t('report'))))),
+        h('div', { style: { ...styles.item, alignItems: 'flex-start' } },
+          h('div', { style: styles.text },
+            h('div', { style: styles.label }, t('data')),
+            h('div', { style: styles.hint }, t('dataHint')),
+            h('div', { style: styles.controls },
+              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => exportData('standard') }, busy === 'data-standard' ? t('checking') : t('dataStandard'))),
+            h('div', { style: { ...styles.hint, marginTop: 8 } }, t('dataPrivateHint')),
+            h('input', { type: 'password', autoComplete: 'new-password', value: privatePassword, placeholder: t('dataPassword'), style: styles.password, onChange: event => setPrivatePassword(event.target.value) }),
+            h('div', { style: styles.controls },
+              h(primitives.Button, { size: 'sm', disabled: Boolean(busy) || privatePassword.length < 8, onClick: () => exportData('private') }, busy === 'data-private' ? t('checking') : t('dataPrivate'))))),
         message && h('div', { style: styles.status, role: 'status' }, message))
     }
 

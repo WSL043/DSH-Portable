@@ -129,6 +129,10 @@ An official DSH update does not need to wait for a DSH-Portable feature release,
 
 ## Portable data
 
+Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, choose **Export migration package** or **Export encrypted private package** under **Settings → General → Portable → Data and migration**. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device. Runtimes, caches, logs, and workspace files are deliberately excluded.
+
+`DATA-MIGRATION.txt` in every finished package documents the inspect and restore commands. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`. **Plugin sync** in the plugin market is only for moving a plugin list and plugin configuration between devices. It is not a full-product backup.
+
 | Path | Contents |
 | --- | --- |
 | `data/dsh-home/` | Settings, model credentials, sessions, and plugins |

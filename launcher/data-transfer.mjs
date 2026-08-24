@@ -1,0 +1,260 @@
+import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { gunzipSync, gzipSync } from 'node:zlib'
+
+const MAGIC_PLAIN = Buffer.from('DSHDAT1U')
+const MAGIC_ENCRYPTED = Buffer.from('DSHDAT1E')
+const FORMAT = 'dsh-portable-data'
+const VERSION = 1
+const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
+const MAX_DOCUMENT_BYTES = 768 * 1024 * 1024
+const MAX_FILES = 100_000
+const DEFAULT_CATEGORIES = ['settings', 'sessions', 'plugins']
+const ALL_CATEGORIES = new Set([...DEFAULT_CATEGORIES, 'credentials', 'workspace'])
+const PROFILE_SKIP = new Set(['node_modules', '.dsh-portable-archives', '.git', 'pnpm-lock.yaml'])
+const SECRET_NAME = /(^|\/)(\.credentials\.yaml|config\.toml|\.env(?:\.[^/]+)?|credentials?\.(?:json|ya?ml)|secrets?\.(?:json|ya?ml))$/i
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex')
+}
+
+function normalizedRelative(root, filename) {
+  const value = path.relative(root, filename).split(path.sep).join('/')
+  if (value === '' || value.startsWith('../') || path.isAbsolute(value)) throw new Error(`Unsafe data path: ${filename}`)
+  return value
+}
+
+async function walkFiles(root, { skip = new Set(), filter = () => true } = {}) {
+  if (!existsSync(root)) return []
+  const found = []
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      if (skip.has(entry.name)) continue
+      const filename = path.join(directory, entry.name)
+      if (entry.isSymbolicLink()) continue
+      if (entry.isDirectory()) await visit(filename)
+      else if (entry.isFile() && filter(filename)) found.push(filename)
+      if (found.length > MAX_FILES) throw new Error(`Backup contains more than ${MAX_FILES} files.`)
+    }
+  }
+  await visit(root)
+  return found
+}
+
+function addSpec(specs, category, root, filename) {
+  if (!existsSync(filename)) return
+  const relative = normalizedRelative(root, filename)
+  if (!specs.has(relative)) specs.set(relative, { category, filename })
+}
+
+async function addTree(specs, category, root, directory, options) {
+  for (const filename of await walkFiles(directory, options)) addSpec(specs, category, root, filename)
+}
+
+async function selectedFiles(layout, categories) {
+  const specs = new Map()
+  const stateRoot = layout.stateRoot
+  const data = layout.dataDir
+  const home = layout.dshHome
+  if (categories.includes('settings')) {
+    for (const filename of [
+      path.join(data, 'launcher-settings.json'),
+      path.join(data, 'window-state.json'),
+      path.join(home, 'settings.yaml'),
+    ]) addSpec(specs, 'settings', stateRoot, filename)
+    await addTree(specs, 'settings', stateRoot, path.join(home, '.agent-presets'))
+  }
+  if (categories.includes('sessions')) {
+    await addTree(specs, 'sessions', stateRoot, path.join(home, 'sessions'))
+    await addTree(specs, 'sessions', stateRoot, path.join(home, 'storages'))
+  }
+  if (categories.includes('plugins')) {
+    await addTree(specs, 'plugins', stateRoot, path.join(home, 'profiles'), {
+      skip: PROFILE_SKIP,
+      filter: filename => !SECRET_NAME.test(normalizedRelative(home, filename)),
+    })
+  }
+  if (categories.includes('credentials')) {
+    addSpec(specs, 'credentials', stateRoot, path.join(home, '.credentials.yaml'))
+    await addTree(specs, 'credentials', stateRoot, path.join(home, 'profiles'), {
+      skip: PROFILE_SKIP,
+      filter: filename => SECRET_NAME.test(normalizedRelative(home, filename)),
+    })
+  }
+  if (categories.includes('workspace')) await addTree(specs, 'workspace', stateRoot, layout.workspace)
+  return [...specs.entries()].map(([archivePath, value]) => ({ archivePath, ...value }))
+}
+
+function normalizeCategories(value) {
+  const source = value === undefined ? DEFAULT_CATEGORIES : value
+  if (!Array.isArray(source) || source.length === 0) throw new Error('Select at least one backup category.')
+  const categories = [...new Set(source)]
+  for (const category of categories) if (!ALL_CATEGORIES.has(category)) throw new Error(`Unknown backup category: ${category}`)
+  return categories
+}
+
+function encrypt(compressed, password) {
+  const salt = randomBytes(16)
+  const iv = randomBytes(12)
+  const key = scryptSync(password, salt, 32, { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 })
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  cipher.setAAD(MAGIC_ENCRYPTED)
+  const ciphertext = Buffer.concat([cipher.update(compressed), cipher.final()])
+  return Buffer.concat([MAGIC_ENCRYPTED, salt, iv, cipher.getAuthTag(), ciphertext])
+}
+
+function decodeArchive(bytes, password) {
+  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error('Data package is too large.')
+  const magic = bytes.subarray(0, 8)
+  let compressed
+  let encrypted = false
+  if (magic.equals(MAGIC_PLAIN)) compressed = bytes.subarray(8)
+  else if (magic.equals(MAGIC_ENCRYPTED)) {
+    encrypted = true
+    if (!password) throw new Error('This data package is encrypted. Enter its password.')
+    if (bytes.length < 52) throw new Error('Encrypted data package is incomplete.')
+    const salt = bytes.subarray(8, 24)
+    const iv = bytes.subarray(24, 36)
+    const tag = bytes.subarray(36, 52)
+    const key = scryptSync(password, salt, 32, { N: 131072, r: 8, p: 1, maxmem: 256 * 1024 * 1024 })
+    try {
+      const decipher = createDecipheriv('aes-256-gcm', key, iv)
+      decipher.setAAD(MAGIC_ENCRYPTED)
+      decipher.setAuthTag(tag)
+      compressed = Buffer.concat([decipher.update(bytes.subarray(52)), decipher.final()])
+    } catch {
+      throw new Error('The password is incorrect or the encrypted data package was changed.')
+    }
+  } else throw new Error('Unsupported DSH-Portable data package.')
+  let document
+  try { document = JSON.parse(gunzipSync(compressed, { maxOutputLength: MAX_DOCUMENT_BYTES }).toString('utf8')) } catch { throw new Error('The data package is damaged or unsupported.') }
+  validateDocument(document)
+  return { document, encrypted }
+}
+
+function validateDocument(document) {
+  if (document?.format !== FORMAT || document?.version !== VERSION || !Array.isArray(document.files)) throw new Error('Unsupported data package format.')
+  const categories = normalizeCategories(document.categories)
+  if (document.files.length > MAX_FILES) throw new Error('Data package contains too many files.')
+  const seen = new Set()
+  for (const file of document.files) {
+    if (!file || typeof file.path !== 'string' || typeof file.category !== 'string' || typeof file.data !== 'string' || typeof file.sha256 !== 'string') throw new Error('Invalid data package entry.')
+    const normalized = file.path.replaceAll('\\', '/')
+    if (normalized === '' || normalized.startsWith('/') || normalized.split('/').includes('..') || path.win32.isAbsolute(normalized)) throw new Error(`Unsafe data package path: ${file.path}`)
+    if (!categories.includes(file.category) || !ALL_CATEGORIES.has(file.category)) throw new Error(`Invalid data category: ${file.category}`)
+    if (!pathAllowedForCategory(normalized, file.category)) throw new Error(`Data path does not belong to ${file.category}: ${file.path}`)
+    if (seen.has(normalized)) throw new Error(`Duplicate data package path: ${file.path}`)
+    seen.add(normalized)
+    const bytes = Buffer.from(file.data, 'base64')
+    if (!/^[0-9a-f]{64}$/i.test(file.sha256) || !timingSafeEqual(Buffer.from(sha256(bytes)), Buffer.from(file.sha256.toLowerCase()))) throw new Error(`Data package integrity check failed: ${file.path}`)
+  }
+}
+
+function pathAllowedForCategory(value, category) {
+  if (category === 'settings') return [
+    'data/launcher-settings.json', 'data/window-state.json', 'data/dsh-home/settings.yaml',
+  ].includes(value) || value.startsWith('data/dsh-home/.agent-presets/')
+  if (category === 'sessions') return value.startsWith('data/dsh-home/sessions/') || value.startsWith('data/dsh-home/storages/')
+  if (category === 'plugins') return value.startsWith('data/dsh-home/profiles/')
+    && !value.split('/').some(part => PROFILE_SKIP.has(part)) && !SECRET_NAME.test(value)
+  if (category === 'credentials') return value === 'data/dsh-home/.credentials.yaml'
+    || (value.startsWith('data/dsh-home/profiles/') && SECRET_NAME.test(value))
+  if (category === 'workspace') return value.startsWith('workspace/')
+  return false
+}
+
+export async function createDataArchive(layout, output, options = {}) {
+  const categories = normalizeCategories(options.categories)
+  if (options.password && String(options.password).length < 8) throw new Error('Data package passwords must contain at least 8 characters.')
+  if (categories.includes('credentials') && !options.password && options.allowUnencryptedCredentials !== true) {
+    throw new Error('Credential backup requires a password or an explicit unencrypted-credentials choice.')
+  }
+  const specs = await selectedFiles(layout, categories)
+  const files = []
+  let sourceBytes = 0
+  for (const spec of specs) {
+    const bytes = await readFile(spec.filename)
+    sourceBytes += bytes.length
+    if (sourceBytes > MAX_ARCHIVE_BYTES) throw new Error('Selected user data is too large for one data package.')
+    files.push({ path: spec.archivePath, category: spec.category, bytes: bytes.length, sha256: sha256(bytes), data: bytes.toString('base64') })
+  }
+  const document = { format: FORMAT, version: VERSION, createdAt: new Date().toISOString(), categories, files }
+  const compressed = gzipSync(Buffer.from(JSON.stringify(document)), { level: 6 })
+  const archive = options.password ? encrypt(compressed, String(options.password)) : Buffer.concat([MAGIC_PLAIN, compressed])
+  await mkdir(path.dirname(path.resolve(output)), { recursive: true })
+  const temporary = `${path.resolve(output)}.part-${process.pid}`
+  await writeFile(temporary, archive, { mode: 0o600 })
+  await rename(temporary, path.resolve(output))
+  return { output: path.resolve(output), categories, files: files.length, sourceBytes, archiveBytes: archive.length, encrypted: Boolean(options.password) }
+}
+
+export async function inspectDataArchive(filename, options = {}) {
+  const { document, encrypted } = decodeArchive(await readFile(path.resolve(filename)), options.password)
+  return {
+    format: document.format,
+    version: document.version,
+    createdAt: document.createdAt,
+    encrypted,
+    categories: document.categories,
+    files: document.files.map(file => file.path),
+    bytes: document.files.reduce((total, file) => total + Number(file.bytes || Buffer.from(file.data, 'base64').length), 0),
+  }
+}
+
+async function safeTarget(root, relativePath) {
+  await mkdir(root, { recursive: true })
+  const target = path.resolve(root, ...relativePath.split('/'))
+  if (!target.startsWith(path.resolve(root) + path.sep)) throw new Error(`Unsafe restore path: ${relativePath}`)
+  let current = path.resolve(root)
+  for (const part of relativePath.split('/').slice(0, -1)) {
+    current = path.join(current, part)
+    if (!existsSync(current)) {
+      await mkdir(current)
+      continue
+    }
+    const stat = await lstat(current)
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Unsafe restore path: ${relativePath}`)
+  }
+  if (existsSync(target)) {
+    const stat = await lstat(target)
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Unsafe restore path: ${relativePath}`)
+  }
+  return target
+}
+
+export async function restoreDataArchive(layout, filename, options = {}) {
+  const conflict = options.conflict ?? 'keep'
+  if (!['keep', 'replace'].includes(conflict)) throw new Error('Conflict mode must be keep or replace.')
+  const { document, encrypted } = decodeArchive(await readFile(path.resolve(filename)), options.password)
+  const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
+  const rollbackDirectory = path.join(layout.dataDir, 'backups', `before-import-${stamp}`)
+  const conflicts = []
+  let imported = 0
+  let unchanged = 0
+  let replaced = 0
+  for (const file of document.files) {
+    const bytes = Buffer.from(file.data, 'base64')
+    const target = await safeTarget(layout.stateRoot, file.path)
+    if (existsSync(target)) {
+      const previous = await readFile(target)
+      if (sha256(previous) === file.sha256) { unchanged += 1; continue }
+      if (conflict === 'keep') { conflicts.push(file.path); continue }
+      const rollback = await safeTarget(rollbackDirectory, file.path)
+      await mkdir(path.dirname(rollback), { recursive: true })
+      await writeFile(rollback, previous, { mode: 0o600 })
+      replaced += 1
+    }
+    await mkdir(path.dirname(target), { recursive: true })
+    const temporary = `${target}.dsh-import-${process.pid}`
+    await writeFile(temporary, bytes, { mode: 0o600 })
+    await rename(temporary, target)
+    imported += 1
+  }
+  if (replaced === 0) await rm(rollbackDirectory, { recursive: true, force: true })
+  return {
+    status: 'restored', encrypted, categories: document.categories, imported, unchanged, conflicts, replaced,
+    rollbackDirectory: replaced > 0 ? rollbackDirectory : null,
+  }
+}

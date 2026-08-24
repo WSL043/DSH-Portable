@@ -176,6 +176,21 @@ test('every desktop package ships the portable repair runtime used by the CLI', 
   for (const build of [windows, macos, linux]) assert.match(build, /repair-core\.mjs/)
 })
 
+test('every desktop package ships the versioned data migration runtime and user guide', async () => {
+  const [windows, macos, linux, guide] = await Promise.all([
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('scripts/build-linux.sh'),
+    read('templates/DATA-MIGRATION.txt'),
+  ])
+  for (const builder of [windows, macos, linux]) {
+    assert.match(builder, /data-transfer\.mjs/)
+    assert.match(builder, /DATA-MIGRATION\.txt/)
+  }
+  assert.match(guide, /dsh portable backup/)
+  assert.match(guide, /dsh portable restore/)
+})
+
 test('the release surface is Portable-only and does not publish traditional installers', async () => {
   const [staging, publish, workflow, chinese, english, site] = await Promise.all([
     read('scripts/stage-release-assets.mjs'),

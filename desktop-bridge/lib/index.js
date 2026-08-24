@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { copyFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -150,6 +151,32 @@ export function mountPortableRoutes(webServer, options = {}) {
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
     try { sendJson(response, 200, await runCli(['support-report', '--json'])) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+  } })
+
+  register({ kind: 'exact', path: '/dsh-portable/data-export', handler: async (request, response) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    let passwordFile = ''
+    try {
+      const body = await readJson(request)
+      const kind = body.kind === 'private' ? 'private' : body.kind === 'standard' ? 'standard' : ''
+      if (!kind) return sendJson(response, 400, { error: 'invalid data package kind' })
+      const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
+      const output = path.join(stateRoot, 'data', 'backups', `DSH-Portable-${kind}-${stamp}.dshdata`)
+      const args = ['backup-data', '--json', '--categories', 'settings,sessions,plugins,credentials', '--output', output]
+      if (kind === 'standard') args.push('--allow-unencrypted-credentials')
+      if (kind === 'private') {
+        const password = typeof body.password === 'string' ? body.password : ''
+        if (password.length < 8) return sendJson(response, 400, { error: 'password must contain at least 8 characters' })
+        const runtime = path.join(stateRoot, 'data', 'runtime')
+        mkdirSync(runtime, { recursive: true })
+        passwordFile = path.join(runtime, `data-password-${process.pid}-${randomBytes(8).toString('hex')}.txt`)
+        writeFileSync(passwordFile, password, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        args.push('--password-file', passwordFile)
+      }
+      sendJson(response, 200, await runCli(args))
+    } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+    finally { if (passwordFile) try { unlinkSync(passwordFile) } catch {} }
   } })
 
   return () => { for (const dispose of disposers.reverse()) dispose?.() }

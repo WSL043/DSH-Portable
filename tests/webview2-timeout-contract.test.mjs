@@ -88,7 +88,7 @@ test('Windows never treats an unavailable tray bridge state as permission to rep
 
   assert.match(fullPackageBranch, /if \(!trayBridgeReady\)/)
   assert.ok(
-    fullPackageBranch.indexOf('if (!trayBridgeReady)') < fullPackageBranch.indexOf('ShowUpdateChoiceAsync'),
+    fullPackageBranch.indexOf('if (!trayBridgeReady)') < fullPackageBranch.indexOf('ShowUpdateChoiceDialog'),
     'the shell must fail closed before offering a complete-package replacement',
   )
   assert.match(fullPackageBranch, /if \(!manual\) return/)
@@ -114,7 +114,24 @@ test('Windows update checking and update interaction use separate states', async
   assert.match(rebuild, /checkEngineUpdateItem\.Enabled = !updateCheckRunning && !updateInteractionRunning/)
   assert.match(updateCheck, /FinishUpdateCheckPhase\(\);/)
   assert.ok(
-    updateCheck.indexOf('FinishUpdateCheckPhase();') < updateCheck.indexOf('ShowUpdateChoiceAsync'),
+    updateCheck.indexOf('FinishUpdateCheckPhase();') < updateCheck.indexOf('ShowUpdateChoiceDialog'),
     'the checking label must be cleared before waiting for the user update choice',
   )
+})
+
+test('Windows complete-package update choice never resizes the live workspace', async () => {
+  const source = await readFile(launcherSource, 'utf8')
+  const updateCheck = source.slice(
+    source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual, string scope)'),
+    source.indexOf('private void ShowDesktopOperation'),
+  )
+  const choice = source.slice(
+    source.indexOf('private int ShowUpdateChoiceDialog('),
+    source.indexOf('private void ResetOperationUi'),
+  )
+
+  assert.match(updateCheck, /int choice = ShowUpdateChoiceDialog\(/)
+  assert.match(choice, /dialog\.ShowDialog\(this\)/)
+  assert.doesNotMatch(choice, /^\s*ClientSize\s*=/m)
+  assert.doesNotMatch(choice, /webView\.(?:Bounds|Size|Width|Height)\s*=/)
 })

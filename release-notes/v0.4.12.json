@@ -1,0 +1,21 @@
+{
+  "version": "0.4.12",
+  "zh": {
+    "summary": "更新选择不再挤压工作台，并新增可验证、可加密、可回滚的数据迁移包。",
+    "highlights": [
+      "Windows 的完整包更新选择现在使用独立原生对话框，不会再调整正在使用的 DeepSeek Harness 窗口尺寸或挤出空白区域。",
+      "设置页提供内容相同的迁移包和加密私密包；两者都包含 API 凭据，加密包的密码不会写入命令行或日志。",
+      "迁移默认保留目标端已有文件；明确选择覆盖时，Portable 会先在 data/backups 中创建可回滚副本。",
+      "每个平台成品都附带数据检查与恢复工具。插件市场原有备份入口改名为“插件同步”，只负责插件清单和插件配置，不再冒充整机备份。"
+    ]
+  },
+  "en": {
+    "summary": "Update choices no longer squeeze the workspace, and Portable data packages are now verifiable, encryptable, and rollback-safe.",
+    "highlights": [
+      "Windows complete-package decisions now use a separate native dialog and never resize the active DeepSeek Harness workspace.",
+      "Settings can export a migration package or an encrypted private package with identical contents, including API credentials. Encryption passwords never enter command-line arguments or logs.",
+      "Migration keeps existing target files by default. Explicit replacement creates a rollback copy under data/backups first.",
+      "Every platform package includes inspect and restore tools. The plugin market's former backup surface is now Plugin sync and covers only plugin lists and configuration, not full-product backup."
+    ]
+  }
+}

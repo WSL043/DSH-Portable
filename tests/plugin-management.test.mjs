@@ -10,9 +10,19 @@ import {
   materializeRemotePluginArchives,
   normalizeFreshReleaseRemovalArgv,
   normalizeDshArgvForWindowsShell,
+  portableDataArgv,
   profileNeedsRelink,
   resolveProductStateRoot,
 } from '../launcher/dsh-cli.mjs'
+
+test('portable data commands use the product migration CLI without changing official DSH commands', () => {
+  assert.deepEqual(portableDataArgv(['portable', 'backup', '--output', 'backup.dshdata']), [
+    'backup-data', '--categories', 'settings,sessions,plugins,credentials', '--allow-unencrypted-credentials', '--output', 'backup.dshdata',
+  ])
+  assert.deepEqual(portableDataArgv(['portable', 'restore', '--input', 'backup.dshdata']), ['restore-data', '--input', 'backup.dshdata'])
+  assert.equal(portableDataArgv(['plugin', 'list']), null)
+  assert.throws(() => portableDataArgv(['portable', 'erase']), /backup, inspect, or restore/)
+})
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 

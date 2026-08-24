@@ -1,6 +1,7 @@
 /.cache/
 /artifacts/
 /app/node_modules/
+**/node_modules/
 /launcher/linux/node_modules/
 /launcher/linux/gen/
 /launcher/linux/payload/*

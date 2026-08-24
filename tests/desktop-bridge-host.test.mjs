@@ -127,6 +127,40 @@ test('Portable maintenance routes are same-origin, bounded, and delegate only of
   assert.equal(untrusted.status, 403)
 })
 
+test('Portable data export offers a small migration package and password-protected private package', async (t) => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-data-export-'))
+  t.after(() => rm(stateRoot, { recursive: true, force: true }))
+  const calls = []
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, {
+    root: stateRoot,
+    stateRoot,
+    async runCli(args) {
+      calls.push(args)
+      const passwordIndex = args.indexOf('--password-file')
+      if (passwordIndex >= 0) assert.equal(await readFile(args[passwordIndex + 1], 'utf8'), 'private-password')
+      return { output: args[args.indexOf('--output') + 1], encrypted: passwordIndex >= 0 }
+    },
+  })
+
+  const standard = response()
+  await routes.get('/dsh-portable/data-export').handler(request('POST', { kind: 'standard' }), standard)
+  assert.equal(standard.status, 200)
+  assert.deepEqual(calls[0].slice(0, 4), ['backup-data', '--json', '--categories', 'settings,sessions,plugins,credentials'])
+  assert.ok(calls[0].includes('--allow-unencrypted-credentials'))
+
+  const privateExport = response()
+  await routes.get('/dsh-portable/data-export').handler(request('POST', { kind: 'private', password: 'private-password' }), privateExport)
+  assert.equal(privateExport.status, 200)
+  assert.equal(calls[1][calls[1].indexOf('--categories') + 1], calls[0][calls[0].indexOf('--categories') + 1])
+  const passwordFile = calls[1][calls[1].indexOf('--password-file') + 1]
+  await assert.rejects(readFile(passwordFile, 'utf8'), /ENOENT/)
+
+  const missingPassword = response()
+  await routes.get('/dsh-portable/data-export').handler(request('POST', { kind: 'private', password: '' }), missingPassword)
+  assert.equal(missingPassword.status, 400)
+})
+
 test('Portable preferences belong to the official General settings surface', async () => {
   const client = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
 
@@ -154,4 +188,5 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.match(client, /\/dsh-portable\/doctor/)
   assert.match(client, /\/dsh-portable\/repair/)
   assert.match(client, /\/dsh-portable\/support-report/)
+  assert.match(client, /\/dsh-portable\/data-export/)
 })

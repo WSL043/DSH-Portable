@@ -1,0 +1,26 @@
+DSH-Portable data and migration / 数据与迁移
+
+正常更新会原地保留 data 和 workspace，无需手动搬运。
+Normal updates preserve data and workspace in place.
+
+从托盘打开「DSH 终端」后运行：
+Open DSH Terminal from the tray, then run:
+
+  dsh portable backup
+  dsh portable inspect --input <file.dshdata>
+  dsh portable restore --input <file.dshdata>
+
+在普通 Windows PowerShell 中，请把上面的 dsh 改为 .\dsh.exe。
+In a regular Windows PowerShell window, replace dsh above with .\dsh.exe.
+
+迁移包和加密私密包的内容相同：会话、设置、插件配置和 API 凭据。不包含运行时、缓存、日志和工作区文件。未加密包只应保存在信任的设备上。
+Migration and encrypted private packages contain the same sessions, settings, plugin configuration, and API credentials. They exclude runtimes, caches, logs, and workspace files. Keep an unencrypted package only on a trusted device.
+
+两种包都可在「设置 → 数据与迁移」导出。加密私密包必须设置密码，密码丢失无法恢复。
+Export either package from Settings > Data and migration. Encrypted private packages require a password; lost passwords cannot be recovered.
+
+恢复默认保留已存在的文件，只补入缺失数据。明确选择 replace 时，被替换的文件会先写入 data/backups。
+Restore keeps existing files by default and imports missing data. Explicit replace creates a rollback copy under data/backups first.
+
+非常旧或损坏的启动器无法完成原地更新时，下载当前小型启动包，选择原 Portable 目录进行完整升级。如果启动器也已损坏，把原目录的 data 和 workspace 复制到新版即可。
+If a very old or damaged launcher cannot update in place, run the current small bootstrap against the existing Portable folder. If the launcher itself is damaged, copy data and workspace into a clean current version.
