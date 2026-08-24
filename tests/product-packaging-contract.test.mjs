@@ -219,7 +219,7 @@ test('GitHub gives Chinese and English users direct, privacy-safe feedback forms
 test('release notes prioritize downloads and keep verification optional', async () => {
   const notes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0', '0.1.1-rc.1')
   assert.match(notes, /^>\s+DSH-Portable 是独立社区发行版，内置官方 DeepSeek Harness/m)
-  assert.match(notes, /0\.4\.0 是正式版/)
+  assert.doesNotMatch(notes, /0\.4\.0 是正式版|0\.4\.0 is a stable release/i)
   assert.doesNotMatch(notes, /^#\s+DSH-Portable/m)
   assert.match(notes, /DSH-Portable-windows-x64\.exe/)
   assert.ok(notes.indexOf('DSH-Portable-windows-x64.exe') < notes.indexOf('<details>'))

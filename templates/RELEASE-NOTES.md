@@ -1,6 +1,6 @@
 > DSH-Portable 是独立社区发行版，内置官方 DeepSeek Harness `{{DSH_VERSION}}`。
 
-**{{RELEASE_INTRO_ZH}}**
+{{RELEASE_INTRO_ZH}}
 
 {{RELEASE_SUMMARY_ZH}}
 
@@ -34,7 +34,7 @@
 
 > DSH-Portable is an independent community distribution bundled with official DeepSeek Harness `{{DSH_VERSION}}`.
 
-**{{RELEASE_INTRO_EN}}**
+{{RELEASE_INTRO_EN}}
 
 {{RELEASE_SUMMARY_EN}}
 

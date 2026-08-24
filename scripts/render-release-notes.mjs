@@ -43,11 +43,11 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
     '{{PRODUCT_VERSION}}': tag.slice(1),
     '{{DSH_VERSION}}': dshVersion,
     '{{RELEASE_INTRO_ZH}}': candidate
-      ? `${tag.slice(1)} 是候选版，不会推送给稳定版用户：`
-      : `${tag.slice(1)} 是正式版：`,
+      ? `**这是候选版，不会推送给稳定版用户。**`
+      : '',
     '{{RELEASE_INTRO_EN}}': candidate
-      ? `${tag.slice(1)} is a release candidate and is not offered to stable users:`
-      : `${tag.slice(1)} is a stable release:`,
+      ? `**This is a release candidate and is not offered to stable users.**`
+      : '',
     '{{RELEASE_SUMMARY_ZH}}': release.zh.summary,
     '{{RELEASE_SUMMARY_EN}}': release.en.summary,
     '{{RELEASE_HIGHLIGHTS_ZH}}': highlights(release.zh.highlights),

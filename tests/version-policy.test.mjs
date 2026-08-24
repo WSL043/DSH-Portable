@@ -71,8 +71,7 @@ test('stable release notes never describe the product as a candidate', async () 
   assert.doesNotMatch(stable, /\{\{DSH_VERSION\}\}/)
   assert.match(stable, /0\.1\.1-rc\.1/)
   assert.doesNotMatch(stable, /候选版|candidate(?: release| build| version)?/i)
-  assert.match(stable, /0\.4\.0 是正式版/)
-  assert.match(stable, /0\.4\.0 is a stable release/i)
+  assert.doesNotMatch(stable, /0\.4\.0 是正式版|0\.4\.0 is a stable release/i)
 })
 
 test('all finished-product manifests use the same declared product version', async () => {
