@@ -405,6 +405,31 @@ export async function repairManagedProfileModuleFallback(layout) {
   return changed
 }
 
+export async function clearPortableMoveLinks(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const fallbackRoot = paths.join(layout.dshHome, 'profiles', 'node_modules')
+  let changed = false
+  if (existsSync(fallbackRoot)) {
+    await rm(fallbackRoot, { recursive: true, force: true })
+    changed = true
+  }
+
+  let storeVersions = []
+  try {
+    storeVersions = await readdir(layout.packageManagerStore, { withFileTypes: true })
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
+  for (const entry of storeVersions) {
+    if (!entry.isDirectory() || !/^v\d+$/.test(entry.name)) continue
+    const projects = paths.join(layout.packageManagerStore, entry.name, 'projects')
+    if (!existsSync(projects)) continue
+    await rm(projects, { recursive: true, force: true })
+    changed = true
+  }
+  return changed
+}
+
 export function buildDshEnv(layout, source = process.env) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const separator = layout.platform === 'win32' ? ';' : ':'

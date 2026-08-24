@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawn } from 'node:child_process'
 import { realpathSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -12,6 +12,7 @@ import {
   acquireLaunchLockWithWait,
   browserLaunchSpec,
   buildDshEnv,
+  clearPortableMoveLinks,
   isOwnedPortableBrowserProcess,
   isOwnedDshProcess,
   isOwnedLauncherProcess,
@@ -83,6 +84,28 @@ test('startup rebuilds the managed module fallback from the packaged dependency 
   assert.throws(() => realpathSync(
     path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-client-ui-jobs.stale'),
   ))
+})
+
+test('shutdown removes only generated absolute links so the portable root can move', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-fallback-clear-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  const fallback = path.join(layout.dshHome, 'profiles', 'node_modules')
+  const profile = path.join(layout.dshHome, 'profiles', 'web')
+  const storeProjects = path.join(layout.packageManagerStore, 'v11', 'projects')
+  const storeProject = path.join(storeProjects, 'profile-record')
+  await mkdir(path.join(fallback, '@deepseek-ai', 'dsh'), { recursive: true })
+  await writeFile(path.join(fallback, '@deepseek-ai', 'dsh', 'package.json'), '{"generated":true}')
+  await mkdir(profile, { recursive: true })
+  await writeFile(path.join(profile, 'package.json'), '{"name":"user-profile"}')
+  await mkdir(storeProjects, { recursive: true })
+  await symlink(profile, storeProject, process.platform === 'win32' ? 'junction' : 'dir')
+
+  assert.equal(await clearPortableMoveLinks(layout), true)
+  await assert.rejects(readFile(path.join(fallback, '@deepseek-ai', 'dsh', 'package.json')), { code: 'ENOENT' })
+  await assert.rejects(readFile(path.join(storeProject, 'package.json')), { code: 'ENOENT' })
+  assert.equal(JSON.parse(await readFile(path.join(profile, 'package.json'), 'utf8')).name, 'user-profile')
+  assert.equal(await clearPortableMoveLinks(layout), false)
 })
 
 test('runtime closure ignores build-time type packages that production npm installs may prune', async (t) => {

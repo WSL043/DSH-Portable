@@ -14,6 +14,7 @@ import {
   acquireLaunchLockWithWait,
   browserLaunchSpec,
   buildDshEnv,
+  clearPortableMoveLinks,
   ensureDesktopBridgeFallback,
   repairManagedProfileModuleFallback,
   ensurePortableDirectories,
@@ -407,6 +408,7 @@ async function stop() {
   }
   if (ownedState(state)) throw new Error(`DSH process ${state.pid} did not stop.`)
   rmSync(layout.processState, { force: true })
+  await clearPortableMoveLinks(layout)
   if (process.platform !== 'win32' && state.controlPipe) rmSync(state.controlPipe, { force: true })
   if (browserError) throw browserError
   return { status: 'stopped', pid: state.pid, port: state.port, graceful: gracefulRequested && !forced, forced, browser }
