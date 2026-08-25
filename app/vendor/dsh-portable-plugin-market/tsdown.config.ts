@@ -15,8 +15,9 @@ export default defineConfig({
   platform: 'browser',
   target: 'es2022',
   dts: false,
-  sourcemap: true,
+  sourcemap: false,
   clean: false,
+  minify: true,
   external,
   noExternal: source => external.includes(source) ? undefined : true,
   define: {

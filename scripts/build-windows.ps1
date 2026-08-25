@@ -380,6 +380,14 @@ try {
     if (Test-Path -LiteralPath $ZipBackup) { Remove-Item -LiteralPath $ZipBackup -Force }
     if (Test-Path -LiteralPath $ShaBackup) { Remove-Item -LiteralPath $ShaBackup -Force }
 
+    $FootprintReport = Join-Path $OutputDir 'footprint-windows-x64.json'
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\report-footprint.mjs') $Stage `
+        --platform windows-x64 `
+        --archive $Zip `
+        --budget (Join-Path $ProjectRoot 'config\footprint-budgets.json') `
+        --output $FootprintReport
+    if ($LASTEXITCODE -ne 0) { throw 'Windows product footprint exceeded its reviewed budget.' }
+
     $Manifest = Join-Path $OutputDir 'portable-manifest.json'
     $ManifestCandidate = Join-Path $OutputDir (".portable-manifest-$BuildId.json")
     $ManifestBody = [ordered]@{
@@ -443,6 +451,7 @@ try {
         UpdateComponentSha256 = $UpdateComponentHash
         UpdateManifest = $UpdateManifest
         EngineUpdateManifest = $EngineUpdateManifest
+        FootprintReport = $FootprintReport
         Stage = $Stage
         DshVersion = $Lock.dsh.version
     }

@@ -20,6 +20,39 @@ const subprocessEntry = requireFromApp.resolve('@deepseek-ai/dsh-subprocess-loca
 await import(pathToFileURL(subprocessEntry).href)
 loaded.push('@deepseek-ai/dsh-subprocess-local')
 
+// The finished product deliberately removes alternate browser/ESM payloads
+// from packages whose Node export resolves to the CommonJS build. Exercise
+// both require and ESM import at the actual app boundary so an upstream export
+// change cannot turn that footprint optimization into a silent provider fault.
+const bedrock = requireFromApp('@aws-sdk/client-bedrock-runtime')
+assert.equal(typeof bedrock.BedrockRuntimeClient, 'function', 'Amazon Bedrock CommonJS client did not load')
+const bedrockEntry = requireFromApp.resolve('@aws-sdk/client-bedrock-runtime')
+const bedrockImported = await import(pathToFileURL(bedrockEntry).href)
+assert.equal(typeof bedrockImported.BedrockRuntimeClient, 'function', 'Amazon Bedrock ESM import did not load')
+const bedrockClient = new bedrock.BedrockRuntimeClient({
+  region: 'us-east-1',
+  credentials: { accessKeyId: 'portable-smoke', secretAccessKey: 'portable-smoke' },
+})
+bedrockClient.destroy()
+loaded.push('@aws-sdk/client-bedrock-runtime')
+
+const telemetry = requireFromApp('@opentelemetry/api')
+assert.equal(typeof telemetry.trace?.getTracer, 'function', 'OpenTelemetry CommonJS API did not load')
+const telemetryEntry = requireFromApp.resolve('@opentelemetry/api')
+const telemetryImported = await import(pathToFileURL(telemetryEntry).href)
+assert.equal(typeof telemetryImported.trace?.getTracer, 'function', 'OpenTelemetry ESM import did not load')
+loaded.push('@opentelemetry/api')
+
+// Mistral's ESM client imports OpenTelemetry internally. Loading and
+// constructing it from the finished app catches CJS/ESM interop regressions
+// that a direct OpenTelemetry import alone would miss.
+const mistralEntry = requireFromApp.resolve('@mistralai/mistralai')
+const mistralImported = await import(pathToFileURL(mistralEntry).href)
+assert.equal(typeof mistralImported.Mistral, 'function', 'Mistral ESM client did not load')
+const mistralClient = new mistralImported.Mistral({ apiKey: 'portable-smoke' })
+assert.ok(mistralClient, 'Mistral client construction failed')
+loaded.push('@mistralai/mistralai')
+
 const pty = requireFromApp('node-pty')
 await new Promise((resolve, reject) => {
   const marker = 'DSH_PORTABLE_PTY_OK'

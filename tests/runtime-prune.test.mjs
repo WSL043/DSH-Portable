@@ -74,6 +74,23 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, 'runtime-ts/src/index.ts', 'export default true')
   await fixtureFile(appDir, '@wsl043/dsh-portable-plugin-market/package.json', '{"name":"@wsl043/dsh-portable-plugin-market","main":"lib/index.js"}')
   await fixtureFile(appDir, '@wsl043/dsh-portable-plugin-market/lib/index.js', 'export default true')
+  await fixtureFile(appDir, '@aws-sdk/core/package.json', JSON.stringify({
+    name: '@aws-sdk/core',
+    main: './dist-cjs/index.js',
+    module: './dist-es/index.js',
+    exports: { '.': { module: './dist-es/index.js', node: './dist-cjs/index.js', import: './dist-es/index.js', require: './dist-cjs/index.js' } },
+  }))
+  await fixtureFile(appDir, '@aws-sdk/core/dist-cjs/index.js', 'module.exports = true')
+  await fixtureFile(appDir, '@aws-sdk/core/dist-es/index.js', 'export default true')
+  await fixtureFile(appDir, '@opentelemetry/api/package.json', JSON.stringify({
+    name: '@opentelemetry/api',
+    main: 'build/src/index.js',
+    module: 'build/esm/index.js',
+    exports: { '.': { module: './build/esm/index.js', default: './build/src/index.js' } },
+  }))
+  await fixtureFile(appDir, '@opentelemetry/api/build/src/index.js', 'module.exports = true')
+  await fixtureFile(appDir, '@opentelemetry/api/build/esm/index.js', 'export default true')
+  await fixtureFile(appDir, '@opentelemetry/api/build/esnext/index.js', 'export default true')
   await mkdir(path.join(appDir, 'vendor', 'dsh-portable-plugin-market', 'src'), { recursive: true })
   await writeFile(path.join(appDir, 'vendor', 'dsh-portable-plugin-market', 'src', 'maintenance.ts'), 'source only')
 
@@ -107,6 +124,8 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     'openai/index.js',
     'runtime-ts/src/index.ts',
     '@wsl043/dsh-portable-plugin-market/lib/index.js',
+    '@aws-sdk/core/dist-cjs/index.js',
+    '@opentelemetry/api/build/src/index.js',
   ]) {
     assert.equal(await exists(path.join(appDir, 'node_modules', ...relative.split('/'))), true, relative)
   }
@@ -134,6 +153,9 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     '@mixmark-io/domino/.yarn',
     'openai/src',
     '../vendor',
+    '@aws-sdk/core/dist-es',
+    '@opentelemetry/api/build/esm',
+    '@opentelemetry/api/build/esnext',
   ]) {
     assert.equal(await exists(path.join(appDir, 'node_modules', ...relative.split('/'))), false, relative)
   }

@@ -1,10 +1,9 @@
 {
   "name": "@wsl043/dsh-portable-plugin-market",
   "description": "Portable-native DSH plugin market backed by the Awesome DSH Plugin catalog.",
-  "version": "0.1.0-beta.4",
+  "version": "0.1.0-beta.5",
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -23,7 +22,7 @@
   ],
   "scripts": {
     "build": "pnpm run build:server && pnpm run build:client",
-    "build:server": "tsc -p tsconfig.json",
+    "build:server": "tsdown --config tsdown.server.config.ts",
     "build:client": "tsdown && node scripts/normalize-client-banner.mjs"
   },
   "devDependencies": {
@@ -60,10 +59,7 @@
     }
   },
   "exports": {
-    ".": {
-      "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
-    },
+    ".": "./lib/index.js",
     "./client": "./client/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./package.json": "./package.json"

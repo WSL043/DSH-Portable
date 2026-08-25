@@ -15,7 +15,7 @@
   },
   "pluginMarket": {
     "package": "@wsl043/dsh-portable-plugin-market",
-    "version": "0.1.0-beta.4",
+    "version": "0.1.0-beta.5",
     "catalog": "https://awesome-dsh-plugin.com/plugins.json",
     "catalogRepository": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin",
     "implementationBasis": "https://github.com/dsh-market/dsh-market",

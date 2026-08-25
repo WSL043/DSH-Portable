@@ -66,6 +66,26 @@ const reviewedPackagingOnlyPayloads = [
     remove: ['test', '.yarn'],
   },
 ]
+const reviewedNodeOnlyBuilds = [
+  {
+    packageName: /^@(?:aws-sdk|smithy)\//,
+    main: /^\.\/dist-cjs\//,
+    module: /^\.\/dist-es\//,
+    remove: ['dist-es'],
+  },
+  {
+    packageName: /^@aws\/lambda-invoke-store$/,
+    main: /^\.\/dist-cjs\//,
+    module: /^\.\/dist-es\//,
+    remove: ['dist-es'],
+  },
+  {
+    packageName: /^@opentelemetry\//,
+    main: /^build\/src\//,
+    module: /^build\/esm\//,
+    remove: ['build/esm', 'build/esnext'],
+  },
+]
 const removed = { bytes: 0, files: 0, directories: 0 }
 
 async function removeTree(filename) {
@@ -87,6 +107,77 @@ async function prunePackagePayload(root) {
       await removeTree(filename)
     }
   }
+}
+
+function resolveConditionalTarget(value, conditions) {
+  if (typeof value === 'string') return value
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const target = resolveConditionalTarget(item, conditions)
+      if (target) return target
+    }
+    return null
+  }
+  if (!value || typeof value !== 'object') return null
+  for (const [condition, target] of Object.entries(value)) {
+    if (conditions.has(condition)) return resolveConditionalTarget(target, conditions)
+  }
+  return null
+}
+
+function nodeExportTargets(exportsField) {
+  if (!exportsField) return []
+  const mappings = exportsField && typeof exportsField === 'object' && !Array.isArray(exportsField)
+    && Object.keys(exportsField).some((key) => key.startsWith('.'))
+    ? Object.values(exportsField)
+    : [exportsField]
+  const targets = []
+  for (const mapping of mappings) {
+    for (const mode of ['import', 'require']) {
+      const target = resolveConditionalTarget(mapping, new Set(['node', 'node-addons', mode, 'default']))
+      if (target) targets.push(target)
+    }
+  }
+  return targets
+}
+
+async function pruneReviewedNodeOnlyBuilds() {
+  for (const { name, root } of await packageRoots(nodeModules)) {
+    const rule = reviewedNodeOnlyBuilds.find((candidate) => candidate.packageName.test(name))
+    if (!rule) continue
+    const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+    if (!rule.main.test(String(manifest.main ?? '')) || !rule.module.test(String(manifest.module ?? ''))) {
+      throw new Error(`refusing to prune an unreviewed alternate build layout for ${name}`)
+    }
+    const activeTargets = nodeExportTargets(manifest.exports)
+    for (const relative of rule.remove) {
+      const prefix = `./${relative.replaceAll('\\', '/')}/`
+      if (activeTargets.some((target) => target === `./${relative}` || target.startsWith(prefix))) {
+        throw new Error(`refusing to remove an active Node export from ${name}: ${relative}`)
+      }
+      try {
+        await removeTree(path.join(root, ...relative.split('/')))
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error
+      }
+    }
+  }
+}
+
+async function packageRoots(root) {
+  const result = []
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.name === '.bin') continue
+    const first = path.join(root, entry.name)
+    if (!entry.name.startsWith('@')) {
+      result.push({ name: entry.name, root: first })
+      continue
+    }
+    for (const child of await readdir(first, { withFileTypes: true })) {
+      if (child.isDirectory()) result.push({ name: `${entry.name}/${child.name}`, root: path.join(first, child.name) })
+    }
+  }
+  return result
 }
 
 async function removeDebugSymbols(root) {
@@ -140,6 +231,7 @@ await rm(path.join(ptyRoot, 'binding.gyp'), { force: true })
 // like development material. Only remove file formats that Node cannot execute
 // at runtime, plus the package-specific node-pty build inputs above.
 await prunePackagePayload(nodeModules)
+await pruneReviewedNodeOnlyBuilds()
 for (const segments of sourceOnlyPackages) {
   const packageRoot = path.join(nodeModules, ...segments.slice(0, -1))
   const sourceRoot = path.join(nodeModules, ...segments)

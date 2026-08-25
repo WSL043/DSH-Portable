@@ -1,0 +1,21 @@
+{
+  "version": "0.4.15",
+  "zh": {
+    "summary": "便携包显著减少小文件，同时完整保留官方 DSH、插件市场和插件管理能力。",
+    "highlights": [
+      "Windows 完整包减少约 15% 的落地文件和约 14% 的文件系统项目，复制、解压、移动与删除时需要处理的项目更少。",
+      "插件市场的服务端和界面产物合并为紧凑的成品文件；发现、安装、更新、卸载、诊断与重启提示保持不变。",
+      "只移除 Node 运行时不会选择的重复依赖构建；Amazon Bedrock、OpenTelemetry、官方 DSH 与第三方插件流程均通过成品验收。",
+      "Windows、macOS 与 Linux 构建现在都会产出体积报告；Windows 发行门会阻止文件数、目录数、落地体积或市场体积意外反弹。"
+    ]
+  },
+  "en": {
+    "summary": "The portable package now carries substantially fewer small files while preserving official DSH, the Plugin Market, and plugin management.",
+    "highlights": [
+      "The complete Windows package contains about 15% fewer files and 14% fewer filesystem items, reducing the amount of work needed when extracting, copying, moving, or deleting it.",
+      "The Plugin Market server and client are packaged as compact production artifacts without removing discovery, install, update, uninstall, diagnostics, or restart guidance.",
+      "Only duplicate dependency builds that Node never selects are removed. Amazon Bedrock, OpenTelemetry, official DSH, and third-party plugin flows pass finished-product acceptance.",
+      "Windows, macOS, and Linux builds now emit footprint reports, while the Windows release gate blocks unexpected regressions in files, directories, extracted size, or market size."
+    ]
+  }
+}

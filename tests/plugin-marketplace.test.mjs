@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -57,6 +57,9 @@ test('the packaged market ships runtime artifacts only', async () => {
     'NOTICE.md',
   ])
   assert.equal(manifest.files.some((entry) => entry === 'src' || entry.includes('*.map') || entry.includes('types')), false)
+  assert.deepEqual(await readdir(path.join(root, 'app/vendor/dsh-portable-plugin-market/lib')), ['index.js'])
+  assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/lib/index.js'))).size < 200_000)
+  assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/client/client.js'))).size < 220_000)
 })
 
 test('the Portable market is a native Plugins tab with readable cards and direct project links', async () => {
@@ -96,37 +99,29 @@ test('the Portable market is a native Plugins tab with readable cards and direct
 })
 
 test('the Portable market never flashes a console window for background commands on Windows', async () => {
-  const [processLayer, restartLayer, builtProcessLayer, builtRestartLayer] = await Promise.all([
+  const [processLayer, restartLayer] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/dsh-cli.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/restart.ts'),
-    read('app/vendor/dsh-portable-plugin-market/lib/dsh-cli.js'),
-    read('app/vendor/dsh-portable-plugin-market/lib/restart.js'),
   ])
 
-  for (const text of [processLayer, builtProcessLayer]) {
-    assert.match(text, /function spawnShim[\s\S]+windowsHide:\s*true/)
-    assert.match(text, /spawn\('taskkill',[\s\S]+windowsHide:\s*true/)
-  }
-  for (const text of [restartLayer, builtRestartLayer]) {
-    assert.match(text, /spawn\(nodeExecutable\(\),[\s\S]+windowsHide:\s*true/)
-    assert.match(text, /child = spawn\(file, args, \{[\s\S]+windowsHide: true/)
-  }
+  assert.match(processLayer, /function spawnShim[\s\S]+windowsHide:\s*true/)
+  assert.match(processLayer, /spawn\('taskkill',[\s\S]+windowsHide:\s*true/)
+  assert.match(restartLayer, /spawn\(nodeExecutable\(\),[\s\S]+windowsHide:\s*true/)
+  assert.match(restartLayer, /child = spawn\(file, args, \{[\s\S]+windowsHide: true/)
 })
 
 test('the market keeps implementation metadata and support controls out of the primary header', async () => {
-  const [section, operations, styles, source, builtRoutes] = await Promise.all([
+  const [section, operations, styles, source] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/OperationsPanel.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
     read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
-    read('app/vendor/dsh-portable-plugin-market/lib/routes.js'),
   ])
 
   const header = section.match(/<div className=\{css\.titleRow\}>[\s\S]*?<div className=\{css\.tabs\}>/)?.[0] ?? ''
   assert.doesNotMatch(header, /DSH-Portable|versionHint|doExportLog/)
   assert.doesNotMatch(section, /doExportLog|\/dsh-market\/logs|exportState/)
   assert.doesNotMatch(source, /exportLogs|\/dsh-market\/logs/)
-  assert.doesNotMatch(builtRoutes, /exportLogs|\/dsh-market\/logs/)
   assert.match(operations, /if \(records\.length === 0\) return null/)
   assert.doesNotMatch(operations, /opEntryQuiet/)
   assert.doesNotMatch(styles, /\.repoLink|\.version|\.opEntryQuiet/)
@@ -299,15 +294,11 @@ test('the host-peer retry is scoped to DSH runtime peers and runs at most once',
 })
 
 test('opening the market revalidates installed-plugin updates instead of serving the 30-minute cache', async () => {
-  const [section, builtClient] = await Promise.all([
-    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
-    read('app/vendor/dsh-portable-plugin-market/client/client.js'),
-  ])
+  const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
   const initialEffect = section.match(/useEffect\(\(\) => \{\s*void loadCatalog\(\)[\s\S]*?\n\s*\}, \[refreshInstalled, loadCatalog\]\)/)?.[0] ?? ''
 
   assert.match(initialEffect, /refreshInstalled\(true\)/)
   assert.doesNotMatch(initialEffect, /refreshInstalled\(\)\s*$/m)
-  assert.match(builtClient, /refreshInstalled\(true\)/)
 })
 
 test('plugin updates remain visible in the market activity panel', async () => {
@@ -321,10 +312,7 @@ test('plugin updates remain visible in the market activity panel', async () => {
 })
 
 test('a newly published plugin asks for confirmation before pnpm mutates the profile', async () => {
-  const [routes, builtRoutes] = await Promise.all([
-    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
-    read('app/vendor/dsh-portable-plugin-market/lib/routes.js'),
-  ])
+  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
   const updateRoute = routes.slice(routes.indexOf("path: '/dsh-market/update'"), routes.indexOf("path: '/dsh-market/setup-pnpm'"))
   const confirmation = updateRoute.indexOf('confirmationRequired: true')
   const mutation = updateRoute.indexOf('await runPlugin(config.profile, addArgs)')
@@ -335,7 +323,6 @@ test('a newly published plugin asks for confirmation before pnpm mutates the pro
   assert.match(updateRoute, /if \(!force && !isGit[\s\S]*latestPublishedRecently\(name\)/)
   assert.match(updateRoute, /staleReason:\s*'release-age'/)
   assert.match(updateRoute, /force:[\s\S]*RELEASE_AGE_OVERRIDE/)
-  assert.match(builtRoutes, /confirmationRequired:\s*true/)
 
   const client = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
   assert.match(client, /body\.confirmationRequired === true[\s\S]*setFreshReleaseConfirmation/)

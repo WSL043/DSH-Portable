@@ -17,9 +17,9 @@
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>
-	<string>0.4.14</string>
+	<string>0.4.15</string>
   <key>CFBundleVersion</key>
-	<string>4014999</string>
+	<string>4015999</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>

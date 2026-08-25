@@ -247,6 +247,9 @@ rm -f "$TAR" "$TAR.sha256"
 tar --sort=name --mtime='@0' --owner=0 --group=0 --numeric-owner -czf "$TAR" -C "$BUILD_ROOT" DSH-Portable
 TAR_HASH="$(sha256sum "$TAR" | awk '{print $1}')"
 printf '%s  %s\n' "$TAR_HASH" "$(basename "$TAR")" > "$TAR.sha256"
+FOOTPRINT="$OUTPUT_DIR/footprint-linux-$ARCH.json"
+"$NODE_EXE" "$PROJECT_ROOT/scripts/report-footprint.mjs" "$STAGE" \
+  --platform "linux-$ARCH" --archive "$TAR" --output "$FOOTPRINT"
 
 APPIMAGE_SOURCE="$(find "$PROJECT_ROOT/launcher/linux/target/release/bundle/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
 [[ -n "$APPIMAGE_SOURCE" && -f "$APPIMAGE_SOURCE" ]] || { echo "Tauri did not create an AppImage" >&2; exit 1; }
@@ -262,5 +265,5 @@ if find "$STAGE/data" -type f ! -name README.txt -print -quit | grep -q .; then
   exit 1
 fi
 
-printf '{"archive":"%s","archiveSha256":"%s","appImage":"%s","appImageSha256":"%s","updateComponent":"%s","updateComponentSha256":"%s","updateManifest":"%s","architecture":"%s"}\n' \
-  "$TAR" "$TAR_HASH" "$APPIMAGE" "$APPIMAGE_HASH" "$UPDATE_COMPONENT" "$UPDATE_COMPONENT_HASH" "$UPDATE_MANIFEST" "$ARCH"
+printf '{"archive":"%s","archiveSha256":"%s","appImage":"%s","appImageSha256":"%s","updateComponent":"%s","updateComponentSha256":"%s","updateManifest":"%s","footprint":"%s","architecture":"%s"}\n' \
+  "$TAR" "$TAR_HASH" "$APPIMAGE" "$APPIMAGE_HASH" "$UPDATE_COMPONENT" "$UPDATE_COMPONENT_HASH" "$UPDATE_MANIFEST" "$FOOTPRINT" "$ARCH"
