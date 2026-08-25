@@ -250,6 +250,8 @@ namespace DshPortable
     {
         internal const int WmPortableExit = 0x8043;
         internal const int WmPortableRestore = 0x8044;
+        private const int WmClose = 0x0010;
+        private const uint GwOwner = 4;
         private enum WindowCloseBehavior { Tray, Exit }
 
         private static string uiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
@@ -1028,13 +1030,16 @@ namespace DshPortable
                     dialog.ShowNewFolderButton = true;
                     string portableWorkspace = Path.Combine(root, "workspace");
                     if (Directory.Exists(portableWorkspace)) dialog.SelectedPath = portableWorkspace;
-                    DialogResult selection = dialog.ShowDialog(this);
-                    if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
-                        WriteLauncherLog("workspace-picker", "dialog-closed result=" + selection.ToString());
-                    if (selection == DialogResult.OK && Directory.Exists(dialog.SelectedPath))
-                        result["path"] = Path.GetFullPath(dialog.SelectedPath);
-                    else
-                        result["cancelled"] = true;
+                    using (System.Threading.Timer automation = ArmWorkspacePickerAutomation(Handle))
+                    {
+                        DialogResult selection = dialog.ShowDialog(this);
+                        if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                            WriteLauncherLog("workspace-picker", "dialog-closed result=" + selection.ToString());
+                        if (selection == DialogResult.OK && Directory.Exists(dialog.SelectedPath))
+                            result["path"] = Path.GetFullPath(dialog.SelectedPath);
+                        else
+                            result["cancelled"] = true;
+                    }
                 }
             }
             catch (Exception error)
@@ -1047,6 +1052,37 @@ namespace DshPortable
                     webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
             }
             catch { }
+        }
+
+        private System.Threading.Timer ArmWorkspacePickerAutomation(IntPtr ownerHandle)
+        {
+            if (!String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                return null;
+            int processId = Process.GetCurrentProcess().Id;
+            int closeRequested = 0;
+            return new System.Threading.Timer(delegate
+            {
+                if (System.Threading.Interlocked.CompareExchange(ref closeRequested, 0, 0) != 0) return;
+                EnumWindows(delegate(IntPtr window, IntPtr ignored)
+                {
+                    if (window == ownerHandle || !IsWindowVisible(window)) return true;
+                    uint windowProcessId;
+                    GetWindowThreadProcessId(window, out windowProcessId);
+                    if (windowProcessId != (uint)processId) return true;
+                    IntPtr owner = GetWindow(window, GwOwner);
+                    uint ownerProcessId;
+                    GetWindowThreadProcessId(owner, out ownerProcessId);
+                    if (owner == IntPtr.Zero || ownerProcessId != (uint)processId) return true;
+                    if (System.Threading.Interlocked.CompareExchange(ref closeRequested, 1, 0) != 0) return false;
+                    StringBuilder className = new StringBuilder(256);
+                    GetClassName(window, className, className.Capacity);
+                    WriteLauncherLog("workspace-picker", "dialog-detected hwnd=" + window.ToInt64().ToString(CultureInfo.InvariantCulture)
+                        + " owner=" + owner.ToInt64().ToString(CultureInfo.InvariantCulture)
+                        + " class=" + className.ToString());
+                    PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero);
+                    return false;
+                }, IntPtr.Zero);
+            }, null, 100, 100);
         }
 
         private void DisposeTrayIcon()
@@ -1623,6 +1659,15 @@ namespace DshPortable
 
         [DllImport("user32.dll")]
         private static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr window, uint command);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsWindowVisible(IntPtr window);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr window, StringBuilder className, int maximum);
 
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
