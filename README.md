@@ -172,7 +172,7 @@ bash scripts/build-macos.sh arm64   # 或 x64
 bash scripts/build-linux.sh x64     # 或 arm64
 ```
 
-依赖、发布内容和成品测试均由仓库固定。普通用户无需手动比较校验值；需要时可从 Release 下载 `checksums.txt`。
+依赖、发布内容和成品测试均由仓库固定。普通用户无需手动比较校验值；需要时可从 Release 下载 `checksums.txt`。新构建还会生成绑定源码提交和验收工作流的 GitHub/Sigstore 证明，高级用户可运行 `gh attestation verify <下载文件> -R WSL043/DSH-Portable` 验证来源。
 
 </details>
 

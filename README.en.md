@@ -171,7 +171,7 @@ bash scripts/build-macos.sh arm64   # or x64
 bash scripts/build-linux.sh x64     # or arm64
 ```
 
-Dependencies, release contents, and finished-product tests are pinned by the repository. Normal users do not need to compare checksums manually; `checksums.txt` remains available on each Release.
+Dependencies, release contents, and finished-product tests are pinned by the repository. Normal users do not need to compare checksums manually; `checksums.txt` remains available on each Release. New builds also receive a GitHub/Sigstore attestation bound to their source commit and qualification workflow; advanced users can verify one with `gh attestation verify <download> -R WSL043/DSH-Portable`.
 
 </details>
 

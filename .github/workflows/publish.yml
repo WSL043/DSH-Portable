@@ -14,7 +14,10 @@ on:
 
 permissions:
   actions: read
+  artifact-metadata: write
+  attestations: write
   contents: write
+  id-token: write
 
 jobs:
   publish:
@@ -51,6 +54,32 @@ jobs:
           path: artifacts
       - name: Stage a small user release and a separate update channel
         run: node scripts/stage-release-assets.mjs artifacts release-staging "${{ steps.version.outputs.channel }}"
+      - name: Record the exact release qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" > release-run.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > release-jobs.json
+          node scripts/create-release-evidence.mjs \
+            release-staging/user-assets \
+            release-run.json \
+            release-jobs.json \
+            release-qualification.json \
+            "$GITHUB_REPOSITORY" \
+            "$GITHUB_SHA" \
+            "$RELEASE_TAG"
+      - name: Sign the user download provenance with GitHub attestations
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release-staging/user-assets/checksums.txt
+      - name: Sign the cross-platform qualification result
+        uses: actions/attest@v4
+        with:
+          subject-checksums: release-staging/user-assets/checksums.txt
+          predicate-type: https://in-toto.io/attestation/test-result/v0.1
+          predicate-path: release-qualification.json
       - name: Render immutable download links for this release
         env:
           RELEASE_TAG: ${{ inputs.tag }}

@@ -262,6 +262,8 @@ test('public downloads expose a truthful security and code-signing policy', asyn
   assert.match(signing, /PRIVACY\.md/)
   assert.match(security, /private vulnerability reporting/i)
   assert.match(security, /API key|credentials/i)
+  assert.match(chinese, /gh attestation verify.+WSL043\/DSH-Portable/)
+  assert.match(english, /gh attestation verify.+WSL043\/DSH-Portable/i)
 })
 
 test('release notes are version-specific instead of replaying one fixed feature list', async () => {
@@ -330,6 +332,18 @@ test('publishing separates beginner downloads from machine update assets', async
     'the immutable version release must be public before its update channel advertises the new version',
   )
   assert.match(workflow, /stage-release-assets\.mjs artifacts release-staging "\$\{\{ steps\.version\.outputs\.channel \}\}"/)
+  assert.match(workflow, /id-token:\s*write/)
+  assert.match(workflow, /attestations:\s*write/)
+  assert.match(workflow, /create-release-evidence\.mjs/)
+  assert.match(workflow, /actions\/attest@v4/)
+  assert.match(workflow, /subject-checksums:\s*release-staging\/user-assets\/checksums\.txt/)
+  assert.match(workflow, /predicate-type:\s*https:\/\/in-toto\.io\/attestation\/test-result\/v0\.1/)
+  assert.match(workflow, /predicate-path:\s*release-qualification\.json/)
+  assert.ok(
+    workflow.indexOf('create-release-evidence.mjs') < workflow.indexOf('actions/attest@v4')
+      && workflow.indexOf('actions/attest@v4') < workflow.indexOf('Publish curated user downloads'),
+    'the exact qualified user assets must be recorded and attested before publication',
+  )
   assert.match(workflow, /update-channel-core-\$\{\{ steps\.version\.outputs\.channel \}\}/)
   assert.match(workflow, /release-staging\/engine-update-assets\/\*/)
   assert.match(workflow, /内核更新通道（无需下载）/)
