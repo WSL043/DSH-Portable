@@ -161,6 +161,23 @@ test('Simplified Chinese is the default GitHub landing page and English is a com
   assert.doesNotMatch(english, /三步启动|下载 Windows|便携数据与安全/)
 })
 
+test('README status badges stay compact, useful, and visually consistent', async () => {
+  const chinese = await read('README.md')
+  const english = await read('README.en.md')
+
+  for (const document of [chinese, english]) {
+    const badgeBlock = document.match(/<p align="center">\s*(?:<a[^>]+><img[^>]+><\/a>\s*){4}<\/p>/)?.[0] ?? ''
+    assert.notEqual(badgeBlock, '', 'README must expose one compact four-badge status row')
+    assert.match(badgeBlock, /github\/v\/release\/WSL043\/DSH-Portable\?display_name=tag/)
+    assert.match(badgeBlock, /github\/downloads\/WSL043\/DSH-Portable\/total/)
+    assert.match(badgeBlock, /github\/actions\/workflow\/status\/WSL043\/DSH-Portable\/ci\.yml\?branch=main/)
+    assert.match(badgeBlock, /github\/license\/WSL043\/DSH-Portable/)
+    assert.doesNotMatch(badgeBlock, /github\/stars|Windows%20%7C|display_name=release/)
+    assert.equal((badgeBlock.match(/style=flat-square/g) ?? []).length, 4)
+    assert.equal((badgeBlock.match(/color=171717/g) ?? []).length, 4)
+  }
+})
+
 test('update guidance describes the component update path without exposing internals', async () => {
   const chinese = await read('README.md')
   const english = await read('README.en.md')

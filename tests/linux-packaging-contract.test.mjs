@@ -206,7 +206,6 @@ test('Chinese-first product docs explain Linux launch, portable data, plugins, a
   assert.match(english, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
   assert.match(bundled, /Linux[\s\S]+DSH 终端[\s\S]+dsh plugin/)
   assert.match(bundled, /Linux[\s\S]+\.\/dsh/)
-  assert.match(chinese, /Windows%20%7C%20macOS%20%7C%20Linux/)
 })
 
 test('Linux native loading surface follows Chinese or English without an external page', async () => {
