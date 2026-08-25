@@ -2,6 +2,7 @@ import type { Translate } from './market-data.ts'
 
 interface AiFixPeerMismatch {
   satisfied: boolean | null
+  verdict?: { kind: 'risk' | 'warning' | 'none' }
 }
 
 interface AiFixReport {
@@ -15,7 +16,14 @@ interface AiFixReport {
 
 /** Build a repair prompt whose allowed actions match the observed problem. */
 export function buildAiFixPrompt(report: AiFixReport, t: Translate): string {
-  const lines: string[] = [t('aiFixIntro').replace('{0}', report.profile), '']
+  const lines: string[] = [
+    t('aiFixIntro').replace('{0}', report.profile),
+    '',
+    t('aiFixDetect'),
+    '',
+    t('aiFixIfSelf'),
+    '',
+  ]
   if (report.summary.errors.length > 0) {
     lines.push(`${t('checkErrors')}:`)
     for (const error of report.summary.errors) lines.push(`- ${error}`)
@@ -34,7 +42,8 @@ export function buildAiFixPrompt(report: AiFixReport, t: Translate): string {
 
   // A peer-range-only report is a package-version problem. Reordering bundle
   // layers or editing the user's patch cannot widen a plugin manifest range.
-  const confirmedPeers = report.peerMismatches.filter(peer => peer.satisfied === false)
+  const confirmedPeers = report.peerMismatches.filter(peer =>
+    peer.satisfied === false && (peer.verdict === undefined || peer.verdict.kind === 'risk'))
   const peerRangeOnly = report.summary.errors.length === 0
     && report.duplicates.length === 0
     && report.multiVersion.length === 0

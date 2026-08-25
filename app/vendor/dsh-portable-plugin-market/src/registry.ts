@@ -14,6 +14,8 @@ export interface RegistryPlugin {
   category: string
   description: Record<string, string>
   npm?: string | null
+  /** Optional prebuilt archive published by this entry's own GitHub repository. */
+  tarball?: string | null
   stars?: number | null
   /**
    * npm downloads in the last 30 days, when the entry has a published

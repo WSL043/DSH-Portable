@@ -120,6 +120,8 @@ export declare function parsePatchRows(text: string): {
 };
 /** The profile manifest's `dsh.profile.bundles` — what the CLI reconciled. */
 export declare function readProfileBundles(profileDirectory: string): string[];
+/** Finish a remove that deleted the package before pnpm could save the manifest. */
+export declare function dropFromManifest(profile: string, name: string, explicitDir?: string): boolean;
 export declare function removeProfileBundle(profileDirectory: string, name: string): boolean;
 export declare function addProfileBundle(profileDirectory: string, name: string): boolean;
 /**

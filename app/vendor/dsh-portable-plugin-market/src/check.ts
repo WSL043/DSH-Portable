@@ -104,6 +104,27 @@ export interface OrphanRow {
   reason: string
 }
 
+export interface PeerRisk {
+  plugin: string
+  peer: string
+  range: string
+  resolved: string
+  direction: 'belowMin' | 'aboveMax'
+}
+
+export interface PeerWarning {
+  plugin: string
+  peer: string
+  range: string
+  resolved: string
+  reason: 'aboveMax' | 'optional'
+}
+
+export type PeerVerdict =
+  | { kind: 'risk'; risk: PeerRisk }
+  | { kind: 'warning'; warning: PeerWarning }
+  | { kind: 'none' }
+
 /** A plugin peerDependencies range vs the resolved version. */
 export interface PeerMismatch {
   plugin: string
@@ -112,6 +133,8 @@ export interface PeerMismatch {
   resolved: string | null
   /** False = confirmed incompatible; null = could not be evaluated. */
   satisfied: boolean | null
+  optional?: boolean
+  verdict?: PeerVerdict
 }
 
 /**
@@ -820,7 +843,7 @@ export function analyzeProfile(profileDirectory: string, options: CheckOptions =
   const peerMismatches: PeerMismatch[] = []
   const seenDeps = new Set<string>()
   for (const plugin of installedPackageNames(profileDirectory)) {
-    let pkg: { peerDependencies?: Record<string, string> }
+    let pkg: { peerDependencies?: Record<string, string>; peerDependenciesMeta?: Record<string, { optional?: boolean }> }
     try {
       pkg = JSON.parse(readFileSync(join(profileDirectory, 'node_modules', plugin, 'package.json'), 'utf8')) as typeof pkg
     } catch {
@@ -847,6 +870,7 @@ export function analyzeProfile(profileDirectory: string, options: CheckOptions =
       peerMismatches.push({
         plugin, name, range: spec, resolved,
         satisfied: satisfied === null ? null : satisfied,
+        ...(pkg.peerDependenciesMeta?.[name]?.optional === true ? { optional: true } : {}),
       })
     }
   }

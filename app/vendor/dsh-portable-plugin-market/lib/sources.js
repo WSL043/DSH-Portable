@@ -10,6 +10,27 @@ function validSubpath(subpath) {
 }
 /** Registry tarball names must be plain npm package names, nothing fancier. */
 const NPM_NAME_RE = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/;
+/** Accept only a prebuilt GitHub Release archive owned by the entry's repo. */
+function releaseTarballTarget(value, repo) {
+    if (typeof value !== 'string')
+        return null;
+    const target = value.trim();
+    let url;
+    try {
+        url = new URL(target);
+    }
+    catch {
+        return null;
+    }
+    if (url.protocol !== 'https:' || url.hostname !== 'github.com')
+        return null;
+    if (!url.pathname.endsWith('.tgz') && !url.pathname.endsWith('.tar.gz'))
+        return null;
+    const segments = url.pathname.split('/').filter(Boolean);
+    if (segments.length < 4 || segments[2] !== 'releases')
+        return null;
+    return `${segments[0]}/${segments[1]}`.toLowerCase() === repo.toLowerCase() ? target : null;
+}
 /**
  * Parse a registry source url: a github repo, optionally with a
  * `/tree/<branch>/<subpath>` suffix (how the curated list links monorepo
@@ -120,6 +141,9 @@ export function installTargetFor(entry) {
         return null;
     if (typeof entry.npm === 'string' && NPM_NAME_RE.test(entry.npm))
         return entry.npm;
+    const tarball = releaseTarballTarget(entry.tarball, source.repo);
+    if (tarball !== null)
+        return tarball;
     return source.subpath !== null
         ? `github:${source.repo}#path:/${source.subpath}`
         : `github:${source.repo}`;

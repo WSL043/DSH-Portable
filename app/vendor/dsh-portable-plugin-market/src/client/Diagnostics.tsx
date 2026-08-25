@@ -52,6 +52,11 @@ interface OrphanRow {
   reason: string
 }
 
+type PeerVerdict =
+  | { kind: 'risk'; risk: { direction: 'belowMin' | 'aboveMax' } }
+  | { kind: 'warning'; warning: { reason: 'aboveMax' | 'optional' } }
+  | { kind: 'none' }
+
 /** Mirrors PeerMismatch in src/check.ts. */
 interface PeerMismatch {
   plugin: string
@@ -59,6 +64,8 @@ interface PeerMismatch {
   range: string
   resolved: string | null
   satisfied: boolean | null
+  optional?: boolean
+  verdict?: PeerVerdict
 }
 
 /** Mirrors MultiVersion in src/check.ts. */
@@ -370,12 +377,16 @@ export function Diagnostics(props: { t: Translate }) {
   const summary = report.summary
   const suggested = report.suggestedOrder ?? null
   // Confirmed mismatches vs informational entries (satisfied / unknown).
-  const peerConfirmed = report.peerMismatches.filter(peer => peer.satisfied === false)
+  const peerRisk = report.peerMismatches.filter(peer => peer.satisfied === false && peer.verdict?.kind === 'risk')
+  const peerWarning = report.peerMismatches.filter(peer =>
+    peer.satisfied === false && (peer.verdict === undefined || peer.verdict.kind === 'warning'))
+  const peerConfirmed = [...peerRisk, ...peerWarning]
   const peerInfo = report.peerMismatches.filter(peer => peer.satisfied !== false)
   // Category counts for the overview strip: conflicts / dependencies / order.
   // Conflicts = HARD duplicate loader entries only; same-name rows are
   // informational and stay out of the conflict count (review #109).
   const catConflict = report.duplicates.length
+  const catRisk = peerRisk.length
   const catDeps = report.peerMismatches.length + report.multiVersion.length
   const catOrder = report.orderConflicts?.length ?? 0
   const anyIssue = catConflict + catDeps + catOrder > 0
@@ -387,7 +398,7 @@ export function Diagnostics(props: { t: Translate }) {
   // as a hard issue (review #109).
   const hasHardIssues = summary.errors.length > 0
     || report.duplicates.length > 0
-    || report.peerMismatches.some(peer => peer.satisfied === false)
+    || catRisk > 0
 
   /**
    * Build the AI-fix prompt (errors/warnings/order conflicts + scope) and
@@ -584,7 +595,9 @@ export function Diagnostics(props: { t: Translate }) {
                 <span className={css.nm}>{peer.plugin}</span>
                 <span className={css.spec}>{t('checkRange')}: {peer.range}</span>
                 <span className={css.spec}>{t('checkResolved')}: {peer.resolved ?? '—'}</span>
-                <span className={css.diagBadgeShadow}>{t('checkUnsatisfied')}</span>
+                <span className={peer.verdict?.kind === 'risk' ? css.diagBadgeShadow : css.diagBadgeWarn}>
+                  {t(peer.verdict?.kind === 'risk' ? 'peerRisk' : 'peerWarning')}
+                </span>
               </div>
             ))}
           </div>

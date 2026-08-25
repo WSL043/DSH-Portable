@@ -16,35 +16,15 @@
  * Everything else stays informational: `*`, prerelease-vs-`*` artifacts,
  * unparseable ranges, and optional peers never produce a risk here.
  */
-import { type CheckOptions, type DuplicateName } from './check.ts';
-export interface CompatibilityRisk {
-    plugin: string;
-    peer: string;
-    range: string;
-    resolved: string;
-    direction: 'belowMin' | 'aboveMax';
-}
-export interface CompatibilityWarning {
-    plugin: string;
-    peer: string;
-    range: string;
-    resolved: string;
-    reason: 'aboveMax' | 'optional';
-}
+import { type CheckOptions, type DuplicateName, type PeerRisk, type PeerWarning, type PeerVerdict } from './check.ts';
+export type CompatibilityRisk = PeerRisk;
+export type CompatibilityWarning = PeerWarning;
+export type { PeerVerdict };
 export interface CompatibilityAssessment {
     risks: CompatibilityRisk[];
     warnings: CompatibilityWarning[];
     duplicateNames: DuplicateName[];
 }
-export type PeerVerdict = {
-    kind: 'risk';
-    risk: CompatibilityRisk;
-} | {
-    kind: 'warning';
-    warning: CompatibilityWarning;
-} | {
-    kind: 'none';
-};
 /** Translate one confirmed peer mismatch into a directional verdict. */
 export declare function classifyPeer(plugin: string, peer: string, range: string, resolved: string | null, optional: boolean): PeerVerdict;
 /** Whether a peer is declared optional in the installed plugin manifest. */

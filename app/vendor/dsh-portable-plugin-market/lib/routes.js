@@ -15,8 +15,8 @@ import { createGroup, deleteGroup, removeFromGroups, renameGroup, setGroupMember
 import { logEvent } from './log.js';
 import { diagnosePackageManifests } from './diagnostics.js';
 import { BOOT_ID, cancelActive, probePnpm, progress, provisionPnpm, runDshPlugin, } from './dsh-cli.js';
-import { addProfileBundle, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.js';
-import { assessProfile, introducedDuplicateNames, introducedRisks } from './compatibility.js';
+import { addProfileBundle, dropFromManifest, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.js';
+import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks } from './compatibility.js';
 import { runningAgentIds } from './agents.js';
 import { analyzeProfile } from './check.js';
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.js';
@@ -694,6 +694,11 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                 }
                 try {
                     const report = analyzeProfile(activeProfileDir);
+                    for (const row of report.peerMismatches) {
+                        row.verdict = row.satisfied === false
+                            ? classifyPeer(row.plugin, row.name, row.range, row.resolved, row.optional === true)
+                            : { kind: 'none' };
+                    }
                     sendJson(response, 200, report);
                 }
                 catch (error) {
@@ -1763,8 +1768,15 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                         const cancelled = result.cancelled;
                         const ok = result.exitCode === 0 && !result.timedOut && !cancelled;
                         const cancelDiff = cancelled ? changedSince(beforeInstalled) : null;
+                        const halfGone = !ok && !cancelled
+                            && !existsSync(join(activeProfileDir, 'node_modules', name, 'package.json'));
+                        let reconciled = false;
+                        if (halfGone) {
+                            reconciled = dropFromManifest(config.profile, name, activeProfileDir);
+                            logEvent('warn', 'uninstall', `${name}: package vanished during failed remove; manifest reconciled=${String(reconciled)}`);
+                        }
                         let hot = false;
-                        if (ok) {
+                        if (ok || halfGone) {
                             invalidateUpdates();
                             const unmounted = await hotUnmount(name);
                             // Bundle-layer plugins never hot-mount, but their loader entry
@@ -1791,6 +1803,7 @@ export function mountMarketRoutes(host, config, commandRuntime, agentsLookup) {
                             ok,
                             cancelled: cancelled || undefined,
                             busy: result.busy || undefined,
+                            reconciled: reconciled || undefined,
                             hot,
                             partial: cancelDiff?.partial,
                             changed: cancelDiff?.changed,

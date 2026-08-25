@@ -1343,6 +1343,12 @@ export function MarketSection(props: MarketSectionProps) {
           if (!body.hot) setRemovedCount(n => n + 1)
           refreshInstalled()
         } else {
+          if (body.reconciled === true) {
+            if (!body.hot) setRemovedCount(n => n + 1)
+            refreshInstalled()
+            setInstallError(t('uninstallReconciled'))
+            return
+          }
           if (body.cancelled === true) {
             refreshInstalled()
             if (body.partial === true) setInstallError(t('partialNote'))

@@ -23,8 +23,8 @@ import {
   BOOT_ID, cancelActive, probePnpm, progress, provisionPnpm, runDshPlugin,
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
-import { addProfileBundle, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.ts'
-import { assessProfile, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
+import { addProfileBundle, dropFromManifest, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.ts'
+import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
@@ -746,6 +746,11 @@ export function mountMarketRoutes(
         }
         try {
           const report = analyzeProfile(activeProfileDir)
+          for (const row of report.peerMismatches) {
+            row.verdict = row.satisfied === false
+              ? classifyPeer(row.plugin, row.name, row.range, row.resolved, row.optional === true)
+              : { kind: 'none' }
+          }
           sendJson(response, 200, report)
         } catch (error) {
           sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
@@ -1819,8 +1824,15 @@ export function mountMarketRoutes(
             const cancelled = result.cancelled
             const ok = result.exitCode === 0 && !result.timedOut && !cancelled
             const cancelDiff = cancelled ? changedSince(beforeInstalled) : null
+            const halfGone = !ok && !cancelled
+              && !existsSync(join(activeProfileDir, 'node_modules', name, 'package.json'))
+            let reconciled = false
+            if (halfGone) {
+              reconciled = dropFromManifest(config.profile, name, activeProfileDir)
+              logEvent('warn', 'uninstall', `${name}: package vanished during failed remove; manifest reconciled=${String(reconciled)}`)
+            }
             let hot = false
-            if (ok) {
+            if (ok || halfGone) {
               invalidateUpdates()
               const unmounted = await hotUnmount(name)
               // Bundle-layer plugins never hot-mount, but their loader entry
@@ -1848,6 +1860,7 @@ export function mountMarketRoutes(
               ok,
               cancelled: cancelled || undefined,
               busy: result.busy || undefined,
+              reconciled: reconciled || undefined,
               hot,
               partial: cancelDiff?.partial,
               changed: cancelDiff?.changed,

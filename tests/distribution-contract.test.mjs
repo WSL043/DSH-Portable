@@ -54,12 +54,12 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   })
   assert.deepEqual(lock.pluginMarket, {
     package: '@wsl043/dsh-portable-plugin-market',
-    version: '0.1.0-beta.3',
+    version: '0.1.0-beta.4',
     catalog: 'https://awesome-dsh-plugin.com/plugins.json',
     catalogRepository: 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
     implementationBasis: 'https://github.com/dsh-market/dsh-market',
-    reviewedBasisTag: 'v1.21.2',
-    reviewedBasisCommit: 'bb0f128ad14ee5de383412a817d53e21e6a0d7c6',
+    reviewedBasisTag: 'v1.26.0',
+    reviewedBasisCommit: '53cb827b12fad5021d9ccdecd1a2797f537e712d',
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)
@@ -108,7 +108,7 @@ test('the independent lock verifier accepts the current local bridge link and ex
   const result = JSON.parse(stdout)
   const upstream = JSON.parse(await read('upstream.lock.json'))
   assert.equal(result.dshVersion, upstream.dsh.version)
-  assert.equal(result.pluginMarketVersion, '0.1.0-beta.3')
+  assert.equal(result.pluginMarketVersion, '0.1.0-beta.4')
 })
 
 test('build script verifies downloads and emits ZIP plus checksum', async () => {

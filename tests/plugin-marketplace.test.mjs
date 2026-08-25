@@ -381,6 +381,62 @@ test('AI repair prompt does not recommend bundle surgery for peer-range-only war
   assert.doesNotMatch(prompt, /EDIT BUNDLES/)
 })
 
+test('catalog release archives are accepted only when bound to the entry repository', async () => {
+  const { installTargetFor } = await import('../app/vendor/dsh-portable-plugin-market/src/sources.ts')
+  const own = 'https://github.com/example/plugin/releases/download/v1.2.3/plugin-1.2.3.tgz'
+
+  assert.equal(installTargetFor({ url: 'https://github.com/example/plugin', tarball: own }), own)
+  assert.equal(
+    installTargetFor({
+      url: 'https://github.com/example/plugin',
+      tarball: 'https://github.com/other/repo/releases/download/v1/plugin.tgz',
+    }),
+    'github:example/plugin',
+  )
+  assert.equal(
+    installTargetFor({
+      url: 'https://github.com/example/plugin',
+      tarball: 'https://release-assets.githubusercontent.com/unsafe/plugin.tgz',
+    }),
+    'github:example/plugin',
+  )
+})
+
+test('a half-failed uninstall can atomically remove a vanished plugin from both manifest lists', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dshm-half-uninstall-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({
+    name: 'profile',
+    dependencies: { keep: '1.0.0', ghost: '2.0.0' },
+    dsh: { profile: { bundles: ['keep', 'ghost'] } },
+  }, null, 2))
+  const { dropFromManifest } = await import('../app/vendor/dsh-portable-plugin-market/src/profile.ts')
+
+  assert.equal(dropFromManifest('web', 'ghost', root), true)
+  const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+  assert.deepEqual(manifest.dependencies, { keep: '1.0.0' })
+  assert.deepEqual(manifest.dsh.profile.bundles, ['keep'])
+  assert.equal(dropFromManifest('web', 'ghost', root), false)
+})
+
+test('diagnostics classify peer mismatches before exposing repair actions', async () => {
+  const [routes, diagnostics, promptSource, locales] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/Diagnostics.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/ai-fix.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
+  ])
+
+  assert.match(routes, /row\.verdict\s*=\s*row\.satisfied === false[\s\S]*classifyPeer/)
+  assert.match(diagnostics, /peerRisk/)
+  assert.match(diagnostics, /peerWarning/)
+  assert.match(diagnostics, /catRisk > 0/)
+  assert.match(promptSource, /aiFixDetect/)
+  assert.match(promptSource, /aiFixIfSelf/)
+  assert.match(locales, /aiFixDetect:/)
+  assert.match(locales, /aiFixIfSelf:/)
+})
+
 test('plugin profile transfer is presented as plugin sync, not full Portable backup', async () => {
   const locales = await read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts')
   assert.match(locales, /tabBackup:\s*'插件同步'/)

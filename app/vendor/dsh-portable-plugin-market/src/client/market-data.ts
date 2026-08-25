@@ -17,6 +17,7 @@ export interface RegistryPlugin {
   /** Catalog detail page; fall back to the repository URL when absent. */
   page?: string
   npm?: string
+  tarball?: string
   category: string
   description?: LocalizedText
   stars?: number

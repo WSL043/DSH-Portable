@@ -721,6 +721,7 @@ export function analyzeProfile(profileDirectory, options = {}) {
             peerMismatches.push({
                 plugin, name, range: spec, resolved,
                 satisfied: satisfied === null ? null : satisfied,
+                ...(pkg.peerDependenciesMeta?.[name]?.optional === true ? { optional: true } : {}),
             });
         }
     }

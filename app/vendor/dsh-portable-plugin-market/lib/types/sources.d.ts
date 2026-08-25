@@ -56,6 +56,7 @@ export declare function gitAllowBuildsKey(name: string, spec: string): string | 
 export declare function installTargetFor(entry: {
     url: string;
     npm?: unknown;
+    tarball?: unknown;
 }): string | null;
 /**
  * The name an entry is ALREADY installed under, or null — the server-side

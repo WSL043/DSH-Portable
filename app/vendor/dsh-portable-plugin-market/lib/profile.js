@@ -441,6 +441,31 @@ function writeManifestAtomic(manifestPath, manifest) {
     writeFileSync(temp, `${JSON.stringify(manifest, null, 2)}\n`);
     renameSync(temp, manifestPath);
 }
+/** Finish a remove that deleted the package before pnpm could save the manifest. */
+export function dropFromManifest(profile, name, explicitDir) {
+    const file = join(profileDir(profile, explicitDir), 'package.json');
+    let manifest;
+    try {
+        manifest = JSON.parse(readFileSync(file, 'utf8'));
+    }
+    catch {
+        return false;
+    }
+    let touched = false;
+    if (manifest.dependencies?.[name] !== undefined) {
+        delete manifest.dependencies[name];
+        touched = true;
+    }
+    const bundles = manifest.dsh?.profile?.bundles;
+    if (Array.isArray(bundles) && bundles.includes(name)) {
+        manifest.dsh.profile.bundles = bundles.filter(bundle => bundle !== name);
+        touched = true;
+    }
+    if (!touched)
+        return false;
+    writeManifestAtomic(file, manifest);
+    return true;
+}
 export function removeProfileBundle(profileDirectory, name) {
     const manifestPath = join(profileDirectory, 'package.json');
     const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));

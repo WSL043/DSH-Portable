@@ -15,22 +15,22 @@
   },
   "pluginMarket": {
     "package": "@wsl043/dsh-portable-plugin-market",
-    "version": "0.1.0-beta.3",
+    "version": "0.1.0-beta.4",
     "catalog": "https://awesome-dsh-plugin.com/plugins.json",
     "catalogRepository": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin",
     "implementationBasis": "https://github.com/dsh-market/dsh-market",
-    "reviewedBasisTag": "v1.21.2",
-    "reviewedBasisCommit": "bb0f128ad14ee5de383412a817d53e21e6a0d7c6"
+    "reviewedBasisTag": "v1.26.0",
+    "reviewedBasisCommit": "53cb827b12fad5021d9ccdecd1a2797f537e712d"
   },
   "defaultPlugins": {
     "sessionDelete": {
       "package": "dsh-native-session-delete",
-      "version": "1.1.1",
-      "url": "https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-1.1.1.tgz",
-      "sha256": "bb8dd1d6c3fa81e0b811bb0b16fc198bb8426855c047f6cad9562cd620e49b36",
-      "integrity": "sha512-22fk0Zq3QJRzfclm0Svjat4QpgQZwCdVJCnO7pbfMdBBlyPsS1oGZpJ6HODde82risd0YlPtZQ9Bvs3Q/vqalg==",
+      "version": "1.1.2",
+      "url": "https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-1.1.2.tgz",
+      "sha256": "671db83c0d15afb17783ecd3f876bbb07acf256b3207136b7b991867c21bdc7e",
+      "integrity": "sha512-P1imNSoUPQEYouxCkZCazeQlSPThFqhm7pm/4N2cntxoWRDsoabCyIwnbFMWrxcS+jbNtI1d8xqzCsU5rqVYjg==",
       "license": "MIT",
-      "reviewedCommit": "966ff699012b7c939188c1bf99f075433831902f",
+      "reviewedCommit": "9c3202e21ff6fce412e5dc670816022eea1eae00",
       "filename": "dsh-native-session-delete.tgz"
     }
   },
