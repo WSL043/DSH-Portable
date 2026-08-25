@@ -42,7 +42,18 @@
 | --- | --- | --- |
 | Sessions, settings, plugins, desktop data, and the default workspace stay together. | Exit, copy to another drive, USB device, or computer, and open it again. | Updates replace reproducible app components while keeping sessions, credentials, plugins, and workspace. |
 
-It still behaves like a desktop product: dedicated window, system tray, recent sessions, task-completion notifications, remembered window placement, and updates that do not interrupt active work.
+This is not a renamed browser shortcut sold as a “no-install build.” Its runtime and plugin tools live inside the product folder, so the destination computer does not need Node.js or pnpm and DSH-Portable never modifies the system `PATH`. The dedicated window, tray, recent sessions, task notifications, remembered placement, and update experience remain intact.
+
+| Where you start | What Portable handles |
+| --- | --- |
+| **Online** | Download the roughly 55 KB launcher, choose a location, and let it prepare and verify the complete folder. |
+| **Offline** | The complete ZIP includes official DSH, its runtime, the Plugin Market, and plugin management tools. |
+| **Another PC or USB drive** | Copy the folder; Portable repairs the paths it owns on the next launch. |
+| **Personal data only** | Export the same migration contents as either a plain package or a password-encrypted private package. |
+| **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
+| **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
+
+Starting with 0.4.15, the complete Windows package contains about **15% fewer files** and **14% fewer filesystem items** than the previous build. Release gates now prevent accidental regressions in file count, directory count, and extracted size. The target is the work Windows performs while extracting, copying, moving, or deleting—not merely a smaller number beside the download.
 
 ## Start in 3 steps
 
