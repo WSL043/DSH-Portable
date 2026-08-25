@@ -83,7 +83,9 @@ h1 { max-width: 600px; margin-bottom: 25px; font-size: clamp(46px, 4.5vw, 62px);
 .portable-facts dd { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .story-intro { position: static; }
 .story-intro h2, .section-heading h2 { margin-bottom: 22px; font-size: clamp(38px, 4.5vw, 60px); line-height: 1.06; letter-spacing: -.045em; font-weight: 680; }
-.story-intro > p:last-child, .section-heading > p { max-width: 520px; margin: 0; color: var(--muted); font-size: 16px; }
+.story-intro > p[data-i18n="portableIntro"], .section-heading > p { max-width: 520px; margin: 0; color: var(--muted); font-size: 16px; }
+.story-guide { display: inline-block; margin-top: 22px; padding-bottom: 3px; border-bottom: 1px solid rgba(255, 255, 255, .34); color: #d9dad7; font-size: 13px; transition: border-color .18s ease, color .18s ease; }
+.story-guide:hover { border-color: white; color: white; }
 .journey { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); gap: 30px; margin: 0; padding: 0; list-style: none; }
 .journey::before, .journey::after { content: ""; position: absolute; left: 27px; top: 26px; height: 1px; }
 .journey::before { right: 27px; background: rgba(255, 255, 255, .13); }

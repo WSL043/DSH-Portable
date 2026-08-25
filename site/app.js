@@ -7,7 +7,7 @@ const copy = {
     skip: "Skip to content", brandEdition: "Community portable edition", navPortable: "Portable", navDownload: "Download", navGithub: "GitHub", headerDownload: "Download",
     heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "DeepSeek Harness,<br>wherever you work.", heroLede: "Sessions, settings, plugins, and workspace move together in one directory. Exit, copy, and continue on another computer.",
     downloadFor: "Download for Windows", downloadMeta: "Latest stable · Portable · No install", otherPlatforms: "Other platforms", heroNote: "Open-source community project · Windows / macOS / Linux", stageCaption: "DeepSeek Harness running in DSH-Portable", scrollCue: "See how it moves",
-    portableKicker: "Works where you do", portableTitle: "One directory. Any machine.", portableIntro: "Work normally. When it is time to move, exit fully from the tray and copy the whole DSH-Portable folder.",
+    portableKicker: "Works where you do", portableTitle: "One directory. Any machine.", portableIntro: "Work normally. When it is time to move, exit fully from the tray and copy the whole DSH-Portable folder.", migrationGuide: "Read the complete migration guide",
     factLauncher: "Windows portable launcher", factFiles: "Files in the complete package", factTargetsValue: "3 systems · 5 targets", factTargets: "Finished-product move tests",
     journeyDesktop: "Work on this computer", journeyDesktopText: "Sessions, plugins, and workspace keep saving inside the portable directory.", journeyMove: "Copy the whole directory", journeyMoveText: "Put it on a portable drive, USB drive, or any location you choose.", journeyContinue: "Continue on another computer", journeyContinueText: "Open it again and the app repairs paths it owns.",
     downloadsKicker: "Get DSH-Portable", downloadsTitle: "Choose your platform", downloadsIntro: "Your system is selected automatically. Each platform keeps a portable entry point and a complete offline package.", recommended: "Recommended",
@@ -24,6 +24,7 @@ const zhCopy = new Map([...document.querySelectorAll("[data-i18n]")].map((elemen
 const languageSwitch = document.querySelector("[data-language-switch]");
 const motionControl = document.querySelector("[data-motion-control]");
 const productShot = document.querySelector("[data-product-shot]");
+const migrationGuide = document.querySelector("[data-migration-guide]");
 const systemMotionPreference = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function readSavedMotion() {
@@ -101,6 +102,9 @@ function setLanguage(language) {
   updateMotionControlCopy();
   productShot.src = lang === "en" ? "assets/dsh-interface-en.png" : "assets/dsh-interface-zh.png";
   productShot.alt = lang === "en" ? "DeepSeek Harness workspace in DSH-Portable" : "DSH-Portable 中的 DeepSeek Harness 桌面工作台";
+  migrationGuide.href = lang === "en"
+    ? "https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.en.md"
+    : "https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md";
   saveLanguage(lang);
 }
 
