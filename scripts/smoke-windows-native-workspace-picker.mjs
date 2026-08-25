@@ -225,7 +225,10 @@ try {
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
   await client.send('Runtime.enable')
-  await waitForValue(client, "Boolean(document.body && document.readyState !== 'loading')", Boolean, 'DSH document readiness')
+  // The DevTools target and body can exist before DSH finishes its initial
+  // navigation. Sending the native request from that transient document can be
+  // lost when the final page replaces it, so wait for the settled document.
+  await waitForValue(client, 'document.readyState', value => value === 'complete', 'DSH document readiness', 60000)
   await evaluate(client, `(() => {
     window.__dshWorkspacePickerResult = null
     window.chrome.webview.addEventListener('message', event => {
