@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -181,7 +181,7 @@ public static class DshWindowProbe {
       // FolderBrowserDialog can use different native window classes across
       // supported Windows images. A modal popup is the visible same-process
       // window whose direct owner is another window in the DSH process. This is
-      // stable even when the test intentionally hides the main host window.
+      // stable while the real host window remains visible to the desktop.
       if (pid == processId && owner != IntPtr.Zero && owner != hwnd && ownerPid == processId && IsWindowVisible(hwnd)) {
         result.Add(new DshDialogInfo { hwnd = hwnd.ToInt64(), owner = owner.ToInt64(), ownerPid = (int)ownerPid, className = className.ToString(), visible = true });
       }
@@ -218,7 +218,6 @@ try {
       DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
     },
     stdio: 'ignore',
-    windowsHide: true,
   })
 
   const page = await waitForPage(debugPort, launcher)
@@ -249,7 +248,11 @@ try {
     if (dialogs.length > 0) break
     await new Promise(resolve => setTimeout(resolve, 100))
   }
-  assert.ok(dialogs.length >= 1, 'the native workspace dialog did not appear')
+  if (dialogs.length === 0) {
+    const launcherLogPath = path.join(root, 'data', 'logs', 'launcher.log')
+    const launcherLog = existsSync(launcherLogPath) ? await readFile(launcherLogPath, 'utf8') : '(launcher.log is missing)'
+    assert.fail(`the native workspace dialog did not appear; launcher.log tail:\n${launcherLog.slice(-8000)}`)
+  }
   const dialog = dialogs.find(item => item.visible === true) || dialogs[0]
   assert.ok(Number(dialog.owner) > 0, 'the workspace dialog has no native owner')
   assert.equal(Number(dialog.ownerPid), launcher.pid, 'the workspace dialog is not owned by DeepSeek-Herness.exe')

@@ -139,7 +139,11 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.doesNotMatch(fullPackageUpdate, /DefaultManifestUrl|update-channel-stable/)
 
   assert.doesNotMatch(moveSmoke, /Wait-ForPortableWebViewExit/)
-  assert.match(moveSmoke, /lifecycle failed[\s\S]+Move-Item -LiteralPath \$Root -Destination \$MovedRoot/)
+  assert.match(moveSmoke, /function Move-PortableDirectory/)
+  assert.match(moveSmoke, /IOException/)
+  assert.match(moveSmoke, /UnauthorizedAccessException/)
+  assert.match(moveSmoke, /DateTime\]::UtcNow\.AddSeconds\(5\)/)
+  assert.match(moveSmoke, /lifecycle failed[\s\S]+Move-PortableDirectory -Source \$Root -Destination \$MovedRoot/)
 })
 
 test('Windows workspace selection is owned by the native DSH window instead of a Node child process', async () => {
@@ -164,6 +168,8 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(smoke, /parsed == null \? \[\]/)
   assert.match(smoke, /DSH_PORTABLE_TEST_AUTOMATION/)
   assert.doesNotMatch(smoke, /DSH_PORTABLE_TEST_HIDDEN:\s*'1'/)
+  const launcherBlock = smoke.slice(smoke.lastIndexOf('launcher = spawn('), smoke.indexOf('const page = await waitForPage'))
+  assert.doesNotMatch(launcherBlock, /windowsHide:\s*true/)
   assert.match(smoke, /postMessage\(\{ type: 'dsh-portable\/pick-directory'/)
   assert.match(smoke, /WaitUntilClosed\(hwnd/)
   assert.match(smoke, /WM_CLOSE[\s\S]+WaitUntilClosed\(hwnd/)
