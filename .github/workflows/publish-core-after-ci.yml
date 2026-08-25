@@ -61,6 +61,13 @@ jobs:
             ASSETS+=("artifacts/dsh-core-update-${platform}.json" "artifacts/DSH-Portable-update-${platform}.zip")
           done
           for channel in update-channel-core-stable update-channel-core-candidate; do
-            gh release view "$channel" >/dev/null 2>&1 || gh release create "$channel" --prerelease --title "Verified DeepSeek Harness core channel" --notes "Machine-readable official DeepSeek Harness updates verified against DSH-Portable."
+            if [ "$channel" = "update-channel-core-stable" ]; then
+              title="DSH 内核更新通道（无需下载） / Core update channel"
+              notes="供 DSH-Portable 自动更新已通过兼容性验证的官方 DeepSeek Harness 内核使用。普通用户无需下载这里的文件，请从 Latest 下载 DSH-Portable。 / Used by DSH-Portable to deliver verified official DeepSeek Harness core updates. Users do not need these assets; download DSH-Portable from Latest."
+            else
+              title="DSH 候选内核通道（无需下载） / Candidate core channel"
+              notes="供 DSH-Portable 的候选内核兼容性验证使用。普通用户无需下载这里的文件，请从 Latest 下载 DSH-Portable。 / Used for DSH-Portable candidate core compatibility validation. Users do not need these assets; download DSH-Portable from Latest."
+            fi
+            gh release view "$channel" >/dev/null 2>&1 || gh release create "$channel" --prerelease --title "$title" --notes "$notes"
             gh release upload "$channel" "${ASSETS[@]}" --clobber
           done
