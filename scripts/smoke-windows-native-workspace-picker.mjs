@@ -147,21 +147,26 @@ public static class DshWindowProbe {
     while (IsWindow(hwnd) && Environment.TickCount < deadline) Thread.Sleep(25);
     return !IsWindow(hwnd);
   }
-  public static bool Cancel(IntPtr hwnd) {
-    UIntPtr result;
-    // The Windows 11 / Server 2025 common-item dialog can acknowledge WM_CLOSE
-    // or a bare WM_COMMAND without completing FolderBrowserDialog.ShowDialog().
-    // Invoke the dialog's own Cancel button so this is equivalent to a user
-    // click and the managed host can deliver the normal cancellation result.
-    IntPtr cancel = GetDlgItem(hwnd, IDCANCEL);
-    if (cancel != IntPtr.Zero) {
-      SendMessageTimeout(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result);
-      if (WaitUntilClosed(hwnd)) return true;
+  public static bool CancelUntilClosed(IntPtr hwnd, int timeoutMs = 12000) {
+    long deadline = Environment.TickCount64 + timeoutMs;
+    // Server 2025 can expose the common-item dialog before its native controls
+    // process input. Keep the user-equivalent cancel path bounded, but retry it
+    // until the same captured dialog really closes instead of accepting a
+    // message acknowledgement as completion.
+    while (IsWindow(hwnd) && Environment.TickCount64 < deadline) {
+      UIntPtr result;
+      IntPtr cancel = GetDlgItem(hwnd, IDCANCEL);
+      if (cancel != IntPtr.Zero) {
+        SendMessageTimeout(cancel, BM_CLICK, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, out result);
+        if (WaitUntilClosed(hwnd, 500)) return true;
+      }
+      SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), cancel, SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, out result);
+      if (WaitUntilClosed(hwnd, 500)) return true;
+      SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 1000, out result);
+      if (WaitUntilClosed(hwnd, 500)) return true;
+      Thread.Sleep(100);
     }
-    SendMessageTimeout(hwnd, WM_COMMAND, new IntPtr(IDCANCEL), cancel, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result);
-    if (WaitUntilClosed(hwnd)) return true;
-    SendMessageTimeout(hwnd, WM_CLOSE, IntPtr.Zero, IntPtr.Zero, SMTO_BLOCK | SMTO_ABORTIFHUNG, 5000, out result);
-    return WaitUntilClosed(hwnd, 5000);
+    return !IsWindow(hwnd);
   }
   public static DshDialogInfo[] Find(int processId) {
     List<DshDialogInfo> result = new List<DshDialogInfo>();
@@ -190,7 +195,7 @@ $dialogs = @([DshWindowProbe]::Find($ProcessId))
 if ($Close) {
   $target = @($dialogs | Where-Object { $_.hwnd -eq $WindowHandle })
   if ($target.Count -ne 1) { throw "The captured workspace dialog is no longer the active popup owned by the DSH window." }
-  if (-not [DshWindowProbe]::Cancel([IntPtr]$target[0].hwnd)) { throw "The workspace dialog did not process its native cancel command." }
+  if (-not [DshWindowProbe]::CancelUntilClosed([IntPtr]$target[0].hwnd)) { throw "The workspace dialog did not process its native cancel command." }
 }
 ConvertTo-Json -Compress -InputObject @($dialogs)
 `
