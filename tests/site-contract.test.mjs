@@ -57,6 +57,10 @@ test("website lets visitors override motion without discarding the system prefer
 
 test("website motion tells the portable story instead of adding decorative noise", () => {
   assert.match(html, /data-journey-step/);
+  assert.match(html, /class="portable-facts"/);
+  assert.match(html, /data-i18n="factLauncher"/);
+  assert.match(app, /factTargetsValue/);
+  assert.match(css, /\.portable-facts/);
   assert.match(app, /data-journey-step/);
   assert.match(app, /--journey-progress/);
   assert.match(css, /@keyframes atmosphere-drift/);

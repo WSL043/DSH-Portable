@@ -77,6 +77,10 @@ h1 { max-width: 600px; margin-bottom: 25px; font-size: clamp(46px, 4.5vw, 62px);
 
 .portable-story, .downloads, .details, .faq { width: var(--content); margin: 0 auto; padding: 120px 0; border-bottom: 1px solid var(--line); }
 .portable-story { display: grid; grid-template-columns: minmax(260px, 320px) minmax(0, 1fr); gap: clamp(54px, 7vw, 96px); align-items: start; }
+.portable-facts { display: grid; gap: 0; margin: 38px 0 0; padding: 0; border-top: 1px solid var(--line); }
+.portable-facts div { display: grid; grid-template-columns: minmax(94px, auto) 1fr; gap: 18px; align-items: baseline; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.portable-facts dt { color: #f0f0ed; font: 600 12px/1.3 "SFMono-Regular", Consolas, monospace; letter-spacing: -.01em; }
+.portable-facts dd { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
 .story-intro { position: static; }
 .story-intro h2, .section-heading h2 { margin-bottom: 22px; font-size: clamp(38px, 4.5vw, 60px); line-height: 1.06; letter-spacing: -.045em; font-weight: 680; }
 .story-intro > p:last-child, .section-heading > p { max-width: 520px; margin: 0; color: var(--muted); font-size: 16px; }
