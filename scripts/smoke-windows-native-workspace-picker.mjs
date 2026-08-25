@@ -245,7 +245,7 @@ try {
   while (Date.now() < deadline) {
     const output = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', probePath, String(launcher.pid)], { windowsHide: true })
     const parsed = JSON.parse(output.stdout || '[]')
-    dialogs = Array.isArray(parsed) ? parsed : [parsed]
+    dialogs = parsed == null ? [] : (Array.isArray(parsed) ? parsed.filter(Boolean) : [parsed])
     if (dialogs.length > 0) break
     await new Promise(resolve => setTimeout(resolve, 100))
   }

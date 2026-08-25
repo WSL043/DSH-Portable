@@ -160,6 +160,7 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(smoke, /GetDlgItem\(hwnd, IDCANCEL\)/)
   assert.match(smoke, /CancelUntilClosed\(IntPtr hwnd/)
   assert.match(smoke, /while \(IsWindow\(hwnd\) && Environment\.TickCount64 < deadline\)/)
+  assert.match(smoke, /parsed == null \? \[\]/)
   assert.match(smoke, /WaitUntilClosed\(hwnd/)
   assert.match(smoke, /WM_CLOSE[\s\S]+WaitUntilClosed\(hwnd/)
   assert.doesNotMatch(smoke, /SendMessageTimeout\(cancel, BM_CLICK[^\n]+\) return true;/)
