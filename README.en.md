@@ -13,6 +13,7 @@
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>Website</strong></a>
   · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>Download</strong></a>
   · <a href="#start-in-3-steps">Get started</a>
+  · <a href="docs/move-between-computers.en.md">Move</a>
   · <a href="#plugins">Plugins</a>
   · <a href="#get-help">Support</a>
   · <a href="README.md">简体中文</a> · <strong>English</strong>
@@ -97,6 +98,8 @@ The AppImage keeps sessions, settings, plugins, and workspace in the sibling `DS
 
 ## Move and back up
 
+See the [computer-to-computer migration guide](docs/move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
+
 1. Choose **Exit DeepSeek Harness** from the tray and wait for the window and tray icon to disappear.
 2. Copy the entire `DSH-Portable` folder.
 3. Run `DeepSeek-Herness.exe` on Windows or the corresponding entry point on the new platform.
@@ -161,6 +164,8 @@ Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and 
 - [Report a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
 - [Request an improvement](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [Join a discussion](https://github.com/WSL043/DSH-Portable/discussions)
+- [Project introduction in the official DSH community](https://github.com/deepseek-ai/deepseek-harness/discussions/4505)
+- [Listed in Awesome DeepSeek Harness](https://github.com/0xsline/awesome-deepseek-harness)
 
 Do not paste API keys, login credentials, or private conversations into an issue.
 

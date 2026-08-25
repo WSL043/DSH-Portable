@@ -13,6 +13,7 @@
   <a href="https://wsl043.github.io/DSH-Portable/"><strong>官网</strong></a>
   · <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong>下载</strong></a>
   · <a href="#三步启动">开始使用</a>
+  · <a href="docs/move-between-computers.md">迁移</a>
   · <a href="#插件">插件</a>
   · <a href="#获取帮助">帮助</a>
   · <strong>简体中文</strong> · <a href="README.en.md">English</a>
@@ -97,6 +98,8 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 ## 移动与备份
 
+完整步骤、数据包迁移和无需第二台电脑的验证方法见[跨电脑迁移指南](docs/move-between-computers.md)。
+
 1. 从托盘选择 **退出 DeepSeek Harness**，等窗口和托盘图标消失。
 2. 复制整个 `DSH-Portable` 文件夹。
 3. 在新位置运行 `DeepSeek-Herness.exe`（Windows）或对应平台入口。
@@ -162,6 +165,8 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 - [提交 Bug 报告](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
 - [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
+- [官方 DSH 社区中的项目介绍](https://github.com/deepseek-ai/deepseek-harness/discussions/4505)
+- [Awesome DeepSeek Harness 收录](https://github.com/0xsline/awesome-deepseek-harness)
 
 请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 
