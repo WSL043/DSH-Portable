@@ -46,7 +46,7 @@ This is not a renamed browser shortcut sold as a “no-install build.” Its run
 
 | Where you start | What Portable handles |
 | --- | --- |
-| **Online** | Download the roughly 55 KB launcher, choose a location, and let it prepare and verify the complete folder. |
+| **Online** | Download the roughly 55 KB launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
 | **Offline** | The complete ZIP includes official DSH, its runtime, the Plugin Market, and plugin management tools. |
 | **Another PC or USB drive** | Copy the folder; Portable repairs the paths it owns on the next launch. |
 | **Personal data only** | Export the same migration contents as either a plain package or a password-encrypted private package. |
@@ -58,7 +58,7 @@ Starting with 0.4.15, the complete Windows package contains about **15% fewer fi
 ## Start in 3 steps
 
 1. Download the [**Windows portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).
-2. Run it and choose a location. It prepares a complete `DSH-Portable` folder.
+2. Put the launcher where you want to keep the product and run it. It prepares a complete `DSH-Portable` folder beside itself.
 3. Connect a model in the interface. Next time, run `DeepSeek-Herness.exe` inside that folder.
 
 The close button sends the app to the system tray by default, so an active task can keep running. To stop everything, right-click the tray icon and choose **Exit DeepSeek Harness**.
