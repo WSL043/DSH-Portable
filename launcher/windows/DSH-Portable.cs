@@ -937,10 +937,17 @@ namespace DshPortable
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
         {
             Uri source;
-            if (applicationUri == null
-                || !Uri.TryCreate(eventArgs.Source, UriKind.Absolute, out source)
-                || !source.IsLoopback
-                || source.Port != applicationUri.Port) return;
+            bool trustedSource = applicationUri != null
+                && Uri.TryCreate(eventArgs.Source, UriKind.Absolute, out source)
+                && source.IsLoopback
+                && source.Port == applicationUri.Port;
+            if (!trustedSource)
+            {
+                if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                    WriteLauncherLog("workspace-picker", "web-message-rejected source=" + eventArgs.Source
+                        + " expected=" + (applicationUri == null ? "" : applicationUri.AbsoluteUri));
+                return;
+            }
             try
             {
                 Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
@@ -970,6 +977,8 @@ namespace DshPortable
                 if (message != null && message.TryGetValue("type", out messageType)
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/pick-directory", StringComparison.Ordinal))
                 {
+                    if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                        WriteLauncherLog("workspace-picker", "web-message-received");
                     object requestValue;
                     string requestId = message.TryGetValue("requestId", out requestValue)
                         ? Convert.ToString(requestValue)
@@ -1000,6 +1009,8 @@ namespace DshPortable
 
         private void ShowWorkspaceDirectoryPicker(string requestId)
         {
+            if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                WriteLauncherLog("workspace-picker", "dialog-open-requested");
             Dictionary<string, object> result = new Dictionary<string, object>
             {
                 { "type", "dsh-portable/pick-directory-result" },
@@ -1015,7 +1026,12 @@ namespace DshPortable
                 {
                     dialog.Description = L("选择工作区文件夹", "Select a workspace folder");
                     dialog.ShowNewFolderButton = true;
-                    if (dialog.ShowDialog(this) == DialogResult.OK && Directory.Exists(dialog.SelectedPath))
+                    string portableWorkspace = Path.Combine(root, "workspace");
+                    if (Directory.Exists(portableWorkspace)) dialog.SelectedPath = portableWorkspace;
+                    DialogResult selection = dialog.ShowDialog(this);
+                    if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                        WriteLauncherLog("workspace-picker", "dialog-closed result=" + selection.ToString());
+                    if (selection == DialogResult.OK && Directory.Exists(dialog.SelectedPath))
                         result["path"] = Path.GetFullPath(dialog.SelectedPath);
                     else
                         result["cancelled"] = true;
@@ -2208,7 +2224,8 @@ namespace DshPortable
                     Language = UiLanguageTag,
                 };
                 string testBrowserArguments = Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS");
-                if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
+                if ((String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
+                    || String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
                     && !String.IsNullOrWhiteSpace(testBrowserArguments)
                     && Regex.IsMatch(testBrowserArguments, "^--remote-debugging-port=[0-9]{1,5}$"))
                 {

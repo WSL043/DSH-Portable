@@ -6,7 +6,8 @@
       "插件市场优先使用与插件仓库和版本严格对应的预构建发布包，减少安装到错误或不可追溯产物的风险。",
       "插件卸载被中断时，可以安全清理已经消失但仍留在 profile 清单中的条目，不会改动其他插件。",
       "依赖范围不匹配会先按风险分类；只有明确阻断启动的问题才会给出修复动作，普通预览版兼容提示不会诱导用户重排 bundle。",
-      "新建 web profile 默认附带的 DSH Native Session Manager 已更新到 1.1.2；现有用户自行卸载后仍不会被重新安装。"
+      "新建 web profile 默认附带的 DSH Native Session Manager 已更新到 1.1.2；现有用户自行卸载后仍不会被重新安装。",
+      "Windows 选择工作区时会从当前 Portable 的本地 workspace 开始，避免系统快速访问或网络历史拖慢原生文件夹窗口。"
     ]
   },
   "en": {
@@ -15,7 +16,8 @@
       "The market prefers prebuilt release packages that are bound to the plugin repository and version, reducing the risk of installing an unrelated or untraceable artifact.",
       "An interrupted uninstall can safely remove a vanished plugin from the profile manifests without changing other plugins.",
       "Peer-range mismatches are classified before repair actions are offered. Preview compatibility notices no longer encourage unnecessary bundle reordering.",
-      "New web profiles now include DSH Native Session Manager 1.1.2 by default. Existing users who removed it will not have it reinstalled."
+      "New web profiles now include DSH Native Session Manager 1.1.2 by default. Existing users who removed it will not have it reinstalled.",
+      "On Windows, workspace selection now starts in the current Portable workspace instead of letting Quick Access or stale network history delay the native folder dialog."
     ]
   }
 }
