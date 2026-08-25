@@ -28,6 +28,16 @@ test('bootstrap UI follows the Windows display language with English fallback', 
   assert.match(bootstrap, /BootstrapText\.L\("网络有问题？下载离线完整包", "Network issue\? Download the full offline package"\)/)
 })
 
+test('interactive first launch lets the user choose the portable parent folder', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  assert.match(bootstrap, /internal bool DestinationExplicit;/)
+  assert.match(bootstrap, /options\.DestinationExplicit = true;/)
+  assert.match(bootstrap, /FolderBrowserDialog/)
+  assert.match(bootstrap, /BootstrapText\.L\("选择 DSH-Portable 的保存位置", "Choose where to save DSH-Portable"\)/)
+  assert.match(bootstrap, /Path\.Combine\(dialog\.SelectedPath, "DSH-Portable"\)/)
+  assert.match(bootstrap, /if \(!options\.DestinationExplicit && !BootstrapInstaller\.IsCompletePortable\(options\.Destination\)\)/)
+})
+
 function cscPath() {
   const windows = process.env.WINDIR || 'C:\\Windows'
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')

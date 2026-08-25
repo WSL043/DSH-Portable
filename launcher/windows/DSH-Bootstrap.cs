@@ -108,6 +108,7 @@ namespace DshPortableBootstrap
         internal bool AllowHttp;
         internal bool NoLaunch;
         internal bool UpgradeExisting;
+        internal bool DestinationExplicit;
 
         internal static BootstrapOptions Parse(string[] args)
         {
@@ -122,7 +123,11 @@ namespace DshPortableBootstrap
                 else if (argument == "--no-launch") options.NoLaunch = true;
                 else if (argument == "--upgrade-existing") options.UpgradeExisting = true;
                 else if (argument == "--manifest") options.ManifestUrl = RequireValue(args, ref index, argument);
-                else if (argument == "--destination") options.Destination = RequireValue(args, ref index, argument);
+                else if (argument == "--destination")
+                {
+                    options.Destination = RequireValue(args, ref index, argument);
+                    options.DestinationExplicit = true;
+                }
                 else if (argument == "--result") options.ResultFile = RequireValue(args, ref index, argument);
                 else throw new ArgumentException("Unknown option: " + argument);
             }
@@ -1098,6 +1103,18 @@ namespace DshPortableBootstrap
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
+                if (!options.DestinationExplicit && !BootstrapInstaller.IsCompletePortable(options.Destination))
+                {
+                    using (FolderBrowserDialog dialog = new FolderBrowserDialog())
+                    {
+                        dialog.Description = BootstrapText.L("选择 DSH-Portable 的保存位置", "Choose where to save DSH-Portable");
+                        dialog.ShowNewFolderButton = true;
+                        dialog.SelectedPath = Path.GetDirectoryName(Application.ExecutablePath);
+                        if (dialog.ShowDialog() != DialogResult.OK) return 0;
+                        options.Destination = Path.GetFullPath(Path.Combine(dialog.SelectedPath, "DSH-Portable"));
+                        options.DestinationExplicit = true;
+                    }
+                }
                 Application.Run(new BootstrapWindow(options));
                 return 0;
             }
