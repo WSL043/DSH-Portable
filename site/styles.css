@@ -119,6 +119,9 @@ h1 { max-width: 600px; margin-bottom: 25px; font-size: clamp(46px, 4.5vw, 62px);
 .download-options a:hover { background: rgba(255, 255, 255, .035); }
 .download-options strong { font-size: 13px; }
 .download-options span { color: #777a7e; font-size: 11px; }
+.download-trust { margin: 0; padding: 14px 36px; border-top: 1px solid var(--line); color: #8d9094; font-size: 11px; line-height: 1.55; }
+.download-trust a { color: #c9cbce; text-decoration: underline; text-decoration-color: #54575b; text-underline-offset: 3px; }
+.download-trust a:hover { color: #fff; text-decoration-color: #fff; }
 .architecture-switch { display: inline-flex; margin-bottom: 24px; border: 1px solid var(--line-strong); border-radius: 7px; overflow: hidden; }
 .architecture-switch button { padding: 7px 13px; border: 0; border-right: 1px solid var(--line); color: var(--muted); background: transparent; cursor: pointer; font-size: 11px; }
 .architecture-switch button:last-child { border-right: 0; }
@@ -223,6 +226,7 @@ html[data-motion="full"] .scroll-cue { animation: cue-breathe 2.8s ease-in-out i
   .platform-tabs button { min-width: 0; flex: 1; padding: 0 10px; }
   .download-panel { padding: 25px 18px; }
   .release-links { padding: 14px 18px; }
+  .download-trust { padding: 14px 18px; }
   .journey li { padding-left: 72px; }
   .footer-links { flex-wrap: wrap; }
 }
