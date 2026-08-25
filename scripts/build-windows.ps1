@@ -351,7 +351,7 @@ try {
                 requiredNodeVersion = $Lock.node.version
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
                 sha256 = $UpdateComponentHash
-                urls = @("https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-$ReleaseChannel/DSH-Portable-update-windows-x64.zip")
+                urls = @("https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-$ReleaseChannel/DSH-Portable-update-windows-x64.zip")
             }
         } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
         [System.Text.UTF8Encoding]::new($false)

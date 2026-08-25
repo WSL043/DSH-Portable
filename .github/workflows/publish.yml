@@ -120,18 +120,3 @@ jobs:
               gh release create update-channel-candidate --prerelease --title "DSH-Portable candidate update channel" --notes "Machine-readable candidate updates and stable promotion assets."
             gh release upload update-channel-candidate release-staging/update-assets/* --clobber
           fi
-      - name: Publish the verified DeepSeek Harness core channel
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CORE_UPDATE_CHANNEL_TAG: update-channel-core-${{ steps.version.outputs.channel }}
-        run: |
-          if [ "${{ steps.version.outputs.channel }}" = "stable" ]; then
-            CORE_TITLE="DSH 内核更新通道（无需下载） / Core update channel"
-            CORE_NOTES="供 DSH-Portable 自动更新已通过兼容性验证的官方 DeepSeek Harness 内核使用。普通用户无需下载这里的文件，请从 Latest 下载 DSH-Portable。 / Used by DSH-Portable to deliver verified official DeepSeek Harness core updates. Users do not need these assets; download DSH-Portable from Latest."
-          else
-            CORE_TITLE="DSH 候选内核通道（无需下载） / Candidate core channel"
-            CORE_NOTES="供 DSH-Portable 的候选内核兼容性验证使用。普通用户无需下载这里的文件，请从 Latest 下载 DSH-Portable。 / Used for DSH-Portable candidate core compatibility validation. Users do not need these assets; download DSH-Portable from Latest."
-          fi
-          gh release view "$CORE_UPDATE_CHANNEL_TAG" >/dev/null 2>&1 || \
-            gh release create "$CORE_UPDATE_CHANNEL_TAG" --prerelease --title "$CORE_TITLE" --notes "$CORE_NOTES"
-          gh release upload "$CORE_UPDATE_CHANNEL_TAG" release-staging/engine-update-assets/* --clobber

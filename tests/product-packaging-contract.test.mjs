@@ -344,10 +344,8 @@ test('publishing separates beginner downloads from machine update assets', async
       && workflow.indexOf('actions/attest@v4') < workflow.indexOf('Publish curated user downloads'),
     'the exact qualified user assets must be recorded and attested before publication',
   )
-  assert.match(workflow, /update-channel-core-\$\{\{ steps\.version\.outputs\.channel \}\}/)
-  assert.match(workflow, /release-staging\/engine-update-assets\/\*/)
-  assert.match(workflow, /内核更新通道（无需下载）/)
-  assert.doesNotMatch(workflow, /Verified DeepSeek Harness core channel/)
+  assert.doesNotMatch(workflow, /update-channel-core-/)
+  assert.doesNotMatch(workflow, /engine-update-assets/)
   assert.match(staging, /channel === 'candidate'/)
   assert.match(staging, /user-assets/)
   assert.match(staging, /update-assets/)
@@ -377,10 +375,10 @@ test('every desktop platform verifies the live visual plugin marketplace', async
 })
 
 test('installable official updates use a short-lived PR, full product gates, and an independent core channel', async () => {
-  const [workflow, autoMerge, corePublish, updater, upstreamState] = await Promise.all([
+  const [workflow, autoMerge, updateCore, updater, upstreamState] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     read('.github/workflows/merge-verified-dependencies.yml'),
-    read('.github/workflows/publish-core-after-ci.yml'),
+    read('launcher/update-core.mjs'),
     read('scripts/update-upstream.mjs'),
     read('scripts/upstream-state.mjs'),
   ])
@@ -395,13 +393,8 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.match(autoMerge, /gh pr merge[\s\S]+--delete-branch/)
   assert.match(autoMerge, /actions:\s*write/)
   assert.match(autoMerge, /gh workflow run ci\.yml[^\n]+--ref main/)
-  assert.match(corePublish, /workflow_run:/)
-  assert.match(corePublish, /event == 'push'[\s\S]+event == 'workflow_dispatch'/)
-  assert.match(corePublish, /verify-update-artifact\.mjs/)
-  assert.match(corePublish, /update-channel-core-stable/)
-  assert.match(corePublish, /update-channel-core-candidate/)
-  assert.match(corePublish, /候选内核通道（无需下载）/)
-  assert.doesNotMatch(corePublish, /Verified DeepSeek Harness core channel/)
+  assert.match(updateCore, /WSL043\/DSH-Portable-Updates\/releases\/download\/update-channel-core-/)
+  assert.doesNotMatch(updateCore, /WSL043\/DSH-Portable\/releases\/download\/update-channel-core-/)
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/)
   assert.match(workflow, /git push --force origin/)
   assert.match(updater, /registry\.npmjs\.org/)

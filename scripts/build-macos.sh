@@ -236,7 +236,7 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
     "bytes": $UPDATE_COMPONENT_BYTES,
     "sha256": "$UPDATE_COMPONENT_HASH",
     "urls": [
-      "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-$RELEASE_CHANNEL/DSH-Portable-update-macos-$ARCH.zip"
+      "https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-$RELEASE_CHANNEL/DSH-Portable-update-macos-$ARCH.zip"
     ]
   }
 }

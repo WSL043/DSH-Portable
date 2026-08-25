@@ -183,7 +183,7 @@ test('installed release channel selects an isolated machine update feed', () => 
   assert.throws(() => defaultUpdateManifestUrl('preview', 'linux', 'x64'), /release channel/i)
   assert.equal(
     defaultEngineUpdateManifestUrl('stable', 'win32', 'x64'),
-    'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-stable/dsh-core-update-windows-x64.json',
+    'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-update-windows-x64.json',
   )
 })
 

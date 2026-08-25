@@ -45,7 +45,7 @@ export function defaultUpdateManifestUrl(releaseChannel = 'stable', platform = p
 
 export function defaultEngineUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
   normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-core-${releaseChannel}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
+  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-${releaseChannel}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
 }
 
 function parseSemanticVersion(value) {

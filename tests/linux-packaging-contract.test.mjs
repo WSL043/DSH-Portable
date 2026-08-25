@@ -185,7 +185,6 @@ test('release staging exposes two obvious Linux choices per architecture', async
     assert.match(staging, new RegExp(`DeepSeek-Herness-linux-${arch}\\.AppImage`))
     assert.match(staging, new RegExp(`DSH-Portable-update-linux-${arch}\\.zip`))
     assert.match(staging, new RegExp(`portable-update-linux-${arch}\\.json`))
-    assert.match(staging, new RegExp(`dsh-core-update-linux-${arch}\\.json`))
   }
 })
 
