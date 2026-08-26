@@ -300,8 +300,7 @@ try {
   await waitForValue(client, clickButton(['导出迁移包', 'Export migration package']), value => value?.clicked, 'migration export action')
   const standardArchive = await waitForArchive('DSH-Portable-data-')
 
-  const importOpen = await evaluate(client, clickButton(['导入数据包', 'Import data package']))
-  assert.equal(importOpen.clicked, true, `data import action unavailable: ${JSON.stringify(importOpen)}`)
+  await waitForValue(client, clickButton(['导入数据包', 'Import data package']), value => value?.clicked, 'data import action')
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /输入数据包密码|Enter package password/.test(item.textContent || '')))`, Boolean, 'import password dialog')
   await capture(client, '05-import-password-modal.png')
   const importFilled = await evaluate(client, `(() => {
