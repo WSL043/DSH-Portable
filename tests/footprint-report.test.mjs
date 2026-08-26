@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -51,4 +51,16 @@ test('footprint budget blocks a regression and accepts a bounded product', async
   const strict = path.join(root, 'strict.json')
   await writeFile(strict, JSON.stringify({ platforms: { test: { extractedBytes: 9 } } }))
   await assert.rejects(createFootprintReport({ root: product, platform: 'test', budget: strict }), /extractedBytes=10 exceeds 9/)
+})
+
+test('every distributed platform has a bounded 0.5.0 footprint budget', async () => {
+  const document = JSON.parse(await readFile(new URL('../config/footprint-budgets.json', import.meta.url), 'utf8'))
+  const expected = ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64', 'linux-arm64']
+  assert.deepEqual(Object.keys(document.platforms).sort(), expected.sort())
+  for (const platform of expected) {
+    const budget = document.platforms[platform]
+    for (const metric of ['archiveBytes', 'extractedBytes', 'files', 'directories', 'items', 'marketBytes', 'marketFiles']) {
+      assert.ok(Number.isSafeInteger(budget[metric]) && budget[metric] > 0, `${platform}.${metric} must be a positive integer`)
+    }
+  }
 })

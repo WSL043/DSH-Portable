@@ -249,7 +249,8 @@ TAR_HASH="$(sha256sum "$TAR" | awk '{print $1}')"
 printf '%s  %s\n' "$TAR_HASH" "$(basename "$TAR")" > "$TAR.sha256"
 FOOTPRINT="$OUTPUT_DIR/footprint-linux-$ARCH.json"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/report-footprint.mjs" "$STAGE" \
-  --platform "linux-$ARCH" --archive "$TAR" --output "$FOOTPRINT"
+  --platform "linux-$ARCH" --archive "$TAR" \
+  --budget "$PROJECT_ROOT/config/footprint-budgets.json" --output "$FOOTPRINT"
 
 APPIMAGE_SOURCE="$(find "$PROJECT_ROOT/launcher/linux/target/release/bundle/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
 [[ -n "$APPIMAGE_SOURCE" && -f "$APPIMAGE_SOURCE" ]] || { echo "Tauri did not create an AppImage" >&2; exit 1; }

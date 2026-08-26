@@ -249,7 +249,8 @@ HASH="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
 printf '%s  %s\n' "$HASH" "$(basename "$ZIP")" > "$ZIP.sha256"
 FOOTPRINT="$OUTPUT_DIR/footprint-macos-$ARCH.json"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/report-footprint.mjs" "$STAGE" \
-  --platform "macos-$ARCH" --archive "$ZIP" --output "$FOOTPRINT"
+  --platform "macos-$ARCH" --archive "$ZIP" \
+  --budget "$PROJECT_ROOT/config/footprint-budgets.json" --output "$FOOTPRINT"
 
 printf '{"archive":"%s","sha256":"%s","updateComponent":"%s","updateComponentSha256":"%s","updateManifest":"%s","footprint":"%s","architecture":"%s"}\n' \
   "$ZIP" "$HASH" "$UPDATE_COMPONENT" "$UPDATE_COMPONENT_HASH" "$UPDATE_MANIFEST" "$FOOTPRINT" "$ARCH"
