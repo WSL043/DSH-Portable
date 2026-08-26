@@ -713,7 +713,10 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
     assert.match(compilerConsumer, /VersionInfo/)
     assert.match(compilerConsumer, /ProductVersion/)
     assert.match(compilerConsumer, /FileVersion/)
-    assert.doesNotMatch(compilerConsumer, /['"]\/\?['"]/)
+    assert.match(compilerConsumer, /ProcessStartInfo/)
+    assert.match(compilerConsumer, /RedirectStandardOutput\s*=\s*\$true/)
+    assert.match(compilerConsumer, /RedirectStandardError\s*=\s*\$true/)
+    assert.match(compilerConsumer, /Inno Setup\\s\+/)
     assert.match(compilerConsumer, /--quiet/)
   }
   assert.match(innoBuild, /Inno Setup 7 or newer/)

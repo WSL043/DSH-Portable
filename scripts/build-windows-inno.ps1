@@ -45,6 +45,22 @@ $IsccVersion = $IsccVersions | Where-Object {
     $Match.Success -and [int]$Match.Groups['major'].Value -ge 7
 } | Select-Object -First 1
 if (-not $IsccVersion) {
+    $VersionProbe = New-Object System.Diagnostics.ProcessStartInfo
+    $VersionProbe.FileName = $IsccPath
+    $VersionProbe.Arguments = '/?'
+    $VersionProbe.UseShellExecute = $false
+    $VersionProbe.RedirectStandardOutput = $true
+    $VersionProbe.RedirectStandardError = $true
+    $VersionProbe.CreateNoWindow = $true
+    $VersionProcess = [System.Diagnostics.Process]::Start($VersionProbe)
+    $VersionOutput = $VersionProcess.StandardOutput.ReadToEnd() + "`n" + $VersionProcess.StandardError.ReadToEnd()
+    $VersionProcess.WaitForExit()
+    $VersionMatch = [regex]::Match($VersionOutput, 'Inno Setup\s+(?<version>\d+(?:\.\d+)*)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if ($VersionMatch.Success -and [int]$VersionMatch.Groups['version'].Value.Split('.')[0] -ge 7) {
+        $IsccVersion = $VersionMatch.Groups['version'].Value
+    }
+}
+if (-not $IsccVersion) {
     throw "Inno Setup 7 or newer is required; compiler versions are '$($IsccVersions -join ', ')'."
 }
 
