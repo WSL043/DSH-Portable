@@ -10,7 +10,7 @@ import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import { en, zh } from './locales.ts'
 import { InstallToast } from './InstallToast.tsx'
 import { MarketSection } from './MarketSection.tsx'
-import type { ThemeSnapshot, Translate } from './market-data.ts'
+import type { Translate } from './market-data.ts'
 
 const NS = 'dsh-portable-plugin-market'
 
@@ -25,12 +25,6 @@ export const REQUIRED_PRIMITIVES = ['Menu', 'DisclosureRow', 'Tooltip', 'Toast']
 
 export function missingPrimitives(mod: Record<string, unknown>, required: readonly string[] = REQUIRED_PRIMITIVES): string[] {
   return required.filter(name => mod[name] === undefined)
-}
-
-/** The subset of the theme service this plugin touches. */
-interface ThemeService {
-  getTheme(): ThemeSnapshot | null
-  setTheme(id: string): void
 }
 
 /** The subset of the locale service this plugin touches. */
@@ -52,17 +46,12 @@ interface SlotsService {
  * external package free of monorepo-internal type dependencies). */
 interface MarketClientContext {
   effect(callback: () => unknown, label?: string): void
-  on(event: string, callback: () => void): () => void
   locale: LocaleService
   slots: SlotsService
-  theme: ThemeService
 }
 
 export const name = 'dsh-portable-plugin-market'
-// 'theme' is safe to require: ui-layout (mandatory in every web composition)
-// already hard-depends on it. This cordis's object-form inject means
-// intercept config, NOT {required,optional} — do not use it here.
-export const inject = ['slots', 'locale', 'theme']
+export const inject = ['slots', 'locale']
 export function apply(ctx: MarketClientContext): void {
   // Older hosts resolve the primitives module but lack the rc.6 exports the
   // market renders with. Skip registration (market simply absent from the
@@ -89,11 +78,6 @@ export function apply(ctx: MarketClientContext): void {
     }, () => h(MarketSection, {
       t,
       locale: ctx.locale,
-      theme: ctx.theme,
-      themeStore: {
-        subscribe: (cb: () => void) => ctx.on('theme/change', cb),
-        getSnapshot: () => ctx.theme.getTheme(),
-      },
     })))
 
   const Toast = () => h(InstallToast, { t })

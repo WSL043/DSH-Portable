@@ -90,12 +90,33 @@ test('the Portable market is a native Plugins tab with readable cards and direct
   assert.match(section, /href=\{p\.url\}/)
   assert.doesNotMatch(section, /className=\{css\.nameLink\}\s+href=\{p\.page/)
   assert.match(section, /className=\{css\.nameLink\}/)
+  assert.match(section, /title=\{t\('openProject'\)\}/)
+  assert.match(section, /IconLinkOutline14/)
+  assert.doesNotMatch(section, /t\('viewSource'\)/)
+  assert.doesNotMatch(await read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'), /^\s*viewSource:/m)
   assert.match(section, /FishLogo/)
   assert.doesNotMatch(section, /function MarketLogo[\s\S]{0,500}<svg/)
   assert.match(styles, /\.logoMark\s*\{[^}]*color:\s*var\(--dsw-alias-label-primary/s)
   assert.doesNotMatch(styles, /\.logoPlug|@keyframes\s+dshmPlug\b/)
   assert.doesNotMatch(section, /https:\/\/github\.com\/dsh-market\/dsh-market/)
   assert.match(clientBundle, /^window\.__ModuleLoader__\.load\(\{\s*id:\s*"@wsl043\/dsh-portable-plugin-market"/)
+})
+
+test('the market keeps one navigation layer inside the native Plugins page', async () => {
+  const [section, styles] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
+  ])
+
+  const tabBar = section.match(/<div className=\{css\.tabs\}>[\s\S]*?<\/div>\s*<div className=\{css\.notices\}>/)?.[0] ?? ''
+  assert.match(tabBar, /tabDiscover/)
+  assert.match(tabBar, /tabInstalled/)
+  assert.doesNotMatch(tabBar, /tabThemes|tabAdvanced|tabBackup|tabDiagnostics/)
+  assert.doesNotMatch(section, /className=\{css\.subTabs\}/)
+  assert.doesNotMatch(styles, /^\.subTabs\b/m)
+  assert.match(section, /className=\{css\.installedToolbar\}/)
+  assert.match(section, /onClick=\{\(\) => setTab\('diagnostics'\)\}/)
+  assert.doesNotMatch(section, /tab === 'backup'/)
 })
 
 test('the Portable market never flashes a console window for background commands on Windows', async () => {
@@ -539,10 +560,11 @@ test('GitHub plugin update checks use the unmetered git ref advertisement', asyn
   assert.doesNotMatch(source, /api\.github\.com\/repos\/\$\{gh\[1\]\}\/commits\/HEAD/)
 })
 
-test('plugin profile transfer is presented as plugin sync, not full Portable backup', async () => {
+test('plugin profile transfer no longer duplicates Portable data migration in market navigation', async () => {
   const locales = await read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts')
-  assert.match(locales, /tabBackup:\s*'插件同步'/)
-  assert.match(locales, /tabBackup:\s*'Plugin sync'/)
+  const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  assert.doesNotMatch(locales, /^\s*tabBackup:/m)
+  assert.doesNotMatch(section, /setTab\(['"]backup['"]\)/)
   assert.match(locales, /会话、通用设置和凭据请使用 Portable/)
   assert.match(locales, /Use Portable Data and migration for sessions, general settings, and credentials/)
 })

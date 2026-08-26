@@ -36,6 +36,8 @@ Reviewed upstream baseline: `dsh-market` `v1.31.1`
 | Check GitHub-only updates through the unmetered git ref advertisement | Adopted; still honors the configured proxy path |
 | Unicode profiles and Git subpath installs | Independently implemented and tested |
 | Catalog, images, filters, direct author links, list/card views | Portable-native implementation |
+| Plugin name and a separate source link point to the same repository | Keep the plugin name as the single project link; remove the duplicate footer action |
+| Market-level Discover, Themes, Installed, Advanced, and Backup navigation | Flattened to Discover and Installed; themes remain a catalog category, diagnostics is an Installed action, and Portable data migration owns transfer |
 | Market-managed DSH restart/supervisor | Not applicable; the desktop host owns lifecycle |
 | Global `PNPM_HOME` integration | Not applicable; Portable uses its pinned private pnpm |
 | Sponsored cards, advertisements, theme gallery | Excluded from the core Portable product |

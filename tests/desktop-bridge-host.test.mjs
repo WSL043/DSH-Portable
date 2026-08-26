@@ -168,8 +168,9 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.doesNotMatch(client, /settings\.section/)
   assert.doesNotMatch(client, /id:\s*['"]portable['"][\s\S]+label:/)
   assert.match(client, /borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"]/);
-  assert.match(client, /padding:\s*['"]16px 0['"]/);
-  assert.match(client, /item:\s*\{[^}]*padding:\s*['"]12px 0['"][^}]*flexWrap:\s*['"]wrap['"]/s)
+  assert.match(client, /padding:\s*['"]20px 0 8px['"]/);
+  assert.match(client, /section:\s*\{[^}]*gap:\s*8[^}]*marginTop:\s*20/s)
+  assert.match(client, /item:\s*\{[^}]*padding:\s*['"]14px 0['"][^}]*borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"][^}]*flexWrap:\s*['"]wrap['"]/s)
   assert.match(client, /text:\s*\{[^}]*gap:\s*4/s)
   assert.match(client, /primitives\.Menu/)
   assert.match(client, /primitives\.IconChevronDownOutline14/)

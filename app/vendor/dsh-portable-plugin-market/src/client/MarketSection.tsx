@@ -1,5 +1,5 @@
 /**
- * The Market settings section: Discover / Themes / Installed tabs over the
+ * The Market settings section: Discover / Installed over the
  * /dsh-market/* host routes, with install/update/uninstall flows and the
  * pending-restart bookkeeping in sessionStorage.
  */
@@ -40,11 +40,11 @@ import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
   avatarColor, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
-  formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, themePlugins as themePluginsOf, themeSwatch, TIME_RANGE_DAYS, visiblePlugins,
+  formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
 ActivationInfo, ActivationState, GistExportResult, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
-  SharedHostPackageDependencyFinding, SortDir, SortField, ThemeSnapshot, TimeRange, Translate, UpdateStatus,
+  SharedHostPackageDependencyFinding, SortDir, SortField, TimeRange, Translate, UpdateStatus,
 } from './market-data.ts'
 
 function isHostDependencyFinding(value: unknown): value is SharedHostPackageDependencyFinding {
@@ -437,11 +437,6 @@ export interface MarketSectionProps {
     subscribe(callback: () => void): () => void
     getSnapshot(): { active: string }
   }
-  theme: { setTheme(id: string): void }
-  themeStore: {
-    subscribe(callback: () => void): () => void
-    getSnapshot(): ThemeSnapshot | null
-  }
 }
 
 export function MarketSection(props: MarketSectionProps) {
@@ -452,11 +447,6 @@ export function MarketSection(props: MarketSectionProps) {
     () => props.locale.getSnapshot(),
   )
   const lang = String(localeSnap.active).toLowerCase().startsWith('zh') ? 'zh' : 'en'
-  // null when the composition has no theme service — the Themes tab hides.
-  const themeSnap = useSyncExternalStore(
-    props.themeStore.subscribe,
-    props.themeStore.getSnapshot,
-  )
   const [data, setData] = useState<Registry | null>(cachedRegistry)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [installed, setInstalledState] = useState<InstalledMap>(cachedInstalled ?? {})
@@ -473,14 +463,13 @@ export function MarketSection(props: MarketSectionProps) {
   }, [])
   const [installedFiles, setInstalledFiles] = useState<string[]>([])
   const [skins, setSkins] = useState<string[]>([])
-  const [tab, setTab] = useState(() => {
+  const [tab, setTab] = useState<'discover' | 'installed' | 'diagnostics'>(() => {
     const saved = sessionStorage.getItem('dshm-tab')
     if (saved !== null) sessionStorage.removeItem('dshm-tab')
-    return saved || 'discover'
+    return saved === 'installed' ? 'installed' : 'discover'
   })
   const [q, setQ] = useState('')
-  /** Per-tab searches stay independent: discover / themes / installed. */
-  const [qThemes, setQThemes] = useState('')
+  /** Per-tab searches stay independent: discover / installed. */
   const [qInstalled, setQInstalled] = useState('')
   const [cat, setCat] = useState('all')
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
@@ -1813,19 +1802,6 @@ export function MarketSection(props: MarketSectionProps) {
     else if (id.startsWith('time:')) setTimeRange(id.slice(5) as TimeRange)
   }
 
-  const themePlugins = data === null ? [] : themePluginsOf(data.plugins)
-  /** Themes-tab search narrows by name/owner/description. */
-  const filteredThemePlugins = useMemo(() => {
-    const needle = qThemes.trim().toLowerCase()
-    if (needle === '') return themePlugins
-    return themePlugins.filter(p => {
-      const desc = (p.description && (p.description[lang] || p.description.en)) || ''
-      return p.name.toLowerCase().includes(needle)
-        || (p.owner || '').toLowerCase().includes(needle)
-        || desc.toLowerCase().includes(needle)
-    })
-  }, [themePlugins, qThemes, lang])
-
   /** The catalog entry a deprecated plugin's `replacement` names, if any. */
   const replacementOf = (p: RegistryPlugin): RegistryPlugin | undefined =>
     p.deprecated === true && p.replacement !== undefined
@@ -1852,8 +1828,9 @@ export function MarketSection(props: MarketSectionProps) {
               the same name without either card needing a qualifier. */}
           <div style={{ minWidth: 0 }}>
             <div className={css.nm} title={p.name}>
-              <a className={css.nameLink} href={p.url} target="_blank" rel="noreferrer">
+              <a className={css.nameLink} href={p.url} target="_blank" rel="noreferrer" title={t('openProject')}>
                 {pluginName(p.name)}
+                <IconLinkOutline14 size={13} className={css.projectLinkIcon} />
               </a>
               {p.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
             </div>
@@ -1912,10 +1889,6 @@ export function MarketSection(props: MarketSectionProps) {
             {(data!.categories[p.category] && (data!.categories[p.category]![lang] || data!.categories[p.category]!.en)) || p.category}
           </span>
           {p.added && <span className={css.metaInline}>{t('published') + ' ' + p.added}</span>}
-          {/* De-emphasized on purpose: almost nobody opens the source
-              before installing, so it rides along with the date instead of
-              claiming a button of its own beside Install. */}
-          <a className={css.src} href={p.url} target="_blank" rel="noreferrer">{(p.added ? ' · ' : '') + t('viewSource')}</a>
           <span className={css.grow} />
         </div>
         {busy && (
@@ -1934,106 +1907,6 @@ export function MarketSection(props: MarketSectionProps) {
             </div>
           </div>
         )}
-      </div>
-    )
-  }
-
-  const installedNameOf = (p: RegistryPlugin) => matchInstalledName(p, installed, repoIdentities, data?.plugins, repoHints)
-
-  // Plugins loaded at boot (bundle-layer skins) aren't in the shim list but
-  // are just as live; the boot manifest is the page's own record of them.
-  const bootEntries = (typeof window !== 'undefined' && window.__DSH_BOOT__ && Array.isArray(window.__DSH_BOOT__.entries))
-    ? window.__DSH_BOOT__.entries
-    : []
-
-  // Unified card for the Themes tab: install → use/in-use → uninstall.
-  const themePluginCard = (p: RegistryPlugin) => {
-    const instName = installedNameOf(p)
-    if (instName === null) return pluginCard(p)
-    // A theme switched off via the Installed-tab toggle (or a group switch)
-    // stays in the boot manifest, so the disabled set must veto the badge.
-    const mounted = (skins.includes(instName) || bootEntries.some(e => e.id === instName)) && !effectiveDisabledSet.has(instName)
-    const desc = (p.description && (p.description[lang] || p.description.en)) || ''
-    const replacement = replacementOf(p)
-    return (
-      <div key={p.url} className={`${css.card}${marketView === 'compact' ? ` ${css.compactCard}` : ''}`}>
-        <div className={css.row1}>
-          {/* Same header as the discover card, and it has to stay that way:
-              the themes tab lists the same plugins from the same catalog,
-              so a different title here would name one plugin two ways in
-              one product. */}
-          <div style={{ minWidth: 0 }}>
-            <div className={css.nm} title={p.name}>
-              {pluginName(p.name)}
-              {p.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
-            </div>
-            <div className={css.byline}>
-              <OwnerAvatar name={p.name} owner={p.owner || ''} />
-              <span className={css.owner}>{p.owner}</span>
-              {typeof p.downloads === 'number' && <span className={css.star} title={String(p.downloads)}>{'· ↓ ' + formatCount(p.downloads)}</span>}
-              {typeof p.stars === 'number' && <span className={css.star} title={String(p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
-            </div>
-          </div>
-        </div>
-        <div className={css.desc}>{desc}</div>
-        <CardShot plugin={p} onOpen={openLightbox} />
-        {p.deprecated === true && (
-          <div className={css.deprecate}>
-            <div className={css.depLine}>
-              <span>⚠️ {t('deprecatedWarn')}</span>
-              {replacement !== undefined && (
-                <a className={css.src} href={replacement.url} target="_blank" rel="noreferrer">
-                  {t('replacementHint') + ' ' + replacement.name}
-                </a>
-              )}
-            </div>
-          </div>
-        )}
-        <div className={css.foot}>
-          {p.added && <span className={css.metaInline}>{t('published') + ' ' + p.added}</span>}
-          {/* De-emphasized on purpose: almost nobody opens the source
-              before installing, so it rides along with the date instead of
-              claiming a button of its own beside Install. */}
-          <a className={css.src} href={p.url} target="_blank" rel="noreferrer">{(p.added ? ' · ' : '') + t('viewSource')}</a>
-          <span className={css.grow} />
-          {removingName === instName
-            ? <Button variant="outline" size="sm" disabled>{t('uninstalling')}</Button>
-            : <Button variant="outline" size="sm" onClick={() => setRemoveConfirm(instName)}>{t('uninstall')}</Button>}
-          {effectiveDisabledSet.has(instName) && <span className={css.spec}>{t('disabledState')}</span>}
-          {mounted
-            ? <>
-                <span className={css.okState}>{t('themeActive')}</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={togglingName !== null}
-                  onClick={() => doToggle(instName, false, true)}
-                >{t('themeDeactivate')}</Button>
-              </>
-            : <Button variant="primary" size="sm" onClick={() => doUseSkin(instName)}>{t('themeApply')}</Button>}
-        </div>
-      </div>
-    )
-  }
-
-  const themeCard = (id: string, label: string, swatch: string[]) => {
-    const active = themeSnap !== null && themeSnap.preference === id
-    return (
-      <div key={'th-' + id} className={css.card}>
-        <div className={css.swatches}>{swatch.map((c, i) => <i key={i} style={{ background: c }} />)}</div>
-        <div className={css.foot}>
-          <span className={css.nm}>{label}</span>
-          <span className={css.grow} />
-          {active
-            ? <span className={css.okState}>{t('themeActive')}</span>
-            : (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={() => { try { props.theme.setTheme(id) } catch (error) { setInstallError(String(error)) } }}
-                >{t('themeApply')}</Button>
-              )}
-        </div>
       </div>
     )
   }
@@ -2127,15 +2000,10 @@ export function MarketSection(props: MarketSectionProps) {
     <div className={css.root}>
       <div className={css.tabs}>
           <button className={tab === 'discover' ? `${css.tab} ${css.on}` : css.tab} onClick={() => setTab('discover')}>{t('tabDiscover')}</button>
-          {themeSnap !== null && <button className={tab === 'themes' ? `${css.tab} ${css.on}` : css.tab} onClick={() => setTab('themes')}>{t('tabThemes')}</button>}
-          <button className={tab === 'installed' ? `${css.tab} ${css.on}` : css.tab} onClick={() => { setTab('installed'); refreshInstalled(true) }}>
+          <button className={(tab === 'installed' || tab === 'diagnostics') ? `${css.tab} ${css.on}` : css.tab} onClick={() => { setTab('installed'); refreshInstalled(true) }}>
             {t('tabInstalled') + (installedOtherCount > 0 ? ' (' + installedOtherCount + ')' : '')}
             {hasUpdates && <StateDot state="error" size={7} className={css.dot} />}
           </button>
-          <button
-            className={(tab === 'backup' || tab === 'diagnostics') ? `${css.tab} ${css.on}` : css.tab}
-            onClick={() => { if (tab !== 'backup' && tab !== 'diagnostics') setTab('backup') }}
-          >{t('tabAdvanced')}</button>
           <span className={css.grow} />
           {updatableNames.length >= 2 && (
             <Button
@@ -2163,16 +2031,6 @@ export function MarketSection(props: MarketSectionProps) {
           />
       </div>
       <div className={css.notices}>
-        {/* Backup & Restore and Diagnostics sit under Advanced rather than as
-            their own top-level tabs — most users never need either, and having
-            five peers up top buried the ones people actually reach for. */}
-        {(tab === 'backup' || tab === 'diagnostics') && (
-          <div className={css.subTabs}>
-            <button className={tab === 'backup' ? `${css.tab} ${css.on}` : css.tab} onClick={() => setTab('backup')}>{t('tabBackup')}</button>
-            <button className={tab === 'diagnostics' ? `${css.tab} ${css.on}` : css.tab} onClick={() => setTab('diagnostics')}>{t('tabDiagnostics')}</button>
-            <span className={css.grow} />
-          </div>
-        )}
         {!envReady && (
           <div className={css.banner}>
             <IconCordisPluginOutline14 size={14} className={css.bannerIcon} />
@@ -2333,7 +2191,7 @@ export function MarketSection(props: MarketSectionProps) {
         ref={bodyRef}
         onScroll={e => setShowTop(e.currentTarget.scrollTop > 400)}
       >
-        {tab === 'backup'
+        {false
           ? (
               <div className={css.backupGrid}>
                 <section className={css.backupCard}>
@@ -2608,49 +2466,33 @@ export function MarketSection(props: MarketSectionProps) {
                         )}
                   </>
                 )
-          : tab === 'themes' && themeSnap !== null
+          : tab === 'diagnostics'
             ? (
                 <>
-                  <div className={css.tabSearchRow}>
-                    <Input className={css.tabSearch} icon={<IconSearchOutline16 size={14} />} placeholder={t('searchPh')} value={qThemes} onChange={e => setQThemes(e.target.value)} />
+                  <div className={css.installedToolbar}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      icon={<IconChevronLeftOutline14 size={14} />}
+                      onClick={() => { setTab('installed'); refreshInstalled(true) }}
+                    >{t('backInstalled')}</Button>
                   </div>
-                  <div className={css.themeViewRow}>
-                    <div className={`${css.viewBar} ${css.viewBarInline}`} role="group" aria-label={t('viewMode')}>
-                      <button type="button" aria-pressed={marketView === 'cards'} className={marketView === 'cards' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setMarketView('cards')}>{t('viewCards')}</button>
-                      <button type="button" aria-pressed={marketView === 'compact'} className={marketView === 'compact' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setMarketView('compact')}>{t('viewCompact')}</button>
-                    </div>
-                  </div>
-                  {/* Light/dark/system live in the official Appearance setting; this
-                    tab only shows what that setting can't: registered third-party
-                    palettes (none in the wild yet) and installable theme plugins. */}
-                  {(() => {
-                    const extra = themeSnap.themes.filter(def => def.id !== 'light' && def.id !== 'dark')
-                    return extra.length > 0 && (
-                      <div className={`${css.grid} ${css.themesGrid}`}>
-                        {extra.map(def => themeCard(def.id, def.id, themeSwatch(def)))}
-                      </div>
-                    )
-                  })()}
-                  {data === null
-                    ? <div className={css.loading}><span className={css.logoMark}><MarketLogo size={26} animated /></span>{t('loading')}</div>
-                    : themePlugins.length === 0
-                      ? <div className={css.empty}>{t('themeEmpty')}</div>
-                      : filteredThemePlugins.length === 0
-                        ? <div className={css.empty}>{t('empty')}</div>
-                        : <div className={marketView === 'compact' ? `${css.grid} ${css.compactGrid}` : css.grid}>{filteredThemePlugins.map(themePluginCard)}</div>}
-                </>
-              )
-            : tab === 'diagnostics'
-            ? (
-                <>
                   <Diagnostics t={t} />
                 </>
               )
             : (
                 <>
-                  <div className={css.viewBar}>
-                    <button type="button" className={installedView === 'list' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('list')}>{t('tabList')}</button>
-                    <button type="button" className={installedView === 'groups' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('groups')}>{t('tabGroups')}</button>
+                  <div className={css.installedToolbar}>
+                    <div className={css.viewBar}>
+                      <button type="button" className={installedView === 'list' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('list')}>{t('tabList')}</button>
+                      <button type="button" className={installedView === 'groups' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('groups')}>{t('tabGroups')}</button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={<IconCodeOutline16 size={14} />}
+                      onClick={() => setTab('diagnostics')}
+                    >{t('tabDiagnostics')}</Button>
                   </div>
                   <div className={css.tabSearchRow}>
                     <Input className={css.tabSearch} icon={<IconSearchOutline16 size={14} />} placeholder={t('searchPh')} value={qInstalled} onChange={e => setQInstalled(e.target.value)} />
