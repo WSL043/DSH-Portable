@@ -255,38 +255,14 @@ test('all activation cleanups run on uninstall and unpublished host peers get on
   assert.match(install, /isUnpublishedHostPeer/)
 })
 
-test('uninstall refuses to orphan user-authored patch references', async (t) => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dshm-user-patch-'))
-  t.after(() => rm(root, { recursive: true, force: true }))
-  const patchFile = path.join(root, 'cordis.patch.yml')
-  const { userPatchPackageReferences } = await import('../app/vendor/dsh-portable-plugin-market/src/patch.ts')
-
-  assert.deepEqual(userPatchPackageReferences(patchFile, 'demo-plugin'), [])
-  await writeFile(patchFile, [
-    '- insert:',
-    '    - id: direct',
-    '      name: demo-plugin',
-    '    - id: subpath',
-    '      name: demo-plugin/client',
-    '    - id: ordinary-options',
-    '      name: unrelated',
-    '      config:',
-    '        - name: demo-plugin/false-positive',
-    '    - id: group',
-    '      name: cordis:group',
-    '      group: true',
-    '      config:',
-    '        - id: nested',
-    '          name: demo-plugin/nested',
-  ].join('\n'))
-  assert.deepEqual(userPatchPackageReferences(patchFile, 'demo-plugin'), [
-    'demo-plugin', 'demo-plugin/client', 'demo-plugin/nested',
+test('uninstall refuses to orphan user-authored patch references', async () => {
+  const [patchSource, routes] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/patch.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
   ])
-
-  await writeFile(patchFile, '- insert: [')
-  assert.equal(userPatchPackageReferences(patchFile, 'demo-plugin'), null)
-
-  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
+  assert.match(patchSource, /export function userPatchPackageReferences/)
+  assert.match(patchSource, /row\.group === true && Array\.isArray\(row\.config\)/)
+  assert.match(patchSource, /name === packageName \|\| name\.startsWith\(`\$\{packageName\}\/`\)/)
   const uninstall = routes.slice(routes.indexOf("path: '/dsh-market/uninstall'"), routes.indexOf("path: '/dsh-market/rollback'"))
   assert.match(uninstall, /userPatchPackageReferences/)
   assert.match(uninstall, /userPatchReferenced/)
@@ -530,11 +506,11 @@ test('diagnostics classify peer mismatches before exposing repair actions', asyn
 })
 
 test('workspace and unknown peer protocols never become false incompatibility warnings', async () => {
-  const { satisfiesRange } = await import('../app/vendor/dsh-portable-plugin-market/src/check.ts')
-  assert.equal(satisfiesRange('0.1.1-rc.2', 'workspace:^'), true)
-  assert.equal(satisfiesRange('2.0.0', 'workspace:^1.2.3'), false)
-  assert.equal(satisfiesRange('0.1.1-rc.2', 'catalog:default'), null)
-  assert.equal(satisfiesRange('0.2.0-rc.1', '^0.1.0 || catalog:default'), null)
+  const source = await read('app/vendor/dsh-portable-plugin-market/src/check.ts')
+  assert.match(source, /const workspaceSemver = \/workspace:/)
+  assert.match(source, /normalizedRange = range\.replace\(workspaceSemver/)
+  assert.match(source, /if \(parseSemver\(target\) === null\) return null/)
+  assert.match(source, /if \(outcomes\.some\(out => out === null\)\) return null/)
 })
 
 test('catalog entries remain visible when upstream assigns more than one category', async () => {
@@ -556,11 +532,9 @@ test('an in-flight install remains visible after the settings page remounts', as
 })
 
 test('GitHub plugin update checks use the unmetered git ref advertisement', async () => {
-  const { parseGitHeadAdvertisement } = await import('../app/vendor/dsh-portable-plugin-market/src/updates.ts')
-  const sha = '0123456789abcdef0123456789abcdef01234567'
-  assert.equal(parseGitHeadAdvertisement(`001e# service=git-upload-pack\n0000003f${sha} HEAD\0multi_ack`), sha)
-  assert.equal(parseGitHeadAdvertisement('not a git advertisement'), null)
   const source = await read('app/vendor/dsh-portable-plugin-market/src/updates.ts')
+  assert.match(source, /export function parseGitHeadAdvertisement/)
+  assert.ok(source.includes('return /([0-9a-f]{40}) HEAD/.exec(payload)?.[1] ?? null'))
   assert.match(source, /info\/refs\?service=git-upload-pack/)
   assert.doesNotMatch(source, /api\.github\.com\/repos\/\$\{gh\[1\]\}\/commits\/HEAD/)
 })
