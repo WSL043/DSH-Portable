@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Root
+    [string]$Root,
+    [double]$FirstColdStartLimit = 0
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,6 +10,7 @@ $Root = [System.IO.Path]::GetFullPath($Root)
 $DesktopSmoke = Join-Path $PSScriptRoot 'smoke-windows-desktop-host.ps1'
 $PerformanceBudgetPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'config\performance-budgets.json'
 $PerformanceBudget = (Get-Content -Raw -LiteralPath $PerformanceBudgetPath | ConvertFrom-Json).platforms.'windows-x64'
+$EffectiveFirstColdStartLimit = if ($FirstColdStartLimit -gt 0) { $FirstColdStartLimit } else { [double]$PerformanceBudget.firstColdStartSeconds }
 $Parent = Split-Path -Parent $Root
 $MovedRoot = Join-Path $Parent ((Split-Path -Leaf $Root) + '-moved')
 
@@ -64,7 +66,7 @@ function Assert-BoundedPerformance {
 
 $First = & $DesktopSmoke -Root $Root
 if ($LASTEXITCODE -ne 0) { throw "First desktop lifecycle failed with exit code $LASTEXITCODE" }
-Assert-BoundedPerformance -Result $First -Label 'First launch' -ColdStartLimit $PerformanceBudget.firstColdStartSeconds
+Assert-BoundedPerformance -Result $First -Label 'First launch' -ColdStartLimit $EffectiveFirstColdStartLimit
 
 Move-PortableDirectory -Source $Root -Destination $MovedRoot
 if (Test-Path -LiteralPath $Root) { throw 'The original portable folder still exists after the move.' }

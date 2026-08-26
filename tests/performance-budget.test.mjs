@@ -16,6 +16,7 @@ test('Windows finished-product lifecycle enforces the 0.5.0 performance budget',
   const move = await readFile(new URL('../scripts/smoke-windows-desktop-move.ps1', import.meta.url), 'utf8')
   assert.match(move, /performance-budgets\.json/)
   assert.match(move, /firstColdStartSeconds/)
+  assert.match(move, /FirstColdStartLimit/)
   assert.match(move, /movedColdStartSeconds/)
   assert.match(move, /explicitExitSeconds/)
   assert.match(move, /closeToExitSeconds/)

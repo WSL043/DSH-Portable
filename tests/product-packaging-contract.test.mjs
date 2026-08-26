@@ -710,10 +710,8 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.match(innoBuild, /installer\\windows\\DSH-Portable\.iss/)
   for (const compilerConsumer of [innoBuild]) {
     assert.doesNotMatch(compilerConsumer, /--version/)
-    assert.match(compilerConsumer, /['"]\/\?['"]/)
-    assert.match(compilerConsumer, /Command-Line Compiler/)
-    assert.doesNotMatch(compilerConsumer, /Select-Object -First 1/)
-    assert.match(compilerConsumer, /Select-Object -First 8/)
+    assert.match(compilerConsumer, /VersionInfo\.ProductVersion/)
+    assert.doesNotMatch(compilerConsumer, /['"]\/\?['"]/)
     assert.match(compilerConsumer, /--quiet/)
   }
   assert.match(innoBuild, /Inno Setup 7 or newer/)
@@ -876,6 +874,8 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /\.\/actionlint/)
   assert.match(workflow, /windows-desktop-host:[\s\S]+needs:\s*windows-build/)
   assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
+  assert.match(workflow, /windows-2022[\s\S]+firstColdStartSeconds:\s*35/)
+  assert.match(workflow, /windows-2025[\s\S]+firstColdStartSeconds:\s*20/)
   const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   assert.doesNotMatch(windowsBaseJob, /BuildInstaller|ISCC|Inno Setup/)

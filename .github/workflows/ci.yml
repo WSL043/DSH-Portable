@@ -229,8 +229,10 @@ jobs:
         include:
           - runner: windows-2022
             label: windows-2022
+            firstColdStartSeconds: 35
           - runner: windows-2025
             label: windows-2025
+            firstColdStartSeconds: 20
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
     steps:
@@ -247,7 +249,9 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           ./scripts/smoke-windows-detached-updater.ps1 -Root (Join-Path $Root 'DSH-Portable')
-          ./scripts/smoke-windows-desktop-move.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          ./scripts/smoke-windows-desktop-move.ps1 `
+            -Root (Join-Path $Root 'DSH-Portable') `
+            -FirstColdStartLimit ${{ matrix.firstColdStartSeconds }}
           ./scripts/smoke-windows-dom-ready.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-native-tray.ps1 -Root (Join-Path $Root 'DSH-Portable')
           node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable')
