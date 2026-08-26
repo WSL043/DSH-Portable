@@ -57,8 +57,10 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
 })
 
 test('Windows exit does not complete until the owned WebView2 runtime releases the portable folder', async () => {
-  const [host, moveSmoke] = await Promise.all([
+  const [host, processJob, build, moveSmoke] = await Promise.all([
     read('launcher/windows/DSH-Portable.cs'),
+    read('launcher/windows/PortableProcessJob.cs'),
+    read('scripts/build-windows.ps1'),
     read('scripts/smoke-windows-desktop-move.ps1'),
   ])
 
@@ -102,10 +104,12 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.match(host, /shutdown-webview/)
   assert.match(host, /begin hostPid=/)
   assert.match(host, /Application\.ExecutablePath/)
-  assert.match(host, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/)
-  assert.match(host, /CreateJobObject/)
-  assert.match(host, /SetInformationJobObject/)
-  assert.match(host, /AssignProcessToJobObject/)
+  assert.match(processJob, /JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE/)
+  assert.match(processJob, /CreateJobObject/)
+  assert.match(processJob, /SetInformationJobObject/)
+  assert.match(processJob, /AssignProcessToJobObject/)
+  assert.doesNotMatch(host, /internal static class PortableProcessJob/)
+  assert.match(build, /PortableProcessJob\.cs/)
   assert.match(host, /PortableProcessJob\.Initialize\(\)/)
   assert.ok(
     host.indexOf('PortableProcessJob.Initialize();') < host.indexOf('Application.Run(new LauncherWindow(args))'),

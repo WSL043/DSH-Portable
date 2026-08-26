@@ -9,7 +9,10 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
-const source = path.join(projectRoot, 'launcher', 'windows', 'DSH-Portable.cs')
+const sources = [
+  path.join(projectRoot, 'launcher', 'windows', 'DSH-Portable.cs'),
+  path.join(projectRoot, 'launcher', 'windows', 'PortableProcessJob.cs'),
+]
 const utf8FailureFixture = path.join(projectRoot, 'tests', 'fixtures', 'launcher-error-utf8.mjs')
 
 function cscPath() {
@@ -44,7 +47,7 @@ async function compileLauncher(output, webview2) {
     '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
     `/reference:${webview2.core}`, `/reference:${webview2.winforms}`,
     `/out:${output}`,
-    source,
+    ...sources,
   ])
 }
 

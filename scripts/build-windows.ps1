@@ -226,7 +226,8 @@ try {
         '/reference:System.Web.Extensions.dll',
         "/reference:$WebView2Core", "/reference:$WebView2WinForms",
         "/out:$LauncherExe",
-        (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs')
+        (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\PortableProcessJob.cs')
     )
     & $Csc $CompilerArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $LauncherExe)) { throw 'Windows launcher compilation failed.' }
