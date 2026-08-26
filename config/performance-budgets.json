@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "platforms": {
+    "windows-x64": {
+      "firstColdStartSeconds": 20,
+      "movedColdStartSeconds": 12,
+      "explicitExitSeconds": 15,
+      "closeToExitSeconds": 15
+    }
+  }
+}

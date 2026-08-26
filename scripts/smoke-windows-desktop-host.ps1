@@ -91,6 +91,8 @@ $HomeDigest = (Get-FileHash -Algorithm SHA256 -LiteralPath $HomeMarker).Hash
 $Process = $null
 $StopProcess = $null
 $RestoreProcess = $null
+$ExplicitExitClock = $null
+$CloseToExitClock = $null
 
 function Get-ProductStatus {
     param([int]$TimeoutSeconds = 15)
@@ -246,11 +248,13 @@ try {
     $StopStartInfo.Arguments = 'stop --no-browser --json'
     $StopStartInfo.WorkingDirectory = $Root
     $StopStartInfo.UseShellExecute = $false
+    $ExplicitExitClock = [System.Diagnostics.Stopwatch]::StartNew()
     $StopProcess = [System.Diagnostics.Process]::Start($StopStartInfo)
     if (-not $StopProcess.WaitForExit(60000)) { throw 'Explicit exit command did not finish within 60 seconds.' }
     if (-not $Process.WaitForExit(45000)) { throw 'Explicit exit left the native desktop host running.' }
     $StoppedByLauncher = (Get-ProductStatus).Status
     if ($StoppedByLauncher -ne 'stopped') { throw 'Explicit exit left the DSH backend running.' }
+    $ExplicitExitClock.Stop()
 
     # The persisted setting can opt into close-to-exit without changing system settings.
     [System.IO.File]::WriteAllText($LauncherSettings, '{"schemaVersion":1,"closeBehavior":"exit"}', [System.Text.UTF8Encoding]::new($false))
@@ -276,9 +280,11 @@ try {
     if ([Math]::Abs($RestoredStateWidth - $PersistedWidth) -gt 4 -or [Math]::Abs($RestoredStateHeight - $PersistedHeight) -gt 4) {
         throw "Native window bounds were not restored after restart: ${RestoredStateWidth}x${RestoredStateHeight}."
     }
+    $CloseToExitClock = [System.Diagnostics.Stopwatch]::StartNew()
     if (-not $Process.CloseMainWindow()) { throw 'Close-to-exit could not request a native close.' }
     if (-not $Process.WaitForExit(45000)) { throw 'Close-to-exit setting left the host running.' }
     if ((Get-ProductStatus).Status -ne 'stopped') { throw 'Close-to-exit setting left the backend running.' }
+    $CloseToExitClock.Stop()
 
     if (Test-Path -LiteralPath $LauncherLog) {
         $Stream = [System.IO.FileStream]::new($LauncherLog, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete)
@@ -303,6 +309,8 @@ try {
         MainWindowHandle = $Process.MainWindowHandle
         EmbeddedWebView2Processes = $EmbeddedRenderers.Count
         ColdStartSeconds = [Math]::Round($ColdStartClock.Elapsed.TotalSeconds, 3)
+        ExplicitExitSeconds = [Math]::Round($ExplicitExitClock.Elapsed.TotalSeconds, 3)
+        CloseToExitSeconds = [Math]::Round($CloseToExitClock.Elapsed.TotalSeconds, 3)
         Status = 'passed'
     }
 } finally {
