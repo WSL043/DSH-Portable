@@ -110,7 +110,7 @@ Managed paths repair themselves after a move; external projects remain where you
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
-Fresh installs include the removable [DSH Native Session Manager](https://github.com/WSL043/dsh-native-session-manager) and [DSH Native Image Viewer](https://github.com/WSL043/dsh-native-image-viewer) offline. The former adds archive management and second-confirmation permanent deletion; the latter provides native image viewing. Both follow the standard plugin update path afterward, and a normal upgrade does not reinstall a default plugin an existing user removed.
+Fresh install packages include the removable [DSH Native Session Manager](https://github.com/WSL043/dsh-native-session-manager) and [DSH Native Image Viewer](https://github.com/WSL043/dsh-native-image-viewer) offline. The former adds archive management and second-confirmation permanent session deletion; the latter provides native image viewing. Both follow the standard plugin update path afterward, and a normal upgrade does not reinstall a default plugin an existing user removed.
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
 
