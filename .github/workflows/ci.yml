@@ -232,7 +232,7 @@ jobs:
             firstColdStartSeconds: 35
           - runner: windows-2025
             label: windows-2025
-            firstColdStartSeconds: 20
+            firstColdStartSeconds: 30
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:

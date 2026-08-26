@@ -38,10 +38,14 @@ if (-not $IsccPath) {
 if (-not $IsccPath -or -not (Test-Path -LiteralPath $IsccPath -PathType Leaf)) {
     throw 'An Inno Setup 7 compiler (ISCC.exe) is required.'
 }
-$IsccVersion = (Get-Item -LiteralPath $IsccPath).VersionInfo.ProductVersion
-$IsccVersionMatch = [regex]::Match([string]$IsccVersion, '^(?<major>\d+)(?:\.|$)')
-if (-not $IsccVersionMatch.Success -or [int]$IsccVersionMatch.Groups['major'].Value -lt 7) {
-    throw "Inno Setup 7 or newer is required; compiler version is '$IsccVersion'."
+$IsccVersionInfo = (Get-Item -LiteralPath $IsccPath).VersionInfo
+$IsccVersions = @($IsccVersionInfo.ProductVersion, $IsccVersionInfo.FileVersion) | Where-Object { $_ }
+$IsccVersion = $IsccVersions | Where-Object {
+    $Match = [regex]::Match([string]$_, '^(?<major>\d+)(?:\.|$)')
+    $Match.Success -and [int]$Match.Groups['major'].Value -ge 7
+} | Select-Object -First 1
+if (-not $IsccVersion) {
+    throw "Inno Setup 7 or newer is required; compiler versions are '$($IsccVersions -join ', ')'."
 }
 
 $PortableVersion = (Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'package.json') | ConvertFrom-Json).version
