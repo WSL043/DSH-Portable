@@ -7,6 +7,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { githubRemoteIdentities, githubRepoIdentities } from './sources.ts'
 
 /**
@@ -49,11 +50,7 @@ export function readInstalled(profile: string, explicitDir?: string): Record<str
   }
 }
 
-/**
- * RAW dependency map of the profile manifest — including the in-box bundles
- * readInstalled() filters out. This is the rollback snapshot (#65): restoring
- * a filtered view would delete @deepseek-ai/dsh-base and friends.
- */
+/** Raw dependency map, including official bundles, for pnpm drift recovery. */
 export function readManifestDeps(profile: string, explicitDir?: string): Record<string, string> {
   try {
     const manifest = JSON.parse(readFileSync(join(profileDir(profile, explicitDir), 'package.json'), 'utf8')) as {
@@ -63,35 +60,6 @@ export function readManifestDeps(profile: string, explicitDir?: string): Record<
   } catch {
     return {}
   }
-}
-
-/**
- * Restore the profile manifest's dependency map to a pre-operation snapshot,
- * leaving every other manifest field untouched. pnpm writes package.json
- * BEFORE it finishes installing (#65, #69: a 404/blocked-build failure lands
- * after the write), so a failed add leaves ghost dependencies that break
- * every later pnpm run — and pnpm itself can no longer remove them (the same
- * failure re-fires on any mutation). Direct manifest surgery is the only
- * reliable rollback; the lockfile is left as-is (pnpm reconciles it from the
- * manifest on the next run).
- * @returns names whose entries were dropped or reverted, empty when nothing changed.
- */
-export function restoreManifestDeps(profile: string, snapshot: Record<string, string>, explicitDir?: string): string[] {
-  const file = join(profileDir(profile, explicitDir), 'package.json')
-  let manifest: { dependencies?: Record<string, string> }
-  try {
-    manifest = JSON.parse(readFileSync(file, 'utf8')) as { dependencies?: Record<string, string> }
-  } catch {
-    return []
-  }
-  const current = manifest.dependencies ?? {}
-  const touched = new Set<string>()
-  for (const name of Object.keys(current)) if (current[name] !== snapshot[name]) touched.add(name)
-  for (const name of Object.keys(snapshot)) if (current[name] !== snapshot[name]) touched.add(name)
-  if (touched.size === 0) return []
-  manifest.dependencies = { ...snapshot }
-  writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`)
-  return [...touched]
 }
 
 /** The version actually present in the profile's node_modules, or null. */
@@ -450,6 +418,118 @@ export function readProfileBundles(profileDirectory: string): string[] {
   } catch {
     return []
   }
+}
+
+/** Exact package-manifest state a plugin mutation is allowed to change. */
+export interface ProfileManifestSnapshot {
+  dependencies: Record<string, string>
+  profileBundles: { present: false } | { present: true; value: unknown }
+}
+
+function objectRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
+}
+
+/** Capture both fields that `dsh plugin` may write before a later failure. */
+export function readProfileManifestSnapshot(profile: string, explicitDir?: string): ProfileManifestSnapshot {
+  try {
+    const manifest = JSON.parse(readFileSync(join(profileDir(profile, explicitDir), 'package.json'), 'utf8')) as {
+      dependencies?: Record<string, string>
+      dsh?: { profile?: unknown }
+    }
+    const profileManifest = objectRecord(manifest.dsh?.profile)
+    const present = profileManifest !== undefined && Object.hasOwn(profileManifest, 'bundles')
+    return {
+      dependencies: { ...manifest.dependencies },
+      profileBundles: present
+        ? { present: true, value: structuredClone(profileManifest.bundles) }
+        : { present: false },
+    }
+  } catch {
+    return { dependencies: {}, profileBundles: { present: false } }
+  }
+}
+
+function bundleNames(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((name): name is string => typeof name === 'string') : []
+}
+
+/** Bundle-resolution failures introduced by one mutation, in stable order. */
+export function introducedUnresolvedBundles(before: readonly string[], after: readonly string[]): string[] {
+  const known = new Set(before)
+  return [...new Set(after)].filter(name => !known.has(name))
+}
+
+/**
+ * Restore the exact dependency map and bundle field while preserving every
+ * unrelated profile setting. A failed host operation can write both fields
+ * before reporting failure; restoring only dependencies leaves the next boot
+ * pointing at a package that does not exist.
+ */
+export function restoreProfileManifest(
+  profile: string,
+  snapshot: ProfileManifestSnapshot,
+  explicitDir?: string,
+): string[] {
+  const file = join(profileDir(profile, explicitDir), 'package.json')
+  let manifest: { dependencies?: Record<string, string>; dsh?: unknown }
+  try {
+    manifest = JSON.parse(readFileSync(file, 'utf8')) as typeof manifest
+  } catch {
+    return []
+  }
+
+  const touched = new Set<string>()
+  const currentDependencies = manifest.dependencies ?? {}
+  for (const name of Object.keys(currentDependencies)) {
+    if (currentDependencies[name] !== snapshot.dependencies[name]) touched.add(name)
+  }
+  for (const name of Object.keys(snapshot.dependencies)) {
+    if (currentDependencies[name] !== snapshot.dependencies[name]) touched.add(name)
+  }
+
+  const currentDsh = objectRecord(manifest.dsh)
+  const currentProfile = objectRecord(currentDsh?.profile)
+  const currentBundles = currentProfile !== undefined && Object.hasOwn(currentProfile, 'bundles')
+    ? { present: true as const, value: currentProfile.bundles }
+    : { present: false as const }
+  const bundlesChanged = currentBundles.present !== snapshot.profileBundles.present
+    || (currentBundles.present && snapshot.profileBundles.present
+      && !isDeepStrictEqual(currentBundles.value, snapshot.profileBundles.value))
+  if (bundlesChanged) {
+    const currentNames = new Set(currentBundles.present ? bundleNames(currentBundles.value) : [])
+    const originalNames = new Set(snapshot.profileBundles.present ? bundleNames(snapshot.profileBundles.value) : [])
+    let namedChange = false
+    for (const name of currentNames) {
+      if (!originalNames.has(name)) {
+        touched.add(name)
+        namedChange = true
+      }
+    }
+    for (const name of originalNames) {
+      if (!currentNames.has(name)) {
+        touched.add(name)
+        namedChange = true
+      }
+    }
+    if (!namedChange) touched.add('dsh.profile.bundles')
+  }
+
+  if (touched.size === 0) return []
+  manifest.dependencies = { ...snapshot.dependencies }
+  if (snapshot.profileBundles.present) {
+    const dsh = currentDsh ?? {}
+    const profileManifest = currentProfile ?? {}
+    manifest.dsh = dsh
+    dsh.profile = profileManifest
+    profileManifest.bundles = structuredClone(snapshot.profileBundles.value)
+  } else if (currentProfile !== undefined) {
+    delete currentProfile.bundles
+  }
+  writeManifestAtomic(file, manifest)
+  return [...touched]
 }
 
 function writeManifestAtomic(manifestPath: string, manifest: unknown): void {

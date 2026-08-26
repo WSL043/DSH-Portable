@@ -111,6 +111,25 @@ async function fetchJson(url: string): Promise<unknown> {
   return res.json() as unknown
 }
 
+/** Extract the symbolic HEAD commit from git's pkt-line ref advertisement. */
+export function parseGitHeadAdvertisement(payload: string): string | null {
+  return /([0-9a-f]{40}) HEAD/.exec(payload)?.[1] ?? null
+}
+
+/** Read GitHub HEAD through the same endpoint `git clone` uses, without REST quota. */
+async function fetchGitHead(repo: string): Promise<string | null> {
+  try {
+    const response = await marketFetch(`https://github.com/${repo}/info/refs?service=git-upload-pack`, {
+      headers: { 'user-agent': 'git/2.40.0' },
+      signal: AbortSignal.timeout(10_000),
+    })
+    if (!response.ok) return null
+    return parseGitHeadAdvertisement(await response.text())
+  } catch {
+    return null
+  }
+}
+
 /**
  * Evidence check behind the "wait a day" stale diagnosis (#45): whether the
  * package's CURRENT latest release was published recently enough to sit
@@ -235,8 +254,7 @@ export async function checkUpdates(
     try {
       if (spec.startsWith('github:') && gh !== null) {
         const current = lockCommits.get(gh[1].toLowerCase()) ?? null
-        const head = (await fetchJson(`https://api.github.com/repos/${gh[1]}/commits/HEAD`)) as { sha?: string }
-        const latest = typeof head.sha === 'string' ? head.sha : null
+        const latest = await fetchGitHead(gh[1])
         result[name] = {
           kind: 'github', version, current, latest,
           updateAvailable: current !== null && latest !== null && current !== latest,

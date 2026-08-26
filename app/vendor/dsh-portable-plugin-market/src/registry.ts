@@ -11,7 +11,7 @@ export interface RegistryPlugin {
   owner: string
   url: string
   page?: string
-  category: string
+  category: string | string[]
   description: Record<string, string>
   npm?: string | null
   /** Optional prebuilt archive published by this entry's own GitHub repository. */
@@ -41,6 +41,11 @@ export interface Registry {
   count: number
   categories: Record<string, Record<string, string>>
   plugins: RegistryPlugin[]
+}
+
+/** Tolerate the catalog's legacy single category and future multi-category form. */
+export function hasPluginCategory(plugin: Pick<RegistryPlugin, 'category'>, category: string): boolean {
+  return Array.isArray(plugin.category) ? plugin.category.includes(category) : plugin.category === category
 }
 
 /**

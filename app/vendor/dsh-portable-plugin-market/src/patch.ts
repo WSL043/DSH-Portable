@@ -174,6 +174,61 @@ export function readUserPatchState(patchPath: string): PatchState {
   return { disables, forced, inserts }
 }
 
+/**
+ * User-owned insert rows that still load a package or one of its exported
+ * subpaths.  The market may remove rows it created, but must never rewrite a
+ * hand-authored insert behind the user's back.
+ *
+ * A missing patch is the ordinary empty state. `null` means the existing file
+ * could not be inspected safely, so a destructive caller should stop.
+ */
+export function userPatchPackageReferences(patchPath: string, packageName: string): string[] | null {
+  let rows: unknown[] | null
+  try {
+    rows = parsePatchFile(patchPath)
+  } catch {
+    return null
+  }
+  try {
+    readFileSync(patchPath, 'utf8')
+  } catch (error) {
+    const code = error !== null && typeof error === 'object' && 'code' in error
+      ? (error as { code?: unknown }).code
+      : undefined
+    return code === 'ENOENT' ? [] : null
+  }
+  if (rows === null) return null
+
+  const names = new Set<string>()
+  const visiting = new Set<unknown[]>()
+  const visited = new Set<unknown[]>()
+  const collect = (entries: unknown[]): boolean => {
+    if (visited.has(entries)) return true
+    if (visiting.has(entries)) return false
+    visiting.add(entries)
+    for (const entry of entries) {
+      if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return false
+      const row = entry as Record<string, unknown>
+      if ('name' in row && typeof row.name !== 'string') return false
+      if (typeof row.name === 'string') names.add(row.name)
+      // Only a group row owns nested loader rows. Ordinary plugin options may
+      // contain arrays of named objects and must not become false references.
+      if (row.group === true && Array.isArray(row.config) && !collect(row.config)) return false
+    }
+    visiting.delete(entries)
+    visited.add(entries)
+    return true
+  }
+
+  for (const patch of rows) {
+    if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) return null
+    const row = patch as Record<string, unknown>
+    if (!('insert' in row)) continue
+    if (!Array.isArray(row.insert) || !collect(row.insert)) return null
+  }
+  return [...names].filter(name => name === packageName || name.startsWith(`${packageName}/`))
+}
+
 /** The include entry's id prefix (loader entry ids look like `include:X`). */
 function includePrefix(host: PatchHost): string {
   for (const entry of host.loader.entries()) {

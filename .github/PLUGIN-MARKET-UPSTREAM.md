@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.26.0`
-(`53cb827b12fad5021d9ccdecd1a2797f537e712d`).
+Reviewed upstream baseline: `dsh-market` `v1.31.1`
+(`3cbe62cf48ba3763dcefb40f9af2a41440c4d1a8`).
 
 ## Compatibility matrix
 
@@ -27,12 +27,21 @@ Reviewed upstream baseline: `dsh-market` `v1.26.0`
 | Prevent an AI repair prompt from mutating its own running Harness | Adopted; defaults to read-only analysis and external apply/rollback scripts |
 | Keep screenshot portals inside the market root | Adopted |
 | Keep running plugin updates visible in the activity panel | Adopted |
+| Preserve an in-flight install across a Settings-page remount | Adopted; the host task URL remains authoritative |
+| Restore the exact dependency and bundle shape after a failed mutation | Adopted; order, duplicates, and field absence are preserved |
+| Reject a successful mutation that newly leaves unresolved profile bundles | Adopted; the previous profile state is restored before reporting failure |
+| Refuse uninstall while a user-authored patch still loads the package | Adopted; Portable never silently rewrites that patch |
+| Normalize pnpm `workspace:` peer ranges and tolerate unknown protocols | Adopted; avoids false incompatibility warnings |
+| Accept catalog entries with more than one category | Adopted |
+| Check GitHub-only updates through the unmetered git ref advertisement | Adopted; still honors the configured proxy path |
 | Unicode profiles and Git subpath installs | Independently implemented and tested |
 | Catalog, images, filters, direct author links, list/card views | Portable-native implementation |
 | Market-managed DSH restart/supervisor | Not applicable; the desktop host owns lifecycle |
 | Global `PNPM_HOME` integration | Not applicable; Portable uses its pinned private pnpm |
 | Sponsored cards, advertisements, theme gallery | Excluded from the core Portable product |
 | Profile snapshots and named plugin presets | Excluded; Portable data migration already owns full-profile recovery |
+| Reverse-proxy base-path routing | Not applicable to the native desktop host, which serves DSH at its own origin root |
+| Persistent market server logs and full-profile export | Excluded; Portable support reports and migration own those product-level surfaces |
 | Restore local development links to catalog sources | Deferred; useful for plugin authors but outside the beginner install path |
 | Third-party desktop-host compatibility branches | Reviewed only when they affect the official DSH contract |
 

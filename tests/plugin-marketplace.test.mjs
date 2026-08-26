@@ -255,6 +255,44 @@ test('all activation cleanups run on uninstall and unpublished host peers get on
   assert.match(install, /isUnpublishedHostPeer/)
 })
 
+test('uninstall refuses to orphan user-authored patch references', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dshm-user-patch-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const patchFile = path.join(root, 'cordis.patch.yml')
+  const { userPatchPackageReferences } = await import('../app/vendor/dsh-portable-plugin-market/src/patch.ts')
+
+  assert.deepEqual(userPatchPackageReferences(patchFile, 'demo-plugin'), [])
+  await writeFile(patchFile, [
+    '- insert:',
+    '    - id: direct',
+    '      name: demo-plugin',
+    '    - id: subpath',
+    '      name: demo-plugin/client',
+    '    - id: ordinary-options',
+    '      name: unrelated',
+    '      config:',
+    '        - name: demo-plugin/false-positive',
+    '    - id: group',
+    '      name: cordis:group',
+    '      group: true',
+    '      config:',
+    '        - id: nested',
+    '          name: demo-plugin/nested',
+  ].join('\n'))
+  assert.deepEqual(userPatchPackageReferences(patchFile, 'demo-plugin'), [
+    'demo-plugin', 'demo-plugin/client', 'demo-plugin/nested',
+  ])
+
+  await writeFile(patchFile, '- insert: [')
+  assert.equal(userPatchPackageReferences(patchFile, 'demo-plugin'), null)
+
+  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
+  const uninstall = routes.slice(routes.indexOf("path: '/dsh-market/uninstall'"), routes.indexOf("path: '/dsh-market/rollback'"))
+  assert.match(uninstall, /userPatchPackageReferences/)
+  assert.match(uninstall, /userPatchReferenced/)
+  assert.match(uninstall, /userPatchInspectionFailed/)
+})
+
 test('the host-peer retry is scoped to DSH runtime peers and runs at most once', async () => {
   const { withHoistRecovery, AUTO_INSTALL_PEERS_OFF } = await import('../app/vendor/dsh-portable-plugin-market/src/install.ts')
   const profile = await mkdtemp(path.join(os.tmpdir(), 'dshm-host-peer-'))
@@ -406,6 +444,73 @@ test('a half-failed uninstall can atomically remove a vanished plugin from both 
   assert.equal(dropFromManifest('web', 'ghost', root), false)
 })
 
+test('a failed install restores the exact dependency and bundle state without touching other profile fields', async (t) => {
+  const profile = await mkdtemp(path.join(os.tmpdir(), 'dshm-failed-install-'))
+  t.after(() => rm(profile, { recursive: true, force: true }))
+  const manifestFile = path.join(profile, 'package.json')
+  await writeFile(manifestFile, JSON.stringify({
+    name: 'profile',
+    dependencies: { keep: '1.0.0' },
+    dsh: { profile: { bundles: ['keep'], preset: 'standard' } },
+    portableMarker: { preserve: true },
+  }, null, 2))
+  const {
+    readProfileManifestSnapshot,
+    restoreProfileManifest,
+  } = await import('../app/vendor/dsh-portable-plugin-market/src/profile.ts')
+
+  const snapshot = readProfileManifestSnapshot('web', profile)
+  await writeFile(manifestFile, JSON.stringify({
+    name: 'profile',
+    dependencies: { keep: '1.0.0', ghost: '2.0.0' },
+    dsh: { profile: { bundles: ['keep', 'ghost'], preset: 'standard' } },
+    portableMarker: { preserve: true },
+  }, null, 2))
+
+  assert.deepEqual(restoreProfileManifest('web', snapshot, profile).sort(), ['ghost'])
+  const restored = JSON.parse(await readFile(manifestFile, 'utf8'))
+  assert.deepEqual(restored.dependencies, { keep: '1.0.0' })
+  assert.deepEqual(restored.dsh.profile, { bundles: ['keep'], preset: 'standard' })
+  assert.deepEqual(restored.portableMarker, { preserve: true })
+})
+
+test('manifest rollback preserves whether the bundle field existed and its exact order', async (t) => {
+  const profile = await mkdtemp(path.join(os.tmpdir(), 'dshm-bundle-shape-'))
+  t.after(() => rm(profile, { recursive: true, force: true }))
+  const manifestFile = path.join(profile, 'package.json')
+  const {
+    readProfileManifestSnapshot,
+    restoreProfileManifest,
+  } = await import('../app/vendor/dsh-portable-plugin-market/src/profile.ts')
+
+  await writeFile(manifestFile, JSON.stringify({ dependencies: {}, dsh: { profile: { preset: 'standard' } } }, null, 2))
+  const absent = readProfileManifestSnapshot('web', profile)
+  await writeFile(manifestFile, JSON.stringify({ dependencies: {}, dsh: { profile: { preset: 'standard', bundles: ['ghost'] } } }, null, 2))
+  assert.deepEqual(restoreProfileManifest('web', absent, profile), ['ghost'])
+  assert.equal(Object.hasOwn(JSON.parse(await readFile(manifestFile, 'utf8')).dsh.profile, 'bundles'), false)
+
+  await writeFile(manifestFile, JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: ['b', 'a', 'b'] } } }, null, 2))
+  const ordered = readProfileManifestSnapshot('web', profile)
+  await writeFile(manifestFile, JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: ['a', 'b'] } } }, null, 2))
+  assert.deepEqual(restoreProfileManifest('web', ordered, profile), ['dsh.profile.bundles'])
+  assert.deepEqual(JSON.parse(await readFile(manifestFile, 'utf8')).dsh.profile.bundles, ['b', 'a', 'b'])
+})
+
+test('post-operation health detects only newly unresolved profile bundles', async (t) => {
+  const { introducedUnresolvedBundles } = await import('../app/vendor/dsh-portable-plugin-market/src/profile.ts')
+  assert.deepEqual(introducedUnresolvedBundles(['old'], ['old', 'ghost']), ['ghost'])
+  assert.deepEqual(introducedUnresolvedBundles(['old'], ['old']), [])
+  assert.deepEqual(introducedUnresolvedBundles(['old'], ['new', 'new']), ['new'])
+})
+
+test('install and update routes gate success on post-operation profile health', async () => {
+  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
+  assert.match(routes, /introducedUnresolvedBundles/)
+  assert.match(routes, /installBootBefore/)
+  assert.match(routes, /updateBootBefore/)
+  assert.match(routes, /profile-health/)
+})
+
 test('diagnostics classify peer mismatches before exposing repair actions', async () => {
   const [routes, diagnostics, promptSource, locales] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
@@ -422,6 +527,42 @@ test('diagnostics classify peer mismatches before exposing repair actions', asyn
   assert.match(promptSource, /aiFixIfSelf/)
   assert.match(locales, /aiFixDetect:/)
   assert.match(locales, /aiFixIfSelf:/)
+})
+
+test('workspace and unknown peer protocols never become false incompatibility warnings', async () => {
+  const { satisfiesRange } = await import('../app/vendor/dsh-portable-plugin-market/src/check.ts')
+  assert.equal(satisfiesRange('0.1.1-rc.2', 'workspace:^'), true)
+  assert.equal(satisfiesRange('2.0.0', 'workspace:^1.2.3'), false)
+  assert.equal(satisfiesRange('0.1.1-rc.2', 'catalog:default'), null)
+  assert.equal(satisfiesRange('0.2.0-rc.1', '^0.1.0 || catalog:default'), null)
+})
+
+test('catalog entries remain visible when upstream assigns more than one category', async () => {
+  const { visiblePlugins, themePlugins } = await import('../app/vendor/dsh-portable-plugin-market/src/client/market-data.ts')
+  const plugin = {
+    name: 'multi', owner: 'author', url: 'https://github.com/author/multi',
+    category: ['ui', 'theme'], description: { en: 'test' },
+  }
+  assert.deepEqual(visiblePlugins([plugin], { category: 'ui', query: '', lang: 'en', sort: 'stars-desc' }), [plugin])
+  assert.deepEqual(themePlugins([plugin]), [plugin])
+})
+
+test('an in-flight install remains visible after the settings page remounts', async () => {
+  const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  assert.match(section, /dshm-pending[\s\S]*name:\s*plugin\.name/)
+  assert.match(section, /recovered-install:/)
+  assert.match(section, /record\.url === busyUrl[\s\S]*state:\s*'done'/)
+  assert.match(section, /record\.url === busyUrl[\s\S]*state:\s*'failed'/)
+})
+
+test('GitHub plugin update checks use the unmetered git ref advertisement', async () => {
+  const { parseGitHeadAdvertisement } = await import('../app/vendor/dsh-portable-plugin-market/src/updates.ts')
+  const sha = '0123456789abcdef0123456789abcdef01234567'
+  assert.equal(parseGitHeadAdvertisement(`001e# service=git-upload-pack\n0000003f${sha} HEAD\0multi_ack`), sha)
+  assert.equal(parseGitHeadAdvertisement('not a git advertisement'), null)
+  const source = await read('app/vendor/dsh-portable-plugin-market/src/updates.ts')
+  assert.match(source, /info\/refs\?service=git-upload-pack/)
+  assert.doesNotMatch(source, /api\.github\.com\/repos\/\$\{gh\[1\]\}\/commits\/HEAD/)
 })
 
 test('plugin profile transfer is presented as plugin sync, not full Portable backup', async () => {

@@ -39,7 +39,7 @@ import { clearSettled, drop, enqueue, patch as patchRecord, recordForUrl } from 
 import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
-  avatarColor, entryForDep, groupSwitchState, humanOutput, isInstalled, matchInstalledName, orderedCategories,
+  avatarColor, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
   formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, themePlugins as themePluginsOf, themeSwatch, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
@@ -835,8 +835,20 @@ export function MarketSection(props: MarketSectionProps) {
   // the poll below converges the button state from the host's ground truth.
   useEffect(() => {
     const pending = readSession('dshm-pending')
-    if (pending !== null && typeof pending.url === 'string') setBusyUrl(pending.url)
-  }, [])
+    if (pending === null || typeof pending.url !== 'string') return
+    setBusyUrl(pending.url)
+    const fallback = data?.plugins.find(plugin => plugin.url === pending.url)?.name ?? pending.url
+    const name = typeof pending.name === 'string' && pending.name !== '' ? pending.name : fallback
+    setRecords(list => list.some(record => record.url === pending.url)
+      ? list
+      : enqueue(list, {
+          id: `recovered-install:${pending.url}`,
+          kind: 'install',
+          name,
+          url: pending.url,
+          state: 'running',
+        }))
+  }, [data])
 
   useEffect(() => {
     if (busyUrl === null && updatingName === null) {
@@ -895,6 +907,9 @@ export function MarketSection(props: MarketSectionProps) {
                 idleStrikes.current = 0
                 sessionStorage.removeItem('dshm-pending')
                 setDoneUrls(urls => urls.includes(busyUrl) ? urls : urls.concat(busyUrl))
+                setRecords(list => list.map(record => record.url === busyUrl && record.state === 'running'
+                  ? { ...record, state: 'done' as const }
+                  : record))
                 setBusyUrl(null)
               } else if (++idleStrikes.current >= 2) {
                 // Host is idle and the plugin never landed: the install died
@@ -902,6 +917,9 @@ export function MarketSection(props: MarketSectionProps) {
                 // button says "installing" forever — across reloads (#32).
                 idleStrikes.current = 0
                 sessionStorage.removeItem('dshm-pending')
+                setRecords(list => list.map(record => record.url === busyUrl && record.state === 'running'
+                  ? { ...record, state: 'failed' as const, reason: t('installFail') }
+                  : record))
                 setBusyUrl(null)
                 setInstallError(t('installFail'))
               }
@@ -1017,7 +1035,7 @@ export function MarketSection(props: MarketSectionProps) {
     setRecords(list => enqueue(list, {
       id: recordId, kind: 'install', name: plugin.name, url: plugin.url, state: 'running',
     }))
-    sessionStorage.setItem('dshm-pending', JSON.stringify({ url: plugin.url }))
+    sessionStorage.setItem('dshm-pending', JSON.stringify({ url: plugin.url, name: plugin.name }))
     fetch('/dsh-market/install', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1027,7 +1045,7 @@ export function MarketSection(props: MarketSectionProps) {
       .then(({ status, body }) => {
         setBusyUrl(null)
         sessionStorage.removeItem('dshm-pending')
-        if (status === 200 && body.ok && body.hot && plugin.category === 'theme') {
+  if (status === 200 && body.ok && body.hot && hasCategory(plugin, 'theme')) {
           // Themes auto-activate on install; reload straight into the Themes
           // tab so the new look is on screen immediately.
           sessionStorage.setItem('dshm-toast', JSON.stringify([plugin.name]))
@@ -2100,7 +2118,7 @@ export function MarketSection(props: MarketSectionProps) {
     if (data === null) return names
     for (const [name, spec] of Object.entries(installed)) {
       const entry = entryForDep(data.plugins, name, String(spec), repoIdentities[name], repoHints[name])
-      if (entry !== undefined && entry.category === 'theme') names.add(name)
+      if (entry !== undefined && hasCategory(entry, 'theme')) names.add(name)
     }
     return names
   }, [data, installed, repoIdentities, repoHints])

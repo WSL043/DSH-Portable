@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { loadRegistry } from './registry.ts'
+import { hasPluginCategory, loadRegistry } from './registry.ts'
 import {
   cleanHotDir, hotMount, hotUnmount, listHotMounts,
   mountClientOnlyDeps, purgeMarketState, readMarketState, writeMarketState,
@@ -23,7 +23,7 @@ import {
   BOOT_ID, cancelActive, probePnpm, progress, provisionPnpm, runDshPlugin,
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
-import { addProfileBundle, dropFromManifest, hasLoadableEntry, INBOX_BUNDLES, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readManifestDeps, readProfileBundles, removeProfileBundle, restoreManifestDeps, setAllowBuilds } from './profile.ts'
+import { addProfileBundle, dropFromManifest, hasLoadableEntry, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
@@ -39,7 +39,7 @@ import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, tr
 import { activationAfterReplace, brokenClientBundles, checkClientBundle, hasHostHalf, newlyBrokenBundles, verifyActivation } from './verify.ts'
 import {
   carrierDisableIds, disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags,
-  readUserPatchState, removeRowBlocks, rowIdsForPackage,
+  readUserPatchState, removeRowBlocks, rowIdsForPackage, userPatchPackageReferences,
 } from './patch.ts'
 import {
   createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, unportableDeps, uploadWebdav,
@@ -351,6 +351,18 @@ export function mountMarketRoutes(
   /** Every plugin command goes through the pnpm-drift recovery wrapper (#20). */
   const runPlugin = (profile: string, args: string[]) => withHoistRecovery(commands.runPlugin, profile, args, activeProfileDir)
 
+  /** Unresolvable bundle rows that would prevent the next profile boot. */
+  const unresolvedProfileBundles = (): string[] => {
+    try {
+      return analyzeProfile(activeProfileDir).bundles
+        .filter(layer => layer.directory === null)
+        .map(layer => layer.name)
+    } catch (error) {
+      logEvent('warn', 'profile-health', `bundle resolution check failed: ${error instanceof Error ? error.message : String(error)}`)
+      return []
+    }
+  }
+
   /**
    * Undo a clean-exit update whose new build cannot boot. Restoring only the
    * manifest pin (the original #159 behavior) leaves the bad package files
@@ -358,8 +370,8 @@ export function mountMarketRoutes(
    * next start still fails. Re-run pnpm install against the restored
    * manifest to rematerialize the previous build's files.
    */
-  async function rollbackUpdateBuild(name: string, manifestBefore: Record<string, string>): Promise<{ ok: boolean; detail: string | null }> {
-    const rolledBack = restoreManifestDeps(config.profile, manifestBefore, activeProfileDir)
+  async function rollbackUpdateBuild(name: string, manifestBefore: ProfileManifestSnapshot): Promise<{ ok: boolean; detail: string | null }> {
+    const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
     if (rolledBack.length === 0) return { ok: true, detail: null }
     // CI=true (the market always runs pnpm that way) turns frozen-lockfile
     // on, and the restored manifest pin now disagrees with the lockfile the
@@ -379,7 +391,7 @@ export function mountMarketRoutes(
     id: string
     kind: 'update' | 'install'
     names: string[]
-    manifestBefore?: Record<string, string>
+    manifestBefore?: ProfileManifestSnapshot
     /** github: updates must re-add the pre-update commit, not just reinstall. */
     gitTarget?: string
     beforeCommit?: string | null
@@ -397,14 +409,14 @@ export function mountMarketRoutes(
   /** Restore a github: update by re-adding the commit captured before the update. */
   async function rollbackGitBuild(
     name: string,
-    manifestBefore: Record<string, string>,
+    manifestBefore: ProfileManifestSnapshot,
     target: string,
     beforeCommit: string | null,
   ): Promise<{ ok: boolean; detail: string | null }> {
     if (beforeCommit === null) {
       return { ok: false, detail: 'the previous commit is unknown; nothing to roll back to' }
     }
-    restoreManifestDeps(config.profile, manifestBefore, activeProfileDir)
+    restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
     const add = await runPlugin(config.profile, ['add', RELEASE_AGE_OVERRIDE, `${target}#${beforeCommit}`])
     if (add.exitCode !== 0 || add.timedOut || add.cancelled) {
       return { ok: false, detail: (add.stderr || add.stdout).slice(-300) }
@@ -412,7 +424,7 @@ export function mountMarketRoutes(
     // pnpm wrote a commit-pinned spec; the profile's durable spec must stay
     // the original `github:owner/repo` form. The lockfile keeps the restored
     // commit resolution for the next boot.
-    restoreManifestDeps(config.profile, manifestBefore, activeProfileDir)
+    restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
     logEvent('info', 'update-rollback', `${name}: restored github build at ${beforeCommit}`)
     return { ok: true, detail: null }
   }
@@ -1281,11 +1293,12 @@ export function mountMarketRoutes(
             pendingRollbacks.clear()
             const compatibilityBefore = assessProfile(config.profile, activeProfileDir)
             const bundlesBefore = brokenClientBundles(config.profile, activeProfileDir)
-            const manifestBefore = readManifestDeps(config.profile, activeProfileDir)
+            const updateBootBefore = unresolvedProfileBundles()
+            const manifestBefore = readProfileManifestSnapshot(config.profile, activeProfileDir)
             const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
             if ((result.exitCode !== 0 || result.timedOut) && !cancelled) {
-              const rolledBack = restoreManifestDeps(config.profile, manifestBefore, activeProfileDir)
+              const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
               if (rolledBack.length > 0) logEvent('warn', 'update', `${name}: rolled back manifest residue of the failed run: ${rolledBack.join(', ')}`)
             }
             let ok = result.exitCode === 0 && !result.timedOut && !cancelled
@@ -1346,6 +1359,20 @@ export function mountMarketRoutes(
                   : `${name} 更新后的组合无法启动（${first}），回滚未能恢复原版本文件（${rollback.detail ?? 'unknown'}）；请运行 dsh plugin --profile ${config.profile} install 手工恢复。 / ${name} updated to a composition that cannot boot (${first}); the previous files could not be restored (${rollback.detail ?? 'unknown'}) — run 'dsh plugin --profile ${config.profile} install' to recover manually.`
                 logEvent('error', 'update',
                   `${name}: trial validation failed — ${first}${rollback.ok ? '; previous build restored' : `; could not restore previous files: ${rollback.detail ?? 'unknown'}`}`)
+              }
+            }
+            let profileHealthError: string | null = null
+            if (ok) {
+              const newlyUnresolved = introducedUnresolvedBundles(updateBootBefore, unresolvedProfileBundles())
+              if (newlyUnresolved.length > 0) {
+                ok = false
+                const rollback = await rollbackUpdateBuild(name, manifestBefore)
+                rollbackOk = rollback.ok
+                rollbackDetail = rollback.detail
+                profileHealthError = rollback.ok
+                  ? `更新留下了无法解析的插件层（${newlyUnresolved.join('、')}），已恢复原版本。 / The update left unresolvable bundle rows (${newlyUnresolved.join(', ')}); the previous version was restored.`
+                  : `更新留下了无法解析的插件层（${newlyUnresolved.join('、')}），自动恢复失败：${rollback.detail ?? 'unknown'} / The update left unresolvable bundle rows (${newlyUnresolved.join(', ')}) and automatic recovery failed: ${rollback.detail ?? 'unknown'}`
+                logEvent('error', 'profile-health', `${name}: unresolved after update — ${newlyUnresolved.join(', ')}`)
               }
             }
             let compatibility: { code: 'soft-incompatible'; risks: CompatibilityRisk[]; shadowedNames?: DuplicateName[]; brokenBundles?: Array<{ name: string; reason: string }>; rollbackId: string } | undefined
@@ -1424,7 +1451,7 @@ export function mountMarketRoutes(
               compatibility,
               ignoredBuilds,
               staleReason: staleReason ?? undefined,
-              error: trialError ?? brokenEntryError ?? staleError ?? undefined,
+              error: profileHealthError ?? trialError ?? brokenEntryError ?? staleError ?? undefined,
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,
@@ -1793,8 +1820,9 @@ export function mountMarketRoutes(
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown; force?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
+            const force = body.force === true
             if (name === 'dsh-market' || name === 'dshmarket') {
               sendJson(response, 400, { error: 'the market cannot uninstall itself; use the dsh CLI' })
               return
@@ -1802,6 +1830,29 @@ export function mountMarketRoutes(
             if (readInstalled(config.profile, activeProfileDir)[name] === undefined) {
               sendJson(response, 400, { error: 'plugin is not installed' })
               return
+            }
+            const userPatchReferences = userPatchPackageReferences(userPatchPath, name)
+            if (userPatchReferences === null && !force) {
+              logEvent('warn', 'uninstall-blocked', `${name}: user cordis.patch.yml could not be inspected safely`)
+              sendJson(response, 409, {
+                error: `无法安全卸载 ${name}：当前 profile 的 cordis.patch.yml 无法读取为有效补丁，无法排除它仍在加载该插件。请先检查补丁文件；确认无关后可强制卸载。 / Cannot safely uninstall ${name}: this profile's cordis.patch.yml could not be inspected as a valid patch, so a remaining package reference cannot be ruled out. Check the patch file; force removal only after confirming it is unrelated.`,
+                userPatchInspectionFailed: true,
+                forceable: true,
+              })
+              return
+            }
+            if (userPatchReferences !== null && userPatchReferences.length > 0) {
+              const listed = userPatchReferences.join(', ')
+              logEvent('warn', 'uninstall-blocked', `${name}: user cordis.patch.yml still inserts ${listed}`)
+              sendJson(response, 409, {
+                error: `无法卸载 ${name}：cordis.patch.yml 仍通过 insert 引用 ${listed}。请先移除这些用户补丁引用；市场不会自动改写用户文件。 / Cannot uninstall ${name}: cordis.patch.yml still inserts ${listed}. Remove those user-owned references first; the market will not rewrite the file automatically.`,
+                userPatchReferenced: true,
+                patchReferences: userPatchReferences,
+              })
+              return
+            }
+            if (userPatchReferences === null) {
+              logEvent('warn', 'uninstall', `${name}: forced past an unreadable user cordis.patch.yml`)
             }
             const busyAgents = runningAgentsForGuard()
             if (busyAgents.length > 0) {
@@ -2051,16 +2102,17 @@ export function mountMarketRoutes(
             pendingRollbacks.clear()
             const compatibilityBefore = assessProfile(config.profile, activeProfileDir)
             const bundlesBefore = brokenClientBundles(config.profile, activeProfileDir)
+            const installBootBefore = unresolvedProfileBundles()
             // RAW manifest snapshot for failure rollback (#65): pnpm writes
             // package.json before the build-script check / registry fetches
             // run, so a hard-failed add leaves ghost dependencies that break
             // every later pnpm run — of anything. Cancelled runs keep their
             // partial state on purpose (the user sees the diff and decides).
-            const manifestBefore = readManifestDeps(config.profile, activeProfileDir)
+            const manifestBefore = readProfileManifestSnapshot(config.profile, activeProfileDir)
             const result = await runPlugin(config.profile, ['add', target])
             const cancelled = result.cancelled
             if ((result.exitCode !== 0 || result.timedOut) && !cancelled) {
-              const rolledBack = restoreManifestDeps(config.profile, manifestBefore, activeProfileDir)
+              const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
               if (rolledBack.length > 0) logEvent('warn', 'install', `${target}: rolled back manifest residue of the failed run: ${rolledBack.join(', ')}`)
             }
             let ok = result.exitCode === 0 && !result.timedOut && !cancelled
@@ -2095,6 +2147,18 @@ export function mountMarketRoutes(
                 ok = true
               }
             }
+            let profileHealthError: string | null = null
+            if (ok) {
+              const newlyUnresolved = introducedUnresolvedBundles(installBootBefore, unresolvedProfileBundles())
+              if (newlyUnresolved.length > 0) {
+                ok = false
+                const rollback = await rollbackUpdateBuild(entry.name, manifestBefore)
+                profileHealthError = rollback.ok
+                  ? `安装留下了无法解析的插件层（${newlyUnresolved.join('、')}），已撤销本次变更。 / The install left unresolvable bundle rows (${newlyUnresolved.join(', ')}); this change was rolled back.`
+                  : `安装留下了无法解析的插件层（${newlyUnresolved.join('、')}），自动恢复失败：${rollback.detail ?? 'unknown'} / The install left unresolvable bundle rows (${newlyUnresolved.join(', ')}) and automatic recovery failed: ${rollback.detail ?? 'unknown'}`
+                logEvent('error', 'profile-health', `${entry.name}: unresolved after install — ${newlyUnresolved.join(', ')}`)
+              }
+            }
             const conflictGroups = groupConflictsByOwner(conflicts)
             const installed = readInstalled(config.profile, activeProfileDir)
             let hot = false
@@ -2114,7 +2178,7 @@ export function mountMarketRoutes(
                 // theme) so the result is visible right after the refresh.
                 hot = true
                 for (const name of added) {
-                  const live = entry.category === 'theme'
+                  const live = hasPluginCategory(entry, 'theme')
                     ? await themes.activateTheme(name)
                     : (await hotMount(host, activeProfileDir, name)).ok
                   if (!live) hot = false
@@ -2178,13 +2242,13 @@ export function mountMarketRoutes(
               // owner while listing every id blamed one plugin for another's
               // ids.
               conflictGroups: conflictGroups.length > 0 ? conflictGroups : undefined,
-              error: conflictGroups.length > 0
+              error: profileHealthError ?? (conflictGroups.length > 0
                 ? `「${conflicts[0].name}」与已安装的 ${conflictGroups.map(group => `「${group.owner}」（${group.ids.join('、')}）`).join('、')} 占用相同的 loader 条目 id，无法在同一环境中共存——保留会导致 DeepSeek Harness 下次启动失败，因此已自动移除。 / "${conflicts[0].name}" declares the same loader entry id(s) as the installed ${conflictGroups.map(group => `"${group.owner}" (${group.ids.join(', ')})`).join(', ')}; they cannot coexist in one environment — keeping it would stop DeepSeek Harness from starting, so it was removed.`
                 : notAPlugin
                   ? 'nothing installable: the plugin(s) need a build step (blocked by default, see allowBuilds) or ship no prebuilt artifacts / 没有可安装的内容：插件需要构建授权（allowBuilds，默认拦截）或未附带构建产物，详见导出日志'
                   : Array.isArray(ignoredBuilds) && ignoredBuilds.length > 0
                   ? `构建脚本被 pnpm 默认拦截（${ignoredBuilds.join(', ')}），请点击上方按钮放行后重试 / build scripts are blocked by pnpm by default (${ignoredBuilds.join(', ')}); click "Allow build scripts and retry" above`
-                  : undefined,
+                  : undefined),
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,

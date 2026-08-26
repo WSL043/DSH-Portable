@@ -18,7 +18,7 @@ export interface RegistryPlugin {
   page?: string
   npm?: string
   tarball?: string
-  category: string
+  category: string | string[]
   description?: LocalizedText
   stars?: number
   /**
@@ -230,6 +230,11 @@ export function isMarketItself(plugin: Pick<RegistryPlugin, 'name' | 'npm'>): bo
   return plugin.name === 'dsh-market' || plugin.npm === 'dshmarket'
 }
 
+/** One catalog entry can belong to multiple filters without disappearing. */
+export function hasCategory(plugin: Pick<RegistryPlugin, 'category'>, category: string): boolean {
+  return Array.isArray(plugin.category) ? plugin.category.includes(category) : plugin.category === category
+}
+
 /**
  * The discover list: category filter, then the published-within window, then
  * search across name / owner / localized description, then the selected sort.
@@ -239,7 +244,7 @@ export function visiblePlugins(plugins: RegistryPlugin[], options: ListQuery): R
   const query = options.query.trim().toLowerCase()
   const list = plugins.filter((p) => {
     if (isMarketItself(p)) return false
-    if (options.category !== 'all' && p.category !== options.category) return false
+    if (options.category !== 'all' && !hasCategory(p, options.category)) return false
     if (options.sinceDays !== undefined && !withinDays(p.added, options.sinceDays)) return false
     if (query === '') return true
     const desc = (p.description && (p.description[options.lang] || p.description.en)) || ''
@@ -287,7 +292,7 @@ export function visiblePlugins(plugins: RegistryPlugin[], options: ListQuery): R
 
 /** The themes tab listing: theme category only, most-starred first. */
 export function themePlugins(plugins: RegistryPlugin[]): RegistryPlugin[] {
-  return plugins.filter(p => p.category === 'theme').sort((a, b) => (b.stars || 0) - (a.stars || 0))
+  return plugins.filter(p => hasCategory(p, 'theme')).sort((a, b) => (b.stars || 0) - (a.stars || 0))
 }
 
 /**
