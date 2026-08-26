@@ -15,7 +15,6 @@
   · <a href="#start-in-3-steps">Get started</a>
   · <a href="docs/move-between-computers.en.md">Move</a>
   · <a href="#plugins">Plugins</a>
-  · <a href="ROADMAP.en.md">Roadmap</a>
   · <a href="#get-help">Support</a>
   · <a href="README.md">简体中文</a> · <strong>English</strong>
 </p>
@@ -56,8 +55,6 @@ This is not a renamed browser shortcut sold as a “no-install build.” Its run
 | **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
 
 Starting with 0.4.15, the complete Windows package contains about **15% fewer files** and **14% fewer filesystem items** than the previous build. Release gates now prevent accidental regressions in file count, directory count, and extracted size. The target is the work Windows performs while extracting, copying, moving, or deleting—not merely a smaller number beside the download.
-
-The next phase batches reliable shutdown, layered updates, dependency intake, cross-platform parity, and measured footprint work into one coherent 0.5.0 instead of turning routine maintenance into a stream of small releases. See the [0.5.0 roadmap](ROADMAP.en.md) for boundaries and acceptance gates.
 
 ## Start in 3 steps
 

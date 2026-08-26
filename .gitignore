@@ -12,3 +12,9 @@
 /workspace/
 *.log
 build/
+
+# Product planning stays local. Public branches contain shipped behavior only.
+/ROADMAP.md
+/ROADMAP.en.md
+/INTERNAL*.md
+/PRIVATE*.md
