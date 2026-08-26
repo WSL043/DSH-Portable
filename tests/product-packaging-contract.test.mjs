@@ -384,6 +384,11 @@ test('installable official updates use a short-lived PR, full product gates, and
   ])
 
   assert.match(workflow, /pull-requests:\s*write/)
+  assert.match(workflow, /name:\s*Dependency intake/)
+  assert.match(workflow, /repository_dispatch:/)
+  assert.match(workflow, /dependency-released/)
+  assert.match(workflow, /cron:\s*['"]23 2 \* \* 1['"]/, 'external upstreams need only a weekly safety poll')
+  assert.match(workflow, /workflow_dispatch:/)
   assert.match(workflow, /node scripts\/update-upstream\.mjs/)
   assert.match(workflow, /npm test/)
   assert.match(workflow, /automation\/verified-dependencies/)
@@ -415,23 +420,22 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
 })
 
-test('the bundled session-delete default is monitored as a verified candidate dependency', async () => {
-  const [workflow, updater, ci, publish, upstreamWatch] = await Promise.all([
-    read('.github/workflows/default-plugin-watch.yml'),
+test('the bundled session-delete default is accumulated by the unified dependency intake', async () => {
+  const [workflow, updater, ci, publish] = await Promise.all([
+    read('.github/workflows/upstream-watch.yml'),
     read('scripts/update-default-plugin.mjs'),
     read('.github/workflows/ci.yml'),
     read('.github/workflows/publish.yml'),
-    read('.github/workflows/upstream-watch.yml'),
   ])
 
   assert.match(workflow, /schedule:/)
+  assert.match(workflow, /repository_dispatch:/)
   assert.match(workflow, /workflow_dispatch:/)
   assert.match(workflow, /node scripts\/update-default-plugin\.mjs/)
   assert.match(workflow, /npm test/)
-  assert.match(workflow, /actions\/upload-artifact@v7/)
-  assert.match(workflow, /gh issue (?:create|edit)/)
+  assert.match(workflow, /automation\/verified-dependencies/)
+  assert.match(workflow, /gh pr (?:create|edit)/)
   assert.match(workflow, /timeout-minutes:\s*\d+/)
-  assert.doesNotMatch(workflow, /git (?:switch|push)/)
   assert.match(updater, /registry\.npmjs\.org\/\$\{packageName\}/)
   assert.match(updater, /repository\s*=\s*['"]WSL043\/dsh-native-session-manager['"]/)
   assert.match(updater, /repos\/\$\{repository\}\/releases\/tags/)
@@ -443,8 +447,7 @@ test('the bundled session-delete default is monitored as a verified candidate de
   assert.match(updater, /--check/)
   assert.match(ci, /node scripts\/update-default-plugin\.mjs --check/)
   assert.match(publish, /node scripts\/update-default-plugin\.mjs --check/)
-  assert.match(upstreamWatch, /node scripts\/update-default-plugin\.mjs/)
-  assert.match(upstreamWatch, /launcher\/default-plugins\.mjs/)
+  assert.match(workflow, /launcher\/default-plugins\.mjs/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {

@@ -1,9 +1,36 @@
-name: Watch official DSH
+name: Dependency intake
 
 on:
+  repository_dispatch:
+    types: [dependency-released]
   schedule:
-    - cron: '23 2 * * *'
+    # GitHub cannot subscribe to release events from repositories we do not
+    # control. This weekly run is a safety net, not the primary trigger.
+    - cron: '23 2 * * 1'
   workflow_dispatch:
+    inputs:
+      source:
+        description: Dependency source that prompted the intake
+        required: false
+        type: choice
+        options:
+          - all
+          - official-dsh
+          - default-plugin
+          - dsh-market
+        default: all
+      version:
+        description: Optional release version for the run summary
+        required: false
+        type: string
+      release_url:
+        description: Optional canonical release URL for the run summary
+        required: false
+        type: string
+
+concurrency:
+  group: dependency-intake
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -19,6 +46,17 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Record the intake signal
+        env:
+          SOURCE: ${{ github.event.client_payload.source || inputs.source || github.event_name }}
+          VERSION: ${{ github.event.client_payload.version || inputs.version || '' }}
+          RELEASE_URL: ${{ github.event.client_payload.release_url || inputs.release_url || '' }}
+        run: |
+          printf '%s\n' \
+            '### Dependency intake' \
+            '' "- signal: \`${SOURCE}\`" "- announced version: \`${VERSION:-not supplied}\`" \
+            "- announced release: ${RELEASE_URL:-not supplied}" \
+            '' 'Canonical registries and immutable releases are verified below; the signal itself is never trusted as package evidence.' >> "$GITHUB_STEP_SUMMARY"
       - id: default_plugin
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -39,13 +77,14 @@ jobs:
           LATEST: ${{ steps.market.outputs.latest }}
           RELEASE_URL: ${{ steps.market.outputs.url }}
         run: |
-          TITLE="Review dsh-market ${LATEST} for Portable"
+          TITLE="Dependency intake: dsh-market"
           BODY=$(mktemp)
           printf '%s\n' \
-            'A newer dsh-market release is available for a selective Portable review.' \
+            'Rolling review inbox for dsh-market changes that may apply to Portable.' \
             '' "- reviewed baseline: \`${PINNED}\`" "- latest release: [\`${LATEST}\`](${RELEASE_URL})" \
-            '' 'Use .github/PLUGIN-MARKET-UPSTREAM.md as the decision matrix. Port only applicable behavior with tests; do not merge the upstream working tree or auto-release.' > "$BODY"
-          ISSUE=$(gh issue list --state open --search "Review dsh-market in:title" --json number,title --jq '.[] | select(.title | startswith("Review dsh-market")) | .number' | head -n 1)
+            '' 'Use .github/PLUGIN-MARKET-UPSTREAM.md as the decision matrix. Port only applicable behavior with a failing test first; do not merge the upstream working tree or auto-release.' \
+            '' 'Accepted fixes accumulate on main and ship with the next planned Portable release unless they close a blocking security, installation, or data-safety defect.' > "$BODY"
+          ISSUE=$(gh issue list --state open --search "dsh-market in:title" --json number,title --jq '.[] | select(.title == "Dependency intake: dsh-market" or (.title | startswith("Review dsh-market"))) | .number' | head -n 1)
           if [ -n "$ISSUE" ]; then
             gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY" --add-assignee WSL043
           else
