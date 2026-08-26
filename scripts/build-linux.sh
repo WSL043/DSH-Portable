@@ -141,7 +141,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "pluginMarketVersion": "$(lock_value pluginMarket.version)",
   "defaultPluginPackage": "$(lock_value defaultPlugins.sessionDelete.package)",
   "defaultPluginVersion": "$(lock_value defaultPlugins.sessionDelete.version)",
-  "defaultPluginSha256": "$DEFAULT_PLUGIN_SHA256",
+  "defaultPluginSha256": "$(lock_value defaultPlugins.sessionDelete.sha256)",
   "defaultPluginIntegrity": "$(lock_value defaultPlugins.sessionDelete.integrity)",
   "defaultImageViewerPackage": "$(lock_value defaultPlugins.imageViewer.package)",
   "defaultImageViewerVersion": "$(lock_value defaultPlugins.imageViewer.version)",
