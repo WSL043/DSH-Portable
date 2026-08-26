@@ -124,8 +124,6 @@ dsh --profile web --dump-config
 
 The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
 
-DSH-Portable focuses on a movable, offline-ready, repairable distribution and no longer publishes a conventional installer. If a conventional installer is the priority, use the full-featured [DeepSeek Harness Desktop (Electron)](https://github.com/anywhere-labs/deepseek-harness-desktop) or the smaller [DeepSeek Harness Desktop (Tauri)](https://github.com/dsh-tauri-desk/deepseek-harness-desktop).
-
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
 ## Updates and repair
@@ -164,8 +162,6 @@ Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and 
 - [Report a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
 - [Request an improvement](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [Join a discussion](https://github.com/WSL043/DSH-Portable/discussions)
-- [Project introduction in the official DSH community](https://github.com/deepseek-ai/deepseek-harness/discussions/4505)
-- [Listed in Awesome DeepSeek Harness](https://github.com/0xsline/awesome-deepseek-harness)
 
 Do not paste API keys, login credentials, or private conversations into an issue.
 

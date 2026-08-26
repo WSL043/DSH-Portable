@@ -124,8 +124,6 @@ dsh --profile web --dump-config
 
 便携版的 DSH 终端只在当前窗口临时识别 `dsh`，不会修改系统 `PATH`。移动整个 Portable 文件夹后，新开的 DSH 终端会自动使用新位置，不需要修复环境变量。
 
-DSH-Portable 专注于可搬迁、可离线和可修复的发行体验，不再提供传统安装版。更需要标准安装/卸载流程时，可选择功能完整的 [DeepSeek Harness Desktop（Electron）](https://github.com/anywhere-labs/deepseek-harness-desktop)，或体积更小的 [DeepSeek Harness Desktop（Tauri）](https://github.com/dsh-tauri-desk/deepseek-harness-desktop)。
-
 能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。市场不会在任务运行时更新、卸载或偷偷重启 DSH。只安装你信任的插件。
 
 ## 更新与修复
@@ -165,8 +163,6 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 - [提交 Bug 报告](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
 - [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
-- [官方 DSH 社区中的项目介绍](https://github.com/deepseek-ai/deepseek-harness/discussions/4505)
-- [Awesome DeepSeek Harness 收录](https://github.com/0xsline/awesome-deepseek-harness)
 
 请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 
