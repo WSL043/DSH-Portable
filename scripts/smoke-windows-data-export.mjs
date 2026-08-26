@@ -113,7 +113,12 @@ const clickButton = names => `(() => {
   const names = ${JSON.stringify(names)}
   const button = [...document.querySelectorAll('button,[role="button"]')].find(item => {
     const label = item.getAttribute('aria-label') || item.getAttribute('title') || item.textContent || ''
-    return names.includes(label.trim())
+    if (!names.includes(label.trim()) || item.disabled || item.getAttribute('aria-disabled') === 'true') return false
+    const rect = item.getBoundingClientRect()
+    const style = getComputedStyle(item)
+    if (rect.width <= 0 || rect.height <= 0 || style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false
+    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    return Boolean(point && (point === item || item.contains(point)))
   })
   if (!button) return { clicked: false, labels: [...document.querySelectorAll('button,[role="button"]')].slice(0, 80).map(item => (item.textContent || item.getAttribute('aria-label') || '').trim()) }
   button.click()
@@ -281,6 +286,17 @@ try {
   await waitForValue(client, clickButton(['选择位置并导出', 'Choose location and export']), value => value?.clicked, 'private export confirmation')
   const privateArchive = await waitForArchive('DSH-Portable-private-')
 
+  await waitForValue(client, `(() => {
+    const privatePasswordInput = [...document.querySelectorAll('input[type="password"][autocomplete="new-password"]')].find(item => {
+      const rect = item.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+    })
+    const action = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出迁移包|Export migration package)$/.test((item.textContent || '').trim()))
+    if (privatePasswordInput || !action || action.disabled || action.getAttribute('aria-disabled') === 'true') return false
+    const rect = action.getBoundingClientRect()
+    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    return rect.width > 0 && rect.height > 0 && Boolean(point && (point === action || action.contains(point)))
+  })()`, Boolean, 'private export completion')
   await waitForValue(client, clickButton(['导出迁移包', 'Export migration package']), value => value?.clicked, 'migration export action')
   const standardArchive = await waitForArchive('DSH-Portable-data-')
 

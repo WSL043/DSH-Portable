@@ -341,6 +341,14 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
   assert.match(workflow, /smoke-windows-native-workspace-picker\.mjs/)
   assert.match(workflow, /smoke-windows-data-export\.mjs/)
+  const dataExportSmoke = await read('scripts/smoke-windows-data-export.mjs')
+  assert.match(dataExportSmoke, /item\.disabled \|\| item\.getAttribute\('aria-disabled'\) === 'true'/)
+  assert.match(dataExportSmoke, /document\.elementFromPoint/)
+  assert.match(dataExportSmoke, /private export completion/)
+  assert.ok(
+    dataExportSmoke.indexOf('private export completion') < dataExportSmoke.indexOf("'migration export action'"),
+    'the real migration smoke must wait for the encrypted export modal to close before starting another export',
+  )
   assert.match(workflow, /\$DownloadRoot = Join-Path \$env:RUNNER_TEMP 'dsh-native-download-host'/)
   assert.match(workflow, /smoke-windows-native-download\.mjs \(Join-Path \$DownloadRoot 'DSH-Portable'\)/)
   assert.match(workflow, /\$MigrationRoot = Join-Path \$env:RUNNER_TEMP 'dsh-native-migration-host'/)
