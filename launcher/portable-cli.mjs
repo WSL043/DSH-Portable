@@ -39,9 +39,15 @@ import { workspaceDocumentReady } from './http-readiness.mjs'
 import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
+import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const layout = layoutForRoot(root, process.platform, process.env.DSH_PORTABLE_STATE_ROOT || root)
+let layout = layoutForRoot(
+  root,
+  process.platform,
+  process.env.DSH_PORTABLE_STATE_ROOT || root,
+  process.env.DSH_PORTABLE_RUNTIME_ROOT || root,
+)
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
 const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
@@ -515,6 +521,15 @@ async function update(options) {
       update: available,
       allowHttp: options.allowHttp,
       healthCheck: async (metadata) => {
+        if (metadata.kind === 'dsh-runtime-capsule') {
+          const prepared = await ensureRuntimeCapsule(root)
+          layout = layoutForRoot(
+            root,
+            process.platform,
+            process.env.DSH_PORTABLE_STATE_ROOT || root,
+            prepared.runtimeRoot,
+          )
+        }
         const version = execFileSync(layout.nodeExe, [layout.dshBin, '--version'], {
           cwd: layout.workspace,
           env: buildDshEnv(layout),
@@ -538,6 +553,13 @@ async function update(options) {
     await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     let recovery = null
     try {
+      const restored = await ensureRuntimeCapsule(root)
+      layout = layoutForRoot(
+        root,
+        process.platform,
+        process.env.DSH_PORTABLE_STATE_ROOT || root,
+        restored.runtimeRoot,
+      )
       recovery = await start(options.noBrowser)
     } catch (recoveryError) {
       throw new Error(`${error?.message ?? error}\nThe previous version was restored but could not restart: ${recoveryError?.message ?? recoveryError}`, { cause: error })
@@ -549,7 +571,10 @@ async function update(options) {
 function print(result, json) {
   if (json) console.log(JSON.stringify(result))
   else if (result.url) console.log(`DeepSeek Harness ${result.status}: ${result.url}`)
-  else console.log(`DeepSeek Harness: ${result.status}`)
+  else if (typeof result.status === 'string') console.log(`DeepSeek Harness: ${result.status}`)
+  else if (typeof result.output === 'string') console.log(`DSH-Portable: ${result.output}`)
+  else if (typeof result.ok === 'boolean') console.log(`DSH-Portable: ${result.ok ? 'OK' : 'needs attention'}`)
+  else console.log(JSON.stringify(result, null, 2))
   if (result.browser?.portableProfile === false) console.warn('Chrome/Edge was not found; the default browser opened without the portable browser profile.')
 }
 
@@ -570,7 +595,15 @@ async function main() {
       })
     }
     let result
-    if (options.command === 'start') result = await start(options.noBrowser)
+    if (options.command === 'diagnostic-root') result = {
+      status: 'ok',
+      root: layout.root,
+      stateRoot: layout.stateRoot,
+      dataDir: layout.dataDir,
+      workspace: layout.workspace,
+      platform: layout.platform,
+    }
+    else if (options.command === 'start') result = await start(options.noBrowser)
     else if (options.command === 'stop') result = await stop()
     else if (options.command === 'status') result = await status()
     else if (options.command === 'open') result = await openExisting()
@@ -580,6 +613,8 @@ async function main() {
     else if (options.command === 'backup-data') result = await backupData(options)
     else if (options.command === 'inspect-data') result = await inspectData(options)
     else if (options.command === 'restore-data') result = await restoreData(options)
+    else if (options.command === 'runtime-cache-status') result = await runtimeCacheStatus(root)
+    else if (options.command === 'runtime-cache-clean') result = await cleanUnusedRuntimeCaches(root)
     else if (options.command === 'check-update') result = await checkUpdate(options)
     else if (options.command === 'defer-update') result = await deferUpdate(layout, { scope: options.updateScope })
     else if (options.command === 'ignore-update') result = await ignoreUpdate(layout, '', { scope: options.updateScope })

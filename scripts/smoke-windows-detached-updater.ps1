@@ -42,10 +42,9 @@ $type.GetMethod('StartDetachedUpdater', $flags).Invoke($null, @($Writer, [string
 $type.GetMethod('ExitOwnedTree', $flags).Invoke($null, @())
 '@ | Set-Content -LiteralPath $Runner -Encoding UTF8
 
-    $Process = Start-Process powershell.exe -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $Runner,
-        '-Launcher', $Launcher, '-Writer', $Writer, '-Sentinel', $Sentinel
-    ) -WindowStyle Hidden -PassThru -Wait
+    $RunnerArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Launcher "{1}" -Writer "{2}" -Sentinel "{3}"' -f `
+        $Runner, $Launcher, $Writer, $Sentinel
+    $Process = Start-Process powershell.exe -ArgumentList $RunnerArguments -WindowStyle Hidden -PassThru -Wait
     if ($Process.ExitCode -ne 0) { throw "detached updater probe exited with code $($Process.ExitCode)" }
 
     $Deadline = [DateTime]::UtcNow.AddSeconds(10)

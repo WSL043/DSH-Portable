@@ -27,10 +27,6 @@ DSH_VERSION="$(lock_value dsh.version)"
 DSH_COMMIT="$(lock_value dsh.reviewedCommit)"
 DSH_NOTICES_SHA256="$(lock_value dsh.noticesSha256)"
 PORTABLE_VERSION="$("$BUILD_NODE" -p 'require(process.argv[1]).version' "$PROJECT_ROOT/package.json")"
-DEFAULT_PLUGIN_URL="$(lock_value defaultPlugins.sessionDelete.url)"
-DEFAULT_PLUGIN_VERSION="$(lock_value defaultPlugins.sessionDelete.version)"
-DEFAULT_PLUGIN_FILENAME="$(lock_value defaultPlugins.sessionDelete.filename)"
-DEFAULT_PLUGIN_SHA256="$(lock_value defaultPlugins.sessionDelete.sha256)"
 VERSION_POLICY="$("$BUILD_NODE" "$PROJECT_ROOT/scripts/version-policy.mjs" "$PORTABLE_VERSION")"
 RELEASE_CHANNEL="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "channel" { print $2 }')"
 UPDATE_CHANNEL_TAG="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "updateChannelTag" { print $2 }')"
@@ -76,7 +72,8 @@ cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
 cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
 cp "$PROJECT_ROOT/launcher/data-transfer.mjs" "$STAGE/launcher/data-transfer.mjs"
-cp "$PROJECT_ROOT/templates/DATA-MIGRATION.txt" "$STAGE/DATA-MIGRATION.txt"
+cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"
+cp "$PROJECT_ROOT/templates/DATA-MIGRATION.en.txt" "$STAGE/DATA-MIGRATION.en.txt"
 cp "$PROJECT_ROOT/launcher/http-readiness.mjs" "$STAGE/launcher/http-readiness.mjs"
 cp "$PROJECT_ROOT/launcher/default-plugins.mjs" "$STAGE/launcher/default-plugins.mjs"
 cp "$PROJECT_ROOT/launcher/macos/dsh" "$STAGE/dsh"
@@ -85,7 +82,8 @@ mkdir -p "$STAGE/launcher/terminal-bin"
 cp "$PROJECT_ROOT/launcher/unix/dsh-terminal" "$STAGE/launcher/dsh-terminal.command"
 cp "$PROJECT_ROOT/launcher/unix/terminal-bin/dsh" "$STAGE/launcher/terminal-bin/dsh"
 chmod 755 "$STAGE/launcher/dsh-terminal.command" "$STAGE/launcher/terminal-bin/dsh"
-cp "$PROJECT_ROOT/templates/USER-README.txt" "$STAGE/README.txt"
+cp "$PROJECT_ROOT/templates/USER-README.zh-CN.txt" "$STAGE/README.zh-CN.txt"
+cp "$PROJECT_ROOT/templates/USER-README.en.txt" "$STAGE/README.en.txt"
 cp "$PROJECT_ROOT/templates/DATA-README.txt" "$STAGE/data/README.txt"
 cp "$PROJECT_ROOT/templates/WORKSPACE-README.txt" "$STAGE/workspace/README.txt"
 cp "$PROJECT_ROOT/LICENSE" "$STAGE/licenses/DSH-Portable-LICENSE.txt"
@@ -94,14 +92,18 @@ cp "$NODE_EXE" "$STAGE/runtime/node/bin/node"
 chmod 755 "$STAGE/runtime/node/bin/node"
 cp "$NODE_FOLDER/LICENSE" "$STAGE/licenses/Node.js-LICENSE.txt"
 
-DEFAULT_PLUGIN_ARCHIVE="$DOWNLOAD_DIR/$DEFAULT_PLUGIN_VERSION-$DEFAULT_PLUGIN_FILENAME"
-if [[ ! -f "$DEFAULT_PLUGIN_ARCHIVE" ]]; then
-  curl --fail --location --retry 3 --output "$DEFAULT_PLUGIN_ARCHIVE" "$DEFAULT_PLUGIN_URL"
-fi
-printf '%s  %s\n' "$DEFAULT_PLUGIN_SHA256" "$DEFAULT_PLUGIN_ARCHIVE" | shasum -a 256 -c -
-cp "$DEFAULT_PLUGIN_ARCHIVE" "$STAGE/default-plugins/$DEFAULT_PLUGIN_FILENAME"
-tar -xOf "$DEFAULT_PLUGIN_ARCHIVE" package/LICENSE > "$STAGE/licenses/dsh-native-session-delete-LICENSE.txt"
-tar -xOf "$DEFAULT_PLUGIN_ARCHIVE" package/THIRD_PARTY_NOTICES.md > "$STAGE/licenses/dsh-native-session-delete-THIRD-PARTY-NOTICES.txt"
+while IFS=$'\t' read -r plugin_package plugin_version plugin_filename plugin_url plugin_sha256; do
+  plugin_archive="$DOWNLOAD_DIR/$plugin_version-$plugin_filename"
+  if [[ ! -f "$plugin_archive" ]]; then
+    curl --fail --location --retry 3 --output "$plugin_archive" "$plugin_url"
+  fi
+  printf '%s  %s\n' "$plugin_sha256" "$plugin_archive" | shasum -a 256 -c -
+  cp "$plugin_archive" "$STAGE/default-plugins/$plugin_filename"
+  tar -xOf "$plugin_archive" package/LICENSE > "$STAGE/licenses/$plugin_package-LICENSE.txt"
+  if tar -tf "$plugin_archive" package/THIRD_PARTY_NOTICES.md >/dev/null 2>&1; then
+    tar -xOf "$plugin_archive" package/THIRD_PARTY_NOTICES.md > "$STAGE/licenses/$plugin_package-THIRD-PARTY-NOTICES.txt"
+  fi
+done < <("$BUILD_NODE" "$PROJECT_ROOT/scripts/list-default-plugins.mjs" "$LOCK_FILE")
 
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-lock.mjs" "$PROJECT_ROOT/app/package-lock.json" "$LOCK_FILE"
 (
@@ -140,6 +142,10 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "defaultPluginVersion": "$(lock_value defaultPlugins.sessionDelete.version)",
   "defaultPluginSha256": "$DEFAULT_PLUGIN_SHA256",
   "defaultPluginIntegrity": "$(lock_value defaultPlugins.sessionDelete.integrity)",
+  "defaultImageViewerPackage": "$(lock_value defaultPlugins.imageViewer.package)",
+  "defaultImageViewerVersion": "$(lock_value defaultPlugins.imageViewer.version)",
+  "defaultImageViewerSha256": "$(lock_value defaultPlugins.imageViewer.sha256)",
+  "defaultImageViewerIntegrity": "$(lock_value defaultPlugins.imageViewer.integrity)",
   "pnpmVersion": "$(lock_value pnpm.version)",
   "pnpmIntegrity": "$(lock_value pnpm.integrity)",
   "nodeVersion": "$NODE_VERSION",

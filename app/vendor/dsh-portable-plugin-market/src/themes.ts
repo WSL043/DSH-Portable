@@ -41,13 +41,14 @@ export function createThemeManager(
   profile: string,
   disabledThemes: Set<string>,
   explicitDir?: string,
+  registryCacheFile?: string,
 ): ThemeManager {
   const activeProfileDir = profileDir(profile, explicitDir)
   /** Installed package names classified as themes by the registry's theme category. */
   async function installedThemeNames(): Promise<Set<string>> {
     const names = new Set<string>()
     try {
-      const registry = await loadRegistry()
+      const registry = await loadRegistry({ cacheFile: registryCacheFile })
       const themeEntries = registry.plugins.filter(p => hasPluginCategory(p, 'theme'))
       const themeNames = new Set(themeEntries.map(p => p.name))
       const themeRepos = new Set(

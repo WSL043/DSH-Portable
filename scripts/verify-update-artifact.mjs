@@ -56,7 +56,9 @@ async function main() {
     fail('Update compatibility metadata is incomplete.')
   }
   const component = manifest.component
-  if (!component || component.kind !== 'dsh-app' || !component.requiredNodeVersion) fail('Update component metadata is incomplete.')
+  if (!component || !['dsh-app', 'dsh-runtime-capsule'].includes(component.kind) || !component.requiredNodeVersion) {
+    fail('Update component metadata is incomplete.')
+  }
 
   const archiveInfo = await stat(archive)
   if (archiveInfo.size !== Number(component.bytes)) fail(`component size mismatch: expected ${component.bytes}, received ${archiveInfo.size}`)
@@ -75,9 +77,16 @@ async function main() {
   const rawEntries = listed.stdout.split(/\r?\n/).filter(Boolean)
   validateArchiveEntries(rawEntries)
   const entryMap = new Map(rawEntries.map((entry) => [normalizedEntry(entry), entry]))
-  for (const required of [
+  const requiredEntries = component.kind === 'dsh-runtime-capsule' ? [
+    'component.json',
+    'runtime-capsule.json',
+    'runtime/DSH-App.dshpack',
+  ] : [
     'component.json',
     'app/package.json',
+  ]
+  for (const required of [
+    ...requiredEntries,
     'licenses/COMPONENTS.json',
     'licenses/DeepSeek-Harness-LICENSE.txt',
     'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
@@ -86,7 +95,7 @@ async function main() {
   ]) {
     if (!entryMap.has(required)) fail(`Update archive is missing ${required}.`)
   }
-  if (![...entryMap.keys()].some((entry) => entry.startsWith('app/node_modules/@deepseek-ai/dsh/'))) {
+  if (component.kind === 'dsh-app' && ![...entryMap.keys()].some((entry) => entry.startsWith('app/node_modules/@deepseek-ai/dsh/'))) {
     fail('Update archive contains no DeepSeek Harness runtime.')
   }
 
@@ -105,6 +114,7 @@ async function main() {
     || components.dshCommit !== component.dshCommit
     || components.platform !== manifest.platform
     || components.nodeVersion !== component.requiredNodeVersion
+    || (component.runtimeLayout && components.runtimeLayout !== component.runtimeLayout)
     || Number(components.updaterSchema) < Number(manifest.minimumUpdaterSchema)
     || Number(components.shellSchema) < Number(manifest.requiredShellSchema)) {
     fail('Installed component metadata does not match the update manifest.')

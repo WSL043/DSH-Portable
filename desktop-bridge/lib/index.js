@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { copyFileSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync, readSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
@@ -82,6 +82,26 @@ async function defaultRunCli(root, stateRoot, args) {
   return output ? JSON.parse(output.split(/\r?\n/).at(-1)) : {}
 }
 
+function encryptedDataPackage(filename) {
+  const descriptor = openSync(path.resolve(filename), 'r')
+  try {
+    const magic = Buffer.alloc(8)
+    if (readSync(descriptor, magic, 0, magic.length, 0) !== magic.length) throw new Error('The data package is incomplete.')
+    if (magic.equals(Buffer.from('DSHDAT1E'))) return true
+    if (magic.equals(Buffer.from('DSHDAT1U'))) return false
+    throw new Error('Unsupported DSH-Portable data package.')
+  } finally { closeSync(descriptor) }
+}
+
+function temporaryPasswordFile(stateRoot, password) {
+  if (typeof password !== 'string' || password.length < 8) throw new Error('password must contain at least 8 characters')
+  const runtime = path.join(stateRoot, 'data', 'runtime')
+  mkdirSync(runtime, { recursive: true })
+  const filename = path.join(runtime, `data-password-${process.pid}-${randomBytes(8).toString('hex')}.txt`)
+  writeFileSync(filename, password, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+  return filename
+}
+
 export function mountPortableRoutes(webServer, options = {}) {
   const root = path.resolve(options.root || process.env.DSH_PORTABLE_ROOT || path.join(import.meta.dirname, '..', '..'))
   const stateRoot = path.resolve(options.stateRoot || process.env.DSH_PORTABLE_STATE_ROOT || root)
@@ -104,6 +124,7 @@ export function mountPortableRoutes(webServer, options = {}) {
         }
       })(),
       lastRepair: readJsonFile(repairResult),
+      workspacePath: path.join(stateRoot, 'workspace'),
     })
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
@@ -162,20 +183,40 @@ export function mountPortableRoutes(webServer, options = {}) {
       const kind = body.kind === 'private' ? 'private' : body.kind === 'standard' ? 'standard' : ''
       if (!kind) return sendJson(response, 400, { error: 'invalid data package kind' })
       const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
-      const output = path.join(stateRoot, 'data', 'backups', `DSH-Portable-${kind}-${stamp}.dshdata`)
+      const requestedOutput = typeof body.output === 'string' ? body.output.trim() : ''
+      if (requestedOutput && !path.isAbsolute(requestedOutput)) return sendJson(response, 400, { error: 'output path must be absolute' })
+      const output = requestedOutput || path.join(stateRoot, 'data', 'backups', `DSH-Portable-${kind}-${stamp}.dshdata`)
+      mkdirSync(path.dirname(output), { recursive: true })
       const args = ['backup-data', '--json', '--categories', 'settings,sessions,plugins,credentials', '--output', output]
       if (kind === 'standard') args.push('--allow-unencrypted-credentials')
       if (kind === 'private') {
-        const password = typeof body.password === 'string' ? body.password : ''
-        if (password.length < 8) return sendJson(response, 400, { error: 'password must contain at least 8 characters' })
-        const runtime = path.join(stateRoot, 'data', 'runtime')
-        mkdirSync(runtime, { recursive: true })
-        passwordFile = path.join(runtime, `data-password-${process.pid}-${randomBytes(8).toString('hex')}.txt`)
-        writeFileSync(passwordFile, password, { encoding: 'utf8', mode: 0o600, flag: 'wx' })
+        if (typeof body.password !== 'string' || body.password.length < 8)
+          return sendJson(response, 400, { error: 'password must contain at least 8 characters' })
+        passwordFile = temporaryPasswordFile(stateRoot, body.password)
         args.push('--password-file', passwordFile)
       }
       sendJson(response, 200, await runCli(args))
     } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+    finally { if (passwordFile) try { unlinkSync(passwordFile) } catch {} }
+  } })
+
+  register({ kind: 'exact', path: '/dsh-portable/data-inspect', handler: async (request, response) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    let passwordFile = ''
+    try {
+      const body = await readJson(request)
+      const input = typeof body.input === 'string' ? body.input.trim() : ''
+      if (!input || !path.isAbsolute(input)) return sendJson(response, 400, { error: 'input path must be absolute' })
+      const encrypted = encryptedDataPackage(input)
+      if (encrypted && !body.password) return sendJson(response, 401, { requiresPassword: true, encrypted: true })
+      const args = ['inspect-data', '--input', input, '--json']
+      if (encrypted) {
+        passwordFile = temporaryPasswordFile(stateRoot, body.password)
+        args.push('--password-file', passwordFile)
+      }
+      sendJson(response, 200, { ...(await runCli(args)), input, encrypted })
+    } catch (error) { sendJson(response, 400, { error: String(error?.message || error) }) }
     finally { if (passwordFile) try { unlinkSync(passwordFile) } catch {} }
   } })
 

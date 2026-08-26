@@ -15,9 +15,18 @@ export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   integrity: 'sha512-P1imNSoUPQEYouxCkZCazeQlSPThFqhm7pm/4N2cntxoWRDsoabCyIwnbFMWrxcS+jbNtI1d8xqzCsU5rqVYjg==',
   license: 'MIT',
   reviewedCommit: '9c3202e21ff6fce412e5dc670816022eea1eae00',
+}), Object.freeze({
+  name: 'dsh-native-image-viewer',
+  version: '0.1.0-beta.2',
+  filename: 'dsh-native-image-viewer.tgz',
+  url: 'https://registry.npmjs.org/dsh-native-image-viewer/-/dsh-native-image-viewer-0.1.0-beta.2.tgz',
+  sha256: '8750aac5b6d7245142fc97815157c7dd0e374e54a11f7785d7d07ce2a4d6b0ea',
+  integrity: 'sha512-eaXQceLNvF0FtFnOrJ2US66K9IaXE4HBP0+d97lx+UdJQ6cY7qBQYee3FQjwDa5zfvCzWFtPX2cPK7ga0rpzVg==',
+  license: 'MIT',
+  reviewedCommit: 'c857c21f75298075f99b90d8e23d26bf29dbb6a2',
 })])
 
-async function promoteBundledPluginToRegistryLifecycle(profileRoot, plugin, adapters = {}) {
+async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}) {
   const load = adapters.readFile ?? readFile
   const save = adapters.writeFile ?? writeFile
   const move = adapters.rename ?? rename
@@ -25,7 +34,7 @@ async function promoteBundledPluginToRegistryLifecycle(profileRoot, plugin, adap
   const temporary = `${manifestPath}.${process.pid}.tmp`
   const manifest = JSON.parse(await load(manifestPath, 'utf8'))
   manifest.dependencies ??= {}
-  manifest.dependencies[plugin.name] = plugin.version
+  for (const plugin of plugins) manifest.dependencies[plugin.name] = plugin.version
   await save(temporary, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   await move(temporary, manifestPath)
 }
@@ -47,20 +56,20 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
   const recoveringInterruptedSeed = exists(profileRoot) && exists(seedMarker)
   if (exists(profileRoot) && !recoveringInterruptedSeed) return { status: 'skipped', profile, reason: 'profile-exists' }
 
-  const plugin = DEFAULT_PLUGINS[0]
-  const packagedArchive = paths.join(layout.root, 'default-plugins', plugin.filename)
   const archiveRoot = paths.join(profileRoot, '.dsh-portable-archives')
-  const profileArchive = paths.join(archiveRoot, plugin.filename)
   const makeDirectory = adapters.mkdir ?? mkdir
   const copy = adapters.copyFile ?? copyFile
   const remove = adapters.rm ?? rm
   const save = adapters.writeFile ?? writeFile
   const run = adapters.spawnSync ?? spawnSync
-  const verify = adapters.verifyArchive ?? ((filename) => verifyPackagedArchive(filename, plugin.sha256, adapters))
   let createdProfile = false
 
   try {
-    await verify(packagedArchive)
+    for (const plugin of DEFAULT_PLUGINS) {
+      const packagedArchive = paths.join(layout.root, 'default-plugins', plugin.filename)
+      const verify = adapters.verifyArchive ?? ((filename) => verifyPackagedArchive(filename, plugin.sha256, adapters))
+      await verify(packagedArchive, plugin)
+    }
     if (recoveringInterruptedSeed) await remove(profileRoot, { recursive: true, force: true })
     await makeDirectory(profilesRoot, { recursive: true })
     try {
@@ -70,13 +79,17 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
       if (error?.code === 'EEXIST') return { status: 'skipped', profile, reason: 'profile-exists' }
       throw error
     }
-    await save(seedMarker, `${JSON.stringify({ schemaVersion: 1, plugin: plugin.name })}\n`, 'utf8')
+    await save(seedMarker, `${JSON.stringify({ schemaVersion: 2, plugins: DEFAULT_PLUGINS.map(plugin => plugin.name) })}\n`, 'utf8')
     await makeDirectory(archiveRoot, { recursive: true })
-    await copy(packagedArchive, profileArchive)
-    const relativeArchive = `file:${paths.relative(profileRoot, profileArchive).replaceAll('\\', '/')}`
+    const relativeArchives = []
+    for (const plugin of DEFAULT_PLUGINS) {
+      const packagedArchive = paths.join(layout.root, 'default-plugins', plugin.filename)
+      const profileArchive = paths.join(archiveRoot, plugin.filename)
+      await copy(packagedArchive, profileArchive)
+      relativeArchives.push(`file:${paths.relative(profileRoot, profileArchive).replaceAll('\\', '/')}`)
+    }
     const result = run(layout.nodeExe, [
-      layout.dshBin,
-      'plugin', '--profile', profile, 'add', relativeArchive,
+      layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives,
     ], {
       cwd: profileRoot,
       env: buildDshEnv(layout),
@@ -88,9 +101,9 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
     // The local tarball makes first boot fully offline. Once installed, expose
     // its exact published version in the profile manifest so DSH's normal
     // plugin manager and the built-in market can discover future npm updates.
-    await promoteBundledPluginToRegistryLifecycle(profileRoot, plugin, adapters)
+    await promoteBundledPluginsToRegistryLifecycle(profileRoot, DEFAULT_PLUGINS, adapters)
     await remove(seedMarker, { force: true })
-    return { status: 'seeded', profile, plugins: [plugin.name] }
+    return { status: 'seeded', profile, plugins: DEFAULT_PLUGINS.map(plugin => plugin.name) }
   } catch (error) {
     if (createdProfile) await remove(profileRoot, { recursive: true, force: true }).catch(() => {})
     return {

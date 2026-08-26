@@ -118,7 +118,11 @@ async function requestLinuxAppQuit(nativeHost) {
 }
 
 async function invokeCli(root, ...args) {
-  return run(nodeFor(root), [cliFor(root), ...args], { cwd: root })
+  const capsule = await exists(path.join(root, 'runtime-capsule.json'))
+  const commandArgs = capsule
+    ? [path.join(root, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs', ...args]
+    : [cliFor(root), ...args]
+  return run(nodeFor(root), commandArgs, { cwd: root })
 }
 
 function parseCliJson(stdout) {
@@ -139,10 +143,10 @@ async function assertWebReady(url) {
   assert.ok(text.length > 0, 'DSH Web returned an empty document')
 }
 
-for (const filename of [nodeFor(originalRoot), cliFor(originalRoot), path.join(originalRoot, 'README.txt')]) {
+for (const filename of [nodeFor(originalRoot), cliFor(originalRoot), path.join(originalRoot, 'README.zh-CN.txt'), path.join(originalRoot, 'README.en.txt')]) {
   assert.equal(await exists(filename), true, `missing package file: ${filename}`)
 }
-assert.doesNotMatch(await readFile(path.join(originalRoot, 'README.txt'), 'utf8'), /build script|development history|community\.1/i)
+assert.doesNotMatch(await readFile(path.join(originalRoot, 'README.zh-CN.txt'), 'utf8'), /build script|development history|community\.1/i)
 
 let nativeHost = null
 

@@ -192,7 +192,7 @@ test('Chinese-first product docs explain Linux launch, portable data, plugins, a
   const [chinese, english, bundled, notes] = await Promise.all([
     read('README.md'),
     read('README.en.md'),
-    read('templates/USER-README.txt'),
+    read('templates/USER-README.zh-CN.txt'),
     read('templates/RELEASE-NOTES.md'),
   ])
   for (const source of [chinese, english, notes]) {

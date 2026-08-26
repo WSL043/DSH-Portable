@@ -131,23 +131,37 @@ try {
   await waitForValue(client, 'location.href', value => /^http:\/\/127\.0\.0\.1:\d+\//.test(value || ''), 'DSH application origin')
   await waitForValue(client, "Boolean(document.body && document.readyState !== 'loading')", Boolean, 'DSH document readiness')
   await evaluate(client, `(() => {
-    window.__dshWorkspacePickerResult = null
+    window.__dshNativeDialogResults = {}
     window.chrome.webview.addEventListener('message', event => {
       if (event.data?.type === 'dsh-portable/pick-directory-result' && event.data?.requestId === 'workspace-smoke') {
-        window.__dshWorkspacePickerResult = event.data
+        window.__dshNativeDialogResults.workspace = event.data
+      }
+      if (event.data?.type === 'dsh-portable/pick-data-export-result' && event.data?.requestId === 'data-export-smoke') {
+        window.__dshNativeDialogResults.dataExport = event.data
+      }
+      if (event.data?.type === 'dsh-portable/pick-data-import-result' && event.data?.requestId === 'data-import-smoke') {
+        window.__dshNativeDialogResults.dataImport = event.data
       }
     })
     window.chrome.webview.postMessage({ type: 'dsh-portable/pick-directory', schemaVersion: 1, requestId: 'workspace-smoke' })
     return true
   })()`)
 
-  const result = await waitForValue(client, 'window.__dshWorkspacePickerResult', value => value?.cancelled === true, 'workspace-picker cancellation', 45000)
+  const result = await waitForValue(client, 'window.__dshNativeDialogResults.workspace', value => value?.cancelled === true, 'workspace-picker cancellation', 45000)
   assert.equal(result.requestId, 'workspace-smoke')
+  await evaluate(client, `window.chrome.webview.postMessage({ type: 'dsh-portable/pick-data-export', schemaVersion: 1, requestId: 'data-export-smoke', kind: 'standard' })`)
+  const dataExport = await waitForValue(client, 'window.__dshNativeDialogResults.dataExport', value => value?.cancelled === true, 'data-export dialog cancellation', 45000)
+  assert.equal(dataExport.requestId, 'data-export-smoke')
+  await evaluate(client, `window.chrome.webview.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId: 'data-import-smoke' })`)
+  const dataImport = await waitForValue(client, 'window.__dshNativeDialogResults.dataImport', value => value?.cancelled === true, 'data-import dialog cancellation', 45000)
+  assert.equal(dataImport.requestId, 'data-import-smoke')
   const launcherLogPath = path.join(root, 'data', 'logs', 'launcher.log')
   const launcherLog = existsSync(launcherLogPath) ? await readFile(launcherLogPath, 'utf8') : '(launcher.log is missing)'
   assert.match(launcherLog, /\[workspace-picker\] dialog-detected hwnd=\d+ owner=\d+ class=\S+/)
   assert.match(launcherLog, /\[workspace-picker\] dialog-closed result=Cancel/)
-  process.stdout.write(`${JSON.stringify({ status: 'passed', nativeDialog: true, cancelled: true })}\n`)
+  assert.match(launcherLog, /\[data-export-dialog\] dialog-detected hwnd=\d+ owner=\d+ class=\S+/)
+  assert.match(launcherLog, /\[data-import-dialog\] dialog-detected hwnd=\d+ owner=\d+ class=\S+/)
+  process.stdout.write(`${JSON.stringify({ status: 'passed', nativeDialog: true, workspace: 'cancelled', dataExport: 'cancelled', dataImport: 'cancelled' })}\n`)
 } finally {
   client?.close()
   await portable(['stop', '--no-browser', '--json']).catch(() => {})

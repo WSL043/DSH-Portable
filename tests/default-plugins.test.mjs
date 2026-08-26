@@ -9,28 +9,30 @@ import { layoutForRoot } from '../launcher/portable-core.mjs'
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
 
 const lock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8'))
-const expected = Object.freeze({
-  name: lock.defaultPlugins.sessionDelete.package,
-  version: lock.defaultPlugins.sessionDelete.version,
-  filename: lock.defaultPlugins.sessionDelete.filename,
-  url: lock.defaultPlugins.sessionDelete.url,
-  sha256: lock.defaultPlugins.sessionDelete.sha256,
-  integrity: lock.defaultPlugins.sessionDelete.integrity,
-  license: lock.defaultPlugins.sessionDelete.license,
-  reviewedCommit: lock.defaultPlugins.sessionDelete.reviewedCommit,
-})
+const expected = Object.freeze(Object.values(lock.defaultPlugins).map(plugin => Object.freeze({
+  name: plugin.package,
+  version: plugin.version,
+  filename: plugin.filename,
+  url: plugin.url,
+  sha256: plugin.sha256,
+  integrity: plugin.integrity,
+  license: plugin.license,
+  reviewedCommit: plugin.reviewedCommit,
+})))
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-plugin-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root, process.platform)
   await mkdir(path.join(root, 'default-plugins'), { recursive: true })
-  await writeFile(path.join(root, 'default-plugins', expected.filename), 'verified archive fixture')
+  for (const plugin of expected) {
+    await writeFile(path.join(root, 'default-plugins', plugin.filename), `verified archive fixture: ${plugin.name}`)
+  }
   return { root, layout }
 }
 
-test('default session-delete plugin metadata is exact and independently locked', () => {
-  assert.deepEqual(DEFAULT_PLUGINS, [expected])
+test('default plugin metadata is exact and independently locked', () => {
+  assert.deepEqual(DEFAULT_PLUGINS, expected)
 })
 
 test('fresh web profile is seeded through official plugin add with a move-safe profile-relative archive', async (t) => {
@@ -41,7 +43,7 @@ test('fresh web profile is seeded through official plugin add with a move-safe p
     spawnSync(command, args, options) {
       calls.push({ command, args, options })
       writeFileSync(path.join(options.cwd, 'package.json'), JSON.stringify({
-        dependencies: { 'dsh-native-session-delete': 'file:.dsh-portable-archives/dsh-native-session-delete.tgz' },
+        dependencies: Object.fromEntries(expected.map(plugin => [plugin.name, `file:.dsh-portable-archives/${plugin.filename}`])),
       }))
       return { status: 0 }
     },
@@ -55,15 +57,16 @@ test('fresh web profile is seeded through official plugin add with a move-safe p
     layout.dshBin,
     'plugin', '--profile', 'web', 'add',
     'file:.dsh-portable-archives/dsh-native-session-delete.tgz',
+    'file:.dsh-portable-archives/dsh-native-image-viewer.tgz',
   ])
   assert.equal(calls[0].options.cwd, path.join(layout.dshHome, 'profiles', 'web'))
   assert.equal(calls[0].options.env.DSH_HOME, layout.dshHome)
   assert.equal(
-    await readFile(path.join(calls[0].options.cwd, '.dsh-portable-archives', expected.filename), 'utf8'),
-    'verified archive fixture',
+    await readFile(path.join(calls[0].options.cwd, '.dsh-portable-archives', expected[1].filename), 'utf8'),
+    'verified archive fixture: dsh-native-image-viewer',
   )
   const manifest = JSON.parse(await readFile(path.join(calls[0].options.cwd, 'package.json'), 'utf8'))
-  assert.equal(manifest.dependencies['dsh-native-session-delete'], expected.version)
+  for (const plugin of expected) assert.equal(manifest.dependencies[plugin.name], plugin.version)
 })
 
 test('an existing profile is never inspected, changed, or re-seeded after removal', async (t) => {
@@ -96,7 +99,7 @@ test('an interrupted Portable-owned seed is recovered without treating it as use
     spawnSync(command, args, options) {
       calls += 1
       writeFileSync(path.join(options.cwd, 'package.json'), JSON.stringify({
-        dependencies: { 'dsh-native-session-delete': 'file:.dsh-portable-archives/dsh-native-session-delete.tgz' },
+        dependencies: Object.fromEntries(expected.map(plugin => [plugin.name, `file:.dsh-portable-archives/${plugin.filename}`])),
       }))
       return { status: 0 }
     },

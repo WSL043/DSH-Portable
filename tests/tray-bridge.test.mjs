@@ -54,6 +54,10 @@ function fakeContext(initialSessions) {
   let downloadSnapshot = { bySession: {} }
   const disposers = []
   const slotEntries = []
+  let workspaceSnapshot = { items: [], baselinesReady: true, recentWorkspaceId: undefined }
+  const workspaceListeners = new Set()
+  const createdWorkspaces = []
+  const startedWorkspaces = []
   const ctx = {
     locale: {
       getLocale: () => locale,
@@ -81,6 +85,18 @@ function fakeContext(initialSessions) {
       clear() { cleared += 1 },
     },
     workspaces: {
+      list: {
+        getSnapshot: () => workspaceSnapshot,
+        subscribe(listener) { workspaceListeners.add(listener); return () => workspaceListeners.delete(listener) },
+      },
+      async create(input) {
+        createdWorkspaces.push(input)
+        const workspace = { workspaceId: 'portable-workspace', path: input.path, sessionIds: [] }
+        workspaceSnapshot = { ...workspaceSnapshot, items: [workspace], recentWorkspaceId: workspace.workspaceId }
+        for (const listener of workspaceListeners) listener()
+        return workspace
+      },
+      startSession(id) { startedWorkspaces.push(id) },
       async pickDirectory() { return 'node-owned-picker' },
     },
     sessionLogDownload: {
@@ -110,6 +126,9 @@ function fakeContext(initialSessions) {
     get cleared() { return cleared },
     get downloadSnapshot() { return downloadSnapshot },
     slotEntries,
+    createdWorkspaces,
+    startedWorkspaces,
+    setWorkspaces(value) { workspaceSnapshot = value; for (const listener of workspaceListeners) listener() },
     emit(name, value) {
       if (name === 'locale/change') locale = value
       if (name === 'theme/change') theme = value
@@ -124,6 +143,23 @@ function fakeContext(initialSessions) {
     },
   }
 }
+
+test('Portable registers its owned workspace only for a truly empty first run', async () => {
+  const client = await loadBridgeClient()
+  const fresh = fakeContext({ ids: [], byId: {}, current: undefined, phase: 'ready' })
+  const created = await client.exports.ensurePortableWorkspace(fresh.ctx, 'C:\\Portable\\workspace')
+  assert.equal(created.status, 'created')
+  assert.equal(created.workspaceId, 'portable-workspace')
+  assert.equal(fresh.createdWorkspaces.length, 1)
+  assert.equal(fresh.createdWorkspaces[0].path, 'C:\\Portable\\workspace')
+  assert.deepEqual(fresh.startedWorkspaces, ['portable-workspace'])
+
+  const existing = fakeContext({ ids: [], byId: {}, current: undefined, phase: 'ready' })
+  existing.setWorkspaces({ items: [{ workspaceId: 'user', path: 'D:\\UserProject', sessionIds: [] }], baselinesReady: true, recentWorkspaceId: 'user' })
+  assert.equal((await client.exports.ensurePortableWorkspace(existing.ctx, 'C:\\Portable\\workspace')).status, 'preserved')
+  assert.deepEqual(existing.createdWorkspaces, [])
+  assert.deepEqual(existing.startedWorkspaces, [])
+})
 
 test('Portable desktop bridge owns workspace picking through the WebView host and restores the runtime on dispose', async () => {
   const client = await loadBridgeClient()

@@ -22,11 +22,18 @@ window.__ModuleLoader__.load({
         check: '运行检查', checking: '正在检查…', healthy: '未发现问题', issues: '发现 {0} 项问题',
         repair: '下次启动时安全修复', scheduled: '已安排，下次启动时执行', repaired: '上次修复已完成',
         fullPackage: '程序文件不完整，自动修复未改动用户数据。请使用完整版本覆盖安装。',
-        report: '导出支持报告', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
-        data: '数据与迁移', dataHint: '会话、设置、插件配置和 API 凭据；不包含缓存、运行环境和工作区文件。',
+        report: '导出支持报告', more: '更多', cancel: '取消', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
+        data: '数据', dataTitle: '迁移与备份', dataHint: '会话、设置、插件配置和 API 凭据；不包含缓存、运行环境和工作区文件。',
         dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。',
-        dataPrivate: '导出加密私密包', dataPrivateHint: '内容与迁移包相同，恢复时需要密码。', dataPassword: '加密密码（至少 8 位）',
+        dataPrivate: '导出加密私密包', dataPrivateHint: '内容与迁移包相同，恢复时需要密码。',
+        dataPrivateDialogHint: '为会话、设置、插件和 API 凭据设置恢复密码。密码不会保存在 DSH-Portable 中。',
+        dataPassword: '密码（至少 8 位）', dataPasswordConfirm: '确认密码', dataPasswordMismatch: '两次输入的密码不一致。',
+        chooseSaveLocation: '选择保存位置后开始导出。', exportNow: '选择位置并导出',
         dataSaved: '数据包已保存：{0}',
+        dataImport: '导入数据包', dataImportHint: '选择另一份 DSH-Portable 导出的数据包；导入前会先检查内容。',
+        dataImportPassword: '输入数据包密码', dataImportPasswordHint: '这个数据包已加密。密码只用于本次导入，不会保存。',
+        dataImportReview: '确认导入', dataImportReviewHint: '将导入 {0} 个文件。冲突项会由数据包替换，同时自动保留回滚备份。',
+        dataImportCategories: '包含：{0}', dataImportRestart: '重启并导入', dataImporting: '正在重启并导入…',
       },
       en: {
         title: 'Portable',
@@ -44,15 +51,51 @@ window.__ModuleLoader__.load({
         check: 'Run check', checking: 'Checking…', healthy: 'No problems found', issues: '{0} issue(s) found',
         repair: 'Repair safely on next start', scheduled: 'Scheduled for the next start', repaired: 'The last repair completed',
         fullPackage: 'Program files are incomplete. Automatic repair preserved user data; reinstall the complete package.',
-        report: 'Export support report', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
-        data: 'Data and migration', dataHint: 'Sessions, settings, plugin configuration, and API credentials; caches, runtimes, and workspace files stay out.',
+        report: 'Export support report', more: 'More', cancel: 'Cancel', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
+        data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Sessions, settings, plugin configuration, and API credentials; caches, runtimes, and workspace files stay out.',
         dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.',
-        dataPrivate: 'Export encrypted private package', dataPrivateHint: 'Contains the same data and requires its password to restore.', dataPassword: 'Encryption password (8+ characters)',
+        dataPrivate: 'Export encrypted private package', dataPrivateHint: 'Contains the same data and requires its password to restore.',
+        dataPrivateDialogHint: 'Set a recovery password for sessions, settings, plugins, and API credentials. DSH-Portable never stores it.',
+        dataPassword: 'Password (8+ characters)', dataPasswordConfirm: 'Confirm password', dataPasswordMismatch: 'The passwords do not match.',
+        chooseSaveLocation: 'Choose where to save the package before export starts.', exportNow: 'Choose location and export',
         dataSaved: 'Data package saved: {0}',
+        dataImport: 'Import data package', dataImportHint: 'Choose a package exported by another DSH-Portable. Its contents are checked before import.',
+        dataImportPassword: 'Enter package password', dataImportPasswordHint: 'This package is encrypted. The password is used for this import only and is never stored.',
+        dataImportReview: 'Confirm import', dataImportReviewHint: 'Import {0} file(s). Package files replace conflicts and a rollback backup is created automatically.',
+        dataImportCategories: 'Includes: {0}', dataImportRestart: 'Restart and import', dataImporting: 'Restarting to import…',
       },
     }
 
     function format(template, value) { return String(template).replace('{0}', String(value)) }
+
+    let dataExportRequestSequence = 0
+    const pendingDataExportRequests = new Map()
+    const pendingDataImportRequests = new Map()
+
+    function chooseDataExportPath(kind) {
+      const webview = window.chrome?.webview
+      if (!webview?.postMessage) return Promise.resolve('')
+      return new Promise((resolve, reject) => {
+        const requestId = `data-export-${Date.now().toString(36)}-${++dataExportRequestSequence}`
+        pendingDataExportRequests.set(requestId, { resolve, reject })
+        webview.postMessage({
+          type: 'dsh-portable/pick-data-export',
+          schemaVersion: 1,
+          requestId,
+          kind,
+        })
+      })
+    }
+
+    function chooseDataImportPath() {
+      const webview = window.chrome?.webview
+      if (!webview?.postMessage) return Promise.resolve(null)
+      return new Promise((resolve, reject) => {
+        const requestId = `data-import-${Date.now().toString(36)}-${++dataExportRequestSequence}`
+        pendingDataImportRequests.set(requestId, { resolve, reject })
+        webview.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId })
+      })
+    }
 
     function PortableSelector({ value, items, onSelect, label, primitives }) {
       const h = React.createElement
@@ -81,7 +124,16 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
       const [privatePassword, setPrivatePassword] = useState('')
-      const setStatus = (key, value) => setMessages(current => ({ ...current, [key]: value }))
+      const [privatePasswordConfirm, setPrivatePasswordConfirm] = useState('')
+      const [importPassword, setImportPassword] = useState('')
+      const [importState, setImportState] = useState(null)
+      const [maintenanceMenuOpen, setMaintenanceMenuOpen] = useState(false)
+      const [dataDialog, setDataDialog] = useState('')
+      const statusRefs = React.useRef({})
+      const setStatus = (key, value) => {
+        setMessages(current => ({ ...current, [key]: value }))
+        if (value) requestAnimationFrame(() => statusRefs.current[key]?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
+      }
       useEffect(() => {
         let active = true
         fetch('/dsh-portable/settings', { cache: 'no-store' })
@@ -130,35 +182,106 @@ window.__ModuleLoader__.load({
           else setStatus(name, t('updateUnavailable'))
         }).catch(error => setStatus(name, format(t('failed'), error.message || error))).finally(() => setBusy(''))
       }
-      const exportData = kind => {
+      const closePrivateDialog = () => {
+        setDataDialog('')
+        setPrivatePassword('')
+        setPrivatePasswordConfirm('')
+      }
+      const closeImportDialog = () => {
+        setDataDialog('')
+        setImportPassword('')
+        setImportState(null)
+      }
+      const inspectImport = async (input, password = '') => {
+        const response = await fetch('/dsh-portable/data-inspect', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ input, password: password || undefined }),
+        })
+        const body = await response.json()
+        return { response, body }
+      }
+      const beginImport = async () => {
+        setBusy('data-import')
+        setStatus('data', '')
+        try {
+          const input = await chooseDataImportPath()
+          if (!input) return
+          const { response, body } = await inspectImport(input)
+          if (response.status === 401 && body.requiresPassword) {
+            setImportState({ input, info: null })
+            setDataDialog('import-password')
+            return
+          }
+          if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`)
+          setImportState({ input, info: body })
+          setDataDialog('import-confirm')
+        } catch (error) { setStatus('data', format(t('failed'), error.message || error)) }
+        finally { setBusy('') }
+      }
+      const unlockImport = async () => {
+        if (!importState?.input || importPassword.length < 8) return
+        setBusy('data-import')
+        try {
+          const { response, body } = await inspectImport(importState.input, importPassword)
+          if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`)
+          setImportState({ ...importState, info: body })
+          setDataDialog('import-confirm')
+        } catch (error) { setStatus('data', format(t('failed'), error.message || error)) }
+        finally { setBusy('') }
+      }
+      const runImport = () => {
+        const webview = window.chrome?.webview
+        if (!webview?.postMessage || !importState?.input) {
+          setStatus('data', format(t('failed'), 'desktop host unavailable'))
+          return
+        }
+        setBusy('data-import-run')
+        webview.postMessage({
+          type: 'dsh-portable/import-data', schemaVersion: 1,
+          input: importState.input, password: importPassword || undefined, conflict: 'replace',
+        })
+      }
+      const exportData = async kind => {
         const name = `data-${kind}`
-        setBusy(name); setStatus('data', '')
-        fetch('/dsh-portable/data-export', {
-          method: 'POST', headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ kind, password: kind === 'private' ? privatePassword : undefined }),
-        }).then(res => res.json()).then(body => {
+        setBusy(name)
+        setStatus('data', '')
+        try {
+          const output = await chooseDataExportPath(kind)
+          if (output === null) return
+          const res = await fetch('/dsh-portable/data-export', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ kind, output: output || undefined, password: kind === 'private' ? privatePassword : undefined }),
+          })
+          const body = await res.json()
           if (body.error) throw new Error(body.error)
           setStatus('data', format(t('dataSaved'), body.output || ''))
-          if (kind === 'private') setPrivatePassword('')
-        }).catch(error => setStatus('data', format(t('failed'), error.message || error))).finally(() => setBusy(''))
+          if (kind === 'private') closePrivateDialog()
+        } catch (error) {
+          setStatus('data', format(t('failed'), error.message || error))
+        } finally {
+          setBusy('')
+        }
       }
       const styles = {
         group: { borderBottom: '1px solid var(--dsw-alias-border-l2)', display: 'flex', flexDirection: 'column', padding: '20px 0 8px' },
         heading: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 500, lineHeight: '22px', marginBottom: 0 },
-        section: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 20 },
+        section: { display: 'flex', flexDirection: 'column', gap: 0, marginTop: 18 },
         sectionHeading: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, fontWeight: 500, lineHeight: '18px', padding: 0 },
         item: { display: 'flex', gap: 16, alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--dsw-alias-border-l2)', flexWrap: 'wrap' },
         text: { display: 'flex', flex: '1 1 260px', minWidth: 0, flexDirection: 'column', gap: 4 },
         label: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 400, lineHeight: '22px' },
         hint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px' },
-        controls: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 },
+        controls: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 },
         status: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', marginTop: 8, wordBreak: 'break-word' },
-        password: { boxSizing: 'border-box', width: '100%', maxWidth: 320, height: 36, border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, background: 'var(--dsw-alias-bg-module-platform)', color: 'var(--dsw-alias-label-primary)', padding: '0 12px', font: 'inherit' },
+        modalFields: { display: 'flex', flexDirection: 'column', gap: 14, width: '100%', minWidth: 0 },
+        modalField: { display: 'flex', flexDirection: 'column', gap: 6, width: '100%', minWidth: 0 },
+        modalInput: { width: '100%', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' },
+        modalLabel: { color: 'var(--dsw-alias-label-primary)', fontSize: 13, lineHeight: '20px' },
+        modalError: { color: 'var(--dsw-alias-status-error)', fontSize: 12, lineHeight: '18px' },
         version: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', whiteSpace: 'nowrap' },
         rowActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 1 auto' },
       }
       const inlineStatus = key => messages[key]
-        ? h('div', { style: styles.status, role: 'status', 'aria-live': 'polite' }, messages[key])
+        ? h('div', { ref: node => { statusRefs.current[key] = node }, style: styles.status, role: 'status', 'aria-live': 'polite' }, messages[key])
         : null
       if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t('title')), h('div', { style: styles.hint }, t('checking')))
       const booleanRow = (key, title, hint) => h('div', { style: styles.item },
@@ -181,45 +304,98 @@ window.__ModuleLoader__.load({
           }),
           h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => checkUpdate(scope) },
             busy === `update-${scope}` ? t('checking') : t('checkUpdate'))))
+      const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
+        h('div', { style: styles.sectionHeading }, t('updates')),
+        updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
+        updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint')))
+      const desktopSection = h('section', { style: styles.section, 'aria-label': t('desktop') },
+        h('div', { style: styles.sectionHeading }, t('desktop')),
+        booleanRow('taskNotificationsEnabled', t('notifications'), t('notificationsHint')),
+        h('div', { style: styles.item },
+          h('div', { style: styles.text }, h('div', { style: styles.label }, t('close'))),
+          h(PortableSelector, {
+            primitives, value: settings.closeBehavior, label: t('close'),
+            items: [{ id: 'tray', label: t('tray') }, { id: 'exit', label: t('exit') }],
+            onSelect: closeBehavior => update({ closeBehavior }),
+          })))
+      const maintenanceMenu = h(primitives.Menu, {
+        open: maintenanceMenuOpen,
+        anchor: h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setMaintenanceMenuOpen(current => !current) }, t('more')),
+        align: 'end', portal: true,
+        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') }],
+        onClose: () => setMaintenanceMenuOpen(false),
+        onSelect: id => {
+          setMaintenanceMenuOpen(false)
+          if (id === 'repair') action('repair', '/dsh-portable/repair')
+          else if (id === 'report') action('report', '/dsh-portable/support-report')
+        },
+      })
+      const careSection = h('section', { style: styles.section, 'aria-label': t('care') },
+        h('div', { style: styles.sectionHeading }, t('care')),
+        h('div', { style: styles.item },
+          h('div', { style: styles.text },
+            h('div', { style: styles.label }, t('maintenance')),
+            h('div', { style: styles.hint }, t('maintenanceHint')),
+            inlineStatus('maintenance')),
+          h('div', { style: styles.rowActions },
+            h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
+            maintenanceMenu)))
+      const privatePasswordMismatch = privatePasswordConfirm.length > 0 && privatePassword !== privatePasswordConfirm
+      const privateDialog = dataDialog === 'private' ? h(primitives.Modal, {
+        open: true,
+        onClose: closePrivateDialog,
+        title: t('dataPrivate'),
+        description: t('dataPrivateDialogHint'),
+        footer: h(React.Fragment, null,
+          h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closePrivateDialog }, t('cancel')),
+          h(primitives.Button, {
+            variant: 'primary',
+            disabled: Boolean(busy) || privatePassword.length < 8 || privatePassword !== privatePasswordConfirm,
+            onClick: () => exportData('private'),
+          }, busy === 'data-private' ? t('checking') : t('exportNow'))),
+      }, h('div', { style: styles.modalFields },
+        h('label', { style: styles.modalField },
+          h('span', { style: styles.modalLabel }, t('dataPassword')),
+          h(primitives.Input, { style: styles.modalInput, type: 'password', autoComplete: 'new-password', value: privatePassword, onChange: event => setPrivatePassword(event.target.value), autoFocus: true })),
+        h('label', { style: styles.modalField },
+          h('span', { style: styles.modalLabel }, t('dataPasswordConfirm')),
+          h(primitives.Input, { style: styles.modalInput, type: 'password', autoComplete: 'new-password', value: privatePasswordConfirm, onChange: event => setPrivatePasswordConfirm(event.target.value) })),
+        privatePasswordMismatch && h('div', { style: styles.modalError, role: 'alert' }, t('dataPasswordMismatch')),
+        h('div', { style: styles.hint }, t('chooseSaveLocation')))) : null
+      const importPasswordDialog = dataDialog === 'import-password' ? h(primitives.Modal, {
+        open: true, onClose: closeImportDialog, title: t('dataImportPassword'), description: t('dataImportPasswordHint'),
+        footer: h(React.Fragment, null,
+          h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closeImportDialog }, t('cancel')),
+          h(primitives.Button, { variant: 'primary', disabled: Boolean(busy) || importPassword.length < 8, onClick: unlockImport }, busy ? t('checking') : t('dataImportReview'))),
+      }, h('label', { style: styles.modalField },
+        h('span', { style: styles.modalLabel }, t('dataPassword')),
+        h(primitives.Input, { style: styles.modalInput, type: 'password', autoComplete: 'current-password', value: importPassword, onChange: event => setImportPassword(event.target.value), autoFocus: true }))) : null
+      const importInfo = importState?.info
+      const importConfirmDialog = dataDialog === 'import-confirm' && importInfo ? h(primitives.Modal, {
+        open: true, onClose: closeImportDialog, title: t('dataImportReview'),
+        description: format(t('dataImportReviewHint'), Array.isArray(importInfo.files) ? importInfo.files.length : 0),
+        footer: h(React.Fragment, null,
+          h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closeImportDialog }, t('cancel')),
+          h(primitives.Button, { variant: 'primary', disabled: Boolean(busy), onClick: runImport }, busy === 'data-import-run' ? t('dataImporting') : t('dataImportRestart'))),
+      }, h('div', { style: styles.hint }, format(t('dataImportCategories'), (importInfo.categories || []).join(', ')))) : null
+      const dataSection = h('section', { style: styles.section, 'aria-label': t('data') },
+        h('div', { style: styles.sectionHeading }, t('data')),
+        h('div', { style: styles.item },
+          h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataTitle')), h('div', { style: styles.hint }, t('dataHint')), inlineStatus('data')),
+          h('div', { style: styles.rowActions },
+            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: beginImport }, t('dataImport')),
+            h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => exportData('standard') }, busy === 'data-standard' ? t('checking') : t('dataStandard')),
+            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setDataDialog('private') }, t('dataPrivate')))))
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
         inlineStatus('portable'),
-        h('section', { style: styles.section, 'aria-label': t('updates') },
-          h('div', { style: styles.sectionHeading }, t('updates')),
-          updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
-          updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint'))),
-        h('section', { style: styles.section, 'aria-label': t('desktop') },
-          h('div', { style: styles.sectionHeading }, t('desktop')),
-          booleanRow('taskNotificationsEnabled', t('notifications'), t('notificationsHint')),
-          h('div', { style: styles.item }, h('div', { style: styles.text }, h('div', { style: styles.label }, t('close'))),
-            h(PortableSelector, {
-              primitives, value: settings.closeBehavior, label: t('close'),
-              items: [{ id: 'tray', label: t('tray') }, { id: 'exit', label: t('exit') }],
-              onSelect: closeBehavior => update({ closeBehavior }),
-            }))),
-        h('section', { style: styles.section, 'aria-label': t('care') },
-          h('div', { style: styles.sectionHeading }, t('care')),
-          h('div', { style: { ...styles.item, alignItems: 'flex-start' } },
-            h('div', { style: styles.text },
-              h('div', { style: styles.label }, t('maintenance')),
-              h('div', { style: styles.hint }, t('maintenanceHint')),
-              inlineStatus('maintenance')),
-            h('div', { style: styles.rowActions },
-              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
-              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('repair', '/dsh-portable/repair') }, t('repair')),
-              h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('report', '/dsh-portable/support-report') }, t('report'))))),
-        h('section', { style: styles.section, 'aria-label': t('data') },
-          h('div', { style: styles.sectionHeading }, t('data')),
-          h('div', { style: styles.hint }, t('dataHint')),
-          h('div', { style: styles.item },
-            h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataStandard')), h('div', { style: styles.hint }, t('dataStandardHint'))),
-            h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => exportData('standard') }, busy === 'data-standard' ? t('checking') : t('dataStandard'))),
-          h('div', { style: { ...styles.item, alignItems: 'flex-start' } },
-            h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataPrivate')), h('div', { style: styles.hint }, t('dataPrivateHint')),
-              h('input', { type: 'password', autoComplete: 'new-password', value: privatePassword, placeholder: t('dataPassword'), style: styles.password, onChange: event => setPrivatePassword(event.target.value) }),
-              inlineStatus('data')),
-            h(primitives.Button, { size: 'sm', disabled: Boolean(busy) || privatePassword.length < 8, onClick: () => exportData('private') }, busy === 'data-private' ? t('checking') : t('dataPrivate'))))
-      )
+        updatesSection,
+        desktopSection,
+        careSection,
+        dataSection,
+        privateDialog,
+        importPasswordDialog,
+        importConfirmDialog)
     }
 
     function localeOf(ctx) {
@@ -293,12 +469,35 @@ window.__ModuleLoader__.load({
       })
     }
 
+    async function ensurePortableWorkspace(ctx, workspacePath) {
+      const target = String(workspacePath || '').trim()
+      if (!target || !ctx.workspaces?.list?.getSnapshot || typeof ctx.workspaces.create !== 'function') return { status: 'unavailable' }
+      let snapshot = ctx.workspaces.list.getSnapshot()
+      if (!snapshot.baselinesReady) {
+        snapshot = await new Promise(resolve => {
+          const stop = ctx.workspaces.list.subscribe(() => {
+            const next = ctx.workspaces.list.getSnapshot()
+            if (!next.baselinesReady) return
+            stop?.()
+            resolve(next)
+          })
+        })
+      }
+      if ((snapshot.items || []).length > 0) return { status: 'preserved' }
+      if (ctx.sessions?.list?.getSnapshot?.().current !== undefined) return { status: 'preserved' }
+      const workspace = await ctx.workspaces.create({ path: target })
+      if (workspace?.workspaceId && typeof ctx.workspaces.startSession === 'function') {
+        ctx.workspaces.startSession(workspace.workspaceId)
+      }
+      return { status: 'created', workspaceId: workspace?.workspaceId }
+    }
+
     function apply(ctx) {
       const webview = window.chrome?.webview
       if (React?.createElement && React?.useState && React?.useEffect) {
         try {
           const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-          if (primitives?.Button && primitives?.Menu && primitives?.IconChevronDownOutline14) {
+          if (primitives?.Button && primitives?.Input && primitives?.Menu && primitives?.Modal && primitives?.IconChevronDownOutline14) {
             if (!document.getElementById('dsh-portable-settings-controls')) {
               const style = document.createElement('style')
               style.id = 'dsh-portable-settings-controls'
@@ -347,6 +546,24 @@ window.__ModuleLoader__.load({
             else pending.resolve(message.cancelled ? null : String(message.path || '') || null)
             return
           }
+          if (message.type === 'dsh-portable/pick-data-export-result' && message.schemaVersion === 1) {
+            const requestId = String(message.requestId || '')
+            const pending = pendingDataExportRequests.get(requestId)
+            if (!pending) return
+            pendingDataExportRequests.delete(requestId)
+            if (message.error) pending.reject(new Error(String(message.error)))
+            else pending.resolve(message.cancelled ? null : String(message.path || '') || null)
+            return
+          }
+          if (message.type === 'dsh-portable/pick-data-import-result' && message.schemaVersion === 1) {
+            const requestId = String(message.requestId || '')
+            const pending = pendingDataImportRequests.get(requestId)
+            if (!pending) return
+            pendingDataImportRequests.delete(requestId)
+            if (message.error) pending.reject(new Error(String(message.error)))
+            else pending.resolve(message.cancelled ? null : String(message.path || '') || null)
+            return
+          }
           if (message.type === 'dsh-portable/download') {
             applyNativeDownload(ctx, message)
             return
@@ -370,6 +587,13 @@ window.__ModuleLoader__.load({
         const stopTheme = ctx.on('theme/change', publish)
         publish()
 
+        if (typeof fetch === 'function') {
+          fetch('/dsh-portable/settings', { cache: 'no-store' })
+            .then(response => response.json())
+            .then(body => active && ensurePortableWorkspace(ctx, body.workspacePath))
+            .catch(error => { if (active) console.warn('[dsh-portable] default workspace unavailable:', error) })
+        }
+
         return () => {
           active = false
           if (ctx.workspaces?.pickDirectory === nativePickDirectory && typeof originalPickDirectory === 'function') {
@@ -377,6 +601,8 @@ window.__ModuleLoader__.load({
           }
           for (const pending of pendingWorkspaceRequests.values()) pending.resolve(null)
           pendingWorkspaceRequests.clear()
+          for (const pending of pendingDataExportRequests.values()) pending.resolve(null)
+          pendingDataExportRequests.clear()
           webview.removeEventListener?.('message', receive)
           stopSessions?.()
           stopLocale?.()
@@ -386,6 +612,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.inject = inject
+    exports.ensurePortableWorkspace = ensurePortableWorkspace
     exports.apply = apply
     return exports
   },

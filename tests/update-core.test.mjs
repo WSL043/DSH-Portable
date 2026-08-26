@@ -11,6 +11,7 @@ import { promisify } from 'node:util'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 import {
   applyStagedAppUpdate,
+  applyStagedCapsuleUpdate,
   checkForUpdate,
   comparePortableVersions,
   defaultEngineUpdateManifestUrl,
@@ -320,6 +321,30 @@ test('full-package decisions carry immutable release and package-manifest target
   assert.equal(result.fullPackageManifestUrl, 'https://github.com/WSL043/DSH-Portable/releases/download/v0.4.0-rc.2/portable-manifest.json')
 })
 
+test('runtime layout changes require a verified complete-package update', () => {
+  const installed = {
+    portableVersion: '0.4.15',
+    releaseChannel: 'stable',
+    dshVersion: '0.1.1-rc.2',
+    updaterSchema: 1,
+    shellSchema: 21,
+    nodeVersion: '24.19.0',
+    runtimeLayout: 'expanded-v1',
+  }
+  const manifest = updateManifest({
+    portableVersion: '0.5.0',
+    releaseChannel: 'stable',
+    targetRuntimeLayout: 'capsule-v1',
+    component: {
+      ...updateManifest().component,
+      runtimeLayout: 'expanded-v1',
+    },
+  })
+  const result = evaluateUpdate(manifest, installed, 'windows-x64')
+  assert.equal(result.status, 'full-package-required')
+  assert.equal(result.delivery, 'full-package')
+})
+
 test('update checks read installed metadata and cache a successful result', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-check-'))
   const layout = layoutForRoot(root)
@@ -569,6 +594,8 @@ test('component archives are restricted to replaceable application files', () =>
     'licenses/DeepSeek-Harness-LICENSE.txt',
     'licenses/dsh-market-LICENSE.txt',
     'licenses/pnpm-LICENSE.txt',
+    'runtime-capsule.json',
+    'runtime/DSH-App.dshpack',
   ]))
   for (const entry of ['../data/private.txt', '/absolute', 'C:/Windows/System32/file', 'data/session.json', 'launcher/portable-cli.mjs']) {
     assert.throws(() => validateArchiveEntries([entry]), /unsafe|not allowed/i, entry)
@@ -687,6 +714,91 @@ async function makeUpdateFixture() {
   await writeFile(path.join(layout.dataDir, 'private-session.txt'), 'keep me')
   return { dshRelative, layout, root, stagedRoot }
 }
+
+async function makeCapsuleUpdateFixture() {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-capsule-update-'))
+  const runtimeRoot = path.join(root, 'machine-cache', 'old-runtime')
+  const layout = layoutForRoot(root, process.platform, root, runtimeRoot)
+  const stagedRoot = path.join(root, '.dsh-portable-update', 'capsule-fixture', 'staged')
+  const oldCapsule = Buffer.from('old capsule')
+  const newCapsule = Buffer.from('new capsule')
+  await mkdir(path.join(root, 'runtime'), { recursive: true })
+  await mkdir(path.join(stagedRoot, 'runtime'), { recursive: true })
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await mkdir(path.join(stagedRoot, 'licenses'), { recursive: true })
+  await mkdir(layout.dataDir, { recursive: true })
+  const capsuleManifest = (bytes) => ({
+    schemaVersion: 1,
+    filename: 'runtime/DSH-App.dshpack',
+    bytes: bytes.length,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    required: ['package.json'],
+  })
+  await writeFile(path.join(root, 'runtime', 'DSH-App.dshpack'), oldCapsule)
+  await writeFile(path.join(root, 'runtime-capsule.json'), `${JSON.stringify(capsuleManifest(oldCapsule))}\n`)
+  await writeFile(path.join(stagedRoot, 'runtime', 'DSH-App.dshpack'), newCapsule)
+  await writeFile(path.join(stagedRoot, 'runtime-capsule.json'), `${JSON.stringify(capsuleManifest(newCapsule))}\n`)
+  const components = (version, dshVersion, commit) => ({
+    portableVersion: version,
+    dshVersion,
+    dshCommit: commit,
+    releaseChannel: 'candidate',
+    platform: 'windows-x64',
+    nodeVersion: '24.19.0',
+    updaterSchema: 1,
+    shellSchema: 21,
+    runtimeLayout: 'capsule-v1',
+  })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify(components('0.5.0-rc.1', '0.1.1-rc.2', 'a'.repeat(40)))}\n`)
+  await writeFile(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), `${JSON.stringify(components('0.5.0-rc.2', '0.1.1-rc.3', 'b'.repeat(40)))}\n`)
+  for (const name of ['DeepSeek-Harness-LICENSE.txt', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md', 'dsh-market-LICENSE.txt', 'pnpm-LICENSE.txt']) {
+    await writeFile(path.join(root, 'licenses', name), `old ${name}\n`)
+    await writeFile(path.join(stagedRoot, 'licenses', name), `new ${name}\n`)
+  }
+  await writeFile(path.join(stagedRoot, 'component.json'), `${JSON.stringify({
+    schemaVersion: 1,
+    kind: 'dsh-runtime-capsule',
+    portableVersion: '0.5.0-rc.2',
+    releaseChannel: 'candidate',
+    dshVersion: '0.1.1-rc.3',
+    dshCommit: 'b'.repeat(40),
+  })}\n`)
+  await writeFile(path.join(layout.dataDir, 'private-session.txt'), 'keep me')
+  return { layout, root, stagedRoot, oldCapsule, newCapsule }
+}
+
+test('compact runtime update swaps only the capsule and preserves portable data', async () => {
+  const fixture = await makeCapsuleUpdateFixture()
+  try {
+    const result = await applyStagedCapsuleUpdate({
+      layout: fixture.layout,
+      stagedRoot: fixture.stagedRoot,
+      healthCheck: async () => true,
+    })
+    assert.equal(result.status, 'updated')
+    assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.newCapsule)
+    assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).runtimeLayout, 'capsule-v1')
+    assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true })
+  }
+})
+
+test('failed compact runtime health check restores the prior capsule and metadata', async () => {
+  const fixture = await makeCapsuleUpdateFixture()
+  try {
+    await assert.rejects(applyStagedCapsuleUpdate({
+      layout: fixture.layout,
+      stagedRoot: fixture.stagedRoot,
+      healthCheck: async () => false,
+    }), /rolled back/i)
+    assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+    assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, '0.5.0-rc.1')
+    assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true })
+  }
+})
 
 test('app update commits only replaceable files and preserves portable user data', async () => {
   const fixture = await makeUpdateFixture()

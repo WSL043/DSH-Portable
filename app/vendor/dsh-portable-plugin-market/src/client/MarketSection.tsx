@@ -433,6 +433,7 @@ const TIME_OPTIONS: ReadonlyArray<{ key: TimeRange; label: string }> = [
 
 export interface MarketSectionProps {
   t: Translate
+  view: 'discover' | 'installed'
   locale: {
     subscribe(callback: () => void): () => void
     getSnapshot(): { active: string }
@@ -449,6 +450,9 @@ export function MarketSection(props: MarketSectionProps) {
   const lang = String(localeSnap.active).toLowerCase().startsWith('zh') ? 'zh' : 'en'
   const [data, setData] = useState<Registry | null>(cachedRegistry)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [catalogRefreshing, setCatalogRefreshing] = useState(false)
+  const [catalogStale, setCatalogStale] = useState<string | null>(null)
+  const catalogAvailable = useRef(cachedRegistry !== null)
   const [installed, setInstalledState] = useState<InstalledMap>(cachedInstalled ?? {})
   const setInstalled = useCallback((value: InstalledMap) => { cachedInstalled = value; setInstalledState(value) }, [])
   const [repoIdentities, setRepoIdentitiesState] = useState<InstalledRepoIdentities>(cachedRepoIdentities ?? {})
@@ -463,11 +467,8 @@ export function MarketSection(props: MarketSectionProps) {
   }, [])
   const [installedFiles, setInstalledFiles] = useState<string[]>([])
   const [skins, setSkins] = useState<string[]>([])
-  const [tab, setTab] = useState<'discover' | 'installed' | 'diagnostics'>(() => {
-    const saved = sessionStorage.getItem('dshm-tab')
-    if (saved !== null) sessionStorage.removeItem('dshm-tab')
-    return saved === 'installed' ? 'installed' : 'discover'
-  })
+  const [tab, setTab] = useState<'discover' | 'installed' | 'diagnostics'>(props.view)
+  useEffect(() => setTab(props.view), [props.view])
   const [q, setQ] = useState('')
   /** Per-tab searches stay independent: discover / installed. */
   const [qInstalled, setQInstalled] = useState('')
@@ -723,26 +724,52 @@ export function MarketSection(props: MarketSectionProps) {
     [disabledNames, patchDisabledNames],
   )
 
-  const loadCatalog = useCallback(() => {
+  interface CatalogReply {
+    registry?: Registry
+    cached?: boolean
+    changed?: boolean
+    error?: string
+  }
+
+  const applyCatalog = useCallback((registry: Registry) => {
+    cachedRegistry = registry
+    catalogAvailable.current = true
+    setData(registry)
     setLoadError(null)
-    return fetch('/dsh-market/registry', { cache: 'no-store' })
-      .then(async (res) => {
-        const body = (await res.json().catch(() => ({}))) as { registry?: Registry; error?: string }
-        if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `HTTP ${String(res.status)}`)
-        return body
-      })
-      .then((body) => {
-        if (body.registry === undefined) throw new Error('the catalog response carried no data')
-        cachedRegistry = body.registry
-        setData(body.registry)
-        setLoadError(null)
-      })
-      // Report WHY. An unreachable catalog used to be answered with a
-      // bundled copy, so "cannot reach the registry" and "the catalog is
-      // smaller today" looked identical on screen — and the second reading
-      // is the one users reached.
-      .catch((error: unknown) => { setLoadError(error instanceof Error ? error.message : String(error)) })
   }, [])
+
+  const refreshCatalog = useCallback(async () => {
+    setCatalogStale(null)
+    const delayed = setTimeout(() => setCatalogRefreshing(true), 350)
+    try {
+      const res = await fetch('/dsh-market/registry?mode=refresh', { cache: 'no-store' })
+      const body = (await res.json().catch(() => ({}))) as CatalogReply
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `HTTP ${String(res.status)}`)
+      if (body.registry !== undefined) applyCatalog(body.registry)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (catalogAvailable.current) setCatalogStale(message)
+      else setLoadError(message)
+    } finally {
+      clearTimeout(delayed)
+      setCatalogRefreshing(false)
+    }
+  }, [applyCatalog])
+
+  const loadCatalog = useCallback(async () => {
+    setLoadError(null)
+    setCatalogStale(null)
+    try {
+      const res = await fetch('/dsh-market/registry?mode=cache', { cache: 'no-store' })
+      const body = (await res.json().catch(() => ({}))) as CatalogReply
+      if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : `HTTP ${String(res.status)}`)
+      if (body.registry === undefined) throw new Error('the catalog response carried no data')
+      applyCatalog(body.registry)
+      if (body.cached === true) void refreshCatalog()
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : String(error))
+    }
+  }, [applyCatalog, refreshCatalog])
 
   useEffect(() => {
     void loadCatalog()
@@ -1532,7 +1559,6 @@ export function MarketSection(props: MarketSectionProps) {
   // The market manages itself from its own settings card (Settings → Plugins
   // → Plugin configuration), not as a row here — listing it in both places
   // read as two different controls for the same thing.
-  const installedOtherCount = Object.keys(installed).filter(name => name !== selfName).length
 
   const doUpdateAll = useCallback(() => {
     const names = updatableNames.slice()
@@ -1765,13 +1791,6 @@ export function MarketSection(props: MarketSectionProps) {
   const pendingRestart = sessionPendingRestart > 0 ? sessionPendingRestart : (showHostPending ? hostPendingNames.length : 0)
   const displayedInstalled = pendingBackup === null ? installed : { ...pendingDependencies, ...installed }
   const missingRestoreCount = Object.keys(pendingDependencies).filter(name => !installedFiles.includes(name)).length
-  // Self-update lives in the header button and the settings card, not this
-  // tab's row list (the market itself is filtered out below) — so a pending
-  // self-update alone must not light up a dot pointing at an empty-looking tab.
-  const hasUpdates = Object.keys(installed).some(
-    name => name !== selfName && !updatedNames.includes(name) && updates[name] && updates[name].updateAvailable,
-  )
-
   /** Live status line: structured phase, or the human-line fallback. */
   const phasePart = progressPhase != null
     ? phaseLabel(progressPhase, t)
@@ -1998,23 +2017,9 @@ export function MarketSection(props: MarketSectionProps) {
 
   return (
     <div className={css.root}>
-      <div className={css.tabs}>
-          <button className={tab === 'discover' ? `${css.tab} ${css.on}` : css.tab} onClick={() => setTab('discover')}>{t('tabDiscover')}</button>
-          <button className={(tab === 'installed' || tab === 'diagnostics') ? `${css.tab} ${css.on}` : css.tab} onClick={() => { setTab('installed'); refreshInstalled(true) }}>
-            {t('tabInstalled') + (installedOtherCount > 0 ? ' (' + installedOtherCount + ')' : '')}
-            {hasUpdates && <StateDot state="error" size={7} className={css.dot} />}
-          </button>
+      {records.length > 0 && (
+        <div className={css.operationBar}>
           <span className={css.grow} />
-          {updatableNames.length >= 2 && (
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={updatingAll || updatingName !== null || busyUrl !== null || removingName !== null}
-              onClick={() => { setTab('installed'); doUpdateAll() }}
-            >{updatingAll ? t('updating') : t('updateAll') + ' (' + updatableNames.length + ')'}</Button>
-          )}
-          {/* In the tab row, not above the grid: paginating, searching and
-              switching tab all leave it — and any pending decision — in place. */}
           <OperationsPanel
             t={t}
             describe={describePlugin}
@@ -2029,7 +2034,8 @@ export function MarketSection(props: MarketSectionProps) {
             onRefresh={() => location.reload()}
             onResolveConflict={resolveConflict}
           />
-      </div>
+        </div>
+      )}
       <div className={css.notices}>
         {!envReady && (
           <div className={css.banner}>
@@ -2327,6 +2333,15 @@ export function MarketSection(props: MarketSectionProps) {
               ? <div className={css.loading}><span className={css.logoMark}><MarketLogo size={26} animated /></span>{t('loading')}</div>
               : (
                   <>
+                    {catalogRefreshing && <div className={css.catalogStatus}>{t('catalogRefreshing')}</div>}
+                    {catalogStale !== null && (
+                      <div className={css.catalogWarning} title={catalogStale}>
+                        <span>{t('catalogStale')}</span>
+                        <Button variant="outline" size="sm" className={css.retryBtn} onClick={() => { void refreshCatalog() }}>
+                          {t('loadRetry')}
+                        </Button>
+                      </div>
+                    )}
                     <div ref={setCatsSentinel} />
                     <div className={css.stickyHead}>
                     <div className={css.tabSearchRow}>
@@ -2474,7 +2489,7 @@ export function MarketSection(props: MarketSectionProps) {
                       variant="ghost"
                       size="sm"
                       icon={<IconChevronLeftOutline14 size={14} />}
-                      onClick={() => { setTab('installed'); refreshInstalled(true) }}
+                      onClick={() => { setTab(props.view); refreshInstalled(true) }}
                     >{t('backInstalled')}</Button>
                   </div>
                   <Diagnostics t={t} />
@@ -2493,6 +2508,14 @@ export function MarketSection(props: MarketSectionProps) {
                       icon={<IconCodeOutline16 size={14} />}
                       onClick={() => setTab('diagnostics')}
                     >{t('tabDiagnostics')}</Button>
+                    {updatableNames.length >= 2 && (
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        disabled={updatingAll || updatingName !== null || busyUrl !== null || removingName !== null}
+                        onClick={doUpdateAll}
+                      >{updatingAll ? t('updating') : t('updateAll') + ' (' + updatableNames.length + ')'}</Button>
+                    )}
                   </div>
                   <div className={css.tabSearchRow}>
                     <Input className={css.tabSearch} icon={<IconSearchOutline16 size={14} />} placeholder={t('searchPh')} value={qInstalled} onChange={e => setQInstalled(e.target.value)} />
@@ -2806,8 +2829,7 @@ export function MarketSection(props: MarketSectionProps) {
                                   if (replacement === undefined) return null
                                   return (
                                     <>
-                                      <Button variant="outline" size="sm" onClick={() => { setCat('all'); setQ(entry.replacement!); setTab('discover') }}>{t('viewReplacement')}</Button>
-                                      {!isInstalled(replacement, installed, repoIdentities, data?.plugins, repoHints) && (
+                                              {!isInstalled(replacement, installed, repoIdentities, data?.plugins, repoHints) && (
                                         <Button variant="outline" size="sm" onClick={() => setConfirming(replacement)}>{t('installReplacement')}</Button>
                                       )}
                                     </>

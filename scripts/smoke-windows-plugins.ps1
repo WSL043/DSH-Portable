@@ -13,9 +13,10 @@ $Root = [System.IO.Path]::GetFullPath($Root)
 $Fixture = [System.IO.Path]::GetFullPath($Fixture)
 $Dsh = Join-Path $Root 'dsh.exe'
 $Node = Join-Path $Root 'runtime\node\node.exe'
+$RuntimeEntry = Join-Path $Root 'launcher\runtime-entry.mjs'
 $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
 $Launcher = Join-Path $Root 'DeepSeek-Herness.exe'
-foreach ($Required in @($Dsh, $Node, $PortableCli, $Launcher, (Join-Path $Root 'app\node_modules\pnpm\bin\pnpm.mjs'))) {
+foreach ($Required in @($Dsh, $Node, $RuntimeEntry, $PortableCli, $Launcher)) {
     if (-not (Test-Path -LiteralPath $Required -PathType Leaf)) { throw "plugin smoke prerequisite is missing: $Required" }
 }
 if (-not (Test-Path -LiteralPath $Fixture -PathType Container)) { throw "plugin fixture is missing: $Fixture" }
@@ -38,6 +39,7 @@ $RegistryChannel = Join-Path $TestRoot 'registry-channel.txt'
 $RegistryReady = Join-Path $TestRoot 'registry-ready.json'
 $ClsxArchive = Join-Path $TestRoot 'clsx.tgz'
 $DefaultPluginRegistryArchive = Join-Path $TestRoot 'default-plugin.tgz'
+$ImageViewerRegistryArchive = Join-Path $TestRoot 'image-viewer-plugin.tgz'
 $RegistryProcess = $null
 $PriorPath = $env:PATH
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
@@ -67,7 +69,7 @@ function Invoke-Dsh {
 function Product-Status {
     $Deadline = [DateTime]::UtcNow.AddSeconds(10)
     do {
-        $Raw = (& $Node $PortableCli status --json 2>&1 | Out-String).Trim()
+        $Raw = (& $Node $RuntimeEntry 'portable-cli.mjs' status --json 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -eq 0) { return ($Raw | ConvertFrom-Json) }
         if ($Raw -notmatch 'Another portable launcher' -or [DateTime]::UtcNow -ge $Deadline) {
             throw "portable status failed: $Raw"
@@ -83,7 +85,7 @@ function Start-Product {
     # Windows Job Object so closing its window reliably tears down DSH; using
     # that shell with --no-browser would correctly end the child with the shell.
     # Exercise the finished product's supported headless CLI instead.
-    $ArgumentLine = '"{0}" start --no-browser --json' -f $PortableCli
+    $ArgumentLine = '"{0}" portable-cli.mjs start --no-browser --json' -f $RuntimeEntry
     $Process = Start-Process -FilePath $Node -ArgumentList $ArgumentLine -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
@@ -109,7 +111,7 @@ function Start-Product {
 function Stop-Product {
     $Stdout = Join-Path $TestRoot 'stop.stdout.log'
     $Stderr = Join-Path $TestRoot 'stop.stderr.log'
-    $ArgumentLine = '"{0}" stop --json' -f $PortableCli
+    $ArgumentLine = '"{0}" portable-cli.mjs stop --json' -f $RuntimeEntry
     $Process = Start-Process -FilePath $Node -ArgumentList $ArgumentLine -PassThru -NoNewWindow `
         -RedirectStandardOutput $Stdout -RedirectStandardError $Stderr
     if (-not $Process.WaitForExit(60000)) {
@@ -175,17 +177,35 @@ try {
     )
     & tar.exe -czf $RegistryV2 -C $PackageParent 'package'
     if ($LASTEXITCODE -ne 0) { throw 'could not create the revised plugin fixture archive' }
-    $ClsxRoot = Join-Path $Root 'app\node_modules\clsx'
+    $CapsuleManifest = Join-Path $Root 'runtime-capsule.json'
+    $RuntimeRoot = $Root
+    if (Test-Path -LiteralPath $CapsuleManifest) {
+        $Capsule = Get-Content -Raw -LiteralPath $CapsuleManifest | ConvertFrom-Json
+        $CacheParent = if ($env:DSH_PORTABLE_RUNTIME_CACHE) {
+            [System.IO.Path]::GetFullPath($env:DSH_PORTABLE_RUNTIME_CACHE)
+        } else {
+            Join-Path $env:LOCALAPPDATA 'DSH-Portable\runtime-cache'
+        }
+        $RuntimeRoot = Join-Path $CacheParent ([string]$Capsule.sha256)
+    }
+    $ClsxRoot = Join-Path $RuntimeRoot 'app\node_modules\clsx'
     $ClsxManifest = Get-Content -Raw -LiteralPath (Join-Path $ClsxRoot 'package.json') | ConvertFrom-Json
     & tar.exe -czf $ClsxArchive -C (Split-Path -Parent $ClsxRoot) 'clsx'
     if ($LASTEXITCODE -ne 0) { throw 'could not create the clsx fixture archive' }
     $Components = Get-Content -Raw -LiteralPath (Join-Path $Root 'licenses\COMPONENTS.json') | ConvertFrom-Json
     $DefaultPluginArchive = Join-Path $Root 'default-plugins\dsh-native-session-delete.tgz'
     if (-not (Test-Path -LiteralPath $DefaultPluginArchive -PathType Leaf)) { throw 'finished product is missing the default plugin archive' }
-    if (-not $Components.defaultPluginVersion) { throw 'finished product does not declare the default plugin version' }
+    $DefaultPlugin = @($Components.defaultPlugins) | Where-Object { $_.package -eq 'dsh-native-session-delete' } | Select-Object -First 1
+    if (-not $DefaultPlugin -or -not $DefaultPlugin.version) { throw 'finished product does not declare the default session manager version' }
     Copy-Item -LiteralPath $DefaultPluginArchive -Destination $DefaultPluginRegistryArchive
+    $ImageViewer = @($Components.defaultPlugins) | Where-Object { $_.package -eq 'dsh-native-image-viewer' } | Select-Object -First 1
+    $ImageViewerArchive = Join-Path $Root 'default-plugins\dsh-native-image-viewer.tgz'
+    if (-not $ImageViewer -or -not $ImageViewer.version -or -not (Test-Path -LiteralPath $ImageViewerArchive -PathType Leaf)) {
+        throw 'finished product does not declare the default image viewer version'
+    }
+    Copy-Item -LiteralPath $ImageViewerArchive -Destination $ImageViewerRegistryArchive
     [System.IO.File]::WriteAllText($RegistryChannel, "1.0.0`n", [System.Text.UTF8Encoding]::new($false))
-    $RegistryProcess = Start-Process -FilePath $Node -ArgumentList @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version, $DefaultPluginRegistryArchive, [string]$Components.defaultPluginVersion) -PassThru -WindowStyle Hidden
+    $RegistryProcess = Start-Process -FilePath $Node -ArgumentList @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version, $DefaultPluginRegistryArchive, [string]$DefaultPlugin.version, $ImageViewerRegistryArchive, [string]$ImageViewer.version) -PassThru -WindowStyle Hidden
     $ReadyDeadline = [DateTime]::UtcNow.AddSeconds(15)
     while (-not (Test-Path -LiteralPath $RegistryReady)) {
         if ($RegistryProcess.HasExited) { throw "fixture registry exited with code $($RegistryProcess.ExitCode)" }
@@ -271,6 +291,7 @@ try {
         $ProfileRoot = Join-Path $ExpectedStateRoot "data\dsh-home\profiles\$Profile"
         $Dsh = Join-Path $Root 'dsh.exe'
         $Node = Join-Path $Root 'runtime\node\node.exe'
+        $RuntimeEntry = Join-Path $Root 'launcher\runtime-entry.mjs'
         $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
         $Launcher = Join-Path $Root 'DeepSeek-Herness.exe'
         $MovedRemoteList = Invoke-Dsh @('plugin', '--profile', $Profile, 'list', '--depth', '0', '--json')

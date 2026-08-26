@@ -165,7 +165,8 @@ export async function runPluginCommandWithFreshReleaseRecovery(spec, argv, makeS
 }
 
 export function buildPluginCliSpec(root, stateRoot, argv, platform = process.platform, source = process.env) {
-  const layout = layoutForRoot(root, platform, stateRoot)
+  const runtimeRoot = environmentValue(source, 'DSH_PORTABLE_RUNTIME_ROOT', platform) || root
+  const layout = layoutForRoot(root, platform, stateRoot, runtimeRoot)
   const forwardedArgv = platform === 'win32' ? normalizeDshArgvForWindowsShell(argv) : [...argv]
   return {
     command: layout.nodeExe,
@@ -267,6 +268,38 @@ export function profileNeedsRelink(profileRoot, storeRoot, modules, platform = p
     || !isInsidePath(modules.storeDir, storeRoot, platform)
 }
 
+export function runMovedProfileRelinkWithFreshReleaseRecovery(spec, profile, adapters = {}) {
+  const run = adapters.run ?? spawnSync
+  const stdout = adapters.stdout ?? process.stdout
+  const stderr = adapters.stderr ?? process.stderr
+  const options = {
+    cwd: spec.cwd,
+    env: spec.env,
+    encoding: 'utf8',
+    stdio: ['inherit', 'pipe', 'pipe'],
+    windowsHide: false,
+  }
+  const args = [spec.layout.dshBin, 'plugin', '--profile', profile, 'install', '--force']
+  const first = run(spec.command, args, options)
+  const firstOutput = `${first?.stderr ?? ''}\n${first?.stdout ?? ''}`
+  if (first?.error || first?.status === 0 || !firstOutput.includes(RELEASE_AGE_VIOLATION)) {
+    if (first?.stdout) stdout.write(first.stdout)
+    if (first?.stderr) stderr.write(first.stderr)
+    return first
+  }
+
+  stderr.write('A newly published package already present in this profile blocked portable link rebuilding; retrying once for this rebuild only.\n')
+  const retryArgs = [
+    spec.layout.dshBin,
+    'plugin', '--profile', profile,
+    'install', RELEASE_AGE_REMOVAL_OVERRIDE, '--force',
+  ]
+  const retry = run(spec.command, retryArgs, options)
+  if (retry?.stdout) stdout.write(retry.stdout)
+  if (retry?.stderr) stderr.write(retry.stderr)
+  return retry
+}
+
 async function relinkMovedProfileIfNeeded(spec, argv, adapters = {}) {
   const profile = requestedProfile(argv)
   if (!profile) return false
@@ -293,13 +326,11 @@ async function relinkMovedProfileIfNeeded(spec, argv, adapters = {}) {
   const modulesRoot = paths.join(profileRoot, 'node_modules')
   const backupRoot = paths.join(profileRoot, `.node_modules.dsh-portable-backup-${process.pid}-${Date.now()}`)
   await rename(modulesRoot, backupRoot)
-  const run = adapters.spawnSync ?? spawnSync
   try {
-    const repair = run(spec.command, [spec.layout.dshBin, 'plugin', '--profile', profile, 'install', '--force'], {
-      cwd: spec.cwd,
-      env: spec.env,
-      stdio: 'inherit',
-      windowsHide: false,
+    const repair = runMovedProfileRelinkWithFreshReleaseRecovery(spec, profile, {
+      run: adapters.spawnSync,
+      stdout: adapters.stdout,
+      stderr: adapters.stderr,
     })
     if (repair.error) throw repair.error
     if (repair.status !== 0) throw new Error(`Could not rebuild the moved DSH plugin profile (${profile}).`)
@@ -378,7 +409,7 @@ export async function main(argv = process.argv.slice(2), source = process.env) {
   const stateRoot = await resolveProductStateRoot(root, process.platform, source)
   const portableArgv = portableDataArgv(argv)
   if (portableArgv !== null) {
-    const layout = layoutForRoot(root, process.platform, stateRoot)
+    const layout = layoutForRoot(root, process.platform, stateRoot, source.DSH_PORTABLE_RUNTIME_ROOT || root)
     const result = spawnSync(layout.nodeExe, [layout.portableCli, ...portableArgv], {
       cwd: process.cwd(), env: buildDshEnv(layout, source), stdio: 'inherit', windowsHide: false,
     })

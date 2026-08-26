@@ -1,0 +1,25 @@
+{
+  "version": "0.5.0",
+  "zh": {
+    "summary": "更小、更快、更完整的便携桌面版：带走工作区、会话、设置和插件，并在新电脑上直接继续使用。",
+    "highlights": [
+      "Windows 运行环境改为一次准备、后续复用的紧凑封装；完整包只需展开少量产品文件，减少解压、复制、移动和删除时的小文件负担。",
+      "新增完整的数据迁移流程：可导出普通迁移包或密码保护的私密包，并在新的 Portable 环境中预览内容、处理冲突后导入。",
+      "插件市场重新融入 DSH 原生插件页，支持即时显示本地目录、后台刷新、安装、更新、卸载和诊断；插件名称直接进入作者项目。",
+      "新建环境默认离线提供可卸载的 DSH Native Session Manager 与 DSH Native Image Viewer，之后仍按标准插件方式更新和管理。",
+      "Portable 本体与官方 DeepSeek Harness 内核使用独立更新通道；小更新可原地验证、安装和失败回滚，兼容边界变化时会引导完整包升级并保留数据。",
+      "Windows 桌面壳、托盘、工作区选择、文件下载、通知、退出释放和首次启动经过统一收敛，窗口不再暴露浏览器界面。"
+    ]
+  },
+  "en": {
+    "summary": "A smaller, faster, and more complete portable desktop: carry workspaces, sessions, settings, and plugins, then continue on another PC.",
+    "highlights": [
+      "The Windows runtime is now a compact prepare-once package that is reused on later launches. Complete downloads expand into far fewer product files, reducing extraction, copy, move, and deletion overhead.",
+      "A complete data migration flow can export a regular transfer package or a password-protected private package, preview it in a fresh Portable environment, resolve conflicts, and import it.",
+      "Plugin Market now fits directly into the native DSH Plugins page with an immediate local catalog, background refresh, install, update, uninstall, diagnostics, and direct links to each author's project.",
+      "Fresh environments include the removable DSH Native Session Manager and DSH Native Image Viewer offline, while standard plugin update and management remain in control afterward.",
+      "DSH-Portable and the official DeepSeek Harness core use separate update channels. Compatible updates install transactionally with verification and rollback; compatibility changes guide a full-package upgrade while preserving data.",
+      "The Windows shell, tray, workspace picker, downloads, notifications, shutdown release, and first launch are now one coherent desktop flow without exposing browser chrome."
+    ]
+  }
+}

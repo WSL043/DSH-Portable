@@ -1,14 +1,15 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Text;
 
 [assembly: AssemblyTitle("DSH-Portable Command")]
 [assembly: AssemblyProduct("DSH-Portable")]
 [assembly: AssemblyCompany("WSL043")]
-[assembly: AssemblyVersion("0.4.15.65534")]
-[assembly: AssemblyFileVersion("0.4.15.65534")]
+[assembly: AssemblyVersion("0.5.0.65534")]
+[assembly: AssemblyFileVersion("0.5.0.65534")]
 
 internal static class DshCommand
 {
@@ -81,14 +82,16 @@ internal static class DshCommand
                 return LaunchDshTerminal(root);
 
             var node = Path.Combine(root, "runtime", "node", "node.exe");
+            var runtimeEntry = Path.Combine(root, "launcher", "runtime-entry.mjs");
             var cli = Path.Combine(root, "launcher", "dsh-cli.mjs");
             if (!File.Exists(node)) throw new FileNotFoundException("Bundled Node.js is missing.", node);
+            if (!File.Exists(runtimeEntry)) throw new FileNotFoundException("DSH runtime entry is missing.", runtimeEntry);
             if (!File.Exists(cli)) throw new FileNotFoundException("DSH command launcher is missing.", cli);
 
             var start = new ProcessStartInfo
             {
                 FileName = node,
-                Arguments = BuildArguments(cli, arguments),
+                Arguments = BuildArguments(runtimeEntry, new[] { Path.GetFileName(cli) }.Concat(arguments).ToArray()),
                 WorkingDirectory = Environment.CurrentDirectory,
                 UseShellExecute = false,
                 CreateNoWindow = false,

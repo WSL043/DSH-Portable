@@ -12,6 +12,7 @@ import {
   normalizeDshArgvForWindowsShell,
   portableDataArgv,
   profileNeedsRelink,
+  runMovedProfileRelinkWithFreshReleaseRecovery,
   retryFreshReleaseViolationArgv,
   runPluginCommandWithFreshReleaseRecovery,
   resolveProductStateRoot,
@@ -193,6 +194,54 @@ test('direct plugin runner keeps the safety policy on the first attempt and scop
   assert.equal(calls[0].args.includes('--config.minimumReleaseAge=0'), false)
   assert.equal(calls[1].args.includes('--config.minimumReleaseAge=0'), true)
   assert.match(writes.map(([, value]) => value).join('\n'), /retrying once/i)
+})
+
+test('moved profile relink retries once only when an existing young package blocks pnpm verification', () => {
+  const calls = []
+  const writes = []
+  const spec = {
+    command: 'node',
+    cwd: 'C:\\Portable',
+    env: {},
+    layout: { dshBin: 'dsh.js' },
+  }
+  const result = runMovedProfileRelinkWithFreshReleaseRecovery(spec, 'web', {
+    run: (_command, args) => {
+      calls.push(args)
+      if (calls.length === 1) {
+        return { status: 1, stdout: '', stderr: 'ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION image-viewer is too young' }
+      }
+      return { status: 0, stdout: 'relinked', stderr: '' }
+    },
+    stdout: { write: (value) => writes.push(['out', value]) },
+    stderr: { write: (value) => writes.push(['err', value]) },
+  })
+
+  assert.equal(result.status, 0)
+  assert.equal(calls.length, 2)
+  assert.deepEqual(calls[0], ['dsh.js', 'plugin', '--profile', 'web', 'install', '--force'])
+  assert.deepEqual(calls[1], [
+    'dsh.js', 'plugin', '--profile', 'web', 'install', '--config.minimumReleaseAge=0', '--force',
+  ])
+  assert.match(writes.map(([, value]) => value).join('\n'), /retrying once/i)
+})
+
+test('moved profile relink does not weaken release-age policy for unrelated failures', () => {
+  const calls = []
+  const result = runMovedProfileRelinkWithFreshReleaseRecovery({
+    command: 'node', cwd: 'C:\\Portable', env: {}, layout: { dshBin: 'dsh.js' },
+  }, 'web', {
+    run: (_command, args) => {
+      calls.push(args)
+      return { status: 1, stdout: '', stderr: 'ERR_PNPM_FETCH_404 package not found' }
+    },
+    stdout: { write: () => {} },
+    stderr: { write: () => {} },
+  })
+
+  assert.equal(result.status, 1)
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].includes('--config.minimumReleaseAge=0'), false)
 })
 
 test('remote plugin archives become content-addressed profile files that survive repeat installs and moves', async (t) => {

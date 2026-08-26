@@ -19,11 +19,15 @@ const generalScreenshotPath = process.env.DSH_SMOKE_GENERAL_SCREENSHOT
 const generalBottomScreenshotPath = process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT
   ? path.resolve(process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENSHOT)
   : ''
+const installedScreenshotPath = process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
+  ? path.resolve(process.env.DSH_SMOKE_INSTALLED_SCREENSHOT)
+  : ''
 const checkPortableUpdate = process.env.DSH_SMOKE_CHECK_PORTABLE_UPDATE === '1'
 
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
-for (const filename of [portableNode, portableCli]) {
+const runtimeEntry = path.join(root, 'launcher', 'runtime-entry.mjs')
+for (const filename of [portableNode, portableCli, runtimeEntry]) {
   if (!existsSync(filename)) throw new Error(`portable file is missing: ${filename}`)
 }
 
@@ -48,7 +52,7 @@ function lastJsonLine(source) {
 }
 
 async function portable(args) {
-  const result = await execFileAsync(portableNode, [portableCli, ...args], {
+  const result = await execFileAsync(portableNode, [runtimeEntry, path.basename(portableCli), ...args], {
     cwd: root,
     env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
     timeout: 90000,
@@ -319,6 +323,14 @@ try {
       )
     }
   }
+  // DSH may mount its translated preview notice one render after the locale
+  // state changes. Give that official modal a bounded chance to appear before
+  // capturing the finished settings surface.
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    await new Promise(resolve => setTimeout(resolve, 150))
+    const lateNotice = await evaluate(client, clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later']))
+    if (lateNotice?.clicked) await new Promise(resolve => setTimeout(resolve, 120))
+  }
   assert.equal(state.locale, targetLocale)
 
   if (state.theme !== 'light') {
@@ -464,6 +476,24 @@ try {
     active: [...document.querySelectorAll('button[aria-pressed="true"]')].some(item => ['Cards', '图文'].includes((item.textContent || '').trim())),
     saved: localStorage.getItem('dshm-market-view'),
   }))()`, value => value?.active && value.saved === 'cards', 'persisted card market view')
+
+  if (installedScreenshotPath) {
+    await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed native Plugins tab')
+    const installedUi = await waitForValue(client, `(() => {
+      const text = document.body?.innerText || ''
+      const search = [...document.querySelectorAll('input')].some(item => ['Search plugins: notify, terminal, memory…', '搜索插件，比如：通知、终端、记忆…'].includes(item.placeholder || ''))
+      const defaultPlugins = ['dsh-native-session-delete', 'dsh-native-image-viewer'].filter(name => text.includes(name))
+      const marketSelected = [...document.querySelectorAll('button')].some(item => {
+        const label = (item.textContent || '').trim()
+        return ['Plugin Market', '插件市场'].includes(label) && item.getAttribute('aria-selected') === 'true'
+      })
+      return { search, defaultPlugins, marketSelected }
+    })()`, value => value?.search && value.defaultPlugins?.length === 2 && value.marketSelected === false, 'Installed sibling tab with both defaults', 60000)
+    assert.equal(installedUi.defaultPlugins.length, 2)
+    const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+    await mkdir(path.dirname(installedScreenshotPath), { recursive: true })
+    await writeFile(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  }
 
   const stateCountExpression = `window.__dshTrayMessages?.filter(item => item.type === 'dsh-portable/state').length || 0`
   const beforeClear = await evaluate(client, stateCountExpression)

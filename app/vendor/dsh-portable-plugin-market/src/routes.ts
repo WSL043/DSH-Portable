@@ -11,7 +11,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { hasPluginCategory, loadRegistry } from './registry.ts'
+import { hasPluginCategory, loadRegistry, readRegistrySnapshot, revalidateRegistry } from './registry.ts'
 import {
   cleanHotDir, hotMount, hotUnmount, listHotMounts,
   mountClientOnlyDeps, purgeMarketState, readMarketState, writeMarketState,
@@ -153,6 +153,7 @@ export function mountMarketRoutes(
     throw new Error(`dsh-market: invalid profile name: ${config.profile}`)
   }
   const activeProfileDir = profileDir(config.profile, config.profileDirectory)
+  const registryCacheFile = join(activeProfileDir, '.dsh-market', 'registry-cache-v1.json')
   let agentGuardUnavailableLogged = false
   /** Running-agent ids for the mutation gate; logs once when the host exposes no agents service. */
   const runningAgentsForGuard = (): string[] => {
@@ -193,7 +194,7 @@ export function mountMarketRoutes(
   // composed, which is only ever a default.
   if (marketState.channel !== undefined) config.channel = marketState.channel
   const activeChannel = (): Channel => resolveChannel(config.channel, marketVersion())
-  const themes = createThemeManager(host, config.profile, disabled, activeProfileDir)
+  const themes = createThemeManager(host, config.profile, disabled, activeProfileDir, registryCacheFile)
 
   // Client-only packages (dsh.client without dsh.bundle) are invisible to the
   // bundle layer in every boot; the market shim-mounts them so their client
@@ -675,7 +676,28 @@ export function mountMarketRoutes(
         }
         try {
           try {
-            sendJson(response, 200, { registry: await loadRegistry() })
+            const url = new URL(request.url ?? '/dsh-market/registry', 'http://localhost')
+            const mode = url.searchParams.get('mode')
+            if (mode === 'cache') {
+              const cached = await readRegistrySnapshot(registryCacheFile)
+              if (cached !== null) {
+                sendJson(response, 200, { registry: cached.registry, cached: true, savedAt: cached.savedAt })
+                return
+              }
+              const fresh = await revalidateRegistry({ cacheFile: registryCacheFile })
+              sendJson(response, 200, { registry: fresh.registry, fresh: true, checkedAt: fresh.checkedAt })
+              return
+            }
+            if (mode === 'refresh') {
+              const fresh = await revalidateRegistry({ cacheFile: registryCacheFile })
+              sendJson(response, 200, {
+                ...(fresh.changed ? { registry: fresh.registry } : {}),
+                changed: fresh.changed,
+                checkedAt: fresh.checkedAt,
+              })
+              return
+            }
+            sendJson(response, 200, { registry: await loadRegistry({ cacheFile: registryCacheFile }) })
           } catch (error) {
             // Say what went wrong. The market used to substitute a bundled
             // copy here, so an unreachable registry looked exactly like a
@@ -1755,7 +1777,7 @@ export function mountMarketRoutes(
             // catalog must not turn "allow this build" into a 500.
             let entry
             try {
-              entry = (await loadRegistry()).plugins.find(p => p.name === name || p.npm === name)
+              entry = (await loadRegistry({ cacheFile: registryCacheFile })).plugins.find(p => p.name === name || p.npm === name)
             } catch (error) {
               logEvent('warn', 'approve-builds', `catalog unavailable, authorizing ${name} by name only: ${error instanceof Error ? error.message : String(error)}`)
               packages.push(name)
@@ -2026,7 +2048,7 @@ export function mountMarketRoutes(
               return
             }
             const url = typeof body.url === 'string' ? body.url : ''
-            const registry = await loadRegistry()
+            const registry = await loadRegistry({ cacheFile: registryCacheFile })
             const entry = registry.plugins.find(p => p.url.toLowerCase() === url.toLowerCase())
             if (entry === undefined) {
               logEvent('warn', 'install-rejected', `not in curated registry: ${url.slice(0, 120)}`)

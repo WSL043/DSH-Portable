@@ -4,8 +4,6 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const packageName = 'dsh-native-session-delete'
-const repository = 'WSL043/dsh-native-session-manager'
 const checkOnly = process.argv.includes('--check')
 const headers = {
   accept: 'application/vnd.github+json',
@@ -19,88 +17,118 @@ async function json(url, requestHeaders = headers) {
   return response.json()
 }
 
-function replaceExactlyOnce(source, before, after, label) {
-  const first = source.indexOf(before)
-  if (first < 0 || source.indexOf(before, first + before.length) >= 0) {
-    throw new Error(`default plugin source no longer has one exact ${label} marker`)
+async function resolveTagCommit(repository, version) {
+  const ref = await json(`https://api.github.com/repos/${repository}/git/ref/tags/v${version}`)
+  if (ref?.object?.type === 'commit' && /^[0-9a-f]{40}$/.test(ref.object.sha ?? '')) return ref.object.sha
+  if (ref?.object?.type === 'tag') {
+    const tag = await json(`https://api.github.com/repos/${repository}/git/tags/${ref.object.sha}`)
+    if (tag?.object?.type === 'commit' && /^[0-9a-f]{40}$/.test(tag.object.sha ?? '')) return tag.object.sha
   }
-  return `${source.slice(0, first)}${after}${source.slice(first + before.length)}`
+  throw new Error(`${repository} v${version} does not resolve to an immutable commit`)
+}
+
+function replacePluginBlock(source, current, next) {
+  const start = source.indexOf(`  name: '${current.package}',`)
+  if (start < 0) throw new Error(`default plugin source is missing ${current.package}`)
+  const end = source.indexOf('\n})', start)
+  if (end < 0) throw new Error(`default plugin source block is incomplete for ${current.package}`)
+  let block = source.slice(start, end)
+  for (const key of ['version', 'url', 'sha256', 'integrity', 'reviewedCommit']) {
+    const before = `${key}: '${current[key]}'`
+    const after = `${key}: '${next[key]}'`
+    if (!block.includes(before)) throw new Error(`${current.package} source no longer has its ${key} marker`)
+    block = block.replace(before, after)
+  }
+  return `${source.slice(0, start)}${block}${source.slice(end)}`
+}
+
+async function inspectPlugin(key, current) {
+  if (!current?.package || !current?.repository || !current?.releaseChannel) {
+    throw new Error(`default plugin ${key} is missing package, repository, or releaseChannel metadata`)
+  }
+  const registry = await json(`https://registry.npmjs.org/${current.package}`)
+  const distTag = current.releaseChannel === 'stable' ? 'latest' : (registry?.['dist-tags']?.beta ? 'beta' : 'latest')
+  const version = registry?.['dist-tags']?.[distTag]
+  const published = registry?.versions?.[version]
+  const semverPattern = current.releaseChannel === 'stable'
+    ? /^\d+\.\d+\.\d+$/
+    : /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+  if (!semverPattern.test(version ?? '') || !published?.dist?.tarball || !published?.dist?.integrity) {
+    throw new Error(`npm ${distTag} does not describe an installable ${current.package} release`)
+  }
+
+  const release = await json(`https://api.github.com/repos/${current.repository}/releases/tags/v${version}`)
+  const expectsPrerelease = current.releaseChannel === 'prerelease' && version.includes('-')
+  if (release?.draft || Boolean(release?.prerelease) !== expectsPrerelease) {
+    throw new Error(`${current.repository} v${version} release channel does not match ${current.releaseChannel}`)
+  }
+  const commit = await resolveTagCommit(current.repository, version)
+  const asset = (release.assets ?? []).find(candidate => candidate.name === `${current.package}.tgz`)
+  if (!asset || !/^sha256:[0-9a-f]{64}$/i.test(asset.digest ?? '')) {
+    throw new Error(`v${version} does not publish a digest-bearing ${current.package}.tgz asset`)
+  }
+
+  const archiveResponse = await fetch(published.dist.tarball, {
+    headers: { 'user-agent': 'DSH-Portable-default-plugin-candidate' },
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!archiveResponse.ok) throw new Error(`${current.package} npm archive returned HTTP ${archiveResponse.status}`)
+  const sha256 = createHash('sha256').update(Buffer.from(await archiveResponse.arrayBuffer())).digest('hex')
+  if (current.releaseChannel === 'stable' && asset.digest.toLowerCase() !== `sha256:${sha256}`) {
+    throw new Error(`${current.package} npm archive and GitHub release asset digests differ`)
+  }
+
+  return {
+    key,
+    changed: current.version !== version || current.reviewedCommit !== commit,
+    current,
+    next: {
+      ...current,
+      version,
+      url: published.dist.tarball,
+      sha256,
+      integrity: published.dist.integrity,
+      license: published.license ?? current.license,
+      reviewedCommit: commit,
+    },
+  }
 }
 
 const lockPath = path.join(root, 'upstream.lock.json')
 const sourcePath = path.join(root, 'launcher', 'default-plugins.mjs')
-const [lockText, sourceText, registry] = await Promise.all([
+const [lockText, sourceText] = await Promise.all([
   readFile(lockPath, 'utf8'),
   readFile(sourcePath, 'utf8'),
-  json(`https://registry.npmjs.org/${packageName}`),
 ])
 const lock = JSON.parse(lockText)
-const current = lock.defaultPlugins?.sessionDelete
-if (!current || current.package !== packageName) throw new Error('the default session-delete lock is missing')
+const inspections = await Promise.all(Object.entries(lock.defaultPlugins ?? {}).map(([key, plugin]) => inspectPlugin(key, plugin)))
+if (inspections.length === 0) throw new Error('no default plugins are locked')
 
-const version = registry?.['dist-tags']?.latest
-const published = registry?.versions?.[version]
-if (!/^\d+\.\d+\.\d+$/.test(version ?? '') || !published?.dist?.tarball || !published?.dist?.integrity) {
-  throw new Error('npm latest does not describe a stable installable default plugin')
+const changed = inspections.filter(item => item.changed)
+if (changed.length > 0 && checkOnly) {
+  throw new Error(`Bundled default plugins are behind their verified channels: ${changed.map(item => `${item.current.package}@${item.current.version} -> ${item.next.version}`).join(', ')}`)
 }
-const release = await json(`https://api.github.com/repos/${repository}/releases/tags/v${version}`)
-if (release?.draft || release?.prerelease || !/^[0-9a-f]{40}$/.test(release?.target_commitish ?? '')) {
-  throw new Error(`v${version} is not an immutable stable GitHub release`)
-}
-const asset = (release.assets ?? []).find(candidate => candidate.name === `${packageName}.tgz`)
-if (!asset || !/^sha256:[0-9a-f]{64}$/i.test(asset.digest ?? '')) {
-  throw new Error(`v${version} does not publish a digest-bearing ${packageName}.tgz asset`)
-}
-
-const archiveResponse = await fetch(published.dist.tarball, {
-  headers: { 'user-agent': 'DSH-Portable-default-plugin-candidate' },
-  signal: AbortSignal.timeout(30_000),
-})
-if (!archiveResponse.ok) throw new Error(`npm archive returned HTTP ${archiveResponse.status}`)
-const sha256 = createHash('sha256').update(Buffer.from(await archiveResponse.arrayBuffer())).digest('hex')
-if (asset.digest.toLowerCase() !== `sha256:${sha256}`) {
-  throw new Error('npm archive and immutable GitHub release asset digests differ')
-}
-
-const changed = current.version !== version
-if (changed && checkOnly) {
-  throw new Error(`Bundled ${packageName}@${current.version} is behind the verified latest stable v${version}. Run node scripts/update-default-plugin.mjs and rebuild before publishing.`)
-}
-if (changed) {
-  const next = {
-    ...current,
-    version,
-    url: published.dist.tarball,
-    sha256,
-    integrity: published.dist.integrity,
-    license: published.license ?? current.license,
-    reviewedCommit: release.target_commitish,
-  }
-  lock.defaultPlugins.sessionDelete = next
-
-  const markers = [
-    ['version', `version: '${current.version}'`, `version: '${next.version}'`],
-    ['url', `url: '${current.url}'`, `url: '${next.url}'`],
-    ['sha256', `sha256: '${current.sha256}'`, `sha256: '${next.sha256}'`],
-    ['integrity', `integrity: '${current.integrity}'`, `integrity: '${next.integrity}'`],
-    ['reviewed commit', `reviewedCommit: '${current.reviewedCommit}'`, `reviewedCommit: '${next.reviewedCommit}'`],
-  ]
+if (changed.length > 0) {
   let nextSource = sourceText
-  for (const [label, before, after] of markers) nextSource = replaceExactlyOnce(nextSource, before, after, label)
-
+  for (const item of changed) {
+    lock.defaultPlugins[item.key] = item.next
+    nextSource = replacePluginBlock(nextSource, item.current, item.next)
+  }
   await writeFile(`${lockPath}.tmp`, `${JSON.stringify(lock, null, 2)}\n`, 'utf8')
   await rename(`${lockPath}.tmp`, lockPath)
   await writeFile(`${sourcePath}.tmp`, nextSource, 'utf8')
   await rename(`${sourcePath}.tmp`, sourcePath)
 }
 
-const result = { changed, package: packageName, version, commit: release.target_commitish, sha256 }
+const result = {
+  changed: changed.length > 0,
+  plugins: inspections.map(item => ({ package: item.current.package, version: item.next.version, commit: item.next.reviewedCommit, changed: item.changed })),
+}
 console.log(JSON.stringify(result, null, 2))
 if (process.env.GITHUB_OUTPUT) {
   await appendFile(process.env.GITHUB_OUTPUT, [
-    `changed=${changed}`,
-    `version=${version}`,
-    `commit=${release.target_commitish}`,
+    `changed=${result.changed}`,
+    `versions=${JSON.stringify(Object.fromEntries(result.plugins.map(plugin => [plugin.package, plugin.version])))}`,
     '',
   ].join('\n'))
 }

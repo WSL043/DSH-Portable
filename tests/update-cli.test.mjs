@@ -112,7 +112,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'data-transfer.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))

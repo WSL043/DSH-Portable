@@ -85,8 +85,9 @@ test('the public product identity is DSH-Portable everywhere users see it', asyn
 
   const chineseReadme = await read('README.md')
   const englishReadme = await read('README.en.md')
-  const userReadme = await read('templates/USER-README.txt')
-  const combined = `${chineseReadme}\n${englishReadme}\n${userReadme}`
+  const userReadme = await read('templates/USER-README.zh-CN.txt')
+  const userReadmeEnglish = await read('templates/USER-README.en.txt')
+  const combined = `${chineseReadme}\n${englishReadme}\n${userReadme}\n${userReadmeEnglish}`
   assert.match(chineseReadme, /<h1 align="center">DSH-Portable<\/h1>/)
   assert.match(englishReadme, /<h1 align="center">DSH-Portable<\/h1>/)
   assert.match(userReadme, /^DSH-Portable$/m)
@@ -181,7 +182,8 @@ test('README status badges stay compact, useful, and visually consistent', async
 test('update guidance describes the component update path without exposing internals', async () => {
   const chinese = await read('README.md')
   const english = await read('README.en.md')
-  const userReadme = await read('templates/USER-README.txt')
+  const userReadme = await read('templates/USER-README.zh-CN.txt')
+  const userReadmeEnglish = await read('templates/USER-README.en.txt')
   const releaseNotes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0-rc.2', '0.1.1-rc.1')
 
   assert.match(chinese, /启动时检查更新/)
@@ -202,12 +204,12 @@ test('update guidance describes the component update path without exposing inter
   assert.match(english, /compatibility boundary changes.+downloads the verified complete package.+in place/is)
   assert.match(english, /Skip this version/)
 
-  assert.match(userReadme, /^DSH-Portable\r?\n=+\r?\n\r?\n中文/m)
+  assert.match(userReadme, /^DSH-Portable\r?\n=+/m)
   assert.match(userReadme, /只下载.+DSH.+组件/s)
-  assert.match(userReadme, /English[\s\S]+downloads only\s+the changed DSH application component/i)
+  assert.match(userReadmeEnglish, /downloads only\s+the changed DSH application component/i)
   assert.match(releaseNotes, /Linux x64 与 ARM64/)
   assert.match(releaseNotes, /保留会话、设置、凭据、插件和工作区/)
-  assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
+  assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${userReadmeEnglish}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
 })
 
 test('GitHub gives Chinese and English users direct, privacy-safe feedback forms', async () => {
@@ -420,7 +422,7 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
 })
 
-test('the bundled session-delete default is accumulated by the unified dependency intake', async () => {
+test('all bundled defaults are accumulated by the unified dependency intake', async () => {
   const [workflow, updater, ci, publish] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     read('scripts/update-default-plugin.mjs'),
@@ -436,9 +438,11 @@ test('the bundled session-delete default is accumulated by the unified dependenc
   assert.match(workflow, /automation\/verified-dependencies/)
   assert.match(workflow, /gh pr (?:create|edit)/)
   assert.match(workflow, /timeout-minutes:\s*\d+/)
-  assert.match(updater, /registry\.npmjs\.org\/\$\{packageName\}/)
-  assert.match(updater, /repository\s*=\s*['"]WSL043\/dsh-native-session-manager['"]/)
-  assert.match(updater, /repos\/\$\{repository\}\/releases\/tags/)
+  assert.match(updater, /registry\.npmjs\.org\/\$\{current\.package\}/)
+  assert.match(updater, /current\.repository/)
+  assert.match(updater, /current\.releaseChannel/)
+  assert.match(updater, /Object\.entries\(lock\.defaultPlugins/)
+  assert.match(updater, /repos\/\$\{current\.repository\}\/releases\/tags/)
   assert.match(updater, /assets[\s\S]+digest/)
   assert.match(updater, /createHash\(['"]sha256['"]\)/)
   assert.match(updater, /upstream\.lock\.json/)
@@ -564,7 +568,7 @@ test('plugin management is a generic finished-product capability and release gat
   const [chinese, english, userReadme, releaseNotes, workflow, smoke] = await Promise.all([
     read('README.md'),
     read('README.en.md'),
-    read('templates/USER-README.txt'),
+    read('templates/USER-README.zh-CN.txt'),
     read('templates/RELEASE-NOTES.md'),
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-plugins.ps1'),
@@ -623,7 +627,7 @@ test('macOS and Linux finished products verify official bare dsh syntax in an is
   assert.match(english, /macOS[\s\S]+Linux[\s\S]+DSH Terminal[\s\S]+dsh plugin/i)
 })
 
-test('session delete is a removable offline default only for a newly created web profile', async () => {
+test('removable offline defaults are installed only for a newly created web profile', async () => {
   const [lock, windows, macos, linux, cli, core] = await Promise.all([
     read('upstream.lock.json').then(JSON.parse),
     read('scripts/build-windows.ps1'),
@@ -632,21 +636,23 @@ test('session delete is a removable offline default only for a newly created web
     read('launcher/portable-cli.mjs'),
     read('launcher/default-plugins.mjs'),
   ])
-  const sessionDelete = lock.defaultPlugins.sessionDelete
-  assert.equal(sessionDelete.package, 'dsh-native-session-delete')
-  assert.match(sessionDelete.version, /^\d+\.\d+\.\d+$/)
-  assert.equal(sessionDelete.url, `https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-${sessionDelete.version}.tgz`)
-  assert.match(sessionDelete.sha256, /^[0-9a-f]{64}$/)
-  assert.match(sessionDelete.integrity, /^sha512-/)
-  assert.equal(sessionDelete.license, 'MIT')
-  assert.match(sessionDelete.reviewedCommit, /^[0-9a-f]{40}$/)
-  assert.equal(sessionDelete.filename, 'dsh-native-session-delete.tgz')
+  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['imageViewer', 'sessionDelete'])
+  for (const plugin of Object.values(lock.defaultPlugins)) {
+    assert.match(plugin.package, /^dsh-native-/)
+    assert.match(plugin.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
+    assert.equal(plugin.url, `https://registry.npmjs.org/${plugin.package}/-/${plugin.package}-${plugin.version}.tgz`)
+    assert.match(plugin.sha256, /^[0-9a-f]{64}$/)
+    assert.match(plugin.integrity, /^sha512-/)
+    assert.equal(plugin.license, 'MIT')
+    assert.match(plugin.reviewedCommit, /^[0-9a-f]{40}$/)
+    assert.equal(plugin.filename, `${plugin.package}.tgz`)
+  }
   for (const build of [windows, macos, linux]) {
     assert.match(build, /default-plugins/)
-    assert.match(build, /sessionDelete/)
+    assert.match(build, /DefaultPlugins|list-default-plugins/)
     assert.match(build, /sha256|Sha256/i)
-    assert.match(build, /dsh-native-session-delete-LICENSE\.txt/)
-    assert.match(build, /dsh-native-session-delete-THIRD-PARTY-NOTICES\.txt/)
+    assert.match(build, /LICENSE/)
+    assert.match(build, /THIRD-PARTY-NOTICES|THIRD_PARTY_NOTICES/)
   }
   assert.match(cli, /seedDefaultPlugins/)
   assert.match(core, /profile-exists/)
@@ -701,6 +707,8 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
     assert.doesNotMatch(compilerConsumer, /--version/)
     assert.match(compilerConsumer, /['"]\/\?['"]/)
     assert.match(compilerConsumer, /Command-Line Compiler/)
+    assert.doesNotMatch(compilerConsumer, /Select-Object -First 1/)
+    assert.match(compilerConsumer, /Select-Object -First 8/)
     assert.match(compilerConsumer, /--quiet/)
   }
   assert.match(innoBuild, /Inno Setup 7 or newer/)
@@ -714,7 +722,8 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   assert.match(smoke, /\[char\]0x00FC/)
   assert.match(smoke, /installed-mode\.json/)
   assert.match(smoke, /unins\*\.exe/)
-  assert.match(smoke, /amazon-bedrock\.json/)
+  assert.match(smoke, /runtime\\DSH-App\.dshpack/)
+  assert.match(smoke, /runtime-capsule\.json/)
   assert.match(smoke, /runtime\\node\\node\.exe/)
   assert.doesNotMatch(smoke, /&\s+node\s+/)
   assert.match(smoke, /smoke-portable\.mjs/)

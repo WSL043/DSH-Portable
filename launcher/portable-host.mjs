@@ -4,12 +4,17 @@ import http from 'node:http'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+import { acquireRuntimeLease } from './runtime-capsule.mjs'
+
 const [dshBin, ...dshArgs] = process.argv.slice(2)
 const controlPipe = process.env.DSH_PORTABLE_CONTROL_PIPE
 const controlToken = process.env.DSH_PORTABLE_CONTROL_TOKEN
+const runtimeRoot = process.env.DSH_PORTABLE_RUNTIME_ROOT
 
 if (!dshBin) throw new Error('portable host requires the official DSH bin path')
 if (!controlPipe || !controlToken) throw new Error('portable host control channel is not configured')
+
+const releaseRuntimeLease = runtimeRoot ? await acquireRuntimeLease(runtimeRoot) : async () => {}
 
 function tokenMatches(header) {
   const supplied = Buffer.from(String(header ?? '').replace(/^Bearer\s+/i, ''), 'utf8')
@@ -41,7 +46,11 @@ const control = http.createServer((request, response) => {
 })
 control.on('clientError', (_error, socket) => socket.destroy())
 control.on('close', cleanupControlSocket)
-process.on('exit', cleanupControlSocket)
+process.on('beforeExit', releaseRuntimeLease)
+process.on('exit', () => {
+  cleanupControlSocket()
+  if (releaseRuntimeLease.filename) rmSync(releaseRuntimeLease.filename, { force: true })
+})
 
 await new Promise((resolve, reject) => {
   control.once('error', reject)

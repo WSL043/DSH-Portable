@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createReadStream } from 'node:fs'
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -71,6 +71,10 @@ async function main() {
   const root = path.resolve(rootValue)
   const cli = path.join(root, 'launcher', 'portable-cli.mjs')
   const node = runtimeNode(root)
+  const capsule = await access(path.join(root, 'runtime-capsule.json')).then(() => true, () => false)
+  const cliPrefix = capsule
+    ? [path.join(root, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs']
+    : [cli]
   const installedFile = path.join(root, 'licenses', 'COMPONENTS.json')
   const installed = JSON.parse(await readFile(installedFile, 'utf8'))
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
@@ -127,7 +131,7 @@ async function main() {
 
   try {
     const updated = await execFileAsync(node, [
-      cli,
+      ...cliPrefix,
       'update',
       '--json',
       '--no-browser',
@@ -141,7 +145,7 @@ async function main() {
     assert.equal(result.portableVersion, manifest.portableVersion)
     assert.equal(result.dshVersion, manifest.component.dshVersion)
     assert.equal(result.running?.status, 'running')
-    const status = JSON.parse((await execFileAsync(node, [cli, 'status', '--json'], {
+    const status = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
       encoding: 'utf8', timeout: 30000, windowsHide: true,
     })).stdout.trim())
     assert.equal(status.status, 'running')
@@ -152,7 +156,7 @@ async function main() {
     let rollbackDiagnostic = ''
     try {
       await execFileAsync(node, [
-        cli,
+        ...cliPrefix,
         'update',
         '--json',
         '--no-browser',
@@ -166,7 +170,7 @@ async function main() {
       rollbackDiagnostic = `${error?.stderr ?? ''}\n${error?.stdout ?? ''}`
       assert.match(rollbackDiagnostic, /Update failed and was rolled back/i)
     }
-    const rollbackStatus = JSON.parse((await execFileAsync(node, [cli, 'status', '--json'], {
+    const rollbackStatus = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
       encoding: 'utf8', timeout: 30000, windowsHide: true,
     })).stdout.trim())
     assert.equal(rollbackStatus.status, 'running')
@@ -175,7 +179,7 @@ async function main() {
     assert.equal(afterRollback.dshVersion, manifest.component.dshVersion)
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
     const deferred = JSON.parse((await execFileAsync(node, [
-      cli,
+      ...cliPrefix,
       'check-update',
       '--json',
       '--allow-http',
@@ -192,7 +196,7 @@ async function main() {
       rollbackVerified,
     })}\n`)
   } finally {
-    await execFileAsync(node, [cli, 'stop', '--json'], { encoding: 'utf8', timeout: 30000, windowsHide: true }).catch(() => {})
+    await execFileAsync(node, [...cliPrefix, 'stop', '--json'], { encoding: 'utf8', timeout: 30000, windowsHide: true }).catch(() => {})
     await new Promise((resolve) => server.close(resolve))
     await rm(rollbackProbe.temporary, { recursive: true, force: true })
   }

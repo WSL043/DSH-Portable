@@ -150,14 +150,17 @@ export function evaluateUpdate(manifest, installed, platform) {
   } else if (productComparison >= 0) {
     return describe('current', 'none')
   }
-  if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0) || manifest.component?.kind !== 'dsh-app') {
+  if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0)
+    || !['dsh-app', 'dsh-runtime-capsule'].includes(manifest.component?.kind)) {
     return describe('full-package-required', 'full-package')
   }
   const component = manifest.component
   if (
     Number(manifest.requiredShellSchema ?? 0) > Number(installed.shellSchema ?? 0)
+    || (manifest.targetRuntimeLayout && manifest.targetRuntimeLayout !== (installed.runtimeLayout || 'expanded-v1'))
     || !component.requiredNodeVersion
     || component.requiredNodeVersion !== installed.nodeVersion
+    || (component.runtimeLayout && component.runtimeLayout !== (installed.runtimeLayout || 'expanded-v1'))
   ) {
     return describe('full-package-required', 'full-package')
   }
@@ -269,7 +272,11 @@ export function validateArchiveEntries(entries) {
     if (source.startsWith('/') || /^[A-Za-z]:/.test(source) || segments.includes('..') || source.includes('\0')) {
       throw new Error(`Unsafe update archive entry: ${rawEntry}`)
     }
-    if (source === 'component.json' || source === 'app' || source.startsWith('app/') || source === 'licenses' || allowedLicenses.has(source)) continue
+    if (source === 'component.json'
+      || source === 'app' || source.startsWith('app/')
+      || source === 'runtime-capsule.json'
+      || source === 'runtime' || source === 'runtime/DSH-App.dshpack'
+      || source === 'licenses' || allowedLicenses.has(source)) continue
     throw new Error(`Update archive entry is not allowed: ${rawEntry}`)
   }
 }
@@ -334,6 +341,7 @@ export async function readInstalledUpdateState(layout) {
     updaterSchema: Number(components.updaterSchema ?? 0),
     shellSchema: Number(components.shellSchema ?? 0),
     nodeVersion: components.nodeVersion ?? '',
+    runtimeLayout: components.runtimeLayout || 'expanded-v1',
   }
 }
 
@@ -452,7 +460,11 @@ function transactionPaths(layout, operationId) {
   return {
     operationRoot,
     backupApp: path.join(backupRoot, 'app'),
+    backupCapsuleManifest: path.join(backupRoot, 'runtime-capsule.json'),
+    backupCapsuleFile: path.join(backupRoot, 'DSH-App.dshpack'),
     backupLicenses: path.join(backupRoot, 'licenses'),
+    rootCapsuleManifest: path.join(layout.root, 'runtime-capsule.json'),
+    rootCapsuleFile: path.join(layout.root, 'runtime', 'DSH-App.dshpack'),
     rootLicenses: path.join(layout.root, 'licenses'),
   }
 }
@@ -474,7 +486,15 @@ export async function rollbackPendingAppUpdate(layout, { beforeRestore = async (
     return { status: 'committed-cleaned', operationId: journal.operationId }
   }
   await beforeRestore(journal)
-  if (existsSync(paths.backupApp)) {
+  if (journal.kind === 'dsh-runtime-capsule') {
+    await rm(paths.rootCapsuleManifest, { force: true })
+    await rm(paths.rootCapsuleFile, { force: true })
+    if (existsSync(paths.backupCapsuleManifest)) await rename(paths.backupCapsuleManifest, paths.rootCapsuleManifest)
+    if (existsSync(paths.backupCapsuleFile)) {
+      await mkdir(path.dirname(paths.rootCapsuleFile), { recursive: true })
+      await rename(paths.backupCapsuleFile, paths.rootCapsuleFile)
+    }
+  } else if (existsSync(paths.backupApp)) {
     await rm(layout.appDir, { recursive: true, force: true })
     await rename(paths.backupApp, layout.appDir)
   }
@@ -561,6 +581,80 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, be
   return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
 }
 
+export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {} }) {
+  if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
+  if (!layout.capsuleMode) throw new Error('A compact runtime update cannot be applied to an expanded installation.')
+  const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
+  if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-runtime-capsule') {
+    throw new Error('Staged compact runtime metadata is invalid.')
+  }
+  const stagedManifestFile = path.join(stagedRoot, 'runtime-capsule.json')
+  const stagedCapsuleFile = path.join(stagedRoot, 'runtime', 'DSH-App.dshpack')
+  const stagedManifest = await readJson(stagedManifestFile, null)
+  const stagedLicenses = path.join(stagedRoot, 'licenses')
+  const stagedComponents = await readJson(path.join(stagedLicenses, 'COMPONENTS.json'), null)
+  if (!stagedManifest || stagedManifest.schemaVersion !== 1
+    || stagedManifest.filename !== 'runtime/DSH-App.dshpack'
+    || !/^[a-f0-9]{64}$/i.test(String(stagedManifest.sha256 ?? ''))
+    || !Number.isSafeInteger(Number(stagedManifest.bytes)) || Number(stagedManifest.bytes) <= 0
+    || !Array.isArray(stagedManifest.required) || stagedManifest.required.length === 0) {
+    throw new Error('Staged compact runtime manifest is invalid.')
+  }
+  if (!stagedComponents
+    || stagedComponents.portableVersion !== metadata.portableVersion
+    || stagedComponents.dshVersion !== metadata.dshVersion
+    || stagedComponents.runtimeLayout !== 'capsule-v1'
+    || (metadata.dshCommit && stagedComponents.dshCommit !== metadata.dshCommit)) {
+    throw new Error('Staged component metadata does not agree with its compact runtime payload.')
+  }
+  if (!existsSync(stagedCapsuleFile) || UPDATE_LICENSE_FILES.some((name) => !existsSync(path.join(stagedLicenses, name)))) {
+    throw new Error('Staged compact runtime update is incomplete.')
+  }
+  const capsuleBytes = await readFile(stagedCapsuleFile)
+  if (capsuleBytes.length !== Number(stagedManifest.bytes)
+    || createHash('sha256').update(capsuleBytes).digest('hex') !== stagedManifest.sha256) {
+    throw new Error('Staged compact runtime failed integrity verification.')
+  }
+
+  const { operationId, operationRoot } = operationFromStage(layout, stagedRoot)
+  const paths = transactionPaths(layout, operationId)
+  const hadLicenses = UPDATE_LICENSE_FILES.filter((name) => existsSync(path.join(paths.rootLicenses, name)))
+  await mkdir(path.dirname(paths.backupCapsuleManifest), { recursive: true })
+  await mkdir(paths.backupLicenses, { recursive: true })
+  await writeJournal(layout, { operationId, kind: metadata.kind, phase: 'prepared', hadLicenses })
+
+  try {
+    if (existsSync(paths.rootCapsuleManifest)) await rename(paths.rootCapsuleManifest, paths.backupCapsuleManifest)
+    if (existsSync(paths.rootCapsuleFile)) await rename(paths.rootCapsuleFile, paths.backupCapsuleFile)
+    await writeJournal(layout, { operationId, kind: metadata.kind, phase: 'runtime-backed-up', hadLicenses })
+    await mkdir(path.dirname(paths.rootCapsuleFile), { recursive: true })
+    await rename(stagedManifestFile, paths.rootCapsuleManifest)
+    await rename(stagedCapsuleFile, paths.rootCapsuleFile)
+    await mkdir(paths.rootLicenses, { recursive: true })
+    for (const name of UPDATE_LICENSE_FILES) {
+      const rootFile = path.join(paths.rootLicenses, name)
+      if (existsSync(rootFile)) await rename(rootFile, path.join(paths.backupLicenses, name))
+      await rename(path.join(stagedLicenses, name), rootFile)
+    }
+    await writeJournal(layout, { operationId, kind: metadata.kind, phase: 'testing', hadLicenses })
+    if (!await healthCheck(metadata)) throw new Error('The updated compact DSH runtime did not pass its health check.')
+    await writeJournal(layout, { operationId, kind: metadata.kind, phase: 'committed', hadLicenses })
+  } catch (error) {
+    if (error?.leavePending) throw error
+    await beforeRollback(error)
+    await rollbackPendingAppUpdate(layout)
+    throw new Error(`Update failed and was rolled back: ${error?.message ?? error}`, { cause: error })
+  }
+  let cleanupPending = false
+  try {
+    await rm(operationRoot, { recursive: true, force: true })
+    await rm(layout.updateJournal, { force: true })
+  } catch {
+    cleanupPending = true
+  }
+  return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
+}
+
 export async function installAvailableAppUpdate({
   layout,
   update,
@@ -571,7 +665,12 @@ export async function installAvailableAppUpdate({
   extract = extractUpdateArchive,
   onProgress = () => {},
 }) {
-  if (update?.status !== 'available' || update.component?.kind !== 'dsh-app') throw new Error('No compatible application update is available.')
+  if (update?.status !== 'available' || !['dsh-app', 'dsh-runtime-capsule'].includes(update.component?.kind)) {
+    throw new Error('No compatible application update is available.')
+  }
+  if (layout.capsuleMode !== (update.component.kind === 'dsh-runtime-capsule')) {
+    throw new Error('The update runtime layout is not compatible with this installation.')
+  }
   if (typeof healthCheck !== 'function') throw new Error('Update health check is required.')
   const operationId = randomUUID()
   const operationRoot = path.join(layout.updateDir, operationId)
@@ -592,7 +691,7 @@ export async function installAvailableAppUpdate({
     await extract(archive, stagedRoot)
     const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
     const components = await readJson(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), null)
-    if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-app') throw new Error('Downloaded update metadata is invalid.')
+    if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== update.component.kind) throw new Error('Downloaded update metadata is invalid.')
     if (metadata.portableVersion !== update.latest || metadata.dshVersion !== update.component.dshVersion) throw new Error('Downloaded update version does not match its manifest.')
     if (metadata.releaseChannel !== update.releaseChannel) throw new Error('Downloaded update channel does not match its manifest.')
     if (update.component.dshCommit && metadata.dshCommit !== update.component.dshCommit) throw new Error('Downloaded update commit does not match its manifest.')
@@ -605,7 +704,9 @@ export async function installAvailableAppUpdate({
       throw new Error('Downloaded component compatibility metadata does not match its manifest.')
     }
     onProgress({ phase: 'installing' })
-    const applied = await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
+    const applied = metadata.kind === 'dsh-runtime-capsule'
+      ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
+      : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
     onProgress({ phase: 'complete', percent: 100 })
     return { ...applied, updateKind: update.updateKind || 'product' }
   } catch (error) {

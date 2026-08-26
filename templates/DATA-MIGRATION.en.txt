@@ -1,0 +1,26 @@
+DSH-Portable data and migration
+===============================
+
+Normal updates preserve data and workspace in place. No manual move is required.
+
+Open DSH Terminal from the tray, then run:
+
+  dsh portable backup
+  dsh portable inspect --input <file.dshdata>
+  dsh portable restore --input <file.dshdata>
+
+In a regular Windows PowerShell window, replace dsh above with .\dsh.exe.
+
+Migration and encrypted private packages contain the same sessions, settings,
+plugin configuration, and API credentials. They exclude runtimes, caches, logs,
+and workspace files. Keep an unencrypted package only on a trusted device.
+
+Export either package from Settings > General > Portable > Data and migration.
+Encrypted private packages require a password; lost passwords cannot be recovered.
+
+Restore keeps existing files by default and imports missing data. Explicit
+replacement creates a rollback copy under data/backups first.
+
+If a very old or damaged launcher cannot update in place, run the current small
+bootstrap against the existing Portable folder. If the launcher itself is damaged,
+copy data and workspace into a clean current version.

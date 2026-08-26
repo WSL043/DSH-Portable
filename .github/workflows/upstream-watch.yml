@@ -110,7 +110,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DSH_VERSION: ${{ steps.upstream.outputs.version }}
           DSH_CHANGED: ${{ steps.upstream.outputs.changed }}
-          DEFAULT_PLUGIN_VERSION: ${{ steps.default_plugin.outputs.version }}
+          DEFAULT_PLUGIN_VERSIONS: ${{ steps.default_plugin.outputs.versions }}
           DEFAULT_PLUGIN_CHANGED: ${{ steps.default_plugin.outputs.changed }}
         run: |
           set -euo pipefail
@@ -126,7 +126,7 @@ jobs:
           Keeps the packaged dependency closure current without coupling it to a DSH-Portable feature release.
 
           - DeepSeek Harness: ${DSH_VERSION} (changed: ${DSH_CHANGED})
-          - Native Session Manager: ${DEFAULT_PLUGIN_VERSION} (changed: ${DEFAULT_PLUGIN_CHANGED})
+          - Portable defaults: ${DEFAULT_PLUGIN_VERSIONS} (changed: ${DEFAULT_PLUGIN_CHANGED})
 
           This pull request is merged only after the full Windows, macOS, and Linux product gate succeeds. Its branch is deleted after merge.
           EOF

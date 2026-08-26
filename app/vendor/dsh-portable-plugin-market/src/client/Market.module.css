@@ -7,6 +7,7 @@
 
 .root{height:100%;display:flex;flex-direction:column;min-width:0;color:var(--dsw-alias-label-primary,#1f2328);position:relative}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);align-items:flex-end}
+.operationBar{display:flex;align-items:center;justify-content:flex-end;min-height:32px;margin-bottom:8px}
 .notices{display:flex;flex-direction:column;gap:12px;padding:12px 4px 0}
 .notices:empty{display:none}
 .tab{border:none;background:none;font:inherit;font-size:13px;color:var(--dsw-alias-label-secondary,#6b7280);padding:7px 12px;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
@@ -300,6 +301,11 @@
 .dangerBtn.dangerBtn:hover:not(:disabled){background:var(--dsw-alias-state-error-primary,#dc2626);color:#fff}
 .dangerArmed.dangerArmed{background:var(--dsw-alias-state-error-primary,#dc2626);border-color:var(--dsw-alias-state-error-primary,#dc2626);color:#fff}
 .retryBtn{margin-top:4px}
+.catalogStatus{display:flex;align-items:center;gap:7px;margin:0 4px 8px;color:var(--dsw-alias-label-tertiary,#8b93a1);font-size:11px}
+.catalogStatus::before{content:'';width:10px;height:10px;border:1.5px solid currentColor;border-right-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.catalogWarning{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 4px 8px;padding:7px 9px;border-radius:7px;background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);color:var(--dsw-alias-label-secondary,#6b7280);font-size:11px}
+.catalogWarning .retryBtn{margin:0;flex-shrink:0}
 .irow{background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);
       border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
 /* Everything packs left. Pushing the trailing controls right — whether with

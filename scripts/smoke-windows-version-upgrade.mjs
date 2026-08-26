@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const oldArchive = path.resolve(process.argv[2] || '')
 const artifacts = path.resolve(process.argv[3] || path.join(projectRoot, 'artifacts'))
+const allowChannelMigration = process.argv.includes('--allow-channel-migration')
 const newArchive = path.join(artifacts, 'DSH-Portable-windows-x64-offline.zip')
 const fullManifestPath = path.join(artifacts, 'portable-manifest.json')
 const componentManifestPath = path.join(artifacts, 'portable-update-windows-x64.json')
@@ -59,9 +60,11 @@ try {
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
   assert.notEqual(oldComponents.portableVersion, fullManifestSource.version, 'the prior package must differ from the target release')
+  const oldRuntimeLayout = oldComponents.runtimeLayout || 'expanded-v1'
   assert.ok(
-    Number(oldComponents.shellSchema) < Number(componentManifestSource.requiredShellSchema),
-    'the prior package does not exercise a complete-package shell boundary',
+    Number(oldComponents.shellSchema) < Number(componentManifestSource.requiredShellSchema)
+      || oldRuntimeLayout !== (componentManifestSource.targetRuntimeLayout || oldRuntimeLayout),
+    'the prior package does not exercise a complete-package compatibility boundary',
   )
 
   const markers = new Map([
@@ -86,19 +89,28 @@ try {
     component: { ...componentManifestSource.component, urls: [`${origin}/unused-component.zip`] },
   }))
 
-  const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
-  const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
-  const { stdout: decisionText } = await execFileAsync(oldNode, [
-    oldCli,
-    'check-update',
-    '--update-manifest', `${origin}/portable-update-windows-x64.json`,
-    '--allow-http',
-    '--force',
-    '--json',
-  ], { timeout: 60 * 1000, windowsHide: true })
-  const decision = JSON.parse(decisionText)
-  assert.equal(decision.status, 'full-package-required')
-  assert.equal(decision.delivery, 'full-package')
+  let decision = { status: 'full-package-required', delivery: 'full-package' }
+  if (!allowChannelMigration) {
+    const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
+    const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
+    const { stdout: decisionText } = await execFileAsync(oldNode, [
+      oldCli,
+      'check-update',
+      '--update-manifest', `${origin}/portable-update-windows-x64.json`,
+      '--allow-http',
+      '--force',
+      '--json',
+    ], { timeout: 60 * 1000, windowsHide: true })
+    decision = JSON.parse(decisionText)
+    assert.equal(decision.status, 'full-package-required')
+    assert.equal(decision.delivery, 'full-package')
+  } else {
+    assert.notEqual(
+      oldComponents.releaseChannel,
+      fullManifestSource.releaseChannel,
+      '--allow-channel-migration is only for exercising the updater across a local release-channel boundary',
+    )
+  }
 
   try {
     await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
@@ -121,6 +133,10 @@ try {
   assert.equal(newComponents.portableVersion, fullManifestSource.version)
   assert.equal(newComponents.shellSchema, componentManifestSource.requiredShellSchema)
   assert.equal(newComponents.dshVersion, componentManifestSource.component.dshVersion)
+  assert.equal(newComponents.runtimeLayout, 'capsule-v1')
+  assert.ok((await stat(path.join(destination, 'runtime-capsule.json'))).isFile())
+  assert.ok((await stat(path.join(destination, 'runtime', 'DSH-App.dshpack'))).isFile())
+  await assert.rejects(stat(path.join(destination, 'app', 'node_modules')), { code: 'ENOENT' })
   for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
   assert.ok((await stat(path.join(destination, 'DeepSeek-Herness.exe'))).isFile())
 

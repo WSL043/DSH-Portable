@@ -176,19 +176,25 @@ test('every desktop package ships the portable repair runtime used by the CLI', 
   for (const build of [windows, macos, linux]) assert.match(build, /repair-core\.mjs/)
 })
 
-test('every desktop package ships the versioned data migration runtime and user guide', async () => {
-  const [windows, macos, linux, guide] = await Promise.all([
+test('every desktop package ships the versioned data migration runtime and separated localized guides', async () => {
+  const [windows, macos, linux, chineseGuide, englishGuide] = await Promise.all([
     read('scripts/build-windows.ps1'),
     read('scripts/build-macos.sh'),
     read('scripts/build-linux.sh'),
-    read('templates/DATA-MIGRATION.txt'),
+    read('templates/DATA-MIGRATION.zh-CN.txt'),
+    read('templates/DATA-MIGRATION.en.txt'),
   ])
   for (const builder of [windows, macos, linux]) {
     assert.match(builder, /data-transfer\.mjs/)
-    assert.match(builder, /DATA-MIGRATION\.txt/)
+    assert.match(builder, /DATA-MIGRATION\.zh-CN\.txt/)
+    assert.match(builder, /DATA-MIGRATION\.en\.txt/)
+    assert.match(builder, /README\.zh-CN\.txt/)
+    assert.match(builder, /README\.en\.txt/)
   }
-  assert.match(guide, /dsh portable backup/)
-  assert.match(guide, /dsh portable restore/)
+  for (const guide of [chineseGuide, englishGuide]) {
+    assert.match(guide, /dsh portable backup/)
+    assert.match(guide, /dsh portable restore/)
+  }
 })
 
 test('the release surface is Portable-only and does not publish traditional installers', async () => {
@@ -206,8 +212,8 @@ test('the release surface is Portable-only and does not publish traditional inst
   }
   assert.doesNotMatch(workflow, /windows-installer-smoke|macos-dmg-smoke|kind:\s*installer/)
   assert.doesNotMatch(publish, /winget/i)
-  assert.match(chinese, /传统安装版/)
-  assert.match(english, /conventional installer/i)
+  assert.doesNotMatch(chinese, /传统安装版/)
+  assert.doesNotMatch(english, /conventional installer/i)
 })
 
 test('stop path preserves the official DSH graceful shutdown before escalation', async () => {

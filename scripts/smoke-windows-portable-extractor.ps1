@@ -46,7 +46,8 @@ foreach ($Name in @(
     'runtime\node\node.exe',
     'data\README.txt',
     'workspace\README.txt',
-    'app\node_modules\@earendil-works\pi-ai\dist\providers\data\amazon-bedrock.json'
+    'runtime\DSH-App.dshpack',
+    'runtime-capsule.json'
 )) {
     if (-not (Test-Path -LiteralPath (Join-Path $ExtractRoot $Name))) { throw "portable file is missing: $Name" }
 }

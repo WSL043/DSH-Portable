@@ -151,7 +151,7 @@ test('startup rejects an incomplete packaged dependency closure before launching
 test('all durable application paths stay under the movable root', () => {
   const layout = layoutForRoot(usbRoot, 'win32')
   for (const [name, value] of Object.entries(layout)) {
-    if (name === 'root' || name === 'platform') continue
+    if (name === 'root' || name === 'platform' || name === 'capsuleMode') continue
     const relative = path.win32.relative(usbRoot, value)
     assert.equal(path.win32.isAbsolute(relative), false, name)
     assert.equal(relative.startsWith('..'), false, `${name}: ${relative}`)
@@ -279,6 +279,11 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     waitForLockMs: 0,
     updateScope: 'product',
   })
+  assert.deepEqual(parseCli(['--diagnostic-root-json']), {
+    ...parseCli([]),
+    command: 'diagnostic-root',
+    json: true,
+  })
   assert.deepEqual(parseCli(['start', '--no-browser', '--json']), {
     command: 'start',
     noBrowser: true,
@@ -311,6 +316,8 @@ test('CLI defaults to start and supports bounded automation flags', () => {
   assert.equal(parseCli(['ignore-update', '--json']).command, 'ignore-update')
   assert.equal(parseCli(['doctor', '--json']).command, 'doctor')
   assert.equal(parseCli(['repair', '--json']).command, 'repair')
+  assert.equal(parseCli(['runtime-cache-status', '--json']).command, 'runtime-cache-status')
+  assert.equal(parseCli(['runtime-cache-clean', '--json']).command, 'runtime-cache-clean')
   assert.deepEqual(parseCli(['backup-data', '--output', 'backup.dshdata', '--categories', 'settings,sessions', '--password-file', 'password.txt']), {
     ...parseCli([]), command: 'backup-data', output: 'backup.dshdata', categories: ['settings', 'sessions'], passwordFile: 'password.txt',
   })
@@ -332,6 +339,8 @@ test('CLI defaults to start and supports bounded automation flags', () => {
 
 test('portable startup owns the desktop surface without allowing official DSH to open a browser', async () => {
   const source = await readFile(path.join(projectRoot, 'launcher', 'portable-cli.mjs'), 'utf8')
+  assert.match(source, /typeof result\.output === 'string'/)
+  assert.match(source, /typeof result\.ok === 'boolean'/)
   assert.match(source, /'--patch',\s*layout\.desktopBridgePatch,[\s\S]*'--profile',\s*'web',[\s\S]*'--no-open'/)
   assert.ok(
     source.indexOf("'--patch'") < source.indexOf("'--no-open'")

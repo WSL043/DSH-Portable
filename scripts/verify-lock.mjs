@@ -44,15 +44,21 @@ const desktopBridgeSource = lockfile.packages?.['../desktop-bridge']
 assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge link target identity')
 assert.equal(desktopBridgeSource?.license, 'Apache-2.0', 'desktop bridge license')
 
-const sessionDelete = upstream.defaultPlugins?.sessionDelete
-assert.equal(sessionDelete?.package, 'dsh-native-session-delete', 'locked default session-delete package')
-assert.match(sessionDelete?.version ?? '', /^\d+\.\d+\.\d+$/, 'default session-delete must use a stable version')
-assert.equal(sessionDelete?.url, `https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-${sessionDelete.version}.tgz`, 'default session-delete npm archive')
-assert.match(sessionDelete?.sha256 ?? '', /^[0-9a-f]{64}$/, 'default session-delete SHA-256')
-assert.match(sessionDelete?.integrity ?? '', /^sha512-/, 'default session-delete npm integrity')
-assert.equal(sessionDelete?.license, 'MIT', 'default session-delete license')
-assert.match(sessionDelete?.reviewedCommit ?? '', /^[0-9a-f]{40}$/, 'default session-delete reviewed release commit')
-assert.equal(sessionDelete?.filename, 'dsh-native-session-delete.tgz', 'default session-delete bundled filename')
+const defaultPlugins = upstream.defaultPlugins ?? {}
+assert.deepEqual(Object.keys(defaultPlugins).sort(), ['imageViewer', 'sessionDelete'])
+for (const [key, plugin] of Object.entries(defaultPlugins)) {
+  assert.match(plugin?.package ?? '', /^dsh-native-[a-z0-9-]+$/, `${key} package`)
+  assert.match(plugin?.repository ?? '', /^WSL043\/[A-Za-z0-9._-]+$/, `${key} repository`)
+  assert.ok(['stable', 'prerelease'].includes(plugin?.releaseChannel), `${key} release channel`)
+  assert.match(plugin?.version ?? '', /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, `${key} version`)
+  if (plugin.releaseChannel === 'stable') assert.match(plugin.version, /^\d+\.\d+\.\d+$/, `${key} stable version`)
+  assert.equal(plugin?.url, `https://registry.npmjs.org/${plugin.package}/-/${plugin.package}-${plugin.version}.tgz`, `${key} npm archive`)
+  assert.match(plugin?.sha256 ?? '', /^[0-9a-f]{64}$/, `${key} SHA-256`)
+  assert.match(plugin?.integrity ?? '', /^sha512-/, `${key} npm integrity`)
+  assert.equal(plugin?.license, 'MIT', `${key} license`)
+  assert.match(plugin?.reviewedCommit ?? '', /^[0-9a-f]{40}$/, `${key} reviewed release commit`)
+  assert.equal(plugin?.filename, `${plugin.package}.tgz`, `${key} bundled filename`)
+}
 
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {

@@ -8,19 +8,22 @@ import path from 'node:path'
 const DEFAULT_PORT = 3080
 const MAX_PORT = 3180
 
-export function layoutForRoot(root, platform = process.platform, stateRoot = root) {
+export function layoutForRoot(root, platform = process.platform, stateRoot = root, runtimeRoot = root) {
   const paths = platform === 'win32' ? path.win32 : path.posix
   const portableRoot = paths.resolve(root)
   const durableRoot = paths.resolve(stateRoot)
+  const immutableRoot = paths.resolve(runtimeRoot)
   const dataDir = paths.join(durableRoot, 'data')
   const runtimeDir = paths.join(portableRoot, 'runtime')
   const nodeDir = paths.join(runtimeDir, 'node')
-  const appDir = paths.join(portableRoot, 'app')
+  const appDir = paths.join(immutableRoot, 'app')
   const appBinDir = paths.join(appDir, 'node_modules', '.bin')
   const stateDir = paths.join(dataDir, 'runtime')
   const dshHome = paths.join(dataDir, 'dsh-home')
   return {
     root: portableRoot,
+    immutableRoot,
+    capsuleMode: immutableRoot !== portableRoot,
     appDir,
     appBinDir,
     browserProfile: paths.join(dataDir, 'browser'),
@@ -64,6 +67,7 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     platform,
     portableCli: paths.join(portableRoot, 'launcher', 'portable-cli.mjs'),
     portableMeta: paths.join(dataDir, 'portable.json'),
+    runtimeCapsule: paths.join(portableRoot, 'runtime-capsule.json'),
     processState: paths.join(stateDir, 'process.json'),
     repairRequest: paths.join(stateDir, 'repair-requested.json'),
     repairResult: paths.join(stateDir, 'repair-result.json'),
@@ -490,7 +494,13 @@ export function parseCli(argv) {
   let allowUnencryptedCredentials = false
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
-    if (arg === '--no-browser') noBrowser = true
+    if (arg === '--diagnostic-root-json') {
+      if (commandSeen) throw new Error('Specify no more than one command.')
+      command = 'diagnostic-root'
+      commandSeen = true
+      json = true
+    }
+    else if (arg === '--no-browser') noBrowser = true
     else if (arg === '--allow-unencrypted-credentials') allowUnencryptedCredentials = true
     else if (arg === '--json') json = true
     else if (arg === '--allow-http') allowHttp = true
@@ -538,7 +548,7 @@ export function parseCli(argv) {
       conflict = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true

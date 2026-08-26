@@ -28,8 +28,7 @@ $WebView2Core = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.
 $WebView2WinForms = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.WinForms.dll'
 $WebView2Loader = Join-Path $WebView2Extracted 'runtimes\win-x64\native\WebView2Loader.dll'
 $WebView2License = Join-Path $WebView2Extracted 'LICENSE.txt'
-$DefaultPlugin = $Lock.defaultPlugins.sessionDelete
-$DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
+$DefaultPlugins = @($Lock.defaultPlugins.PSObject.Properties | ForEach-Object { $_.Value })
 
 function Assert-Sha256([string]$Filename, [string]$Expected) {
     $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Filename).Hash.ToLowerInvariant()
@@ -46,12 +45,14 @@ function Copy-PortableSources([string]$Target) {
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
     Copy-Item -Recurse (Join-Path $ProjectRoot 'app\vendor') (Join-Path $Target 'app\vendor')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'data-transfer.mjs')) {
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'runtime-entry.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
-    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.txt') (Join-Path $Target 'DATA-MIGRATION.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.zh-CN.txt') (Join-Path $Target 'DATA-MIGRATION.zh-CN.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.en.txt') (Join-Path $Target 'DATA-MIGRATION.en.txt')
     Copy-Item (Join-Path $ProjectRoot 'launcher\windows\dsh-terminal.cmd') (Join-Path $Target 'launcher\dsh-terminal.cmd')
-    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.txt') (Join-Path $Target 'README.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.zh-CN.txt') (Join-Path $Target 'README.zh-CN.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.en.txt') (Join-Path $Target 'README.en.txt')
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-README.txt') (Join-Path $Target 'data\README.txt')
     Copy-Item (Join-Path $ProjectRoot 'templates\WORKSPACE-README.txt') (Join-Path $Target 'workspace\README.txt')
     Copy-Item (Join-Path $ProjectRoot 'LICENSE') (Join-Path $Target 'licenses\DSH-Portable-LICENSE.txt')
@@ -72,11 +73,14 @@ try {
 }
 
 try {
-    if (-not (Test-Path -LiteralPath $DefaultPluginArchive)) {
-        Write-Host "Downloading pinned default plugin: $($DefaultPlugin.package) $($DefaultPlugin.version)"
-        Invoke-WebRequest -UseBasicParsing -Uri $DefaultPlugin.url -OutFile $DefaultPluginArchive
+    foreach ($DefaultPlugin in $DefaultPlugins) {
+        $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
+        if (-not (Test-Path -LiteralPath $DefaultPluginArchive)) {
+            Write-Host "Downloading pinned default plugin: $($DefaultPlugin.package) $($DefaultPlugin.version)"
+            Invoke-WebRequest -UseBasicParsing -Uri $DefaultPlugin.url -OutFile $DefaultPluginArchive
+        }
+        Assert-Sha256 $DefaultPluginArchive $DefaultPlugin.sha256
     }
-    Assert-Sha256 $DefaultPluginArchive $DefaultPlugin.sha256
 
     if (-not (Test-Path -LiteralPath $WebView2Archive)) {
         Write-Host "Downloading pinned Microsoft WebView2 SDK: $($Lock.webview2.version)"
@@ -127,7 +131,10 @@ try {
     if (-not $ReleaseChannel -or -not $UpdateChannelTag) { throw 'Product version policy returned no release channel.' }
 
     Copy-PortableSources $Stage
-    Copy-Item $DefaultPluginArchive (Join-Path $Stage "default-plugins\$($DefaultPlugin.filename)")
+    foreach ($DefaultPlugin in $DefaultPlugins) {
+        $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
+        Copy-Item $DefaultPluginArchive (Join-Path $Stage "default-plugins\$($DefaultPlugin.filename)")
+    }
     Copy-Item $NodeExe (Join-Path $Stage 'runtime\node\node.exe')
     Copy-Item (Join-Path $NodeFolder 'LICENSE') (Join-Path $Stage 'licenses\Node.js-LICENSE.txt')
 
@@ -159,20 +166,24 @@ try {
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-plugin-market\LICENSE') (Join-Path $Stage 'licenses\dsh-market-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\pnpm\LICENSE') (Join-Path $Stage 'licenses\pnpm-LICENSE.txt')
-    $DefaultPluginLicenseText = (& tar.exe -xOf $DefaultPluginArchive package/LICENSE) -join [Environment]::NewLine
-    if ($LASTEXITCODE -ne 0 -or -not $DefaultPluginLicenseText) { throw 'Default session-delete plugin archive contains no LICENSE.' }
-    [System.IO.File]::WriteAllText(
-        (Join-Path $Stage 'licenses\dsh-native-session-delete-LICENSE.txt'),
-        ($DefaultPluginLicenseText + [Environment]::NewLine),
-        [System.Text.UTF8Encoding]::new($false)
-    )
-    $DefaultPluginNoticesText = (& tar.exe -xOf $DefaultPluginArchive package/THIRD_PARTY_NOTICES.md) -join [Environment]::NewLine
-    if ($LASTEXITCODE -ne 0 -or -not $DefaultPluginNoticesText) { throw 'Default session-delete plugin archive contains no THIRD_PARTY_NOTICES.md.' }
-    [System.IO.File]::WriteAllText(
-        (Join-Path $Stage 'licenses\dsh-native-session-delete-THIRD-PARTY-NOTICES.txt'),
-        ($DefaultPluginNoticesText + [Environment]::NewLine),
-        [System.Text.UTF8Encoding]::new($false)
-    )
+    foreach ($DefaultPlugin in $DefaultPlugins) {
+        $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
+        $DefaultPluginLicenseText = (& tar.exe -xOf $DefaultPluginArchive package/LICENSE) -join [Environment]::NewLine
+        if ($LASTEXITCODE -ne 0 -or -not $DefaultPluginLicenseText) { throw "Default plugin $($DefaultPlugin.package) contains no LICENSE." }
+        [System.IO.File]::WriteAllText(
+            (Join-Path $Stage "licenses\$($DefaultPlugin.package)-LICENSE.txt"),
+            ($DefaultPluginLicenseText + [Environment]::NewLine),
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        $DefaultPluginNoticesText = (& tar.exe -xOf $DefaultPluginArchive package/THIRD_PARTY_NOTICES.md) -join [Environment]::NewLine
+        if ($LASTEXITCODE -eq 0 -and $DefaultPluginNoticesText) {
+            [System.IO.File]::WriteAllText(
+                (Join-Path $Stage "licenses\$($DefaultPlugin.package)-THIRD-PARTY-NOTICES.txt"),
+                ($DefaultPluginNoticesText + [Environment]::NewLine),
+                [System.Text.UTF8Encoding]::new($false)
+            )
+        }
+    }
     Copy-Item $WebView2Core (Join-Path $Stage 'Microsoft.Web.WebView2.Core.dll')
     Copy-Item $WebView2WinForms (Join-Path $Stage 'Microsoft.Web.WebView2.WinForms.dll')
     Copy-Item $WebView2Loader (Join-Path $Stage 'WebView2Loader.dll')
@@ -194,14 +205,12 @@ try {
         dshCommit = $Lock.dsh.reviewedCommit
         pluginMarketPackage = '@wsl043/dsh-portable-plugin-market'
         pluginMarketVersion = $Lock.pluginMarket.version
-        defaultPluginPackage = $DefaultPlugin.package
-        defaultPluginVersion = $DefaultPlugin.version
-        defaultPluginSha256 = $DefaultPlugin.sha256
-        defaultPluginIntegrity = $DefaultPlugin.integrity
+        defaultPlugins = @($DefaultPlugins | ForEach-Object { [ordered]@{ package = $_.package; version = $_.version; sha256 = $_.sha256; integrity = $_.integrity } })
         pnpmVersion = $Lock.pnpm.version
         pnpmIntegrity = $Lock.pnpm.integrity
         nodeVersion = $Lock.node.version
         nodeSha256 = $Runtime.sha256
+        runtimeLayout = 'expanded-v1'
         webView2Package = $Lock.webview2.package
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
@@ -280,27 +289,9 @@ try {
     $UpdateComponent = Join-Path $OutputDir 'DSH-Portable-update-windows-x64.zip'
     $UpdateComponentCandidate = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.zip")
     $UpdateComponentBackup = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.previous.zip")
-    $ComponentMetadata = Join-Path $Stage 'component.json'
-    [System.IO.File]::WriteAllText(
-        $ComponentMetadata,
-        (([ordered]@{
-            schemaVersion = 1
-            kind = 'dsh-app'
-            portableVersion = $PortableVersion
-            releaseChannel = $ReleaseChannel
-            dshVersion = $Lock.dsh.version
-            dshCommit = $Lock.dsh.reviewedCommit
-        } | ConvertTo-Json -Depth 4) + [Environment]::NewLine),
-        [System.Text.UTF8Encoding]::new($false)
-    )
-    try {
-        & tar.exe -a -c -f $UpdateComponentCandidate -C $Stage `
-            'component.json' 'app' 'licenses/COMPONENTS.json' `
-            'licenses/DeepSeek-Harness-LICENSE.txt' 'licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md' `
-            'licenses/dsh-market-LICENSE.txt' 'licenses/pnpm-LICENSE.txt'
-        if ($LASTEXITCODE -ne 0) { throw "update component creation failed with exit code $LASTEXITCODE" }
-    } finally {
-        Remove-Item -LiteralPath $ComponentMetadata -Force -ErrorAction SilentlyContinue
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\create-windows-capsule-update.mjs') $Stage $UpdateComponentCandidate
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UpdateComponentCandidate)) {
+        throw "compact runtime update creation failed with exit code $LASTEXITCODE"
     }
     if (Test-Path -LiteralPath $UpdateComponent) {
         [System.IO.File]::Replace($UpdateComponentCandidate, $UpdateComponent, $UpdateComponentBackup, $true)
@@ -321,11 +312,13 @@ try {
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
             requiredShellSchema = 21
+            targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{
-                kind = 'dsh-app'
+                kind = 'dsh-runtime-capsule'
                 dshVersion = $Lock.dsh.version
                 dshCommit = $Lock.dsh.reviewedCommit
                 requiredNodeVersion = $Lock.node.version
+                runtimeLayout = 'capsule-v1'
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
                 sha256 = $UpdateComponentHash
                 urls = @("https://github.com/WSL043/DSH-Portable/releases/download/$UpdateChannelTag/DSH-Portable-update-windows-x64.zip")
@@ -345,11 +338,13 @@ try {
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
             requiredShellSchema = 21
+            targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{
-                kind = 'dsh-app'
+                kind = 'dsh-runtime-capsule'
                 dshVersion = $Lock.dsh.version
                 dshCommit = $Lock.dsh.reviewedCommit
                 requiredNodeVersion = $Lock.node.version
+                runtimeLayout = 'capsule-v1'
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
                 sha256 = $UpdateComponentHash
                 urls = @("https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-$ReleaseChannel/DSH-Portable-update-windows-x64.zip")
@@ -364,8 +359,11 @@ try {
     $Sha = $Zip + '.sha256'
     $ShaCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.sha256")
     $ShaBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.previous.sha256")
-    & tar.exe -a -c -f $ZipCandidate -C $StageParent 'DSH-Portable'
-    if ($LASTEXITCODE -ne 0) { throw "archive creation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\package-windows-runtime-capsule.mjs') $Stage $ZipCandidate
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ZipCandidate)) {
+        throw "runtime capsule archive creation failed with exit code $LASTEXITCODE"
+    }
+    Remove-Item -LiteralPath ($ZipCandidate + '.sha256') -Force -ErrorAction SilentlyContinue
     $Hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ZipCandidate).Hash.ToLowerInvariant()
     "$Hash  DSH-Portable-windows-x64-offline.zip" | Set-Content -LiteralPath $ShaCandidate -Encoding ascii -NoNewline
     if (Test-Path -LiteralPath $Zip) {

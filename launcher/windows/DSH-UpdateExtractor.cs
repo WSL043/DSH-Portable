@@ -69,6 +69,7 @@ namespace DshPortableUpdateExtractor
         {
             string normalized = relativePath.Replace('\\', '/');
             if (normalized == "component.json" || normalized == "app" || normalized.StartsWith("app/", StringComparison.Ordinal)) return;
+            if (normalized == "runtime-capsule.json" || normalized == "runtime" || normalized == "runtime/DSH-App.dshpack") return;
             if (normalized == "licenses") return;
             if (normalized == "licenses/COMPONENTS.json"
                 || normalized == "licenses/DeepSeek-Harness-LICENSE.txt"

@@ -12,19 +12,26 @@ if (!rootArgument) throw new Error('usage: node smoke-plugin-marketplace.mjs <fi
 
 const root = path.resolve(rootArgument)
 const cli = path.join(root, 'launcher', 'portable-cli.mjs')
-const marketManifest = JSON.parse(await readFile(
-  path.join(root, 'app', 'node_modules', '@wsl043', 'dsh-portable-plugin-market', 'package.json'),
-  'utf8',
-))
-const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
-const defaultSessionDelete = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-native-session-delete')
-assert.ok(defaultSessionDelete?.version, 'the finished product does not declare its bundled session-delete version')
+const runtimeEntry = path.join(root, 'launcher', 'runtime-entry.mjs')
 const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-plugin-smoke-'))
 const environment = {
   ...process.env,
   DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
   DSH_PORTABLE_STATE_ROOT: stateRoot,
+  DSH_PORTABLE_RUNTIME_CACHE: path.join(stateRoot, 'runtime-cache'),
 }
+const capsuleCore = await import(pathToFileURL(path.join(root, 'launcher', 'runtime-capsule.mjs')))
+const prepared = await capsuleCore.ensureRuntimeCapsule(root, { env: environment })
+const marketManifest = JSON.parse(await readFile(
+  path.join(prepared.runtimeRoot, 'app', 'node_modules', '@wsl043', 'dsh-portable-plugin-market', 'package.json'),
+  'utf8',
+))
+const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
+assert.deepEqual(
+  DEFAULT_PLUGINS.map(plugin => plugin.name).sort(),
+  ['dsh-native-image-viewer', 'dsh-native-session-delete'],
+  'the finished product does not declare both 0.5 default plugins',
+)
 let running = false
 
 function lastJsonLine(output) {
@@ -35,7 +42,10 @@ function lastJsonLine(output) {
 }
 
 async function runCli(...args) {
-  const { stdout, stderr } = await runFile(process.execPath, [cli, ...args, '--json'], {
+  const command = prepared.mode === 'capsule'
+    ? [runtimeEntry, 'portable-cli.mjs', ...args, '--json']
+    : [cli, ...args, '--json']
+  const { stdout, stderr } = await runFile(process.execPath, command, {
     cwd: root,
     env: environment,
     timeout: 120_000,
@@ -85,30 +95,31 @@ try {
   const installed = await getJson(host.url, '/dsh-market/installed')
   assert.equal(installed.profile, 'web')
   assert.equal(typeof installed.installed, 'object')
-  assert.match(JSON.stringify(installed.installed), /dsh-native-session-delete/, 'default plugin is absent from the normal Installed list')
+  for (const plugin of DEFAULT_PLUGINS) {
+    assert.match(JSON.stringify(installed.installed), new RegExp(plugin.name), `${plugin.name} is absent from the normal Installed list`)
+  }
 
   const profileRoot = path.join(stateRoot, 'data', 'dsh-home', 'profiles', 'web')
   const profileManifest = JSON.parse(await readFile(path.join(profileRoot, 'package.json'), 'utf8'))
-  assert.deepEqual(
-    Object.keys(profileManifest.dependencies ?? {}).filter(name => name === 'dsh-native-session-delete'),
-    ['dsh-native-session-delete'],
-    'the fresh profile must contain exactly one default session-delete package',
-  )
-  assert.equal(
-    String(profileManifest.dependencies['dsh-native-session-delete']).replaceAll('\\', '/'),
-    defaultSessionDelete.version,
-    'the offline seed must enter the normal npm plugin lifecycle after installation',
-  )
+  for (const plugin of DEFAULT_PLUGINS) {
+    assert.equal(
+      String(profileManifest.dependencies?.[plugin.name]).replaceAll('\\', '/'),
+      plugin.version,
+      `${plugin.name} must enter the normal npm plugin lifecycle after offline installation`,
+    )
+  }
   const updates = await getJson(host.url, '/dsh-market/updates?force=1', 3)
-  const defaultUpdate = updates.updates?.['dsh-native-session-delete']
-  assert.equal(defaultUpdate?.kind, 'npm', 'the default plugin is outside the market update lifecycle')
-  assert.equal(defaultUpdate?.version, defaultSessionDelete.version, 'the market did not resolve the installed default version')
-  assert.equal(defaultUpdate?.updateAvailable, false, 'the market must not offer the installed default version as an update')
+  for (const plugin of DEFAULT_PLUGINS) {
+    const defaultUpdate = updates.updates?.[plugin.name]
+    assert.equal(defaultUpdate?.kind, 'npm', `${plugin.name} is outside the market update lifecycle`)
+    assert.equal(defaultUpdate?.version, plugin.version, `the market did not resolve ${plugin.name}`)
+    assert.equal(defaultUpdate?.updateAvailable, false, `the market must not offer the bundled ${plugin.name} version as an update`)
+  }
 
   const node = process.platform === 'win32'
     ? path.join(root, 'runtime', 'node', 'node.exe')
     : path.join(root, 'runtime', 'node', 'bin', 'node')
-  const dsh = path.join(root, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  const dsh = path.join(prepared.runtimeRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
   const dumped = await runFile(node, [dsh, '--profile', 'web', '--dump-config'], {
     cwd: path.join(root, 'workspace'),
     env: {
@@ -123,6 +134,7 @@ try {
   })
   assert.match(dumped.stdout, /id:\s*ui-workspace\s+[\s\S]{0,160}?disabled:\s*true/, 'official ui-workspace row is not disabled')
   assert.match(dumped.stdout, /id:\s*ui-workspace-session-delete\s+[\s\S]{0,160}?name:\s*dsh-native-session-delete/, 'native delete row is not active')
+  assert.match(dumped.stdout, /name:\s*dsh-native-image-viewer/, 'native image viewer is not active')
 
   const pluginPatch = await readFile(path.join(profileRoot, 'node_modules', 'dsh-native-session-delete', 'cordis.patch.yml'), 'utf8')
   assert.match(pluginPatch, /id:\s*ui-workspace-session-delete/)
@@ -136,7 +148,7 @@ try {
   const identities = plugins.map(canonicalPluginIdentity)
   assert.equal(new Set(identities).size, identities.length, 'the normalized catalog contains duplicate repositories')
 
-  process.stdout.write(`[plugin-marketplace-smoke] ${catalog.registry.plugins.length} live plugins; default native session delete installed once through the official web profile\n`)
+  process.stdout.write(`[plugin-marketplace-smoke] ${catalog.registry.plugins.length} live plugins; both Portable defaults installed once through the official web profile\n`)
 } finally {
   if (running) await stop().catch(() => {})
   await rm(stateRoot, { recursive: true, force: true })

@@ -78,6 +78,23 @@ export function apply(ctx: MarketClientContext): void {
     }, () => h(MarketSection, {
       t,
       locale: ctx.locale,
+      view: 'discover',
+    })))
+
+  // Installed plugins are a sibling of the market in DSH's native Plugins
+  // navigation. Keeping it out of the market surface removes one unnecessary
+  // level and makes "what I have" reachable without first entering discovery.
+  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
+      name: 'settings.plugins.tab',
+      id: 'installed',
+      order: 50,
+      label: () => t('tabInstalled'),
+      locale: NS,
+      inject: () => ({ t }),
+    }, () => h(MarketSection, {
+      t,
+      locale: ctx.locale,
+      view: 'installed',
     })))
 
   const Toast = () => h(InstallToast, { t })

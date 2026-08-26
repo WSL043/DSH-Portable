@@ -8,8 +8,11 @@ $ErrorActionPreference = 'Stop'
 $Root = [System.IO.Path]::GetFullPath($Root)
 $StartExe = Join-Path $Root 'DeepSeek-Herness.exe'
 $PortableNode = Join-Path $Root 'runtime\node\node.exe'
+$RuntimeEntry = Join-Path $Root 'launcher\runtime-entry.mjs'
 $PortableCli = Join-Path $Root 'launcher\portable-cli.mjs'
 $BrowserState = Join-Path $Root 'data\runtime\browser.json'
+$ProcessState = Join-Path $Root 'data\runtime\process.json'
+$RuntimeCapsule = Join-Path $Root 'runtime-capsule.json'
 $WorkspaceMarker = Join-Path $Root 'workspace\desktop-host-smoke.txt'
 $HomeMarker = Join-Path $Root 'data\dsh-home\desktop-host-smoke.txt'
 $LauncherSettings = Join-Path $Root 'data\launcher-settings.json'
@@ -19,6 +22,7 @@ $LauncherLogOffset = if (Test-Path -LiteralPath $LauncherLog) { (Get-Item -Liter
 foreach ($File in @(
     $StartExe,
     $PortableNode,
+    $RuntimeEntry,
     $PortableCli,
     (Join-Path $Root 'Microsoft.Web.WebView2.Core.dll'),
     (Join-Path $Root 'Microsoft.Web.WebView2.WinForms.dll'),
@@ -94,6 +98,20 @@ $RestoreProcess = $null
 $ExplicitExitClock = $null
 $CloseToExitClock = $null
 
+function Get-LauncherLogSinceStart {
+    if (-not (Test-Path -LiteralPath $LauncherLog)) { return '' }
+
+    $Stream = [System.IO.File]::Open($LauncherLog, 'Open', 'Read', 'ReadWrite')
+    try {
+        if ($Stream.Length -le $LauncherLogOffset) { return '' }
+        [void]$Stream.Seek($LauncherLogOffset, [System.IO.SeekOrigin]::Begin)
+        $Reader = [System.IO.StreamReader]::new($Stream, [System.Text.Encoding]::UTF8, $true, 1024, $true)
+        try { return $Reader.ReadToEnd() } finally { $Reader.Dispose() }
+    } finally {
+        $Stream.Dispose()
+    }
+}
+
 function Get-ProductStatus {
     param([int]$TimeoutSeconds = 15)
 
@@ -105,7 +123,7 @@ function Get-ProductStatus {
         $PreviousErrorActionPreference = $ErrorActionPreference
         try {
             $ErrorActionPreference = 'Continue'
-            $Lines = @(& $PortableNode $PortableCli status --json 2>&1 | ForEach-Object { [string]$_ })
+            $Lines = @(& $PortableNode $RuntimeEntry 'portable-cli.mjs' status --json 2>&1 | ForEach-Object { [string]$_ })
             $ExitCode = $LASTEXITCODE
         } finally {
             $ErrorActionPreference = $PreviousErrorActionPreference
@@ -143,11 +161,11 @@ try {
     } while ($Process.MainWindowHandle -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $StartupDeadline)
     if ($Process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'The native loading window did not appear.' }
     $StartupRect = [WindowAppIdentity+Rect]::new()
-    if (-not [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$StartupRect)) { throw 'Could not measure the native loading window.' }
+    if (-not [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$StartupRect)) { throw 'Could not measure the native desktop window.' }
     $StartupWidth = $StartupRect.Right - $StartupRect.Left
     $StartupHeight = $StartupRect.Bottom - $StartupRect.Top
-    if ($StartupWidth -gt 700 -or $StartupHeight -gt 420) {
-        throw "The native loading view contains excessive blank space: ${StartupWidth}x${StartupHeight}"
+    if ($StartupWidth -lt 900 -or $StartupHeight -lt 620) {
+        throw "The desktop must keep one stable native frame while DSH loads: ${StartupWidth}x${StartupHeight}"
     }
 
     $Deadline = [DateTime]::UtcNow.AddSeconds(90)
@@ -165,13 +183,14 @@ try {
             Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction SilentlyContinue |
                 Where-Object { $_.CommandLine -match '(?i)--embedded-browser-webview=1' -and $_.CommandLine -match '(?i)--webview-exe-name=DeepSeek-Herness\.exe' }
         )
-    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $DesktopWidth -lt 900 -or $EmbeddedRenderers.Count -eq 0 -or (Test-Path -LiteralPath $LaunchLock)) -and [DateTime]::UtcNow -lt $Deadline)
+        $FirstPaintReady = (Get-LauncherLogSinceStart) -match 'dsh-first-paint-ready'
+    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $DesktopWidth -lt 900 -or $EmbeddedRenderers.Count -eq 0 -or -not $FirstPaintReady -or (Test-Path -LiteralPath $LaunchLock) -or ((Test-Path -LiteralPath $RuntimeCapsule) -and -not (Test-Path -LiteralPath $ProcessState))) -and [DateTime]::UtcNow -lt $Deadline)
 
     $Status = Get-ProductStatus
 
     if ($Process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'DeepSeek-Herness.exe did not create a native top-level window.' }
     if ($Status.Status -ne 'running') { throw 'DeepSeek Harness did not become ready behind the desktop host.' }
-    if ($Process.MainWindowTitle -notlike 'DeepSeek-Herness*') { throw "Unexpected native window title: $($Process.MainWindowTitle)" }
+    if ($Process.MainWindowTitle) { throw "The compact desktop chrome must not repeat product identity: $($Process.MainWindowTitle)" }
 
     $AppId = [WindowAppIdentity]::GetAppUserModelId($Process.MainWindowHandle)
     if ($AppId -ne 'io.github.wsl043.dsh-portable') { throw "Unexpected AppUserModelID: $AppId" }
@@ -317,7 +336,7 @@ try {
     $PreviousErrorActionPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'SilentlyContinue'
-        & $PortableNode $PortableCli stop --no-browser --json *> $null
+        & $PortableNode $RuntimeEntry 'portable-cli.mjs' stop --no-browser --json *> $null
         if ($Process -and -not $Process.HasExited) { & taskkill.exe /PID $Process.Id /T /F *> $null }
         if ($StopProcess -and -not $StopProcess.HasExited) { & taskkill.exe /PID $StopProcess.Id /T /F *> $null }
         if ($RestoreProcess -and -not $RestoreProcess.HasExited) { & taskkill.exe /PID $RestoreProcess.Id /T /F *> $null }

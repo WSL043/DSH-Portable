@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
+import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -18,7 +20,7 @@ test('the bundled market explicitly declares each verified official DSH preview 
   assert.ok(ranges.includes(`^${upstream.dsh.version}`))
 })
 
-test('the 0.4 product line pins one live visual catalog and no curated extension cards', async () => {
+test('the current product line pins one live visual catalog and no curated extension cards', async () => {
   const [product, app, lock, patch, chinese, english] = await Promise.all([
     read('package.json').then(JSON.parse),
     read('app/package.json').then(JSON.parse),
@@ -28,7 +30,7 @@ test('the 0.4 product line pins one live visual catalog and no curated extension
     read('README.en.md'),
   ])
 
-  assert.match(product.version, /^0\.4\.\d+(?:-rc\.[1-9]\d*)?$/)
+  assert.match(product.version, /^0\.[45]\.\d+(?:-rc\.[1-9]\d*)?$/)
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(app.dependencies.dshmarket, undefined)
 
@@ -103,15 +105,14 @@ test('the Portable market is a native Plugins tab with readable cards and direct
 })
 
 test('the market keeps one navigation layer inside the native Plugins page', async () => {
-  const [section, styles] = await Promise.all([
+  const [entry, section, styles] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/index.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
   ])
 
-  const tabBar = section.match(/<div className=\{css\.tabs\}>[\s\S]*?<\/div>\s*<div className=\{css\.notices\}>/)?.[0] ?? ''
-  assert.match(tabBar, /tabDiscover/)
-  assert.match(tabBar, /tabInstalled/)
-  assert.doesNotMatch(tabBar, /tabThemes|tabAdvanced|tabBackup|tabDiagnostics/)
+  assert.match(entry, /id:\s*'market'[\s\S]*id:\s*'installed'/)
+  assert.doesNotMatch(section, /tabDiscover|marketViewSwitch/)
   assert.doesNotMatch(section, /className=\{css\.subTabs\}/)
   assert.doesNotMatch(styles, /^\.subTabs\b/m)
   assert.match(section, /className=\{css\.installedToolbar\}/)
@@ -149,7 +150,7 @@ test('the market keeps implementation metadata and support controls out of the p
   assert.doesNotMatch(header, /marketUpdate|dshmarket|dsh-market/)
 })
 
-test('the Plugins page owns the title and the market starts directly at its tabs', async () => {
+test('the Plugins page owns the title and each market surface starts at its content', async () => {
   const [section, styles, locales] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
@@ -159,7 +160,8 @@ test('the Plugins page owns the title and the market starts directly at its tabs
   assert.doesNotMatch(section, /className=\{css\.head\}|className=\{css\.titleRow\}|t\('subtitle'\)|t\('submitPlugin'\)/)
   assert.doesNotMatch(styles, /^\.(head|title|sub|submitLink)\b/m)
   assert.doesNotMatch(locales, /^\s*(subtitle|submitPlugin):/m)
-  assert.match(section, /<div className=\{css\.root\}>\s*<div className=\{css\.tabs\}>/)
+  assert.match(section, /<div className=\{css\.root\}>\s*\{records\.length > 0/)
+  assert.doesNotMatch(section, /marketViewSwitch|tabDiscover|tabInstalled/)
 })
 
 test('the Portable-owned market consumes Awesome directly without plugin-specific trust labels', async () => {
@@ -180,6 +182,78 @@ test('the Portable-owned market consumes Awesome directly without plugin-specifi
   assert.match(notice, /dsh-market/i)
   assert.match(notice, /MIT/i)
   assert.equal(manifest.homepage, 'https://github.com/WSL043/DSH-Portable')
+})
+
+test('the catalog opens from a durable snapshot and coalesces background revalidation', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dshm-registry-cache-'))
+  const cacheFile = path.join(temporary, 'registry-cache.json')
+  const registry = {
+    updated: '2026-08-27T00:00:00Z',
+    count: 1,
+    categories: { utility: { zh: '工具', en: 'Utilities' } },
+    plugins: [{
+      name: 'fixture-plugin',
+      owner: 'fixture',
+      url: 'https://github.com/example/fixture-plugin',
+      category: 'utility',
+      description: { zh: '测试', en: 'Fixture' },
+      install: 'fixture-plugin',
+      added: '2026-08-27',
+    }],
+  }
+  let requests = 0
+  const server = createServer((request, response) => {
+    requests += 1
+    if (request.headers['if-none-match'] === '"fixture-v1"') {
+      response.writeHead(304, { etag: '"fixture-v1"' })
+      response.end()
+      return
+    }
+    response.writeHead(200, { 'content-type': 'application/json', etag: '"fixture-v1"' })
+    response.end(JSON.stringify(registry))
+  })
+  server.listen(0, '127.0.0.1')
+  await once(server, 'listening')
+  const previous = process.env.DSHM_REGISTRY_URL
+  process.env.DSHM_REGISTRY_URL = `http://127.0.0.1:${server.address().port}/plugins.json`
+  try {
+    const module = await import(`../app/vendor/dsh-portable-plugin-market/src/registry.ts?cache=${Date.now()}`)
+    assert.deepEqual(await module.loadRegistry({ cacheFile }), registry)
+    assert.equal(requests, 1)
+
+    module.forgetCatalog()
+    const snapshot = await module.readRegistrySnapshot(cacheFile)
+    assert.deepEqual(snapshot?.registry, registry)
+    assert.equal(typeof snapshot?.savedAt, 'string')
+
+    const [first, second] = await Promise.all([
+      module.revalidateRegistry({ cacheFile }),
+      module.revalidateRegistry({ cacheFile }),
+    ])
+    assert.equal(first.changed, false)
+    assert.equal(second.changed, false)
+    assert.equal(requests, 2)
+  } finally {
+    if (previous === undefined) delete process.env.DSHM_REGISTRY_URL
+    else process.env.DSHM_REGISTRY_URL = previous
+    server.close()
+    await once(server, 'close')
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('the market paints a cached catalog before its explicit freshness check completes', async () => {
+  const [section, routes, locales] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
+  ])
+  assert.match(section, /mode=cache/)
+  assert.match(section, /mode=refresh/)
+  assert.match(routes, /readRegistrySnapshot/)
+  assert.match(routes, /revalidateRegistry/)
+  assert.match(locales, /catalogRefreshing:/)
+  assert.match(locales, /catalogStale:/)
 })
 
 test('market provenance is explicit in the distribution notice without occupying product UI', async () => {
@@ -334,6 +408,20 @@ test('opening the market revalidates installed-plugin updates instead of serving
 
   assert.match(initialEffect, /refreshInstalled\(true\)/)
   assert.doesNotMatch(initialEffect, /refreshInstalled\(\)\s*$/m)
+})
+
+test('plugin market and installed plugins are sibling native plugin tabs', async () => {
+  const [entry, section] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/index.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+  ])
+  const registrations = entry.match(/settings\.plugins\.tab/g) ?? []
+  assert.equal(registrations.length, 4, 'two native plugin tabs should each inject and register once')
+  assert.match(entry, /id:\s*'market'[\s\S]*view:\s*'discover'/)
+  assert.match(entry, /id:\s*'installed'[\s\S]*view:\s*'installed'/)
+  assert.match(entry, /label:\s*\(\)\s*=>\s*t\('tabInstalled'\)/)
+  assert.match(section, /view:\s*'discover'\s*\|\s*'installed'/)
+  assert.doesNotMatch(section, /marketViewSwitch/)
 })
 
 test('plugin updates remain visible in the market activity panel', async () => {

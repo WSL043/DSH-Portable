@@ -1,0 +1,24 @@
+DSH-Portable 数据与迁移
+=======================
+
+正常更新会原地保留 data 和 workspace，无需手动搬运。
+
+从托盘打开「DSH 终端」后运行：
+
+  dsh portable backup
+  dsh portable inspect --input <文件.dshdata>
+  dsh portable restore --input <文件.dshdata>
+
+在普通 Windows PowerShell 中，请把上面的 dsh 改为 .\dsh.exe。
+
+迁移包和加密私密包包含相同内容：会话、设置、插件配置和 API 凭据。
+它们不包含运行时、缓存、日志和工作区文件。未加密包只应保存在信任的设备上。
+
+两种包都可在「设置 → 通用设置 → 便携版 → 数据与迁移」中导出。
+加密私密包必须设置密码；密码丢失后无法恢复。
+
+恢复默认保留已有文件，只补入缺失数据。明确选择覆盖时，被替换的文件会先写入
+data/backups，便于回滚。
+
+非常旧或损坏的启动器无法原地更新时，请用当前小型启动包覆盖原 Portable 目录。
+如果启动器也已损坏，把原目录的 data 和 workspace 复制到干净的当前版本即可。

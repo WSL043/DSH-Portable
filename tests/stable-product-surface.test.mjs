@@ -31,7 +31,7 @@ test('current support surfaces list only packages that are still published', asy
   assert.doesNotMatch(englishReadme, /The installed edition keeps/i)
   assert.doesNotMatch(bugReport, /Windows installer|Windows 安装版/i)
   assert.doesNotMatch(bugReport, /macOS DMG/i)
-  assert.match(`${readme}\n${englishReadme}`, /no longer publishes a conventional installer|不再提供传统安装版/i)
+  assert.doesNotMatch(`${readme}\n${englishReadme}`, /conventional installer|传统安装版/i)
 })
 
 test('dsh.exe opens an isolated official-syntax terminal and preserves parameterized CLI forwarding', async () => {
@@ -40,7 +40,7 @@ test('dsh.exe opens an isolated official-syntax terminal and preserves parameter
     read('launcher/windows/dsh-terminal.cmd'),
   ])
   const zeroArgumentGuard = source.search(/arguments(?:\s*==\s*null|\.Length\s*==\s*0)/)
-  const cliLaunch = source.indexOf('Arguments = BuildArguments(cli, arguments)')
+  const cliLaunch = source.indexOf('Arguments = BuildArguments(runtimeEntry,')
 
   assert.ok(zeroArgumentGuard >= 0, 'the command launcher must handle zero arguments explicitly')
   assert.ok(zeroArgumentGuard < cliLaunch, 'zero-argument terminal routing must happen before launching the CLI')
@@ -52,7 +52,8 @@ test('dsh.exe opens an isolated official-syntax terminal and preserves parameter
   assert.match(terminal, /pwsh\.exe[\s\S]+powershell\.exe/i)
   assert.doesNotMatch(terminal, /\bsetx\b|EnvironmentVariableTarget|CurrentVersion\\Environment/i)
   assert.doesNotMatch(source, /Environment\.SetEnvironmentVariable/)
-  assert.match(source, /Arguments\s*=\s*BuildArguments\(cli, arguments\)/)
+  assert.match(source, /Arguments\s*=\s*BuildArguments\(runtimeEntry,/)
+  assert.match(source, /Path\.GetFileName\(cli\)/)
 })
 
 test('Windows tray exposes the isolated DSH terminal without changing global PATH', async () => {

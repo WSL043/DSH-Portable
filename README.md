@@ -47,14 +47,14 @@
 
 | 从哪里开始 | Portable 为你处理什么 |
 | --- | --- |
-| **联网使用** | 下载约 55 KB 的启动器，把它放到希望保存的位置后运行；它会在旁边自动准备并校验完整工作目录。 |
+| **联网使用** | 下载约 60 KB 的启动器，把它放到希望保存的位置后运行；它会在旁边自动准备并校验完整工作目录。 |
 | **离线使用** | 完整 ZIP 自带官方 DSH、运行环境、插件市场和插件管理工具。 |
 | **换电脑或 U 盘** | 复制文件夹即可；启动时修正由 Portable 管理的旧路径。 |
 | **只迁移个人数据** | 导出同一份迁移内容，可选择普通包或密码加密的私密包。 |
 | **长期更新** | DSH-Portable 与官方 DSH 内核分开更新，均保留 `data` 和 `workspace`。 |
 | **出现异常** | 内置只读检查、保留数据的精准修复和脱敏支持报告。 |
 
-从 0.4.15 起，完整 Windows 包比上一版本减少约 **15% 文件**和 **14% 文件系统项目**；发布门会持续阻止文件数、目录数和落地体积意外反弹。这里优化的是复制、解压、移动和删除真正需要处理的项目数量，而不只是压缩包显示的大小。
+0.5.0 的 Windows 离线包约 **58 MB**，外层只需解压 **44 个文件**。官方 DSH 运行环境以一个经过校验的紧凑包随产品携带，首次启动在本机准备一次，之后直接复用；会话、设置、插件和工作区仍留在 Portable 文件夹中。这样既保留完整插件能力，也把下载解压、复制 Portable 文件夹和日常更新需要处理的小文件降到最低。发布门会同时限制压缩包体积、落地体积、文件数量和启动性能，防止后续版本悄悄反弹。
 
 ## 三步启动
 
@@ -70,7 +70,7 @@
 
 | 适合你，如果… | 下载 |
 | --- | --- |
-| 想要可移动、自动准备的工作文件夹 | [**便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐，约 55 KB） |
+| 想要可移动、自动准备的工作文件夹 | [**便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐，约 60 KB） |
 | 目标电脑无法联网，或需要手动解压 | [完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### macOS
@@ -110,7 +110,7 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 打开 **设置 → 插件 → 插件市场**，可以搜索、筛选、查看项目主页，并安装、更新、停用或卸载社区插件。市场跟随 DSH 的中文/英文和明暗外观，不会为了安装插件静默中断正在运行的任务。
 
-全新安装包含可停用或卸载的[永久删除会话](https://github.com/WSL043/dsh-native-session-manager)插件。永久删除始终需要二次确认，也不会替代可恢复的“归档”。普通升级不会重新安装用户已经移除的插件。
+全新安装离线包含可停用或卸载的 [DSH Native Session Manager](https://github.com/WSL043/dsh-native-session-manager) 和 [DSH Native Image Viewer](https://github.com/WSL043/dsh-native-image-viewer)。前者提供归档管理和二次确认的永久删除，后者提供原生图片查看；两者之后都按普通插件更新。普通升级不会重新安装用户已经移除的默认插件。
 
 Windows 可双击 `dsh.exe`，或从托盘的 **更多 → DSH 终端** 打开；macOS 可从应用菜单打开 **DSH 终端**；Linux 可从托盘打开 **DSH 终端**。在这个专用终端里，第三方插件提供的官方命令可以原样粘贴：
 
@@ -142,7 +142,7 @@ dsh --profile web --dump-config
 
 正常更新会原地保留 `data` 和 `workspace`。需要迁入新的 Portable 环境时，可在**设置 → 通用设置 → 便携版 → 数据与迁移**选择「导出迁移包」或「导出加密私密包」。两者内容相同，都包含会话、设置、插件配置和 API 凭据；只有后者需要密码才能读取。未加密包只应保存在信任的设备上。运行时、缓存、日志和工作区文件不会被塞进迁移包。
 
-成品根目录的 `DATA-MIGRATION.txt` 提供检查和恢复命令。恢复默认只补入缺失数据；明确选择覆盖时，先在 `data/backups/` 生成回滚副本。
+成品根目录的 `DATA-MIGRATION.zh-CN.txt` 提供中文检查和恢复命令；`DATA-MIGRATION.en.txt` 提供独立英文说明。恢复默认只补入缺失数据；明确选择覆盖时，先在 `data/backups/` 生成回滚副本。
 
 | 路径 | 内容 |
 | --- | --- |

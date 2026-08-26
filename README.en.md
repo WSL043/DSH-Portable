@@ -47,14 +47,14 @@ This is not a renamed browser shortcut sold as a “no-install build.” Its run
 
 | Where you start | What Portable handles |
 | --- | --- |
-| **Online** | Download the roughly 55 KB launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
+| **Online** | Download the roughly 60 KB launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
 | **Offline** | The complete ZIP includes official DSH, its runtime, the Plugin Market, and plugin management tools. |
 | **Another PC or USB drive** | Copy the folder; Portable repairs the paths it owns on the next launch. |
 | **Personal data only** | Export the same migration contents as either a plain package or a password-encrypted private package. |
 | **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
 | **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
 
-Starting with 0.4.15, the complete Windows package contains about **15% fewer files** and **14% fewer filesystem items** than the previous build. Release gates now prevent accidental regressions in file count, directory count, and extracted size. The target is the work Windows performs while extracting, copying, moving, or deleting—not merely a smaller number beside the download.
+The 0.5.0 Windows offline package is about **58 MB** and expands into only **44 outer files**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This preserves the complete plugin runtime while minimizing the small-file work needed to download, extract, copy, and update the product. Release gates cover archive size, extracted size, file count, and startup performance so later versions cannot quietly regress.
 
 ## Start in 3 steps
 
@@ -70,7 +70,7 @@ The close button sends the app to the system tray by default, so an active task 
 
 | Choose this when… | Download |
 | --- | --- |
-| You want a movable folder prepared automatically | [**Portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended, about 55 KB) |
+| You want a movable folder prepared automatically | [**Portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended, about 60 KB) |
 | The destination computer is offline, or you need manual extraction | [Complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### macOS
@@ -110,7 +110,7 @@ Managed paths repair themselves after a move; external projects remain where you
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
-Fresh installs include the removable [permanent session deletion](https://github.com/WSL043/dsh-native-session-manager) plugin. Permanent deletion always asks for a second confirmation and does not replace recoverable Archive. Normal upgrades do not reinstall a plugin an existing user removed.
+Fresh installs include the removable [DSH Native Session Manager](https://github.com/WSL043/dsh-native-session-manager) and [DSH Native Image Viewer](https://github.com/WSL043/dsh-native-image-viewer) offline. The former adds archive management and second-confirmation permanent deletion; the latter provides native image viewing. Both follow the standard plugin update path afterward, and a normal upgrade does not reinstall a default plugin an existing user removed.
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
 
@@ -142,7 +142,7 @@ An official DSH update does not need to wait for a DSH-Portable feature release,
 
 Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, choose **Export migration package** or **Export encrypted private package** under **Settings → General → Portable → Data and migration**. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device. Runtimes, caches, logs, and workspace files are deliberately excluded.
 
-`DATA-MIGRATION.txt` in every finished package documents the inspect and restore commands. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`.
+`DATA-MIGRATION.en.txt` in every finished package documents the English inspect and restore commands; `DATA-MIGRATION.zh-CN.txt` provides a separate Chinese guide. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`.
 
 | Path | Contents |
 | --- | --- |

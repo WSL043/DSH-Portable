@@ -7,6 +7,7 @@ using System.Drawing.Drawing2D;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using Microsoft.Win32;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -24,8 +25,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.4.15.65534")]
-[assembly: AssemblyFileVersion("0.4.15.65534")]
+[assembly: AssemblyVersion("0.5.0.65534")]
+[assembly: AssemblyFileVersion("0.5.0.65534")]
 
 namespace DshPortable
 {
@@ -246,6 +247,92 @@ namespace DshPortable
     }
 
 
+    internal sealed class DshProgressBar : Control
+    {
+        private readonly System.Windows.Forms.Timer animationTimer;
+        private ProgressBarStyle progressStyle = ProgressBarStyle.Marquee;
+        private int progressValue;
+        private int animationStep;
+
+        internal DshProgressBar()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            TrackColor = Color.FromArgb(226, 228, 232);
+            IndicatorColor = Color.FromArgb(27, 28, 30);
+            animationTimer = new System.Windows.Forms.Timer { Interval = 22, Enabled = true };
+            animationTimer.Tick += delegate
+            {
+                animationStep = (animationStep + 4) % 240;
+                Invalidate();
+            };
+        }
+
+        internal Color TrackColor { get; set; }
+        internal Color IndicatorColor { get; set; }
+
+        internal ProgressBarStyle Style
+        {
+            get { return progressStyle; }
+            set
+            {
+                progressStyle = value;
+                animationTimer.Enabled = value == ProgressBarStyle.Marquee;
+                Invalidate();
+            }
+        }
+
+        internal int MarqueeAnimationSpeed
+        {
+            get { return animationTimer.Enabled ? animationTimer.Interval : 0; }
+            set
+            {
+                if (value <= 0) animationTimer.Enabled = false;
+                else
+                {
+                    animationTimer.Interval = Math.Max(16, Math.Min(100, value));
+                    if (progressStyle == ProgressBarStyle.Marquee) animationTimer.Enabled = true;
+                }
+            }
+        }
+
+        internal int Value
+        {
+            get { return progressValue; }
+            set { progressValue = Math.Max(0, Math.Min(100, value)); Invalidate(); }
+        }
+
+        protected override void OnPaint(PaintEventArgs eventArgs)
+        {
+            base.OnPaint(eventArgs);
+            Rectangle track = new Rectangle(0, Math.Max(0, (Height - 3) / 2), Math.Max(1, Width), Math.Min(3, Height));
+            using (Brush background = new SolidBrush(TrackColor)) eventArgs.Graphics.FillRectangle(background, track);
+            int indicatorWidth;
+            int indicatorLeft;
+            if (progressStyle == ProgressBarStyle.Marquee)
+            {
+                indicatorWidth = Math.Max(36, Width / 5);
+                int travel = Math.Max(1, Width + indicatorWidth);
+                indicatorLeft = (animationStep * travel / 240) - indicatorWidth;
+            }
+            else
+            {
+                indicatorWidth = Math.Max(0, Width * progressValue / 100);
+                indicatorLeft = 0;
+            }
+            if (indicatorWidth > 0)
+            {
+                Rectangle indicator = new Rectangle(indicatorLeft, track.Y, indicatorWidth, track.Height);
+                using (Brush foreground = new SolidBrush(IndicatorColor)) eventArgs.Graphics.FillRectangle(foreground, indicator);
+            }
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) animationTimer.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
     internal sealed class LauncherWindow : Form
     {
         internal const int WmPortableExit = 0x8043;
@@ -256,7 +343,11 @@ namespace DshPortable
 
         private static string uiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
         private enum DwmWindowCornerPreference { Default = 0, DoNotRound = 1, Round = 2, RoundSmall = 3 }
+        private const int DwmwaUseImmersiveDarkMode = 20;
         private const int DwmwaWindowCornerPreference = 33;
+        private const int DwmwaBorderColor = 34;
+        private const int DwmwaCaptionColor = 35;
+        private const int DwmwaTextColor = 36;
         private const int WorkspaceNavigationTimeoutMs = 60000;
         private const int WebViewShutdownTimeoutMs = 10000;
         private const int WebViewGracefulShutdownMs = 1500;
@@ -276,7 +367,7 @@ namespace DshPortable
         private readonly PictureBox productIcon;
         private readonly Label productLabel;
         private readonly Label statusLabel;
-        private readonly ProgressBar progress;
+        private readonly DshProgressBar progress;
         private readonly Label progressDetail;
         private readonly TextBox detailsBox;
         private readonly Button copyButton;
@@ -295,6 +386,7 @@ namespace DshPortable
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
         private readonly bool desktopStart;
+        private readonly bool hiddenForAutomation;
         private bool operationRunning = true;
         private bool desktopReady;
         private bool shutdownRunning;
@@ -328,66 +420,77 @@ namespace DshPortable
             root = Path.GetDirectoryName(Application.ExecutablePath);
             launcherArgs = ResolveArguments(args);
             nonInteractive = Array.Exists(launcherArgs, item =>
-                string.Equals(item, "--json", StringComparison.OrdinalIgnoreCase));
+                string.Equals(item, "--json", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(item, "--diagnostic-root-json", StringComparison.OrdinalIgnoreCase));
             bool testHidden = String.Equals(
                 Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"),
                 "1",
                 StringComparison.Ordinal);
+            hiddenForAutomation = testHidden;
             desktopStart = !nonInteractive && IsStartCommand(launcherArgs);
 
-            Text = "DeepSeek-Herness";
+            // The workspace already carries the product identity. Keep the native
+            // caption visually quiet instead of repeating it above the DSH shell.
+            Text = desktopStart ? String.Empty : "DeepSeek-Herness";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            ShowIcon = false;
             StartPosition = FormStartPosition.CenterScreen;
-            FormBorderStyle = FormBorderStyle.FixedSingle;
-            MaximizeBox = false;
+            FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedSingle;
+            MaximizeBox = desktopStart;
             MinimizeBox = desktopStart;
             ShowInTaskbar = !nonInteractive && !testHidden;
-            if (nonInteractive || testHidden) Opacity = 0;
-            ClientSize = desktopStart ? new Size(560, 220) : new Size(440, 160);
-            MinimumSize = Size.Empty;
+            if (nonInteractive) Opacity = 0;
+            else if (testHidden) Opacity = 1;
+            else if (desktopStart) Opacity = 0.01;
+            ClientSize = desktopStart ? new Size(1280, 820) : new Size(440, 160);
+            MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
             BackColor = SystemColors.Window;
             Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
 
             launchPanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
-            launchContent = new Panel { Size = new Size(504, 144), BackColor = SystemColors.Window };
+            launchContent = new Panel
+            {
+                Size = desktopStart ? new Size(360, 112) : new Size(504, 144),
+                BackColor = SystemColors.Window,
+            };
             launchPanel.Resize += delegate { CenterLaunchContent(); };
             productIcon = new PictureBox
             {
-                Location = new Point(24, 20),
-                Size = new Size(40, 40),
+                Location = desktopStart ? new Point(0, 8) : new Point(24, 20),
+                Size = desktopStart ? new Size(36, 36) : new Size(40, 40),
                 SizeMode = PictureBoxSizeMode.Zoom,
                 Image = Icon == null ? null : Icon.ToBitmap(),
             };
             productLabel = new Label
             {
                 AutoSize = false,
-                Location = new Point(80, 18),
-                Size = new Size(400, 30),
+                Location = desktopStart ? new Point(52, 4) : new Point(80, 18),
+                Size = desktopStart ? new Size(308, 30) : new Size(400, 30),
                 Text = "DeepSeek Harness",
                 Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point),
             };
             statusLabel = new Label
             {
                 AutoEllipsis = true,
-                Location = new Point(80, 53),
-                Size = new Size(400, 36),
+                Location = desktopStart ? new Point(52, 36) : new Point(80, 53),
+                Size = desktopStart ? new Size(308, 28) : new Size(400, 36),
                 ForeColor = Color.FromArgb(72, 72, 72),
                 Text = IsStopCommand(launcherArgs)
                     ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
                     : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…"),
             };
-            progress = new ProgressBar
+            progress = new DshProgressBar
             {
-                Location = new Point(24, 108),
-                Size = new Size(456, 6),
+                Location = desktopStart ? new Point(0, 86) : new Point(24, 108),
+                Size = desktopStart ? new Size(360, 4) : new Size(456, 6),
                 Style = ProgressBarStyle.Marquee,
                 MarqueeAnimationSpeed = 24,
             };
             progressDetail = new Label
             {
                 AutoEllipsis = true,
-                Location = new Point(24, 84),
-                Size = new Size(456, 20),
+                Location = desktopStart ? new Point(0, 64) : new Point(24, 84),
+                Size = desktopStart ? new Size(360, 20) : new Size(456, 20),
                 ForeColor = Color.FromArgb(97, 102, 107),
                 TextAlign = ContentAlignment.MiddleLeft,
                 Visible = false,
@@ -520,11 +623,29 @@ namespace DshPortable
             };
             Controls.Add(webView);
             Controls.Add(launchPanel);
-            launchPanel.BringToFront();
+            launchPanel.Visible = !desktopStart;
+            if (!desktopStart) launchPanel.BringToFront();
+            if (desktopStart)
+            {
+                RestoreDesktopWindowState();
+                if (testHidden) Location = new Point(-32000, -32000);
+                FitWebViewToClient();
+                ApplyDesktopWindowCorners();
+                ApplyDesktopChrome();
+            }
             CenterLaunchContent();
             ClientSizeChanged += delegate { FitWebViewToClient(); };
             ResizeEnd += delegate { SaveDesktopWindowState(); };
-            Shown += async delegate { await RunLauncherAsync(); };
+            Shown += async delegate
+            {
+                if (desktopStart)
+                {
+                    FitWebViewToClient();
+                    ApplyDesktopWindowCorners();
+                    ApplyDesktopChrome();
+                }
+                await RunLauncherAsync();
+            };
         }
 
         protected override void OnFormClosing(FormClosingEventArgs eventArgs)
@@ -558,6 +679,44 @@ namespace DshPortable
                 return;
             }
             base.WndProc(ref message);
+        }
+
+        private void ApplyDesktopChrome()
+        {
+            bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
+            Color background = dark ? Color.FromArgb(24, 24, 26) : Color.FromArgb(248, 248, 248);
+            Color foreground = dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(35, 35, 35);
+            launchPanel.BackColor = background;
+            launchContent.BackColor = background;
+            productLabel.BackColor = background;
+            productLabel.ForeColor = foreground;
+            statusLabel.BackColor = background;
+            statusLabel.ForeColor = dark ? Color.FromArgb(178, 178, 184) : Color.FromArgb(92, 95, 101);
+            progressDetail.BackColor = background;
+            progressDetail.ForeColor = statusLabel.ForeColor;
+            progress.TrackColor = dark ? Color.FromArgb(53, 53, 57) : Color.FromArgb(226, 228, 232);
+            progress.IndicatorColor = dark ? Color.FromArgb(242, 242, 244) : Color.FromArgb(27, 28, 30);
+            if (desktopStart && IsHandleCreated)
+            {
+                int darkMode = dark ? 1 : 0;
+                uint caption = ToColorRef(background);
+                uint text = ToColorRef(foreground);
+                uint border = caption;
+                try
+                {
+                    DwmSetWindowAttribute(Handle, DwmwaUseImmersiveDarkMode, ref darkMode, sizeof(int));
+                    DwmSetWindowAttribute(Handle, DwmwaCaptionColor, ref caption, sizeof(uint));
+                    DwmSetWindowAttribute(Handle, DwmwaTextColor, ref text, sizeof(uint));
+                    DwmSetWindowAttribute(Handle, DwmwaBorderColor, ref border, sizeof(uint));
+                }
+                catch (DllNotFoundException) { }
+                catch (EntryPointNotFoundException) { }
+            }
+        }
+
+        private static uint ToColorRef(Color color)
+        {
+            return (uint)(color.R | (color.G << 8) | (color.B << 16));
         }
 
         private void CenterLaunchContent()
@@ -641,6 +800,29 @@ namespace DshPortable
         private ToolStripMenuItem CreateOpenItem()
         {
             return new ToolStripMenuItem(L("打开 DeepSeek Harness", "Open DeepSeek Harness"), null, delegate { RestoreFromTray(); });
+        }
+
+        private void ConfigureDesktopLoadingSurface(string message, bool showDetail)
+        {
+            launchContent.Size = new Size(360, 112);
+            productIcon.Location = new Point(0, 8);
+            productIcon.Size = new Size(36, 36);
+            productLabel.Location = new Point(52, 4);
+            productLabel.Size = new Size(308, 30);
+            statusLabel.Location = new Point(52, 36);
+            statusLabel.Size = new Size(308, 28);
+            statusLabel.AutoEllipsis = true;
+            statusLabel.Text = message;
+            progressDetail.Location = new Point(0, 64);
+            progressDetail.Size = new Size(360, 20);
+            progressDetail.Visible = showDetail;
+            progress.Location = new Point(0, 86);
+            progress.Size = new Size(360, 4);
+            progress.Visible = true;
+            detailsBox.Visible = false;
+            copyButton.Visible = false;
+            closeButton.Visible = false;
+            CenterLaunchContent();
         }
 
         private ToolStripMenuItem CreateTerminalItem()
@@ -989,6 +1171,48 @@ namespace DshPortable
                     BeginInvoke((MethodInvoker)delegate { ShowWorkspaceDirectoryPicker(requestId); });
                     return;
                 }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/pick-data-export", StringComparison.Ordinal))
+                {
+                    object requestValue;
+                    object kindValue;
+                    string requestId = message.TryGetValue("requestId", out requestValue)
+                        ? Convert.ToString(requestValue)
+                        : String.Empty;
+                    string kind = message.TryGetValue("kind", out kindValue) ? Convert.ToString(kindValue) : String.Empty;
+                    if (!Regex.IsMatch(requestId ?? String.Empty, "^data-export-[A-Za-z0-9-]{1,96}$")) return;
+                    if (!String.Equals(kind, "standard", StringComparison.Ordinal)
+                        && !String.Equals(kind, "private", StringComparison.Ordinal)) return;
+                    BeginInvoke((MethodInvoker)delegate { ShowDataPackageSaveDialog(requestId, kind); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/pick-data-import", StringComparison.Ordinal))
+                {
+                    object requestValue;
+                    string requestId = message.TryGetValue("requestId", out requestValue)
+                        ? Convert.ToString(requestValue)
+                        : String.Empty;
+                    if (!Regex.IsMatch(requestId ?? String.Empty, "^data-import-[A-Za-z0-9-]{1,96}$")) return;
+                    BeginInvoke((MethodInvoker)delegate { ShowDataPackageOpenDialog(requestId); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/import-data", StringComparison.Ordinal))
+                {
+                    object inputValue;
+                    object passwordValue;
+                    object conflictValue;
+                    string input = message.TryGetValue("input", out inputValue) ? Convert.ToString(inputValue) : String.Empty;
+                    string password = message.TryGetValue("password", out passwordValue) ? Convert.ToString(passwordValue) : String.Empty;
+                    string conflict = message.TryGetValue("conflict", out conflictValue) ? Convert.ToString(conflictValue) : String.Empty;
+                    if (!Path.IsPathRooted(input ?? String.Empty) || !File.Exists(input)) return;
+                    if (!String.IsNullOrEmpty(password) && password.Length < 8) return;
+                    if (!String.Equals(conflict, "keep", StringComparison.Ordinal)
+                        && !String.Equals(conflict, "replace", StringComparison.Ordinal)) return;
+                    BeginInvoke((MethodInvoker)delegate { BeginDataImport(input, password, conflict); });
+                    return;
+                }
                 TrayBridgeState state = json.Deserialize<TrayBridgeState>(eventArgs.WebMessageAsJson);
                 if (state == null || state.type != "dsh-portable/state" || state.schemaVersion != 1) return;
                 if (state.sessions == null) state.sessions = new List<TrayBridgeSession>();
@@ -997,6 +1221,7 @@ namespace DshPortable
                 {
                     uiLanguage = String.Equals(state.locale, "zh", StringComparison.OrdinalIgnoreCase) ? "zh" : "en";
                     trayTheme = String.Equals(state.theme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light";
+                    ApplyDesktopChrome();
                     HandleTaskCompletionNotifications(state);
                     trayState = state;
                     trayBridgeReady = true;
@@ -1030,7 +1255,7 @@ namespace DshPortable
                     dialog.ShowNewFolderButton = true;
                     string portableWorkspace = Path.Combine(root, "workspace");
                     if (Directory.Exists(portableWorkspace)) dialog.SelectedPath = portableWorkspace;
-                    using (System.Threading.Timer automation = ArmWorkspacePickerAutomation(Handle))
+                    using (System.Threading.Timer automation = ArmOwnedDialogCancellationAutomation(Handle, "workspace-picker"))
                     {
                         DialogResult selection = dialog.ShowDialog(this);
                         if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
@@ -1054,7 +1279,7 @@ namespace DshPortable
             catch { }
         }
 
-        private System.Threading.Timer ArmWorkspacePickerAutomation(IntPtr ownerHandle)
+        private System.Threading.Timer ArmOwnedDialogCancellationAutomation(IntPtr ownerHandle, string category)
         {
             if (!String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
                 return null;
@@ -1076,13 +1301,173 @@ namespace DshPortable
                     if (System.Threading.Interlocked.CompareExchange(ref closeRequested, 1, 0) != 0) return false;
                     StringBuilder className = new StringBuilder(256);
                     GetClassName(window, className, className.Capacity);
-                    WriteLauncherLog("workspace-picker", "dialog-detected hwnd=" + window.ToInt64().ToString(CultureInfo.InvariantCulture)
+                    WriteLauncherLog(category, "dialog-detected hwnd=" + window.ToInt64().ToString(CultureInfo.InvariantCulture)
                         + " owner=" + owner.ToInt64().ToString(CultureInfo.InvariantCulture)
                         + " class=" + className.ToString());
                     PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero);
                     return false;
                 }, IntPtr.Zero);
             }, null, 100, 100);
+        }
+
+        private void ShowDataPackageSaveDialog(string requestId, string kind)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/pick-data-export-result" },
+                { "schemaVersion", 1 },
+                { "requestId", requestId },
+            };
+            try
+            {
+                RestoreFromTray();
+                Activate();
+                BringToFront();
+                string stamp = DateTime.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
+                string prefix = String.Equals(kind, "private", StringComparison.Ordinal)
+                    ? "DSH-Portable-private-"
+                    : "DSH-Portable-data-";
+                string automationDirectory = Environment.GetEnvironmentVariable("DSH_PORTABLE_DATA_EXPORT_DIRECTORY");
+                if (!String.IsNullOrWhiteSpace(automationDirectory))
+                {
+                    string directory = Path.GetFullPath(automationDirectory);
+                    Directory.CreateDirectory(directory);
+                    result["path"] = Path.Combine(directory, prefix + stamp + ".dshdata");
+                }
+                else using (SaveFileDialog dialog = new SaveFileDialog
+                {
+                    AddExtension = true,
+                    CheckPathExists = true,
+                    DefaultExt = "dshdata",
+                    FileName = prefix + stamp + ".dshdata",
+                    Filter = L("DSH-Portable 数据包 (*.dshdata)|*.dshdata", "DSH-Portable data package (*.dshdata)|*.dshdata"),
+                    InitialDirectory = GetDefaultDownloadFolder(),
+                    OverwritePrompt = true,
+                    RestoreDirectory = true,
+                    Title = L("选择数据包保存位置", "Choose where to save the data package"),
+                })
+                {
+                    using (System.Threading.Timer automation = ArmOwnedDialogCancellationAutomation(Handle, "data-export-dialog"))
+                    {
+                        DialogResult selection = dialog.ShowDialog(this);
+                        if (selection == DialogResult.OK) result["path"] = Path.GetFullPath(dialog.FileName);
+                        else result["cancelled"] = true;
+                    }
+                }
+            }
+            catch (Exception error)
+            {
+                result["error"] = error.Message;
+            }
+            try
+            {
+                if (webView != null && webView.CoreWebView2 != null)
+                    webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
+            }
+            catch { }
+        }
+
+        private void ShowDataPackageOpenDialog(string requestId)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/pick-data-import-result" },
+                { "schemaVersion", 1 },
+                { "requestId", requestId },
+            };
+            try
+            {
+                RestoreFromTray();
+                Activate();
+                BringToFront();
+                string automationFile = Environment.GetEnvironmentVariable("DSH_PORTABLE_DATA_IMPORT_FILE");
+                if (!String.IsNullOrWhiteSpace(automationFile))
+                {
+                    string input = Path.GetFullPath(automationFile);
+                    if (!File.Exists(input)) throw new FileNotFoundException("The data package does not exist.", input);
+                    result["path"] = input;
+                }
+                else using (OpenFileDialog dialog = new OpenFileDialog
+                {
+                    AddExtension = true,
+                    CheckFileExists = true,
+                    CheckPathExists = true,
+                    DefaultExt = "dshdata",
+                    Filter = L("DSH-Portable 数据包 (*.dshdata)|*.dshdata", "DSH-Portable data package (*.dshdata)|*.dshdata"),
+                    InitialDirectory = GetDefaultDownloadFolder(),
+                    Multiselect = false,
+                    RestoreDirectory = true,
+                    Title = L("选择要导入的数据包", "Choose a data package to import"),
+                })
+                {
+                    using (System.Threading.Timer automation = ArmOwnedDialogCancellationAutomation(Handle, "data-import-dialog"))
+                    {
+                        DialogResult selection = dialog.ShowDialog(this);
+                        if (selection == DialogResult.OK) result["path"] = Path.GetFullPath(dialog.FileName);
+                        else result["cancelled"] = true;
+                    }
+                }
+            }
+            catch (Exception error) { result["error"] = error.Message; }
+            try
+            {
+                if (webView != null && webView.CoreWebView2 != null)
+                    webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
+            }
+            catch { }
+        }
+
+        private async void BeginDataImport(string input, string password, string conflict)
+        {
+            if (shutdownRunning) return;
+            shutdownRunning = true;
+            operationRunning = true;
+            ShowDesktopOperation(L("正在导入数据…", "Importing data…"));
+            Tuple<int, string> stopped;
+            try { stopped = await Task.Run(() => InvokePortableCli(new[] { "stop", "--no-browser", "--json" })); }
+            catch (Exception error) { stopped = Tuple.Create(1, error.GetBaseException().Message); }
+            if (stopped.Item1 != 0)
+            {
+                shutdownRunning = false;
+                HideDesktopOperation();
+                MessageBox.Show(this, stopped.Item2, L("无法开始导入", "Import could not start"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            backendStarted = false;
+            string passwordFile = String.Empty;
+            try
+            {
+                await WaitForWebViewExitAsync(WebViewShutdownTimeoutMs);
+                List<string> args = new List<string> { "restore-data", "--input", Path.GetFullPath(input), "--conflict", conflict, "--json" };
+                if (!String.IsNullOrEmpty(password))
+                {
+                    string runtime = Path.Combine(ResolveProductDataRoot(), "runtime");
+                    Directory.CreateDirectory(runtime);
+                    passwordFile = Path.Combine(runtime, "import-password-" + Guid.NewGuid().ToString("N") + ".txt");
+                    File.WriteAllText(passwordFile, password, new UTF8Encoding(false));
+                    args.Add("--password-file");
+                    args.Add(passwordFile);
+                }
+                Tuple<int, string> imported = await Task.Run(() => InvokePortableCli(args.ToArray()));
+                if (imported.Item1 != 0) throw new InvalidOperationException(imported.Item2);
+                PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, new[]
+                {
+                    "--dsh-restart-after-pid",
+                    Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+                });
+                allowClose = true;
+                DisposeTrayIcon();
+                Close();
+            }
+            catch (Exception error)
+            {
+                shutdownRunning = false;
+                ShowFailure(L("数据导入失败。\r\n", "Data import failed.\r\n") + error.GetBaseException().Message);
+            }
+            finally
+            {
+                if (!String.IsNullOrEmpty(passwordFile)) try { File.Delete(passwordFile); } catch { }
+            }
         }
 
         private void DisposeTrayIcon()
@@ -1679,6 +2064,20 @@ namespace DshPortable
             ref DwmWindowCornerPreference preference,
             int preferenceSize);
 
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(
+            IntPtr window,
+            int attribute,
+            ref int value,
+            int valueSize);
+
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(
+            IntPtr window,
+            int attribute,
+            ref uint value,
+            int valueSize);
+
         internal static bool SignalExistingDesktopHost(int message)
         {
             string expected = Path.GetFullPath(Application.ExecutablePath);
@@ -1955,19 +2354,10 @@ namespace DshPortable
         {
             RestoreFromTray();
             webView.Enabled = false;
-            launchContent.Size = new Size(504, 144);
-            statusLabel.Location = new Point(80, 53);
-            statusLabel.Size = new Size(400, 36);
-            statusLabel.AutoEllipsis = true;
-            statusLabel.Text = message;
-            progress.Visible = true;
+            ConfigureDesktopLoadingSurface(message, true);
             progress.Style = ProgressBarStyle.Marquee;
             progress.MarqueeAnimationSpeed = 24;
             progressDetail.Text = L("正在准备…", "Preparing…");
-            progressDetail.Visible = true;
-            detailsBox.Visible = false;
-            copyButton.Visible = false;
-            closeButton.Visible = false;
             launchPanel.Visible = true;
             launchPanel.BringToFront();
             CenterLaunchContent();
@@ -2059,6 +2449,7 @@ namespace DshPortable
             {
                 if (webViewStartupTrace.Count < 32) webViewStartupTrace.Add(elapsed + "ms " + phase);
             }
+            WriteLauncherLog("startup", elapsed + "ms " + phase);
         }
 
         private void OnWebViewProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs eventArgs)
@@ -2088,16 +2479,43 @@ namespace DshPortable
                 RecordWebViewPhase("dom-content-loaded:" + eventArgs.NavigationId);
                 bool usable = await ProbeWorkspaceDomAsync(url);
                 RecordWebViewPhase("dom-probe:" + usable);
-                if (usable) workspaceUsable.TrySetResult(true);
+                bool painted = usable && await WaitForWorkspaceFirstPaintAsync(url);
+                RecordWebViewPhase("first-paint:" + painted);
+                if (painted)
+                {
+                    RevealDesktopSurface();
+                    workspaceUsable.TrySetResult(true);
+                }
             };
             webView.CoreWebView2.NavigationCompleted += completed;
             webView.CoreWebView2.DOMContentLoaded += domLoaded;
             webView.Visible = true;
-            launchPanel.BringToFront();
+            if (desktopStart)
+            {
+                launchPanel.Visible = false;
+                webView.BringToFront();
+            }
+            else launchPanel.BringToFront();
             RecordWebViewPhase("navigation-start:" + url);
             webView.CoreWebView2.Navigate(url);
             Task timeout = Task.Delay(WorkspaceNavigationTimeoutMs);
             Task winner = await Task.WhenAny(workspaceUsable.Task, navigation.Task, webViewProcessFailure.Task, timeout);
+            if (winner == navigation.Task)
+            {
+                CoreWebView2NavigationCompletedEventArgs navigationResult = await navigation.Task;
+                if (!navigationResult.IsSuccess)
+                {
+                    webView.CoreWebView2.NavigationCompleted -= completed;
+                    webView.CoreWebView2.DOMContentLoaded -= domLoaded;
+                    string webViewSnapshot = WebViewEnvironmentSnapshot();
+                    string diagnostics = await Task.Run(() => WorkspaceFailureDiagnostics(url, webViewSnapshot));
+                    throw new InvalidOperationException((updated
+                        ? L("更新后的工作台加载失败：", "The updated workspace could not load: ")
+                        : L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: "))
+                        + navigationResult.WebErrorStatus + "\r\n" + diagnostics);
+                }
+                winner = await Task.WhenAny(workspaceUsable.Task, webViewProcessFailure.Task, timeout);
+            }
             webView.CoreWebView2.NavigationCompleted -= completed;
             webView.CoreWebView2.DOMContentLoaded -= domLoaded;
             if (winner == webViewProcessFailure.Task)
@@ -2123,16 +2541,6 @@ namespace DshPortable
                 webViewProcessFailure = null;
                 return;
             }
-            CoreWebView2NavigationCompletedEventArgs result = await navigation.Task;
-            if (!result.IsSuccess)
-            {
-                string webViewSnapshot = WebViewEnvironmentSnapshot();
-                string diagnostics = await Task.Run(() => WorkspaceFailureDiagnostics(url, webViewSnapshot));
-                throw new InvalidOperationException((updated
-                    ? L("更新后的工作台加载失败：", "The updated workspace could not load: ")
-                    : L("DeepSeek Harness 工作台加载失败：", "The DeepSeek Harness workspace could not load: "))
-                    + result.WebErrorStatus + "\r\n" + diagnostics);
-            }
             if (!await ProbeWorkspaceDomAsync(url))
             {
                 string webViewSnapshot = WebViewEnvironmentSnapshot();
@@ -2142,6 +2550,57 @@ namespace DshPortable
                     "The DeepSeek Harness workspace did not reach a usable state.") + "\r\n" + diagnostics);
             }
             webViewProcessFailure = null;
+        }
+
+        private void RevealDesktopSurface()
+        {
+            if (!desktopStart) return;
+            launchPanel.Visible = false;
+            webView.Visible = true;
+            webView.BringToFront();
+            WriteLauncherLog("startup", "dsh-first-paint-ready");
+            if (!hiddenForAutomation && Opacity < 1) Opacity = 1;
+        }
+
+        private async Task<bool> WaitForWorkspaceFirstPaintAsync(string expectedUrl)
+        {
+            string expected = json.Serialize(expectedUrl.TrimEnd('/'));
+            string script = "(function(){try{"
+                + "var expected=" + expected + ";"
+                + "var current=String(window.location.href||'').replace(/\\/$/,'');"
+                + "if(current.indexOf(expected)!==0||!document.body)return false;"
+                + "var nodes=document.body.querySelectorAll('*');"
+                + "for(var index=0;index<nodes.length;index++){"
+                + "var node=nodes[index];var rect=node.getBoundingClientRect();var style=getComputedStyle(node);"
+                + "if(rect.width>=120&&rect.height>=24&&style.display!=='none'&&style.visibility!=='hidden'&&style.opacity!=='0')return true;"
+                + "}"
+                + "return String(document.body.innerText||'').trim().length>0;"
+                + "}catch(_){return false;}})()";
+            await Task.Delay(50);
+            for (int attempt = 0; attempt < 80; attempt++)
+            {
+                try
+                {
+                    string result = await webView.CoreWebView2.ExecuteScriptAsync(script);
+                    if (String.Equals(result, "true", StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch (Exception error)
+                {
+                    RecordWebViewPhase("first-paint-probe-failed:" + error.GetType().Name);
+                }
+                await Task.Delay(100);
+            }
+            try
+            {
+                string diagnostics = await webView.CoreWebView2.ExecuteScriptAsync(
+                    "(function(){try{var body=document.body;return {url:String(location.href||''),ready:document.readyState,"
+                    + "children:body?body.querySelectorAll('*').length:0,text:body?String(body.innerText||'').length:0,"
+                    + "width:body?body.getBoundingClientRect().width:0,height:body?body.getBoundingClientRect().height:0};}"
+                    + "catch(error){return {error:String(error&&error.message||error)}}})()");
+                RecordWebViewPhase("first-paint-timeout:" + diagnostics);
+            }
+            catch (Exception error) { RecordWebViewPhase("first-paint-timeout-probe-failed:" + error.GetType().Name); }
+            return false;
         }
 
         private async Task<bool> ProbeWorkspaceDomAsync(string expectedUrl)
@@ -2328,10 +2787,11 @@ namespace DshPortable
             MaximizeBox = true;
             MinimizeBox = true;
             MinimumSize = new Size(900, 620);
-            RestoreDesktopWindowState();
             FitWebViewToClient();
             webView.Visible = true;
             webView.BringToFront();
+            ApplyDesktopWindowCorners();
+            ApplyDesktopChrome();
             launchPanel.Visible = false;
             ResumeLayout(true);
             FitWebViewToClient();
@@ -2347,6 +2807,15 @@ namespace DshPortable
             Rectangle target = ClientRectangle;
             if (target.Width <= 0 || target.Height <= 0) return;
             if (webView.Bounds != target) webView.Bounds = target;
+        }
+
+        private void ApplyDesktopWindowCorners()
+        {
+            if (!IsHandleCreated) return;
+            DwmWindowCornerPreference preference = DwmWindowCornerPreference.Round;
+            try { DwmSetWindowAttribute(Handle, DwmwaWindowCornerPreference, ref preference, sizeof(int)); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
         }
 
         private void OnNewWindowRequested(object sender, CoreWebView2NewWindowRequestedEventArgs eventArgs)
@@ -2773,13 +3242,15 @@ namespace DshPortable
         private Tuple<int, string> InvokePortableCli(string[] actionArgs, Action<string> progressCallback)
         {
             string node = Path.Combine(root, "runtime", "node", "node.exe");
+            string runtimeEntry = Path.Combine(root, "launcher", "runtime-entry.mjs");
             string cli = Path.Combine(root, "launcher", "portable-cli.mjs");
-            if (!File.Exists(node) || !File.Exists(cli))
+            if (!File.Exists(node) || !File.Exists(runtimeEntry) || !File.Exists(cli))
                 throw new InvalidOperationException(L(
                     "DSH-Portable 文件夹不完整。请完整解压后再启动。",
                     "This DSH-Portable folder is incomplete. Extract the entire package before starting it."));
 
-            StringBuilder arguments = new StringBuilder(QuoteArgument(cli));
+            StringBuilder arguments = new StringBuilder(QuoteArgument(runtimeEntry));
+            arguments.Append(" ").Append(QuoteArgument(Path.GetFileName(cli)));
             foreach (string item in actionArgs) arguments.Append(" ").Append(QuoteArgument(item));
             ProcessStartInfo start = new ProcessStartInfo
             {
@@ -2819,16 +3290,17 @@ namespace DshPortable
         private void ShowFailure(string message)
         {
             operationRunning = false;
+            if (!hiddenForAutomation) Opacity = 1;
             launchPanel.Visible = true;
             webView.Visible = false;
             progress.Visible = false;
-            ClientSize = new Size(640, 360);
+            if (!desktopStart) ClientSize = new Size(640, 360);
             launchContent.Size = new Size(584, 304);
             CenterLaunchContent();
-            MinimumSize = Size.Empty;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
+            MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
+            FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedDialog;
+            MaximizeBox = desktopStart;
+            MinimizeBox = desktopStart;
             statusLabel.AutoEllipsis = false;
             statusLabel.Location = new Point(80, 53);
             statusLabel.Size = new Size(480, 28);
@@ -2851,13 +3323,13 @@ namespace DshPortable
             launchPanel.Visible = true;
             launchPanel.BringToFront();
             progress.Visible = false;
-            ClientSize = new Size(640, 360);
+            if (!desktopStart) ClientSize = new Size(640, 360);
             launchContent.Size = new Size(584, 304);
             CenterLaunchContent();
-            MinimumSize = Size.Empty;
-            FormBorderStyle = FormBorderStyle.FixedDialog;
-            MaximizeBox = false;
-            MinimizeBox = false;
+            MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
+            FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedDialog;
+            MaximizeBox = desktopStart;
+            MinimizeBox = desktopStart;
             statusLabel.AutoEllipsis = false;
             statusLabel.Location = new Point(80, 53);
             statusLabel.Size = new Size(480, 28);
@@ -2941,14 +3413,58 @@ namespace DshPortable
 
     internal static class Program
     {
+        private const string AppUserModelId = "io.github.wsl043.dsh-portable";
+
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern int SetCurrentProcessExplicitAppUserModelID(string appID);
+
+        private static void RegisterNotificationIdentity()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(
+                    @"Software\Classes\AppUserModelId\" + AppUserModelId))
+                {
+                    if (key == null) return;
+                    key.SetValue("DisplayName", "DeepSeek Harness", RegistryValueKind.ExpandString);
+                    key.SetValue("IconUri", Application.ExecutablePath, RegistryValueKind.ExpandString);
+                    key.SetValue("IconBackgroundColor", "00000000", RegistryValueKind.String);
+                }
+            }
+            catch { }
+        }
+
+        private static string[] WaitForRestartHandoff(string[] args)
+        {
+            if (args == null || args.Length < 2
+                || !String.Equals(args[0], "--dsh-restart-after-pid", StringComparison.Ordinal))
+                return args ?? new string[0];
+            int processId;
+            if (!Int32.TryParse(args[1], NumberStyles.None, CultureInfo.InvariantCulture, out processId)
+                || processId <= 0)
+                throw new ArgumentException("The restart handoff process id is invalid.");
+            try
+            {
+                using (Process previous = Process.GetProcessById(processId))
+                {
+                    if (!previous.WaitForExit(60000))
+                        throw new TimeoutException("The previous DeepSeek Harness window did not finish closing.");
+                }
+            }
+            catch (ArgumentException)
+            {
+                // The previous process already exited between launch and lookup.
+            }
+            return args.Skip(2).ToArray();
+        }
 
         [STAThread]
         private static void Main(string[] args)
         {
+            args = WaitForRestartHandoff(args);
             PortableProcessJob.Initialize();
-            SetCurrentProcessExplicitAppUserModelID("io.github.wsl043.dsh-portable");
+            RegisterNotificationIdentity();
+            SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             if ((args == null || args.Length == 0) && LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableRestore))

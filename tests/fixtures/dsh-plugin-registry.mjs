@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 
-const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1', defaultPluginArchive, defaultPluginVersion] = process.argv.slice(2)
+const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1', defaultPluginArchive, defaultPluginVersion, imageViewerArchive, imageViewerVersion] = process.argv.slice(2)
 if (!v1Archive || !v2Archive || !channelFile || !readyFile || !clsxArchive || !defaultPluginArchive || !defaultPluginVersion) {
   throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> <clsx-version> <default-plugin.tgz> <default-plugin-version>')
 }
@@ -16,6 +16,8 @@ const releases = new Map([
 const clsxRelease = archiveRelease(clsxVersion, clsxArchive)
 const defaultPluginName = 'dsh-native-session-delete'
 const defaultPluginRelease = archiveRelease(defaultPluginVersion, defaultPluginArchive)
+const defaultReleases = new Map([[defaultPluginName, defaultPluginRelease]])
+if (imageViewerArchive && imageViewerVersion) defaultReleases.set('dsh-native-image-viewer', archiveRelease(imageViewerVersion, imageViewerArchive))
 
 function archiveRelease(version, filename) {
   const body = readFileSync(filename)
@@ -74,20 +76,20 @@ function clsxMetadata(origin) {
   }
 }
 
-function defaultPluginMetadata(origin) {
+function defaultPluginMetadata(origin, name, release) {
   return {
-    _id: defaultPluginName,
-    name: defaultPluginName,
-    'dist-tags': { latest: defaultPluginVersion },
+    _id: name,
+    name,
+    'dist-tags': { latest: release.version },
     versions: {
-      [defaultPluginVersion]: {
-        name: defaultPluginName,
-        version: defaultPluginVersion,
+      [release.version]: {
+        name,
+        version: release.version,
         license: 'MIT',
         dist: {
-          tarball: `${origin}/${defaultPluginName}/-/${defaultPluginName}-${defaultPluginVersion}.tgz`,
-          shasum: defaultPluginRelease.shasum,
-          integrity: defaultPluginRelease.integrity,
+          tarball: `${origin}/${name}/-/${name}-${release.version}.tgz`,
+          shasum: release.shasum,
+          integrity: release.integrity,
         },
       },
     },
@@ -115,8 +117,9 @@ const server = http.createServer((request, response) => {
     }).end(body)
     return
   }
-  if (request.method === 'GET' && pathname === `/${defaultPluginName}`) {
-    const body = Buffer.from(JSON.stringify(defaultPluginMetadata(origin)), 'utf8')
+  const defaultMetadataName = pathname.slice(1)
+  if (request.method === 'GET' && defaultReleases.has(defaultMetadataName)) {
+    const body = Buffer.from(JSON.stringify(defaultPluginMetadata(origin, defaultMetadataName, defaultReleases.get(defaultMetadataName))), 'utf8')
     response.writeHead(200, {
       'content-type': 'application/json',
       'content-length': body.length,
@@ -142,12 +145,16 @@ const server = http.createServer((request, response) => {
     }).end(clsxRelease.body)
     return
   }
-  if (request.method === 'GET' && pathname === `/${defaultPluginName}/-/${defaultPluginName}-${defaultPluginVersion}.tgz`) {
+  const defaultArchiveEntry = [...defaultReleases].find(([name, release]) => (
+    pathname === `/${name}/-/${name}-${release.version}.tgz`
+  ))
+  if (request.method === 'GET' && defaultArchiveEntry) {
+    const defaultArchiveRelease = defaultArchiveEntry[1]
     response.writeHead(200, {
       'content-type': 'application/octet-stream',
-      'content-length': defaultPluginRelease.body.length,
+      'content-length': defaultArchiveRelease.body.length,
       'cache-control': 'no-store',
-    }).end(defaultPluginRelease.body)
+    }).end(defaultArchiveRelease.body)
     return
   }
   response.writeHead(404, { 'content-type': 'text/plain' }).end('not found')

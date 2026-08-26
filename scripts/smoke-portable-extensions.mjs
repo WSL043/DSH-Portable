@@ -21,8 +21,12 @@ assert.equal(await missing(path.join(root, 'app', 'node_modules', '@wsl043', 'ds
 assert.equal(await missing(path.join(root, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'extensions', 'catalog.json')), true)
 await access(fixture)
 
+const capsuleCore = await import(pathToFileURL(path.join(root, 'launcher', 'runtime-capsule.mjs')))
+const prepared = await capsuleCore.ensureRuntimeCapsule(root)
+const immutableRoot = prepared.runtimeRoot
+
 const client = await readFile(path.join(
-  root, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'lib', 'client.js',
+  immutableRoot, 'app', 'node_modules', '@wsl043', 'dsh-portable-desktop-bridge', 'lib', 'client.js',
 ), 'utf8')
 assert.doesNotMatch(client, /Portable extensions|便携扩展|portable-extensions|\/api\/dsh-portable\/extensions/)
 

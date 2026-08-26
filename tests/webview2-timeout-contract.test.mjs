@@ -13,6 +13,8 @@ test('Windows desktop host waits for the usable DOM and reports the failing boun
   assert.match(source, /EventHandler<CoreWebView2DOMContentLoadedEventArgs>\s+domLoaded/)
   assert.match(source, /DOMContentLoaded\s*\+=\s*domLoaded/)
   assert.match(source, /ProbeWorkspaceDomAsync\(url\)/)
+  assert.match(source, /WaitForWorkspaceFirstPaintAsync\(url\)/)
+  assert.match(source, /WaitForWorkspaceFirstPaintAsync[\s\S]+getBoundingClientRect\(\)[\s\S]+await Task\.Delay\(50\)/)
   assert.match(source, /ExecuteScriptAsync/)
   assert.match(source, /workspaceUsable\.TrySetResult\(true\)/)
   assert.match(source, /Task\.WhenAny\(workspaceUsable\.Task,\s*navigation\.Task,\s*webViewProcessFailure\.Task,\s*timeout\)/)
