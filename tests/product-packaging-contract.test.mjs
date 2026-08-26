@@ -657,6 +657,7 @@ test('removable offline defaults are installed only for a newly created web prof
   for (const build of [macos, linux]) {
     assert.doesNotMatch(build, /\$DEFAULT_PLUGIN_SHA256/)
     assert.match(build, /lock_value defaultPlugins\.sessionDelete\.sha256/)
+    assert.match(build, /runtime-capsule\.mjs/)
   }
   assert.match(cli, /seedDefaultPlugins/)
   assert.match(core, /profile-exists/)
