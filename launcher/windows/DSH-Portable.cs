@@ -799,25 +799,27 @@ namespace DshPortable
 
         private void ConfigureDesktopLoadingSurface(string message, bool showDetail)
         {
-            launchContent.Size = new Size(360, showDetail ? 124 : 104);
-            productIcon.Visible = false;
+            launchContent.Size = new Size(360, showDetail ? 164 : 140);
+            productIcon.Location = new Point(162, 0);
+            productIcon.Size = new Size(36, 36);
+            productIcon.Visible = true;
             productLabel.Text = "HARNESS";
-            productLabel.Location = new Point(0, 0);
+            productLabel.Location = new Point(0, 44);
             productLabel.Size = new Size(360, 24);
             productLabel.TextAlign = ContentAlignment.MiddleCenter;
             productLabel.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point);
-            activityRing.Location = new Point(170, 40);
+            activityRing.Location = new Point(170, 80);
             activityRing.Size = new Size(20, 20);
             activityRing.Indeterminate = true;
             activityRing.Value = 0;
             activityRing.Visible = true;
-            statusLabel.Location = new Point(0, 76);
+            statusLabel.Location = new Point(0, 112);
             statusLabel.Size = new Size(360, 20);
             statusLabel.AutoEllipsis = true;
             statusLabel.TextAlign = ContentAlignment.MiddleCenter;
             statusLabel.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
             statusLabel.Text = message;
-            progressDetail.Location = new Point(0, 100);
+            progressDetail.Location = new Point(0, 140);
             progressDetail.Size = new Size(360, 20);
             progressDetail.TextAlign = ContentAlignment.MiddleCenter;
             progressDetail.Visible = showDetail;
@@ -2502,8 +2504,8 @@ namespace DshPortable
             webView.Visible = true;
             if (desktopStart)
             {
-                launchPanel.Visible = false;
-                webView.BringToFront();
+                launchPanel.Visible = true;
+                launchPanel.BringToFront();
             }
             else launchPanel.BringToFront();
             RecordWebViewPhase("navigation-start:" + url);
@@ -2579,6 +2581,11 @@ namespace DshPortable
                 + "var expected=" + expected + ";"
                 + "var current=String(window.location.href||'').replace(/\\/$/,'');"
                 + "if(current.indexOf(expected)!==0||!document.body)return false;"
+                + "var boot=document.querySelector('[data-dsh-boot]');"
+                + "var bootVisible=false;"
+                + "if(boot){var bootRect=boot.getBoundingClientRect();var bootStyle=getComputedStyle(boot);"
+                + "bootVisible=bootRect.width>0&&bootRect.height>0&&bootStyle.display!=='none'&&bootStyle.visibility!=='hidden'&&bootStyle.opacity!=='0';}"
+                + "if(bootVisible)return false;"
                 + "var nodes=document.body.querySelectorAll('*');"
                 + "for(var index=0;index<nodes.length;index++){"
                 + "var node=nodes[index];var rect=node.getBoundingClientRect();var style=getComputedStyle(node);"
@@ -2587,7 +2594,10 @@ namespace DshPortable
                 + "return String(document.body.innerText||'').trim().length>0;"
                 + "}catch(_){return false;}})()";
             await Task.Delay(50);
-            for (int attempt = 0; attempt < 80; attempt++)
+            // Keep the native loading surface in place for the same budget as
+            // workspace navigation. Slow first-run plugin discovery must not
+            // expose the intermediate DSH boot page or turn into a false stall.
+            for (int attempt = 0; attempt < 560; attempt++)
             {
                 try
                 {
