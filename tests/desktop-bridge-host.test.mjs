@@ -94,6 +94,13 @@ test('Portable settings expose product and official DSH checks as separate bound
   assert.equal(calls.length, 2)
 })
 
+test('data import review exposes the real package contents before restart', async () => {
+  const source = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+  assert.match(source, /dataImportFiles:/)
+  assert.match(source, /styles\.importFileList/)
+  assert.match(source, /importInfo\.files\.map/)
+})
+
 test('Portable maintenance routes are same-origin, bounded, and delegate only official CLI commands', async (t) => {
   const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-maintenance-'))
   t.after(() => rm(stateRoot, { recursive: true, force: true }))
@@ -115,10 +122,11 @@ test('Portable maintenance routes are same-origin, bounded, and delegate only of
   assert.equal(repair.status, 202)
   assert.equal(repair.json().scheduled, true)
 
+  const reportOutput = path.join(stateRoot, 'chosen-support.json')
   const report = response()
-  await routes.get('/dsh-portable/support-report').handler(request('POST'), report)
+  await routes.get('/dsh-portable/support-report').handler(request('POST', { output: reportOutput }), report)
   assert.equal(report.status, 200)
-  assert.equal(calls.at(-1)[0], 'support-report')
+  assert.deepEqual(calls.at(-1), ['support-report', '--json', '--output', reportOutput])
 
   const untrusted = response()
   const bad = request('POST')

@@ -90,6 +90,15 @@ jobs:
           else
             gh issue create --title "$TITLE" --body-file "$BODY" --assignee WSL043
           fi
+      - name: Close the resolved plugin-market review issue
+        if: steps.market.outputs.changed != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ISSUE=$(gh issue list --state open --search "dsh-market in:title" --json number,title --jq '.[] | select(.title == "Dependency intake: dsh-market" or (.title | startswith("Review dsh-market"))) | .number' | head -n 1)
+          if [ -n "$ISSUE" ]; then
+            gh issue close "$ISSUE" --comment "The current upstream release is covered by the reviewed compatibility matrix."
+          fi
       - name: Summarize source-only upstream activity
         if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.source_changed == 'true'
         env:

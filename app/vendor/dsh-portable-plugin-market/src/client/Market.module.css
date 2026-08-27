@@ -348,6 +348,11 @@
 .viewBarInline{margin:0;flex-shrink:0}
 .installedToolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
 .installedToolbar .viewBar{margin-bottom:0}
+.installedSummary{display:flex;align-items:center;gap:10px;min-width:0;color:var(--dsw-alias-label-primary,#1f2328);font-size:13px;line-height:20px;font-weight:600}
+.installedUpdateState{display:inline-flex;align-items:center;gap:6px;color:var(--dsw-alias-label-secondary,#6b7280);font-size:12px;line-height:18px;font-weight:400;white-space:nowrap}
+.installedUpdateDot{width:6px;height:6px;border-radius:99px;background:var(--dsw-alias-brand-primary,#4f6ef7);flex:0 0 auto}
+.installedToolbarActions{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+@media(max-width:560px){.installedToolbar{align-items:flex-start;flex-direction:column}.installedToolbarActions{width:100%;justify-content:flex-start;flex-wrap:wrap}.installedUpdateState{white-space:normal}}
 .themeViewRow{display:flex;justify-content:flex-end;padding:0 4px 10px}
 .viewBtn{border:none;background:none;font:inherit;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#6b7280);padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
 .viewBtn:hover{color:var(--dsw-alias-brand-primary,#4f6ef7)}

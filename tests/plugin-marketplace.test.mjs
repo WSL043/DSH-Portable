@@ -424,6 +424,22 @@ test('plugin market and installed plugins are sibling native plugin tabs', async
   assert.doesNotMatch(section, /marketViewSwitch/)
 })
 
+test('installed plugins surface keeps its count and update state visible', async () => {
+  const [section, styles, locales] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
+  ])
+
+  assert.match(section, /const installedCount = Object\.keys\(installed\)\.filter\(/)
+  assert.match(section, /className=\{css\.installedSummary\}/)
+  assert.match(section, /updatableNames\.length > 0[\s\S]*css\.installedUpdateDot/)
+  assert.match(styles, /\.installedSummary\s*\{/)
+  assert.match(styles, /\.installedUpdateDot\s*\{/)
+  assert.match(locales, /^\s*installedCount:/m)
+  assert.match(locales, /^\s*updatesAvailable:/m)
+})
+
 test('plugin updates remain visible in the market activity panel', async () => {
   const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
   const updateFlow = section.slice(section.indexOf('const doUpdate ='), section.indexOf('const doUseSkin ='))

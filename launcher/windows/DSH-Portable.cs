@@ -441,7 +441,7 @@ namespace DshPortable
             ShowInTaskbar = !nonInteractive && !testHidden;
             if (nonInteractive) Opacity = 0;
             else if (testHidden) Opacity = 1;
-            else if (desktopStart) Opacity = 0.01;
+            else if (desktopStart) Opacity = 1;
             ClientSize = desktopStart ? new Size(1280, 820) : new Size(440, 160);
             MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
             BackColor = SystemColors.Window;
@@ -623,8 +623,8 @@ namespace DshPortable
             };
             Controls.Add(webView);
             Controls.Add(launchPanel);
-            launchPanel.Visible = !desktopStart;
-            if (!desktopStart) launchPanel.BringToFront();
+            launchPanel.Visible = true;
+            launchPanel.BringToFront();
             if (desktopStart)
             {
                 RestoreDesktopWindowState();
@@ -1182,7 +1182,8 @@ namespace DshPortable
                     string kind = message.TryGetValue("kind", out kindValue) ? Convert.ToString(kindValue) : String.Empty;
                     if (!Regex.IsMatch(requestId ?? String.Empty, "^data-export-[A-Za-z0-9-]{1,96}$")) return;
                     if (!String.Equals(kind, "standard", StringComparison.Ordinal)
-                        && !String.Equals(kind, "private", StringComparison.Ordinal)) return;
+                        && !String.Equals(kind, "private", StringComparison.Ordinal)
+                        && !String.Equals(kind, "support", StringComparison.Ordinal)) return;
                     BeginInvoke((MethodInvoker)delegate { ShowDataPackageSaveDialog(requestId, kind); });
                     return;
                 }
@@ -1324,27 +1325,35 @@ namespace DshPortable
                 Activate();
                 BringToFront();
                 string stamp = DateTime.Now.ToString("yyyy-MM-dd-HHmm", CultureInfo.InvariantCulture);
-                string prefix = String.Equals(kind, "private", StringComparison.Ordinal)
-                    ? "DSH-Portable-private-"
-                    : "DSH-Portable-data-";
+                bool support = String.Equals(kind, "support", StringComparison.Ordinal);
+                string prefix = support
+                    ? "DSH-Portable-support-"
+                    : String.Equals(kind, "private", StringComparison.Ordinal)
+                        ? "DSH-Portable-private-"
+                        : "DSH-Portable-data-";
+                string extension = support ? ".json" : ".dshdata";
                 string automationDirectory = Environment.GetEnvironmentVariable("DSH_PORTABLE_DATA_EXPORT_DIRECTORY");
                 if (!String.IsNullOrWhiteSpace(automationDirectory))
                 {
                     string directory = Path.GetFullPath(automationDirectory);
                     Directory.CreateDirectory(directory);
-                    result["path"] = Path.Combine(directory, prefix + stamp + ".dshdata");
+                    result["path"] = Path.Combine(directory, prefix + stamp + extension);
                 }
                 else using (SaveFileDialog dialog = new SaveFileDialog
                 {
                     AddExtension = true,
                     CheckPathExists = true,
-                    DefaultExt = "dshdata",
-                    FileName = prefix + stamp + ".dshdata",
-                    Filter = L("DSH-Portable 数据包 (*.dshdata)|*.dshdata", "DSH-Portable data package (*.dshdata)|*.dshdata"),
+                    DefaultExt = support ? "json" : "dshdata",
+                    FileName = prefix + stamp + extension,
+                    Filter = support
+                        ? L("JSON 支持报告 (*.json)|*.json", "JSON support report (*.json)|*.json")
+                        : L("DSH-Portable 数据包 (*.dshdata)|*.dshdata", "DSH-Portable data package (*.dshdata)|*.dshdata"),
                     InitialDirectory = GetDefaultDownloadFolder(),
                     OverwritePrompt = true,
                     RestoreDirectory = true,
-                    Title = L("选择数据包保存位置", "Choose where to save the data package"),
+                    Title = support
+                        ? L("选择支持报告保存位置", "Choose where to save the support report")
+                        : L("选择数据包保存位置", "Choose where to save the data package"),
                 })
                 {
                     using (System.Threading.Timer automation = ArmOwnedDialogCancellationAutomation(Handle, "data-export-dialog"))

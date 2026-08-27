@@ -145,8 +145,8 @@ export function evaluateUpdate(manifest, installed, platform) {
   }
   const productComparison = comparePortableVersions(installed.portableVersion, manifest.portableVersion)
   if (updateKind === 'engine') {
-    if (productComparison !== 0) return describe('core-incompatible', 'none')
     if (engineCurrent && comparePortableVersions(engineCurrent, engineLatest) >= 0) return describe('current', 'none')
+    if (productComparison !== 0) return describe('core-incompatible', 'none')
   } else if (productComparison >= 0) {
     return describe('current', 'none')
   }

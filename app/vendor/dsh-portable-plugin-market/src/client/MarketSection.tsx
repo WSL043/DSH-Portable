@@ -1553,6 +1553,7 @@ export function MarketSection(props: MarketSectionProps) {
   // The market itself stays out of the batch: its update reloads this page
   // mid-run, which would strand the remaining items.
   const selfName = installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
+  const installedCount = Object.keys(installed).filter(name => name !== selfName).length
   const updatableNames = Object.keys(installed).filter(
     name => name !== selfName && !updatedNames.includes(name) && updates[name] && updates[name].updateAvailable,
   )
@@ -2498,24 +2499,35 @@ export function MarketSection(props: MarketSectionProps) {
             : (
                 <>
                   <div className={css.installedToolbar}>
-                    <div className={css.viewBar}>
-                      <button type="button" className={installedView === 'list' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('list')}>{t('tabList')}</button>
-                      <button type="button" className={installedView === 'groups' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('groups')}>{t('tabGroups')}</button>
+                    <div className={css.installedSummary}>
+                      <span>{t('installedCount')} ({installedCount})</span>
+                      {updatableNames.length > 0 && (
+                        <span className={css.installedUpdateState} title={t('updatesAvailable').replace('{0}', String(updatableNames.length))}>
+                          <span className={css.installedUpdateDot} />
+                          {t('updatesAvailable').replace('{0}', String(updatableNames.length))}
+                        </span>
+                      )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={<IconCodeOutline16 size={14} />}
-                      onClick={() => setTab('diagnostics')}
-                    >{t('tabDiagnostics')}</Button>
-                    {updatableNames.length >= 2 && (
+                    <div className={css.installedToolbarActions}>
+                      <div className={css.viewBar}>
+                        <button type="button" className={installedView === 'list' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('list')}>{t('tabList')}</button>
+                        <button type="button" className={installedView === 'groups' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setInstalledView('groups')}>{t('tabGroups')}</button>
+                      </div>
                       <Button
-                        variant="primary"
+                        variant="outline"
                         size="sm"
-                        disabled={updatingAll || updatingName !== null || busyUrl !== null || removingName !== null}
-                        onClick={doUpdateAll}
-                      >{updatingAll ? t('updating') : t('updateAll') + ' (' + updatableNames.length + ')'}</Button>
-                    )}
+                        icon={<IconCodeOutline16 size={14} />}
+                        onClick={() => setTab('diagnostics')}
+                      >{t('tabDiagnostics')}</Button>
+                      {updatableNames.length >= 2 && (
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          disabled={updatingAll || updatingName !== null || busyUrl !== null || removingName !== null}
+                          onClick={doUpdateAll}
+                        >{updatingAll ? t('updating') : t('updateAll') + ' (' + updatableNames.length + ')'}</Button>
+                      )}
+                    </div>
                   </div>
                   <div className={css.tabSearchRow}>
                     <Input className={css.tabSearch} icon={<IconSearchOutline16 size={14} />} placeholder={t('searchPh')} value={qInstalled} onChange={e => setQInstalled(e.target.value)} />

@@ -112,7 +112,7 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
 const clickButton = names => `(() => {
   const names = ${JSON.stringify(names)}
   const button = [...document.querySelectorAll('button,[role="button"]')].find(item => {
-    const label = item.getAttribute('aria-label') || item.getAttribute('title') || item.textContent || ''
+    const label = item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || ''
     if (!names.includes(label.trim()) || item.disabled || item.getAttribute('aria-disabled') === 'true') return false
     const rect = item.getBoundingClientRect()
     const style = getComputedStyle(item)
@@ -167,13 +167,23 @@ async function waitForArchive(prefix, timeoutMs = 90000) {
   throw new Error(`timed out waiting for ${prefix} archive`)
 }
 
+async function waitForSupportReport(timeoutMs = 90000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const names = (await readdir(outputDirectory)).filter(name => name.startsWith('DSH-Portable-support-') && name.endsWith('.json'))
+    if (names.length === 1) return path.join(outputDirectory, names[0])
+    await new Promise(resolve => setTimeout(resolve, 100))
+  }
+  throw new Error('timed out waiting for the support report')
+}
+
 let launcher = null
 let client = null
 let importFixtureRoot = ''
 try {
   await mkdir(outputDirectory, { recursive: true })
   for (const name of await readdir(outputDirectory)) {
-    if (name.endsWith('.dshdata') || name.endsWith('.png') || name === 'private-password.txt') {
+    if (name.endsWith('.dshdata') || name.endsWith('.png') || name.startsWith('DSH-Portable-support-') || name === 'private-password.txt') {
       await rm(path.join(outputDirectory, name), { force: true })
     }
   }
@@ -243,8 +253,27 @@ try {
   await new Promise(resolve => setTimeout(resolve, 200))
   await capture(client, '03-general-settings.png')
 
+  const more = await evaluate(client, clickButton(['更多', 'More']))
+  assert.equal(more.clicked, true, `maintenance menu unavailable: ${JSON.stringify(more)}`)
+  await waitForValue(client, clickChoice(['导出支持报告', 'Export support report']), value => value?.clicked, 'support report action')
+  const supportReport = await waitForSupportReport()
+  assert.equal(existsSync(supportReport), true)
+
+  await evaluate(client, `(() => {
+    const target = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出加密私密包|Export encrypted private package)$/.test((item.textContent || '').trim()))
+    target?.scrollIntoView({ block: 'center' })
+    return Boolean(target)
+  })()`)
+  await new Promise(resolve => setTimeout(resolve, 150))
+  const privateTarget = await evaluate(client, `(() => {
+    const target = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出加密私密包|Export encrypted private package)$/.test((item.textContent || '').trim()))
+    if (!target) return { found: false }
+    const rect = target.getBoundingClientRect()
+    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    return { found: true, rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, point: point?.outerHTML?.slice(0, 300) || '' }
+  })()`)
   const privateOpen = await evaluate(client, clickButton(['导出加密私密包', 'Export encrypted private package']))
-  assert.equal(privateOpen.clicked, true, `private export action unavailable: ${JSON.stringify(privateOpen)}`)
+  assert.equal(privateOpen.clicked, true, `private export action unavailable: ${JSON.stringify({ privateOpen, privateTarget })}`)
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /导出加密私密包|Export encrypted private package/.test(item.textContent || '')))`, Boolean, 'private export dialog')
   const privateGeometry = await evaluate(client, `(() => {
     const dialog = [...document.querySelectorAll('[role="dialog"]')].find(item => /导出加密私密包|Export encrypted private package/.test(item.textContent || ''))
@@ -348,6 +377,7 @@ try {
 
   process.stdout.write(`${JSON.stringify({
     status: 'passed',
+    supportReport,
     standardArchive,
     privateArchive,
     imported: true,

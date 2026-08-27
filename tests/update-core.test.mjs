@@ -158,7 +158,14 @@ test('the engine channel is monotonic and never crosses an unverified Portable c
   assert.equal(evaluateUpdate(engineUpdateManifest({
     component: { ...engineUpdateManifest().component, dshVersion: '0.1.1-rc.2' },
   }), installed, 'windows-x64').status, 'current')
-  const incompatible = evaluateUpdate(engineUpdateManifest({ portableVersion: '0.4.11' }), installed, 'windows-x64')
+  assert.equal(evaluateUpdate(engineUpdateManifest({
+    portableVersion: '0.4.9',
+    component: { ...engineUpdateManifest().component, dshVersion: installed.dshVersion },
+  }), installed, 'windows-x64').status, 'current')
+  const incompatible = evaluateUpdate(engineUpdateManifest({
+    portableVersion: '0.4.11',
+    component: { ...engineUpdateManifest().component, dshVersion: '0.1.1-rc.4' },
+  }), installed, 'windows-x64')
   assert.equal(incompatible.status, 'core-incompatible')
   assert.equal(incompatible.delivery, 'none')
 })

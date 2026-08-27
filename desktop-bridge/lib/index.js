@@ -170,7 +170,12 @@ export function mountPortableRoutes(webServer, options = {}) {
   register({ kind: 'exact', path: '/dsh-portable/support-report', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-    try { sendJson(response, 200, await runCli(['support-report', '--json'])) }
+    try {
+      const body = await readJson(request)
+      const requestedOutput = typeof body.output === 'string' ? body.output.trim() : ''
+      if (!requestedOutput || !path.isAbsolute(requestedOutput)) return sendJson(response, 400, { error: 'output path must be absolute' })
+      sendJson(response, 200, await runCli(['support-report', '--json', '--output', requestedOutput]))
+    }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 

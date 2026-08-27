@@ -33,7 +33,7 @@ window.__ModuleLoader__.load({
         dataImport: '导入数据包', dataImportHint: '选择另一份 DSH-Portable 导出的数据包；导入前会先检查内容。',
         dataImportPassword: '输入数据包密码', dataImportPasswordHint: '这个数据包已加密。密码只用于本次导入，不会保存。',
         dataImportReview: '确认导入', dataImportReviewHint: '将导入 {0} 个文件。冲突项会由数据包替换，同时自动保留回滚备份。',
-        dataImportCategories: '包含：{0}', dataImportRestart: '重启并导入', dataImporting: '正在重启并导入…',
+        dataImportCategories: '包含：{0}', dataImportFiles: '文件明细', dataImportMoreFiles: '另有 {0} 个文件', dataImportRestart: '重启并导入', dataImporting: '正在重启并导入…',
       },
       en: {
         title: 'Portable',
@@ -62,7 +62,7 @@ window.__ModuleLoader__.load({
         dataImport: 'Import data package', dataImportHint: 'Choose a package exported by another DSH-Portable. Its contents are checked before import.',
         dataImportPassword: 'Enter package password', dataImportPasswordHint: 'This package is encrypted. The password is used for this import only and is never stored.',
         dataImportReview: 'Confirm import', dataImportReviewHint: 'Import {0} file(s). Package files replace conflicts and a rollback backup is created automatically.',
-        dataImportCategories: 'Includes: {0}', dataImportRestart: 'Restart and import', dataImporting: 'Restarting to import…',
+        dataImportCategories: 'Includes: {0}', dataImportFiles: 'Files', dataImportMoreFiles: '{0} more file(s)', dataImportRestart: 'Restart and import', dataImporting: 'Restarting to import…',
       },
     }
 
@@ -168,6 +168,20 @@ window.__ModuleLoader__.load({
           } else if (name === 'repair') setStatus('maintenance', t('scheduled'))
           else setStatus('maintenance', format(t('exported'), body.output || ''))
         }).catch(error => setStatus('maintenance', format(t('failed'), error.message || error))).finally(() => setBusy(''))
+      }
+      const exportSupportReport = async () => {
+        setBusy('report'); setStatus('maintenance', '')
+        try {
+          const output = await chooseDataExportPath('support')
+          if (!output) return
+          const response = await fetch('/dsh-portable/support-report', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ output }),
+          })
+          const body = await response.json()
+          if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`)
+          setStatus('maintenance', format(t('exported'), body.output || output))
+        } catch (error) { setStatus('maintenance', format(t('failed'), error.message || error)) }
+        finally { setBusy('') }
       }
       const checkUpdate = scope => {
         const name = `update-${scope}`
@@ -277,6 +291,9 @@ window.__ModuleLoader__.load({
         modalInput: { width: '100%', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' },
         modalLabel: { color: 'var(--dsw-alias-label-primary)', fontSize: 13, lineHeight: '20px' },
         modalError: { color: 'var(--dsw-alias-status-error)', fontSize: 12, lineHeight: '18px' },
+        importFileHeading: { color: 'var(--dsw-alias-label-primary)', fontSize: 12, fontWeight: 500, lineHeight: '18px', marginTop: 12 },
+        importFileList: { maxHeight: 160, overflowY: 'auto', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, padding: '8px 10px', marginTop: 6 },
+        importFile: { color: 'var(--dsw-alias-label-secondary)', fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', fontSize: 11, lineHeight: '18px', overflowWrap: 'anywhere' },
         version: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', whiteSpace: 'nowrap' },
         rowActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flex: '0 1 auto' },
       }
@@ -327,7 +344,7 @@ window.__ModuleLoader__.load({
         onSelect: id => {
           setMaintenanceMenuOpen(false)
           if (id === 'repair') action('repair', '/dsh-portable/repair')
-          else if (id === 'report') action('report', '/dsh-portable/support-report')
+          else if (id === 'report') exportSupportReport()
         },
       })
       const careSection = h('section', { style: styles.section, 'aria-label': t('care') },
@@ -371,21 +388,28 @@ window.__ModuleLoader__.load({
         h('span', { style: styles.modalLabel }, t('dataPassword')),
         h(primitives.Input, { style: styles.modalInput, type: 'password', autoComplete: 'current-password', value: importPassword, onChange: event => setImportPassword(event.target.value), autoFocus: true }))) : null
       const importInfo = importState?.info
+      const importPreviewFiles = Array.isArray(importInfo?.files) ? importInfo.files.map(String).slice(0, 80) : []
+      const hiddenImportFileCount = Array.isArray(importInfo?.files) ? Math.max(0, importInfo.files.length - importPreviewFiles.length) : 0
       const importConfirmDialog = dataDialog === 'import-confirm' && importInfo ? h(primitives.Modal, {
         open: true, onClose: closeImportDialog, title: t('dataImportReview'),
         description: format(t('dataImportReviewHint'), Array.isArray(importInfo.files) ? importInfo.files.length : 0),
         footer: h(React.Fragment, null,
           h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closeImportDialog }, t('cancel')),
           h(primitives.Button, { variant: 'primary', disabled: Boolean(busy), onClick: runImport }, busy === 'data-import-run' ? t('dataImporting') : t('dataImportRestart'))),
-      }, h('div', { style: styles.hint }, format(t('dataImportCategories'), (importInfo.categories || []).join(', ')))) : null
+      }, h('div', null,
+        h('div', { style: styles.hint }, format(t('dataImportCategories'), (importInfo.categories || []).join(', '))),
+        h('div', { style: styles.importFileHeading }, t('dataImportFiles')),
+        h('div', { style: styles.importFileList },
+          importPreviewFiles.map(file => h('div', { key: file, style: styles.importFile }, file)),
+          hiddenImportFileCount > 0 && h('div', { style: styles.importFile }, format(t('dataImportMoreFiles'), hiddenImportFileCount))))) : null
       const dataSection = h('section', { style: styles.section, 'aria-label': t('data') },
         h('div', { style: styles.sectionHeading }, t('data')),
         h('div', { style: styles.item },
           h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataTitle')), h('div', { style: styles.hint }, t('dataHint')), inlineStatus('data')),
           h('div', { style: styles.rowActions },
-            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: beginImport }, t('dataImport')),
-            h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => exportData('standard') }, busy === 'data-standard' ? t('checking') : t('dataStandard')),
-            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setDataDialog('private') }, t('dataPrivate')))))
+            h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataImportHint'), disabled: Boolean(busy), onClick: beginImport }, t('dataImport')),
+            h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataStandardHint'), disabled: Boolean(busy), onClick: () => exportData('standard') }, busy === 'data-standard' ? t('checking') : t('dataStandard')),
+            h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataPrivateHint'), disabled: Boolean(busy), onClick: () => setDataDialog('private') }, t('dataPrivate')))))
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
         inlineStatus('portable'),
