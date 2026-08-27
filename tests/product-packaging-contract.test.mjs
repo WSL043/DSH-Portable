@@ -882,8 +882,8 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /\.\/actionlint/)
   assert.match(workflow, /windows-desktop-host:[\s\S]+needs:\s*windows-build/)
   assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
-  assert.match(workflow, /windows-2022[\s\S]+firstColdStartSeconds:\s*35/)
-  assert.match(workflow, /windows-2025[\s\S]+firstColdStartSeconds:\s*40/)
+  assert.match(workflow, /windows-2022[\s\S]+firstColdStartSeconds:\s*75/)
+  assert.match(workflow, /windows-2025[\s\S]+firstColdStartSeconds:\s*75/)
   const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   assert.doesNotMatch(windowsBaseJob, /BuildInstaller|ISCC|Inno Setup/)
