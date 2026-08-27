@@ -54,7 +54,7 @@ This is not a renamed browser shortcut sold as a “no-install build.” Its run
 | **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
 | **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
 
-The 0.5.0 Windows offline package is about **58 MB** and expands into only **44 outer files**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This preserves the complete plugin runtime while minimizing the small-file work needed to download, extract, copy, and update the product. Release gates cover archive size, extracted size, file count, and startup performance so later versions cannot quietly regress.
+The 0.5 series Windows offline package is about **58 MB** and expands into about **44 outer files**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This preserves the complete plugin runtime while minimizing the small-file work needed to download, extract, copy, and update the product. Release gates cover archive size, extracted size, file count, and startup performance so later versions cannot quietly regress.
 
 ## Start in 3 steps
 
@@ -110,7 +110,7 @@ Managed paths repair themselves after a move; external projects remain where you
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
-Fresh install packages include the removable [DSH Native Session Manager](https://github.com/WSL043/dsh-native-session-manager) and [DSH Native Image Viewer](https://github.com/WSL043/dsh-native-image-viewer) offline. The former adds archive management and second-confirmation permanent session deletion; the latter provides native image viewing. Both follow the standard plugin update path afterward, and a normal upgrade does not reinstall a default plugin an existing user removed.
+Fresh install packages include the removable [DSH Chat Manager](https://github.com/WSL043/dsh-chat-manager) and [DSH Image Viewer](https://github.com/WSL043/dsh-image-viewer) offline. The former adds archive management and second-confirmation permanent session deletion; the latter provides native image viewing. Both follow the standard plugin update path afterward, and a normal upgrade does not reinstall a default plugin an existing user removed.
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
 

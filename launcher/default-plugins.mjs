@@ -7,23 +7,23 @@ import path from 'node:path'
 import { buildDshEnv } from './portable-core.mjs'
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
-  name: 'dsh-native-session-delete',
-  version: '1.1.2',
-  filename: 'dsh-native-session-delete.tgz',
-  url: 'https://registry.npmjs.org/dsh-native-session-delete/-/dsh-native-session-delete-1.1.2.tgz',
-  sha256: '671db83c0d15afb17783ecd3f876bbb07acf256b3207136b7b991867c21bdc7e',
-  integrity: 'sha512-P1imNSoUPQEYouxCkZCazeQlSPThFqhm7pm/4N2cntxoWRDsoabCyIwnbFMWrxcS+jbNtI1d8xqzCsU5rqVYjg==',
+  name: 'dsh-chat-manager',
+  version: '1.2.0',
+  filename: 'dsh-chat-manager.tgz',
+  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.2.0.tgz',
+  sha256: '0360ce9a05620b16aff0beb4ddc4dfaa6e719f4fbbe96df37c76c21ec5a0711b',
+  integrity: 'sha512-8mLEBX97GeB9PNNy27RyeDwbR7Vc5yaNsVFvQAPCMN5aYo3JKpt+mZNOwl3ANydTjyqKqhQb/XAiRLlABtal7w==',
   license: 'MIT',
-  reviewedCommit: '9c3202e21ff6fce412e5dc670816022eea1eae00',
+  reviewedCommit: '1effe0eb81d79d24ecd3c3114f09a07e885386e2',
 }), Object.freeze({
-  name: 'dsh-native-image-viewer',
-  version: '0.1.0-beta.2',
-  filename: 'dsh-native-image-viewer.tgz',
-  url: 'https://registry.npmjs.org/dsh-native-image-viewer/-/dsh-native-image-viewer-0.1.0-beta.2.tgz',
-  sha256: '8750aac5b6d7245142fc97815157c7dd0e374e54a11f7785d7d07ce2a4d6b0ea',
-  integrity: 'sha512-eaXQceLNvF0FtFnOrJ2US66K9IaXE4HBP0+d97lx+UdJQ6cY7qBQYee3FQjwDa5zfvCzWFtPX2cPK7ga0rpzVg==',
+  name: 'dsh-image-viewer',
+  version: '0.1.0-beta.3',
+  filename: 'dsh-image-viewer.tgz',
+  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.3.tgz',
+  sha256: 'f2a06ee671ae0b1cdcafa88d3fe40b00bed300401e3cb7f48c4502303ec7442a',
+  integrity: 'sha512-SdVDeYM2mJV1T2tv6/vTBsJgX7Sumcj/7avS0QiwwKWRZ8GlSQto40a8k3U/V8bCTHuh76MmW+vZGVFhUTbqaw==',
   license: 'MIT',
-  reviewedCommit: 'c857c21f75298075f99b90d8e23d26bf29dbb6a2',
+  reviewedCommit: 'c7869a1936e2538a26d3d404b8b4ecaa092ab699',
 })])
 
 async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}) {

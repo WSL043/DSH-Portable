@@ -29,7 +29,7 @@ const marketManifest = JSON.parse(await readFile(
 const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
 assert.deepEqual(
   DEFAULT_PLUGINS.map(plugin => plugin.name).sort(),
-  ['dsh-native-image-viewer', 'dsh-native-session-delete'],
+  ['dsh-chat-manager', 'dsh-image-viewer'],
   'the finished product does not declare both 0.5 default plugins',
 )
 let running = false
@@ -133,10 +133,10 @@ try {
     maxBuffer: 8 * 1024 * 1024,
   })
   assert.match(dumped.stdout, /id:\s*ui-workspace\s+[\s\S]{0,160}?disabled:\s*true/, 'official ui-workspace row is not disabled')
-  assert.match(dumped.stdout, /id:\s*ui-workspace-session-delete\s+[\s\S]{0,160}?name:\s*dsh-native-session-delete/, 'native delete row is not active')
-  assert.match(dumped.stdout, /name:\s*dsh-native-image-viewer/, 'native image viewer is not active')
+  assert.match(dumped.stdout, /id:\s*ui-workspace-session-delete\s+[\s\S]{0,160}?name:\s*dsh-chat-manager/, 'chat manager row is not active')
+  assert.match(dumped.stdout, /name:\s*dsh-image-viewer/, 'image viewer is not active')
 
-  const pluginPatch = await readFile(path.join(profileRoot, 'node_modules', 'dsh-native-session-delete', 'cordis.patch.yml'), 'utf8')
+  const pluginPatch = await readFile(path.join(profileRoot, 'node_modules', 'dsh-chat-manager', 'cordis.patch.yml'), 'utf8')
   assert.match(pluginPatch, /id:\s*ui-workspace-session-delete/)
   assert.match(pluginPatch, /id:\s*ui-workspace[\s\S]+disabled:\s*true/)
 

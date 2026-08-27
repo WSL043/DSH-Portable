@@ -93,8 +93,12 @@ try {
   if (!allowChannelMigration) {
     const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
     const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
+    const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(
+      () => [path.join(destination, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs'],
+      () => [oldCli],
+    )
     const { stdout: decisionText } = await execFileAsync(oldNode, [
-      oldCli,
+      ...oldEntry,
       'check-update',
       '--update-manifest', `${origin}/portable-update-windows-x64.json`,
       '--allow-http',

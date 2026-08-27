@@ -33,6 +33,11 @@ async function fixture(t) {
 
 test('default plugin metadata is exact and independently locked', () => {
   assert.deepEqual(DEFAULT_PLUGINS, expected)
+  assert.deepEqual(
+    DEFAULT_PLUGINS.map(plugin => plugin.name),
+    ['dsh-chat-manager', 'dsh-image-viewer'],
+    'fresh profiles must use the current canonical package identities',
+  )
 })
 
 test('fresh web profile is seeded through official plugin add with a move-safe profile-relative archive', async (t) => {
@@ -56,14 +61,14 @@ test('fresh web profile is seeded through official plugin add with a move-safe p
   assert.deepEqual(calls[0].args, [
     layout.dshBin,
     'plugin', '--profile', 'web', 'add',
-    'file:.dsh-portable-archives/dsh-native-session-delete.tgz',
-    'file:.dsh-portable-archives/dsh-native-image-viewer.tgz',
+    'file:.dsh-portable-archives/dsh-chat-manager.tgz',
+    'file:.dsh-portable-archives/dsh-image-viewer.tgz',
   ])
   assert.equal(calls[0].options.cwd, path.join(layout.dshHome, 'profiles', 'web'))
   assert.equal(calls[0].options.env.DSH_HOME, layout.dshHome)
   assert.equal(
     await readFile(path.join(calls[0].options.cwd, '.dsh-portable-archives', expected[1].filename), 'utf8'),
-    'verified archive fixture: dsh-native-image-viewer',
+    'verified archive fixture: dsh-image-viewer',
   )
   const manifest = JSON.parse(await readFile(path.join(calls[0].options.cwd, 'package.json'), 'utf8'))
   for (const plugin of expected) assert.equal(manifest.dependencies[plugin.name], plugin.version)

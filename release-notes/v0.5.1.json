@@ -1,0 +1,23 @@
+{
+  "version": "0.5.1",
+  "zh": {
+    "summary": "更可靠的桌面运行、迁移与插件体验，并为多个独立 Portable 环境提供完整隔离。",
+    "highlights": [
+      "Windows、macOS 与 Linux 的桌面壳现在使用一致的原生能力边界；文件选择、数据迁移、设置与重启反馈在失败后也能恢复到可继续使用的窗口。",
+      "插件安装、更新与卸载会明确显示刷新或重启结果，不再让用户猜测改动是否已经生效。",
+      "同一台电脑可以同时运行位于不同目录的 Portable 环境；端口、进程和数据目录彼此隔离，关闭其中一个不会影响另一个。",
+      "全新环境离线提供当前的 DSH Chat Manager 1.2.0 与 DSH Image Viewer 0.1.0-beta.3；已有环境保留用户自己的插件状态。",
+      "启动、更新和数据导入的生命周期检查进一步收紧，异常退出不会把不完整状态当成成功。"
+    ]
+  },
+  "en": {
+    "summary": "More reliable desktop, migration, and plugin flows, with complete isolation between independent Portable environments.",
+    "highlights": [
+      "Windows, macOS, and Linux now share the same bounded native-host capabilities. File selection, data migration, settings, and restart feedback recover to a usable window after a failed operation.",
+      "Plugin install, update, and removal now report whether a refresh or restart is needed, so activation is no longer ambiguous.",
+      "Independent Portable folders can run side by side on the same computer. Ports, processes, and data roots remain isolated, and stopping one does not interrupt another.",
+      "Fresh environments include DSH Chat Manager 1.2.0 and DSH Image Viewer 0.1.0-beta.3 offline, while existing environments keep their user-managed plugin state.",
+      "Startup, update, and data-import lifecycle checks are stricter, and incomplete shutdown or recovery is never reported as success."
+    ]
+  }
+}

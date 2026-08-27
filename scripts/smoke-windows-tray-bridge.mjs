@@ -629,7 +629,7 @@ try {
     const installedUi = await waitForValue(client, `(() => {
       const text = document.body?.innerText || ''
       const search = [...document.querySelectorAll('input')].some(item => ['Search plugins: notify, terminal, memory…', '搜索插件，比如：通知、终端、记忆…'].includes(item.placeholder || ''))
-      const defaultPlugins = ['dsh-native-session-delete', 'dsh-native-image-viewer'].filter(name => text.includes(name))
+      const defaultPlugins = ['dsh-chat-manager', 'dsh-image-viewer'].filter(name => text.includes(name))
       const marketSelected = [...document.querySelectorAll('button')].some(item => {
         const label = (item.textContent || '').trim()
         return ['Plugin Market', '插件市场'].includes(label) && item.getAttribute('aria-selected') === 'true'

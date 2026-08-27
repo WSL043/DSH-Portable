@@ -47,7 +47,7 @@ assert.equal(desktopBridgeSource?.license, 'Apache-2.0', 'desktop bridge license
 const defaultPlugins = upstream.defaultPlugins ?? {}
 assert.deepEqual(Object.keys(defaultPlugins).sort(), ['imageViewer', 'sessionDelete'])
 for (const [key, plugin] of Object.entries(defaultPlugins)) {
-  assert.match(plugin?.package ?? '', /^dsh-native-[a-z0-9-]+$/, `${key} package`)
+  assert.match(plugin?.package ?? '', /^dsh-[a-z0-9-]+$/, `${key} package`)
   assert.match(plugin?.repository ?? '', /^WSL043\/[A-Za-z0-9._-]+$/, `${key} repository`)
   assert.ok(['stable', 'prerelease'].includes(plugin?.releaseChannel), `${key} release channel`)
   assert.match(plugin?.version ?? '', /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, `${key} version`)

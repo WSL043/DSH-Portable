@@ -14,10 +14,10 @@ const releases = new Map([
   ['1.0.1', archiveRelease('1.0.1', v2Archive)],
 ])
 const clsxRelease = archiveRelease(clsxVersion, clsxArchive)
-const defaultPluginName = 'dsh-native-session-delete'
+const defaultPluginName = 'dsh-chat-manager'
 const defaultPluginRelease = archiveRelease(defaultPluginVersion, defaultPluginArchive)
 const defaultReleases = new Map([[defaultPluginName, defaultPluginRelease]])
-if (imageViewerArchive && imageViewerVersion) defaultReleases.set('dsh-native-image-viewer', archiveRelease(imageViewerVersion, imageViewerArchive))
+if (imageViewerArchive && imageViewerVersion) defaultReleases.set('dsh-image-viewer', archiveRelease(imageViewerVersion, imageViewerArchive))
 
 function archiveRelease(version, filename) {
   const body = readFileSync(filename)
