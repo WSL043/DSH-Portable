@@ -369,6 +369,9 @@ test('simultaneous portable roots cannot mistake another root on the same port f
   assert.match(startBody, /EADDRINUSE|address already in use/i)
   assert.match(startBody, /portRetry\s*<\s*PORT_RANGE\.last\s*-\s*PORT_RANGE\.first/)
   assert.match(startBody, /start\(noBrowser,\s*portRetry\s*\+\s*1\)/)
+  assert.match(source, /dsh-portable-port-\$\{port\}\.lock/)
+  assert.match(source, /openSync\(filename, ['"]wx['"]\)/)
+  assert.match(startBody, /portReservation\.release\(\)/)
 })
 
 test('a stale or recycled PID is never treated as our DSH host', () => {

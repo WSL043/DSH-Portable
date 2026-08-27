@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
@@ -122,13 +122,66 @@ function portAvailable(port) {
   })
 }
 
-async function selectPort(preferred) {
+function processExists(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return error?.code === 'EPERM'
+  }
+}
+
+function acquirePortReservation(port) {
+  const filename = path.join(os.tmpdir(), `dsh-portable-port-${port}.lock`)
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const token = randomBytes(16).toString('hex')
+    let handle
+    try {
+      handle = openSync(filename, 'wx')
+      writeSync(handle, `${JSON.stringify({ pid: process.pid, token })}\n`)
+    } catch (error) {
+      if (handle !== undefined) {
+        closeSync(handle)
+        try { rmSync(filename, { force: true }) } catch {}
+        throw error
+      }
+      if (error?.code !== 'EEXIST') throw error
+      let ownerPid = 0
+      try { ownerPid = Number(JSON.parse(readFileSync(filename, 'utf8')).pid) } catch { /* invalid locks are stale */ }
+      if (processExists(ownerPid)) return null
+      try { rmSync(filename, { force: true }) } catch { return null }
+      continue
+    }
+    let released = false
+    return {
+      port,
+      release() {
+        if (released) return
+        released = true
+        closeSync(handle)
+        try {
+          const current = JSON.parse(readFileSync(filename, 'utf8'))
+          if (current.pid === process.pid && current.token === token) rmSync(filename, { force: true })
+        } catch { /* a crashed or externally cleaned reservation is already released */ }
+      },
+    }
+  }
+  return null
+}
+
+async function reservePort(preferred) {
   const candidates = []
   if (Number.isInteger(preferred) && preferred >= PORT_RANGE.first && preferred <= PORT_RANGE.last) candidates.push(preferred)
   for (let port = PORT_RANGE.first; port <= PORT_RANGE.last; port += 1) {
     if (!candidates.includes(port)) candidates.push(port)
   }
-  for (const port of candidates) if (await portAvailable(port)) return port
+  for (const port of candidates) {
+    const reservation = acquirePortReservation(port)
+    if (!reservation) continue
+    if (await portAvailable(port)) return reservation
+    reservation.release()
+  }
   throw new Error(`No free loopback port in ${PORT_RANGE.first}-${PORT_RANGE.last}.`)
 }
 
@@ -304,7 +357,8 @@ async function start(noBrowser, portRetry = 0) {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
 
-  const port = await selectPort(prior?.port)
+  const portReservation = await reservePort(prior?.port)
+  const port = portReservation.port
   const stdoutLog = path.join(layout.logsDir, 'dsh.stdout.log')
   const stderrLog = path.join(layout.logsDir, 'dsh.stderr.log')
   const stdoutOffset = logSize(stdoutLog)
@@ -350,6 +404,7 @@ async function start(noBrowser, portRetry = 0) {
   await writeJsonAtomic(layout.processState, state)
   try {
     const hostUnavailable = !await waitForHost(state)
+    portReservation.release()
     if (hostUnavailable) {
       const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
       const portConflict = /EADDRINUSE|address already in use/i.test(details)
@@ -376,6 +431,7 @@ async function start(noBrowser, portRetry = 0) {
     const browser = noBrowser ? null : await openBrowser(url)
     return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }
   } catch (error) {
+    portReservation.release()
     let cleanupError = null
     if (ownedState(state)) {
       try { await stop() } catch (failedCleanup) { cleanupError = failedCleanup }
