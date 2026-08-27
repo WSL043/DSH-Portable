@@ -7,11 +7,30 @@ import test from 'node:test'
 
 const sourceUrl = new URL('../desktop-bridge/lib/client.js', import.meta.url)
 
-async function loadBridgeClient() {
+async function loadBridgeClient(options = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const posted = []
   const webMessageListeners = new Set()
   let definition
+  const nativeListeners = new Set()
+  const native = options.native === true ? {
+    capabilities: {
+      pickDirectory: true,
+      saveDataPackage: true,
+      openDataPackage: true,
+      importData: true,
+      restartHost: true,
+      preferences: true,
+      sessionProjection: true,
+    },
+    addEventListener(name, listener) {
+      if (name === 'message') nativeListeners.add(listener)
+    },
+    removeEventListener(name, listener) {
+      if (name === 'message') nativeListeners.delete(listener)
+    },
+    postMessage(value) { posted.push(structuredClone(value)) },
+  } : undefined
   const window = {
     __ModuleLoader__: {
       load(value) { definition = value },
@@ -28,6 +47,10 @@ async function loadBridgeClient() {
       },
     },
   }
+  if (native) {
+    window.__DSH_PORTABLE_NATIVE__ = native
+    delete window.chrome
+  }
   vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window })
   assert.equal(definition?.id, '@wsl043/dsh-portable-desktop-bridge')
   const exports = definition.factory((id) => {
@@ -40,6 +63,7 @@ async function loadBridgeClient() {
     posted,
     send(value) {
       for (const listener of webMessageListeners) listener({ data: structuredClone(value) })
+      for (const listener of nativeListeners) listener({ data: structuredClone(value) })
     },
   }
 }
@@ -227,6 +251,42 @@ test('Portable exposes a native restart contract and returns the host decision',
   assert.equal(client.window.__DSH_PORTABLE_HOST__, undefined)
 })
 
+test('Portable uses one capability-aware host transport outside WebView2', async () => {
+  const client = await loadBridgeClient({ native: true })
+  const runtime = fakeContext(sessionList(1))
+  const original = runtime.ctx.workspaces.pickDirectory
+
+  client.exports.apply(runtime.ctx)
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(client.window.__DSH_PORTABLE_HOST__?.capabilities)),
+    {
+      pickDirectory: true,
+      saveDataPackage: true,
+      openDataPackage: true,
+      importData: true,
+      restartHost: true,
+      preferences: true,
+      sessionProjection: true,
+    },
+  )
+  assert.notEqual(runtime.ctx.workspaces.pickDirectory, original)
+  assert.equal(client.posted.at(-1).type, 'dsh-portable/state')
+
+  const picked = runtime.ctx.workspaces.pickDirectory()
+  const request = client.posted.at(-1)
+  assert.equal(request.type, 'dsh-portable/pick-directory')
+  client.send({
+    type: 'dsh-portable/pick-directory-result',
+    schemaVersion: 1,
+    requestId: request.requestId,
+    path: '/tmp/project',
+  })
+  assert.equal(await picked, '/tmp/project')
+
+  runtime.dispose()
+  assert.equal(client.window.__DSH_PORTABLE_HOST__, undefined)
+})
+
 function sessionList(count = 12) {
   const byId = {}
   const ids = []
@@ -333,8 +393,8 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(macBuild, /desktop-bridge/)
   assert.match(windowsBuild, /shellSchema\s*=\s*21/)
   assert.match(windowsBuild, /requiredShellSchema\s*=\s*21/)
-  assert.match(macBuild, /"shellSchema": 16/)
-  assert.match(macBuild, /"requiredShellSchema": 16/)
+  assert.match(macBuild, /"shellSchema": 17/)
+  assert.match(macBuild, /"requiredShellSchema": 17/)
 })
 
 test('Portable maintenance is a native General settings item backed by same-origin product routes', async () => {

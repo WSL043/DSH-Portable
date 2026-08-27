@@ -29,8 +29,8 @@ test('Linux uses architecture-specific component update channels', () => {
 
 test('Linux requires a compatible native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
-  assert.match(source, /"shellSchema": 8/)
-  assert.match(source, /"requiredShellSchema": 8/)
+  assert.match(source, /"shellSchema": 9/)
+  assert.match(source, /"requiredShellSchema": 9/)
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
@@ -55,6 +55,15 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /portable-cli\.mjs/)
   assert.match(source, /--no-browser/)
   assert.match(source, /navigate\(/)
+  assert.match(source, /initialization_script/)
+  assert.match(source, /__DSH_PORTABLE_NATIVE__/)
+  assert.match(source, /portable_host_message/)
+  assert.match(source, /dsh-portable\/pick-directory/)
+  assert.match(source, /dsh-portable\/pick-data-export/)
+  assert.match(source, /dsh-portable\/pick-data-import/)
+  assert.match(source, /dsh-portable\/restart-host/)
+  assert.match(source, /hasRunningSession/)
+  assert.match(config, /http:\/\/127\.0\.0\.1:\*/)
   assert.match(source, /check-update/)
   assert.match(source, /check-product-update/)
   assert.match(source, /check-engine-update/)

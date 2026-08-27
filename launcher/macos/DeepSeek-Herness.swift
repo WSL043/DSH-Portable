@@ -35,7 +35,7 @@ private struct WindowFrameState: Codable {
     let height: Double
 }
 
-private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate {
+private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private var window: NSWindow!
     private var webView: WKWebView!
     private var statusLabel: NSTextField!
@@ -44,6 +44,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var allowingClose = false
     private var shuttingDown = false
     private var backendStarted = false
+    private var hasRunningSession = false
+    private var restartAfterShutdown = false
     private var manualUpdateRunning = false
     private var automaticUpdateMenuItem: NSMenuItem!
     private var productUpdateMenuItem: NSMenuItem!
@@ -81,6 +83,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var launcherSettingsURL: URL {
         productDataRoot.appendingPathComponent("launcher-settings.json")
     }
+
+    private let nativeBridgeScript = """
+    (() => {
+      if (window.__DSH_PORTABLE_NATIVE__) return;
+      const listeners = new Set();
+      Object.defineProperty(window, '__DSH_PORTABLE_NATIVE__', {
+        configurable: false,
+        value: Object.freeze({
+          capabilities: Object.freeze({
+            pickDirectory: true, saveDataPackage: true, openDataPackage: true,
+            importData: true, restartHost: true, preferences: true, sessionProjection: true
+          }),
+          postMessage(message) { window.webkit.messageHandlers.dshPortable.postMessage(message); },
+          addEventListener(name, listener) { if (name === 'message') listeners.add(listener); },
+          removeEventListener(name, listener) { if (name === 'message') listeners.delete(listener); },
+          __emit(message) { for (const listener of [...listeners]) listener({ data: message }); }
+        })
+      });
+    })();
+    """
 
     private var updateCheckEnabled: Bool {
         get {
@@ -419,6 +441,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
+        configuration.userContentController.add(self, name: "dshPortable")
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: nativeBridgeScript,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
         webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -591,12 +619,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 _ = try self.runCLI(["stop", "--no-browser", "--json"])
                 self.backendStarted = false
                 DispatchQueue.main.async {
+                    if self.restartAfterShutdown { self.scheduleNativeRelaunch() }
                     self.allowingClose = true
                     NSApp.terminate(nil)
                 }
             } catch {
                 DispatchQueue.main.async {
                     self.shuttingDown = false
+                    self.restartAfterShutdown = false
                     self.window.title = "DeepSeek-Herness"
                     self.webView.isHidden = false
                     self.statusLabel.isHidden = true
@@ -605,6 +635,192 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     self.showFailureAlert(error)
                 }
             }
+        }
+    }
+
+    private func trustedBridgeMessage(_ message: WKScriptMessage) -> Bool {
+        guard message.frameInfo.isMainFrame,
+              let target = message.frameInfo.request.url,
+              let applicationURL = applicationURL else { return false }
+        return target.scheme == applicationURL.scheme
+            && target.host == applicationURL.host
+            && target.port == applicationURL.port
+    }
+
+    private func validRequestID(_ value: Any?, prefix: String) -> String? {
+        guard let requestID = value as? String,
+              requestID.range(of: "^\(NSRegularExpression.escapedPattern(for: prefix))[A-Za-z0-9-]{1,96}$",
+                              options: .regularExpression) != nil else { return nil }
+        return requestID
+    }
+
+    private func postBridgeMessage(_ value: [String: Any]) {
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value),
+              let json = String(data: data, encoding: .utf8) else { return }
+        webView.evaluateJavaScript("window.__DSH_PORTABLE_NATIVE__?.__emit(\(json));")
+    }
+
+    private func mergeLauncherPreferences(_ message: [String: Any]) {
+        var settings: [String: Any] = [:]
+        if let data = try? Data(contentsOf: launcherSettingsURL),
+           let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { settings = existing }
+        settings["schemaVersion"] = 2
+        for key in ["productUpdateCheckEnabled", "engineUpdateCheckEnabled", "taskNotificationsEnabled", "closeBehavior"] {
+            if let value = message[key] { settings[key] = value }
+        }
+        if let product = settings["productUpdateCheckEnabled"] as? Bool { settings["updateCheckEnabled"] = product }
+        guard let data = try? JSONSerialization.data(withJSONObject: settings, options: [.sortedKeys]) else { return }
+        try? FileManager.default.createDirectory(at: productDataRoot, withIntermediateDirectories: true)
+        try? data.write(to: launcherSettingsURL, options: .atomic)
+        refreshAutomaticUpdateMenuItem()
+    }
+
+    private func showDirectoryPicker(requestID: String) {
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        let panel = NSOpenPanel()
+        panel.title = L("选择工作区文件夹", "Select a workspace folder")
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        let portableWorkspace = runtimeRoot.appendingPathComponent("workspace")
+        if FileManager.default.fileExists(atPath: portableWorkspace.path) { panel.directoryURL = portableWorkspace }
+        let response = panel.runModal()
+        var result: [String: Any] = ["type": "dsh-portable/pick-directory-result", "schemaVersion": 1, "requestId": requestID]
+        if response == .OK, let selected = panel.url { result["path"] = selected.standardizedFileURL.path }
+        else { result["cancelled"] = true }
+        postBridgeMessage(result)
+    }
+
+    private func showDataExportPicker(requestID: String, kind: String) {
+        let panel = NSSavePanel()
+        let support = kind == "support"
+        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
+        let prefix = support ? "DSH-Portable-support-" : (kind == "private" ? "DSH-Portable-private-" : "DSH-Portable-data-")
+        panel.title = support ? L("选择支持报告保存位置", "Choose where to save the support report")
+            : L("选择数据包保存位置", "Choose where to save the data package")
+        panel.nameFieldStringValue = prefix + stamp + (support ? ".json" : ".dshdata")
+        panel.allowedFileTypes = [support ? "json" : "dshdata"]
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        let response = panel.runModal()
+        var result: [String: Any] = ["type": "dsh-portable/pick-data-export-result", "schemaVersion": 1, "requestId": requestID]
+        if response == .OK, let selected = panel.url { result["path"] = selected.standardizedFileURL.path }
+        else { result["cancelled"] = true }
+        postBridgeMessage(result)
+    }
+
+    private func showDataImportPicker(requestID: String) {
+        let panel = NSOpenPanel()
+        panel.title = L("选择要导入的数据包", "Choose a data package to import")
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = false
+        panel.allowedFileTypes = ["dshdata"]
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        let response = panel.runModal()
+        var result: [String: Any] = ["type": "dsh-portable/pick-data-import-result", "schemaVersion": 1, "requestId": requestID]
+        if response == .OK, let selected = panel.url { result["path"] = selected.standardizedFileURL.path }
+        else { result["cancelled"] = true }
+        postBridgeMessage(result)
+    }
+
+    private func scheduleNativeRelaunch() {
+        let helper = Process()
+        helper.executableURL = URL(fileURLWithPath: "/bin/sh")
+        helper.arguments = [
+            "-c",
+            "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; exec /usr/bin/open -n \"$2\"",
+            "dsh-portable-restart",
+            String(ProcessInfo.processInfo.processIdentifier),
+            Bundle.main.bundleURL.path,
+        ]
+        helper.standardInput = FileHandle.nullDevice
+        helper.standardOutput = FileHandle.nullDevice
+        helper.standardError = FileHandle.nullDevice
+        try? helper.run()
+    }
+
+    private func requestNativeRestart(requestID: String) {
+        var result: [String: Any] = [
+            "type": "dsh-portable/restart-host-result", "schemaVersion": 1, "requestId": requestID,
+        ]
+        if shuttingDown {
+            result["ok"] = false
+            result["error"] = L("正在关闭，请稍候。", "The app is already closing.")
+        } else if hasRunningSession {
+            result["ok"] = false
+            result["error"] = L("任务仍在运行；完成后再重启即可，当前任务不会被中断。",
+                                "A task is still running. Restart after it finishes; the current task was not interrupted.")
+        } else {
+            result["ok"] = true
+            restartAfterShutdown = true
+        }
+        postBridgeMessage(result)
+        if restartAfterShutdown { beginShutdown() }
+    }
+
+    private func importData(_ message: [String: Any]) {
+        guard !shuttingDown, !hasRunningSession,
+              let input = message["input"] as? String,
+              FileManager.default.fileExists(atPath: input),
+              ["keep", "replace"].contains(message["conflict"] as? String ?? "") else { return }
+        let password = message["password"] as? String ?? ""
+        guard password.isEmpty || password.count >= 8 else { return }
+        shuttingDown = true
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            guard let self = self else { return }
+            var passwordURL: URL?
+            do {
+                _ = try self.runCLI(["stop", "--no-browser", "--json"])
+                self.backendStarted = false
+                var arguments = ["restore-data", "--input", input, "--conflict", message["conflict"] as! String, "--json"]
+                if !password.isEmpty {
+                    let runtime = self.productDataRoot.appendingPathComponent("runtime")
+                    try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
+                    let target = runtime.appendingPathComponent("import-password-\(UUID().uuidString).txt")
+                    try password.data(using: .utf8)!.write(to: target, options: [.atomic])
+                    passwordURL = target
+                    arguments += ["--password-file", target.path]
+                }
+                _ = try self.runCLI(arguments)
+                if let passwordURL = passwordURL { try? FileManager.default.removeItem(at: passwordURL) }
+                DispatchQueue.main.async {
+                    self.scheduleNativeRelaunch()
+                    self.allowingClose = true
+                    NSApp.terminate(nil)
+                }
+            } catch {
+                if let passwordURL = passwordURL { try? FileManager.default.removeItem(at: passwordURL) }
+                DispatchQueue.main.async {
+                    self.shuttingDown = false
+                    self.showFailureAlert(error)
+                }
+            }
+        }
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "dshPortable", trustedBridgeMessage(message),
+              let body = message.body as? [String: Any],
+              let type = body["type"] as? String,
+              (body["schemaVersion"] as? Int) == 1 else { return }
+        switch type {
+        case "dsh-portable/preferences": mergeLauncherPreferences(body)
+        case "dsh-portable/state": hasRunningSession = body["hasRunningSession"] as? Bool ?? false
+        case "dsh-portable/pick-directory":
+            if let requestID = validRequestID(body["requestId"], prefix: "workspace-") { showDirectoryPicker(requestID: requestID) }
+        case "dsh-portable/pick-data-export":
+            if let requestID = validRequestID(body["requestId"], prefix: "data-export-"),
+               let kind = body["kind"] as? String, ["standard", "private", "support"].contains(kind) {
+                showDataExportPicker(requestID: requestID, kind: kind)
+            }
+        case "dsh-portable/pick-data-import":
+            if let requestID = validRequestID(body["requestId"], prefix: "data-import-") { showDataImportPicker(requestID: requestID) }
+        case "dsh-portable/import-data": importData(body)
+        case "dsh-portable/restart-host":
+            if let requestID = validRequestID(body["requestId"], prefix: "host-restart-") { requestNativeRestart(requestID: requestID) }
+        default: break
         }
     }
 

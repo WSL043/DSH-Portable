@@ -1,4 +1,4 @@
-use rfd::{MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 use semver::Version;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -25,6 +25,31 @@ const PORTABLE_DATA_NAME: &str = "DSH-Portable-data";
 static LAYOUT: OnceLock<ProductLayout> = OnceLock::new();
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static UPDATE_PROMPT_OPEN: AtomicBool = AtomicBool::new(false);
+static HAS_RUNNING_SESSION: AtomicBool = AtomicBool::new(false);
+
+const NATIVE_BRIDGE_SCRIPT: &str = r#"
+(() => {
+  if (window.__DSH_PORTABLE_NATIVE__) return;
+  const listeners = new Set();
+  const native = {
+    capabilities: Object.freeze({
+      pickDirectory: true, saveDataPackage: true, openDataPackage: true,
+      importData: true, restartHost: true, preferences: true, sessionProjection: true
+    }),
+    postMessage(message) {
+      const invoke = window.__TAURI__?.core?.invoke;
+      if (!invoke) return;
+      invoke('portable_host_message', { message }).then(result => {
+        if (result != null) native.__emit(result);
+      }).catch(error => console.warn('[dsh-portable] native host request failed:', error));
+    },
+    addEventListener(name, listener) { if (name === 'message') listeners.add(listener); },
+    removeEventListener(name, listener) { if (name === 'message') listeners.delete(listener); },
+    __emit(message) { for (const listener of [...listeners]) listener({ data: message }); }
+  };
+  Object.defineProperty(window, '__DSH_PORTABLE_NATIVE__', { configurable: false, value: Object.freeze(native) });
+})();
+"#;
 
 #[derive(Clone, Debug, Serialize)]
 struct ProductLayout {
@@ -503,6 +528,255 @@ fn stop_and_exit(app: tauri::AppHandle) {
     });
 }
 
+fn trusted_application_window(window: &tauri::WebviewWindow) -> bool {
+    window.url().ok().is_some_and(|url| {
+        url.scheme() == "http"
+            && matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"))
+            && url.port().is_some_and(|port| (3080..=3180).contains(&port))
+    })
+}
+
+fn request_id(message: &Value, prefix: &str) -> Option<String> {
+    let value = message.get("requestId")?.as_str()?;
+    let suffix = value.strip_prefix(prefix)?;
+    if suffix.is_empty()
+        || suffix.len() > 96
+        || !suffix.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+    {
+        return None;
+    }
+    Some(value.to_owned())
+}
+
+fn bridge_result(kind: &str, request_id: String) -> serde_json::Map<String, Value> {
+    serde_json::Map::from_iter([
+        ("type".to_owned(), Value::String(kind.to_owned())),
+        ("schemaVersion".to_owned(), Value::from(1)),
+        ("requestId".to_owned(), Value::String(request_id)),
+    ])
+}
+
+fn save_launcher_preferences(layout: &ProductLayout, message: &Value) -> Result<(), String> {
+    let filename = settings_file(layout);
+    let mut value = fs::read_to_string(&filename)
+        .ok()
+        .and_then(|source| serde_json::from_str::<Value>(&source).ok())
+        .filter(Value::is_object)
+        .unwrap_or_else(|| Value::Object(Default::default()));
+    let object = value.as_object_mut().expect("settings object was initialized");
+    object.insert("schemaVersion".to_owned(), Value::from(2));
+    for key in [
+        "productUpdateCheckEnabled",
+        "engineUpdateCheckEnabled",
+        "taskNotificationsEnabled",
+        "closeBehavior",
+    ] {
+        if let Some(field) = message.get(key) {
+            object.insert(key.to_owned(), field.clone());
+        }
+    }
+    if let Some(field) = object.get("productUpdateCheckEnabled").cloned() {
+        object.insert("updateCheckEnabled".to_owned(), field);
+    }
+    fs::create_dir_all(filename.parent().ok_or("settings directory is unavailable")?)
+        .map_err(|error| error.to_string())?;
+    fs::write(filename, format!("{}\n", serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?))
+        .map_err(|error| error.to_string())
+}
+
+fn exact_relaunch_executable() -> Result<PathBuf, String> {
+    if let Some(appimage) = env::var_os("APPIMAGE") {
+        return Ok(PathBuf::from(appimage));
+    }
+    env::current_exe().map_err(|error| error.to_string())
+}
+
+fn schedule_linux_relaunch() -> Result<(), String> {
+    let executable = exact_relaunch_executable()?;
+    Command::new("/bin/sh")
+        .args([
+            "-c",
+            "while kill -0 \"$1\" 2>/dev/null; do sleep 0.1; done; exec \"$2\" --skip-update-check",
+            "dsh-portable-restart",
+        ])
+        .arg(std::process::id().to_string())
+        .arg(executable)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| error.to_string())
+}
+
+fn restart_linux_host(app: tauri::AppHandle) {
+    if QUITTING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    thread::spawn(move || {
+        if let Some(layout) = LAYOUT.get() {
+            let stopped = run_portable_cli(layout, &["stop", "--json"])
+                .ok()
+                .is_some_and(|output| output.status.success());
+            if stopped && schedule_linux_relaunch().is_ok() {
+                app.exit(0);
+                return;
+            }
+        }
+        QUITTING.store(false, Ordering::SeqCst);
+        dialog(
+            PRODUCT_NAME,
+            &text(
+                LAYOUT.get().expect("layout is initialized"),
+                "无法安全重启 DSH-Portable。当前程序仍保持打开。",
+                "DSH-Portable could not restart safely. The current app remains open.",
+            ),
+            MessageLevel::Error,
+        );
+    });
+}
+
+fn import_data_and_restart(app: tauri::AppHandle, message: &Value) -> Result<(), String> {
+    if HAS_RUNNING_SESSION.load(Ordering::SeqCst) {
+        return Err("A task is still running. The data package was not imported.".to_owned());
+    }
+    let input = PathBuf::from(message.get("input").and_then(Value::as_str).ok_or("input is missing")?);
+    if !input.is_absolute() || !input.is_file() {
+        return Err("the data package does not exist".to_owned());
+    }
+    let conflict = message.get("conflict").and_then(Value::as_str).unwrap_or("").to_owned();
+    if !matches!(conflict.as_str(), "keep" | "replace") {
+        return Err("invalid import conflict policy".to_owned());
+    }
+    let password = message.get("password").and_then(Value::as_str).unwrap_or("").to_owned();
+    if !password.is_empty() && password.len() < 8 {
+        return Err("password must contain at least 8 characters".to_owned());
+    }
+    if QUITTING.swap(true, Ordering::SeqCst) {
+        return Err("the app is already closing".to_owned());
+    }
+    thread::spawn(move || {
+        let layout = LAYOUT.get().expect("layout is initialized");
+        let mut password_file = None;
+        let outcome = (|| -> Result<(), String> {
+            let stopped = run_portable_cli(layout, &["stop", "--json"]).map_err(|error| error.to_string())?;
+            if !stopped.status.success() { return Err(String::from_utf8_lossy(&stopped.stderr).into_owned()); }
+            let input_string = input.to_string_lossy().into_owned();
+            let mut owned = vec![
+                "restore-data".to_owned(), "--input".to_owned(), input_string,
+                "--conflict".to_owned(), conflict, "--json".to_owned(),
+            ];
+            if !password.is_empty() {
+                let runtime = layout.state_root.join("data/runtime");
+                fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
+                let target = runtime.join(format!("import-password-{}-{}.txt", std::process::id(), thread_id()));
+                fs::write(&target, password.as_bytes()).map_err(|error| error.to_string())?;
+                password_file = Some(target.clone());
+                owned.extend(["--password-file".to_owned(), target.to_string_lossy().into_owned()]);
+            }
+            let borrowed: Vec<&str> = owned.iter().map(String::as_str).collect();
+            let imported = run_portable_cli(layout, &borrowed).map_err(|error| error.to_string())?;
+            if !imported.status.success() { return Err(String::from_utf8_lossy(&imported.stderr).into_owned()); }
+            schedule_linux_relaunch()
+        })();
+        if let Some(filename) = password_file { let _ = fs::remove_file(filename); }
+        match outcome {
+            Ok(()) => app.exit(0),
+            Err(error) => {
+                QUITTING.store(false, Ordering::SeqCst);
+                dialog(PRODUCT_NAME, &error, MessageLevel::Error);
+            }
+        }
+    });
+    Ok(())
+}
+
+fn thread_id() -> String {
+    format!("{:?}", thread::current().id()).replace('(', "").replace(')', "")
+}
+
+#[tauri::command]
+fn portable_host_message(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    message: Value,
+) -> Result<Option<Value>, String> {
+    if !trusted_application_window(&window)
+        || message.get("schemaVersion").and_then(Value::as_u64) != Some(1)
+    {
+        return Err("untrusted Portable host request".to_owned());
+    }
+    let kind = message.get("type").and_then(Value::as_str).unwrap_or("");
+    let layout = LAYOUT.get().ok_or("Portable layout is unavailable")?;
+    match kind {
+        "dsh-portable/preferences" => {
+            save_launcher_preferences(layout, &message)?;
+            Ok(None)
+        }
+        "dsh-portable/state" => {
+            HAS_RUNNING_SESSION.store(
+                message.get("hasRunningSession").and_then(Value::as_bool).unwrap_or(false),
+                Ordering::SeqCst,
+            );
+            Ok(None)
+        }
+        "dsh-portable/pick-directory" => {
+            let id = request_id(&message, "workspace-").ok_or("invalid request id")?;
+            let mut result = bridge_result("dsh-portable/pick-directory-result", id);
+            match FileDialog::new().set_directory(layout.state_root.join("workspace")).pick_folder() {
+                Some(path) => { result.insert("path".to_owned(), Value::String(path.to_string_lossy().into_owned())); }
+                None => { result.insert("cancelled".to_owned(), Value::Bool(true)); }
+            }
+            Ok(Some(Value::Object(result)))
+        }
+        "dsh-portable/pick-data-export" => {
+            let id = request_id(&message, "data-export-").ok_or("invalid request id")?;
+            let export_kind = message.get("kind").and_then(Value::as_str).unwrap_or("");
+            if !matches!(export_kind, "standard" | "private" | "support") { return Err("invalid export kind".to_owned()); }
+            let support = export_kind == "support";
+            let prefix = if support { "DSH-Portable-support" } else if export_kind == "private" { "DSH-Portable-private" } else { "DSH-Portable-data" };
+            let extension = if support { "json" } else { "dshdata" };
+            let mut result = bridge_result("dsh-portable/pick-data-export-result", id);
+            match FileDialog::new().add_filter(if support { "JSON support report" } else { "DSH-Portable data package" }, &[extension])
+                .set_file_name(format!("{prefix}.{extension}")).save_file() {
+                Some(path) => { result.insert("path".to_owned(), Value::String(path.to_string_lossy().into_owned())); }
+                None => { result.insert("cancelled".to_owned(), Value::Bool(true)); }
+            }
+            Ok(Some(Value::Object(result)))
+        }
+        "dsh-portable/pick-data-import" => {
+            let id = request_id(&message, "data-import-").ok_or("invalid request id")?;
+            let mut result = bridge_result("dsh-portable/pick-data-import-result", id);
+            match FileDialog::new().add_filter("DSH-Portable data package", &["dshdata"]).pick_file() {
+                Some(path) => { result.insert("path".to_owned(), Value::String(path.to_string_lossy().into_owned())); }
+                None => { result.insert("cancelled".to_owned(), Value::Bool(true)); }
+            }
+            Ok(Some(Value::Object(result)))
+        }
+        "dsh-portable/import-data" => {
+            import_data_and_restart(app, &message)?;
+            Ok(None)
+        }
+        "dsh-portable/restart-host" => {
+            let id = request_id(&message, "host-restart-").ok_or("invalid request id")?;
+            let mut result = bridge_result("dsh-portable/restart-host-result", id);
+            if QUITTING.load(Ordering::SeqCst) {
+                result.insert("ok".to_owned(), Value::Bool(false));
+                result.insert("error".to_owned(), Value::String("The app is already closing.".to_owned()));
+            } else if HAS_RUNNING_SESSION.load(Ordering::SeqCst) {
+                result.insert("ok".to_owned(), Value::Bool(false));
+                result.insert("error".to_owned(), Value::String("A task is still running. Restart after it finishes; the current task was not interrupted.".to_owned()));
+            } else {
+                result.insert("ok".to_owned(), Value::Bool(true));
+                let app = app.clone();
+                thread::spawn(move || { thread::sleep(Duration::from_millis(150)); restart_linux_host(app); });
+            }
+            Ok(Some(Value::Object(result)))
+        }
+        _ => Err("unsupported Portable host request".to_owned()),
+    }
+}
+
 fn open_dsh_terminal(layout: &ProductLayout) -> Result<(), String> {
     let helper = layout.root.join("launcher/dsh-terminal");
     if !helper.is_file() {
@@ -790,6 +1064,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![portable_host_message])
         .setup(move |app| {
             let resource_dir = app.path().resource_dir()?;
             let layout = resolve_layout(Some(&resource_dir))?;
@@ -805,6 +1080,7 @@ fn main() {
                 return Ok(());
             }
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+                .initialization_script(NATIVE_BRIDGE_SCRIPT)
                 .title(PRODUCT_NAME)
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(900.0, 620.0)

@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/remote-schema.json",
+  "identifier": "portable-host",
+  "description": "Allows the embedded local DSH workspace to use the bounded Portable host bridge.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*", "http://localhost:*"]
+  },
+  "platforms": ["linux"],
+  "permissions": ["allow-portable-host-message"]
+}

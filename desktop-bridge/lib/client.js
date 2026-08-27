@@ -73,13 +73,45 @@ window.__ModuleLoader__.load({
     const pendingDataImportRequests = new Map()
     const pendingHostRestartRequests = new Map()
 
-    function chooseDataExportPath(kind) {
+    const completeHostCapabilities = Object.freeze({
+      pickDirectory: true,
+      saveDataPackage: true,
+      openDataPackage: true,
+      importData: true,
+      restartHost: true,
+      preferences: true,
+      sessionProjection: true,
+    })
+
+    function nativeHostTransport() {
+      const native = window.__DSH_PORTABLE_NATIVE__
+      if (native?.postMessage && native?.addEventListener) {
+        return {
+          bridge: native,
+          capabilities: Object.freeze({ ...completeHostCapabilities, ...(native.capabilities || {}) }),
+        }
+      }
       const webview = window.chrome?.webview
-      if (!webview?.postMessage) return Promise.resolve('')
+      if (webview?.postMessage && webview?.addEventListener) {
+        return { bridge: webview, capabilities: completeHostCapabilities }
+      }
+      return null
+    }
+
+    function postToNativeHost(message, capability) {
+      const host = nativeHostTransport()
+      if (!host || host.capabilities[capability] !== true) return false
+      host.bridge.postMessage(message)
+      return true
+    }
+
+    function chooseDataExportPath(kind) {
+      const host = nativeHostTransport()
+      if (!host || host.capabilities.saveDataPackage !== true) return Promise.resolve('')
       return new Promise((resolve, reject) => {
         const requestId = `data-export-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         pendingDataExportRequests.set(requestId, { resolve, reject })
-        webview.postMessage({
+        host.bridge.postMessage({
           type: 'dsh-portable/pick-data-export',
           schemaVersion: 1,
           requestId,
@@ -89,18 +121,18 @@ window.__ModuleLoader__.load({
     }
 
     function chooseDataImportPath() {
-      const webview = window.chrome?.webview
-      if (!webview?.postMessage) return Promise.resolve(null)
+      const host = nativeHostTransport()
+      if (!host || host.capabilities.openDataPackage !== true) return Promise.resolve(null)
       return new Promise((resolve, reject) => {
         const requestId = `data-import-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         pendingDataImportRequests.set(requestId, { resolve, reject })
-        webview.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId })
+        host.bridge.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId })
       })
     }
 
     function restartPortableHost() {
-      const webview = window.chrome?.webview
-      if (!webview?.postMessage) return Promise.reject(new Error('Portable restart is unavailable on this host.'))
+      const host = nativeHostTransport()
+      if (!host || host.capabilities.restartHost !== true) return Promise.reject(new Error('Portable restart is unavailable on this host.'))
       return new Promise((resolve, reject) => {
         const requestId = `host-restart-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         const timeout = setTimeout(() => {
@@ -111,7 +143,7 @@ window.__ModuleLoader__.load({
           resolve: value => { clearTimeout(timeout); resolve(value) },
           reject: error => { clearTimeout(timeout); reject(error) },
         })
-        webview.postMessage({ type: 'dsh-portable/restart-host', schemaVersion: 1, requestId })
+        host.bridge.postMessage({ type: 'dsh-portable/restart-host', schemaVersion: 1, requestId })
       })
     }
 
@@ -173,7 +205,7 @@ window.__ModuleLoader__.load({
         }).then(res => res.json()).then(body => {
           if (body.error) throw new Error(body.error)
           setSettings(body.settings)
-          window.chrome?.webview?.postMessage?.({ type: 'dsh-portable/preferences', schemaVersion: 1, ...body.settings })
+          postToNativeHost({ type: 'dsh-portable/preferences', schemaVersion: 1, ...body.settings }, 'preferences')
         }).catch(error => setStatus('portable', format(t('failed'), error.message || error)))
       }
       const action = (name, path) => {
@@ -261,13 +293,13 @@ window.__ModuleLoader__.load({
         finally { setBusy('') }
       }
       const runImport = () => {
-        const webview = window.chrome?.webview
-        if (!webview?.postMessage || !importState?.input) {
+        const host = nativeHostTransport()
+        if (!host || host.capabilities.importData !== true || !importState?.input) {
           setStatus('data', format(t('failed'), 'desktop host unavailable'))
           return
         }
         setBusy('data-import-run')
-        webview.postMessage({
+        host.bridge.postMessage({
           type: 'dsh-portable/import-data', schemaVersion: 1,
           input: importState.input, password: importPassword || undefined, conflict: 'replace',
         })
@@ -535,7 +567,7 @@ window.__ModuleLoader__.load({
     }
 
     function apply(ctx) {
-      const webview = window.chrome?.webview
+      const host = nativeHostTransport()
       if (React?.createElement && React?.useState && React?.useEffect) {
         try {
           const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
@@ -553,9 +585,11 @@ window.__ModuleLoader__.load({
           }
         } catch (error) { console.warn('[dsh-portable] settings section unavailable:', error) }
       }
-      if (!webview?.postMessage || !webview?.addEventListener) return
+      if (!host) return
+      const webview = host.bridge
 
       window.__DSH_PORTABLE_HOST__ = { restart: restartPortableHost }
+      window.__DSH_PORTABLE_HOST__.capabilities = host.capabilities
 
       ctx.effect(() => {
         let active = true
@@ -563,7 +597,7 @@ window.__ModuleLoader__.load({
         const pendingWorkspaceRequests = new Map()
         const originalPickDirectory = ctx.workspaces?.pickDirectory
         let nativePickDirectory = null
-        if (ctx.workspaces && typeof originalPickDirectory === 'function') {
+        if (host.capabilities.pickDirectory === true && ctx.workspaces && typeof originalPickDirectory === 'function') {
           nativePickDirectory = () => new Promise((resolve, reject) => {
             const requestId = `workspace-${Date.now().toString(36)}-${++workspaceRequestSequence}`
             pendingWorkspaceRequests.set(requestId, { resolve, reject })
@@ -576,7 +610,7 @@ window.__ModuleLoader__.load({
           ctx.workspaces.pickDirectory = nativePickDirectory
         }
         const publish = () => {
-          if (active) webview.postMessage(sessionState(ctx))
+          if (active && host.capabilities.sessionProjection === true) webview.postMessage(sessionState(ctx))
         }
         const receive = event => {
           const message = event?.data
