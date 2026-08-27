@@ -13,8 +13,12 @@ test('Windows desktop host waits for the usable DOM and reports the failing boun
   assert.match(source, /EventHandler<CoreWebView2DOMContentLoadedEventArgs>\s+domLoaded/)
   assert.match(source, /DOMContentLoaded\s*\+=\s*domLoaded/)
   assert.match(source, /ProbeWorkspaceDomAsync\(url\)/)
-  assert.match(source, /WaitForWorkspaceFirstPaintAsync\(url\)/)
-  assert.match(source, /WaitForWorkspaceFirstPaintAsync[\s\S]+getBoundingClientRect\(\)[\s\S]+await Task\.Delay\(50\)/)
+  assert.match(source, /WaitForWorkspaceHandoffAsync\(url, workspaceSurfaceReady\.Task\)/)
+  assert.match(source, /WaitForWorkspaceHandoffAsync[\s\S]+getBoundingClientRect\(\)[\s\S]+await Task\.Delay\(50\)/)
+  assert.match(source, /surface-handoff:/)
+  assert.match(source, /dsh-portable\/surface-ready/)
+  assert.match(source, /native-bridge/)
+  assert.match(source, /stable-workspace/)
   assert.match(source, /ExecuteScriptAsync/)
   assert.match(source, /workspaceUsable\.TrySetResult\(true\)/)
   assert.match(source, /Task\.WhenAny\(workspaceUsable\.Task,\s*navigation\.Task,\s*webViewProcessFailure\.Task,\s*timeout\)/)
@@ -58,6 +62,29 @@ test('Windows overlaps cold WebView2 initialization with the first DSH start', a
   const webViewAwait = runLauncher.indexOf('await webViewInitialization')
   assert.ok(webViewStart >= 0 && webViewStart < backendStart)
   assert.ok(webViewAwait > backendStart)
+})
+
+test('Windows recovers a bounded WebView2 resource-in-use race after an update restart', async () => {
+  const [source, bootstrap, upgradeSmoke] = await Promise.all([
+    readFile(launcherSource, 'utf8'),
+    readFile(path.join(projectRoot, 'launcher', 'windows', 'DSH-Bootstrap.cs'), 'utf8'),
+    readFile(path.join(projectRoot, 'scripts', 'smoke-windows-version-upgrade.mjs'), 'utf8'),
+  ])
+
+  assert.match(source, /WebViewResourceInUseHResult\s*=\s*unchecked\(\(int\)0x800700AA\)/)
+  assert.match(source, /IsWebViewResourceInUse\(Exception error\)/)
+  assert.match(source, /InitializeWebViewAttemptAsync/)
+  assert.match(source, /ResetWebViewAfterInitializationFailure/)
+  assert.match(source, /environment-busy-retry:/)
+  assert.match(source, /WebViewInitializationMaxAttempts\s*=\s*[2-9]/)
+  assert.match(source, /DSH_PORTABLE_TEST_WEBVIEW2_BUSY_ONCE/)
+  assert.match(bootstrap, /StopRunningPortable\(\)[\s\S]+WaitForPortableWebViewRelease\(\)/)
+  assert.match(bootstrap, /ResolvePortableWebViewDataRoot\(\)/)
+  assert.match(bootstrap, /Get-CimInstance Win32_Process[\s\S]+DSH_PORTABLE_WEBVIEW_ROOT/)
+  assert.match(upgradeSmoke, /--running-host/)
+  assert.match(upgradeSmoke, /--simulate-webview-busy/)
+  assert.match(upgradeSmoke, /dsh-first-paint-ready/)
+  assert.match(upgradeSmoke, /environment-busy-retry:/)
 })
 
 test('Windows cold start shows the local workspace before checking for updates in the background', async () => {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { readFile, mkdir, mkdtemp, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import os from 'node:os'
@@ -12,6 +12,8 @@ const projectRoot = path.resolve(import.meta.dirname, '..')
 const oldArchive = path.resolve(process.argv[2] || '')
 const artifacts = path.resolve(process.argv[3] || path.join(projectRoot, 'artifacts'))
 const allowChannelMigration = process.argv.includes('--allow-channel-migration')
+const runningHostUpgrade = process.argv.includes('--running-host')
+const simulateWebViewBusy = process.argv.includes('--simulate-webview-busy')
 const newArchive = path.join(artifacts, 'DSH-Portable-windows-x64-offline.zip')
 const fullManifestPath = path.join(artifacts, 'portable-manifest.json')
 const componentManifestPath = path.join(artifacts, 'portable-update-windows-x64.json')
@@ -36,6 +38,30 @@ const destination = path.join(root, 'DSH Portable 旧版迁移 ü')
 const resultPath = path.join(root, 'upgrade-result.json')
 let fullManifestBody = null
 let componentManifestBody = null
+let oldHost = null
+
+async function waitFor(predicate, message, timeoutMs = 90_000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await predicate()) return
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+  throw new Error(message)
+}
+
+async function launcherLog() {
+  return readFile(path.join(destination, 'data', 'logs', 'launcher.log'), 'utf8').catch(() => '')
+}
+
+async function stopFinishedProduct() {
+  const executable = path.join(destination, 'DeepSeek-Herness.exe')
+  if (!await stat(executable).then(() => true, () => false)) return
+  await execFileAsync(executable, ['stop', '--no-browser', '--json'], {
+    cwd: destination,
+    timeout: 90_000,
+    windowsHide: true,
+  }).catch(() => null)
+}
 const server = createServer((request, response) => {
   if (request.url === '/portable-manifest.json') {
     response.writeHead(200, { 'content-type': 'application/json', 'content-length': fullManifestBody.length })
@@ -89,6 +115,26 @@ try {
     component: { ...componentManifestSource.component, urls: [`${origin}/unused-component.zip`] },
   }))
 
+  let launcherLogOffset = 0
+  if (runningHostUpgrade) {
+    const oldExecutable = path.join(destination, 'DeepSeek-Herness.exe')
+    oldHost = spawn(oldExecutable, [], {
+      cwd: destination,
+      env: {
+        ...process.env,
+        DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+        DSH_PORTABLE_TEST_HIDDEN: '1',
+      },
+      windowsHide: true,
+      stdio: 'ignore',
+    })
+    await waitFor(
+      async () => (await launcherLog()).includes('environment-ready:'),
+      'the old native desktop host did not initialize WebView2 before the update',
+    )
+    launcherLogOffset = (await launcherLog()).length
+  }
+
   let decision = { status: 'full-package-required', delivery: 'full-package' }
   if (!allowChannelMigration) {
     const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
@@ -117,14 +163,24 @@ try {
   }
 
   try {
-    await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+    const updaterArguments = [
       '--upgrade-existing',
       '--manifest', `${origin}/portable-manifest.json`,
       '--destination', destination,
       '--allow-http',
-      '--no-launch',
       '--result', resultPath,
-    ], { timeout: 10 * 60 * 1000, windowsHide: true })
+    ]
+    if (!runningHostUpgrade) updaterArguments.push('--no-launch')
+    await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
+      timeout: 10 * 60 * 1000,
+      windowsHide: true,
+      env: runningHostUpgrade ? {
+        ...process.env,
+        DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+        DSH_PORTABLE_TEST_HIDDEN: '1',
+        ...(simulateWebViewBusy ? { DSH_PORTABLE_TEST_WEBVIEW2_BUSY_ONCE: '1' } : {}),
+      } : process.env,
+    })
   } catch (error) {
     const diagnostic = await readFile(resultPath, 'utf8').catch(() => 'no updater result was written')
     throw new Error(`the prior full updater failed: ${diagnostic}`, { cause: error })
@@ -144,6 +200,17 @@ try {
   for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
   assert.ok((await stat(path.join(destination, 'DeepSeek-Herness.exe'))).isFile())
 
+  if (runningHostUpgrade) {
+    await waitFor(async () => {
+      const currentLog = await launcherLog()
+      return currentLog.slice(launcherLogOffset).includes('dsh-first-paint-ready')
+    }, 'the updated native desktop host did not become ready after the running-host handoff')
+    const updateLog = (await launcherLog()).slice(launcherLogOffset)
+    assert.doesNotMatch(updateLog, /0x800700AA|requested resource is in use|要求されたリソースは使用中/i)
+    if (simulateWebViewBusy) assert.match(updateLog, /environment-busy-retry:/)
+    await stopFinishedProduct()
+  }
+
   await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {
     timeout: 10 * 60 * 1000,
     windowsHide: true,
@@ -157,6 +224,8 @@ try {
     delivery: decision.delivery,
   }))
 } finally {
+  await stopFinishedProduct()
+  if (oldHost && oldHost.exitCode === null) oldHost.kill()
   if (server.listening) await new Promise((resolve) => server.close(resolve))
   if (!process.env.CI) await rm(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 100 })
 }

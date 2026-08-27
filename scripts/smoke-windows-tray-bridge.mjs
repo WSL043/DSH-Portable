@@ -22,6 +22,9 @@ const generalBottomScreenshotPath = process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENS
 const installedScreenshotPath = process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
   ? path.resolve(process.env.DSH_SMOKE_INSTALLED_SCREENSHOT)
   : ''
+const diagnosticsScreenshotPath = process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT
+  ? path.resolve(process.env.DSH_SMOKE_DIAGNOSTICS_SCREENSHOT)
+  : ''
 const activationPlugin = String(process.env.DSH_SMOKE_PLUGIN_ACTIVATION || '').trim()
 const updatePlugin = String(process.env.DSH_SMOKE_PLUGIN_UPDATE || '').trim()
 const activationScreenshotPath = process.env.DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT
@@ -641,6 +644,81 @@ try {
     await mkdir(path.dirname(installedScreenshotPath), { recursive: true })
     await writeFile(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
+
+  const diagnosticContrastExpression = `(() => {
+    const tag = [...document.querySelectorAll('[class*="_ovByTag"]')].find(item => {
+      const rect = item.getBoundingClientRect()
+      return rect.width > 0 && rect.height > 0
+    })
+    if (!tag) return null
+    const parse = value => {
+      const values = (value.match(/[\\d.]+/g) || []).map(Number)
+      return { r: values[0] || 0, g: values[1] || 0, b: values[2] || 0, a: values.length > 3 ? values[3] : 1 }
+    }
+    const blend = (front, back) => ({
+      r: front.r * front.a + back.r * (1 - front.a),
+      g: front.g * front.a + back.g * (1 - front.a),
+      b: front.b * front.a + back.b * (1 - front.a),
+      a: front.a + back.a * (1 - front.a),
+    })
+    let background = { r: 0, g: 0, b: 0, a: 0 }
+    let current = tag
+    while (current && background.a < 0.999) {
+      background = blend(background, parse(getComputedStyle(current).backgroundColor))
+      current = current.parentElement
+    }
+    if (background.a < 0.999) background = blend(background, { r: 255, g: 255, b: 255, a: 1 })
+    const foreground = parse(getComputedStyle(tag).color)
+    const luminance = color => {
+      const channel = value => {
+        const normalized = value / 255
+        return normalized <= 0.04045 ? normalized / 12.92 : ((normalized + 0.055) / 1.055) ** 2.4
+      }
+      return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b)
+    }
+    const light = Math.max(luminance(foreground), luminance(background))
+    const dark = Math.min(luminance(foreground), luminance(background))
+    return {
+      text: (tag.textContent || '').trim(),
+      foreground: getComputedStyle(tag).color,
+      background: getComputedStyle(tag).backgroundColor,
+      contrastRatio: (light + 0.05) / (dark + 0.05),
+    }
+  })()`
+  const verifyDiagnosticContrast = async (themeLabel) => {
+    await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, `${themeLabel} installed plugin section`)
+    await waitForValue(client, clickButton(['Diagnostics', '诊断']), value => value?.clicked, `${themeLabel} diagnostics section`)
+    await waitForValue(client, `(() => {
+      if ([...document.querySelectorAll('[class*="_ovByTag"]')].some(item => item.getBoundingClientRect().width > 0)) return { clicked: true }
+      const titles = ['Override relationships', '覆盖关系']
+      const button = [...document.querySelectorAll('button')].find(item => titles.some(title => (item.textContent || '').includes(title)))
+      if (!button) return { clicked: false }
+      button.click()
+      return { clicked: true }
+    })()`, value => value?.clicked, `${themeLabel} override relationship section`)
+    const result = await waitForValue(client, diagnosticContrastExpression, value => value?.text && value.contrastRatio >= 4.5, `diagnostic override contrast in ${themeLabel} theme`)
+    assert.ok(result.contrastRatio >= 4.5, `${themeLabel} diagnostic override contrast was ${result.contrastRatio}`)
+  }
+  await verifyDiagnosticContrast('light')
+  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings before dark diagnostics')
+  await waitForValue(client, clickButton(['Dark', '深色']), value => value?.clicked, 'dark theme button')
+  state = await waitForValue(client, stateExpression, value => value?.theme === 'dark', 'theme dark for diagnostic contrast')
+  await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'Plugins settings tab in dark theme')
+  await verifyDiagnosticContrast('dark')
+  if (diagnosticsScreenshotPath) {
+    await evaluate(client, `(() => {
+      const tag = [...document.querySelectorAll('[class*="_ovByTag"]')].find(item => item.getBoundingClientRect().width > 0)
+      tag?.scrollIntoView({ block: 'center', inline: 'nearest' })
+      return Boolean(tag)
+    })()`)
+    await new Promise(resolve => setTimeout(resolve, 120))
+    const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+    await mkdir(path.dirname(diagnosticsScreenshotPath), { recursive: true })
+    await writeFile(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  }
+  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings after dark diagnostics')
+  await waitForValue(client, clickButton(['Light', '浅色', '亮色']), value => value?.clicked, 'restore light theme button')
+  state = await waitForValue(client, stateExpression, value => value?.theme === 'light', 'restored light theme')
 
   const stateCountExpression = `window.__dshTrayMessages?.filter(item => item.type === 'dsh-portable/state').length || 0`
   const beforeClear = await evaluate(client, stateCountExpression)

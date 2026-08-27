@@ -24,8 +24,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.5.1.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.5.1.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.5.2.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.5.2.65534")]
 
 namespace DshPortableBootstrap
 {
@@ -504,6 +504,75 @@ namespace DshPortableBootstrap
             while (HasRunningLauncher(launcher) && DateTime.UtcNow < deadline) Thread.Sleep(100);
             if (HasRunningLauncher(launcher))
                 throw new InvalidOperationException(BootstrapText.L("DSH-Portable 仍在运行；请关闭窗口后重试更新。", "DSH-Portable is still running. Close its window and try the update again."));
+            WaitForPortableWebViewRelease();
+        }
+
+        private void WaitForPortableWebViewRelease()
+        {
+            string dataRoot = ResolvePortableWebViewDataRoot();
+            if (String.IsNullOrEmpty(dataRoot)) return;
+            string script =
+                "$root=$env:DSH_PORTABLE_WEBVIEW_ROOT; " +
+                "@(Get-CimInstance Win32_Process -Filter \"Name = 'msedgewebview2.exe'\" -ErrorAction Stop | " +
+                "Where-Object { $_.CommandLine -and $_.CommandLine.IndexOf($root,[System.StringComparison]::OrdinalIgnoreCase) -ge 0 }).Count";
+            string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+            DateTime deadline = DateTime.UtcNow.AddSeconds(8);
+            do
+            {
+                try
+                {
+                    ProcessStartInfo start = new ProcessStartInfo
+                    {
+                        FileName = "powershell.exe",
+                        Arguments = "-NoProfile -NonInteractive -EncodedCommand " + encoded,
+                        UseShellExecute = false,
+                        CreateNoWindow = true,
+                        WindowStyle = ProcessWindowStyle.Hidden,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                    };
+                    start.EnvironmentVariables["DSH_PORTABLE_WEBVIEW_ROOT"] = dataRoot;
+                    using (Process process = Process.Start(start))
+                    {
+                        Task<string> output = process.StandardOutput.ReadToEndAsync();
+                        Task<string> error = process.StandardError.ReadToEndAsync();
+                        if (!process.WaitForExit(5000))
+                        {
+                            try { process.Kill(); } catch { }
+                            return;
+                        }
+                        Task.WaitAll(output, error);
+                        int count;
+                        if (process.ExitCode != 0 || !Int32.TryParse(output.Result.Trim(), out count)) return;
+                        if (count == 0) return;
+                    }
+                }
+                catch { return; }
+                Thread.Sleep(250);
+            }
+            while (DateTime.UtcNow < deadline);
+        }
+
+        private string ResolvePortableWebViewDataRoot()
+        {
+            if (File.Exists(Path.Combine(options.Destination, "installed-mode.json")))
+                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data", "webview2");
+            string identityPath = Path.Combine(options.Destination, "data", "portable-instance.id");
+            if (!File.Exists(identityPath)) return null;
+            string identity;
+            try { identity = File.ReadAllText(identityPath, Encoding.ASCII).Trim().ToLowerInvariant(); }
+            catch { return null; }
+            if (!Regex.IsMatch(identity, "^[0-9a-f]{32}$", RegexOptions.CultureInvariant)) return null;
+            string fullRoot = Path.GetFullPath(options.Destination).ToUpperInvariant();
+            string locationKey;
+            using (SHA256 hash = SHA256.Create())
+            {
+                byte[] digest = hash.ComputeHash(Encoding.UTF8.GetBytes(fullRoot));
+                locationKey = BitConverter.ToString(digest, 0, 16).Replace("-", "").ToLowerInvariant();
+            }
+            return Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DSH-Portable", "webview2", identity, locationKey);
         }
 
         private static bool HasRunningLauncher(string launcher)

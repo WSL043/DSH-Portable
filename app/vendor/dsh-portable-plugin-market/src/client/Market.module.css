@@ -418,7 +418,7 @@
 .diagAlert{color:var(--dsw-alias-state-warn-primary,#b45309)}
 .ovRow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;line-height:18px;background:var(--dsw-alias-bg-layer-2,#f7f8fa);border-radius:8px;padding:6px 10px;min-width:0}
 .ovArrow{color:var(--dsw-alias-label-tertiary,#9ca3af);font-size:12px;flex-shrink:0}
-.ovByTag{display:inline-flex;align-items:center;padding:0 8px;height:18px;border-radius:9px;background:var(--dsw-alias-brand-primary,#4f6ef7);color:#fff;font-size:11px;font-weight:600;flex-shrink:0;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ovByTag{display:inline-flex;align-items:center;padding:0 8px;height:18px;border:1px solid var(--dsw-alias-border-l3,#d9dde3);border-radius:9px;background:transparent;color:var(--dsw-alias-label-primary,#1f2328);font-size:11px;font-weight:500;flex-shrink:0;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ovFrom{color:var(--dsw-alias-label-secondary,#6b7280);font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .orphRow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;font-size:12px;line-height:18px;background:var(--dsw-alias-bg-layer-2,#f7f8fa);border-radius:8px;padding:6px 10px;min-width:0}
 .orphBadge{display:inline-flex;align-items:center;padding:0 8px;height:18px;border-radius:9px;background:var(--dsw-alias-state-warn-primary,#b45309);color:#fff;font-size:11px;font-weight:600;flex-shrink:0;white-space:nowrap}

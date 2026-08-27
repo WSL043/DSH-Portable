@@ -1,0 +1,19 @@
+{
+  "version": "0.5.2",
+  "zh": {
+    "summary": "修复完整包更新后的 Windows 启动竞争，统一启动过渡，并恢复插件诊断在深浅主题下的清晰显示。",
+    "highlights": [
+      "Windows 完整包更新会等待旧桌面的 WebView2 会话释放；若系统仍在回收浏览器资源，新版本会在不删除用户数据的前提下有限重试，避免更新后首次打开出现资源占用错误。",
+      "插件诊断的覆盖关系标签改用与 DSH 一致的中性描边和主题文字颜色，在深色与浅色外观下均保持清晰可读。",
+      "启动窗口会在 DSH 加载层就绪后一次显示；同一加载层持续覆盖到工作台可交互，让启动到工作台保持连续。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes a Windows startup race after complete-package updates, unifies the startup transition, and restores readable plugin diagnostics in both themes.",
+    "highlights": [
+      "Windows complete-package updates now wait for the previous desktop WebView2 session to release. If Windows is still reclaiming browser resources, the new version retries within a bounded window without deleting user data.",
+      "Plugin diagnostic override labels now use DSH-aligned neutral borders and theme text colors, preserving readability in both light and dark appearances.",
+      "The window now appears when the DSH loader is ready, and that same loader remains until the workspace is interactive for one continuous transition."
+    ]
+  }
+}

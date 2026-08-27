@@ -548,8 +548,8 @@ test('Windows package exposes real GUI executables with matching icon and an iso
   assert.match(build, /dsh-core-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*22/)
-  assert.match(build, /requiredShellSchema\s*=\s*22/)
+  assert.match(build, /shellSchema\s*=\s*23/)
+  assert.match(build, /requiredShellSchema\s*=\s*23/)
   assert.match(source, new RegExp(`AssemblyFileVersion\\("${regexEscape(policy.windowsVersion)}"\\)`))
   assert.match(bootstrap, /ZipArchive/)
   assert.match(bootstrap, /internal sealed class BootstrapActivityRing : Control/)
@@ -915,7 +915,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(macDesktopHostSmoke, /--no-browser/)
 })
 
-test('CI upgrades a published Windows candidate through the candidate full-package boundary', async () => {
+test('CI upgrades a running published Windows product and injects the WebView2 restart race', async () => {
   const [workflow, smoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-version-upgrade.mjs'),
@@ -924,9 +924,13 @@ test('CI upgrades a published Windows candidate through the candidate full-packa
   assert.match(workflow, /gh release list --repo "\$env:GITHUB_REPOSITORY"[\s\S]+isPrerelease/)
   assert.match(workflow, /\[regex\]::Match\(\$_\.tagName, '\^v[\s\S]+\$_\.isPrerelease/)
   assert.match(workflow, /Groups\[['"]base['"]\]\.Value[\s\S]+Groups\[['"]rc['"]\]\.Value/)
+  assert.match(workflow, /-not \$_\.isPrerelease[\s\S]+\$_\.tagName -match '\^v\\d\+[\s\S]+\$_\.tagName -ne "v\$CandidateVersion"/)
   assert.doesNotMatch(workflow, /gh release view --repo "\$env:GITHUB_REPOSITORY" --json tagName/)
-  assert.match(workflow, /gh release download \$PriorTag/)
-  assert.match(workflow, /smoke-windows-version-upgrade\.mjs/)
+  assert.match(workflow, /gh release download \$Release\.tagName/)
+  assert.match(workflow, /COMPONENTS\.json/)
+  assert.match(workflow, /Components\.shellSchema[\s\S]+Target\.requiredShellSchema/)
+  assert.match(workflow, /Components\.runtimeLayout[\s\S]+Target\.targetRuntimeLayout/)
+  assert.match(workflow, /smoke-windows-version-upgrade\.mjs[\s\S]+--running-host --simulate-webview-busy/)
   assert.match(smoke, /\['stable', 'candidate'\]\.includes\(fullManifestSource\.releaseChannel\)/)
   assert.match(smoke, /componentManifestSource\.releaseChannel, fullManifestSource\.releaseChannel/)
   assert.match(smoke, /oldComponents\.portableVersion, fullManifestSource\.version/)

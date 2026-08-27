@@ -264,6 +264,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $Root | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+          $StartupEvidence = Join-Path $env:RUNNER_TEMP "dsh-startup-transition-${{ matrix.label }}"
+          node scripts/audit-windows-startup-transition.mjs (Join-Path $Root 'DSH-Portable') $StartupEvidence
           ./scripts/smoke-windows-detached-updater.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-desktop-move.ps1 `
             -Root (Join-Path $Root 'DSH-Portable') `
@@ -297,6 +299,13 @@ jobs:
           name: windows-native-migration-${{ matrix.label }}
           path: ${{ runner.temp }}/dsh-native-migration-evidence-${{ matrix.label }}
           if-no-files-found: warn
+      - name: Upload startup transition evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-startup-transition-${{ matrix.label }}
+          path: ${{ runner.temp }}/dsh-startup-transition-${{ matrix.label }}
+          if-no-files-found: warn
 
   windows-bootstrap-smoke:
     name: Windows lightweight bootstrap
@@ -315,7 +324,7 @@ jobs:
       - run: node scripts/smoke-windows-bootstrap.mjs
 
   windows-version-upgrade-smoke:
-    name: Windows candidate release upgrade
+    name: Windows running published release upgrade
     needs: windows-build
     runs-on: windows-latest
     timeout-minutes: 20
@@ -328,38 +337,60 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Upgrade the latest published candidate release
+      - name: Upgrade a running published release through the complete-package boundary
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $CandidateVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $Policy = node scripts/version-policy.mjs $CandidateVersion | ConvertFrom-StringData
-          if ($Policy.channel -ne 'candidate') {
-            Write-Host "Version $CandidateVersion is stable; the candidate-to-candidate boundary does not apply."
-            exit 0
-          }
-          $CandidateMatch = [regex]::Match($CandidateVersion, '^(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
-          $PriorRelease = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts `
-            --limit 100 --json tagName,isPrerelease,publishedAt | ConvertFrom-Json | `
-            Where-Object {
+          $Target = Get-Content artifacts/portable-update-windows-x64.json -Raw | ConvertFrom-Json
+          $Releases = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts `
+            --limit 100 --json tagName,isPrerelease,publishedAt | ConvertFrom-Json
+          $Eligible = @()
+          if ($Policy.channel -eq 'candidate') {
+            $CandidateMatch = [regex]::Match($CandidateVersion, '^(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
+            $Eligible = $Releases | Where-Object {
               $ReleaseMatch = [regex]::Match($_.tagName, '^v(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
               $_.isPrerelease -and $ReleaseMatch.Success -and `
                 $ReleaseMatch.Groups['base'].Value -eq $CandidateMatch.Groups['base'].Value -and `
                 [int]$ReleaseMatch.Groups['rc'].Value -lt [int]$CandidateMatch.Groups['rc'].Value
-            } | `
-            Sort-Object publishedAt -Descending | Select-Object -First 1
-          $PriorTag = $PriorRelease.tagName
+            } | Sort-Object publishedAt -Descending
+          }
+          if (-not $Eligible) {
+            $Eligible = $Releases | Where-Object {
+              -not $_.isPrerelease -and $_.tagName -match '^v\d+\.\d+\.\d+$' -and $_.tagName -ne "v$CandidateVersion"
+            } | Sort-Object publishedAt -Descending
+          }
+          $PriorTag = $null
+          $PriorZip = $null
+          foreach ($Release in $Eligible) {
+            $TagDir = Join-Path $env:RUNNER_TEMP ("prior-release-" + $Release.tagName.TrimStart('v'))
+            New-Item -ItemType Directory -Force -Path $TagDir | Out-Null
+            gh release download $Release.tagName --repo "$env:GITHUB_REPOSITORY" `
+              --pattern 'DSH-Portable-windows-x64-offline.zip' --dir $TagDir
+            $Zip = Join-Path $TagDir 'DSH-Portable-windows-x64-offline.zip'
+            $ComponentsJson = tar.exe -xOf $Zip DSH-Portable/licenses/COMPONENTS.json
+            if ($LASTEXITCODE -ne 0 -or -not $ComponentsJson) {
+              throw "Could not read COMPONENTS.json from $($Release.tagName)."
+            }
+            $Components = $ComponentsJson | ConvertFrom-Json
+            $CrossesBoundary = [int]$Components.shellSchema -lt [int]$Target.requiredShellSchema `
+              -or [string]$Components.runtimeLayout -ne [string]$Target.targetRuntimeLayout
+            if ($CrossesBoundary) {
+              $PriorTag = $Release.tagName
+              $PriorZip = $Zip
+              break
+            }
+          }
           if (-not $PriorTag) {
-            Write-Host 'No earlier published release candidate exists; no candidate upgrade boundary to test.'
+            Write-Host 'No published release crosses this complete-package boundary; nothing to test.'
             exit 0
           }
-          $Prior = Join-Path $env:RUNNER_TEMP 'prior-release'
-          New-Item -ItemType Directory -Force -Path $Prior | Out-Null
-          gh release download $PriorTag --repo "$env:GITHUB_REPOSITORY" `
-            --pattern 'DSH-Portable-windows-x64-offline.zip' --dir $Prior
+          Write-Host "Testing complete-package upgrade from $PriorTag to $CandidateVersion."
           node scripts/smoke-windows-version-upgrade.mjs `
-            (Join-Path $Prior 'DSH-Portable-windows-x64-offline.zip') artifacts
+            $PriorZip artifacts `
+            --running-host --simulate-webview-busy
 
   windows-extractor-smoke:
     name: Windows self-extractor

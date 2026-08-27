@@ -219,7 +219,21 @@ try {
         $PersistedHeight,
         0x0014
     )) { throw 'Could not set deterministic desktop bounds for the persistence check.' }
-    Start-Sleep -Milliseconds 250
+    $BoundsDeadline = [DateTime]::UtcNow.AddSeconds(5)
+    $StableBounds = 0
+    do {
+        Start-Sleep -Milliseconds 100
+        $Process.Refresh()
+        $Observed = New-Object WindowAppIdentity+RECT
+        if ($Process.MainWindowHandle -ne [IntPtr]::Zero -and [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$Observed) `
+            -and ($Observed.Right - $Observed.Left) -eq $PersistedWidth `
+            -and ($Observed.Bottom - $Observed.Top) -eq $PersistedHeight) {
+            $StableBounds += 1
+        } else {
+            $StableBounds = 0
+        }
+    } while ($StableBounds -lt 3 -and [DateTime]::UtcNow -lt $BoundsDeadline)
+    if ($StableBounds -lt 3) { throw 'The native window did not retain the requested persistence-test bounds.' }
 
     # Default close behavior is minimized to tray: closing the window must keep
     # the native host and running task alive until the user explicitly exits.

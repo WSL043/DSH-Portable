@@ -120,6 +120,21 @@ test('the market keeps one navigation layer inside the native Plugins page', asy
   assert.doesNotMatch(section, /tab === 'backup'/)
 })
 
+test('diagnostic override labels remain readable in both DSH themes', async () => {
+  const [styles, browserSmoke] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
+    read('scripts/smoke-windows-tray-bridge.mjs'),
+  ])
+
+  const overrideStyle = styles.match(/\.ovByTag\s*\{[^}]+\}/s)?.[0] ?? ''
+  assert.match(overrideStyle, /border:\s*1px solid var\(--dsw-alias-border-l3/)
+  assert.match(overrideStyle, /color:\s*var\(--dsw-alias-label-primary/)
+  assert.doesNotMatch(overrideStyle, /background:\s*var\(--dsw-alias-brand-primary/)
+  assert.match(browserSmoke, /verifyDiagnosticContrast\('light'\)/)
+  assert.match(browserSmoke, /verifyDiagnosticContrast\('dark'\)/)
+  assert.match(browserSmoke, /contrastRatio >= 4\.5/)
+})
+
 test('the Portable market never flashes a console window for background commands on Windows', async () => {
   const [processLayer, restartLayer] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/dsh-cli.ts'),

@@ -25,8 +25,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.5.1.65534")]
-[assembly: AssemblyFileVersion("0.5.1.65534")]
+[assembly: AssemblyVersion("0.5.2.65534")]
+[assembly: AssemblyFileVersion("0.5.2.65534")]
 
 namespace DshPortable
 {
@@ -345,6 +345,8 @@ namespace DshPortable
         private const int WorkspaceNavigationTimeoutMs = 60000;
         private const int WebViewShutdownTimeoutMs = 10000;
         private const int WebViewGracefulShutdownMs = 1500;
+        private const int WebViewResourceInUseHResult = unchecked((int)0x800700AA);
+        private const int WebViewInitializationMaxAttempts = 4;
 
         private static string L(string chinese, string english)
         {
@@ -406,9 +408,11 @@ namespace DshPortable
         private readonly List<string> webViewStartupTrace = new List<string>();
         private Stopwatch webViewStartupClock;
         private TaskCompletionSource<string> webViewProcessFailure;
+        private TaskCompletionSource<string> workspaceSurfaceReady;
         private CoreWebView2Environment webViewEnvironment;
         private TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs> webViewBrowserExited;
         private int ownedWebViewBrowserProcessId;
+        private bool testWebViewBusyInjected;
 
         internal LauncherWindow(string[] args)
         {
@@ -433,10 +437,12 @@ namespace DshPortable
             FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedSingle;
             MaximizeBox = desktopStart;
             MinimizeBox = desktopStart;
-            ShowInTaskbar = !nonInteractive && !testHidden;
+            // Reveal the desktop only after the official DSH WebView boot
+            // surface is ready, so startup remains one continuous surface.
+            ShowInTaskbar = !nonInteractive && !testHidden && !desktopStart;
             if (nonInteractive) Opacity = 0;
             else if (testHidden) Opacity = 1;
-            else if (desktopStart) Opacity = 1;
+            else if (desktopStart) Opacity = 0;
             ClientSize = desktopStart ? new Size(1280, 820) : new Size(440, 160);
             MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
             BackColor = SystemColors.Window;
@@ -534,7 +540,7 @@ namespace DshPortable
             launchContent.Controls.Add(closeButton);
             launchPanel.Controls.Add(launchContent);
             if (desktopStart)
-                ConfigureDesktopLoadingSurface(L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…"), false);
+                ConfigureDesktopLoadingSurface("Loading plugins…", false);
 
             closeBehavior = LoadCloseBehavior();
             updateCheckEnabled = LoadUpdateCheckEnabled("productUpdateCheckEnabled");
@@ -610,17 +616,11 @@ namespace DshPortable
                 if (!String.IsNullOrEmpty(sessionId)) PostBridgeAction("open-session", sessionId);
             };
 
-            webView = new WebView2
-            {
-                Dock = DockStyle.None,
-                Location = Point.Empty,
-                Size = ClientSize,
-                Visible = true,
-            };
+            webView = CreateDesktopWebView();
             Controls.Add(webView);
             Controls.Add(launchPanel);
-            launchPanel.Visible = true;
-            launchPanel.BringToFront();
+            launchPanel.Visible = !desktopStart;
+            if (launchPanel.Visible) launchPanel.BringToFront();
             if (desktopStart)
             {
                 RestoreDesktopWindowState();
@@ -1141,6 +1141,20 @@ namespace DshPortable
             {
                 Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
                 object messageType;
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/boot-visible", StringComparison.Ordinal))
+                {
+                    RecordWebViewPhase("boot-visible-message");
+                    BeginInvoke((MethodInvoker)RevealDesktopBootSurface);
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/surface-ready", StringComparison.Ordinal))
+                {
+                    RecordWebViewPhase("surface-ready-message");
+                    if (workspaceSurfaceReady != null) workspaceSurfaceReady.TrySetResult("native-bridge");
+                    return;
+                }
                 if (message != null && message.TryGetValue("type", out messageType)
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/preferences", StringComparison.Ordinal))
                 {
@@ -2159,6 +2173,9 @@ namespace DshPortable
             ref uint value,
             int valueSize);
 
+        [DllImport("dwmapi.dll")]
+        private static extern int DwmFlush();
+
         internal static bool SignalExistingDesktopHost(int message)
         {
             string expected = Path.GetFullPath(Application.ExecutablePath);
@@ -2214,7 +2231,7 @@ namespace DshPortable
             {
                 if (desktopStart)
                 {
-                    statusLabel.Text = L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
+                    statusLabel.Text = "Loading plugins…";
                     Task webViewInitialization = InitializeWebViewAsync();
                     Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json" }));
                     if (started.Item1 != 0)
@@ -2546,6 +2563,7 @@ namespace DshPortable
             TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
                 new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
             TaskCompletionSource<bool> workspaceUsable = new TaskCompletionSource<bool>();
+            workspaceSurfaceReady = new TaskCompletionSource<string>();
             webViewProcessFailure = new TaskCompletionSource<string>();
             EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = null;
             EventHandler<CoreWebView2DOMContentLoadedEventArgs> domLoaded = null;
@@ -2559,9 +2577,9 @@ namespace DshPortable
                 RecordWebViewPhase("dom-content-loaded:" + eventArgs.NavigationId);
                 bool usable = await ProbeWorkspaceDomAsync(url);
                 RecordWebViewPhase("dom-probe:" + usable);
-                bool painted = usable && await WaitForWorkspaceFirstPaintAsync(url);
-                RecordWebViewPhase("first-paint:" + painted);
-                if (painted)
+                string handoff = usable ? await WaitForWorkspaceHandoffAsync(url, workspaceSurfaceReady.Task) : String.Empty;
+                RecordWebViewPhase("surface-handoff:" + (String.IsNullOrEmpty(handoff) ? "unavailable" : handoff));
+                if (!String.IsNullOrEmpty(handoff))
                 {
                     RevealDesktopSurface();
                     workspaceUsable.TrySetResult(true);
@@ -2572,8 +2590,9 @@ namespace DshPortable
             webView.Visible = true;
             if (desktopStart)
             {
-                launchPanel.Visible = true;
-                launchPanel.BringToFront();
+                // Native operations such as an update may already own this
+                // surface. Normal startup reveals the official DSH boot overlay.
+                if (launchPanel.Visible) launchPanel.BringToFront();
             }
             else launchPanel.BringToFront();
             RecordWebViewPhase("navigation-start:" + url);
@@ -2635,48 +2654,88 @@ namespace DshPortable
         private void RevealDesktopSurface()
         {
             if (!desktopStart) return;
-            launchPanel.Visible = false;
             webView.Visible = true;
             webView.BringToFront();
+            webView.Update();
+            try { DwmFlush(); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            launchPanel.Visible = false;
             WriteLauncherLog("startup", "dsh-first-paint-ready");
-            if (!hiddenForAutomation && Opacity < 1) Opacity = 1;
+            if (!hiddenForAutomation)
+            {
+                ShowInTaskbar = true;
+                if (Opacity < 1) Opacity = 1;
+            }
         }
 
-        private async Task<bool> WaitForWorkspaceFirstPaintAsync(string expectedUrl)
+        private void RevealDesktopBootSurface()
+        {
+            if (!desktopStart || webView == null || webView.IsDisposed) return;
+            webView.Visible = true;
+            webView.BringToFront();
+            webView.Update();
+            try { DwmFlush(); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
+            launchPanel.Visible = false;
+            WriteLauncherLog("startup", "dsh-boot-surface-visible");
+            if (!hiddenForAutomation)
+            {
+                ShowInTaskbar = true;
+                if (Opacity < 1) Opacity = 1;
+            }
+        }
+
+        private async Task<string> WaitForWorkspaceHandoffAsync(string expectedUrl, Task<string> nativeHandoff)
         {
             string expected = json.Serialize(expectedUrl.TrimEnd('/'));
             string script = "(function(){try{"
                 + "var expected=" + expected + ";"
                 + "var current=String(window.location.href||'').replace(/\\/$/,'');"
-                + "if(current.indexOf(expected)!==0||!document.body)return false;"
-                + "var boot=document.querySelector('[data-dsh-boot]');"
-                + "var bootVisible=false;"
-                + "if(boot){var bootRect=boot.getBoundingClientRect();var bootStyle=getComputedStyle(boot);"
-                + "bootVisible=bootRect.width>0&&bootRect.height>0&&bootStyle.display!=='none'&&bootStyle.visibility!=='hidden'&&bootStyle.opacity!=='0';}"
-                + "if(bootVisible)return false;"
-                + "var nodes=document.body.querySelectorAll('*');"
-                + "for(var index=0;index<nodes.length;index++){"
-                + "var node=nodes[index];var rect=node.getBoundingClientRect();var style=getComputedStyle(node);"
-                + "if(rect.width>=120&&rect.height>=24&&style.display!=='none'&&style.visibility!=='hidden'&&style.opacity!=='0')return true;"
-                + "}"
-                + "return String(document.body.innerText||'').trim().length>0;"
-                + "}catch(_){return false;}})()";
+                + "if(current.indexOf(expected)!==0||!document.body)return 0;"
+                + "var key='__dshPortableStartupGate';"
+                + "var root=document.querySelector('#root');if(!root)return 0;"
+                + "var rootRect=root.getBoundingClientRect();var rootStyle=getComputedStyle(root);"
+                + "var rootVisible=rootRect.width>=Math.max(320,innerWidth*.8)&&rootRect.height>=Math.max(240,innerHeight*.8)"
+                + "&&rootStyle.display!=='none'&&rootStyle.visibility!=='hidden'&&rootStyle.opacity!=='0';"
+                + "if(!rootVisible)return 0;"
+                + "var now=performance.now();var gate=window[key];"
+                + "if(!gate){gate={since:now,lastMutation:now,lastSignature:'',stablePolls:0};"
+                + "gate.observer=new MutationObserver(function(records){"
+                + "for(var i=0;i<records.length;i++){var record=records[i];"
+                + "if(record.type==='childList'||record.type==='characterData'){gate.lastMutation=performance.now();gate.stablePolls=0;break;}}});"
+                + "gate.observer.observe(root,{subtree:true,childList:true,characterData:true});window[key]=gate;}"
+                + "var visibleControls=0;var controls=root.querySelectorAll('button,input,textarea,[contenteditable=true],[role=button]');"
+                + "for(var index=0;index<controls.length;index++){var node=controls[index];var rect=node.getBoundingClientRect();var style=getComputedStyle(node);"
+                + "if(rect.width>=20&&rect.height>=20&&style.display!=='none'&&style.visibility!=='hidden'&&style.opacity!=='0')visibleControls++;}"
+                + "var text=String(root.innerText||'').replace(/\\s+/g,' ').trim();"
+                + "var signature=[root.children.length,root.querySelectorAll('*').length,visibleControls,text.length].join(':');"
+                + "if(signature!==gate.lastSignature){gate.lastSignature=signature;gate.since=now;gate.stablePolls=0;return 0;}"
+                + "gate.stablePolls++;"
+                + "var fontsReady=!document.fonts||document.fonts.status==='loaded';"
+                + "return fontsReady&&visibleControls>=2&&text.length>0&&gate.stablePolls>=3"
+                + "&&now-gate.since>=300&&now-gate.lastMutation>=300?2:0;"
+                + "}catch(_){return 0;}})()";
             await Task.Delay(50);
-            // Keep the native loading surface in place for the same budget as
-            // workspace navigation. Slow first-run plugin discovery must not
-            // expose the intermediate DSH boot page or turn into a false stall.
+            // The official DSH boot overlay remains in the WebView while the
+            // workspace mounts behind it. The native host waits for that same
+            // surface to report readiness instead of introducing another page.
             for (int attempt = 0; attempt < 560; attempt++)
             {
+                if (nativeHandoff.IsCompleted) return await nativeHandoff;
                 try
                 {
                     string result = await webView.CoreWebView2.ExecuteScriptAsync(script);
-                    if (String.Equals(result, "true", StringComparison.OrdinalIgnoreCase)) return true;
+                    if (String.Equals(result, "2", StringComparison.Ordinal)) return "stable-workspace";
                 }
                 catch (Exception error)
                 {
                     RecordWebViewPhase("first-paint-probe-failed:" + error.GetType().Name);
                 }
-                await Task.Delay(100);
+                Task delay = Task.Delay(100);
+                Task winner = await Task.WhenAny(nativeHandoff, delay);
+                if (winner == nativeHandoff) return await nativeHandoff;
             }
             try
             {
@@ -2688,7 +2747,7 @@ namespace DshPortable
                 RecordWebViewPhase("first-paint-timeout:" + diagnostics);
             }
             catch (Exception error) { RecordWebViewPhase("first-paint-timeout-probe-failed:" + error.GetType().Name); }
-            return false;
+            return String.Empty;
         }
 
         private async Task<bool> ProbeWorkspaceDomAsync(string expectedUrl)
@@ -2809,33 +2868,43 @@ namespace DshPortable
             RecordWebViewPhase("environment-start");
             string userData = ResolveWebViewDataRoot();
             Directory.CreateDirectory(userData);
-            try
+            CoreWebView2EnvironmentOptions options = new CoreWebView2EnvironmentOptions
             {
-                CoreWebView2EnvironmentOptions options = new CoreWebView2EnvironmentOptions
-                {
-                    Language = UiLanguageTag,
-                };
-                string testBrowserArguments = Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS");
-                if ((String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
-                    || String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
-                    && !String.IsNullOrWhiteSpace(testBrowserArguments)
-                    && Regex.IsMatch(testBrowserArguments, "^--remote-debugging-port=[0-9]{1,5}$"))
-                {
-                    options.AdditionalBrowserArguments = testBrowserArguments;
-                }
-                webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userData, options);
-                webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
-                webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
-                await webView.EnsureCoreWebView2Async(webViewEnvironment);
-                ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
-                RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
+                Language = UiLanguageTag,
+            };
+            string testBrowserArguments = Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS");
+            if ((String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
+                || String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                && !String.IsNullOrWhiteSpace(testBrowserArguments)
+                && Regex.IsMatch(testBrowserArguments, "^--remote-debugging-port=[0-9]{1,5}$"))
+            {
+                options.AdditionalBrowserArguments = testBrowserArguments;
             }
-            catch (WebView2RuntimeNotFoundException)
+
+            for (int attempt = 1; attempt <= WebViewInitializationMaxAttempts; attempt += 1)
             {
-                throw new InvalidOperationException(
-                    L(
-                        "此电脑缺少 Microsoft Edge WebView2 Runtime。\r\n请安装官方 Evergreen Runtime 后重新打开：\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
-                        "Microsoft Edge WebView2 Runtime is missing.\r\nInstall the official Evergreen Runtime, then open the app again:\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703"));
+                bool retryBusyInitialization = false;
+                try
+                {
+                    await InitializeWebViewAttemptAsync(userData, options);
+                    break;
+                }
+                catch (WebView2RuntimeNotFoundException)
+                {
+                    throw new InvalidOperationException(
+                        L(
+                            "此电脑缺少 Microsoft Edge WebView2 Runtime。\r\n请安装官方 Evergreen Runtime 后重新打开：\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703",
+                            "Microsoft Edge WebView2 Runtime is missing.\r\nInstall the official Evergreen Runtime, then open the app again:\r\nhttps://go.microsoft.com/fwlink/p/?LinkId=2124703"));
+                }
+                catch (Exception error)
+                {
+                    if (!IsWebViewResourceInUse(error) || attempt >= WebViewInitializationMaxAttempts) throw;
+                    retryBusyInitialization = true;
+                }
+                if (!retryBusyInitialization) continue;
+                RecordWebViewPhase("environment-busy-retry:" + attempt.ToString(CultureInfo.InvariantCulture));
+                ResetWebViewAfterInitializationFailure();
+                await WaitForWebViewDataFolderReleaseAsync(attempt * 2000);
             }
 
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
@@ -2862,6 +2931,100 @@ namespace DshPortable
                 RecordWebViewPhase("content-loading:" + eventArgs.NavigationId);
             };
             webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
+        }
+
+        private async Task InitializeWebViewAttemptAsync(string userData, CoreWebView2EnvironmentOptions options)
+        {
+            if (!testWebViewBusyInjected
+                && String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_BUSY_ONCE"), "1", StringComparison.Ordinal))
+            {
+                testWebViewBusyInjected = true;
+                throw new COMException("The requested resource is in use.", WebViewResourceInUseHResult);
+            }
+
+            webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userData, options);
+            webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
+            webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
+            await webView.EnsureCoreWebView2Async(webViewEnvironment);
+            ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
+            RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
+        }
+
+        private static bool IsWebViewResourceInUse(Exception error)
+        {
+            Exception current = error;
+            while (current != null)
+            {
+                if (current.HResult == WebViewResourceInUseHResult) return true;
+                current = current.InnerException;
+            }
+            return false;
+        }
+
+        private WebView2 CreateDesktopWebView()
+        {
+            return new WebView2
+            {
+                Dock = DockStyle.None,
+                Location = Point.Empty,
+                Size = ClientSize,
+                Visible = true,
+            };
+        }
+
+        private void ResetWebViewAfterInitializationFailure()
+        {
+            CoreWebView2Environment failedEnvironment = webViewEnvironment;
+            if (failedEnvironment != null)
+            {
+                try { failedEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited; }
+                catch { }
+            }
+            WebView2 failedWebView = webView;
+            if (failedWebView != null)
+            {
+                try { Controls.Remove(failedWebView); }
+                catch { }
+                try { failedWebView.Dispose(); }
+                catch { }
+            }
+            webViewEnvironment = null;
+            webViewBrowserExited = null;
+            ownedWebViewBrowserProcessId = 0;
+            webView = CreateDesktopWebView();
+            Controls.Add(webView);
+            webView.SendToBack();
+            FitWebViewToClient();
+        }
+
+        private async Task WaitForWebViewDataFolderReleaseAsync(int timeoutMs)
+        {
+            DateTime deadline = DateTime.UtcNow.AddMilliseconds(Math.Max(250, timeoutMs));
+            List<string> remaining = new List<string>();
+            do
+            {
+                bool diagnosticFailed = false;
+                try
+                {
+                    remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
+                    if (remaining.Count == 0) return;
+                }
+                catch (Exception diagnosticError)
+                {
+                    WriteLauncherLog("startup", "environment-busy-diagnostic="
+                        + diagnosticError.GetBaseException().Message.Replace("\r", " ").Replace("\n", " | "));
+                    diagnosticFailed = true;
+                }
+                if (diagnosticFailed)
+                {
+                    await Task.Delay(Math.Min(500, Math.Max(1, timeoutMs)));
+                    return;
+                }
+                await Task.Delay(250);
+            }
+            while (DateTime.UtcNow < deadline);
+
+            WriteLauncherLog("startup", "environment-busy-processes-remain=" + String.Join(";", remaining));
         }
 
         private async Task ShowDesktopAsync(string url)
@@ -3375,7 +3538,11 @@ namespace DshPortable
         private void ShowFailure(string message)
         {
             operationRunning = false;
-            if (!hiddenForAutomation) Opacity = 1;
+            if (!hiddenForAutomation)
+            {
+                ShowInTaskbar = true;
+                Opacity = 1;
+            }
             launchPanel.Visible = true;
             webView.Visible = false;
             activityRing.Visible = false;
