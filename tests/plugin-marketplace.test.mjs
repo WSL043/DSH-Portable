@@ -150,6 +150,43 @@ test('the market keeps implementation metadata and support controls out of the p
   assert.doesNotMatch(header, /marketUpdate|dshmarket|dsh-market/)
 })
 
+test('plugin operations expose one truthful activation action after every mutation', async () => {
+  const [{ completionAction, summarize }, section, panel, locales, routes] = await Promise.all([
+    import('../app/vendor/dsh-portable-plugin-market/src/client/operations.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/OperationsPanel.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
+  ])
+
+  assert.equal(completionAction({ hot: true }), 'refresh')
+  assert.equal(completionAction({ hot: false }), 'restart')
+  assert.equal(completionAction({ activationAction: 'none', hot: false }), 'none')
+  assert.equal(completionAction({ activationAction: 'refresh', hot: false }), 'refresh')
+  assert.equal(completionAction({ activationAction: 'restart', hot: true }), 'restart')
+  assert.equal(completionAction({ activation: { plugin: { state: 'restart' } } }), 'restart')
+  assert.equal(completionAction({ activation: { plugin: { state: 'live' } } }), 'refresh')
+
+  const summary = summarize([
+    { id: '1', kind: 'install', name: 'a', state: 'done', nextAction: 'refresh' },
+    { id: '2', kind: 'update', name: 'b', state: 'done', nextAction: 'restart' },
+  ])
+  assert.equal(summary.actionable, 2)
+
+  assert.match(section, /completionAction\(body\)/)
+  assert.doesNotMatch(section, /classified === 'none' \? 'restart'/)
+  assert.doesNotMatch(section, /needsRefresh:\s*body\.hot\s*!==\s*true/)
+  assert.match(section, /kind:\s*'uninstall'[\s\S]{0,200}state:\s*'running'/)
+  assert.match(panel, /onRestart/)
+  assert.match(panel, /record\.nextAction === 'refresh'/)
+  assert.match(panel, /record\.nextAction === 'restart'/)
+  assert.match(locales, /opDoneLive:/)
+  assert.match(locales, /opDoneRestart:/)
+  assert.match(routes, /activationAction: ok \|\| halfGone/)
+  assert.match(routes, /addedPackages\.some\(name => packageHasClientPart/)
+  assert.match(routes, /activation\?\.\[name\]\?\.state === 'restart'/)
+})
+
 test('the Plugins page owns the title and each market surface starts at its content', async () => {
   const [section, styles, locales] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
@@ -508,8 +545,23 @@ test('AI repair prompt does not recommend bundle surgery for peer-range-only war
 })
 
 test('catalog release archives are accepted only when bound to the entry repository', async () => {
-  const { installTargetFor } = await import('../app/vendor/dsh-portable-plugin-market/src/sources.ts')
+  const { installTargetFor, verifiedNpmTargetFor } = await import('../app/vendor/dsh-portable-plugin-market/src/sources.ts')
   const own = 'https://github.com/example/plugin/releases/download/v1.2.3/plugin-1.2.3.tgz'
+  const digest = '00'.repeat(64)
+  const integrity = `sha512-${Buffer.from(digest, 'hex').toString('base64')}`
+  const provenance = repository => ({
+    attestations: [{
+      predicateType: 'https://slsa.dev/provenance/v1',
+      bundle: { dsseEnvelope: { payload: Buffer.from(JSON.stringify({
+        subject: [{ name: 'pkg:npm/example-plugin@1.2.3', digest: { sha512: digest } }],
+        predicate: { buildDefinition: { externalParameters: { workflow: { repository } } } },
+      })).toString('base64') } },
+    }],
+  })
+  const metadata = repository => ({
+    name: 'example-plugin', version: '1.2.3', repository,
+    dist: { integrity },
+  })
 
   assert.equal(installTargetFor({ url: 'https://github.com/example/plugin', tarball: own }), own)
   assert.equal(
@@ -526,6 +578,41 @@ test('catalog release archives are accepted only when bound to the entry reposit
     }),
     'github:example/plugin',
   )
+
+  assert.equal(verifiedNpmTargetFor(
+    { name: 'example-plugin', url: 'https://github.com/example/plugin' },
+    metadata({ type: 'git', url: 'git+https://github.com/example/plugin.git' }),
+    provenance('https://github.com/example/plugin'),
+  ), 'example-plugin')
+  assert.equal(verifiedNpmTargetFor(
+    { name: 'example-plugin', url: 'https://github.com/example/plugin' },
+    metadata({ url: 'https://github.com/attacker/lookalike.git' }),
+    provenance('https://github.com/example/plugin'),
+  ), null)
+  assert.equal(verifiedNpmTargetFor(
+    { name: 'example-plugin', url: 'https://github.com/example/plugin' },
+    metadata({ url: 'https://github.com/example/plugin.git' }),
+    provenance('https://github.com/attacker/lookalike'),
+  ), null)
+  assert.equal(verifiedNpmTargetFor(
+    { name: 'example-plugin', url: 'https://github.com/example/collection/tree/main/packages/plugin' },
+    metadata({ url: 'https://github.com/example/collection.git', directory: 'packages/other' }),
+    provenance('https://github.com/example/collection'),
+  ), null)
+  assert.equal(verifiedNpmTargetFor(
+    { name: 'example-plugin', url: 'https://github.com/example/collection/tree/main/packages/plugin' },
+    metadata({ url: 'https://github.com/example/collection.git', directory: 'packages/plugin' }),
+    provenance('https://github.com/example/collection'),
+  ), 'example-plugin')
+})
+
+test('install resolves a missing catalog npm mapping only through repository-verified metadata', async () => {
+  const routes = await readFile(path.join(root, 'app/vendor/dsh-portable-plugin-market/src/routes.ts'), 'utf8')
+  assert.match(routes, /await resolveInstallTarget\(entry\)/)
+  assert.match(routes, /registry\.npmjs\.org/)
+  assert.match(routes, /verifiedNpmTargetFor\(entry, metadata, attestations\)/)
+  assert.match(routes, /parsed\.hostname === 'registry\.npmjs\.org'/)
+  assert.match(routes, /parsed\.pathname\.startsWith\('\/-\/npm\/v1\/attestations\/'\)/)
 })
 
 test('a half-failed uninstall can atomically remove a vanished plugin from both manifest lists', async (t) => {

@@ -29,7 +29,8 @@ import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
 import { trialValidate } from './trial.ts'
-import { findInstalledAlias, gitAllowBuildsKey, installTargetFor } from './sources.ts'
+import { findInstalledAlias, gitAllowBuildsKey, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
+import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
 import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, versionOnChannel } from './updates.ts'
@@ -51,6 +52,52 @@ import {
 
 export type { LoaderEntry } from './themes.ts'
 export type { UpdateStatus } from './updates.ts'
+
+/**
+ * Resolve the smallest prebuilt source without trusting a same-name package.
+ * The curated registry is authoritative; npm is only a lag-recovery path and
+ * must prove exact repository (and monorepo directory) ownership.
+ */
+async function resolveInstallTarget(entry: { name: string; url: string; npm?: unknown; tarball?: unknown }): Promise<string | null> {
+  const catalogTarget = installTargetFor(entry)
+  if (catalogTarget === null || !catalogTarget.startsWith('github:')) return catalogTarget
+  try {
+    const response = await marketFetch(`https://registry.npmjs.org/${encodeURIComponent(entry.name)}/latest`, {
+      signal: AbortSignal.timeout(10_000),
+      headers: { accept: 'application/json' },
+    })
+    if (!response.ok) return catalogTarget
+    const metadata = await response.json() as {
+      name?: unknown
+      version?: unknown
+      repository?: unknown
+      dist?: { attestations?: { url?: unknown }; integrity?: unknown }
+    }
+    const attestationUrl = typeof metadata.dist?.attestations?.url === 'string' ? metadata.dist.attestations.url : ''
+    let trustedAttestationUrl: URL | null = null
+    try {
+      const parsed = new URL(attestationUrl)
+      if (parsed.protocol === 'https:' && parsed.hostname === 'registry.npmjs.org' && parsed.pathname.startsWith('/-/npm/v1/attestations/')) {
+        trustedAttestationUrl = parsed
+      }
+    } catch { /* no trusted provenance */ }
+    if (trustedAttestationUrl === null) return catalogTarget
+    const attestationResponse = await marketFetch(trustedAttestationUrl.href, {
+      signal: AbortSignal.timeout(10_000),
+      headers: { accept: 'application/json' },
+    })
+    if (!attestationResponse.ok) return catalogTarget
+    const attestations = await attestationResponse.json()
+    const npmTarget = verifiedNpmTargetFor(entry, metadata, attestations)
+    if (npmTarget !== null) {
+      logEvent('info', 'install-source', `${entry.name}: catalog npm mapping is pending; using repository-verified npm package`)
+      return npmTarget
+    }
+  } catch (error) {
+    logEvent('warn', 'install-source', `${entry.name}: npm ownership probe unavailable; keeping curated source (${String(error).slice(0, 160)})`)
+  }
+  return catalogTarget
+}
 
 export interface WebServerService {
   register(route: {
@@ -1459,6 +1506,13 @@ export function mountMarketRoutes(
             // Reporting the blocked packages here gives the client the same
             // approve-and-retry banner the install flow has had since #6.
             const ignoredBuilds = ok || cancelled ? undefined : blockedBuilds(result)
+            const activationAction = ok
+              ? activation?.[name]?.state === 'restart'
+                ? 'restart'
+                : packageHasClientPart(activeProfileDir, name)
+                  ? 'refresh'
+                  : 'none'
+              : undefined
             logEvent(ok || cancelled ? 'info' : 'error', 'update',
               `${name} -> ${target} exit=${String(result.exitCode)}${result.timedOut ? ' TIMEOUT' : ''}${cancelled ? ' CANCELLED' : ''}${stale ? ` STALE(${staleReason ?? 'unknown'})` : ''}${ok || cancelled ? '' : ` stderr=${result.stderr.slice(-300)}`}`)
             // A user-cancelled run is a quiet outcome, not an error.
@@ -1470,6 +1524,7 @@ export function mountMarketRoutes(
               partial: cancelDiff?.partial,
               changed: cancelDiff?.changed,
               activation,
+              activationAction,
               compatibility,
               ignoredBuilds,
               staleReason: staleReason ?? undefined,
@@ -1888,6 +1943,7 @@ export function mountMarketRoutes(
             }
             pendingRollbacks.clear()
             const beforeInstalled = readInstalled(config.profile, activeProfileDir)
+            const hadClientPart = packageHasClientPart(activeProfileDir, name)
             // isDisabled comes from the patch layer (#130) — keep it while the
             // lock moves into withMutationLock (#125).
             const activation = {
@@ -1935,6 +1991,9 @@ export function mountMarketRoutes(
               busy: result.busy || undefined,
               reconciled: reconciled || undefined,
               hot,
+              activationAction: ok || halfGone
+                ? hot ? hadClientPart ? 'refresh' : 'none' : 'restart'
+                : undefined,
               partial: cancelDiff?.partial,
               changed: cancelDiff?.changed,
               // The state of the package that was just removed (captured pre-op).
@@ -2055,7 +2114,7 @@ export function mountMarketRoutes(
               sendJson(response, 400, { error: 'plugin is not in the curated registry' })
               return
             }
-            const target = installTargetFor(entry)
+            const target = await resolveInstallTarget(entry)
             if (target === null) {
               sendJson(response, 400, { error: 'unsupported source url' })
               return
@@ -2242,11 +2301,17 @@ export function mountMarketRoutes(
             logEvent(ok || cancelled ? 'info' : 'error', 'install',
               `${target} exit=${String(result.exitCode)}${result.timedOut ? ' TIMEOUT' : ''}${cancelled ? ' CANCELLED' : ''}${ok ? ` hot=${String(hot)}` : cancelled ? '' : ` stderr=${result.stderr.slice(-300)}`}`)
             const ignoredBuilds = blockedBuilds(result)
+            const activationAction = ok
+              ? hot
+                ? addedPackages.some(name => packageHasClientPart(activeProfileDir, name)) ? 'refresh' : 'none'
+                : 'restart'
+              : undefined
             sendJson(response, ok || cancelled ? 200 : result.busy === true ? 409 : 502, {
               ok,
               cancelled: cancelled || undefined,
               busy: result.busy || undefined,
               hot,
+              activationAction,
               partial: cancelDiff?.partial,
               changed: cancelDiff?.changed,
               activation,

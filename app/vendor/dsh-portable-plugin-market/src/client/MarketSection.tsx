@@ -35,7 +35,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import css from './Market.module.css'
 import { OperationsPanel } from './OperationsPanel.tsx'
-import { clearSettled, drop, enqueue, patch as patchRecord, recordForUrl } from './operations.ts'
+import { clearSettled, completionAction, drop, enqueue, patch as patchRecord, recordForUrl } from './operations.ts'
 import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
@@ -786,7 +786,7 @@ export function MarketSection(props: MarketSectionProps) {
             setRestartNoticeDismissed(sessionStorage.getItem('dshm-restart-dismissed') === status.boot)
           } catch { /* storage unavailable */ }
         }
-        setRestartEnabled(status.restart === true)
+        setRestartEnabled(status.restart === true || typeof window.__DSH_PORTABLE_HOST__?.restart === 'function')
       })
       .catch(() => {})
     // Opening the market is an explicit freshness boundary. The server keeps
@@ -1077,6 +1077,7 @@ export function MarketSection(props: MarketSectionProps) {
           return
         }
         if (status === 200 && body.ok) {
+          const nextAction = completionAction(body)
           sessionStorage.setItem('dshm-tab', 'installed')
           if (body.activation && typeof body.activation === 'object') {
             setActivations(prev => ({ ...prev, ...body.activation }))
@@ -1085,14 +1086,14 @@ export function MarketSection(props: MarketSectionProps) {
               .map(([name, info]) => ({ name, info }))
             setActivationWarnings(warns)
           }
-          if (body.hot) {
+          if (nextAction === 'refresh') {
             // The status-poll recovery path may have already counted this URL
             // as pending-restart before the install response confirmed a hot
             // mount; a hot plugin must not stay in doneUrls (#73).
             setDoneUrls(urls => urls.filter(url => url !== plugin.url))
             setHotUrls(urls => urls.includes(plugin.url) ? urls : urls.concat(plugin.url))
             setHotNames(names => names.includes(plugin.name) ? names : names.concat(plugin.name))
-          } else {
+          } else if (nextAction === 'restart') {
             setDoneUrls(urls => urls.includes(plugin.url) ? urls : urls.concat(plugin.url))
           }
           if (body.compatibility?.code === 'soft-incompatible') {
@@ -1101,8 +1102,9 @@ export function MarketSection(props: MarketSectionProps) {
           // `warned` keeps the ✓: the plugin IS installed, so calling a
           // compatibility risk a failure would misreport what happened.
           setRecords(list => patchRecord(list, recordId, body.compatibility?.code === 'soft-incompatible'
-            ? { state: 'warned', reason: t('compatRiskBanner') }
-            : { state: 'done', needsRefresh: body.hot !== true }))
+            ? { state: 'warned', reason: t('compatRiskBanner'), nextAction }
+            : { state: 'done', nextAction }))
+          setOperationsOpen(true)
           refreshInstalled()
         } else {
           if (status === 409) {
@@ -1242,6 +1244,16 @@ export function MarketSection(props: MarketSectionProps) {
       }
       poll()
     }
+    const portableRestart = window.__DSH_PORTABLE_HOST__?.restart
+    if (typeof portableRestart === 'function') {
+      portableRestart()
+        .then(awaitNewBoot)
+        .catch(error => {
+          setRestarting(false)
+          setInstallError(t('restartFail') + ': ' + String(error instanceof Error ? error.message : error))
+        })
+      return
+    }
     const requestRestart = (attemptsLeft: number) => {
       fetch('/dsh-market/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
         .then(res => res.json().then(body => ({ status: res.status, body })))
@@ -1294,14 +1306,17 @@ export function MarketSection(props: MarketSectionProps) {
           return
         }
         if (status === 200 && body.ok) {
-          setRecords(list => patchRecord(list, updateRecordId, { state: 'done' }))
-          setUpdatedNames(names => names.concat(name))
+          const nextAction = completionAction(body)
+          setRecords(list => patchRecord(list, updateRecordId, { state: 'done', nextAction }))
+          if (nextAction === 'restart') setUpdatedNames(names => names.includes(name) ? names : names.concat(name))
+          if (nextAction === 'refresh') setRefreshNames(names => names.includes(name) ? names : names.concat(name))
           if (body.activation && typeof body.activation === 'object') {
             setActivations(prev => ({ ...prev, ...body.activation }))
           }
           if (body.compatibility?.code === 'soft-incompatible') {
             setCompatibilityNotice(body.compatibility as CompatibilityNotice)
           }
+          setOperationsOpen(true)
           refreshInstalled()
         } else {
           if (status === 409) {
@@ -1366,6 +1381,8 @@ export function MarketSection(props: MarketSectionProps) {
     setInstallError(null)
     setActivationWarnings([])
     setRemovingName(name)
+    const uninstallRecordId = nextRecordId()
+    setRecords(list => enqueue(list, { id: uninstallRecordId, kind: 'uninstall', name, state: 'running' }))
     return fetch('/dsh-market/uninstall', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -1374,27 +1391,46 @@ export function MarketSection(props: MarketSectionProps) {
       .then(res => res.json().then(body => ({ status: res.status, body })))
       .then(({ status, body }) => {
         if (status === 200 && body.ok) {
-          if (!body.hot) setRemovedCount(n => n + 1)
+          const nextAction = completionAction(body)
+          if (nextAction === 'restart') setRemovedCount(n => n + 1)
+          if (nextAction === 'refresh') setRefreshNames(names => names.includes(name) ? names : names.concat(name))
+          setRecords(list => patchRecord(list, uninstallRecordId, { state: 'done', nextAction }))
+          setOperationsOpen(true)
           refreshInstalled()
         } else {
           if (body.reconciled === true) {
-            if (!body.hot) setRemovedCount(n => n + 1)
+            const nextAction = completionAction(body)
+            if (nextAction === 'restart') setRemovedCount(n => n + 1)
+            if (nextAction === 'refresh') setRefreshNames(names => names.includes(name) ? names : names.concat(name))
+            setRecords(list => patchRecord(list, uninstallRecordId, {
+              state: 'warned', nextAction, reason: t('uninstallReconciled'),
+            }))
+            setOperationsOpen(true)
             refreshInstalled()
             setInstallError(t('uninstallReconciled'))
             return
           }
           if (body.cancelled === true) {
+            setRecords(list => drop(list, uninstallRecordId))
             refreshInstalled()
             if (body.partial === true) setInstallError(t('partialNote'))
             return
           }
           const text = (v: unknown) => typeof v === 'string' ? v : (v && typeof (v as any).text === 'string') ? (v as any).text : v == null ? '' : JSON.stringify(v)
-          setInstallError((text(body.error) || humanOutput(text(body.stderr)) || 'error').trim().slice(-600))
+          const detail = (text(body.error) || humanOutput(text(body.stderr)) || 'error').trim().slice(-600)
+          setRecords(list => patchRecord(list, uninstallRecordId, { state: 'failed', reason: detail }))
+          setOperationsOpen(true)
+          setInstallError(detail)
         }
       })
-      .catch(error => setInstallError(String(error)))
+      .catch(error => {
+        const detail = String(error)
+        setRecords(list => patchRecord(list, uninstallRecordId, { state: 'failed', reason: detail }))
+        setOperationsOpen(true)
+        setInstallError(detail)
+      })
       .finally(() => setRemovingName(null))
-  }, [refreshInstalled])
+  }, [nextRecordId, refreshInstalled, t])
 
   /** Live enable/disable of one installed plugin (#60). `reload` opts the
    * card-level theme flow into a page refresh so the visual result lands
@@ -1998,6 +2034,17 @@ export function MarketSection(props: MarketSectionProps) {
     () => [...new Set([...hotNames, ...refreshNames])],
     [hotNames, refreshNames],
   )
+  const recordHasRefreshAction = records.some(record => record.state === 'done' && record.nextAction === 'refresh')
+  const recordHasRestartAction = records.some(record => record.state === 'done' && record.nextAction === 'restart')
+  const refreshPage = useCallback(() => {
+    const names = [...new Set([
+      ...pendingRefreshNames,
+      ...records.filter(record => record.nextAction === 'refresh').map(record => record.name),
+    ])]
+    if (names.length > 0) sessionStorage.setItem('dshm-toast', JSON.stringify(names))
+    sessionStorage.setItem('dshm-tab', 'installed')
+    location.reload()
+  }, [pendingRefreshNames, records])
 
   /** Installed plugins the market itself cannot group (#60). */
   const groupableNames = Object.keys(installed).filter(name => name !== 'dsh-market' && name !== 'dshmarket')
@@ -2032,7 +2079,9 @@ export function MarketSection(props: MarketSectionProps) {
             onClearSettled={() => setRecords(list => clearSettled(list))}
             onCancel={() => doCancel()}
             onDismiss={record => setRecords(list => drop(list, record.id))}
-            onRefresh={() => location.reload()}
+            onRefresh={refreshPage}
+            onRestart={doRestart}
+            restartAvailable={restartEnabled}
             onResolveConflict={resolveConflict}
           />
         </div>
@@ -2068,22 +2117,18 @@ export function MarketSection(props: MarketSectionProps) {
             </Button>
           </div>
         )}
-        {pendingRefreshNames.length > 0 && (
+        {pendingRefreshNames.length > 0 && !recordHasRefreshAction && (
           <div className={css.banner}>
             <IconSparkle16 size={14} className={css.bannerIcon} />
             <span className={css.grow}><b>{pendingRefreshNames.length}</b> {t('refreshBanner')}</span>
             <Button
               variant="primary"
               size="sm"
-              onClick={() => {
-                if (hotNames.length > 0) sessionStorage.setItem('dshm-toast', JSON.stringify(hotNames))
-                sessionStorage.setItem('dshm-tab', 'installed')
-                location.reload()
-              }}
+              onClick={refreshPage}
             >{t('refresh')}</Button>
           </div>
         )}
-        {pendingRestart > 0 && (
+        {pendingRestart > 0 && !recordHasRestartAction && (
           <div className={css.banner}>
             <IconRefreshOutline14 size={14} className={css.bannerIcon} />
             <span className={css.grow}><b>{pendingRestart}</b> {t('restartBanner')}</span>

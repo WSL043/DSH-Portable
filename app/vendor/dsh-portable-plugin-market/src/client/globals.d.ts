@@ -10,4 +10,8 @@ interface Window {
   __DSH_BOOT__?: {
     entries?: Array<{ id: string }>
   }
+  /** Native Portable host capabilities injected by the desktop bridge. */
+  __DSH_PORTABLE_HOST__?: {
+    restart: () => Promise<{ ok: true }>
+  }
 }

@@ -384,6 +384,7 @@ namespace DshPortable
         private bool operationRunning = true;
         private bool desktopReady;
         private bool shutdownRunning;
+        private bool restartAfterShutdown;
         private bool allowClose;
         private bool backendStarted;
         private bool trayNoticeShown;
@@ -1218,6 +1219,17 @@ namespace DshPortable
                     BeginInvoke((MethodInvoker)delegate { BeginDataImport(input, password, conflict); });
                     return;
                 }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/restart-host", StringComparison.Ordinal))
+                {
+                    object requestValue;
+                    string requestId = message.TryGetValue("requestId", out requestValue)
+                        ? Convert.ToString(requestValue)
+                        : String.Empty;
+                    if (!Regex.IsMatch(requestId ?? String.Empty, "^host-restart-[A-Za-z0-9-]{1,96}$")) return;
+                    BeginInvoke((MethodInvoker)delegate { HandleDesktopRestartRequest(requestId); });
+                    return;
+                }
                 TrayBridgeState state = json.Deserialize<TrayBridgeState>(eventArgs.WebMessageAsJson);
                 if (state == null || state.type != "dsh-portable/state" || state.schemaVersion != 1) return;
                 if (state.sessions == null) state.sessions = new List<TrayBridgeSession>();
@@ -1237,6 +1249,39 @@ namespace DshPortable
             {
                 // A malformed or future bridge payload cannot remove the native Open/Exit fallback.
             }
+        }
+
+        private void HandleDesktopRestartRequest(string requestId)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/restart-host-result" },
+                { "schemaVersion", 1 },
+                { "requestId", requestId },
+            };
+            if (shutdownRunning)
+            {
+                result["ok"] = false;
+                result["error"] = L("正在关闭，请稍候。", "The app is already closing.");
+            }
+            else if (trayState != null && trayState.hasRunningSession)
+            {
+                result["ok"] = false;
+                result["error"] = L("任务仍在运行；完成后再重启即可，当前任务不会被中断。",
+                    "A task is still running. Restart after it finishes; the current task was not interrupted.");
+            }
+            else
+            {
+                result["ok"] = true;
+                restartAfterShutdown = true;
+            }
+            try
+            {
+                if (webView != null && webView.CoreWebView2 != null)
+                    webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
+            }
+            catch { }
+            if (restartAfterShutdown) BeginDesktopShutdown();
         }
 
         private void ShowWorkspaceDirectoryPicker(string requestId)
@@ -1683,6 +1728,7 @@ namespace DshPortable
             if (result.Item1 != 0)
             {
                 shutdownRunning = false;
+                restartAfterShutdown = false;
                 webView.Enabled = true;
                 Text = "DeepSeek-Herness";
                 MessageBox.Show(this, result.Item2, L("DeepSeek Harness 停止失败", "DeepSeek Harness could not stop"), MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -1697,12 +1743,21 @@ namespace DshPortable
             catch (Exception error)
             {
                 Environment.ExitCode = 1;
+                restartAfterShutdown = false;
                 WriteLauncherLog("shutdown", "failed " + error.GetBaseException().Message.Replace("\r", " ").Replace("\n", " | "));
                 ShowShutdownFailure(error.GetBaseException().Message);
                 return;
             }
 
             allowClose = true;
+            if (restartAfterShutdown)
+            {
+                PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, new[]
+                {
+                    "--dsh-restart-after-pid",
+                    Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+                });
+            }
             DisposeTrayIcon();
             WriteLauncherLog("shutdown", "complete");
             Close();

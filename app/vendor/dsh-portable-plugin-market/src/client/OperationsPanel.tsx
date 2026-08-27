@@ -55,6 +55,8 @@ export interface OperationsPanelProps {
   onCancel: (record: OperationRecord) => void
   onDismiss: (record: OperationRecord) => void
   onRefresh: () => void
+  onRestart: () => void
+  restartAvailable: boolean
   /** Resolve a clash: keep what is installed, or uninstall it and retry. */
   onResolveConflict: (record: OperationRecord, choice: 'keep' | 'swap') => void
   /** Retry an operation the host refused for a fixable reason. */
@@ -204,7 +206,9 @@ function statusLine(t: Translate, record: OperationRecord, ahead: number | null)
     case 'warned':
       return record.reason ?? t('opDone')
     case 'done':
-      return record.needsRefresh === true ? t('opDoneRefresh') : t('opDone')
+      if (record.nextAction === 'restart') return t('opDoneRestart')
+      if (record.nextAction === 'refresh') return t('opDoneRefresh')
+      return t('opDoneLive')
   }
 }
 
@@ -238,9 +242,11 @@ export function OperationsPanel(props: OperationsPanelProps) {
   // The entry label is the batch, not a verb with no object: a bare "3" says
   // nothing about what is happening to the profile.
   const label = busy
-    ? `${t('opInstalling')} ${String(summary.progressed)}/${String(summary.total)}`
+    ? `${t('opWorking')} ${String(summary.progressed)}/${String(summary.total)}`
     : summary.attention > 0
       ? `${String(summary.attention)} ${t('opNeedsYou')}`
+      : summary.actionable > 0
+        ? `${String(summary.actionable)} ${t('opNeedsApply')}`
       : t('opTitle')
 
   if (records.length === 0) return null
@@ -249,13 +255,18 @@ export function OperationsPanel(props: OperationsPanelProps) {
     <div className={css.opWrap} ref={wrapRef}>
       <button
         type="button"
-        className={summary.attention > 0 ? `${css.opEntry} ${css.opEntryAlert}` : css.opEntry}
+        className={summary.attention > 0
+          ? `${css.opEntry} ${css.opEntryAlert}`
+          : summary.actionable > 0
+            ? `${css.opEntry} ${css.opEntryAction}`
+            : css.opEntry}
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
         {busy && <span className={css.spin}><IconLoadingOutline16 size={12} /></span>}
         {label}
         {summary.attention > 0 && <span className={css.opDot} />}
+        {summary.attention === 0 && summary.actionable > 0 && <span className={`${css.opDot} ${css.opDotAction}`} />}
       </button>
       {open && (
         <div className={css.opPanel}>
@@ -277,7 +288,7 @@ export function OperationsPanel(props: OperationsPanelProps) {
           {busy && (
             <div className={css.opAggregate}>
               <div className={css.opAggregateTop}>
-                <span>{t('opInstalling')} {summary.progressed}/{summary.total}</span>
+                <span>{t('opWorking')} {summary.progressed}/{summary.total}</span>
               </div>
               <div className={css.bar}>
                 <div
@@ -332,8 +343,11 @@ export function OperationsPanel(props: OperationsPanelProps) {
                   {record.state === 'queued' && (
                     <Button variant="ghost" size="sm" onClick={() => props.onDismiss(record)}>{t('opDequeue')}</Button>
                   )}
-                  {record.state === 'done' && record.needsRefresh === true && (
+                  {record.state === 'done' && record.nextAction === 'refresh' && (
                     <Button variant="primary" size="sm" onClick={props.onRefresh}>{t('refresh')}</Button>
+                  )}
+                  {record.state === 'done' && record.nextAction === 'restart' && props.restartAvailable && (
+                    <Button variant="primary" size="sm" onClick={props.onRestart}>{t('restartNow')}</Button>
                   )}
                   {record.state === 'failed' && props.onRetry !== undefined && (
                     <Button variant="outline" size="sm" onClick={() => props.onRetry?.(record)}>{t('opRetry')}</Button>

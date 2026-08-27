@@ -147,6 +147,77 @@ export function installTargetFor(entry: { url: string; npm?: unknown; tarball?: 
 }
 
 /**
+ * Accept an npm fallback discovered at install time only when npm itself
+ * proves that the package belongs to the exact curated GitHub source.
+ *
+ * This closes a catalog-lag gap without turning a package-name coincidence
+ * into install authority. Monorepo entries must also match repository.directory.
+ */
+export function verifiedNpmTargetFor(
+  entry: { name: string; url: string },
+  metadata: { name?: unknown; version?: unknown; repository?: unknown; dist?: unknown },
+  attestations: unknown,
+): string | null {
+  if (typeof metadata.name !== 'string' || metadata.name !== entry.name || !NPM_NAME_RE.test(metadata.name)) return null
+  const source = parseSourceUrl(entry.url)
+  if (source === null) return null
+  const repository = metadata.repository
+  const repositoryUrl = typeof repository === 'string'
+    ? repository
+    : repository !== null && typeof repository === 'object' && typeof (repository as { url?: unknown }).url === 'string'
+      ? (repository as { url: string }).url
+      : null
+  if (repositoryUrl === null) return null
+  const published = parseGitHubRepository(repositoryUrl)
+  if (published === null || published.repo.toLowerCase() !== source.repo.toLowerCase()) return null
+
+  const directory = repository !== null && typeof repository === 'object'
+    && typeof (repository as { directory?: unknown }).directory === 'string'
+    ? (repository as { directory: string }).directory.trim().replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+    : ''
+  const expected = source.subpath?.toLowerCase() ?? ''
+  if (directory.toLowerCase() !== expected) return null
+
+  // package.json.repository is self-asserted. It narrows accidental matches
+  // but cannot establish ownership by itself. Require npm's Sigstore/SLSA
+  // provenance for this exact tarball and the same GitHub repository before
+  // filling a missing catalog mapping.
+  if (typeof metadata.version !== 'string') return null
+  const dist = metadata.dist
+  const integrity = dist !== null && typeof dist === 'object' && typeof (dist as { integrity?: unknown }).integrity === 'string'
+    ? (dist as { integrity: string }).integrity
+    : ''
+  const integrityMatch = /^sha512-([A-Za-z0-9+/]+={0,2})$/.exec(integrity)
+  if (integrityMatch === null) return null
+  const expectedDigest = Buffer.from(integrityMatch[1]!, 'base64').toString('hex')
+  const records = attestations !== null && typeof attestations === 'object' && Array.isArray((attestations as { attestations?: unknown }).attestations)
+    ? (attestations as { attestations: unknown[] }).attestations
+    : []
+  const expectedSubject = `pkg:npm/${metadata.name}@${metadata.version}`
+  let provenanceRepo: string | null = null
+  for (const record of records) {
+    if (record === null || typeof record !== 'object') continue
+    const candidate = record as { predicateType?: unknown; bundle?: { dsseEnvelope?: { payload?: unknown } } }
+    if (candidate.predicateType !== 'https://slsa.dev/provenance/v1' || typeof candidate.bundle?.dsseEnvelope?.payload !== 'string') continue
+    try {
+      const statement = JSON.parse(Buffer.from(candidate.bundle.dsseEnvelope.payload, 'base64').toString('utf8')) as {
+        subject?: Array<{ name?: unknown; digest?: { sha512?: unknown } }>
+        predicate?: { buildDefinition?: { externalParameters?: { workflow?: { repository?: unknown } } } }
+      }
+      const bound = statement.subject?.some(item => item.name === expectedSubject && item.digest?.sha512 === expectedDigest) === true
+      const repository = statement.predicate?.buildDefinition?.externalParameters?.workflow?.repository
+      if (!bound || typeof repository !== 'string') continue
+      provenanceRepo = parseGitHubRepository(repository)?.repo ?? null
+      if (provenanceRepo !== null) break
+    } catch {
+      // Invalid provenance is not install authority.
+    }
+  }
+  if (provenanceRepo === null || provenanceRepo.toLowerCase() !== source.repo.toLowerCase()) return null
+  return metadata.name
+}
+
+/**
  * The name an entry is ALREADY installed under, or null — the server-side
  * duplicate guard (#27): the same plugin listed under an alias entry must
  * never install twice (two loader entries with one id brick the next boot).

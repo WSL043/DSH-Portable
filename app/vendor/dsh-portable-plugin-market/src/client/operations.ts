@@ -26,6 +26,31 @@ export type OperationKind = 'install' | 'update' | 'uninstall'
  */
 export type OperationState = 'queued' | 'running' | 'input' | 'done' | 'warned' | 'failed'
 
+/** The only follow-up actions a completed plugin mutation may require. */
+export type OperationNextAction = 'none' | 'refresh' | 'restart'
+
+interface CompletionReply {
+  activationAction?: OperationNextAction
+  hot?: boolean
+  activation?: Record<string, { state?: string }> | null
+}
+
+/**
+ * Convert the host's activation evidence into one user action.
+ * A restart always wins over a refresh. `hot` is the fallback used by
+ * install/uninstall responses; update responses carry the more precise
+ * per-package activation verdict.
+ */
+export function completionAction(reply: CompletionReply): OperationNextAction {
+  if (reply.activationAction === 'none' || reply.activationAction === 'refresh' || reply.activationAction === 'restart') {
+    return reply.activationAction
+  }
+  const states = Object.values(reply.activation ?? {}).map(value => value?.state)
+  if (states.includes('restart') || reply.hot === false) return 'restart'
+  if (states.includes('live') || reply.hot === true) return 'refresh'
+  return 'none'
+}
+
 /** The installed plugins one candidate clashed with, one entry per owner. */
 export interface ConflictGroup {
   owner: string
@@ -49,8 +74,8 @@ export interface OperationRecord {
   conflicts?: ConflictGroup[]
   /** Set with `warned` or `failed`: one sentence naming what went wrong. */
   reason?: string
-  /** Set with `done` when the change needs a page refresh to be visible. */
-  needsRefresh?: boolean
+  /** The one follow-up action that makes this completed change visible. */
+  nextAction?: OperationNextAction
 }
 
 /**
@@ -133,6 +158,8 @@ export interface OperationSummary {
   attention: number
   /** Records that finished, however they finished. */
   settled: number
+  /** Completed records that still need refresh or restart. */
+  actionable: number
   /** running + queued + settled: the denominator of "3 / 7". */
   total: number
   /** settled + running, the numerator — a running item is the one in flight. */
@@ -148,17 +175,22 @@ export function summarize(list: readonly OperationRecord[]): OperationSummary {
   let queued = 0
   let attention = 0
   let settled = 0
+  let actionable = 0
   for (const record of list) {
     if (record.state === 'running') running += 1
     else if (record.state === 'queued') queued += 1
     else if (needsUser(record)) attention += 1
-    else settled += 1
+    else {
+      settled += 1
+      if (record.nextAction === 'refresh' || record.nextAction === 'restart') actionable += 1
+    }
   }
   return {
     running,
     queued,
     attention,
     settled,
+    actionable,
     total: running + queued + settled,
     progressed: settled + running,
   }

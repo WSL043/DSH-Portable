@@ -22,6 +22,12 @@ const generalBottomScreenshotPath = process.env.DSH_SMOKE_GENERAL_BOTTOM_SCREENS
 const installedScreenshotPath = process.env.DSH_SMOKE_INSTALLED_SCREENSHOT
   ? path.resolve(process.env.DSH_SMOKE_INSTALLED_SCREENSHOT)
   : ''
+const activationPlugin = String(process.env.DSH_SMOKE_PLUGIN_ACTIVATION || '').trim()
+const updatePlugin = String(process.env.DSH_SMOKE_PLUGIN_UPDATE || '').trim()
+const activationScreenshotPath = process.env.DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT
+  ? path.resolve(process.env.DSH_SMOKE_PLUGIN_ACTIVATION_SCREENSHOT)
+  : ''
+const removeActivationPlugin = process.env.DSH_SMOKE_PLUGIN_REMOVE_AFTER === '1'
 const checkPortableUpdate = process.env.DSH_SMOKE_CHECK_PORTABLE_UPDATE === '1'
 
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
@@ -476,6 +482,147 @@ try {
     active: [...document.querySelectorAll('button[aria-pressed="true"]')].some(item => ['Cards', '图文'].includes((item.textContent || '').trim())),
     saved: localStorage.getItem('dshm-market-view'),
   }))()`, value => value?.active && value.saved === 'cards', 'persisted card market view')
+
+  if (updatePlugin !== '') {
+    await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed plugin section for update')
+    await waitForValue(client, `(() => {
+      const title = [...document.querySelectorAll('a')].find(item =>
+        (item.textContent || '').trim() === ${JSON.stringify(updatePlugin)}
+        && item.getBoundingClientRect().width > 0
+        && item.getBoundingClientRect().height > 0)
+      const card = title?.closest('div[class*="_irow"]')
+      const actions = card && [...card.querySelectorAll('button')].filter(item => ['Update', '更新'].includes((item.textContent || '').trim()))
+      if (actions?.length === 1) { actions[0].click(); return true }
+      return false
+    })()`, Boolean, `${updatePlugin} update action`, 90_000)
+    // A package inside the fresh-release safety window needs one explicit
+    // confirmation. Older releases skip this branch.
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      const confirmed = await evaluate(client, clickButton(['Update now', '立即更新']))
+      if (confirmed?.clicked) break
+      const started = await evaluate(client, `(${JSON.stringify(targetLocale === 'zh' ? `更新\n${updatePlugin}` : `Update\n${updatePlugin}`)} && (document.body?.innerText || '').includes(${JSON.stringify(targetLocale === 'zh' ? `更新\n${updatePlugin}` : `Update\n${updatePlugin}`)}))`)
+      if (started) break
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    const updated = await waitForValue(client, `(() => {
+      const text = document.body?.innerText || ''
+      const present = text.includes(${JSON.stringify(`${targetLocale === 'zh' ? '更新' : 'Update'}\n${updatePlugin}`)})
+      const refresh = /Complete · refresh to show changes|已完成 · 刷新页面后显示/.test(text)
+      const restart = /Complete · restart DeepSeek Harness to apply|已完成 · 重启 DeepSeek Harness 后生效/.test(text)
+      const live = /Complete and active|已完成并生效/.test(text)
+      const refreshButtons = [...document.querySelectorAll('button')].filter(item => ['Refresh page', '刷新页面'].includes((item.textContent || '').trim())).length
+      const restartButtons = [...document.querySelectorAll('button')].filter(item => ['Restart now', '立即重启'].includes((item.textContent || '').trim())).length
+      return { present, refresh, restart, live, refreshButtons, restartButtons, text: text.slice(-1400) }
+    })()`, value => value?.present && Number(value.refresh) + Number(value.restart) + Number(value.live) === 1, `${updatePlugin} update completion action`, 180_000)
+    assert.equal(updated.refreshButtons + updated.restartButtons <= 1, true, 'update must offer no more than one apply action')
+    process.stdout.write(`[plugin-update] ${updatePlugin}: ${updated.restart ? 'restart' : updated.refresh ? 'refresh' : 'live'}\n`)
+  }
+
+  if (activationPlugin !== '') {
+    await evaluate(client, `(() => {
+      const input = [...document.querySelectorAll('input')].find(item => ['Search plugins: notify, terminal, memory…', '搜索插件，比如：通知、终端、记忆…'].includes(item.placeholder || ''))
+      if (!input) return false
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+      setter?.call(input, ${JSON.stringify(activationPlugin)})
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      return true
+    })()`)
+    const installClicked = await waitForValue(client, `(() => {
+      const title = [...document.querySelectorAll('a')].find(item => (item.textContent || '').trim() === ${JSON.stringify(activationPlugin)})
+      let card = title
+      while (card && card !== document.body) {
+        const action = [...card.querySelectorAll('button')].find(item => ['Install', '安装'].includes((item.textContent || '').trim()))
+        if (action) { action.click(); return true }
+        card = card.parentElement
+      }
+      return false
+    })()`, Boolean, `${activationPlugin} install action`, 60_000)
+    assert.equal(installClicked, true)
+    await waitForValue(client, clickButton(['Confirm install', '确认安装']), value => value?.clicked, 'plugin install confirmation')
+    const completion = await waitForValue(client, `(() => {
+      const text = document.body?.innerText || ''
+      const refresh = /Complete · refresh to show changes|已完成 · 刷新页面后显示/.test(text)
+      const restart = /Complete · restart DeepSeek Harness to apply|已完成 · 重启 DeepSeek Harness 后生效/.test(text)
+      const live = /Complete and active|已完成并生效/.test(text)
+      const refreshButtons = [...document.querySelectorAll('button')].filter(item => ['Refresh page', '刷新页面'].includes((item.textContent || '').trim())).length
+      const restartButtons = [...document.querySelectorAll('button')].filter(item => ['Restart now', '立即重启'].includes((item.textContent || '').trim())).length
+      return { refresh, restart, live, refreshButtons, restartButtons, text: text.slice(-1200) }
+    })()`, value => value && Number(value.refresh) + Number(value.restart) + Number(value.live) === 1, `${activationPlugin} completion action`, 180_000)
+    assert.equal(completion.refreshButtons + completion.restartButtons <= 1, true, 'a plugin operation must offer no more than one apply action')
+    if (completion.refresh) assert.equal(completion.refreshButtons, 1)
+    if (completion.restart) assert.equal(completion.restartButtons, 1)
+    if (completion.live) assert.equal(completion.refreshButtons + completion.restartButtons, 0)
+    if (activationScreenshotPath) {
+      const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+      await mkdir(path.dirname(activationScreenshotPath), { recursive: true })
+      await writeFile(activationScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    }
+    process.stdout.write(`[plugin-activation] ${activationPlugin}: ${completion.restart ? 'restart' : completion.refresh ? 'refresh' : 'live'}\n`)
+
+    if (removeActivationPlugin) {
+      if (completion.restart) throw new Error('remove-after smoke requires a live or refresh-activated plugin')
+      if (completion.refresh) {
+        await waitForValue(client, clickButton(['Refresh page', '刷新页面']), value => value?.clicked, 'apply plugin with page refresh')
+        await new Promise(resolve => setTimeout(resolve, 600))
+        await waitForValue(client, 'document.readyState', value => value === 'complete', 'reloaded DSH document readiness')
+        await waitForValue(client, `(() => {
+          const labels = [...document.querySelectorAll('button')].map(item => (item.textContent || '').trim())
+          return labels.some(label => ['Settings', '设置', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label))
+        })()`, Boolean, 'reloaded DSH shell controls', 60_000)
+        let reopened = await evaluate(client, clickButton(['Settings', '设置']))
+        if (!reopened?.clicked) {
+          await waitForValue(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']), value => value?.clicked, 'reloaded sidebar control')
+          reopened = await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, 'reloaded Settings button')
+        }
+        assert.equal(reopened.clicked, true)
+        await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /Settings|设置/.test(item.textContent || '')))`, Boolean, 'reloaded Settings dialog')
+        await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'reloaded Plugins settings tab')
+      }
+      await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed plugin section')
+      await waitForValue(client, `(() => {
+        const title = [...document.querySelectorAll('a')].find(item =>
+          (item.textContent || '').trim() === ${JSON.stringify(activationPlugin)}
+          && item.getBoundingClientRect().width > 0
+          && item.getBoundingClientRect().height > 0)
+        const card = title?.closest('div[class*="_irow"]')
+        const actions = card && [...card.querySelectorAll('button')].filter(item => ['Uninstall', '卸载'].includes((item.textContent || '').trim()))
+        if (actions?.length === 1) { actions[0].click(); return true }
+        return false
+      })()`, Boolean, `${activationPlugin} uninstall action`, 60_000)
+      await waitForValue(client, `(() => {
+        const expectedTitle = ${JSON.stringify((targetLocale === 'zh' ? '卸载 ' : 'Uninstall ') + activationPlugin + '?')}
+        const heading = [...document.querySelectorAll('body *')].find(item =>
+          item.children.length === 0
+          && (item.textContent || '').trim() === expectedTitle
+          && item.getBoundingClientRect().width > 0)
+        let modal = heading?.parentElement
+        while (modal && modal !== document.body) {
+          const actions = [...modal.querySelectorAll('button')].filter(item => ['Uninstall', '卸载'].includes((item.textContent || '').trim()))
+          const cancels = [...modal.querySelectorAll('button')].filter(item => ['Cancel', '取消'].includes((item.textContent || '').trim()))
+          if (actions.length === 1 && cancels.length === 1) {
+            actions[0].click()
+            return true
+          }
+          modal = modal.parentElement
+        }
+        return false
+      })()`, Boolean, 'plugin uninstall confirmation')
+      const removal = await waitForValue(client, `(() => {
+        const text = document.body?.innerText || ''
+        const present = text.includes(${JSON.stringify(`${targetLocale === 'zh' ? '卸载' : 'Uninstall'}\n${activationPlugin}`)})
+        const refresh = /Complete · refresh to show changes|已完成 · 刷新页面后显示/.test(text)
+        const restart = /Complete · restart DeepSeek Harness to apply|已完成 · 重启 DeepSeek Harness 后生效/.test(text)
+        const live = /Complete and active|已完成并生效/.test(text)
+        const refreshButtons = [...document.querySelectorAll('button')].filter(item => ['Refresh page', '刷新页面'].includes((item.textContent || '').trim())).length
+        const restartButtons = [...document.querySelectorAll('button')].filter(item => ['Restart now', '立即重启'].includes((item.textContent || '').trim())).length
+        return { present, refresh, restart, live, refreshButtons, restartButtons, text: text.slice(-1400) }
+      })()`, value => value?.present && Number(value.refresh) + Number(value.restart) + Number(value.live) === 1, `${activationPlugin} uninstall completion action`, 180_000)
+      assert.equal(removal.refreshButtons + removal.restartButtons <= 1, true, 'uninstall must offer no more than one apply action')
+      const afterRemoval = await evaluate(client, `fetch('/dsh-market/status', { cache: 'no-store' }).then(response => response.json())`)
+      assert.equal(Object.hasOwn(afterRemoval.installed || {}, activationPlugin), false)
+      process.stdout.write(`[plugin-uninstall] ${activationPlugin}: ${removal.restart ? 'restart' : removal.refresh ? 'refresh' : 'live'}\n`)
+    }
+  }
 
   if (installedScreenshotPath) {
     await waitForValue(client, clickButton(['Installed', '已安装']), value => value?.clicked, 'Installed native Plugins tab')

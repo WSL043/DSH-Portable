@@ -28,7 +28,7 @@ async function loadBridgeClient() {
       },
     },
   }
-  vm.runInNewContext(source, { console, queueMicrotask, window })
+  vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window })
   assert.equal(definition?.id, '@wsl043/dsh-portable-desktop-bridge')
   const exports = definition.factory((id) => {
     if (id === 'react') return {}
@@ -36,6 +36,7 @@ async function loadBridgeClient() {
   })
   return {
     exports,
+    window,
     posted,
     send(value) {
       for (const listener of webMessageListeners) listener({ data: structuredClone(value) })
@@ -194,6 +195,36 @@ test('Portable desktop bridge owns workspace picking through the WebView host an
 
   runtime.dispose()
   assert.equal(runtime.ctx.workspaces.pickDirectory, original)
+})
+
+test('Portable exposes a native restart contract and returns the host decision', async () => {
+  const client = await loadBridgeClient()
+  const runtime = fakeContext(sessionList(1))
+  client.exports.apply(runtime.ctx)
+
+  assert.equal(typeof client.window.__DSH_PORTABLE_HOST__?.restart, 'function')
+  const restartPromise = client.window.__DSH_PORTABLE_HOST__.restart()
+  const request = client.posted.at(-1)
+  assert.equal(request.type, 'dsh-portable/restart-host')
+  assert.match(request.requestId, /^host-restart-/)
+  client.send({
+    type: 'dsh-portable/restart-host-result',
+    schemaVersion: 1,
+    requestId: request.requestId,
+    ok: true,
+  })
+  assert.equal((await restartPromise).ok, true)
+
+  const bridgeSource = await readFile(sourceUrl, 'utf8')
+  assert.match(bridgeSource, /__DSH_PORTABLE_HOST__\s*=\s*\{\s*restart:\s*restartPortableHost\s*\}/)
+  assert.match(bridgeSource, /dsh-portable\/restart-host-result/)
+  const windowsHost = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  assert.match(windowsHost, /dsh-portable\/restart-host/)
+  assert.match(windowsHost, /trayState != null && trayState\.hasRunningSession/)
+  assert.match(windowsHost, /if \(restartAfterShutdown\)[\s\S]{0,300}--dsh-restart-after-pid/)
+
+  runtime.dispose()
+  assert.equal(client.window.__DSH_PORTABLE_HOST__, undefined)
 })
 
 function sessionList(count = 12) {

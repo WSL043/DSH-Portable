@@ -71,6 +71,7 @@ window.__ModuleLoader__.load({
     let dataExportRequestSequence = 0
     const pendingDataExportRequests = new Map()
     const pendingDataImportRequests = new Map()
+    const pendingHostRestartRequests = new Map()
 
     function chooseDataExportPath(kind) {
       const webview = window.chrome?.webview
@@ -94,6 +95,23 @@ window.__ModuleLoader__.load({
         const requestId = `data-import-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         pendingDataImportRequests.set(requestId, { resolve, reject })
         webview.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId })
+      })
+    }
+
+    function restartPortableHost() {
+      const webview = window.chrome?.webview
+      if (!webview?.postMessage) return Promise.reject(new Error('Portable restart is unavailable on this host.'))
+      return new Promise((resolve, reject) => {
+        const requestId = `host-restart-${Date.now().toString(36)}-${++dataExportRequestSequence}`
+        const timeout = setTimeout(() => {
+          pendingHostRestartRequests.delete(requestId)
+          reject(new Error('Portable restart request timed out.'))
+        }, 10000)
+        pendingHostRestartRequests.set(requestId, {
+          resolve: value => { clearTimeout(timeout); resolve(value) },
+          reject: error => { clearTimeout(timeout); reject(error) },
+        })
+        webview.postMessage({ type: 'dsh-portable/restart-host', schemaVersion: 1, requestId })
       })
     }
 
@@ -537,6 +555,8 @@ window.__ModuleLoader__.load({
       }
       if (!webview?.postMessage || !webview?.addEventListener) return
 
+      window.__DSH_PORTABLE_HOST__ = { restart: restartPortableHost }
+
       ctx.effect(() => {
         let active = true
         let workspaceRequestSequence = 0
@@ -588,6 +608,15 @@ window.__ModuleLoader__.load({
             else pending.resolve(message.cancelled ? null : String(message.path || '') || null)
             return
           }
+          if (message.type === 'dsh-portable/restart-host-result' && message.schemaVersion === 1) {
+            const requestId = String(message.requestId || '')
+            const pending = pendingHostRestartRequests.get(requestId)
+            if (!pending) return
+            pendingHostRestartRequests.delete(requestId)
+            if (message.ok === true) pending.resolve(message)
+            else pending.reject(new Error(String(message.error || 'Portable restart was refused.')))
+            return
+          }
           if (message.type === 'dsh-portable/download') {
             applyNativeDownload(ctx, message)
             return
@@ -627,6 +656,11 @@ window.__ModuleLoader__.load({
           pendingWorkspaceRequests.clear()
           for (const pending of pendingDataExportRequests.values()) pending.resolve(null)
           pendingDataExportRequests.clear()
+          for (const pending of pendingDataImportRequests.values()) pending.resolve(null)
+          pendingDataImportRequests.clear()
+          for (const pending of pendingHostRestartRequests.values()) pending.reject(new Error('Portable host closed.'))
+          pendingHostRestartRequests.clear()
+          if (window.__DSH_PORTABLE_HOST__?.restart === restartPortableHost) delete window.__DSH_PORTABLE_HOST__
           webview.removeEventListener?.('message', receive)
           stopSessions?.()
           stopLocale?.()

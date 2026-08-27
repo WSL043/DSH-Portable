@@ -249,8 +249,10 @@
          border:1px solid var(--dsw-alias-border-l3,#d9dde3)}
 /* Idle is not news: no border, no fill, nothing competing with the tabs. */
 .opEntryAlert{border-color:var(--dsw-alias-state-error-primary,#dc2626);color:var(--dsw-alias-state-error-primary,#dc2626)}
+.opEntryAction{border-color:var(--dsw-alias-brand-primary,#4f6ef7);color:var(--dsw-alias-label-primary,#1f2328)}
 .opDot{position:absolute;top:-3px;right:-3px;width:8px;height:8px;border-radius:99px;
        background:var(--dsw-alias-state-error-primary,#dc2626)}
+.opDotAction{background:var(--dsw-alias-brand-primary,#4f6ef7)}
 .opPanel{position:absolute;top:calc(100% + 6px);right:0;z-index:40;width:460px;max-width:86vw;
          max-height:70vh;overflow-y:auto;border-radius:12px;
          background:var(--dsw-alias-bg-layer-1,#fff);
