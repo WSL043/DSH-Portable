@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -14,6 +14,7 @@ if (process.platform !== 'win32') throw new Error('the native workspace-picker s
 const executable = path.join(root, 'DeepSeek-Herness.exe')
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
+const launcherSettings = path.join(root, 'data', 'launcher-settings.json')
 for (const filename of [executable, portableNode, portableCli]) {
   if (!existsSync(filename)) throw new Error(`portable file is missing: ${filename}`)
 }
@@ -108,10 +109,32 @@ async function portable(args) {
   })
 }
 
+async function readPortableStatus() {
+  const result = await portable(['status', '--no-browser', '--json'])
+  return JSON.parse(result.stdout.trim().split(/\r?\n/).at(-1))
+}
+
+async function closeDesktopHostGracefully(processId) {
+  const command = [
+    `$process = Get-Process -Id ${processId} -ErrorAction SilentlyContinue`,
+    'if ($null -eq $process) { exit 0 }',
+    "if (-not $process.CloseMainWindow()) { throw 'desktop host did not accept a native close request' }",
+    "if (-not $process.WaitForExit(45000)) { throw 'desktop host did not exit cleanly within 45 seconds' }",
+  ].join('; ')
+  await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], {
+    cwd: root,
+    timeout: 50000,
+    windowsHide: true,
+  })
+}
+
 let launcher = null
 let client = null
+const originalLauncherSettings = existsSync(launcherSettings) ? await readFile(launcherSettings) : null
 try {
   await portable(['stop', '--no-browser', '--json']).catch(() => {})
+  await mkdir(path.dirname(launcherSettings), { recursive: true })
+  await writeFile(launcherSettings, '{"schemaVersion":1,"closeBehavior":"exit"}\n', 'utf8')
   const debugPort = await reserveLoopbackPort()
   launcher = spawn(executable, [], {
     cwd: root,
@@ -164,8 +187,27 @@ try {
   process.stdout.write(`${JSON.stringify({ status: 'passed', nativeDialog: true, workspace: 'cancelled', dataExport: 'cancelled', dataImport: 'cancelled' })}\n`)
 } finally {
   client?.close()
-  await portable(['stop', '--no-browser', '--json']).catch(() => {})
-  if (launcher?.pid) {
-    try { await execFileAsync('taskkill.exe', ['/PID', String(launcher.pid), '/T', '/F'], { windowsHide: true }) } catch { /* already stopped */ }
+  let cleanupError = null
+  if (launcher?.pid && launcher.exitCode === null) {
+    try {
+      await closeDesktopHostGracefully(launcher.pid)
+    } catch (error) {
+      cleanupError = new Error(`desktop host did not exit cleanly: ${error.message}`)
+      try {
+        await execFileAsync('taskkill.exe', ['/PID', String(launcher.pid), '/T', '/F'], { windowsHide: true })
+      } catch { /* the failed host may already be gone */ }
+    }
   }
+  await portable(['stop', '--no-browser', '--json']).catch(error => {
+    cleanupError ||= new Error(`portable backend cleanup failed: ${error.message}`)
+  })
+  try {
+    const status = await readPortableStatus()
+    if (status.status !== 'stopped') cleanupError ||= new Error(`portable backend remained ${status.status || 'unknown'} after native close`)
+  } catch (error) {
+    cleanupError ||= new Error(`portable status could not be verified after native close: ${error.message}`)
+  }
+  if (originalLauncherSettings === null) await rm(launcherSettings, { force: true })
+  else await writeFile(launcherSettings, originalLauncherSettings)
+  if (cleanupError) throw cleanupError
 }

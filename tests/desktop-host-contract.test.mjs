@@ -411,6 +411,15 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(nativeWorkspacePickerSmoke, /data-export-dialog/)
   assert.match(nativeWorkspacePickerSmoke, /data-import-dialog/)
   assert.match(nativeWorkspacePickerSmoke, /nativeDialog:\s*true/)
+  assert.match(nativeWorkspacePickerSmoke, /closeBehavior[\s\S]+exit/)
+  assert.match(nativeWorkspacePickerSmoke, /CloseMainWindow\(\)/)
+  assert.match(nativeWorkspacePickerSmoke, /WaitForExit\(45000\)/)
+  assert.match(nativeWorkspacePickerSmoke, /desktop host did not exit cleanly/i)
+  assert.match(nativeWorkspacePickerSmoke, /taskkill\.exe/)
+  assert.ok(
+    nativeWorkspacePickerSmoke.indexOf('CloseMainWindow()') < nativeWorkspacePickerSmoke.indexOf('taskkill.exe'),
+    'forced cleanup must remain a fallback after a graceful native-window close',
+  )
   assert.doesNotMatch(nativeWorkspacePickerSmoke, /className\.ToString\(\) == "#32770"/)
   assert.match(detachedUpdaterSmoke, /StartDetachedUpdater/)
   assert.match(detachedUpdaterSmoke, /survived/)
