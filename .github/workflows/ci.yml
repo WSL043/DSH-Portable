@@ -188,6 +188,19 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
+      - name: Run two isolated portable roots in parallel
+        shell: powershell
+        run: |
+          $FirstRoot = Join-Path $env:RUNNER_TEMP 'dsh-portable-parallel-a'
+          $SecondRoot = Join-Path $env:RUNNER_TEMP 'dsh-portable-parallel-b'
+          New-Item -ItemType Directory -Force -Path $FirstRoot, $SecondRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $FirstRoot
+          if ($LASTEXITCODE -ne 0) { throw "First parallel package extraction failed with exit code $LASTEXITCODE" }
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $SecondRoot
+          if ($LASTEXITCODE -ne 0) { throw "Second parallel package extraction failed with exit code $LASTEXITCODE" }
+          node scripts/smoke-portable-parallel-roots.mjs `
+            (Join-Path $FirstRoot 'DSH-Portable') `
+            (Join-Path $SecondRoot 'DSH-Portable')
 
   windows-plugin-smoke:
     name: Windows bundled plugin management

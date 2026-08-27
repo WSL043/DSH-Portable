@@ -358,13 +358,14 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
 })
 
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
-  const [workflow, windowsSmoke, detachedUpdaterSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, macSmoke] = await Promise.all([
+  const [workflow, windowsSmoke, detachedUpdaterSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, parallelRootsSmoke, macSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-desktop-host.ps1'),
     read('scripts/smoke-windows-detached-updater.ps1'),
     read('scripts/smoke-windows-native-tray.ps1'),
     read('scripts/smoke-windows-native-download.mjs'),
     read('scripts/smoke-windows-native-workspace-picker.mjs'),
+    read('scripts/smoke-portable-parallel-roots.mjs'),
     read('scripts/smoke-macos-desktop-host.sh'),
   ])
 
@@ -376,6 +377,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /runner:\s*windows-2025/)
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
   assert.match(workflow, /smoke-windows-native-workspace-picker\.mjs/)
+  assert.match(workflow, /smoke-portable-parallel-roots\.mjs/)
   assert.match(workflow, /smoke-windows-data-export\.mjs/)
   const dataExportSmoke = await read('scripts/smoke-windows-data-export.mjs')
   assert.match(dataExportSmoke, /item\.disabled \|\| item\.getAttribute\('aria-disabled'\) === 'true'/)
@@ -421,6 +423,10 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
     'forced cleanup must remain a fallback after a graceful native-window close',
   )
   assert.doesNotMatch(nativeWorkspacePickerSmoke, /className\.ToString\(\) == "#32770"/)
+  assert.match(parallelRootsSmoke, /Promise\.all\([\s\S]+start[\s\S]+--no-browser/)
+  assert.match(parallelRootsSmoke, /notEqual\(first\.port, second\.port/)
+  assert.match(parallelRootsSmoke, /firstStopped[\s\S]+secondStillRunning/)
+  assert.match(parallelRootsSmoke, /finally[\s\S]+stop/)
   assert.match(detachedUpdaterSmoke, /StartDetachedUpdater/)
   assert.match(detachedUpdaterSmoke, /survived/)
   assert.match(detachedUpdaterSmoke, /-File \"\{0\}\" -Launcher \"\{1\}\" -Writer \"\{2\}\" -Sentinel \"\{3\}\"/)

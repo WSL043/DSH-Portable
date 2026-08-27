@@ -357,6 +357,20 @@ test('a post-spawn startup failure cannot leave the owned DSH host running', asy
   assert.match(startBody, /cleanup failed/i)
 })
 
+test('simultaneous portable roots cannot mistake another root on the same port for their own host', async () => {
+  const source = await readFile(path.join(projectRoot, 'launcher', 'portable-cli.mjs'), 'utf8')
+  const waitBody = source.slice(source.indexOf('async function waitForHost('), source.indexOf('function portAvailable('))
+  const startBody = source.slice(source.indexOf('async function start('), source.indexOf('async function stop()'))
+
+  assert.ok(
+    waitBody.indexOf('ownedState(state)') < waitBody.indexOf('httpReady(state.port)'),
+    'process ownership must be proven before accepting a ready loopback page',
+  )
+  assert.match(startBody, /EADDRINUSE|address already in use/i)
+  assert.match(startBody, /portRetry\s*<\s*PORT_RANGE\.last\s*-\s*PORT_RANGE\.first/)
+  assert.match(startBody, /start\(noBrowser,\s*portRetry\s*\+\s*1\)/)
+})
+
 test('a stale or recycled PID is never treated as our DSH host', () => {
   const layout = layoutForRoot(usbRoot, 'win32')
   const expected = {

@@ -104,8 +104,8 @@ function requestGracefulShutdown(state, timeout = 2500) {
 async function waitForHost(state, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    if (await httpReady(state.port)) return true
     if (!ownedState(state)) return false
+    if (await httpReady(state.port)) return true
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
   return false
@@ -268,7 +268,7 @@ function tailSince(filename, offset, maxBytes = 8000) {
   }
 }
 
-async function start(noBrowser) {
+async function start(noBrowser, portRetry = 0) {
   requireRuntime({ desktopBridge: true })
   await ensurePortableDirectories(layout)
   let requestedRepair = null
@@ -352,6 +352,7 @@ async function start(noBrowser) {
     const hostUnavailable = !await waitForHost(state)
     if (hostUnavailable) {
       const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
+      const portConflict = /EADDRINUSE|address already in use/i.test(details)
       if (child.pid) {
         try {
           if (process.platform === 'win32') {
@@ -365,6 +366,9 @@ async function start(noBrowser) {
       }
       rmSync(layout.processState, { force: true })
       if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
+      if (portConflict && portRetry < PORT_RANGE.last - PORT_RANGE.first) {
+        return start(noBrowser, portRetry + 1)
+      }
       throw new Error(`DeepSeek Harness failed to start.\n${details}`)
     }
 
