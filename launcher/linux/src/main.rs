@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{
     collections::BTreeMap,
-    env, fs, io,
+    env, fs,
+    fs::OpenOptions,
+    io::{self, Write},
+    os::unix::fs::OpenOptionsExt,
     path::{Path, PathBuf},
     process::{Command, Output, Stdio},
     sync::{
@@ -541,7 +544,9 @@ fn request_id(message: &Value, prefix: &str) -> Option<String> {
     let suffix = value.strip_prefix(prefix)?;
     if suffix.is_empty()
         || suffix.len() > 96
-        || !suffix.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        || !suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
     {
         return None;
     }
@@ -563,7 +568,9 @@ fn save_launcher_preferences(layout: &ProductLayout, message: &Value) -> Result<
         .and_then(|source| serde_json::from_str::<Value>(&source).ok())
         .filter(Value::is_object)
         .unwrap_or_else(|| Value::Object(Default::default()));
-    let object = value.as_object_mut().expect("settings object was initialized");
+    let object = value
+        .as_object_mut()
+        .expect("settings object was initialized");
     object.insert("schemaVersion".to_owned(), Value::from(2));
     for key in [
         "productUpdateCheckEnabled",
@@ -578,10 +585,20 @@ fn save_launcher_preferences(layout: &ProductLayout, message: &Value) -> Result<
     if let Some(field) = object.get("productUpdateCheckEnabled").cloned() {
         object.insert("updateCheckEnabled".to_owned(), field);
     }
-    fs::create_dir_all(filename.parent().ok_or("settings directory is unavailable")?)
-        .map_err(|error| error.to_string())?;
-    fs::write(filename, format!("{}\n", serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?))
-        .map_err(|error| error.to_string())
+    fs::create_dir_all(
+        filename
+            .parent()
+            .ok_or("settings directory is unavailable")?,
+    )
+    .map_err(|error| error.to_string())?;
+    fs::write(
+        filename,
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&value).map_err(|error| error.to_string())?
+        ),
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn exact_relaunch_executable() -> Result<PathBuf, String> {
@@ -640,15 +657,28 @@ fn import_data_and_restart(app: tauri::AppHandle, message: &Value) -> Result<(),
     if HAS_RUNNING_SESSION.load(Ordering::SeqCst) {
         return Err("A task is still running. The data package was not imported.".to_owned());
     }
-    let input = PathBuf::from(message.get("input").and_then(Value::as_str).ok_or("input is missing")?);
+    let input = PathBuf::from(
+        message
+            .get("input")
+            .and_then(Value::as_str)
+            .ok_or("input is missing")?,
+    );
     if !input.is_absolute() || !input.is_file() {
         return Err("the data package does not exist".to_owned());
     }
-    let conflict = message.get("conflict").and_then(Value::as_str).unwrap_or("").to_owned();
+    let conflict = message
+        .get("conflict")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
     if !matches!(conflict.as_str(), "keep" | "replace") {
         return Err("invalid import conflict policy".to_owned());
     }
-    let password = message.get("password").and_then(Value::as_str).unwrap_or("").to_owned();
+    let password = message
+        .get("password")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
     if !password.is_empty() && password.len() < 8 {
         return Err("password must contain at least 8 characters".to_owned());
     }
@@ -658,33 +688,67 @@ fn import_data_and_restart(app: tauri::AppHandle, message: &Value) -> Result<(),
     thread::spawn(move || {
         let layout = LAYOUT.get().expect("layout is initialized");
         let mut password_file = None;
+        let mut backend_was_stopped = false;
         let outcome = (|| -> Result<(), String> {
-            let stopped = run_portable_cli(layout, &["stop", "--json"]).map_err(|error| error.to_string())?;
-            if !stopped.status.success() { return Err(String::from_utf8_lossy(&stopped.stderr).into_owned()); }
+            let stopped =
+                run_portable_cli(layout, &["stop", "--json"]).map_err(|error| error.to_string())?;
+            if !stopped.status.success() {
+                return Err(String::from_utf8_lossy(&stopped.stderr).into_owned());
+            }
+            backend_was_stopped = true;
             let input_string = input.to_string_lossy().into_owned();
             let mut owned = vec![
-                "restore-data".to_owned(), "--input".to_owned(), input_string,
-                "--conflict".to_owned(), conflict, "--json".to_owned(),
+                "restore-data".to_owned(),
+                "--input".to_owned(),
+                input_string,
+                "--conflict".to_owned(),
+                conflict,
+                "--json".to_owned(),
             ];
             if !password.is_empty() {
                 let runtime = layout.state_root.join("data/runtime");
                 fs::create_dir_all(&runtime).map_err(|error| error.to_string())?;
-                let target = runtime.join(format!("import-password-{}-{}.txt", std::process::id(), thread_id()));
-                fs::write(&target, password.as_bytes()).map_err(|error| error.to_string())?;
+                let target = runtime.join(format!(
+                    "import-password-{}-{}.txt",
+                    std::process::id(),
+                    thread_id()
+                ));
+                let mut password_stream = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .mode(0o600)
+                    .open(&target)
+                    .map_err(|error| error.to_string())?;
+                password_stream
+                    .write_all(password.as_bytes())
+                    .map_err(|error| error.to_string())?;
+                drop(password_stream);
                 password_file = Some(target.clone());
-                owned.extend(["--password-file".to_owned(), target.to_string_lossy().into_owned()]);
+                owned.extend([
+                    "--password-file".to_owned(),
+                    target.to_string_lossy().into_owned(),
+                ]);
             }
             let borrowed: Vec<&str> = owned.iter().map(String::as_str).collect();
-            let imported = run_portable_cli(layout, &borrowed).map_err(|error| error.to_string())?;
-            if !imported.status.success() { return Err(String::from_utf8_lossy(&imported.stderr).into_owned()); }
+            let imported =
+                run_portable_cli(layout, &borrowed).map_err(|error| error.to_string())?;
+            if !imported.status.success() {
+                return Err(String::from_utf8_lossy(&imported.stderr).into_owned());
+            }
             schedule_linux_relaunch()
         })();
-        if let Some(filename) = password_file { let _ = fs::remove_file(filename); }
+        if let Some(filename) = password_file {
+            let _ = fs::remove_file(filename);
+        }
         match outcome {
             Ok(()) => app.exit(0),
             Err(error) => {
-                QUITTING.store(false, Ordering::SeqCst);
                 dialog(PRODUCT_NAME, &error, MessageLevel::Error);
+                if backend_was_stopped && schedule_linux_relaunch().is_ok() {
+                    app.exit(0);
+                } else {
+                    QUITTING.store(false, Ordering::SeqCst);
+                }
             }
         }
     });
@@ -692,7 +756,9 @@ fn import_data_and_restart(app: tauri::AppHandle, message: &Value) -> Result<(),
 }
 
 fn thread_id() -> String {
-    format!("{:?}", thread::current().id()).replace('(', "").replace(')', "")
+    format!("{:?}", thread::current().id())
+        .replace('(', "")
+        .replace(')', "")
 }
 
 #[tauri::command]
@@ -715,7 +781,10 @@ fn portable_host_message(
         }
         "dsh-portable/state" => {
             HAS_RUNNING_SESSION.store(
-                message.get("hasRunningSession").and_then(Value::as_bool).unwrap_or(false),
+                message
+                    .get("hasRunningSession")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
                 Ordering::SeqCst,
             );
             Ok(None)
@@ -723,33 +792,78 @@ fn portable_host_message(
         "dsh-portable/pick-directory" => {
             let id = request_id(&message, "workspace-").ok_or("invalid request id")?;
             let mut result = bridge_result("dsh-portable/pick-directory-result", id);
-            match FileDialog::new().set_directory(layout.state_root.join("workspace")).pick_folder() {
-                Some(path) => { result.insert("path".to_owned(), Value::String(path.to_string_lossy().into_owned())); }
-                None => { result.insert("cancelled".to_owned(), Value::Bool(true)); }
+            match FileDialog::new()
+                .set_directory(layout.state_root.join("workspace"))
+                .pick_folder()
+            {
+                Some(path) => {
+                    result.insert(
+                        "path".to_owned(),
+                        Value::String(path.to_string_lossy().into_owned()),
+                    );
+                }
+                None => {
+                    result.insert("cancelled".to_owned(), Value::Bool(true));
+                }
             }
             Ok(Some(Value::Object(result)))
         }
         "dsh-portable/pick-data-export" => {
             let id = request_id(&message, "data-export-").ok_or("invalid request id")?;
             let export_kind = message.get("kind").and_then(Value::as_str).unwrap_or("");
-            if !matches!(export_kind, "standard" | "private" | "support") { return Err("invalid export kind".to_owned()); }
+            if !matches!(export_kind, "standard" | "private" | "support") {
+                return Err("invalid export kind".to_owned());
+            }
             let support = export_kind == "support";
-            let prefix = if support { "DSH-Portable-support" } else if export_kind == "private" { "DSH-Portable-private" } else { "DSH-Portable-data" };
+            let prefix = if support {
+                "DSH-Portable-support"
+            } else if export_kind == "private" {
+                "DSH-Portable-private"
+            } else {
+                "DSH-Portable-data"
+            };
             let extension = if support { "json" } else { "dshdata" };
             let mut result = bridge_result("dsh-portable/pick-data-export-result", id);
-            match FileDialog::new().add_filter(if support { "JSON support report" } else { "DSH-Portable data package" }, &[extension])
-                .set_file_name(format!("{prefix}.{extension}")).save_file() {
-                Some(path) => { result.insert("path".to_owned(), Value::String(path.to_string_lossy().into_owned())); }
-                None => { result.insert("cancelled".to_owned(), Value::Bool(true)); }
+            match FileDialog::new()
+                .add_filter(
+                    if support {
+                        "JSON support report"
+                    } else {
+                        "DSH-Portable data package"
+                    },
+                    &[extension],
+                )
+                .set_file_name(format!("{prefix}.{extension}"))
+                .save_file()
+            {
+                Some(path) => {
+                    result.insert(
+                        "path".to_owned(),
+                        Value::String(path.to_string_lossy().into_owned()),
+                    );
+                }
+                None => {
+                    result.insert("cancelled".to_owned(), Value::Bool(true));
+                }
             }
             Ok(Some(Value::Object(result)))
         }
         "dsh-portable/pick-data-import" => {
             let id = request_id(&message, "data-import-").ok_or("invalid request id")?;
             let mut result = bridge_result("dsh-portable/pick-data-import-result", id);
-            match FileDialog::new().add_filter("DSH-Portable data package", &["dshdata"]).pick_file() {
-                Some(path) => { result.insert("path".to_owned(), Value::String(path.to_string_lossy().into_owned())); }
-                None => { result.insert("cancelled".to_owned(), Value::Bool(true)); }
+            match FileDialog::new()
+                .add_filter("DSH-Portable data package", &["dshdata"])
+                .pick_file()
+            {
+                Some(path) => {
+                    result.insert(
+                        "path".to_owned(),
+                        Value::String(path.to_string_lossy().into_owned()),
+                    );
+                }
+                None => {
+                    result.insert("cancelled".to_owned(), Value::Bool(true));
+                }
             }
             Ok(Some(Value::Object(result)))
         }
@@ -762,14 +876,20 @@ fn portable_host_message(
             let mut result = bridge_result("dsh-portable/restart-host-result", id);
             if QUITTING.load(Ordering::SeqCst) {
                 result.insert("ok".to_owned(), Value::Bool(false));
-                result.insert("error".to_owned(), Value::String("The app is already closing.".to_owned()));
+                result.insert(
+                    "error".to_owned(),
+                    Value::String("The app is already closing.".to_owned()),
+                );
             } else if HAS_RUNNING_SESSION.load(Ordering::SeqCst) {
                 result.insert("ok".to_owned(), Value::Bool(false));
                 result.insert("error".to_owned(), Value::String("A task is still running. Restart after it finishes; the current task was not interrupted.".to_owned()));
             } else {
                 result.insert("ok".to_owned(), Value::Bool(true));
                 let app = app.clone();
-                thread::spawn(move || { thread::sleep(Duration::from_millis(150)); restart_linux_host(app); });
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(150));
+                    restart_linux_host(app);
+                });
             }
             Ok(Some(Value::Object(result)))
         }

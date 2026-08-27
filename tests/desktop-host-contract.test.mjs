@@ -229,8 +229,21 @@ test('Windows data migration uses an owned Save dialog and never forces a packag
   assert.match(host, /PortableProcessJob\.StartDetachedUpdater\(Application\.ExecutablePath/)
   assert.match(host, /--dsh-restart-after-pid/)
   assert.match(host, /WaitForRestartHandoff/)
+  assert.match(host, /private void RestartAfterDataImport\(\)[\s\S]+StartDetachedUpdater\(Application\.ExecutablePath[\s\S]+Close\(\)/)
+  const importFlow = host.slice(host.indexOf('private async void BeginDataImport('), host.indexOf('private void DisposeTrayIcon('))
+  assert.match(importFlow, /catch \(Exception error\)[\s\S]+Data import failed[\s\S]+RestartAfterDataImport\(\)/)
   assert.match(finishedProductSmoke, /DSH_PORTABLE_SMOKE_EXECUTABLE/)
   assert.match(finishedProductSmoke, /finished-product smoke left an owned desktop host running/)
+})
+
+test('macOS data import restores an operable host after a failed restore', async () => {
+  const host = await read('launcher/macos/DeepSeek-Herness.swift')
+  const importFlow = host.slice(host.indexOf('private func importData('), host.indexOf('func userContentController('))
+
+  assert.match(importFlow, /var backendWasStopped = false/)
+  assert.match(importFlow, /backendWasStopped = true/)
+  assert.match(importFlow, /catch[\s\S]+if backendWasStopped[\s\S]+scheduleNativeRelaunch\(\)[\s\S]+NSApp\.terminate/)
+  assert.match(importFlow, /setAttributes\(\[\.posixPermissions: 0o600\]/)
 })
 
 test('Windows startup is one full-size product shell with the same activity language as DSH boot', async () => {

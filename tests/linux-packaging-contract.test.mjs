@@ -122,6 +122,12 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(attributes, /^launcher\/linux\/pnpm text eol=lf$/m)
   assert.match(attributes, /^\*\.rs text eol=lf$/m)
   assert.match(cli, /\['win32',\s*'darwin',\s*'linux'\]/)
+
+  const importFlow = source.slice(source.indexOf('fn import_data_and_restart('), source.indexOf('fn thread_id('))
+  assert.match(importFlow, /let mut backend_was_stopped = false/)
+  assert.match(importFlow, /backend_was_stopped = true/)
+  assert.match(importFlow, /Err\(error\)[\s\S]+if backend_was_stopped[\s\S]+schedule_linux_relaunch\(\)[\s\S]+app\.exit\(0\)/)
+  assert.match(importFlow, /OpenOptions::new\(\)[\s\S]+create_new\(true\)[\s\S]+mode\(0o600\)/)
 })
 
 test('Linux packaging and real product smokes run independently on x64 and arm64', async () => {

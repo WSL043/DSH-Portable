@@ -771,8 +771,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
             var passwordURL: URL?
+            var backendWasStopped = false
             do {
                 _ = try self.runCLI(["stop", "--no-browser", "--json"])
+                backendWasStopped = true
                 self.backendStarted = false
                 var arguments = ["restore-data", "--input", input, "--conflict", message["conflict"] as! String, "--json"]
                 if !password.isEmpty {
@@ -780,6 +782,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
                     let target = runtime.appendingPathComponent("import-password-\(UUID().uuidString).txt")
                     try password.data(using: .utf8)!.write(to: target, options: [.atomic])
+                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: target.path)
                     passwordURL = target
                     arguments += ["--password-file", target.path]
                 }
@@ -793,8 +796,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             } catch {
                 if let passwordURL = passwordURL { try? FileManager.default.removeItem(at: passwordURL) }
                 DispatchQueue.main.async {
-                    self.shuttingDown = false
                     self.showFailureAlert(error)
+                    if backendWasStopped {
+                        self.scheduleNativeRelaunch()
+                        self.allowingClose = true
+                        NSApp.terminate(nil)
+                    } else {
+                        self.shuttingDown = false
+                    }
                 }
             }
         }

@@ -1508,24 +1508,37 @@ namespace DshPortable
                 }
                 Tuple<int, string> imported = await Task.Run(() => InvokePortableCli(args.ToArray()));
                 if (imported.Item1 != 0) throw new InvalidOperationException(imported.Item2);
-                PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, new[]
-                {
-                    "--dsh-restart-after-pid",
-                    Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
-                });
-                allowClose = true;
-                DisposeTrayIcon();
-                Close();
+                RestartAfterDataImport();
             }
             catch (Exception error)
             {
-                shutdownRunning = false;
-                ShowFailure(L("数据导入失败。\r\n", "Data import failed.\r\n") + error.GetBaseException().Message);
+                string failure = L("数据导入失败。\r\n", "Data import failed.\r\n") + error.GetBaseException().Message;
+                try
+                {
+                    MessageBox.Show(this, failure, L("数据导入失败", "Data import failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    RestartAfterDataImport();
+                }
+                catch (Exception restartError)
+                {
+                    ShowFailure(failure + Environment.NewLine + restartError.GetBaseException().Message);
+                }
             }
             finally
             {
                 if (!String.IsNullOrEmpty(passwordFile)) try { File.Delete(passwordFile); } catch { }
             }
+        }
+
+        private void RestartAfterDataImport()
+        {
+            PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, new[]
+            {
+                "--dsh-restart-after-pid",
+                Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+            });
+            allowClose = true;
+            DisposeTrayIcon();
+            Close();
         }
 
         private void DisposeTrayIcon()
