@@ -545,7 +545,7 @@ test('component download stops as soon as a response exceeds the declared size',
 test('component download timeout measures inactivity instead of total transfer time', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-slow-progress-'))
   const output = path.join(root, 'component.zip')
-  const chunks = [Buffer.from('sl'), Buffer.from('ow'), Buffer.from('!')]
+  const chunks = [Buffer.from('s'), Buffer.from('l'), Buffer.from('o'), Buffer.from('w')]
   const bytes = Buffer.concat(chunks)
   const progress = []
   const fetchImpl = async (_url, { signal }) => ({
@@ -561,7 +561,7 @@ test('component download timeout measures inactivity instead of total transfer t
             clearInterval(timer)
             controller.close()
           }
-        }, 15)
+        }, 80)
         signal.addEventListener('abort', () => {
           clearInterval(timer)
           controller.error(new Error('aborted'))
@@ -576,7 +576,7 @@ test('component download timeout measures inactivity instead of total transfer t
       bytes: bytes.length,
       sha256: createHash('sha256').update(bytes).digest('hex'),
       fetchImpl,
-      timeoutMs: 25,
+      timeoutMs: 220,
       onProgress: (event) => progress.push(event),
     })
     assert.equal(result.bytes, bytes.length)
