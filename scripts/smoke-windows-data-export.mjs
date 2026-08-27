@@ -320,12 +320,14 @@ try {
       const rect = item.getBoundingClientRect()
       return rect.width > 0 && rect.height > 0
     })
-    const action = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出迁移包|Export migration package)$/.test((item.textContent || '').trim()))
-    if (privatePasswordInput || !action || action.disabled || action.getAttribute('aria-disabled') === 'true') return false
-    const rect = action.getBoundingClientRect()
-    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-    return rect.width > 0 && rect.height > 0 && Boolean(point && (point === action || action.contains(point)))
+    return !privatePasswordInput
   })()`, Boolean, 'private export completion')
+  await waitForValue(client, `(() => {
+    const action = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出迁移包|Export migration package)$/.test((item.textContent || '').trim()))
+    if (!action || action.disabled || action.getAttribute('aria-disabled') === 'true') return false
+    action.scrollIntoView({ block: 'center' })
+    return true
+  })()`, Boolean, 'migration export availability')
   await waitForValue(client, clickButton(['导出迁移包', 'Export migration package']), value => value?.clicked, 'migration export action')
   const standardArchive = await waitForArchive('DSH-Portable-data-')
 
