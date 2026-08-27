@@ -38,6 +38,13 @@ test('interactive first launch lets the user choose the portable parent folder',
   assert.match(bootstrap, /if \(!options\.DestinationExplicit && !BootstrapInstaller\.IsCompletePortable\(options\.Destination\)\)/)
 })
 
+test('bootstrap relaunch preserves the updater environment for bounded handoff recovery', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  const launch = bootstrap.match(/private void LaunchIfRequested\(\)[\s\S]*?\n        \}/u)?.[0] ?? ''
+  assert.match(launch, /FileName = Path\.Combine\(options\.Destination, "DeepSeek-Herness\.exe"\)/)
+  assert.match(launch, /UseShellExecute = false/)
+})
+
 function cscPath() {
   const windows = process.env.WINDIR || 'C:\\Windows'
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')

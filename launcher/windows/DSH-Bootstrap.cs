@@ -477,7 +477,7 @@ namespace DshPortableBootstrap
             {
                 FileName = Path.Combine(options.Destination, "DeepSeek-Herness.exe"),
                 WorkingDirectory = options.Destination,
-                UseShellExecute = true,
+                UseShellExecute = false,
             });
         }
 
