@@ -242,10 +242,13 @@ jobs:
         include:
           - runner: windows-2022
             label: windows-2022
-            firstColdStartSeconds: 35
+            # Hosted runners include variable first-execution Defender scanning.
+            # Keep a functional ceiling here; config/performance-budgets.json
+            # remains the stricter controlled-machine performance contract.
+            firstColdStartSeconds: 75
           - runner: windows-2025
             label: windows-2025
-            firstColdStartSeconds: 40
+            firstColdStartSeconds: 75
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 25
     steps:
