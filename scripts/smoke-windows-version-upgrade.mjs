@@ -178,7 +178,6 @@ try {
         ...process.env,
         DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
         DSH_PORTABLE_TEST_HIDDEN: '1',
-        ...(simulateWebViewBusy ? { DSH_PORTABLE_TEST_WEBVIEW2_BUSY_ONCE: '1' } : {}),
       } : process.env,
     })
   } catch (error) {
@@ -207,8 +206,30 @@ try {
     }, 'the updated native desktop host did not become ready after the running-host handoff')
     const updateLog = (await launcherLog()).slice(launcherLogOffset)
     assert.doesNotMatch(updateLog, /0x800700AA|requested resource is in use|要求されたリソースは使用中/i)
-    if (simulateWebViewBusy) assert.match(updateLog, /environment-busy-retry:/)
     await stopFinishedProduct()
+
+    if (simulateWebViewBusy) {
+      launcherLogOffset = (await launcherLog()).length
+      oldHost = spawn(path.join(destination, 'DeepSeek-Herness.exe'), [], {
+        cwd: destination,
+        env: {
+          ...process.env,
+          DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+          DSH_PORTABLE_TEST_HIDDEN: '1',
+          DSH_PORTABLE_TEST_WEBVIEW2_BUSY_ONCE: '1',
+        },
+        windowsHide: true,
+        stdio: 'ignore',
+      })
+      await waitFor(async () => {
+        const currentLog = await launcherLog()
+        return currentLog.slice(launcherLogOffset).includes('dsh-first-paint-ready')
+      }, 'the updated product did not recover from the injected WebView2 resource-in-use race')
+      const recoveryLog = (await launcherLog()).slice(launcherLogOffset)
+      assert.match(recoveryLog, /environment-busy-retry:/)
+      assert.doesNotMatch(recoveryLog, /0x800700AA|requested resource is in use|要求されたリソースは使用中/i)
+      await stopFinishedProduct()
+    }
   }
 
   await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {
