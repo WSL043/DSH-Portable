@@ -247,22 +247,22 @@ namespace DshPortable
     }
 
 
-    internal sealed class DshProgressBar : Control
+    internal sealed class DshActivityRing : Control
     {
         private readonly System.Windows.Forms.Timer animationTimer;
-        private ProgressBarStyle progressStyle = ProgressBarStyle.Marquee;
+        private bool indeterminate = true;
         private int progressValue;
-        private int animationStep;
+        private int rotation;
 
-        internal DshProgressBar()
+        internal DshActivityRing()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
             TrackColor = Color.FromArgb(226, 228, 232);
             IndicatorColor = Color.FromArgb(27, 28, 30);
-            animationTimer = new System.Windows.Forms.Timer { Interval = 22, Enabled = true };
+            animationTimer = new System.Windows.Forms.Timer { Interval = 16, Enabled = true };
             animationTimer.Tick += delegate
             {
-                animationStep = (animationStep + 4) % 240;
+                rotation = (rotation + 7) % 360;
                 Invalidate();
             };
         }
@@ -270,28 +270,14 @@ namespace DshPortable
         internal Color TrackColor { get; set; }
         internal Color IndicatorColor { get; set; }
 
-        internal ProgressBarStyle Style
+        internal bool Indeterminate
         {
-            get { return progressStyle; }
+            get { return indeterminate; }
             set
             {
-                progressStyle = value;
-                animationTimer.Enabled = value == ProgressBarStyle.Marquee;
+                indeterminate = value;
+                animationTimer.Enabled = value && Visible;
                 Invalidate();
-            }
-        }
-
-        internal int MarqueeAnimationSpeed
-        {
-            get { return animationTimer.Enabled ? animationTimer.Interval : 0; }
-            set
-            {
-                if (value <= 0) animationTimer.Enabled = false;
-                else
-                {
-                    animationTimer.Interval = Math.Max(16, Math.Min(100, value));
-                    if (progressStyle == ProgressBarStyle.Marquee) animationTimer.Enabled = true;
-                }
             }
         }
 
@@ -304,26 +290,34 @@ namespace DshPortable
         protected override void OnPaint(PaintEventArgs eventArgs)
         {
             base.OnPaint(eventArgs);
-            Rectangle track = new Rectangle(0, Math.Max(0, (Height - 3) / 2), Math.Max(1, Width), Math.Min(3, Height));
-            using (Brush background = new SolidBrush(TrackColor)) eventArgs.Graphics.FillRectangle(background, track);
-            int indicatorWidth;
-            int indicatorLeft;
-            if (progressStyle == ProgressBarStyle.Marquee)
+            eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            float stroke = 2F;
+            float diameter = Math.Max(2F, Math.Min(Width, Height) - stroke - 1F);
+            RectangleF bounds = new RectangleF(
+                (Width - diameter) / 2F,
+                (Height - diameter) / 2F,
+                diameter,
+                diameter);
+            using (Pen track = new Pen(TrackColor, stroke))
+                eventArgs.Graphics.DrawEllipse(track, bounds);
+            float sweep = indeterminate
+                ? 72F
+                : progressValue >= 100 ? 359.9F : Math.Max(0F, 360F * progressValue / 100F);
+            if (sweep > 0F)
             {
-                indicatorWidth = Math.Max(36, Width / 5);
-                int travel = Math.Max(1, Width + indicatorWidth);
-                indicatorLeft = (animationStep * travel / 240) - indicatorWidth;
+                using (Pen indicator = new Pen(IndicatorColor, stroke))
+                {
+                    indicator.StartCap = LineCap.Round;
+                    indicator.EndCap = LineCap.Round;
+                    eventArgs.Graphics.DrawArc(indicator, bounds, indeterminate ? rotation - 90F : -90F, sweep);
+                }
             }
-            else
-            {
-                indicatorWidth = Math.Max(0, Width * progressValue / 100);
-                indicatorLeft = 0;
-            }
-            if (indicatorWidth > 0)
-            {
-                Rectangle indicator = new Rectangle(indicatorLeft, track.Y, indicatorWidth, track.Height);
-                using (Brush foreground = new SolidBrush(IndicatorColor)) eventArgs.Graphics.FillRectangle(foreground, indicator);
-            }
+        }
+
+        protected override void OnVisibleChanged(EventArgs eventArgs)
+        {
+            base.OnVisibleChanged(eventArgs);
+            animationTimer.Enabled = Visible && indeterminate;
         }
 
         protected override void Dispose(bool disposing)
@@ -367,7 +361,7 @@ namespace DshPortable
         private readonly PictureBox productIcon;
         private readonly Label productLabel;
         private readonly Label statusLabel;
-        private readonly DshProgressBar progress;
+        private readonly DshActivityRing activityRing;
         private readonly Label progressDetail;
         private readonly TextBox detailsBox;
         private readonly Button copyButton;
@@ -479,12 +473,11 @@ namespace DshPortable
                     ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
                     : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…"),
             };
-            progress = new DshProgressBar
+            activityRing = new DshActivityRing
             {
-                Location = desktopStart ? new Point(0, 86) : new Point(24, 108),
-                Size = desktopStart ? new Size(360, 4) : new Size(456, 6),
-                Style = ProgressBarStyle.Marquee,
-                MarqueeAnimationSpeed = 24,
+                Location = desktopStart ? new Point(170, 40) : new Point(268, 108),
+                Size = new Size(20, 20),
+                Indeterminate = true,
             };
             progressDetail = new Label
             {
@@ -534,11 +527,13 @@ namespace DshPortable
             launchContent.Controls.Add(productLabel);
             launchContent.Controls.Add(statusLabel);
             launchContent.Controls.Add(progressDetail);
-            launchContent.Controls.Add(progress);
+            launchContent.Controls.Add(activityRing);
             launchContent.Controls.Add(detailsBox);
             launchContent.Controls.Add(copyButton);
             launchContent.Controls.Add(closeButton);
             launchPanel.Controls.Add(launchContent);
+            if (desktopStart)
+                ConfigureDesktopLoadingSurface(L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…"), false);
 
             closeBehavior = LoadCloseBehavior();
             updateCheckEnabled = LoadUpdateCheckEnabled("productUpdateCheckEnabled");
@@ -694,8 +689,8 @@ namespace DshPortable
             statusLabel.ForeColor = dark ? Color.FromArgb(178, 178, 184) : Color.FromArgb(92, 95, 101);
             progressDetail.BackColor = background;
             progressDetail.ForeColor = statusLabel.ForeColor;
-            progress.TrackColor = dark ? Color.FromArgb(53, 53, 57) : Color.FromArgb(226, 228, 232);
-            progress.IndicatorColor = dark ? Color.FromArgb(242, 242, 244) : Color.FromArgb(27, 28, 30);
+            activityRing.TrackColor = dark ? Color.FromArgb(53, 53, 57) : Color.FromArgb(226, 228, 232);
+            activityRing.IndicatorColor = dark ? Color.FromArgb(242, 242, 244) : Color.FromArgb(27, 28, 30);
             if (desktopStart && IsHandleCreated)
             {
                 int darkMode = dark ? 1 : 0;
@@ -804,21 +799,28 @@ namespace DshPortable
 
         private void ConfigureDesktopLoadingSurface(string message, bool showDetail)
         {
-            launchContent.Size = new Size(360, 112);
-            productIcon.Location = new Point(0, 8);
-            productIcon.Size = new Size(36, 36);
-            productLabel.Location = new Point(52, 4);
-            productLabel.Size = new Size(308, 30);
-            statusLabel.Location = new Point(52, 36);
-            statusLabel.Size = new Size(308, 28);
+            launchContent.Size = new Size(360, showDetail ? 124 : 104);
+            productIcon.Visible = false;
+            productLabel.Text = "HARNESS";
+            productLabel.Location = new Point(0, 0);
+            productLabel.Size = new Size(360, 24);
+            productLabel.TextAlign = ContentAlignment.MiddleCenter;
+            productLabel.Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold, GraphicsUnit.Point);
+            activityRing.Location = new Point(170, 40);
+            activityRing.Size = new Size(20, 20);
+            activityRing.Indeterminate = true;
+            activityRing.Value = 0;
+            activityRing.Visible = true;
+            statusLabel.Location = new Point(0, 76);
+            statusLabel.Size = new Size(360, 20);
             statusLabel.AutoEllipsis = true;
+            statusLabel.TextAlign = ContentAlignment.MiddleCenter;
+            statusLabel.Font = new Font("Segoe UI", 9F, FontStyle.Regular, GraphicsUnit.Point);
             statusLabel.Text = message;
-            progressDetail.Location = new Point(0, 64);
+            progressDetail.Location = new Point(0, 100);
             progressDetail.Size = new Size(360, 20);
+            progressDetail.TextAlign = ContentAlignment.MiddleCenter;
             progressDetail.Visible = showDetail;
-            progress.Location = new Point(0, 86);
-            progress.Size = new Size(360, 4);
-            progress.Visible = true;
             detailsBox.Visible = false;
             copyButton.Visible = false;
             closeButton.Visible = false;
@@ -2364,8 +2366,7 @@ namespace DshPortable
             RestoreFromTray();
             webView.Enabled = false;
             ConfigureDesktopLoadingSurface(message, true);
-            progress.Style = ProgressBarStyle.Marquee;
-            progress.MarqueeAnimationSpeed = 24;
+            activityRing.Indeterminate = true;
             progressDetail.Text = L("正在准备…", "Preparing…");
             launchPanel.Visible = true;
             launchPanel.BringToFront();
@@ -3168,10 +3169,9 @@ namespace DshPortable
                 ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
                 : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
             progressDetail.Visible = false;
-            progress.Style = ProgressBarStyle.Marquee;
-            progress.MarqueeAnimationSpeed = 24;
-            progress.Value = 0;
-            progress.Visible = true;
+            activityRing.Indeterminate = true;
+            activityRing.Value = 0;
+            activityRing.Visible = true;
         }
 
         private void HandleUpdateProgress(string jsonLine)
@@ -3184,15 +3184,13 @@ namespace DshPortable
                 long current = JsonLong(jsonLine, "receivedBytes");
                 long total = JsonLong(jsonLine, "totalBytes");
                 statusLabel.Text = L("正在下载 DSH-Portable 更新…", "Downloading the DSH-Portable update…");
-                progress.Style = ProgressBarStyle.Continuous;
-                progress.MarqueeAnimationSpeed = 0;
-                progress.Value = percent;
+                activityRing.Indeterminate = false;
+                activityRing.Value = percent;
                 progressDetail.Text = percent + "%  ·  " + FormatBytes(current) + " / " + FormatBytes(total);
             }
             else
             {
-                progress.Style = ProgressBarStyle.Marquee;
-                progress.MarqueeAnimationSpeed = 24;
+                activityRing.Indeterminate = true;
                 if (phase == "verifying") statusLabel.Text = L("正在验证 DSH-Portable 更新…", "Verifying the DSH-Portable update…");
                 else if (phase == "installing") statusLabel.Text = L("正在安装 DSH-Portable 更新…", "Installing the DSH-Portable update…");
                 else if (phase == "complete") statusLabel.Text = L("正在重新打开工作台…", "Reopening the workspace…");
@@ -3302,7 +3300,8 @@ namespace DshPortable
             if (!hiddenForAutomation) Opacity = 1;
             launchPanel.Visible = true;
             webView.Visible = false;
-            progress.Visible = false;
+            activityRing.Visible = false;
+            RestoreFailureIdentity();
             if (!desktopStart) ClientSize = new Size(640, 360);
             launchContent.Size = new Size(584, 304);
             CenterLaunchContent();
@@ -3331,7 +3330,8 @@ namespace DshPortable
             operationRunning = false;
             launchPanel.Visible = true;
             launchPanel.BringToFront();
-            progress.Visible = false;
+            activityRing.Visible = false;
+            RestoreFailureIdentity();
             if (!desktopStart) ClientSize = new Size(640, 360);
             launchContent.Size = new Size(584, 304);
             CenterLaunchContent();
@@ -3352,6 +3352,20 @@ namespace DshPortable
             closeButton.Visible = true;
             AcceptButton = closeButton;
             ActiveControl = closeButton;
+        }
+
+        private void RestoreFailureIdentity()
+        {
+            productIcon.Visible = true;
+            productIcon.Location = new Point(24, 20);
+            productIcon.Size = new Size(40, 40);
+            productLabel.Text = "DeepSeek Harness";
+            productLabel.Location = new Point(80, 18);
+            productLabel.Size = new Size(480, 30);
+            productLabel.TextAlign = ContentAlignment.MiddleLeft;
+            productLabel.Font = new Font("Segoe UI Semibold", 14F, FontStyle.Bold, GraphicsUnit.Point);
+            statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+            statusLabel.Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
         }
     }
 

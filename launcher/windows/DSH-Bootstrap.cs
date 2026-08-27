@@ -2,6 +2,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.IO.Compression;
 using System.Globalization;
@@ -28,6 +29,65 @@ using Microsoft.Win32.SafeHandles;
 
 namespace DshPortableBootstrap
 {
+    internal sealed class BootstrapActivityRing : Control
+    {
+        private readonly System.Windows.Forms.Timer animationTimer;
+        private bool indeterminate = true;
+        private int value;
+        private int rotation;
+
+        internal BootstrapActivityRing()
+        {
+            SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            animationTimer = new System.Windows.Forms.Timer { Interval = 16, Enabled = true };
+            animationTimer.Tick += delegate { rotation = (rotation + 7) % 360; Invalidate(); };
+        }
+
+        internal bool Indeterminate
+        {
+            get { return indeterminate; }
+            set { indeterminate = value; animationTimer.Enabled = value && Visible; Invalidate(); }
+        }
+
+        internal int Value
+        {
+            get { return value; }
+            set { this.value = Math.Max(0, Math.Min(100, value)); Invalidate(); }
+        }
+
+        protected override void OnPaint(PaintEventArgs eventArgs)
+        {
+            base.OnPaint(eventArgs);
+            eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            float stroke = 2F;
+            float diameter = Math.Max(2F, Math.Min(Width, Height) - stroke - 1F);
+            RectangleF bounds = new RectangleF((Width - diameter) / 2F, (Height - diameter) / 2F, diameter, diameter);
+            using (Pen track = new Pen(Color.FromArgb(226, 228, 232), stroke)) eventArgs.Graphics.DrawEllipse(track, bounds);
+            float sweep = indeterminate ? 72F : value >= 100 ? 359.9F : Math.Max(0F, 360F * value / 100F);
+            if (sweep > 0F)
+            {
+                using (Pen indicator = new Pen(Color.FromArgb(27, 28, 30), stroke))
+                {
+                    indicator.StartCap = LineCap.Round;
+                    indicator.EndCap = LineCap.Round;
+                    eventArgs.Graphics.DrawArc(indicator, bounds, indeterminate ? rotation - 90F : -90F, sweep);
+                }
+            }
+        }
+
+        protected override void OnVisibleChanged(EventArgs eventArgs)
+        {
+            base.OnVisibleChanged(eventArgs);
+            animationTimer.Enabled = Visible && indeterminate;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing) animationTimer.Dispose();
+            base.Dispose(disposing);
+        }
+    }
+
     internal static class BootstrapText
     {
         private static readonly string UiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
@@ -907,7 +967,7 @@ namespace DshPortableBootstrap
         private readonly Label titleLabel;
         private readonly Label statusLabel;
         private readonly Label locationLabel;
-        private readonly ProgressBar progress;
+        private readonly BootstrapActivityRing activityRing;
         private readonly Label progressPercentLabel;
         private readonly Button actionButton;
         private readonly LinkLabel offlineLink;
@@ -922,7 +982,7 @@ namespace DshPortableBootstrap
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = true;
-            ClientSize = new Size(520, 210);
+            ClientSize = new Size(520, 220);
             BackColor = Color.FromArgb(250, 250, 250);
             Font = new Font("Segoe UI", 9.5F, FontStyle.Regular, GraphicsUnit.Point);
             try { Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath); } catch { }
@@ -949,25 +1009,24 @@ namespace DshPortableBootstrap
                 Size = new Size(276, 23),
                 AutoEllipsis = true,
             };
-            progress = new ProgressBar
+            activityRing = new BootstrapActivityRing
             {
-                Location = new Point(28, 123),
-                Size = new Size(464, 10),
-                Style = ProgressBarStyle.Marquee,
-                MarqueeAnimationSpeed = 22,
+                Location = new Point(250, 117),
+                Size = new Size(20, 20),
+                Indeterminate = true,
             };
             progressPercentLabel = new Label
             {
-                Location = new Point(310, 91),
-                Size = new Size(182, 23),
+                Location = new Point(28, 141),
+                Size = new Size(464, 23),
                 ForeColor = Color.FromArgb(95, 95, 95),
-                TextAlign = ContentAlignment.MiddleRight,
+                TextAlign = ContentAlignment.MiddleCenter,
                 Visible = false,
             };
             actionButton = new Button
             {
                 Text = BootstrapText.L("取消", "Cancel"),
-                Location = new Point(400, 157),
+                Location = new Point(400, 176),
                 Size = new Size(92, 32),
             };
             actionButton.Click += delegate
@@ -983,7 +1042,7 @@ namespace DshPortableBootstrap
             offlineLink = new LinkLabel
             {
                 Text = BootstrapText.L("网络有问题？下载离线完整包", "Network issue? Download the full offline package"),
-                Location = new Point(28, 164),
+                Location = new Point(28, 183),
                 Size = new Size(280, 24),
                 Visible = false,
             };
@@ -996,7 +1055,7 @@ namespace DshPortableBootstrap
             Controls.Add(statusLabel);
             Controls.Add(locationLabel);
             Controls.Add(progressPercentLabel);
-            Controls.Add(progress);
+            Controls.Add(activityRing);
             Controls.Add(actionButton);
             Controls.Add(offlineLink);
             Shown += async delegate { await RunAsync(); };
@@ -1018,7 +1077,7 @@ namespace DshPortableBootstrap
                 BootstrapResult result = installer.Failure(error);
                 WriteResult(options.ResultFile, result);
                 running = false;
-                progress.Visible = false;
+                activityRing.Visible = false;
                 progressPercentLabel.Visible = false;
                 titleLabel.Text = BootstrapText.L("未能准备 DSH-Portable", "Could not prepare DSH-Portable");
                 statusLabel.Text = result.Message;
@@ -1042,9 +1101,8 @@ namespace DshPortableBootstrap
             if (InvokeRequired) { BeginInvoke(new Action<long, long>(SetProgress), current, total); return; }
             if (total <= 0) return;
             int value = (int)Math.Max(0, Math.Min(100, current * 100L / total));
-            progress.Style = ProgressBarStyle.Continuous;
-            progress.MarqueeAnimationSpeed = 0;
-            progress.Value = value;
+            activityRing.Indeterminate = false;
+            activityRing.Value = value;
             progressPercentLabel.Text = value + "%" + "  ·  " + FormatBytes(current) + " / " + FormatBytes(total);
             progressPercentLabel.Visible = true;
         }

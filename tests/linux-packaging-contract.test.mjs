@@ -214,5 +214,8 @@ test('Linux native loading surface follows Chinese or English without an externa
   assert.match(loading, /Starting DeepSeek Harness/)
   assert.match(loading, /prefers-color-scheme/)
   assert.match(loading, /prefers-reduced-motion/)
+  assert.match(loading, />HARNESS</)
+  assert.match(loading, /class="spinner"/)
+  assert.doesNotMatch(loading, /class="bar"/)
   assert.doesNotMatch(loading, /https?:\/\//)
 })

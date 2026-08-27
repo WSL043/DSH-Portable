@@ -233,14 +233,20 @@ test('Windows data migration uses an owned Save dialog and never forces a packag
   assert.match(finishedProductSmoke, /finished-product smoke left an owned desktop host running/)
 })
 
-test('Windows startup is one full-size product shell instead of a legacy dialog that later jumps size', async () => {
+test('Windows startup is one full-size product shell with the same activity language as DSH boot', async () => {
   const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   assert.match(host, /FormBorderStyle\s*=\s*desktopStart\s*\?\s*FormBorderStyle\.Sizable/)
   assert.match(host, /ClientSize\s*=\s*desktopStart\s*\?\s*new Size\(1280, 820\)/)
   assert.match(host, /MinimumSize\s*=\s*desktopStart\s*\?\s*new Size\(900, 620\)/)
   assert.match(host, /RestoreDesktopWindowState\(\);[\s\S]+ApplyDesktopChrome\(\)/)
-  assert.match(host, /internal sealed class DshProgressBar : Control/)
+  assert.match(host, /internal sealed class DshActivityRing : Control/)
+  assert.match(host, /DrawArc\(/)
+  assert.match(host, /SmoothingMode\.AntiAlias/)
+  assert.doesNotMatch(host, /DshProgressBar/)
+  assert.doesNotMatch(host, /ProgressBarStyle\.Marquee/)
   assert.doesNotMatch(host, /private readonly ProgressBar progress;/)
+  assert.match(host, /productLabel\.Text\s*=\s*"HARNESS"/)
+  assert.match(host, /activityRing\.Indeterminate\s*=\s*true/)
   assert.match(host, /WaitForWorkspaceFirstPaintAsync\(url\)/)
   assert.match(host, /RevealDesktopSurface\(\)/)
   assert.match(host, /dsh-first-paint-ready/)
