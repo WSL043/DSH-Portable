@@ -227,6 +227,16 @@ try {
     await new Promise(resolve => setTimeout(resolve, dismissed?.clicked ? 250 : 150))
   }
 
+  await waitForValue(client, `(() => {
+    const names = new Set(['Settings', '设置', '打开侧边栏', 'Open sidebar', 'Expand sidebar'])
+    return [...document.querySelectorAll('button,[role="button"]')].some(item => {
+      const label = (item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || '').trim()
+      const rect = item.getBoundingClientRect()
+      const style = getComputedStyle(item)
+      return names.has(label) && rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden'
+    })
+  })()`, Boolean, 'DSH navigation controls', 60000)
+
   let settings = await evaluate(client, clickButton(['Settings', '设置']))
   if (!settings?.clicked) {
     const sidebar = await evaluate(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']))
