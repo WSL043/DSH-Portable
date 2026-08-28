@@ -454,9 +454,20 @@ jobs:
             exit 0
           }
           Write-Host "Testing complete-package upgrade from $PriorTag to $CandidateVersion."
-          node scripts/smoke-windows-version-upgrade.mjs `
-            $PriorZip artifacts `
-            --running-host --simulate-webview-busy
+          $UpgradeArguments = @(
+            'scripts/smoke-windows-version-upgrade.mjs',
+            $PriorZip,
+            'artifacts',
+            '--running-host',
+            '--simulate-webview-busy'
+          )
+          if ([string]$Components.releaseChannel -ne [string]$Target.releaseChannel) {
+            if ([string]$Target.releaseChannel -ne 'candidate') {
+              throw "Refusing an implicit release-channel migration to $($Target.releaseChannel)."
+            }
+            $UpgradeArguments += '--allow-channel-migration'
+          }
+          node @UpgradeArguments
 
   windows-extractor-smoke:
     name: Windows self-extractor

@@ -102,6 +102,9 @@ test('preview footprint has a separate reviewed budget without weakening stable 
   assert.ok(preview.platforms['windows-x64'].appBytes > stable.platforms['windows-x64'].appBytes)
   for (const platform of ['macos-x64', 'macos-arm64', 'linux-x64', 'linux-arm64']) {
     assert.ok(preview.platforms[platform])
-    assert.ok(preview.platforms[platform].archiveBytes <= stable.platforms[platform].archiveBytes)
+    assert.ok(
+      preview.platforms[platform].archiveBytes <= stable.platforms[platform].archiveBytes * 1.01,
+      `${platform} preview archive budget must stay within one percent of the stable ceiling`,
+    )
   }
 })

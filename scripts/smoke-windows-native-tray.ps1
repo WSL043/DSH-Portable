@@ -25,15 +25,22 @@ public static class DshTrayCapture {
 $Assembly = [Reflection.Assembly]::LoadFrom($Launcher)
 $AllFields = [Reflection.BindingFlags]'Instance,Static,Public,NonPublic'
 $InstanceMembers = [Reflection.BindingFlags]'Instance,NonPublic'
+$ConstructorMembers = [Reflection.BindingFlags]'Instance,Public,NonPublic'
 $WindowType = $Assembly.GetType('DshPortable.LauncherWindow', $true)
 $StateType = $Assembly.GetType('DshPortable.TrayBridgeState', $true)
 $SessionType = $Assembly.GetType('DshPortable.TrayBridgeSession', $true)
 if ($Assembly.GetType('DshPortable.TrayTaskFlyout', $false)) {
     throw 'Rejected task-flyout type is still present in the compiled launcher'
 }
-$Constructor = $WindowType.GetConstructor($InstanceMembers, $null, [Type[]]@([string[]]), $null)
-$ConstructorArgs = New-Object 'System.Object[]' 1
+$ConstructorSignature = [Type[]]@([string[]], [string], [string], [int], [int])
+$Constructor = $WindowType.GetConstructor($ConstructorMembers, $null, $ConstructorSignature, $null)
+if (-not $Constructor) { throw 'LauncherWindow environment-aware constructor is missing' }
+$ConstructorArgs = New-Object 'System.Object[]' 5
 $ConstructorArgs[0] = [string[]]@('--desktop')
+$ConstructorArgs[1] = 'default'
+$ConstructorArgs[2] = $ResolvedRoot
+$ConstructorArgs[3] = 0
+$ConstructorArgs[4] = 0
 $Window = $Constructor.Invoke($ConstructorArgs)
 $WindowType.GetField('root', $AllFields).SetValue($Window, $ResolvedRoot)
 $LoadUpdateCheckEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers)

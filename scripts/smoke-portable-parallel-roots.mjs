@@ -71,7 +71,7 @@ try {
   assert.equal(secondStillRunning.pid, second.pid)
   assert.equal(secondStillRunning.port, second.port)
 
-  const response = await fetch(secondStillRunning.url, { redirect: 'manual' })
+  const response = await fetch(secondStillRunning.url)
   assert.ok(response.status >= 200 && response.status < 500, `second Portable root returned HTTP ${response.status}`)
   assert.ok((await response.text()).length > 0, 'second Portable root became empty after stopping the first root')
 

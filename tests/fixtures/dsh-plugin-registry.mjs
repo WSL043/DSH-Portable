@@ -4,8 +4,8 @@ import http from 'node:http'
 import path from 'node:path'
 
 const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1', defaultPluginArchive, defaultPluginVersion, imageViewerArchive, imageViewerVersion] = process.argv.slice(2)
-if (!v1Archive || !v2Archive || !channelFile || !readyFile || !clsxArchive || !defaultPluginArchive || !defaultPluginVersion) {
-  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> <clsx-version> <default-plugin.tgz> <default-plugin-version>')
+if (!v1Archive || !v2Archive || !channelFile || !readyFile || !clsxArchive) {
+  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> [clsx-version] [default-plugin.tgz] [default-plugin-version] [image-viewer.tgz] [image-viewer-version]')
 }
 
 const packageName = 'dsh-portable-smoke-plugin'
@@ -14,9 +14,10 @@ const releases = new Map([
   ['1.0.1', archiveRelease('1.0.1', v2Archive)],
 ])
 const clsxRelease = archiveRelease(clsxVersion, clsxArchive)
-const defaultPluginName = 'dsh-chat-manager'
-const defaultPluginRelease = archiveRelease(defaultPluginVersion, defaultPluginArchive)
-const defaultReleases = new Map([[defaultPluginName, defaultPluginRelease]])
+const defaultReleases = new Map()
+if (defaultPluginArchive && defaultPluginVersion) {
+  defaultReleases.set('dsh-chat-manager', archiveRelease(defaultPluginVersion, defaultPluginArchive))
+}
 if (imageViewerArchive && imageViewerVersion) defaultReleases.set('dsh-image-viewer', archiveRelease(imageViewerVersion, imageViewerArchive))
 
 function archiveRelease(version, filename) {
