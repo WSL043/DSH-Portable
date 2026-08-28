@@ -69,6 +69,7 @@ async function makeComponentArchive(root, version, portableVersion) {
     updaterSchema: 1,
     shellSchema: 1,
     nodeVersion: process.versions.node,
+    defaultPlugins: [],
   })}\n`)
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-LICENSE.txt'), 'updated license\n')
   await writeFile(path.join(source, 'licenses', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md'), 'updated notices\n')
@@ -132,6 +133,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       updaterSchema: 1,
       shellSchema: 1,
       nodeVersion: process.versions.node,
+      defaultPlugins: [],
     })}\n`)
     await writeFile(path.join(root, 'data', 'private-session.txt'), 'keep me')
 
@@ -169,6 +171,22 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     origin = `http://127.0.0.1:${server.address().port}`
 
     cli = path.join(root, 'launcher', 'portable-cli.mjs')
+    const research = JSON.parse((await execFileAsync(runtimeNode, [cli, 'start', '--environment', 'research', '--no-browser', '--json'], {
+      timeout: 30000,
+      windowsHide: true,
+    })).stdout.trim())
+    assert.equal(research.environment, 'research')
+    await assert.rejects(
+      execFileAsync(runtimeNode, [cli, 'update', '--json', '--no-browser', '--force', '--allow-http', '--update-manifest', `${origin}/update.json`], {
+        timeout: 30000,
+        windowsHide: true,
+      }),
+      (error) => /Close the other Portable environment before changing shared components: research\./.test(error.stderr),
+    )
+    await execFileAsync(runtimeNode, [cli, 'stop', '--environment', 'research', '--no-browser', '--json'], {
+      timeout: 30000,
+      windowsHide: true,
+    })
     const updated = await execFileAsync(runtimeNode, [cli, 'update', '--json', '--progress-json', '--no-browser', '--force', '--allow-http', '--update-manifest', `${origin}/update.json`], {
       timeout: 60000,
       windowsHide: true,

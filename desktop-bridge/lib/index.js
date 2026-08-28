@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync, readSync, unlinkSync, writeFileSync } from 'node:fs'
+import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
@@ -37,7 +37,7 @@ async function readJson(request) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
 }
 
-function readSettings(filename) {
+function readSettings(filename, defaultUpdateChannel = 'stable') {
   let source = {}
   try { source = JSON.parse(readFileSync(filename, 'utf8')) } catch {}
   const legacyUpdateCheck = source.updateCheckEnabled === true
@@ -53,6 +53,9 @@ function readSettings(filename) {
     updateCheckEnabled: productUpdateCheckEnabled,
     productUpdateCheckEnabled,
     engineUpdateCheckEnabled,
+    updateChannel: ['stable', 'candidate'].includes(source.updateChannel)
+      ? source.updateChannel
+      : defaultUpdateChannel,
     taskNotificationsEnabled: source.taskNotificationsEnabled !== false,
     closeBehavior: source.closeBehavior === 'exit' ? 'exit' : 'tray',
   }
@@ -70,16 +73,71 @@ function writeSettings(filename, settings) {
   finally { try { unlinkSync(temporary) } catch {} }
 }
 
-async function defaultRunCli(root, stateRoot, args) {
-  const { stdout = '' } = await execFileAsync(process.execPath, [path.join(root, 'launcher', 'portable-cli.mjs'), ...args], {
+async function defaultRunCli(root, baseStateRoot, environmentId, args) {
+  const forwarded = environmentId === 'default' ? args : [...args, '--environment', environmentId]
+  const { stdout = '' } = await execFileAsync(process.execPath, [path.join(root, 'launcher', 'portable-cli.mjs'), ...forwarded], {
     cwd: root,
-    env: { ...process.env, DSH_PORTABLE_STATE_ROOT: stateRoot },
+    env: { ...process.env, DSH_PORTABLE_STATE_ROOT: baseStateRoot },
     encoding: 'utf8',
     windowsHide: true,
     timeout: 30000,
   })
   const output = stdout.trim()
   return output ? JSON.parse(output.split(/\r?\n/).at(-1)) : {}
+}
+
+const ENVIRONMENT_ID = /^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$/
+const RESERVED_ENVIRONMENT_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+
+function validEnvironmentId(value) {
+  return ENVIRONMENT_ID.test(String(value || '')) && !RESERVED_ENVIRONMENT_ID.test(String(value || ''))
+}
+
+function readEnvironmentRegistry(filename) {
+  const value = readJsonFile(filename)
+  const items = Array.isArray(value?.environments) ? value.environments : []
+  return {
+    schemaVersion: 1,
+    environments: items
+      .map(item => ({ id: String(item?.id || ''), name: String(item?.name || '').trim() }))
+      .filter(item => validEnvironmentId(item.id) && item.id !== 'default' && item.name),
+  }
+}
+
+function environmentSnapshot(baseStateRoot, currentEnvironment, registryFile) {
+  const registry = readEnvironmentRegistry(registryFile)
+  const names = new Map(registry.environments.map(item => [item.id, item.name]))
+  const ids = new Set(['default'])
+  try {
+    for (const entry of readdirSync(path.join(baseStateRoot, 'environments'), { withFileTypes: true })) {
+      if (entry.isDirectory() && validEnvironmentId(entry.name) && entry.name !== 'default') ids.add(entry.name)
+    }
+  } catch {}
+  return {
+    current: currentEnvironment,
+    items: [...ids]
+      .map(id => ({ id, name: id === 'default' ? '' : names.get(id) || id }))
+      .sort((left, right) => left.id === 'default' ? -1 : right.id === 'default' ? 1 : left.name.localeCompare(right.name)),
+  }
+}
+
+function createEnvironment(baseStateRoot, registryFile, requestedName) {
+  const name = String(requestedName || '').trim()
+  if (!name || name.length > 40 || /[\u0000-\u001f\u007f]/.test(name)) throw new Error('environment name must contain 1-40 visible characters')
+  const current = environmentSnapshot(baseStateRoot, 'default', registryFile)
+  if (current.items.some(item => (item.name || item.id).localeCompare(name, undefined, { sensitivity: 'accent' }) === 0))
+    throw new Error('an environment with this name already exists')
+  let id = name.normalize('NFKD').toLowerCase().replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9._-]+/g, '-').replace(/^[-._]+|[-._]+$/g, '').slice(0, 32)
+  if (!validEnvironmentId(id) || id === 'default') id = `env-${randomBytes(5).toString('hex')}`
+  const environmentRoot = path.join(baseStateRoot, 'environments')
+  while (current.items.some(item => item.id === id)) id = `env-${randomBytes(5).toString('hex')}`
+  const target = path.join(environmentRoot, id)
+  mkdirSync(path.join(target, 'data'), { recursive: true })
+  mkdirSync(path.join(target, 'workspace'), { recursive: true })
+  const registry = readEnvironmentRegistry(registryFile)
+  registry.environments.push({ id, name })
+  writeSettings(registryFile, registry)
+  return { id, name }
 }
 
 function encryptedDataPackage(filename) {
@@ -105,17 +163,26 @@ function temporaryPasswordFile(stateRoot, password) {
 export function mountPortableRoutes(webServer, options = {}) {
   const root = path.resolve(options.root || process.env.DSH_PORTABLE_ROOT || path.join(import.meta.dirname, '..', '..'))
   const stateRoot = path.resolve(options.stateRoot || process.env.DSH_PORTABLE_STATE_ROOT || root)
-  const settingsFile = path.join(stateRoot, 'data', 'launcher-settings.json')
+  const currentEnvironment = String(options.environmentId || process.env.DSH_PORTABLE_ENVIRONMENT || 'default')
+  const baseStateRoot = path.resolve(options.baseStateRoot || process.env.DSH_PORTABLE_BASE_STATE_ROOT
+    || (currentEnvironment === 'default' ? stateRoot : path.dirname(path.dirname(stateRoot))))
+  const environmentRegistryFile = path.join(baseStateRoot, 'data', 'environment-registry.json')
+  const settingsFile = path.join(baseStateRoot, 'data', 'launcher-settings.json')
   const componentsFile = path.join(root, 'licenses', 'COMPONENTS.json')
   const repairRequest = path.join(stateRoot, 'data', 'runtime', 'repair-requested.json')
   const repairResult = path.join(stateRoot, 'data', 'runtime', 'repair-result.json')
-  const runCli = options.runCli || ((args) => defaultRunCli(root, stateRoot, args))
+  const updateResult = path.join(stateRoot, 'data', 'runtime', 'last-update-result.json')
+  const runCli = options.runCli || ((args) => defaultRunCli(root, baseStateRoot, currentEnvironment, args))
   const disposers = []
   const register = route => disposers.push(webServer.register(route))
+  const installedUpdateChannel = () => {
+    const components = readJsonFile(componentsFile)
+    return components?.releaseChannel === 'candidate' ? 'candidate' : 'stable'
+  }
 
   register({ kind: 'exact', path: '/dsh-portable/settings', handler: async (request, response) => {
     if (request.method === 'GET') return sendJson(response, 200, {
-      settings: readSettings(settingsFile),
+      settings: readSettings(settingsFile, installedUpdateChannel()),
       versions: (() => {
         const components = readJsonFile(componentsFile)
         return {
@@ -124,13 +191,16 @@ export function mountPortableRoutes(webServer, options = {}) {
         }
       })(),
       lastRepair: readJsonFile(repairResult),
+      lastUpdate: readJsonFile(updateResult),
       workspacePath: path.join(stateRoot, 'workspace'),
+      environments: environmentSnapshot(baseStateRoot, currentEnvironment, environmentRegistryFile),
     })
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
     try {
       const body = await readJson(request)
-      const current = readSettings(settingsFile)
+      const current = readSettings(settingsFile, installedUpdateChannel())
+      if (body.updateChannel === 'stable' || body.updateChannel === 'candidate') current.updateChannel = body.updateChannel
       if (typeof body.updateCheckEnabled === 'boolean') current.productUpdateCheckEnabled = body.updateCheckEnabled
       if (typeof body.productUpdateCheckEnabled === 'boolean') current.productUpdateCheckEnabled = body.productUpdateCheckEnabled
       if (typeof body.engineUpdateCheckEnabled === 'boolean') current.engineUpdateCheckEnabled = body.engineUpdateCheckEnabled
@@ -139,6 +209,17 @@ export function mountPortableRoutes(webServer, options = {}) {
       if (body.closeBehavior === 'tray' || body.closeBehavior === 'exit') current.closeBehavior = body.closeBehavior
       writeSettings(settingsFile, current)
       sendJson(response, 200, { settings: current })
+    } catch (error) { sendJson(response, 400, { error: String(error?.message || error) }) }
+  } })
+
+  register({ kind: 'exact', path: '/dsh-portable/environments', handler: async (request, response) => {
+    if (request.method === 'GET') return sendJson(response, 200, environmentSnapshot(baseStateRoot, currentEnvironment, environmentRegistryFile))
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try {
+      const body = await readJson(request)
+      const created = createEnvironment(baseStateRoot, environmentRegistryFile, body.name)
+      sendJson(response, 201, { created, ...environmentSnapshot(baseStateRoot, currentEnvironment, environmentRegistryFile) })
     } catch (error) { sendJson(response, 400, { error: String(error?.message || error) }) }
   } })
 

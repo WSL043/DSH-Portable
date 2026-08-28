@@ -5,7 +5,12 @@ import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { buildDshEnv, layoutForRoot } from './portable-core.mjs'
+import {
+  buildDshEnv,
+  environmentStateRoot,
+  layoutForRoot,
+  normalizeEnvironmentId,
+} from './portable-core.mjs'
 
 function platformPaths(platform) {
   return platform === 'win32' ? path.win32 : path.posix
@@ -164,9 +169,27 @@ export async function runPluginCommandWithFreshReleaseRecovery(spec, argv, makeS
   return await run(retrySpec, { args: retrySpec.args, stdout, stderr, mirrorStderr: true })
 }
 
-export function buildPluginCliSpec(root, stateRoot, argv, platform = process.platform, source = process.env) {
+export function extractPortableEnvironmentArgv(argv, source = process.env) {
+  const forwarded = [...argv]
+  let environmentId = normalizeEnvironmentId(source.DSH_PORTABLE_ENVIRONMENT || 'default')
+  if (forwarded[0] === '--environment') {
+    if (!forwarded[1]) throw new Error('--environment requires a value.')
+    environmentId = normalizeEnvironmentId(forwarded[1])
+    forwarded.splice(0, 2)
+  }
+  return { environmentId, argv: forwarded }
+}
+
+export function buildPluginCliSpec(
+  root,
+  stateRoot,
+  argv,
+  platform = process.platform,
+  source = process.env,
+  environmentId = 'default',
+) {
   const runtimeRoot = environmentValue(source, 'DSH_PORTABLE_RUNTIME_ROOT', platform) || root
-  const layout = layoutForRoot(root, platform, stateRoot, runtimeRoot)
+  const layout = layoutForRoot(root, platform, stateRoot, runtimeRoot, environmentId)
   const forwardedArgv = platform === 'win32' ? normalizeDshArgvForWindowsShell(argv) : [...argv]
   return {
     command: layout.nodeExe,
@@ -404,19 +427,26 @@ function isMutatingPluginCommand(argv) {
   return argv.slice(pluginIndex + 1).some((arg) => ['add', 'install', 'remove', 'rm', 'uninstall', 'update', 'up'].includes(arg))
 }
 
-export async function main(argv = process.argv.slice(2), source = process.env) {
+export async function main(inputArgv = process.argv.slice(2), source = process.env) {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const stateRoot = await resolveProductStateRoot(root, process.platform, source)
+  const resolvedStateRoot = await resolveProductStateRoot(root, process.platform, source)
+  const baseStateRoot = environmentValue(source, 'DSH_PORTABLE_BASE_STATE_ROOT', process.platform) || resolvedStateRoot
+  const selected = extractPortableEnvironmentArgv(inputArgv, source)
+  const argv = selected.argv
+  const stateRoot = environmentStateRoot(baseStateRoot, selected.environmentId, process.platform)
   const portableArgv = portableDataArgv(argv)
   if (portableArgv !== null) {
-    const layout = layoutForRoot(root, process.platform, stateRoot, source.DSH_PORTABLE_RUNTIME_ROOT || root)
-    const result = spawnSync(layout.nodeExe, [layout.portableCli, ...portableArgv], {
+    const layout = layoutForRoot(root, process.platform, stateRoot, source.DSH_PORTABLE_RUNTIME_ROOT || root, selected.environmentId)
+    const environmentArgv = selected.environmentId === 'default'
+      ? portableArgv
+      : [...portableArgv, '--environment', selected.environmentId]
+    const result = spawnSync(layout.nodeExe, [layout.portableCli, ...environmentArgv], {
       cwd: process.cwd(), env: buildDshEnv(layout, source), stdio: 'inherit', windowsHide: false,
     })
     if (result.error) throw result.error
     return Number.isInteger(result.status) ? result.status : 1
   }
-  let spec = buildPluginCliSpec(root, stateRoot, argv, process.platform, source)
+  let spec = buildPluginCliSpec(root, stateRoot, argv, process.platform, source, selected.environmentId)
   for (const [label, filename] of [
     ['bundled Node.js', spec.command],
     ['official DSH CLI', spec.layout.dshBin],
@@ -429,13 +459,13 @@ export async function main(argv = process.argv.slice(2), source = process.env) {
   try {
     const materializedArgv = await materializeRemotePluginArchives(argv, stateRoot, process.platform)
     const normalizedArgv = normalizeFreshReleaseRemovalArgv(materializedArgv)
-    spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source)
+    spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source, selected.environmentId)
     await relinkMovedProfileIfNeeded(spec, normalizedArgv)
 
     const result = await runPluginCommandWithFreshReleaseRecovery(
       spec,
       normalizedArgv,
-      (retryArgv) => buildPluginCliSpec(root, stateRoot, retryArgv, process.platform, source),
+      (retryArgv) => buildPluginCliSpec(root, stateRoot, retryArgv, process.platform, source, selected.environmentId),
     )
     const exitCode = Number.isInteger(result.status) ? result.status : 1
     if (exitCode === 0 && isMutatingPluginCommand(argv)) {

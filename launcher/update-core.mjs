@@ -349,6 +349,7 @@ export async function checkForUpdate({
   layout,
   manifestUrl,
   scope = 'product',
+  releaseChannel,
   allowHttp = false,
   force = false,
   fetchImpl = fetch,
@@ -356,6 +357,7 @@ export async function checkForUpdate({
   now = Date.now(),
 }) {
   const installed = await readInstalledUpdateState(layout)
+  if (releaseChannel) installed.releaseChannel = normalizeReleaseChannel(releaseChannel, installed.portableVersion)
   const updateCheckCache = updateCacheForScope(layout, scope)
   manifestUrl ||= scope === 'engine'
     ? defaultEngineUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
@@ -364,7 +366,7 @@ export async function checkForUpdate({
   const cached = await readJson(updateCheckCache, null)
   if (!force && cached?.manifestUrl === manifestUrl && cached?.retryAfter > now) {
     return {
-      status: 'unavailable', updateKind: scope,
+      status: cached.errorStatus || 'unavailable', updateKind: scope,
       current: scope === 'engine' ? installed.dshVersion : installed.portableVersion,
       cached: true, checkedAt: cached.checkedAt, message: cached.error,
     }
@@ -401,15 +403,19 @@ export async function checkForUpdate({
     return { ...result, cached: false, checkedAt: now }
   } catch (error) {
     const message = error?.message ?? String(error)
+    const errorStatus = installed.releaseChannel === 'candidate' && message === 'HTTP 404'
+      ? (scope === 'engine' ? 'engine-follows-product' : 'channel-unpublished')
+      : 'unavailable'
     await writeJsonAtomic(updateCheckCache, {
       schemaVersion: 2,
       checkedAt: now,
       manifestUrl,
       error: message,
+      errorStatus,
       retryAfter: now + UPDATE_FAILURE_TTL_MS,
     }).catch(() => {})
     return {
-      status: 'unavailable',
+      status: errorStatus,
       updateKind: scope,
       current: scope === 'engine' ? installed.dshVersion : installed.portableVersion,
       cached: false,

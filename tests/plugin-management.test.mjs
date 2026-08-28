@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url'
 
 import {
   buildPluginCliSpec,
+  extractPortableEnvironmentArgv,
   materializeRemotePluginArchives,
   normalizeFreshReleaseRemovalArgv,
   normalizeDshArgvForWindowsShell,
@@ -17,6 +18,36 @@ import {
   runPluginCommandWithFreshReleaseRecovery,
   resolveProductStateRoot,
 } from '../launcher/dsh-cli.mjs'
+
+test('official DSH commands remain unchanged while an optional Portable environment selects isolated state', () => {
+  assert.deepEqual(
+    extractPortableEnvironmentArgv(['--environment', 'Research-01', '--profile', 'tui', '--resume', 'abc'], {}),
+    { environmentId: 'research-01', argv: ['--profile', 'tui', '--resume', 'abc'] },
+  )
+  assert.deepEqual(
+    extractPortableEnvironmentArgv(['plugin', '--profile', 'tui', 'add', 'example'], {}),
+    { environmentId: 'default', argv: ['plugin', '--profile', 'tui', 'add', 'example'] },
+  )
+  assert.throws(
+    () => extractPortableEnvironmentArgv(['--environment', '../escape', '--profile', 'tui'], {}),
+    /environment/i,
+  )
+
+  const root = path.win32.resolve('D:\\USB Drive\\DSH-Portable')
+  const stateRoot = path.win32.join(root, 'environments', 'research-01')
+  const spec = buildPluginCliSpec(
+    root,
+    stateRoot,
+    ['--profile', 'tui', '--resume', 'abc'],
+    'win32',
+    { PATH: 'C:\\Windows\\System32' },
+    'research-01',
+  )
+  assert.equal(spec.layout.environmentId, 'research-01')
+  assert.equal(spec.env.DSH_PORTABLE_ENVIRONMENT, 'research-01')
+  assert.equal(spec.env.DSH_HOME, path.win32.join(stateRoot, 'data', 'dsh-home'))
+  assert.deepEqual(spec.args.slice(1), ['--profile', 'tui', '--resume', 'abc'])
+})
 
 test('portable data commands use the product migration CLI without changing official DSH commands', () => {
   assert.deepEqual(portableDataArgv(['portable', 'backup', '--output', 'backup.dshdata']), [

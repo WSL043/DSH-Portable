@@ -389,7 +389,7 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.match(workflow, /name:\s*Dependency intake/)
   assert.match(workflow, /repository_dispatch:/)
   assert.match(workflow, /dependency-released/)
-  assert.match(workflow, /cron:\s*['"]23 2 \* \* 1['"]/, 'external upstreams need only a weekly safety poll')
+  assert.match(workflow, /cron:\s*['"]23 \*\/6 \* \* \*['"]/, 'official installable releases must be discovered without a weekly blind spot')
   assert.match(workflow, /workflow_dispatch:/)
   assert.match(workflow, /node scripts\/update-upstream\.mjs/)
   assert.match(workflow, /npm test/)
@@ -405,6 +405,8 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/)
   assert.match(workflow, /git push --force origin/)
   assert.match(updater, /registry\.npmjs\.org/)
+  assert.match(updater, /\/-\/package\/@deepseek-ai%2Fdsh\/dist-tags/)
+  assert.match(updater, /const needsRegistry/)
   assert.match(upstreamState, /dist-tags/)
   assert.match(upstreamState, /integrity/)
   assert.match(upstreamState, /changed:\s*packageChanged/)
@@ -659,7 +661,8 @@ test('removable offline defaults are installed only for a newly created web prof
   }
   for (const build of [macos, linux]) {
     assert.doesNotMatch(build, /\$DEFAULT_PLUGIN_SHA256/)
-    assert.match(build, /lock_value defaultPlugins\.sessionDelete\.sha256/)
+    assert.match(build, /list-default-plugins\.mjs" "\$COMPONENT_LOCK_FILE"/)
+    assert.match(build, /"defaultPlugins": \$DEFAULT_PLUGINS_JSON/)
     assert.match(build, /runtime-capsule\.mjs/)
   }
   assert.match(cli, /seedDefaultPlugins/)

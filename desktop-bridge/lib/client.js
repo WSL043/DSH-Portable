@@ -9,14 +9,21 @@ window.__ModuleLoader__.load({
       zh: {
         title: '便携版',
         updates: '更新',
+        updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: 'Beta 测试版',
+        updateChannelHint: '稳定版适合日常使用；Beta 可提前体验正在验证的新版本。切换不会自动降级当前版本。',
+        updateRecovery: '新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。',
+        updateRolledBack: '上次更新未通过启动验证，已自动恢复到 {0}。',
+        previousVersion: '上一版本',
         product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。启动检查默认关闭。',
         engine: 'DeepSeek Harness', engineHint: '官方内核。仅推送通过 Portable 兼容验证的版本；启动检查默认关闭。',
         startupCheck: '启动时检查', checkUpdate: '检查更新',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用；可从系统托盘选择安装。',
-        incompatible: '此内核需要先更新 DSH-Portable。', updateUnavailable: '暂时无法连接更新服务。',
+        incompatible: '此内核需要先更新 DSH-Portable。', engineFollowsProduct: '预览版内核随 DSH-Portable 更新。', channelUnpublished: '此预览版尚未发布更新通道。', updateUnavailable: '暂时无法连接更新服务。',
         notifications: '任务完成通知', notificationsHint: '任务在后台完成时显示系统通知。',
         desktop: '桌面行为',
         close: '关闭窗口时', tray: '最小化到托盘', exit: '退出程序',
+        environments: '环境', environmentTitle: '独立环境', environmentHint: '每个环境分别保存会话、设置、凭据、插件和工作区；打开另一个环境不会中断当前任务。',
+        defaultEnvironment: '默认环境', newEnvironment: '新建环境', environmentName: '环境名称', createEnvironment: '创建并打开', environmentOpened: '已打开 {0}',
         on: '开启', off: '关闭',
         care: '维护', maintenance: '检查与修复', maintenanceHint: '检查不会修改文件；修复只重建可再生组件，并在下次启动时执行。',
         check: '运行检查', checking: '正在检查…', healthy: '未发现问题', issues: '发现 {0} 项问题',
@@ -38,14 +45,21 @@ window.__ModuleLoader__.load({
       en: {
         title: 'Portable',
         updates: 'Updates',
+        updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Beta',
+        updateChannelHint: 'Stable is recommended for daily use. Beta offers versions still under validation. Switching never downgrades the installed version.',
+        updateRecovery: 'If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact.',
+        updateRolledBack: 'The last update failed startup verification and automatically restored {0}.',
+        previousVersion: 'the previous version',
         product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations. Startup checks are off by default.',
         engine: 'DeepSeek Harness', engineHint: 'Official core. Only Portable-verified builds are offered; startup checks are off by default.',
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available; install it from the system tray.',
-        incompatible: 'Update DSH-Portable before installing this core.', updateUnavailable: 'The update service is unavailable right now.',
+        incompatible: 'Update DSH-Portable before installing this core.', engineFollowsProduct: 'Preview core updates are delivered with DSH-Portable.', channelUnpublished: 'No update channel has been published for this preview yet.', updateUnavailable: 'The update service is unavailable right now.',
         notifications: 'Task completion notifications', notificationsHint: 'Show a system notification when a background task finishes.',
         desktop: 'Desktop behavior',
         close: 'When closing the window', tray: 'Minimize to tray', exit: 'Exit application',
+        environments: 'Environments', environmentTitle: 'Isolated environments', environmentHint: 'Each environment keeps separate sessions, settings, credentials, plugins, and workspace. Opening another environment does not interrupt this one.',
+        defaultEnvironment: 'Default environment', newEnvironment: 'New environment', environmentName: 'Environment name', createEnvironment: 'Create and open', environmentOpened: 'Opened {0}',
         on: 'On', off: 'Off',
         care: 'Maintenance', maintenance: 'Check and repair', maintenanceHint: 'Checks are read-only. Repair only rebuilds generated components and runs on the next start.',
         check: 'Run check', checking: 'Checking…', healthy: 'No problems found', issues: '{0} issue(s) found',
@@ -72,6 +86,7 @@ window.__ModuleLoader__.load({
     const pendingDataExportRequests = new Map()
     const pendingDataImportRequests = new Map()
     const pendingHostRestartRequests = new Map()
+    const pendingEnvironmentRequests = new Map()
 
     const completeHostCapabilities = Object.freeze({
       pickDirectory: true,
@@ -79,8 +94,14 @@ window.__ModuleLoader__.load({
       openDataPackage: true,
       importData: true,
       restartHost: true,
+      openEnvironment: false,
       preferences: true,
       sessionProjection: true,
+    })
+
+    const webView2HostCapabilities = Object.freeze({
+      ...completeHostCapabilities,
+      openEnvironment: true,
     })
 
     function nativeHostTransport() {
@@ -93,7 +114,7 @@ window.__ModuleLoader__.load({
       }
       const webview = window.chrome?.webview
       if (webview?.postMessage && webview?.addEventListener) {
-        return { bridge: webview, capabilities: completeHostCapabilities }
+        return { bridge: webview, capabilities: webView2HostCapabilities }
       }
       return null
     }
@@ -147,6 +168,23 @@ window.__ModuleLoader__.load({
       })
     }
 
+    function openPortableEnvironment(environment) {
+      const host = nativeHostTransport()
+      if (!host || host.capabilities.openEnvironment !== true) return Promise.reject(new Error('Portable environments are unavailable on this host.'))
+      return new Promise((resolve, reject) => {
+        const requestId = `environment-open-${Date.now().toString(36)}-${++dataExportRequestSequence}`
+        const timeout = setTimeout(() => {
+          pendingEnvironmentRequests.delete(requestId)
+          reject(new Error('Portable environment did not open in time.'))
+        }, 10000)
+        pendingEnvironmentRequests.set(requestId, {
+          resolve: value => { clearTimeout(timeout); resolve(value) },
+          reject: error => { clearTimeout(timeout); reject(error) },
+        })
+        host.bridge.postMessage({ type: 'dsh-portable/open-environment', schemaVersion: 1, requestId, environment })
+      })
+    }
+
     function PortableSelector({ value, items, onSelect, label, primitives }) {
       const h = React.createElement
       const [open, setOpen] = React.useState(false)
@@ -171,6 +209,8 @@ window.__ModuleLoader__.load({
       const t = key => copy[lang][key] || key
       const [settings, setSettings] = useState(null)
       const [versions, setVersions] = useState({ portable: '', engine: '' })
+      const [lastUpdate, setLastUpdate] = useState(null)
+      const [environments, setEnvironments] = useState({ current: 'default', items: [{ id: 'default', name: '' }] })
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
       const [privatePassword, setPrivatePassword] = useState('')
@@ -179,6 +219,9 @@ window.__ModuleLoader__.load({
       const [importState, setImportState] = useState(null)
       const [maintenanceMenuOpen, setMaintenanceMenuOpen] = useState(false)
       const [dataDialog, setDataDialog] = useState('')
+      const [environmentDialog, setEnvironmentDialog] = useState(false)
+      const [environmentName, setEnvironmentName] = useState('')
+      const environmentsSupported = nativeHostTransport()?.capabilities.openEnvironment === true
       const statusRefs = React.useRef({})
       const setStatus = (key, value) => {
         setMessages(current => ({ ...current, [key]: value }))
@@ -191,6 +234,8 @@ window.__ModuleLoader__.load({
             if (!active) return
             setSettings(body.settings)
             setVersions(body.versions || { portable: '', engine: '' })
+            setLastUpdate(body.lastUpdate || null)
+            if (body.environments) setEnvironments(body.environments)
             if (body.lastRepair?.needsFullPackage) setStatus('maintenance', t('fullPackage'))
             else if (body.lastRepair?.ok) setStatus('maintenance', t('repaired'))
           })
@@ -207,6 +252,32 @@ window.__ModuleLoader__.load({
           setSettings(body.settings)
           postToNativeHost({ type: 'dsh-portable/preferences', schemaVersion: 1, ...body.settings }, 'preferences')
         }).catch(error => setStatus('portable', format(t('failed'), error.message || error)))
+      }
+      const openEnvironment = async id => {
+        if (id === environments.current) return
+        const item = environments.items.find(candidate => candidate.id === id)
+        try {
+          await openPortableEnvironment(id)
+          setStatus('environment', format(t('environmentOpened'), item?.name || id))
+        } catch (error) { setStatus('environment', format(t('failed'), error.message || error)) }
+      }
+      const createEnvironment = async () => {
+        if (!environmentName.trim()) return
+        setBusy('environment-create')
+        try {
+          const response = await fetch('/dsh-portable/environments', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: environmentName }),
+          })
+          const body = await response.json()
+          if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`)
+          const nextEnvironments = { current: body.current, items: body.items }
+          setEnvironments(nextEnvironments)
+          setEnvironmentDialog(false)
+          setEnvironmentName('')
+          await openPortableEnvironment(body.created.id)
+          setStatus('environment', format(t('environmentOpened'), body.created.name || body.created.id))
+        } catch (error) { setStatus('environment', format(t('failed'), error.message || error)) }
+        finally { setBusy('') }
       }
       const action = (name, path) => {
         setBusy(name); setStatus('maintenance', '')
@@ -243,6 +314,8 @@ window.__ModuleLoader__.load({
           if (body.status === 'current') setStatus(name, t('current'))
           else if (body.status === 'available' || body.status === 'full-package-required') setStatus(name, format(t('available'), body.latest || ''))
           else if (body.status === 'core-incompatible') setStatus(name, t('incompatible'))
+          else if (body.status === 'engine-follows-product') setStatus(name, t('engineFollowsProduct'))
+          else if (body.status === 'channel-unpublished') setStatus(name, t('channelUnpublished'))
           else setStatus(name, t('updateUnavailable'))
         }).catch(error => setStatus(name, format(t('failed'), error.message || error))).finally(() => setBusy(''))
       }
@@ -373,8 +446,40 @@ window.__ModuleLoader__.load({
             busy === `update-${scope}` ? t('checking') : t('checkUpdate'))))
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
         h('div', { style: styles.sectionHeading }, t('updates')),
+        h('div', { style: styles.item },
+          h('div', { style: styles.text },
+            h('div', { style: styles.label }, t('updateChannel')),
+            h('div', { style: styles.hint }, t('updateChannelHint')),
+            h('div', { style: styles.hint }, t('updateRecovery')),
+            lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
+              format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion')))),
+          h(PortableSelector, {
+            primitives, value: settings.updateChannel || 'stable', label: t('updateChannel'),
+            items: [{ id: 'stable', label: t('stableChannel') }, { id: 'candidate', label: t('betaChannel') }],
+            onSelect: updateChannel => {
+              setMessages(current => ({ ...current, 'update-product': '', 'update-engine': '' }))
+              update({ updateChannel })
+            },
+          })),
         updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
         updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint')))
+      const environmentItems = environments.items.map(item => ({
+        id: item.id,
+        label: item.id === 'default' ? t('defaultEnvironment') : item.name || item.id,
+      }))
+      const environmentSection = environmentsSupported && h('section', { style: styles.section, 'aria-label': t('environments') },
+        h('div', { style: styles.sectionHeading }, t('environments')),
+        h('div', { style: styles.item },
+          h('div', { style: styles.text },
+            h('div', { style: styles.label }, t('environmentTitle')),
+            h('div', { style: styles.hint }, t('environmentHint')),
+            inlineStatus('environment')),
+          h('div', { style: styles.rowActions },
+            h(PortableSelector, {
+              primitives, value: environments.current, label: t('environmentTitle'), items: environmentItems,
+              onSelect: openEnvironment,
+            }),
+            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setEnvironmentDialog(true) }, t('newEnvironment')))))
       const desktopSection = h('section', { style: styles.section, 'aria-label': t('desktop') },
         h('div', { style: styles.sectionHeading }, t('desktop')),
         booleanRow('taskNotificationsEnabled', t('notifications'), t('notificationsHint')),
@@ -408,6 +513,17 @@ window.__ModuleLoader__.load({
             h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
             maintenanceMenu)))
       const privatePasswordMismatch = privatePasswordConfirm.length > 0 && privatePassword !== privatePasswordConfirm
+      const environmentCreateDialog = environmentDialog ? h(primitives.Modal, {
+        open: true,
+        onClose: () => { setEnvironmentDialog(false); setEnvironmentName('') },
+        title: t('newEnvironment'),
+        description: t('environmentHint'),
+        footer: h(React.Fragment, null,
+          h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: () => { setEnvironmentDialog(false); setEnvironmentName('') } }, t('cancel')),
+          h(primitives.Button, { variant: 'primary', disabled: Boolean(busy) || !environmentName.trim(), onClick: createEnvironment }, busy === 'environment-create' ? t('checking') : t('createEnvironment'))),
+      }, h('label', { style: styles.modalField },
+        h('span', { style: styles.modalLabel }, t('environmentName')),
+        h(primitives.Input, { style: styles.modalInput, maxLength: 40, value: environmentName, onChange: event => setEnvironmentName(event.target.value), autoFocus: true }))) : null
       const privateDialog = dataDialog === 'private' ? h(primitives.Modal, {
         open: true,
         onClose: closePrivateDialog,
@@ -463,10 +579,12 @@ window.__ModuleLoader__.load({
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
         inlineStatus('portable'),
+        environmentSection,
         updatesSection,
         desktopSection,
         careSection,
         dataSection,
+        environmentCreateDialog,
         privateDialog,
         importPasswordDialog,
         importConfirmDialog)
@@ -651,6 +769,15 @@ window.__ModuleLoader__.load({
             else pending.reject(new Error(String(message.error || 'Portable restart was refused.')))
             return
           }
+          if (message.type === 'dsh-portable/open-environment-result' && message.schemaVersion === 1) {
+            const requestId = String(message.requestId || '')
+            const pending = pendingEnvironmentRequests.get(requestId)
+            if (!pending) return
+            pendingEnvironmentRequests.delete(requestId)
+            if (message.ok === true) pending.resolve(message)
+            else pending.reject(new Error(String(message.error || 'Portable environment could not be opened.')))
+            return
+          }
           if (message.type === 'dsh-portable/download') {
             applyNativeDownload(ctx, message)
             return
@@ -694,6 +821,8 @@ window.__ModuleLoader__.load({
           pendingDataImportRequests.clear()
           for (const pending of pendingHostRestartRequests.values()) pending.reject(new Error('Portable host closed.'))
           pendingHostRestartRequests.clear()
+          for (const pending of pendingEnvironmentRequests.values()) pending.reject(new Error('Portable host closed.'))
+          pendingEnvironmentRequests.clear()
           if (window.__DSH_PORTABLE_HOST__?.restart === restartPortableHost) delete window.__DSH_PORTABLE_HOST__
           webview.removeEventListener?.('message', receive)
           stopSessions?.()

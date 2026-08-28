@@ -14,6 +14,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Web.Script.Serialization;
@@ -25,8 +26,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.5.2.65534")]
-[assembly: AssemblyFileVersion("0.5.2.65534")]
+[assembly: AssemblyVersion("0.6.0.1")]
+[assembly: AssemblyFileVersion("0.6.0.1")]
 
 namespace DshPortable
 {
@@ -329,8 +330,6 @@ namespace DshPortable
 
     internal sealed class LauncherWindow : Form
     {
-        internal const int WmPortableExit = 0x8043;
-        internal const int WmPortableRestore = 0x8044;
         private const int WmClose = 0x0010;
         private const uint GwOwner = 4;
         private enum WindowCloseBehavior { Tray, Exit }
@@ -379,6 +378,10 @@ namespace DshPortable
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly Dictionary<string, bool> taskCompletionState = new Dictionary<string, bool>(StringComparer.Ordinal);
         private readonly string root;
+        private readonly string environmentId;
+        private readonly string stateRoot;
+        private readonly int restoreMessage;
+        private readonly int exitMessage;
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
         private readonly bool desktopStart;
@@ -397,6 +400,7 @@ namespace DshPortable
         private bool updateInteractionRunning;
         private bool updateCheckEnabled;
         private bool engineUpdateCheckEnabled;
+        private string updateChannel;
         private bool taskNotificationsEnabled;
         private bool taskCompletionBaselineReady;
         private WindowCloseBehavior closeBehavior;
@@ -414,9 +418,13 @@ namespace DshPortable
         private int ownedWebViewBrowserProcessId;
         private bool testWebViewBusyInjected;
 
-        internal LauncherWindow(string[] args)
+        internal LauncherWindow(string[] args, string selectedEnvironmentId, string selectedStateRoot, int environmentRestoreMessage, int environmentExitMessage)
         {
             root = Path.GetDirectoryName(Application.ExecutablePath);
+            environmentId = selectedEnvironmentId;
+            stateRoot = selectedStateRoot;
+            restoreMessage = environmentRestoreMessage;
+            exitMessage = environmentExitMessage;
             launcherArgs = ResolveArguments(args);
             nonInteractive = Array.Exists(launcherArgs, item =>
                 string.Equals(item, "--json", StringComparison.OrdinalIgnoreCase)
@@ -545,6 +553,7 @@ namespace DshPortable
             closeBehavior = LoadCloseBehavior();
             updateCheckEnabled = LoadUpdateCheckEnabled("productUpdateCheckEnabled");
             engineUpdateCheckEnabled = LoadUpdateCheckEnabled("engineUpdateCheckEnabled");
+            updateChannel = LoadUpdateChannel();
             taskNotificationsEnabled = LoadTaskNotificationsEnabled();
             closeBehaviorItem = new ToolStripMenuItem(L("关闭窗口时", "When closing"));
             closeBehaviorItem.Click += delegate
@@ -630,7 +639,6 @@ namespace DshPortable
                 ApplyDesktopChrome();
             }
             CenterLaunchContent();
-            ClientSizeChanged += delegate { FitWebViewToClient(); };
             ResizeEnd += delegate { SaveDesktopWindowState(); };
             Shown += async delegate
             {
@@ -642,6 +650,7 @@ namespace DshPortable
                 }
                 await RunLauncherAsync();
             };
+            if (desktopStart) RegisterDesktopHostProcess();
         }
 
         protected override void OnFormClosing(FormClosingEventArgs eventArgs)
@@ -664,12 +673,12 @@ namespace DshPortable
 
         protected override void WndProc(ref Message message)
         {
-            if (message.Msg == WmPortableExit)
+            if (message.Msg == exitMessage)
             {
                 if (!shutdownRunning) BeginDesktopShutdown();
                 return;
             }
-            if (message.Msg == WmPortableRestore)
+            if (message.Msg == restoreMessage)
             {
                 RestoreFromTray();
                 return;
@@ -682,6 +691,7 @@ namespace DshPortable
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
             Color background = dark ? Color.FromArgb(24, 24, 26) : Color.FromArgb(248, 248, 248);
             Color foreground = dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(35, 35, 35);
+            BackColor = background;
             launchPanel.BackColor = background;
             launchContent.BackColor = background;
             productLabel.BackColor = background;
@@ -692,6 +702,7 @@ namespace DshPortable
             progressDetail.ForeColor = statusLabel.ForeColor;
             activityRing.TrackColor = dark ? Color.FromArgb(53, 53, 57) : Color.FromArgb(226, 228, 232);
             activityRing.IndicatorColor = dark ? Color.FromArgb(242, 242, 244) : Color.FromArgb(27, 28, 30);
+            if (webView != null && !webView.IsDisposed) webView.DefaultBackgroundColor = background;
             if (desktopStart && IsHandleCreated)
             {
                 int darkMode = dark ? 1 : 0;
@@ -842,7 +853,7 @@ namespace DshPortable
                     Process.Start(new ProcessStartInfo
                     {
                         FileName = command,
-                        Arguments = "--terminal",
+                        Arguments = "--terminal --environment " + QuoteArgument(environmentId),
                         WorkingDirectory = root,
                         UseShellExecute = true,
                         WindowStyle = ProcessWindowStyle.Normal,
@@ -1134,7 +1145,7 @@ namespace DshPortable
             {
                 if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
                     WriteLauncherLog("workspace-picker", "web-message-rejected source=" + eventArgs.Source
-                        + " expected=" + (applicationUri == null ? "" : applicationUri.AbsoluteUri));
+                        + " expected=" + (applicationUri == null ? "" : SafeWorkspaceUrl(applicationUri.AbsoluteUri)));
                 return;
             }
             try
@@ -1165,6 +1176,13 @@ namespace DshPortable
                         if (hasProduct) updateCheckEnabled = (bool)value;
                         if (message.TryGetValue("engineUpdateCheckEnabled", out value) && value is bool)
                             engineUpdateCheckEnabled = (bool)value;
+                        if (message.TryGetValue("updateChannel", out value))
+                        {
+                            string requestedChannel = Convert.ToString(value);
+                            if (String.Equals(requestedChannel, "stable", StringComparison.OrdinalIgnoreCase)
+                                || String.Equals(requestedChannel, "candidate", StringComparison.OrdinalIgnoreCase))
+                                updateChannel = requestedChannel.ToLowerInvariant();
+                        }
                         if (!hasProduct && message.TryGetValue("updateCheckEnabled", out value) && value is bool)
                             updateCheckEnabled = engineUpdateCheckEnabled = (bool)value;
                         if (message.TryGetValue("taskNotificationsEnabled", out value) && value is bool)
@@ -1175,6 +1193,21 @@ namespace DshPortable
                         SaveLauncherSettings();
                         RebuildTrayMenu();
                     });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/open-environment", StringComparison.Ordinal))
+                {
+                    object requestValue;
+                    object environmentValue;
+                    string requestId = message.TryGetValue("requestId", out requestValue)
+                        ? Convert.ToString(requestValue)
+                        : String.Empty;
+                    string requestedEnvironment = message.TryGetValue("environment", out environmentValue)
+                        ? Convert.ToString(environmentValue)
+                        : String.Empty;
+                    if (!Regex.IsMatch(requestId ?? String.Empty, "^environment-open-[A-Za-z0-9-]{1,96}$")) return;
+                    BeginInvoke((MethodInvoker)delegate { OpenPortableEnvironment(requestId, requestedEnvironment); });
                     return;
                 }
                 if (message != null && message.TryGetValue("type", out messageType)
@@ -1298,6 +1331,42 @@ namespace DshPortable
             if (restartAfterShutdown) BeginDesktopShutdown();
         }
 
+        private void OpenPortableEnvironment(string requestId, string requestedEnvironment)
+        {
+            Dictionary<string, object> result = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/open-environment-result" },
+                { "schemaVersion", 1 },
+                { "requestId", requestId },
+            };
+            string selected;
+            try
+            {
+                selected = ResolveEnvironmentId(new[] { "--environment", requestedEnvironment });
+                if (String.Equals(selected, environmentId, StringComparison.Ordinal)) RestoreFromTray();
+                else
+                {
+                    string targetStateRoot = ResolveStateRoot(root, selected);
+                    if (!String.Equals(selected, "default", StringComparison.Ordinal) && !Directory.Exists(targetStateRoot))
+                        throw new DirectoryNotFoundException(L("这个环境已不存在。", "This environment no longer exists."));
+                    PortableProcessJob.StartDetachedProcess(Application.ExecutablePath, new[] { "--environment", selected });
+                }
+                result["ok"] = true;
+                result["environment"] = selected;
+            }
+            catch (Exception error)
+            {
+                result["ok"] = false;
+                result["error"] = error.GetBaseException().Message;
+            }
+            try
+            {
+                if (webView != null && webView.CoreWebView2 != null)
+                    webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
+            }
+            catch { }
+        }
+
         private void ShowWorkspaceDirectoryPicker(string requestId)
         {
             if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
@@ -1317,7 +1386,7 @@ namespace DshPortable
                 {
                     dialog.Description = L("选择工作区文件夹", "Select a workspace folder");
                     dialog.ShowNewFolderButton = true;
-                    string portableWorkspace = Path.Combine(root, "workspace");
+                    string portableWorkspace = Path.Combine(stateRoot, "workspace");
                     if (Directory.Exists(portableWorkspace)) dialog.SelectedPath = portableWorkspace;
                     using (System.Threading.Timer automation = ArmOwnedDialogCancellationAutomation(Handle, "workspace-picker"))
                     {
@@ -1545,14 +1614,25 @@ namespace DshPortable
 
         private void RestartAfterDataImport()
         {
-            PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, new[]
-            {
-                "--dsh-restart-after-pid",
-                Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
-            });
+            PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, RestartArguments());
             allowClose = true;
             DisposeTrayIcon();
             Close();
+        }
+
+        private string[] RestartArguments()
+        {
+            List<string> result = new List<string>
+            {
+                "--dsh-restart-after-pid",
+                Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
+            };
+            if (!String.Equals(environmentId, "default", StringComparison.Ordinal))
+            {
+                result.Add("--environment");
+                result.Add(environmentId);
+            }
+            return result.ToArray();
         }
 
         private void DisposeTrayIcon()
@@ -1562,14 +1642,15 @@ namespace DshPortable
 
         private string ResolveProductDataRoot()
         {
-            if (File.Exists(Path.Combine(root, "installed-mode.json")))
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data");
-            return Path.Combine(root, "data");
+            return Path.Combine(stateRoot, "data");
         }
 
         private string LauncherSettingsPath()
         {
-            return Path.Combine(ResolveProductDataRoot(), "launcher-settings.json");
+            string settingsRoot = String.Equals(environmentId, "default", StringComparison.Ordinal)
+                ? stateRoot
+                : Directory.GetParent(Directory.GetParent(stateRoot).FullName).FullName;
+            return Path.Combine(settingsRoot, "data", "launcher-settings.json");
         }
 
         private string DesktopWindowStatePath()
@@ -1685,6 +1766,24 @@ namespace DshPortable
             catch { return true; }
         }
 
+        private string LoadUpdateChannel()
+        {
+            try
+            {
+                string source = File.ReadAllText(LauncherSettingsPath(), Encoding.UTF8);
+                Match explicitValue = Regex.Match(source, "\\\"updateChannel\\\"\\s*:\\s*\\\"(stable|candidate)\\\"", RegexOptions.IgnoreCase);
+                if (explicitValue.Success) return explicitValue.Groups[1].Value.ToLowerInvariant();
+            }
+            catch { }
+            try
+            {
+                string source = File.ReadAllText(Path.Combine(root, "licenses", "COMPONENTS.json"), Encoding.UTF8);
+                if (Regex.IsMatch(source, "\\\"releaseChannel\\\"\\s*:\\s*\\\"candidate\\\"", RegexOptions.IgnoreCase)) return "candidate";
+            }
+            catch { }
+            return "stable";
+        }
+
         private void SaveCloseBehavior(WindowCloseBehavior behavior)
         {
             closeBehavior = behavior;
@@ -1698,7 +1797,9 @@ namespace DshPortable
             Directory.CreateDirectory(Path.GetDirectoryName(filename));
             string close = closeBehavior == WindowCloseBehavior.Exit ? "exit" : "tray";
             File.WriteAllText(temporary,
-                "{\"schemaVersion\":2,\"closeBehavior\":\"" + close + "\",\"updateCheckEnabled\":"
+                "{\"schemaVersion\":2,\"closeBehavior\":\"" + close + "\",\"updateChannel\":\""
+                    + (String.Equals(updateChannel, "candidate", StringComparison.OrdinalIgnoreCase) ? "candidate" : "stable")
+                    + "\",\"updateCheckEnabled\":"
                     + (updateCheckEnabled ? "true" : "false") + ",\"productUpdateCheckEnabled\":"
                     + (updateCheckEnabled ? "true" : "false") + ",\"engineUpdateCheckEnabled\":"
                     + (engineUpdateCheckEnabled ? "true" : "false") + ",\"taskNotificationsEnabled\":"
@@ -1726,6 +1827,7 @@ namespace DshPortable
         protected override void OnFormClosed(FormClosedEventArgs eventArgs)
         {
             SaveDesktopWindowState();
+            UnregisterDesktopHostProcess();
             DisposeTrayIcon();
             trayIcon.Dispose();
             base.OnFormClosed(eventArgs);
@@ -1779,11 +1881,7 @@ namespace DshPortable
             allowClose = true;
             if (restartAfterShutdown)
             {
-                PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, new[]
-                {
-                    "--dsh-restart-after-pid",
-                    Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture),
-                });
+                PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, RestartArguments());
             }
             DisposeTrayIcon();
             WriteLauncherLog("shutdown", "complete");
@@ -2055,7 +2153,7 @@ namespace DshPortable
                 "ForEach-Object { \"pid=$($_.ProcessId) ppid=$($_.ParentProcessId) name=$($_.Name)\" })";
             ProcessStartInfo start = new ProcessStartInfo
             {
-                FileName = "powershell.exe",
+                FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
                 Arguments = "-NoProfile -NonInteractive -Command " + QuoteArgument(script),
                 UseShellExecute = false,
                 CreateNoWindow = true,
@@ -2088,48 +2186,175 @@ namespace DshPortable
             return name.StartsWith("Stop ", StringComparison.OrdinalIgnoreCase) ? new[] { "stop" } : new[] { "start" };
         }
 
+        private static string ResolveCommand(string[] args)
+        {
+            string[] commands = new[]
+            {
+                "start", "stop", "status", "open", "doctor", "repair", "support-report",
+                "backup-data", "inspect-data", "restore-data", "runtime-cache-status",
+                "runtime-cache-clean", "check-update", "defer-update", "ignore-update", "update",
+            };
+            string[] valuedOptions = new[]
+            {
+                "--environment", "--wait-for-lock-ms", "--update-manifest", "--scope", "--channel", "--output",
+                "--input", "--password-file", "--categories", "--conflict",
+            };
+            string[] source = args ?? new string[0];
+            for (int index = 0; index < source.Length; index += 1)
+            {
+                string item = source[index];
+                if (valuedOptions.Contains(item, StringComparer.OrdinalIgnoreCase))
+                {
+                    index += 1;
+                    continue;
+                }
+                string command = commands.FirstOrDefault(value => String.Equals(value, item, StringComparison.OrdinalIgnoreCase));
+                if (command != null) return command;
+            }
+            return "start";
+        }
+
+        internal static string ResolveEnvironmentId(string[] args)
+        {
+            string value = "default";
+            string[] source = args ?? new string[0];
+            for (int index = 0; index < source.Length; index += 1)
+            {
+                if (!String.Equals(source[index], "--environment", StringComparison.OrdinalIgnoreCase)) continue;
+                if (index + 1 >= source.Length) throw new ArgumentException("--environment requires a value.");
+                value = source[index + 1].Trim().ToLowerInvariant();
+                break;
+            }
+            if (!Regex.IsMatch(value, "^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$", RegexOptions.CultureInvariant)
+                || Regex.IsMatch(value, "^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                throw new ArgumentException("Portable environment must be a 1-32 character slug using letters, numbers, dots, dashes, or underscores.");
+            return value;
+        }
+
+        internal static string ResolveStateRoot(string executableRoot, string selectedEnvironmentId)
+        {
+            string configuredRoot = Environment.GetEnvironmentVariable("DSH_PORTABLE_STATE_ROOT");
+            string baseRoot = !String.IsNullOrWhiteSpace(configuredRoot)
+                ? Path.GetFullPath(configuredRoot)
+                : File.Exists(Path.Combine(executableRoot, "installed-mode.json"))
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness")
+                    : executableRoot;
+            return String.Equals(selectedEnvironmentId, "default", StringComparison.Ordinal)
+                ? baseRoot
+                : Path.Combine(baseRoot, "environments", selectedEnvironmentId);
+        }
+
+        internal static string ResolveEnvironmentInstanceKey(string executableRoot, string selectedEnvironmentId)
+        {
+            string identity = Path.GetFullPath(executableRoot).ToUpperInvariant() + "\n" + selectedEnvironmentId;
+            using (SHA256 hash = SHA256.Create())
+                return BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(identity)), 0, 16).Replace("-", "").ToLowerInvariant();
+        }
+
+        internal static int RegisterEnvironmentRestoreMessage(string instanceKey)
+        {
+            uint message = RegisterWindowMessage("DSHPortable.Restore." + instanceKey);
+            if (message == 0) throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not register the Portable restore message.");
+            return unchecked((int)message);
+        }
+
+        internal static int RegisterEnvironmentExitMessage(string instanceKey)
+        {
+            uint message = RegisterWindowMessage("DSHPortable.Exit." + instanceKey);
+            if (message == 0) throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not register the Portable exit message.");
+            return unchecked((int)message);
+        }
+
+        internal static bool IsStartInvocation(string[] args)
+        {
+            return String.Equals(ResolveCommand(args), "start", StringComparison.OrdinalIgnoreCase);
+        }
+
         private static bool IsStopCommand(string[] args)
         {
-            return args.Length > 0 && string.Equals(args[0], "stop", StringComparison.OrdinalIgnoreCase);
+            return String.Equals(ResolveCommand(args), "stop", StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool IsStartCommand(string[] args)
         {
-            return args.Length > 0 && string.Equals(args[0], "start", StringComparison.OrdinalIgnoreCase);
+            return IsStartInvocation(args);
         }
 
         private void CloseOwnedDesktopHost()
         {
             string expected = Path.GetFullPath(Path.Combine(root, "DeepSeek-Herness.exe"));
             int currentProcessId = Process.GetCurrentProcess().Id;
-            foreach (Process process in Process.GetProcessesByName("DeepSeek-Herness"))
+            int targetProcessId;
+            try
             {
-                using (process)
+                if (!Int32.TryParse(File.ReadAllText(DesktopHostStatePath(), Encoding.ASCII).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out targetProcessId))
+                    throw new InvalidDataException();
+            }
+            catch (FileNotFoundException) { return; }
+            catch (DirectoryNotFoundException) { return; }
+            catch
+            {
+                throw new InvalidOperationException(L("DeepSeek-Herness 原生窗口状态无效。", "The DeepSeek-Herness window state is invalid."));
+            }
+            if (targetProcessId == currentProcessId) return;
+            Process process;
+            try { process = Process.GetProcessById(targetProcessId); }
+            catch (ArgumentException)
+            {
+                try { File.Delete(DesktopHostStatePath()); } catch { }
+                return;
+            }
+            using (process)
+            {
+                string candidate;
+                try { candidate = Path.GetFullPath(process.MainModule.FileName); }
+                catch { throw new InvalidOperationException(L("无法验证 DeepSeek-Herness 原生窗口。", "Could not verify the DeepSeek-Herness window.")); }
+                if (!string.Equals(candidate, expected, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidOperationException(L("DeepSeek-Herness 原生窗口身份不匹配。", "The DeepSeek-Herness window identity does not match."));
+                bool signaled = false;
+                EnumWindows(delegate(IntPtr window, IntPtr value)
                 {
-                    if (process.Id == currentProcessId) continue;
-                    string candidate;
-                    try { candidate = Path.GetFullPath(process.MainModule.FileName); }
-                    catch { continue; }
-                    if (!string.Equals(candidate, expected, StringComparison.OrdinalIgnoreCase)) continue;
-                    bool signaled = false;
-                    EnumWindows(delegate(IntPtr window, IntPtr value)
-                    {
-                        uint processId;
-                        GetWindowThreadProcessId(window, out processId);
-                        if (processId != (uint)process.Id) return true;
-                        signaled = PostMessage(window, WmPortableExit, IntPtr.Zero, IntPtr.Zero) || signaled;
-                        return true;
-                    }, IntPtr.Zero);
-                    if (!signaled)
-                        throw new InvalidOperationException(L("DeepSeek-Herness 原生窗口无法接收退出请求。", "The DeepSeek-Herness window could not receive the exit request."));
-                    if (!process.WaitForExit(45000))
-                    {
-                        string details = String.Join("\r\n", OwnedWebViewProcessDiagnostics());
-                        throw new TimeoutException(L("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。", "DeepSeek-Herness did not exit within 45 seconds.")
-                            + (String.IsNullOrEmpty(details) ? "" : "\r\n" + details));
-                    }
+                    uint processId;
+                    GetWindowThreadProcessId(window, out processId);
+                    if (processId != (uint)process.Id) return true;
+                    signaled = PostMessage(window, exitMessage, IntPtr.Zero, IntPtr.Zero) || signaled;
+                    return true;
+                }, IntPtr.Zero);
+                if (!signaled)
+                    throw new InvalidOperationException(L("DeepSeek-Herness 原生窗口无法接收退出请求。", "The DeepSeek-Herness window could not receive the exit request."));
+                if (!process.WaitForExit(45000))
+                {
+                    string details = String.Join("\r\n", OwnedWebViewProcessDiagnostics());
+                    throw new TimeoutException(L("DeepSeek-Herness 原生窗口未能在 45 秒内正常退出。", "DeepSeek-Herness did not exit within 45 seconds.")
+                        + (String.IsNullOrEmpty(details) ? "" : "\r\n" + details));
                 }
             }
+        }
+
+        private string DesktopHostStatePath()
+        {
+            return Path.Combine(stateRoot, "data", "runtime", "desktop-host.pid");
+        }
+
+        private void RegisterDesktopHostProcess()
+        {
+            string filename = DesktopHostStatePath();
+            Directory.CreateDirectory(Path.GetDirectoryName(filename));
+            File.WriteAllText(filename, Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture), Encoding.ASCII);
+        }
+
+        private void UnregisterDesktopHostProcess()
+        {
+            if (!desktopStart) return;
+            string filename = DesktopHostStatePath();
+            try
+            {
+                int recorded;
+                if (Int32.TryParse(File.ReadAllText(filename, Encoding.ASCII).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out recorded)
+                    && recorded == Process.GetCurrentProcess().Id)
+                    File.Delete(filename);
+            }
+            catch { }
         }
 
         private delegate bool EnumWindowsCallback(IntPtr window, IntPtr value);
@@ -2151,6 +2376,9 @@ namespace DshPortable
 
         [DllImport("user32.dll")]
         private static extern bool PostMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern uint RegisterWindowMessage(string message);
 
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(
@@ -2367,6 +2595,22 @@ namespace DshPortable
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                if (updateStatus == "channel-unpublished")
+                {
+                    if (!manual) return;
+                    MessageBox.Show(this,
+                        L("此预览版尚未发布更新通道。", "No update channel has been published for this preview yet."),
+                        L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (updateStatus == "engine-follows-product")
+                {
+                    if (!manual) return;
+                    MessageBox.Show(this,
+                        L("预览版内核随 DSH-Portable 更新。", "Preview core updates are delivered with DSH-Portable."),
+                        L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
                 if (updateStatus == "full-package-required")
                 {
                     if (!trayBridgeReady)
@@ -2387,6 +2631,7 @@ namespace DshPortable
                             L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
+                    if (!EnsureNoOtherRunningEnvironmentHosts(manual)) return;
                     int choice = ShowUpdateChoiceDialog(current, latest, engineCurrent, engineLatest, true);
                     if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl);
                     else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--scope", scope, "--json" }));
@@ -2414,6 +2659,7 @@ namespace DshPortable
                         L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
+                if (!EnsureNoOtherRunningEnvironmentHosts(manual)) return;
 
                 DialogResult accepted = MessageBox.Show(this,
                     UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
@@ -2520,6 +2766,75 @@ namespace DshPortable
             BeginDesktopShutdown();
         }
 
+        private List<string> OtherRunningEnvironmentHosts()
+        {
+            string baseRoot = File.Exists(Path.Combine(root, "installed-mode.json"))
+                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness")
+                : root;
+            List<Tuple<string, string>> candidates = new List<Tuple<string, string>>
+            {
+                Tuple.Create("default", baseRoot),
+            };
+            string environmentsRoot = Path.Combine(baseRoot, "environments");
+            if (Directory.Exists(environmentsRoot))
+            {
+                foreach (string directory in Directory.GetDirectories(environmentsRoot))
+                {
+                    string id = Path.GetFileName(directory).ToLowerInvariant();
+                    if (!Regex.IsMatch(id, "^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$", RegexOptions.CultureInvariant)
+                        || Regex.IsMatch(id, "^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) continue;
+                    candidates.Add(Tuple.Create(id, directory));
+                }
+            }
+
+            string expected = Path.GetFullPath(Path.Combine(root, "DeepSeek-Herness.exe"));
+            string currentStateRoot = Path.GetFullPath(stateRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            List<string> running = new List<string>();
+            foreach (Tuple<string, string> candidate in candidates)
+            {
+                string candidateRoot = Path.GetFullPath(candidate.Item2).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                if (String.Equals(candidateRoot, currentStateRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                string stateFile = Path.Combine(candidateRoot, "data", "runtime", "desktop-host.pid");
+                int pid;
+                try
+                {
+                    if (!Int32.TryParse(File.ReadAllText(stateFile, Encoding.ASCII).Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out pid)) continue;
+                }
+                catch (FileNotFoundException) { continue; }
+                catch (DirectoryNotFoundException) { continue; }
+                catch { running.Add(candidate.Item1); continue; }
+                if (pid == Process.GetCurrentProcess().Id) continue;
+                try
+                {
+                    using (Process process = Process.GetProcessById(pid))
+                    {
+                        string executable = Path.GetFullPath(process.MainModule.FileName);
+                        if (String.Equals(executable, expected, StringComparison.OrdinalIgnoreCase)) running.Add(candidate.Item1);
+                    }
+                }
+                catch (ArgumentException)
+                {
+                    try { File.Delete(stateFile); } catch { }
+                }
+                catch { running.Add(candidate.Item1); }
+            }
+            return running.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private bool EnsureNoOtherRunningEnvironmentHosts(bool manual)
+        {
+            List<string> running = OtherRunningEnvironmentHosts();
+            if (running.Count == 0) return true;
+            if (manual)
+            {
+                MessageBox.Show(this,
+                    L("其他便携环境仍在运行。请先关闭后再更新：", "Other Portable environments are still running. Close them before updating: ")
+                        + String.Join(", ", running),
+                    L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            return false;
+        }
+
         private async Task RestoreDesktopAfterUpdateAttemptAsync()
         {
             try
@@ -2547,6 +2862,22 @@ namespace DshPortable
                 if (webViewStartupTrace.Count < 32) webViewStartupTrace.Add(elapsed + "ms " + phase);
             }
             WriteLauncherLog("startup", elapsed + "ms " + phase);
+        }
+
+        private static string WorkspaceOriginPath(string value)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(value, UriKind.Absolute, out uri)) return String.Empty;
+            return (uri.GetLeftPart(UriPartial.Authority) + uri.AbsolutePath)
+                .TrimEnd('/');
+        }
+
+        private static string SafeWorkspaceUrl(string value)
+        {
+            Uri uri;
+            return Uri.TryCreate(value, UriKind.Absolute, out uri)
+                ? uri.GetLeftPart(UriPartial.Path)
+                : String.Empty;
         }
 
         private void OnWebViewProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs eventArgs)
@@ -2595,7 +2926,7 @@ namespace DshPortable
                 if (launchPanel.Visible) launchPanel.BringToFront();
             }
             else launchPanel.BringToFront();
-            RecordWebViewPhase("navigation-start:" + url);
+            RecordWebViewPhase("navigation-start:" + SafeWorkspaceUrl(url));
             webView.CoreWebView2.Navigate(url);
             Task timeout = Task.Delay(WorkspaceNavigationTimeoutMs);
             Task winner = await Task.WhenAny(workspaceUsable.Task, navigation.Task, webViewProcessFailure.Task, timeout);
@@ -2662,10 +2993,44 @@ namespace DshPortable
             catch (EntryPointNotFoundException) { }
             launchPanel.Visible = false;
             WriteLauncherLog("startup", "dsh-first-paint-ready");
+            bool updateHealthReady = WriteUpdateHealthMarker();
+            if (updateHealthReady && String.Equals(
+                Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"),
+                "1",
+                StringComparison.Ordinal))
+            {
+                BeginInvoke(new Action(BeginDesktopShutdown));
+            }
             if (!hiddenForAutomation)
             {
                 ShowInTaskbar = true;
                 if (Opacity < 1) Opacity = 1;
+            }
+        }
+
+        private bool WriteUpdateHealthMarker()
+        {
+            string filename = Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_FILE");
+            string token = Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_TOKEN");
+            if (String.IsNullOrWhiteSpace(filename) || !Regex.IsMatch(token ?? String.Empty, "^[0-9a-f]{32}$", RegexOptions.IgnoreCase)) return false;
+            try
+            {
+                string full = Path.GetFullPath(filename);
+                string runtime = Path.GetFullPath(Path.Combine(ResolveProductDataRoot(), "runtime"))
+                    .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                if (!full.StartsWith(runtime, StringComparison.OrdinalIgnoreCase)) return false;
+                string temporary = full + ".tmp";
+                Directory.CreateDirectory(Path.GetDirectoryName(full));
+                File.WriteAllText(temporary, token + "\r\n", new UTF8Encoding(false));
+                if (File.Exists(full)) File.Replace(temporary, full, null, true);
+                else File.Move(temporary, full);
+                WriteLauncherLog("update-health", "workspace-ready");
+                return true;
+            }
+            catch (Exception error)
+            {
+                WriteLauncherLog("update-health", "marker-failed " + error.GetBaseException().Message);
+                return false;
             }
         }
 
@@ -2689,11 +3054,11 @@ namespace DshPortable
 
         private async Task<string> WaitForWorkspaceHandoffAsync(string expectedUrl, Task<string> nativeHandoff)
         {
-            string expected = json.Serialize(expectedUrl.TrimEnd('/'));
+            string expected = json.Serialize(WorkspaceOriginPath(expectedUrl));
             string script = "(function(){try{"
                 + "var expected=" + expected + ";"
-                + "var current=String(window.location.href||'').replace(/\\/$/,'');"
-                + "if(current.indexOf(expected)!==0||!document.body)return 0;"
+                + "var current=String(location.origin||'')+String(location.pathname||'');current=current.replace(/\\/$/,'');"
+                + "if(current!==expected||!document.body)return 0;"
                 + "var key='__dshPortableStartupGate';"
                 + "var root=document.querySelector('#root');if(!root)return 0;"
                 + "var rootRect=root.getBoundingClientRect();var rootStyle=getComputedStyle(root);"
@@ -2754,13 +3119,13 @@ namespace DshPortable
         {
             try
             {
-                string expected = json.Serialize(expectedUrl.TrimEnd('/'));
+                string expected = json.Serialize(WorkspaceOriginPath(expectedUrl));
                 string script = "(function(){try{"
                     + "var expected=" + expected + ";"
-                    + "var current=String(window.location.href||'').replace(/\\/$/,'');"
+                    + "var current=String(location.origin||'')+String(location.pathname||'');current=current.replace(/\\/$/,'');"
                     + "var ready=document.readyState==='interactive'||document.readyState==='complete';"
                     + "var errorPage=current.indexOf('chrome-error://')===0||!!document.querySelector('#main-frame-error');"
-                    + "return current.indexOf(expected)===0&&ready&&!!document.body&&!errorPage;"
+                    + "return current===expected&&ready&&!!document.body&&!errorPage;"
                     + "}catch(_){return false;}})()";
                 string result = await webView.CoreWebView2.ExecuteScriptAsync(script);
                 return String.Equals(result, "true", StringComparison.OrdinalIgnoreCase);
@@ -2965,9 +3330,9 @@ namespace DshPortable
         {
             return new WebView2
             {
-                Dock = DockStyle.None,
+                Dock = DockStyle.Fill,
                 Location = Point.Empty,
-                Size = ClientSize,
+                DefaultBackgroundColor = BackColor,
                 Visible = true,
             };
         }
@@ -3055,9 +3420,8 @@ namespace DshPortable
         private void FitWebViewToClient()
         {
             if (webView == null || webView.IsDisposed) return;
-            Rectangle target = ClientRectangle;
-            if (target.Width <= 0 || target.Height <= 0) return;
-            if (webView.Bounds != target) webView.Bounds = target;
+            if (webView.Dock != DockStyle.Fill) webView.Dock = DockStyle.Fill;
+            PerformLayout();
         }
 
         private void ApplyDesktopWindowCorners()
@@ -3246,20 +3610,28 @@ namespace DshPortable
         private string ResolveWebViewDataRoot()
         {
             if (File.Exists(Path.Combine(root, "installed-mode.json")))
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data", "webview2");
-            return Path.Combine(
+            {
+                string installedWebView = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "DeepSeek-Herness", "data", "webview2");
+                return String.Equals(environmentId, "default", StringComparison.Ordinal)
+                    ? installedWebView
+                    : Path.Combine(installedWebView, "environments", environmentId);
+            }
+            string portableWebView = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "DSH-Portable",
                 "webview2",
                 ResolvePortableInstanceId(),
                 ResolvePortableLocationKey());
+            return String.Equals(environmentId, "default", StringComparison.Ordinal)
+                ? portableWebView
+                : Path.Combine(portableWebView, "environments", environmentId);
         }
 
         private string ResolveLauncherLogDirectory()
         {
-            if (File.Exists(Path.Combine(root, "installed-mode.json")))
-                return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness", "data", "logs");
-            return Path.Combine(root, "data", "logs");
+            return Path.Combine(stateRoot, "data", "logs");
         }
 
         private string ResolvePortableInstanceId()
@@ -3463,6 +3835,18 @@ namespace DshPortable
         private void HandleFailure(int exitCode, string message)
         {
             operationRunning = false;
+            if (String.Equals(
+                Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"),
+                "1",
+                StringComparison.Ordinal))
+            {
+                WriteNonInteractiveDiagnostic(message);
+                Environment.ExitCode = exitCode != 0 ? exitCode : 1;
+                allowClose = true;
+                DisposeTrayIcon();
+                Close();
+                return;
+            }
             if (nonInteractive)
             {
                 WriteNonInteractiveDiagnostic(message);
@@ -3500,6 +3884,9 @@ namespace DshPortable
             StringBuilder arguments = new StringBuilder(QuoteArgument(runtimeEntry));
             arguments.Append(" ").Append(QuoteArgument(Path.GetFileName(cli)));
             foreach (string item in actionArgs) arguments.Append(" ").Append(QuoteArgument(item));
+            if (!String.Equals(environmentId, "default", StringComparison.Ordinal)
+                && !actionArgs.Any(item => String.Equals(item, "--environment", StringComparison.OrdinalIgnoreCase)))
+                arguments.Append(" --environment ").Append(QuoteArgument(environmentId));
             ProcessStartInfo start = new ProcessStartInfo
             {
                 FileName = node,
@@ -3512,11 +3899,10 @@ namespace DshPortable
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
-            if (File.Exists(Path.Combine(root, "installed-mode.json")) && string.IsNullOrEmpty(start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"]))
-            {
-                start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "DeepSeek-Herness");
-            }
+            string baseStateRoot = String.Equals(environmentId, "default", StringComparison.Ordinal)
+                ? stateRoot
+                : Directory.GetParent(Directory.GetParent(stateRoot).FullName).FullName;
+            start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = baseStateRoot;
 
             using (Process process = Process.Start(start))
             {
@@ -3730,14 +4116,41 @@ namespace DshPortable
         private static void Main(string[] args)
         {
             args = WaitForRestartHandoff(args);
+            string executableRoot = Path.GetDirectoryName(Application.ExecutablePath);
+            string environmentId = LauncherWindow.ResolveEnvironmentId(args);
+            string stateRoot = LauncherWindow.ResolveStateRoot(executableRoot, environmentId);
+            string instanceKey = LauncherWindow.ResolveEnvironmentInstanceKey(executableRoot, environmentId);
+            int restoreMessage = LauncherWindow.RegisterEnvironmentRestoreMessage(instanceKey);
+            int exitMessage = LauncherWindow.RegisterEnvironmentExitMessage(instanceKey);
+            Mutex environmentMutex = null;
+            bool ownsEnvironmentMutex = false;
+            if (LauncherWindow.IsStartInvocation(args))
+            {
+                environmentMutex = new Mutex(true, @"Local\DSHPortable." + instanceKey, out ownsEnvironmentMutex);
+                if (!ownsEnvironmentMutex)
+                {
+                    LauncherWindow.SignalExistingDesktopHost(restoreMessage);
+                    environmentMutex.Dispose();
+                    return;
+                }
+            }
             PortableProcessJob.Initialize();
             RegisterNotificationIdentity();
             SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            if ((args == null || args.Length == 0) && LauncherWindow.SignalExistingDesktopHost(LauncherWindow.WmPortableRestore))
-                return;
-            Application.Run(new LauncherWindow(args));
+            try
+            {
+                Application.Run(new LauncherWindow(args, environmentId, stateRoot, restoreMessage, exitMessage));
+            }
+            finally
+            {
+                if (environmentMutex != null)
+                {
+                    if (ownsEnvironmentMutex) environmentMutex.ReleaseMutex();
+                    environmentMutex.Dispose();
+                }
+            }
         }
     }
 }

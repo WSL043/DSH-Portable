@@ -1,6 +1,6 @@
 {
   "name": "dsh-portable",
-  "version": "0.5.2",
+  "version": "0.6.0-rc.1",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
@@ -17,6 +17,7 @@
     "footprint": "node scripts/report-footprint.mjs",
     "site:build": "node scripts/build-site.mjs",
     "check:upstream": "node scripts/check-upstream.mjs",
+    "preview:stage-runtime": "node scripts/stage-preview-runtime.mjs",
     "icons": "node scripts/render-icons.mjs app assets/DSH-Portable.svg assets",
     "version:set": "node scripts/set-product-version.mjs"
   }

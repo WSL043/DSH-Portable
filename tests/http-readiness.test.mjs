@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import http from 'node:http'
 import test from 'node:test'
 
-import { workspaceDocumentReady } from '../launcher/http-readiness.mjs'
+import { officialWorkspaceUrl, workspaceDocumentReady } from '../launcher/http-readiness.mjs'
 
 async function withServer(handler, run) {
   const server = http.createServer(handler)
@@ -45,4 +45,37 @@ test('workspace readiness rejects error pages, empty bodies, and oversized bodie
     response.writeHead(200, { 'content-type': 'text/html' })
     response.end(Buffer.alloc(2 * 1024 * 1024 + 1, 65))
   }, async (port) => assert.equal(await workspaceDocumentReady(port, 1000), false))
+})
+
+test('alpha workspace access tokens are parsed only from the expected loopback server', async () => {
+  const output = [
+    'noise',
+    'dsh web: https://127.0.0.1:3080/?token=wrong-protocol',
+    'dsh web: http://example.com:3080/?token=wrong-host',
+    'dsh web: http://127.0.0.1:3081/?token=wrong-port',
+    'dsh web: http://127.0.0.1:3080/?token=local-token',
+  ].join('\n')
+  assert.equal(officialWorkspaceUrl(output, 3080), 'http://127.0.0.1:3080/?token=local-token')
+  assert.equal(officialWorkspaceUrl(output, 3099), null)
+})
+
+test('workspace readiness can use a validated token URL', async () => {
+  await withServer((request, response) => {
+    if (request.url === '/?token=portable') {
+      response.writeHead(303, {
+        location: '/',
+        'set-cookie': 'dsh-auth=verified; Path=/; HttpOnly; SameSite=Strict',
+      }).end()
+      return
+    }
+    if (request.url !== '/' || request.headers.cookie !== 'dsh-auth=verified') {
+      response.writeHead(401, { 'content-type': 'text/plain' }).end('unauthorized')
+      return
+    }
+    response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end('<!doctype html><title>DSH</title>')
+  }, async (port) => {
+    assert.equal(await workspaceDocumentReady(port, 1000), false)
+    assert.equal(await workspaceDocumentReady(`http://127.0.0.1:${port}/?token=portable`, 1000), true)
+    assert.equal(await workspaceDocumentReady(`http://example.com:${port}/?token=portable`, 1000), false)
+  })
 })

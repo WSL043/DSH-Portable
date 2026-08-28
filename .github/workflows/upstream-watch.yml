@@ -5,8 +5,8 @@ on:
     types: [dependency-released]
   schedule:
     # GitHub cannot subscribe to release events from repositories we do not
-    # control. This weekly run is a safety net, not the primary trigger.
-    - cron: '23 2 * * 1'
+    # control. Polling only opens a verified intake PR; it never publishes.
+    - cron: '23 */6 * * *'
   workflow_dispatch:
     inputs:
       source:

@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process'
 import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
+import { workspaceDocumentReady } from '../launcher/http-readiness.mjs'
 import { renameWithRetry } from './smoke-helpers.mjs'
 
 const originalRoot = path.resolve(process.argv[2] ?? '')
@@ -137,10 +138,7 @@ async function cli(root, ...args) {
 }
 
 async function assertWebReady(url) {
-  const response = await fetch(url, { redirect: 'manual' })
-  assert.ok(response.status >= 200 && response.status < 500, `unexpected DSH HTTP status ${response.status}`)
-  const text = await response.text()
-  assert.ok(text.length > 0, 'DSH Web returned an empty document')
+  assert.equal(await workspaceDocumentReady(url, 2_000), true, 'DSH Web did not return a usable workspace document')
 }
 
 for (const filename of [nodeFor(originalRoot), cliFor(originalRoot), path.join(originalRoot, 'README.zh-CN.txt'), path.join(originalRoot, 'README.en.txt')]) {

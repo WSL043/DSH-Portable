@@ -8,24 +8,39 @@ using System.Text;
 [assembly: AssemblyTitle("DSH-Portable Command")]
 [assembly: AssemblyProduct("DSH-Portable")]
 [assembly: AssemblyCompany("WSL043")]
-[assembly: AssemblyVersion("0.5.2.65534")]
-[assembly: AssemblyFileVersion("0.5.2.65534")]
+[assembly: AssemblyVersion("0.6.0.1")]
+[assembly: AssemblyFileVersion("0.6.0.1")]
 
 internal static class DshCommand
 {
-    private static int LaunchDshTerminal(string root)
+    private static int LaunchDshTerminal(string root, string environmentId)
     {
         var terminal = Path.Combine(root, "launcher", "dsh-terminal.cmd");
         if (!File.Exists(terminal)) throw new FileNotFoundException("DSH terminal launcher is missing.", terminal);
         var start = new ProcessStartInfo
         {
             FileName = terminal,
+            Arguments = String.IsNullOrEmpty(environmentId) ? String.Empty : QuoteWindowsArgument(environmentId),
             WorkingDirectory = root,
             UseShellExecute = true,
             WindowStyle = ProcessWindowStyle.Normal,
         };
         if (Process.Start(start) == null) throw new InvalidOperationException("Could not open DSH Terminal.");
         return 0;
+    }
+
+    private static string TerminalEnvironment(string[] arguments)
+    {
+        if (arguments == null || arguments.Length == 0) return null;
+        if (!String.Equals(arguments[0], "--terminal", StringComparison.OrdinalIgnoreCase)) return null;
+        if (arguments.Length == 1) return String.Empty;
+        if (arguments.Length != 3 || !String.Equals(arguments[1], "--environment", StringComparison.OrdinalIgnoreCase))
+            throw new ArgumentException("Usage: dsh.exe --terminal [--environment <id>]");
+        var value = arguments[2] ?? String.Empty;
+        if (value.Length < 1 || value.Length > 32 || !value.All(character =>
+            Char.IsLetterOrDigit(character) || character == '.' || character == '-' || character == '_'))
+            throw new ArgumentException("Portable environment must be a 1-32 character slug using letters, numbers, dots, dashes, or underscores.");
+        return value.ToLowerInvariant();
     }
 
     private static string QuoteWindowsArgument(string value)
@@ -77,9 +92,11 @@ internal static class DshCommand
         {
             var executable = Process.GetCurrentProcess().MainModule.FileName;
             var root = Path.GetDirectoryName(executable);
-            if (arguments == null || arguments.Length == 0 ||
-                (arguments.Length == 1 && String.Equals(arguments[0], "--terminal", StringComparison.OrdinalIgnoreCase)))
-                return LaunchDshTerminal(root);
+            if (arguments == null || arguments.Length == 0)
+                return LaunchDshTerminal(root, String.Empty);
+            var terminalEnvironment = TerminalEnvironment(arguments);
+            if (terminalEnvironment != null)
+                return LaunchDshTerminal(root, terminalEnvironment);
 
             var node = Path.Combine(root, "runtime", "node", "node.exe");
             var runtimeEntry = Path.Combine(root, "launcher", "runtime-entry.mjs");

@@ -7,11 +7,33 @@ import path from 'node:path'
 
 const DEFAULT_PORT = 3080
 const MAX_PORT = 3180
+export const DEFAULT_ENVIRONMENT_ID = 'default'
+const ENVIRONMENT_ID = /^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$/
+const WINDOWS_RESERVED_ENVIRONMENT_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 
-export function layoutForRoot(root, platform = process.platform, stateRoot = root, runtimeRoot = root) {
+export function normalizeEnvironmentId(value = DEFAULT_ENVIRONMENT_ID) {
+  const normalized = String(value ?? '').trim().toLowerCase()
+  if (!ENVIRONMENT_ID.test(normalized) || WINDOWS_RESERVED_ENVIRONMENT_ID.test(normalized)) {
+    throw new Error('Portable environment must be a 1-32 character slug using letters, numbers, dots, dashes, or underscores.')
+  }
+  return normalized
+}
+
+export function environmentStateRoot(baseStateRoot, environmentId = DEFAULT_ENVIRONMENT_ID, platform = process.platform) {
+  const paths = platform === 'win32' ? path.win32 : path.posix
+  const base = paths.resolve(baseStateRoot)
+  const normalized = normalizeEnvironmentId(environmentId)
+  return normalized === DEFAULT_ENVIRONMENT_ID ? base : paths.join(base, 'environments', normalized)
+}
+
+export function layoutForRoot(root, platform = process.platform, stateRoot = root, runtimeRoot = root, environmentId = DEFAULT_ENVIRONMENT_ID) {
   const paths = platform === 'win32' ? path.win32 : path.posix
   const portableRoot = paths.resolve(root)
   const durableRoot = paths.resolve(stateRoot)
+  const normalizedEnvironmentId = normalizeEnvironmentId(environmentId)
+  const baseStateRoot = normalizedEnvironmentId === DEFAULT_ENVIRONMENT_ID
+    ? durableRoot
+    : paths.dirname(paths.dirname(durableRoot))
   const immutableRoot = paths.resolve(runtimeRoot)
   const dataDir = paths.join(durableRoot, 'data')
   const runtimeDir = paths.join(portableRoot, 'runtime')
@@ -19,6 +41,7 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
   const appDir = paths.join(immutableRoot, 'app')
   const appBinDir = paths.join(appDir, 'node_modules', '.bin')
   const stateDir = paths.join(dataDir, 'runtime')
+  const productStateDir = paths.join(baseStateRoot, 'data', 'runtime')
   const dshHome = paths.join(dataDir, 'dsh-home')
   return {
     root: portableRoot,
@@ -26,6 +49,7 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     capsuleMode: immutableRoot !== portableRoot,
     appDir,
     appBinDir,
+    baseStateRoot,
     browserProfile: paths.join(dataDir, 'browser'),
     browserState: paths.join(stateDir, 'browser.json'),
     dataDir,
@@ -53,9 +77,11 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     extensionReceipts: paths.join(stateDir, 'extension-receipts.json'),
     extensionRecovery: paths.join(stateDir, 'extension-recovery'),
     extensionResult: paths.join(stateDir, 'extension-result.json'),
+    environmentId: normalizedEnvironmentId,
     hostBin: paths.join(portableRoot, 'launcher', 'portable-host.mjs'),
     launchLock: paths.join(stateDir, 'launcher.lock'),
     logsDir: paths.join(dataDir, 'logs'),
+    launcherSettings: paths.join(baseStateRoot, 'data', 'launcher-settings.json'),
     nodeDir,
     nodeExe: platform === 'win32' ? paths.join(nodeDir, 'node.exe') : paths.join(nodeDir, 'bin', 'node'),
     packageManagerStore: paths.join(dataDir, 'pnpm-store'),
@@ -67,6 +93,8 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     platform,
     portableCli: paths.join(portableRoot, 'launcher', 'portable-cli.mjs'),
     portableMeta: paths.join(dataDir, 'portable.json'),
+    productOperationLock: paths.join(productStateDir, 'product-operation.lock'),
+    productStateDir,
     runtimeCapsule: paths.join(portableRoot, 'runtime-capsule.json'),
     processState: paths.join(stateDir, 'process.json'),
     repairRequest: paths.join(stateDir, 'repair-requested.json'),
@@ -74,11 +102,11 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     runtimeDir,
     stateRoot: durableRoot,
     stateDir,
-    updateCheckCache: paths.join(stateDir, 'update-check.json'),
-    productUpdateCheckCache: paths.join(stateDir, 'update-check.json'),
-    engineUpdateCheckCache: paths.join(stateDir, 'engine-update-check.json'),
+    updateCheckCache: paths.join(productStateDir, 'update-check.json'),
+    productUpdateCheckCache: paths.join(productStateDir, 'update-check.json'),
+    engineUpdateCheckCache: paths.join(productStateDir, 'engine-update-check.json'),
     updateDir: paths.join(portableRoot, '.dsh-portable-update'),
-    updateJournal: paths.join(stateDir, 'update.json'),
+    updateJournal: paths.join(productStateDir, 'update.json'),
     webView2Core: platform === 'win32' ? paths.join(portableRoot, 'Microsoft.Web.WebView2.Core.dll') : null,
     webView2Loader: platform === 'win32' ? paths.join(portableRoot, 'WebView2Loader.dll') : null,
     webView2WinForms: platform === 'win32' ? paths.join(portableRoot, 'Microsoft.Web.WebView2.WinForms.dll') : null,
@@ -443,6 +471,8 @@ export function buildDshEnv(layout, source = process.env) {
     ...source,
     DSH_HOME: layout.dshHome,
     DSH_PORTABLE: '1',
+    DSH_PORTABLE_ENVIRONMENT: layout.environmentId,
+    DSH_PORTABLE_BASE_STATE_ROOT: layout.baseStateRoot,
     DSH_PORTABLE_ROOT: layout.root,
     DSH_PORTABLE_STATE_ROOT: layout.stateRoot,
     DSH_TELEMETRY_MODE: 'DISABLED',
@@ -484,6 +514,7 @@ export function parseCli(argv) {
   let force = false
   let updateManifest = ''
   let updateScope = 'product'
+  let updateChannel
   let progressJson = false
   let waitForLockMs = 0
   let output
@@ -492,6 +523,7 @@ export function parseCli(argv) {
   let categories
   let conflict
   let allowUnencryptedCredentials = false
+  let environment
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--diagnostic-root-json') {
@@ -506,6 +538,11 @@ export function parseCli(argv) {
     else if (arg === '--allow-http') allowHttp = true
     else if (arg === '--force') force = true
     else if (arg === '--progress-json') progressJson = true
+    else if (arg === '--environment') {
+      if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--environment requires a value.')
+      environment = normalizeEnvironmentId(argv[index + 1])
+      index += 1
+    }
     else if (arg === '--wait-for-lock-ms') {
       const value = Number(argv[index + 1])
       if (!Number.isSafeInteger(value) || value < 0 || value > 60000) throw new Error('--wait-for-lock-ms requires an integer from 0 to 60000.')
@@ -521,6 +558,12 @@ export function parseCli(argv) {
       const value = argv[index + 1]
       if (!['product', 'engine'].includes(value)) throw new Error('--scope requires product or engine.')
       updateScope = value
+      index += 1
+    }
+    else if (arg === '--channel') {
+      const value = argv[index + 1]
+      if (!['stable', 'candidate'].includes(value)) throw new Error('--channel requires stable or candidate.')
+      updateChannel = value
       index += 1
     }
     else if (arg === '--output') {
@@ -556,12 +599,14 @@ export function parseCli(argv) {
     else throw new Error(`Unknown command or option: ${arg}`)
   }
   const result = { command, noBrowser, json, allowHttp, force, updateManifest, progressJson, waitForLockMs, updateScope }
+  if (updateChannel !== undefined) result.updateChannel = updateChannel
   if (output !== undefined) result.output = output
   if (input !== undefined) result.input = input
   if (passwordFile !== undefined) result.passwordFile = passwordFile
   if (categories !== undefined) result.categories = categories
   if (conflict !== undefined) result.conflict = conflict
   if (allowUnencryptedCredentials) result.allowUnencryptedCredentials = true
+  if (environment !== undefined) result.environment = environment
   return result
 }
 
@@ -683,7 +728,8 @@ export function queryWindowsProcess(pid) {
     '}',
   ].join('; ')
   try {
-    const output = execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    const powershell = path.win32.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    const output = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
       encoding: 'utf8',
       windowsHide: true,
     }).trim()
@@ -705,7 +751,8 @@ export function queryWindowsBrowserProcesses(adapters = {}) {
   ].join('; ')
   try {
     const execute = adapters.execute ?? execFileSync
-    const output = execute('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+    const powershell = path.win32.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
+    const output = execute(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
       encoding: 'utf8',
       windowsHide: true,
     }).trim()
@@ -889,9 +936,78 @@ export async function ensurePortableDirectories(layout) {
     mkdir(layout.browserProfile, { recursive: true }),
     mkdir(layout.dshHome, { recursive: true }),
     mkdir(layout.logsDir, { recursive: true }),
+    mkdir(layout.productStateDir, { recursive: true }),
     mkdir(layout.stateDir, { recursive: true }),
     mkdir(layout.workspace, { recursive: true }),
   ])
+}
+
+export async function listEnvironmentLayouts(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const environmentRoot = paths.join(layout.baseStateRoot, 'environments')
+  const ids = [DEFAULT_ENVIRONMENT_ID]
+  for (const entry of await readdir(environmentRoot, { withFileTypes: true }).catch((error) => {
+    if (error?.code === 'ENOENT') return []
+    throw error
+  })) {
+    if (!entry.isDirectory()) continue
+    try {
+      const id = normalizeEnvironmentId(entry.name)
+      if (id !== DEFAULT_ENVIRONMENT_ID) ids.push(id)
+    } catch {
+      // Ignore unrelated directories instead of treating them as environments.
+    }
+  }
+  return [...new Set(ids)].sort((left, right) => {
+    if (left === DEFAULT_ENVIRONMENT_ID) return -1
+    if (right === DEFAULT_ENVIRONMENT_ID) return 1
+    return left.localeCompare(right)
+  }).map((environmentId) => layoutForRoot(
+    layout.root,
+    layout.platform,
+    environmentStateRoot(layout.baseStateRoot, environmentId, layout.platform),
+    layout.immutableRoot,
+    environmentId,
+  ))
+}
+
+export async function findRunningPortableEnvironments(layout, adapters = {}) {
+  const processQuery = adapters.processQuery ?? ((pid) => queryProcess(pid, layout.platform))
+  const running = []
+  for (const candidate of await listEnvironmentLayouts(layout)) {
+    let state
+    try {
+      state = JSON.parse(await readFile(candidate.processState, 'utf8'))
+    } catch { state = null }
+    let backend = null
+    if (state?.pid && state?.port) {
+      let processInfo = null
+      try { processInfo = processQuery(Number(state.pid), candidate, 'backend') } catch { /* an unreadable process is not accepted as owned */ }
+      if (isOwnedDshProcess(processInfo, candidate, Number(state.port))) {
+        backend = { pid: Number(state.pid), port: Number(state.port) }
+      }
+    }
+
+    let desktopPid = 0
+    if (candidate.platform === 'win32' && candidate.desktopExe) {
+      const desktopState = path.join(candidate.stateDir, 'desktop-host.pid')
+      try { desktopPid = Number.parseInt((await readFile(desktopState, 'utf8')).trim(), 10) || 0 } catch { /* no native host */ }
+      if (desktopPid > 0) {
+        let desktopInfo = null
+        try { desktopInfo = processQuery(desktopPid, candidate, 'desktop') } catch { /* an unreadable process is not accepted as owned */ }
+        if (!desktopInfo?.executablePath || !sameComparablePath(desktopInfo.executablePath, candidate.desktopExe, candidate.platform)) desktopPid = 0
+      }
+    }
+    if (!backend && !desktopPid) continue
+    running.push({
+      environmentId: candidate.environmentId,
+      pid: backend?.pid || 0,
+      port: backend?.port || 0,
+      desktopPid,
+      stateRoot: candidate.stateRoot,
+    })
+  }
+  return running
 }
 
 function processExists(pid) {
@@ -904,26 +1020,26 @@ function processExists(pid) {
   }
 }
 
-export async function acquireLaunchLock(layout, adapters = {}) {
-  await mkdir(layout.stateDir, { recursive: true })
+async function acquireOwnedLauncherLock(layout, filename, busyMessage, adapters = {}) {
+  await mkdir(path.dirname(filename), { recursive: true })
   const processQuery = adapters.processQuery ?? ((pid) => queryProcess(pid, layout.platform))
   const pidExists = adapters.pidExists ?? processExists
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const handle = await open(layout.launchLock, 'wx')
+      const handle = await open(filename, 'wx')
       await handle.writeFile(`${process.pid}\n`)
       let released = false
       return async () => {
         if (released) return
         released = true
         await handle.close().catch(() => {})
-        await rm(layout.launchLock, { force: true }).catch(() => {})
+        await rm(filename, { force: true }).catch(() => {})
       }
     } catch (error) {
       if (error?.code !== 'EEXIST') throw error
 
-      const ownerPid = Number.parseInt((await readFile(layout.launchLock, 'utf8').catch(() => '')).trim(), 10)
+      const ownerPid = Number.parseInt((await readFile(filename, 'utf8').catch(() => '')).trim(), 10)
       let owner = null
       try {
         owner = processQuery(ownerPid)
@@ -931,21 +1047,52 @@ export async function acquireLaunchLock(layout, adapters = {}) {
         owner = null
       }
       if (isOwnedLauncherProcess(owner, layout) || (!owner && pidExists(ownerPid))) {
-        throw new Error('Another portable launcher is already starting or stopping DSH.')
+        throw new Error(busyMessage)
       }
 
-      const stale = `${layout.launchLock}.stale-${process.pid}-${Date.now()}`
+      const stale = `${filename}.stale-${process.pid}-${Date.now()}`
       try {
-        await rename(layout.launchLock, stale)
+        await rename(filename, stale)
         await rm(stale, { force: true })
       } catch (reclaimError) {
         if (reclaimError?.code !== 'ENOENT') {
-          throw new Error('Another portable launcher is already starting or stopping DSH.')
+          throw new Error(busyMessage)
         }
       }
     }
   }
-  throw new Error('Another portable launcher is already starting or stopping DSH.')
+  throw new Error(busyMessage)
+}
+
+export async function acquireLaunchLock(layout, adapters = {}) {
+  return acquireOwnedLauncherLock(
+    layout,
+    layout.launchLock,
+    'Another portable launcher is already starting or stopping DSH.',
+    adapters,
+  )
+}
+
+export async function acquireProductMutationLock(layout, adapters = {}) {
+  return acquireOwnedLauncherLock(
+    layout,
+    layout.productOperationLock,
+    'The shared Portable components are being changed by another environment.',
+    adapters,
+  )
+}
+
+export async function acquireProductMutationLockWithWait(layout, waitForLockMs = 0, adapters = {}) {
+  const timeout = Math.max(0, Number(waitForLockMs) || 0)
+  const deadline = Date.now() + timeout
+  while (true) {
+    try {
+      return await acquireProductMutationLock(layout, adapters)
+    } catch (error) {
+      if (!String(error?.message ?? error).includes('shared Portable components are being changed') || Date.now() >= deadline) throw error
+      await new Promise((resolve) => setTimeout(resolve, Math.min(100, Math.max(1, deadline - Date.now()))))
+    }
+  }
 }
 
 export async function acquireLaunchLockWithWait(layout, waitForLockMs = 0, adapters = {}) {

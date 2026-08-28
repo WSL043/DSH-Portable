@@ -43,15 +43,21 @@ const telemetryImported = await import(pathToFileURL(telemetryEntry).href)
 assert.equal(typeof telemetryImported.trace?.getTracer, 'function', 'OpenTelemetry ESM import did not load')
 loaded.push('@opentelemetry/api')
 
-// Mistral's ESM client imports OpenTelemetry internally. Loading and
-// constructing it from the finished app catches CJS/ESM interop regressions
-// that a direct OpenTelemetry import alone would miss.
-const mistralEntry = requireFromApp.resolve('@mistralai/mistralai')
-const mistralImported = await import(pathToFileURL(mistralEntry).href)
-assert.equal(typeof mistralImported.Mistral, 'function', 'Mistral ESM client did not load')
-const mistralClient = new mistralImported.Mistral({ apiKey: 'portable-smoke' })
-assert.ok(mistralClient, 'Mistral client construction failed')
-loaded.push('@mistralai/mistralai')
+// Stable DSH currently carries Mistral's SDK and its ESM client imports
+// OpenTelemetry internally. Alpha releases may legitimately remove that
+// provider from the installed dependency graph. Exercise it when the actual
+// product contains it, but do not turn an upstream dependency removal into a
+// false missing-runtime failure.
+try {
+  const mistralEntry = requireFromApp.resolve('@mistralai/mistralai')
+  const mistralImported = await import(pathToFileURL(mistralEntry).href)
+  assert.equal(typeof mistralImported.Mistral, 'function', 'Mistral ESM client did not load')
+  const mistralClient = new mistralImported.Mistral({ apiKey: 'portable-smoke' })
+  assert.ok(mistralClient, 'Mistral client construction failed')
+  loaded.push('@mistralai/mistralai')
+} catch (error) {
+  if (error?.code !== 'MODULE_NOT_FOUND') throw error
+}
 
 const pty = requireFromApp('node-pty')
 await new Promise((resolve, reject) => {

@@ -245,7 +245,8 @@ test('Portable exposes a native restart contract and returns the host decision',
   const windowsHost = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   assert.match(windowsHost, /dsh-portable\/restart-host/)
   assert.match(windowsHost, /trayState != null && trayState\.hasRunningSession/)
-  assert.match(windowsHost, /if \(restartAfterShutdown\)[\s\S]{0,300}--dsh-restart-after-pid/)
+  assert.match(windowsHost, /if \(restartAfterShutdown\)[\s\S]{0,300}RestartArguments\(\)/)
+  assert.match(windowsHost, /private string\[\] RestartArguments\(\)[\s\S]*--dsh-restart-after-pid/)
 
   runtime.dispose()
   assert.equal(client.window.__DSH_PORTABLE_HOST__, undefined)
@@ -265,6 +266,7 @@ test('Portable uses one capability-aware host transport outside WebView2', async
       openDataPackage: true,
       importData: true,
       restartHost: true,
+      openEnvironment: false,
       preferences: true,
       sessionProjection: true,
     },

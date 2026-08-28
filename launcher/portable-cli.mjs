@@ -12,10 +12,13 @@ import {
   PORT_RANGE,
   acquireLaunchLock,
   acquireLaunchLockWithWait,
+  acquireProductMutationLockWithWait,
   browserLaunchSpec,
   buildDshEnv,
   clearPortableMoveLinks,
   ensureDesktopBridgeFallback,
+  environmentStateRoot,
+  findRunningPortableEnvironments,
   repairManagedProfileModuleFallback,
   ensurePortableDirectories,
   isOwnedDshProcess,
@@ -35,17 +38,18 @@ import {
   installAvailableAppUpdate,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
-import { workspaceDocumentReady } from './http-readiness.mjs'
+import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
 import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const baseStateRoot = process.env.DSH_PORTABLE_STATE_ROOT || root
 let layout = layoutForRoot(
   root,
   process.platform,
-  process.env.DSH_PORTABLE_STATE_ROOT || root,
+  baseStateRoot,
   process.env.DSH_PORTABLE_RUNTIME_ROOT || root,
 )
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
@@ -80,6 +84,28 @@ function ownedState(state) {
   return isOwnedDshProcess(queryProcess(state.pid, layout.platform), layout, state.port)
 }
 
+function environmentList(items) {
+  return items.map((item) => item.environmentId).join(', ')
+}
+
+async function runningEnvironments() {
+  return findRunningPortableEnvironments(layout)
+}
+
+async function assertSharedComponentsIdle({ allowCurrent = false, allowCurrentDesktop = false } = {}) {
+  const running = await runningEnvironments()
+  const blocking = running.filter((item) => {
+    if (item.environmentId !== layout.environmentId) return true
+    if (allowCurrent) return false
+    if (allowCurrentDesktop && !item.pid) return false
+    return true
+  })
+  if (blocking.length) {
+    throw new Error(`Close the other Portable environment${blocking.length === 1 ? '' : 's'} before changing shared components: ${environmentList(blocking)}.`)
+  }
+  return running
+}
+
 const httpReady = workspaceDocumentReady
 
 function requestGracefulShutdown(state, timeout = 2500) {
@@ -101,14 +127,26 @@ function requestGracefulShutdown(state, timeout = 2500) {
   })
 }
 
-async function waitForHost(state, timeoutMs = 60000) {
+async function waitForHost(state, timeoutMs = 60000, launchOutput = null) {
   const deadline = Date.now() + timeoutMs
+  const identityGraceDeadline = Date.now() + 3000
   while (Date.now() < deadline) {
-    if (!ownedState(state)) return false
-    if (await httpReady(state.port)) return true
+    if (!ownedState(state)) {
+      // WMI/CIM can briefly lag a just-spawned process on Windows. A live PID
+      // gets a short identity grace period; mismatched or exited processes do
+      // not get treated as owned and are never terminated here.
+      if (!(Date.now() < identityGraceDeadline && processExists(Number(state.pid)))) return null
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      continue
+    }
+    const loggedUrl = launchOutput
+      ? officialWorkspaceUrl(tailSince(launchOutput.filename, launchOutput.offset, 16000), state.port)
+      : null
+    const url = loggedUrl || state.url || `http://127.0.0.1:${state.port}/`
+    if (await httpReady(url)) return url
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
-  return false
+  return null
 }
 
 function portAvailable(port) {
@@ -338,10 +376,10 @@ async function start(noBrowser, portRetry = 0) {
   const migration = await migratePortableRoot(layout)
   const prior = readProcessState()
   if (ownedState(prior)) {
-    if (await waitForHost(prior, 15000)) {
-      const url = `http://127.0.0.1:${prior.port}`
+    const url = await waitForHost(prior, 15000)
+    if (url) {
       const browser = noBrowser ? null : await openBrowser(url)
-      return { status: 'already-running', pid: prior.pid, port: prior.port, url, browser, migration }
+      return { status: 'already-running', environment: layout.environmentId, pid: prior.pid, port: prior.port, url, browser, migration }
     }
     throw new Error('DeepSeek Harness is still running but its local workspace is not ready. Stop the existing instance before retrying.')
   }
@@ -399,11 +437,13 @@ async function start(noBrowser, portRetry = 0) {
     controlPipe,
     controlToken,
     root: layout.root,
+    environment: layout.environmentId,
     startedAt: new Date().toISOString(),
   }
   await writeJsonAtomic(layout.processState, state)
   try {
-    const hostUnavailable = !await waitForHost(state)
+    const url = await waitForHost(state, 60000, { filename: stdoutLog, offset: stdoutOffset })
+    const hostUnavailable = !url
     portReservation.release()
     if (hostUnavailable) {
       const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
@@ -427,9 +467,10 @@ async function start(noBrowser, portRetry = 0) {
       throw new Error(`DeepSeek Harness failed to start.\n${details}`)
     }
 
-    const url = `http://127.0.0.1:${port}`
+    state.url = url
+    await writeJsonAtomic(layout.processState, state)
     const browser = noBrowser ? null : await openBrowser(url)
-    return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }
+    return { status: 'started', environment: layout.environmentId, pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }
   } catch (error) {
     portReservation.release()
     let cleanupError = null
@@ -478,18 +519,19 @@ async function stop() {
   await clearPortableMoveLinks(layout)
   if (process.platform !== 'win32' && state.controlPipe) rmSync(state.controlPipe, { force: true })
   if (browserError) throw browserError
-  return { status: 'stopped', pid: state.pid, port: state.port, graceful: gracefulRequested && !forced, forced, browser }
+  return { status: 'stopped', environment: layout.environmentId, pid: state.pid, port: state.port, graceful: gracefulRequested && !forced, forced, browser }
 }
 
 async function status() {
   const state = readProcessState()
-  if (!ownedState(state)) return { status: 'stopped', root: layout.root }
+  if (!ownedState(state)) return { status: 'stopped', environment: layout.environmentId, root: layout.root }
   return {
-    status: await httpReady(state.port) ? 'running' : 'starting',
+    status: await httpReady(state.url || state.port) ? 'running' : 'starting',
+    environment: layout.environmentId,
     root: layout.root,
     pid: state.pid,
     port: state.port,
-    url: `http://127.0.0.1:${state.port}`,
+    url: state.url || `http://127.0.0.1:${state.port}`,
   }
 }
 
@@ -550,6 +592,7 @@ async function checkUpdate(options) {
   return checkForUpdate({
     layout,
     scope: options.updateScope,
+    releaseChannel: preferredUpdateChannel(options),
     manifestUrl: options.updateManifest || undefined,
     allowHttp: options.allowHttp,
     force: options.force,
@@ -563,11 +606,14 @@ async function update(options) {
   const available = await checkForUpdate({
     layout,
     scope: options.updateScope,
+    releaseChannel: preferredUpdateChannel(options),
     manifestUrl: options.updateManifest || undefined,
     allowHttp: options.allowHttp,
     force: true,
   })
   if (available.status !== 'available') return available
+
+  await assertSharedComponentsIdle({ allowCurrent: true })
 
   const reportProgress = options.progressJson
     ? (event) => process.stdout.write(`${JSON.stringify({ type: 'update-progress', ...event })}\n`)
@@ -575,6 +621,7 @@ async function update(options) {
 
   const prior = readProcessState()
   if (ownedState(prior)) await stop()
+  await assertSharedComponentsIdle({ allowCurrentDesktop: true })
   try {
     const applied = await installAvailableAppUpdate({
       layout,
@@ -586,8 +633,9 @@ async function update(options) {
           layout = layoutForRoot(
             root,
             process.platform,
-            process.env.DSH_PORTABLE_STATE_ROOT || root,
+            layout.stateRoot,
             prepared.runtimeRoot,
+            layout.environmentId,
           )
         }
         const version = execFileSync(layout.nodeExe, [layout.dshBin, '--version'], {
@@ -617,14 +665,25 @@ async function update(options) {
       layout = layoutForRoot(
         root,
         process.platform,
-        process.env.DSH_PORTABLE_STATE_ROOT || root,
+        layout.stateRoot,
         restored.runtimeRoot,
+        layout.environmentId,
       )
       recovery = await start(options.noBrowser)
     } catch (recoveryError) {
       throw new Error(`${error?.message ?? error}\nThe previous version was restored but could not restart: ${recoveryError?.message ?? recoveryError}`, { cause: error })
     }
     throw new Error(`${error?.message ?? error}\nThe previous version was restored and restarted.`, { cause: error, recovery })
+  }
+}
+
+function preferredUpdateChannel(options) {
+  if (options.updateChannel) return options.updateChannel
+  try {
+    const settings = JSON.parse(readFileSync(layout.launcherSettings, 'utf8'))
+    return ['stable', 'candidate'].includes(settings.updateChannel) ? settings.updateChannel : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -641,12 +700,30 @@ function print(result, json) {
 async function main() {
   if (!['win32', 'darwin', 'linux'].includes(process.platform)) throw new Error('DSH-Portable supports Windows, macOS, and Linux.')
   const options = parseCli(process.argv.slice(2))
+  const environmentId = options.environment || process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
+  const stateRoot = environmentStateRoot(baseStateRoot, environmentId, process.platform)
+  layout = layoutForRoot(
+    root,
+    process.platform,
+    stateRoot,
+    process.env.DSH_PORTABLE_RUNTIME_ROOT || root,
+    environmentId,
+  )
   const release = options.waitForLockMs > 0
     ? await acquireLaunchLockWithWait(layout, options.waitForLockMs)
     : await acquireLaunchLock(layout)
+  const productLockedCommands = new Set([
+    'start',
+    'runtime-cache-clean',
+    'update',
+  ])
+  const releaseProduct = productLockedCommands.has(options.command)
+    ? await acquireProductMutationLockWithWait(layout, Math.max(5000, options.waitForLockMs || 0))
+    : async () => {}
   try {
     await ensurePortableDirectories(layout)
-    if (existsSync(layout.updateJournal)) {
+    if (existsSync(layout.updateJournal) && ['start', 'runtime-cache-clean', 'update'].includes(options.command)) {
+      await assertSharedComponentsIdle({ allowCurrentDesktop: options.command === 'start' })
       await rollbackPendingAppUpdate(layout, {
         beforeRestore: async () => {
           const current = readProcessState()
@@ -659,6 +736,7 @@ async function main() {
       status: 'ok',
       root: layout.root,
       stateRoot: layout.stateRoot,
+      environment: layout.environmentId,
       dataDir: layout.dataDir,
       workspace: layout.workspace,
       platform: layout.platform,
@@ -674,7 +752,10 @@ async function main() {
     else if (options.command === 'inspect-data') result = await inspectData(options)
     else if (options.command === 'restore-data') result = await restoreData(options)
     else if (options.command === 'runtime-cache-status') result = await runtimeCacheStatus(root)
-    else if (options.command === 'runtime-cache-clean') result = await cleanUnusedRuntimeCaches(root)
+    else if (options.command === 'runtime-cache-clean') {
+      await assertSharedComponentsIdle()
+      result = await cleanUnusedRuntimeCaches(root)
+    }
     else if (options.command === 'check-update') result = await checkUpdate(options)
     else if (options.command === 'defer-update') result = await deferUpdate(layout, { scope: options.updateScope })
     else if (options.command === 'ignore-update') result = await ignoreUpdate(layout, '', { scope: options.updateScope })
@@ -682,7 +763,7 @@ async function main() {
     else throw new Error(`Unsupported command: ${options.command}`)
     print(result, options.json)
   } finally {
-    await release()
+    try { await releaseProduct() } finally { await release() }
   }
 }
 

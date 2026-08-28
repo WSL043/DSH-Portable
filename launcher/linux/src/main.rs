@@ -573,6 +573,7 @@ fn save_launcher_preferences(layout: &ProductLayout, message: &Value) -> Result<
         .expect("settings object was initialized");
     object.insert("schemaVersion".to_owned(), Value::from(2));
     for key in [
+        "updateChannel",
         "productUpdateCheckEnabled",
         "engineUpdateCheckEnabled",
         "taskNotificationsEnabled",

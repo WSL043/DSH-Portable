@@ -151,7 +151,7 @@ test('startup rejects an incomplete packaged dependency closure before launching
 test('all durable application paths stay under the movable root', () => {
   const layout = layoutForRoot(usbRoot, 'win32')
   for (const [name, value] of Object.entries(layout)) {
-    if (name === 'root' || name === 'platform' || name === 'capsuleMode') continue
+    if (name === 'root' || name === 'platform' || name === 'capsuleMode' || name === 'environmentId') continue
     const relative = path.win32.relative(usbRoot, value)
     assert.equal(path.win32.isAbsolute(relative), false, name)
     assert.equal(relative.startsWith('..'), false, `${name}: ${relative}`)
@@ -307,6 +307,8 @@ test('CLI defaults to start and supports bounded automation flags', () => {
     updateScope: 'product',
   })
   assert.equal(parseCli(['check-update', '--scope', 'engine', '--json']).updateScope, 'engine')
+  assert.equal(parseCli(['check-update', '--channel', 'candidate', '--json']).updateChannel, 'candidate')
+  assert.throws(() => parseCli(['check-update', '--channel', 'nightly']), /stable or candidate/)
   assert.equal(parseCli(['update', '--scope', 'product', '--json']).updateScope, 'product')
   assert.throws(() => parseCli(['check-update', '--scope', 'everything']), /product or engine/)
   assert.equal(parseCli(['stop', '--wait-for-lock-ms', '30000']).waitForLockMs, 30000)
@@ -363,9 +365,10 @@ test('simultaneous portable roots cannot mistake another root on the same port f
   const startBody = source.slice(source.indexOf('async function start('), source.indexOf('async function stop()'))
 
   assert.ok(
-    waitBody.indexOf('ownedState(state)') < waitBody.indexOf('httpReady(state.port)'),
+    waitBody.indexOf('ownedState(state)') < waitBody.indexOf('httpReady(url)'),
     'process ownership must be proven before accepting a ready loopback page',
   )
+  assert.match(waitBody, /officialWorkspaceUrl\([\s\S]+state\.port\)/)
   assert.match(startBody, /EADDRINUSE|address already in use/i)
   assert.match(startBody, /portRetry\s*<\s*PORT_RANGE\.last\s*-\s*PORT_RANGE\.first/)
   assert.match(startBody, /start\(noBrowser,\s*portRetry\s*\+\s*1\)/)
@@ -406,9 +409,15 @@ test('Windows process inspection preserves Unicode command-line paths', { skip: 
     child.once('spawn', resolve)
     child.once('error', reject)
   })
-  const info = queryWindowsProcess(child.pid)
-  assert.ok(info)
-  assert.match(info.commandLine, new RegExp(marker))
+  const previousPath = process.env.PATH
+  process.env.PATH = `${process.env.SystemRoot}\\System32;${process.env.SystemRoot}`
+  try {
+    const info = queryWindowsProcess(child.pid)
+    assert.ok(info, 'process ownership must not depend on a globally installed PowerShell PATH entry')
+    assert.match(info.commandLine, new RegExp(marker))
+  } finally {
+    process.env.PATH = previousPath
+  }
 })
 
 test('browser process inspection fails closed when the operating-system query fails', () => {

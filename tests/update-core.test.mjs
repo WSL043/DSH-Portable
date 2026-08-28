@@ -477,6 +477,31 @@ test('a temporary update outage is cached briefly instead of delaying every laun
   }
 })
 
+test('a candidate engine follows its Portable product instead of reporting a network outage', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-unpublished-'))
+  const layout = layoutForRoot(root)
+  let requests = 0
+  const fetchImpl = async () => {
+    requests += 1
+    return new Response('', { status: 404 })
+  }
+  try {
+    await mkdir(path.join(root, 'licenses'), { recursive: true })
+    await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+      portableVersion: '0.6.0-rc.1', releaseChannel: 'candidate', dshVersion: '0.1.1-rc.2', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+    })}\n`)
+    const first = await checkForUpdate({ layout, scope: 'engine', fetchImpl, now: 1000 })
+    const cached = await checkForUpdate({ layout, scope: 'engine', fetchImpl, now: 2000 })
+    assert.equal(first.status, 'engine-follows-product')
+    assert.equal(first.message, 'HTTP 404')
+    assert.equal(cached.status, 'engine-follows-product')
+    assert.equal(cached.cached, true)
+    assert.equal(requests, 1)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
 test('verified component download falls back by route but never accepts corrupt bytes', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-download-'))
   const output = path.join(root, 'component.zip')

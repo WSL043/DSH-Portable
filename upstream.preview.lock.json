@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "channel": "beta",
+  "dsh": {
+    "package": "@deepseek-ai/dsh",
+    "version": "0.1.2-alpha.1",
+    "tag": "dsh-v0.1.2-alpha.1",
+    "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
+    "reviewedCommit": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
+    "noticesSha256": "b0245871962b81ef8c6f4ade35b15c3effd0e72341fdf4472ce4982eccc01da7",
+    "buildProfile": "official",
+    "packageManager": "pnpm@11.7.0",
+    "packedFamilies": {
+      "dsh": 241,
+      "vendor": 9,
+      "landlock": 1
+    }
+  },
+  "defaultPlugins": {}
+}

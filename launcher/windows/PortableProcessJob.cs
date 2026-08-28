@@ -189,7 +189,7 @@ namespace DshPortable
             return quoted.ToString();
         }
 
-        internal static void StartDetachedUpdater(string executable, IEnumerable<string> arguments)
+        internal static void StartDetachedProcess(string executable, IEnumerable<string> arguments)
         {
             List<string> argumentList = arguments.ToList();
             if (!IsActive)
@@ -222,9 +222,14 @@ namespace DshPortable
                 System.IO.Path.GetTempPath(),
                 ref startup,
                 out process))
-                throw new Win32Exception(Marshal.GetLastWin32Error(), "The independent updater could not start.");
+                throw new Win32Exception(Marshal.GetLastWin32Error(), "The independent process could not start.");
             CloseHandle(process.hThread);
             CloseHandle(process.hProcess);
+        }
+
+        internal static void StartDetachedUpdater(string executable, IEnumerable<string> arguments)
+        {
+            StartDetachedProcess(executable, arguments);
         }
 
         internal static void ExitOwnedTree()

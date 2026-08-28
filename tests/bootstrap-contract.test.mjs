@@ -45,6 +45,12 @@ test('bootstrap relaunch preserves the updater environment for bounded handoff r
   assert.match(launch, /UseShellExecute = false/)
 })
 
+test('full-package cleanup does not depend on a user PATH entry for PowerShell', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  assert.match(bootstrap, /SpecialFolder\.Windows[\s\S]+WindowsPowerShell[\s\S]+powershell\.exe/)
+  assert.doesNotMatch(bootstrap, /FileName = "powershell\.exe"/)
+})
+
 function cscPath() {
   const windows = process.env.WINDIR || 'C:\\Windows'
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
@@ -61,6 +67,41 @@ async function compileBootstrap(output) {
     source,
   ])
 }
+
+async function compileHealthFixture(output, mode = 'ready') {
+  const sourceFile = `${output}.cs`
+  await writeFile(sourceFile, `
+using System;
+using System.IO;
+using System.Text;
+internal static class FixtureLauncher {
+  [STAThread] private static void Main() {
+    string marker = Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_FILE");
+    string token = Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_TOKEN");
+    bool preflight = String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"), "1", StringComparison.Ordinal);
+    bool ready = ${JSON.stringify(mode)} == "ready" || (${JSON.stringify(mode)} == "preflight-only" && preflight);
+    if (ready && !String.IsNullOrWhiteSpace(marker) && !String.IsNullOrWhiteSpace(token)) {
+      Directory.CreateDirectory(Path.GetDirectoryName(marker));
+      File.WriteAllText(marker, token + "\\r\\n", new UTF8Encoding(false));
+    }
+  }
+}
+`)
+  await execFileAsync(cscPath(), ['/nologo', '/target:winexe', '/platform:x64', '/optimize+', `/out:${output}`, sourceFile])
+}
+
+test('a full-package update preflights the staged desktop against preserved state before replacing program files', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  const updateFlow = bootstrap.match(/if \(upgradeExisting\)[\s\S]*?else\s*\{\s*if \(Directory\.Exists\(options\.Destination\)\)/u)?.[0] ?? ''
+  assert.match(updateFlow, /VerifyStagedPortableCompatibility\(extracted, manifest\.Version\)/)
+  assert.ok(
+    updateFlow.indexOf('VerifyStagedPortableCompatibility(extracted, manifest.Version)')
+      < updateFlow.indexOf('ReplacePortableTransactionally(extracted, backupRoot)'),
+    'the staged product must pass compatibility preflight before program replacement begins',
+  )
+  assert.match(bootstrap, /DSH_PORTABLE_UPDATE_PREFLIGHT/)
+  assert.match(bootstrap, /DSH_PORTABLE_STATE_ROOT/)
+})
 
 async function execBootstrap(executable, args, resultFile) {
   try {
@@ -216,9 +257,11 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     await mkdir(path.join(destination, 'app'), { recursive: true })
     await mkdir(path.join(destination, 'data'), { recursive: true })
     await mkdir(path.join(destination, 'workspace'), { recursive: true })
+    await mkdir(path.join(destination, 'licenses'), { recursive: true })
     await writeFile(path.join(destination, 'DeepSeek-Herness.exe'), 'old launcher')
     await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
     await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
     await writeFile(path.join(destination, 'workspace', 'project.txt'), 'keep workspace\n')
 
@@ -244,6 +287,140 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
       [],
       'successful upgrades must remove staging and backup directories',
     )
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a full-package update restores the prior program when the updated desktop never becomes ready', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-health-rollback-'))
+  try {
+    const executable = path.join(root, 'full-updater.exe')
+    const resultFile = path.join(root, 'result.json')
+    const destination = path.join(root, 'portable', 'DSH-Portable')
+    const fixture = await makeFixture(root)
+    await compileBootstrap(executable)
+    await compileHealthFixture(path.join(root, 'payload', 'DSH-Portable', 'DeepSeek-Herness.exe'), 'preflight-only')
+    await execFileAsync('tar.exe', ['-a', '-c', '-f', fixture.archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
+    fixture.bytes = await readFile(fixture.archive)
+    fixture.sha256 = createHash('sha256').update(fixture.bytes).digest('hex')
+
+    await mkdir(path.join(destination, 'runtime', 'node'), { recursive: true })
+    await mkdir(path.join(destination, 'app'), { recursive: true })
+    await mkdir(path.join(destination, 'data'), { recursive: true })
+    await mkdir(path.join(destination, 'workspace'), { recursive: true })
+    await mkdir(path.join(destination, 'licenses'), { recursive: true })
+    await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'), 'ready')
+    await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
+    await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0"}\n')
+    await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
+
+    await withFixtureServer(fixture, async ({ manifestUrl }) => {
+      await assert.rejects(execBootstrap(executable, [
+        '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
+        '--allow-http', '--result', resultFile,
+      ], resultFile))
+    })
+
+    const result = JSON.parse(await readFile(resultFile, 'utf8'))
+    assert.equal(result.status, 'failed')
+    assert.match(result.message, /previous version was restored/i)
+    const updateOutcome = JSON.parse(await readFile(path.join(destination, 'data', 'runtime', 'last-update-result.json'), 'utf8'))
+    assert.equal(updateOutcome.status, 'rolled-back')
+    assert.equal(updateOutcome.restoredVersion, '0.4.0')
+    assert.equal(updateOutcome.targetVersion, 'test-portable')
+    assert.match(updateOutcome.message, /previous version was restored/i)
+    assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"old"}\n')
+    assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
+    assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a failed staged compatibility preflight leaves the installed program untouched', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-preflight-reject-'))
+  try {
+    const executable = path.join(root, 'full-updater.exe')
+    const resultFile = path.join(root, 'result.json')
+    const destination = path.join(root, 'portable', 'DSH-Portable')
+    const fixture = await makeFixture(root)
+    await compileBootstrap(executable)
+    await compileHealthFixture(path.join(root, 'payload', 'DSH-Portable', 'DeepSeek-Herness.exe'), 'fail')
+    await execFileAsync('tar.exe', ['-a', '-c', '-f', fixture.archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
+    fixture.bytes = await readFile(fixture.archive)
+    fixture.sha256 = createHash('sha256').update(fixture.bytes).digest('hex')
+
+    await mkdir(path.join(destination, 'runtime', 'node'), { recursive: true })
+    await mkdir(path.join(destination, 'app'), { recursive: true })
+    await mkdir(path.join(destination, 'data'), { recursive: true })
+    await mkdir(path.join(destination, 'workspace'), { recursive: true })
+    await mkdir(path.join(destination, 'licenses'), { recursive: true })
+    await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'), 'ready')
+    await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
+    await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
+    await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.5.2"}\n')
+    await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
+
+    await withFixtureServer(fixture, async ({ manifestUrl }) => {
+      await assert.rejects(execBootstrap(executable, [
+        '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
+        '--allow-http', '--result', resultFile,
+      ], resultFile))
+    })
+
+    const result = JSON.parse(await readFile(resultFile, 'utf8'))
+    assert.equal(result.status, 'failed')
+    assert.match(result.message, /compatibility check/i)
+    const updateOutcome = JSON.parse(await readFile(path.join(destination, 'data', 'runtime', 'last-update-result.json'), 'utf8'))
+    assert.equal(updateOutcome.status, 'blocked')
+    assert.equal(updateOutcome.restoredVersion, '0.5.2')
+    assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"old"}\n')
+    assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
+    assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a full-package update commits only after the updated desktop reports ready', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-health-commit-'))
+  try {
+    const executable = path.join(root, 'full-updater.exe')
+    const resultFile = path.join(root, 'result.json')
+    const destination = path.join(root, 'portable', 'DSH-Portable')
+    const fixture = await makeFixture(root)
+    await compileBootstrap(executable)
+    await compileHealthFixture(path.join(root, 'payload', 'DSH-Portable', 'DeepSeek-Herness.exe'), 'ready')
+    await execFileAsync('tar.exe', ['-a', '-c', '-f', fixture.archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
+    fixture.bytes = await readFile(fixture.archive)
+    fixture.sha256 = createHash('sha256').update(fixture.bytes).digest('hex')
+
+    await mkdir(path.join(destination, 'runtime', 'node'), { recursive: true })
+    await mkdir(path.join(destination, 'app'), { recursive: true })
+    await mkdir(path.join(destination, 'data'), { recursive: true })
+    await mkdir(path.join(destination, 'workspace'), { recursive: true })
+    await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'), 'ready')
+    await writeFile(path.join(destination, 'runtime', 'node', 'node.exe'), 'old node')
+    await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
+    await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
+
+    await withFixtureServer(fixture, async ({ manifestUrl }) => {
+      await execBootstrap(executable, [
+        '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
+        '--allow-http', '--result', resultFile,
+      ], resultFile)
+    })
+
+    const result = JSON.parse(await readFile(resultFile, 'utf8'))
+    assert.equal(result.status, 'updated')
+    const updateOutcome = JSON.parse(await readFile(path.join(destination, 'data', 'runtime', 'last-update-result.json'), 'utf8'))
+    assert.equal(updateOutcome.status, 'updated')
+    assert.equal(updateOutcome.targetVersion, 'test-portable')
+    assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"fixture"}\n')
+    assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
+    assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
   } finally {
     await rm(root, { recursive: true, force: true })
   }

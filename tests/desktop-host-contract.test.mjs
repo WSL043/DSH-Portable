@@ -26,12 +26,16 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /关闭窗口时/)
   assert.match(host, /最小化到托盘/)
   assert.match(host, /退出 DeepSeek Harness/)
-  assert.match(host, /WmPortableRestore/)
+  assert.match(host, /RegisterEnvironmentRestoreMessage/)
+  assert.match(host, /message\.Msg == restoreMessage/)
   assert.match(host, /SignalExistingDesktopHost/)
   assert.match(host, /NavigationCompleted/)
   assert.match(host, /TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>/)
   assert.match(host, /private void FitWebViewToClient\(\)/)
-  assert.match(host, /ClientSizeChanged\s*\+=\s*delegate\s*\{\s*FitWebViewToClient\(\);\s*\}/)
+  assert.match(host, /Dock\s*=\s*DockStyle\.Fill/)
+  assert.doesNotMatch(host, /ClientSizeChanged\s*\+=\s*delegate\s*\{\s*FitWebViewToClient\(\);\s*\}/)
+  assert.match(host, /BackColor\s*=\s*background/)
+  assert.match(host, /webView\.DefaultBackgroundColor\s*=\s*background/)
   assert.ok(
     host.indexOf('RestoreDesktopWindowState();') < host.indexOf('Shown += async delegate'),
     'the desktop must open at its saved final size before startup work begins',
@@ -56,7 +60,7 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host.slice(0, host.indexOf('ShowDesktopAsync')), /MinimumSize\s*=\s*desktopStart\s*\?\s*new Size\(900,\s*620\)/)
   assert.match(host, /CloseOwnedDesktopHost/)
   assert.match(host, /Path\.GetFullPath\(process\.MainModule\.FileName\)/)
-  assert.match(host, /PostMessage\(window, WmPortableExit/)
+  assert.match(host, /PostMessage\(window, exitMessage/)
   assert.match(host, /process\.WaitForExit\(45000\)/)
   const externalHostClose = host.slice(host.indexOf('private void CloseOwnedDesktopHost()'), host.indexOf('private delegate bool EnumWindowsCallback'))
   assert.doesNotMatch(externalHostClose, /process\.ExitCode/)
@@ -70,6 +74,12 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(build, /WebView2Loader\.dll/)
   assert.match(build, /WebView2-LICENSE\.txt/)
   assert.doesNotMatch(build, /Copy-Item\s+\$LauncherExe\s+\(Join-Path\s+\$Stage\s+'Stop DeepSeek-Herness\.exe'\)/)
+})
+
+test('Windows desktop diagnostics do not depend on a user PATH entry for PowerShell', async () => {
+  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  assert.match(source, /SpecialFolder\.Windows[\s\S]+WindowsPowerShell[\s\S]+powershell\.exe/)
+  assert.doesNotMatch(source, /FileName = "powershell\.exe"/)
 })
 
 test('Windows exit does not complete until the owned WebView2 runtime releases the portable folder', async () => {
@@ -128,7 +138,7 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.match(build, /PortableProcessJob\.cs/)
   assert.match(host, /PortableProcessJob\.Initialize\(\)/)
   assert.ok(
-    host.indexOf('PortableProcessJob.Initialize();') < host.indexOf('Application.Run(new LauncherWindow(args))'),
+    host.indexOf('PortableProcessJob.Initialize();') < host.indexOf('Application.Run(new LauncherWindow(args,'),
     'the native host must enter its job before WebView2 and DSH child processes are created',
   )
   assert.match(webViewExit, /PortableProcessJob\.ExitOwnedTree/)
@@ -142,12 +152,12 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.doesNotMatch(webViewDataRoot, /Path\.Combine\(root, "data", "webview2"\)/)
   assert.match(host, /private string ResolvePortableLocationKey\(\)/)
   assert.match(host, /private string ResolveLauncherLogDirectory\(\)/)
-  assert.match(host, /Path\.Combine\(root, "data", "logs"\)/)
+  assert.match(host, /Path\.Combine\(stateRoot, "data", "logs"\)/)
 
   const releaseFailure = host.slice(host.indexOf('await WaitForWebViewExitAsync'), host.indexOf('allowClose = true;', host.indexOf('await WaitForWebViewExitAsync')))
   assert.doesNotMatch(releaseFailure, /shutdownRunning\s*=\s*false/)
 
-  const externalExit = host.slice(host.indexOf('if (message.Msg == WmPortableExit)'), host.indexOf('if (message.Msg == WmPortableRestore)'))
+  const externalExit = host.slice(host.indexOf('if (message.Msg == exitMessage)'), host.indexOf('if (message.Msg == restoreMessage)'))
   assert.match(externalExit, /BeginDesktopShutdown\(/)
   assert.doesNotMatch(externalExit, /Close\(\)/)
 
@@ -288,6 +298,24 @@ test('Windows startup reveals only the full-size official DSH boot surface', asy
   assert.match(firstPaintProbe, /document\.fonts\.status==='loaded'/)
   assert.match(firstPaintProbe, /attempt\s*<\s*560/)
   assert.doesNotMatch(navigationSetup.slice(0, navigationSetup.indexOf('Navigate(url)')), /Opacity\s*=\s*1/)
+})
+
+test('Windows staged-update preflight exits without leaving a hidden failure window', async () => {
+  const source = await read('launcher/windows/DSH-Portable.cs')
+  const failure = source.match(/private void HandleFailure\(int exitCode, string message\)[\s\S]*?\n        \}/u)?.[0] ?? ''
+  assert.match(failure, /DSH_PORTABLE_UPDATE_PREFLIGHT/)
+  assert.match(failure, /DisposeTrayIcon\(\)/)
+  assert.match(failure, /Close\(\)/)
+  assert.doesNotMatch(failure, /ShowFailure\(message\)[\s\S]*DSH_PORTABLE_UPDATE_PREFLIGHT/)
+})
+
+test('Windows workspace readiness survives the official Alpha token redirect without logging the token', async () => {
+  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  assert.match(host, /private static string WorkspaceOriginPath\(string value\)/)
+  assert.match(host, /location\.origin[\s\S]+location\.pathname/)
+  assert.match(host, /current===expected/)
+  assert.match(host, /navigation-start:" \+ SafeWorkspaceUrl\(url\)/)
+  assert.doesNotMatch(host, /navigation-start:" \+ url/)
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {

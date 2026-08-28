@@ -15,7 +15,10 @@ const headers = {
 }
 
 async function json(url) {
-  const response = await fetch(url, { headers })
+  const requestHeaders = url.startsWith('https://registry.npmjs.org/')
+    ? { ...headers, accept: 'application/json' }
+    : headers
+  const response = await fetch(url, { headers: requestHeaders })
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
   return response.json()
 }
@@ -33,18 +36,31 @@ async function officialTagCommit(version) {
   return { sha: object.sha }
 }
 
-const [registry, commit, currentLock] = await Promise.all([
-  json('https://registry.npmjs.org/@deepseek-ai%2Fdsh'),
+const [distTags, commit, currentLock] = await Promise.all([
+  json('https://registry.npmjs.org/-/package/@deepseek-ai%2Fdsh/dist-tags'),
   json('https://api.github.com/repos/deepseek-ai/deepseek-harness/commits/master'),
   readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
 ])
+const needsRegistry = [distTags.latest, distTags.next]
+  .filter(Boolean)
+  .some(version => version !== currentLock.dsh.version)
+const registry = needsRegistry
+  ? await json('https://registry.npmjs.org/@deepseek-ai%2Fdsh')
+  : {
+      'dist-tags': distTags,
+      versions: {
+        [currentLock.dsh.version]: { dist: { integrity: currentLock.dsh.integrity } },
+      },
+    }
 const provisional = evaluateUpstream({
   lock: currentLock,
   registry,
   commit,
   requestedTag: tag,
 })
-const packageCommit = await officialTagCommit(provisional.version)
+const packageCommit = provisional.version === currentLock.dsh.version
+  ? { sha: currentLock.dsh.reviewedCommit }
+  : await officialTagCommit(provisional.version)
 const state = evaluateUpstream({
   lock: currentLock,
   registry,

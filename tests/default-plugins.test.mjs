@@ -40,6 +40,20 @@ test('default plugin metadata is exact and independently locked', () => {
   )
 })
 
+test('a product channel can explicitly ship no default plugins without creating a profile', async (t) => {
+  const { root, layout } = await fixture(t)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), '{"defaultPlugins":[]}\n')
+  let spawned = false
+  const result = await seedDefaultPlugins(layout, {
+    spawnSync() { spawned = true; return { status: 0 } },
+  })
+
+  assert.deepEqual(result, { status: 'skipped', profile: 'web', reason: 'no-compatible-defaults' })
+  assert.equal(spawned, false)
+  await assert.rejects(readFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json')), /ENOENT/)
+})
+
 test('fresh web profile is seeded through official plugin add with a move-safe profile-relative archive', async (t) => {
   const { layout } = await fixture(t)
   const calls = []

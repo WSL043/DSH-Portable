@@ -666,7 +666,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         if let data = try? Data(contentsOf: launcherSettingsURL),
            let existing = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { settings = existing }
         settings["schemaVersion"] = 2
-        for key in ["productUpdateCheckEnabled", "engineUpdateCheckEnabled", "taskNotificationsEnabled", "closeBehavior"] {
+        for key in ["updateChannel", "productUpdateCheckEnabled", "engineUpdateCheckEnabled", "taskNotificationsEnabled", "closeBehavior"] {
             if let value = message[key] { settings[key] = value }
         }
         if let product = settings["productUpdateCheckEnabled"] as? Bool { settings["updateCheckEnabled"] = product }

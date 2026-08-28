@@ -38,6 +38,36 @@ const conversationSource = [
   '\t\t\t"access.confirm.title": "Enable Full access?",',
 ].join('\n')
 
+const alphaSettingsSource = [
+  '\t\tfunction displayPermissionPreset(value, name) {',
+  '\t\tfunction PermissionRow({ load, select, usePermission, t }) {',
+  '\t\t\tconst label = selected?.label ?? (busy ? t("loading") : t("unavailable"));',
+  '\t\t\t\t\t\tlabel: option.label',
+  '\t\t\t\tlabel: displayPermissionPreset(option.value, option.name),',
+  '\t\t\t"unavailable": "不可用",',
+  '\t\t\t"confirm.title": "确认启用 Full access？",',
+  '\t\t\t"confirm.description": "启用 Full access 后，新会话",',
+  '\t\t\t"confirm.enable": "启用 Full access"',
+  '\t\t\t"confirm.title": "确认启用 Full access？",',
+  '\t\t\t"confirm.description": "启用 Full access 后，agent",',
+  '\t\t\t"confirm.enable": "启用 Full access"',
+  '\t\t\t"unavailable": "Unavailable",',
+].join('\n')
+
+const alphaConversationSource = [
+  '\t\tfunction optionLabel(option, t) {',
+  '\t\t\treturn option.value === FULL_ACCESS ? t("access.fullLabel") : displayName(option.name);',
+  '\t\t}',
+  '\t\t\tcurrent === void 0 ? displayName(currentValue) : optionLabel(current, t)',
+  '\t\t\tcurrent === void 0 ? displayName(currentValue) : optionLabel(current, t)',
+  '\t\t\t"access.confirm.title": "确认启用 Full access？",',
+  '\t\t\t"access.confirm.description": "启用 Full access 后，agent",',
+  '\t\t\t"access.confirm.enable": "启用 Full access",',
+  '\t\t\t"access.fullLabel": "Full access",',
+  '\t\t\t"access.confirm.enable": "Enable Full access",',
+  '\t\t\t"access.fullLabel": "Full access",',
+].join('\n')
+
 test('known permission modes follow the active Chinese or English locale', () => {
   const settings = patchPermissionSettings(settingsSource)
   const conversation = patchConversationPermissions(conversationSource)
@@ -54,6 +84,20 @@ test('known permission modes follow the active Chinese or English locale', () =>
   assert.match(conversation, /optionLabel\(option, t\)/)
   assert.doesNotMatch(settings, /确认启用 Full access/)
   assert.doesNotMatch(conversation, /确认启用 Full access/)
+})
+
+test('alpha permission presentation seams remain localized and idempotent', () => {
+  const settings = patchPermissionSettings(alphaSettingsSource)
+  const conversation = patchConversationPermissions(alphaConversationSource)
+  for (const output of [settings, conversation]) {
+    assert.match(output, /工作区写入/)
+    assert.match(output, /Workspace write/)
+    assert.doesNotMatch(output, /确认启用 Full access/)
+  }
+  assert.match(settings, /permissionPresetLabel\(option\.value, displayPermissionPreset/)
+  assert.match(conversation, /permissionModeLocaleKeys/)
+  assert.equal(patchPermissionSettings(settings), settings)
+  assert.equal(patchConversationPermissions(conversation), conversation)
 })
 
 test('permission localization is guarded, idempotent, and part of every product build', async () => {

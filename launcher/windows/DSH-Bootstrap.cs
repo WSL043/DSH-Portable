@@ -24,8 +24,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.5.2.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.5.2.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.6.0.1")]
+[assembly: System.Reflection.AssemblyFileVersion("0.6.0.1")]
 
 namespace DshPortableBootstrap
 {
@@ -152,6 +152,38 @@ namespace DshPortableBootstrap
 
         [DataMember(Name = "destination")]
         public string Destination { get; set; }
+
+        [DataMember(Name = "message", EmitDefaultValue = false)]
+        public string Message { get; set; }
+    }
+
+    [DataContract]
+    internal sealed class InstalledModeDefinition
+    {
+        [DataMember(Name = "schemaVersion")]
+        public int SchemaVersion { get; set; }
+
+        [DataMember(Name = "stateRoot")]
+        public string StateRoot { get; set; }
+    }
+
+    [DataContract]
+    internal sealed class UpdateOutcome
+    {
+        [DataMember(Name = "schemaVersion")]
+        public int SchemaVersion { get; set; }
+
+        [DataMember(Name = "status")]
+        public string Status { get; set; }
+
+        [DataMember(Name = "targetVersion", EmitDefaultValue = false)]
+        public string TargetVersion { get; set; }
+
+        [DataMember(Name = "restoredVersion", EmitDefaultValue = false)]
+        public string RestoredVersion { get; set; }
+
+        [DataMember(Name = "recordedAt")]
+        public string RecordedAt { get; set; }
 
         [DataMember(Name = "message", EmitDefaultValue = false)]
         public string Message { get; set; }
@@ -333,8 +365,51 @@ namespace DshPortableBootstrap
                     StopRunningPortable();
                     reportStatus(BootstrapText.L("正在刷新 DSH profile 模块映射…", "Refreshing the DSH profile module mapping…"));
                     ResetManagedProfileModuleFallback();
+                    if (!options.NoLaunch)
+                    {
+                        reportStatus(BootstrapText.L("正在检查现有数据与新版本的兼容性…", "Checking existing data against the new version…"));
+                        try
+                        {
+                            VerifyStagedPortableCompatibility(extracted, manifest.Version);
+                        }
+                        catch (Exception compatibilityError)
+                        {
+                            WriteUpdateOutcome("blocked", manifest.Version, installedVersion, BootstrapText.L(
+                                "新版本未通过现有数据兼容性检查，当前版本保持不变。",
+                                "The new version did not pass the existing-data compatibility check. The current version was left unchanged."));
+                            LaunchIfRequested();
+                            throw new InvalidOperationException(BootstrapText.L(
+                                "新版本未通过兼容性检查；当前程序文件没有被替换。",
+                                "The new version did not pass the compatibility check. Current program files were not replaced."), compatibilityError);
+                        }
+                    }
                     reportStatus(BootstrapText.L("正在安装新版本并保留个人数据…", "Installing the new version and preserving your data…"));
-                    ReplacePortableTransactionally(extracted, Path.Combine(destinationParent, ".dsh-portable-backup-" + operationId));
+                    string backupRoot = Path.Combine(destinationParent, ".dsh-portable-backup-" + operationId);
+                    ReplacePortableTransactionally(extracted, backupRoot);
+                    if (options.NoLaunch)
+                    {
+                        TryDeleteDirectory(backupRoot);
+                    }
+                    else
+                    try
+                    {
+                        reportStatus(BootstrapText.L("正在验证新版本工作台…", "Verifying the updated workspace…"));
+                        VerifyUpdatedPortableStartup(backupRoot, manifest.Version);
+                        TryDeleteDirectory(backupRoot);
+                        WriteUpdateOutcome("updated", manifest.Version, null, null);
+                    }
+                    catch (Exception startupError)
+                    {
+                        reportStatus(BootstrapText.L("新版本启动失败，正在恢复上一版本…", "The updated version could not start. Restoring the previous version…"));
+                        RestorePortableTransactionally(backupRoot);
+                        WriteUpdateOutcome("rolled-back", manifest.Version, installedVersion, BootstrapText.L(
+                            "上次更新未通过启动验证，已自动恢复上一版本。",
+                            "The last update did not pass startup verification, so the previous version was restored."));
+                        LaunchIfRequested();
+                        throw new InvalidOperationException(BootstrapText.L(
+                            "更新后的工作台未通过启动验证，已自动恢复上一版本。",
+                            "The updated workspace did not pass startup verification. The previous version was restored."), startupError);
+                    }
                 }
                 else
                 {
@@ -346,7 +421,7 @@ namespace DshPortableBootstrap
                 reportStatus(upgradeExisting
                     ? BootstrapText.L("DSH-Portable 已更新完成。", "DSH-Portable has been updated.")
                     : BootstrapText.L("DSH-Portable 已准备完成。", "DSH-Portable is ready."));
-                LaunchIfRequested();
+                if (!upgradeExisting) LaunchIfRequested();
                 return Result(upgradeExisting ? "updated" : "installed", manifest.Version, null);
             }
             finally
@@ -507,6 +582,214 @@ namespace DshPortableBootstrap
             WaitForPortableWebViewRelease();
         }
 
+        private void WriteUpdateOutcome(string status, string targetVersion, string restoredVersion, string message)
+        {
+            try
+            {
+                string runtime = Path.Combine(options.Destination, "data", "runtime");
+                Directory.CreateDirectory(runtime);
+                string destination = Path.Combine(runtime, "last-update-result.json");
+                string temporary = destination + "." + Process.GetCurrentProcess().Id + ".tmp";
+                UpdateOutcome outcome = new UpdateOutcome
+                {
+                    SchemaVersion = 1,
+                    Status = status,
+                    TargetVersion = targetVersion,
+                    RestoredVersion = restoredVersion,
+                    RecordedAt = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+                    Message = message,
+                };
+                using (FileStream stream = new FileStream(temporary, FileMode.Create, FileAccess.Write, FileShare.Read))
+                {
+                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(UpdateOutcome));
+                    serializer.WriteObject(stream, outcome);
+                }
+                if (File.Exists(destination)) File.Replace(temporary, destination, null);
+                else File.Move(temporary, destination);
+            }
+            catch { }
+        }
+
+        private void VerifyUpdatedPortableStartup(string backupRoot, string targetVersion)
+        {
+            string runtime = Path.Combine(options.Destination, "data", "runtime");
+            Directory.CreateDirectory(runtime);
+            string token = Guid.NewGuid().ToString("N");
+            string marker = Path.Combine(runtime, "full-update-health-" + token + ".ready");
+            Process process = null;
+            try
+            {
+                ProcessStartInfo start = new ProcessStartInfo
+                {
+                    FileName = Path.Combine(options.Destination, "DeepSeek-Herness.exe"),
+                    WorkingDirectory = options.Destination,
+                    UseShellExecute = false,
+                };
+                start.EnvironmentVariables["DSH_PORTABLE_UPDATE_HEALTH_FILE"] = marker;
+                start.EnvironmentVariables["DSH_PORTABLE_UPDATE_HEALTH_TOKEN"] = token;
+                start.EnvironmentVariables["DSH_PORTABLE_UPDATE_TARGET_VERSION"] = targetVersion ?? String.Empty;
+                process = Process.Start(start);
+                if (process == null) throw new InvalidOperationException(BootstrapText.L("无法启动更新后的程序。", "The updated application could not be started."));
+
+                DateTime deadline = DateTime.UtcNow.AddSeconds(90);
+                while (DateTime.UtcNow < deadline)
+                {
+                    if (File.Exists(marker))
+                    {
+                        string actual = File.ReadAllText(marker, Encoding.UTF8).Trim();
+                        if (!String.Equals(actual, token, StringComparison.Ordinal))
+                            throw new InvalidDataException(BootstrapText.L("更新启动验证结果无效。", "The update startup verification result is invalid."));
+                        return;
+                    }
+                    if (process.HasExited)
+                        throw new InvalidOperationException(BootstrapText.L("更新后的程序在工作台就绪前退出。", "The updated application exited before its workspace became ready."));
+                    Thread.Sleep(200);
+                }
+                throw new TimeoutException(BootstrapText.L("更新后的工作台未能在 90 秒内就绪。", "The updated workspace did not become ready within 90 seconds."));
+            }
+            finally
+            {
+                TryDeleteFile(marker);
+                if (process != null) process.Dispose();
+            }
+        }
+
+        private void VerifyStagedPortableCompatibility(string extracted, string targetVersion)
+        {
+            string baseStateRoot = ResolveProductStateRoot();
+            foreach (string environmentId in PreflightEnvironmentIds(baseStateRoot))
+            {
+                string environmentStateRoot = String.Equals(environmentId, "default", StringComparison.Ordinal)
+                    ? baseStateRoot
+                    : Path.Combine(baseStateRoot, "environments", environmentId);
+                string runtime = Path.Combine(environmentStateRoot, "data", "runtime");
+                Directory.CreateDirectory(runtime);
+                string token = Guid.NewGuid().ToString("N");
+                string marker = Path.Combine(runtime, "staged-update-health-" + token + ".ready");
+                Process process = null;
+                try
+                {
+                    ProcessStartInfo start = new ProcessStartInfo
+                    {
+                        FileName = Path.Combine(extracted, "DeepSeek-Herness.exe"),
+                        WorkingDirectory = extracted,
+                        UseShellExecute = false,
+                    };
+                    if (!String.Equals(environmentId, "default", StringComparison.Ordinal))
+                        start.Arguments = "--environment " + QuoteProcessArgument(environmentId);
+                    start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = baseStateRoot;
+                    start.EnvironmentVariables["DSH_PORTABLE_UPDATE_HEALTH_FILE"] = marker;
+                    start.EnvironmentVariables["DSH_PORTABLE_UPDATE_HEALTH_TOKEN"] = token;
+                    start.EnvironmentVariables["DSH_PORTABLE_UPDATE_TARGET_VERSION"] = targetVersion ?? String.Empty;
+                    start.EnvironmentVariables["DSH_PORTABLE_UPDATE_PREFLIGHT"] = "1";
+                    start.EnvironmentVariables["DSH_PORTABLE_TEST_HIDDEN"] = "1";
+                    process = Process.Start(start);
+                    if (process == null) throw new InvalidOperationException(BootstrapText.L("无法启动新版本兼容性检查。", "The new-version compatibility check could not be started."));
+
+                    DateTime deadline = DateTime.UtcNow.AddSeconds(90);
+                    bool ready = false;
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        if (File.Exists(marker))
+                        {
+                            string actual = File.ReadAllText(marker, Encoding.UTF8).Trim();
+                            if (!String.Equals(actual, token, StringComparison.Ordinal))
+                                throw new InvalidDataException(BootstrapText.L("兼容性检查结果无效。", "The compatibility check result is invalid."));
+                            ready = true;
+                            break;
+                        }
+                        if (process.HasExited)
+                            throw new InvalidOperationException(BootstrapText.L("新版本在兼容性检查完成前退出。", "The new version exited before its compatibility check completed."));
+                        Thread.Sleep(200);
+                    }
+                    if (!ready) throw new TimeoutException(BootstrapText.L("新版本兼容性检查未能在 90 秒内完成。", "The new-version compatibility check did not finish within 90 seconds."));
+                    if (!process.WaitForExit(30000))
+                        throw new TimeoutException(BootstrapText.L("兼容性检查完成后，新版本未能安全退出。", "The new version did not exit safely after its compatibility check."));
+                    if (process.ExitCode != 0)
+                        throw new InvalidOperationException(BootstrapText.L("新版本兼容性检查退出异常。", "The new-version compatibility check exited with an error."));
+                }
+                finally
+                {
+                    TryDeleteFile(marker);
+                    if (process != null)
+                    {
+                        try
+                        {
+                            if (!process.HasExited)
+                            {
+                                process.Kill();
+                                process.WaitForExit(10000);
+                            }
+                        }
+                        catch { }
+                        process.Dispose();
+                    }
+                }
+            }
+        }
+
+        private System.Collections.Generic.List<string> PreflightEnvironmentIds(string baseStateRoot)
+        {
+            System.Collections.Generic.List<string> result = new System.Collections.Generic.List<string> { "default" };
+            string environmentsRoot = Path.Combine(baseStateRoot, "environments");
+            if (!Directory.Exists(environmentsRoot)) return result;
+            foreach (string directory in Directory.GetDirectories(environmentsRoot))
+            {
+                string id = Path.GetFileName(directory).ToLowerInvariant();
+                if (!Regex.IsMatch(id, "^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$", RegexOptions.CultureInvariant)
+                    || Regex.IsMatch(id, "^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)) continue;
+                if (!Directory.Exists(Path.Combine(directory, "data", "dsh-home", "profiles"))) continue;
+                result.Add(id);
+            }
+            return result;
+        }
+
+        private string ResolveProductStateRoot()
+        {
+            string definition = Path.Combine(options.Destination, "installed-mode.json");
+            if (!File.Exists(definition)) return options.Destination;
+            InstalledModeDefinition installed;
+            using (FileStream stream = new FileStream(definition, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                installed = (InstalledModeDefinition)new DataContractJsonSerializer(typeof(InstalledModeDefinition)).ReadObject(stream);
+            if (installed == null || installed.SchemaVersion != 1 || String.IsNullOrWhiteSpace(installed.StateRoot))
+                throw new InvalidDataException(BootstrapText.L("安装模式配置无效。", "The installed-mode configuration is invalid."));
+            string expanded = Regex.Replace(installed.StateRoot, "%([^%]+)%", delegate(Match match)
+            {
+                string value = Environment.GetEnvironmentVariable(match.Groups[1].Value);
+                return String.IsNullOrEmpty(value) ? match.Value : value;
+            });
+            if (Regex.IsMatch(expanded, "%[^%]+%"))
+                throw new InvalidDataException(BootstrapText.L("安装模式配置引用了不可用的环境变量。", "The installed-mode configuration references an unavailable environment variable."));
+            return Path.GetFullPath(expanded);
+        }
+
+        private static string QuoteProcessArgument(string value)
+        {
+            return "\"" + (value ?? String.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
+        }
+
+        private void RestorePortableTransactionally(string backupRoot)
+        {
+            try { StopRunningPortable(); } catch { }
+            string[] preserved = new[] { "data", "workspace", "installed-mode.json" };
+            foreach (string item in Directory.GetFileSystemEntries(options.Destination))
+            {
+                string name = Path.GetFileName(item);
+                if (Array.Exists(preserved, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase))) continue;
+                DeleteEntry(item);
+                if (Directory.Exists(item) || File.Exists(item))
+                    throw new IOException(BootstrapText.L("无法移除启动失败的新版本文件。", "A failed updated program file could not be removed."));
+            }
+            foreach (string item in Directory.GetFileSystemEntries(backupRoot))
+            {
+                string name = Path.GetFileName(item);
+                MoveEntry(item, Path.Combine(options.Destination, name));
+            }
+            if (!IsCompletePortable(options.Destination))
+                throw new InvalidDataException(BootstrapText.L("上一版本恢复后缺少必要文件。", "Required files are missing after restoring the previous version."));
+            TryDeleteDirectory(backupRoot);
+        }
+
         private void WaitForPortableWebViewRelease()
         {
             string dataRoot = ResolvePortableWebViewDataRoot();
@@ -523,7 +806,7 @@ namespace DshPortableBootstrap
                 {
                     ProcessStartInfo start = new ProcessStartInfo
                     {
-                        FileName = "powershell.exe",
+                        FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
                         Arguments = "-NoProfile -NonInteractive -EncodedCommand " + encoded,
                         UseShellExecute = false,
                         CreateNoWindow = true,
@@ -625,7 +908,6 @@ namespace DshPortableBootstrap
                     movedNew.Add(name);
                 }
                 if (!IsCompletePortable(options.Destination)) throw new InvalidDataException(BootstrapText.L("新版本安装后缺少必要文件。", "Required files are missing after the update."));
-                TryDeleteDirectory(backupRoot);
             }
             catch
             {

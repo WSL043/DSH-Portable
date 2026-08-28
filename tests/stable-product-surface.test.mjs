@@ -46,7 +46,9 @@ test('dsh.exe opens an isolated official-syntax terminal and preserves parameter
   assert.ok(zeroArgumentGuard < cliLaunch, 'zero-argument terminal routing must happen before launching the CLI')
   assert.match(source, /LaunchDshTerminal/)
   assert.match(source, /--terminal/)
+  assert.match(source, /--environment/)
   assert.match(source, /dsh-terminal\.cmd/)
+  assert.match(terminal, /DSH_PORTABLE_ENVIRONMENT/)
   assert.match(terminal, /set "PATH=%~dp0\.\.;%PATH%"/i)
   assert.match(terminal, /cd \/d "%~dp0\.\."/i)
   assert.match(terminal, /pwsh\.exe[\s\S]+powershell\.exe/i)
@@ -63,6 +65,8 @@ test('Windows tray exposes the isolated DSH terminal without changing global PAT
   assert.match(source, /DSH Terminal/)
   assert.match(source, /dsh\.exe/)
   assert.match(source, /--terminal/)
+  assert.match(source, /--environment/)
+  assert.match(source, /environmentId/)
   assert.doesNotMatch(source, /Environment\.SetEnvironmentVariable\([^,]+,[^,]+,\s*EnvironmentVariableTarget\.(?:User|Machine)/)
 })
 

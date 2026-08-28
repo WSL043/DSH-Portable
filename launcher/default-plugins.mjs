@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -25,6 +25,22 @@ export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   license: 'MIT',
   reviewedCommit: 'c7869a1936e2538a26d3d404b8b4ecaa092ab699',
 })])
+
+function defaultsForProduct(layout, adapters = {}) {
+  const exists = adapters.existsSync ?? existsSync
+  const load = adapters.readFileSync ?? readFileSync
+  const components = path.join(layout.root, 'licenses', 'COMPONENTS.json')
+  if (!exists(components)) return DEFAULT_PLUGINS
+  const configured = JSON.parse(load(components, 'utf8')).defaultPlugins
+  if (!Array.isArray(configured)) throw new Error('Portable component metadata has no default plugin list.')
+  return Object.freeze(configured.map((entry) => {
+    const matched = DEFAULT_PLUGINS.find(plugin => plugin.name === entry?.package && plugin.version === entry?.version)
+    if (!matched || matched.sha256 !== entry?.sha256 || matched.integrity !== entry?.integrity) {
+      throw new Error(`Portable component metadata contains an unrecognized default plugin: ${entry?.package ?? 'unknown'}`)
+    }
+    return matched
+  }))
+}
 
 async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}) {
   const load = adapters.readFile ?? readFile
@@ -53,6 +69,8 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
   const profileRoot = paths.join(profilesRoot, profile)
   const seedMarker = paths.join(profileRoot, '.dsh-portable-default-seed.json')
   const exists = adapters.existsSync ?? existsSync
+  const plugins = defaultsForProduct(layout, adapters)
+  if (plugins.length === 0) return { status: 'skipped', profile, reason: 'no-compatible-defaults' }
   const recoveringInterruptedSeed = exists(profileRoot) && exists(seedMarker)
   if (exists(profileRoot) && !recoveringInterruptedSeed) return { status: 'skipped', profile, reason: 'profile-exists' }
 
@@ -65,7 +83,7 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
   let createdProfile = false
 
   try {
-    for (const plugin of DEFAULT_PLUGINS) {
+    for (const plugin of plugins) {
       const packagedArchive = paths.join(layout.root, 'default-plugins', plugin.filename)
       const verify = adapters.verifyArchive ?? ((filename) => verifyPackagedArchive(filename, plugin.sha256, adapters))
       await verify(packagedArchive, plugin)
@@ -79,10 +97,10 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
       if (error?.code === 'EEXIST') return { status: 'skipped', profile, reason: 'profile-exists' }
       throw error
     }
-    await save(seedMarker, `${JSON.stringify({ schemaVersion: 2, plugins: DEFAULT_PLUGINS.map(plugin => plugin.name) })}\n`, 'utf8')
+    await save(seedMarker, `${JSON.stringify({ schemaVersion: 2, plugins: plugins.map(plugin => plugin.name) })}\n`, 'utf8')
     await makeDirectory(archiveRoot, { recursive: true })
     const relativeArchives = []
-    for (const plugin of DEFAULT_PLUGINS) {
+    for (const plugin of plugins) {
       const packagedArchive = paths.join(layout.root, 'default-plugins', plugin.filename)
       const profileArchive = paths.join(archiveRoot, plugin.filename)
       await copy(packagedArchive, profileArchive)
@@ -101,9 +119,9 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
     // The local tarball makes first boot fully offline. Once installed, expose
     // its exact published version in the profile manifest so DSH's normal
     // plugin manager and the built-in market can discover future npm updates.
-    await promoteBundledPluginsToRegistryLifecycle(profileRoot, DEFAULT_PLUGINS, adapters)
+    await promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters)
     await remove(seedMarker, { force: true })
-    return { status: 'seeded', profile, plugins: DEFAULT_PLUGINS.map(plugin => plugin.name) }
+    return { status: 'seeded', profile, plugins: plugins.map(plugin => plugin.name) }
   } catch (error) {
     if (createdProfile) await remove(profileRoot, { recursive: true, force: true }).catch(() => {})
     return {

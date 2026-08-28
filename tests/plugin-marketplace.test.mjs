@@ -16,7 +16,7 @@ test('the bundled market explicitly declares each verified official DSH preview 
   ])
   const ranges = manifest.peerDependencies['@deepseek-ai/dsh-settings'].split(/\s*\|\|\s*/)
   assert.equal(new Set(ranges).size, ranges.length)
-  assert.ok(ranges.every(range => /^\^\d+\.\d+\.\d+-rc\.\d+$/.test(range)))
+  assert.ok(ranges.every(range => /^\^\d+\.\d+\.\d+-(?:rc|alpha)\.\d+$/.test(range)))
   assert.ok(ranges.includes(`^${upstream.dsh.version}`))
 })
 
@@ -30,7 +30,7 @@ test('the current product line pins one live visual catalog and no curated exten
     read('README.en.md'),
   ])
 
-  assert.match(product.version, /^0\.[45]\.\d+(?:-rc\.[1-9]\d*)?$/)
+  assert.match(product.version, /^0\.[456]\.\d+(?:-rc\.[1-9]\d*)?$/)
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(app.dependencies.dshmarket, undefined)
 

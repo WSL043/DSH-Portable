@@ -1,0 +1,23 @@
+{
+  "version": "0.6.0-rc.1",
+  "zh": {
+    "summary": "Beta 通道开始兼容官方 DeepSeek Harness Alpha，并继续与日常稳定通道隔离。",
+    "highlights": [
+      "设置中可以选择稳定版或 Beta 测试版；选择会持久保存，但不会自动降级当前安装。",
+      "Windows 完整更新只有在新工作台真正就绪后才提交；若新版本启动失败，会自动恢复上一版本并保留会话、设置、插件和工作区。",
+      "官方 DeepSeek Harness 0.1.2-alpha.1 经过独立运行时封装，稳定版仍使用已验证的正式兼容内核。",
+      "Beta 的全新 profile 暂不预装只兼容稳定内核的会话管理与图片查看插件；已有 profile 不会被改动，兼容版本通过验证后再恢复默认安装。",
+      "多个 Portable 环境共享程序文件，同时隔离各自的会话、设置、插件和工作区。"
+    ]
+  },
+  "en": {
+    "summary": "The Beta channel begins supporting the official DeepSeek Harness Alpha while remaining isolated from the daily Stable channel.",
+    "highlights": [
+      "Settings can persistently select Stable or Beta without silently downgrading the installed product.",
+      "A Windows full update commits only after the new workspace is ready. Failed startup restores the prior program while preserving sessions, settings, plugins, and workspaces.",
+      "Official DeepSeek Harness 0.1.2-alpha.1 is packaged through a separately verified runtime path, while Stable remains on the validated compatible core.",
+      "Fresh Beta profiles do not preinstall the session manager or image viewer while those releases target only the stable core. Existing profiles are left untouched, and defaults return after compatible releases pass verification.",
+      "Multiple Portable environments share program files while isolating their sessions, settings, plugins, and workspaces."
+    ]
+  }
+}

@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [string]$OutputDir,
-    [string]$CacheDir
+    [string]$CacheDir,
+    [string]$PreviewAppSource
 )
 
 $ErrorActionPreference = 'Stop'
@@ -13,6 +14,26 @@ if (-not $CacheDir) { $CacheDir = Join-Path ([System.IO.Path]::GetTempPath()) 'd
 $OutputDir = [System.IO.Path]::GetFullPath($OutputDir)
 $CacheDir = [System.IO.Path]::GetFullPath($CacheDir)
 $Lock = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.lock.json') | ConvertFrom-Json
+$DshLock = $Lock.dsh
+$DefaultPluginsLock = $Lock.defaultPlugins
+$PreviewReceipt = $null
+if ($PreviewAppSource) {
+    $PreviewAppSource = [System.IO.Path]::GetFullPath($PreviewAppSource)
+    $PreviewReceiptPath = Join-Path $PreviewAppSource 'preview-runtime.json'
+    $PreviewLock = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.preview.lock.json') | ConvertFrom-Json
+    if (-not (Test-Path -LiteralPath (Join-Path $PreviewAppSource 'node_modules\@deepseek-ai\dsh\package.json'))) {
+        throw "Preview app source is incomplete: $PreviewAppSource"
+    }
+    if (-not (Test-Path -LiteralPath $PreviewReceiptPath)) {
+        throw "Preview app source has no signed-off receipt: $PreviewReceiptPath"
+    }
+    $PreviewReceipt = Get-Content -Raw -LiteralPath $PreviewReceiptPath | ConvertFrom-Json
+    if ($PreviewReceipt.dshVersion -ne $PreviewLock.dsh.version -or $PreviewReceipt.dshCommit -ne $PreviewLock.dsh.reviewedCommit) {
+        throw 'Preview app receipt does not match upstream.preview.lock.json.'
+    }
+    $DshLock = $PreviewLock.dsh
+    $DefaultPluginsLock = $PreviewLock.defaultPlugins
+}
 $Runtime = $Lock.node.runtimes.'win-x64'
 $PortableVersion = (Get-Content -Raw (Join-Path $ProjectRoot 'package.json') | ConvertFrom-Json).version
 $BuildId = [Guid]::NewGuid().ToString('N')
@@ -28,7 +49,7 @@ $WebView2Core = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.
 $WebView2WinForms = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.WinForms.dll'
 $WebView2Loader = Join-Path $WebView2Extracted 'runtimes\win-x64\native\WebView2Loader.dll'
 $WebView2License = Join-Path $WebView2Extracted 'LICENSE.txt'
-$DefaultPlugins = @($Lock.defaultPlugins.PSObject.Properties | ForEach-Object { $_.Value })
+$DefaultPlugins = @($DefaultPluginsLock.PSObject.Properties | ForEach-Object { $_.Value })
 
 function Assert-Sha256([string]$Filename, [string]$Expected) {
     $Actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $Filename).Hash.ToLowerInvariant()
@@ -116,9 +137,9 @@ try {
 
     $NodeExe = Join-Path $NodeFolder 'node.exe'
     $NpmCli = Join-Path $NodeFolder 'node_modules\npm\bin\npm-cli.js'
-    $PackageLock = Join-Path $ProjectRoot 'app\package-lock.json'
+    $PackageLock = if ($PreviewAppSource) { $null } else { Join-Path $ProjectRoot 'app\package-lock.json' }
     if (-not (Test-Path -LiteralPath $NpmCli)) { throw "Pinned Node archive contains no npm CLI: $NpmCli" }
-    if (-not (Test-Path -LiteralPath $PackageLock)) { throw 'app/package-lock.json is required.' }
+    if (-not $PreviewAppSource -and -not (Test-Path -LiteralPath $PackageLock)) { throw 'app/package-lock.json is required.' }
 
     $ReleasePolicy = @{}
     & $NodeExe (Join-Path $ProjectRoot 'scripts\version-policy.mjs') $PortableVersion | ForEach-Object {
@@ -129,8 +150,18 @@ try {
     $ReleaseChannel = $ReleasePolicy.channel
     $UpdateChannelTag = $ReleasePolicy.updateChannelTag
     if (-not $ReleaseChannel -or -not $UpdateChannelTag) { throw 'Product version policy returned no release channel.' }
+    if ($ReleaseChannel -eq 'candidate' -and -not $PreviewAppSource) {
+        throw 'Candidate builds require -PreviewAppSource; refusing to publish a stable DSH runtime behind a beta shell version.'
+    }
+    if ($ReleaseChannel -eq 'stable' -and $PreviewAppSource) {
+        throw 'Stable builds must not consume -PreviewAppSource.'
+    }
 
     Copy-PortableSources $Stage
+    if ($PreviewAppSource) {
+        [System.IO.Directory]::Delete((Join-Path $Stage 'app'), $true)
+        Copy-Item -Recurse -LiteralPath $PreviewAppSource -Destination (Join-Path $Stage 'app')
+    }
     foreach ($DefaultPlugin in $DefaultPlugins) {
         $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
         Copy-Item $DefaultPluginArchive (Join-Path $Stage "default-plugins\$($DefaultPlugin.filename)")
@@ -138,19 +169,21 @@ try {
     Copy-Item $NodeExe (Join-Path $Stage 'runtime\node\node.exe')
     Copy-Item (Join-Path $NodeFolder 'LICENSE') (Join-Path $Stage 'licenses\Node.js-LICENSE.txt')
 
-    & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-lock.mjs') $PackageLock (Join-Path $ProjectRoot 'upstream.lock.json')
-    if ($LASTEXITCODE -ne 0) { throw "package-lock verification failed with exit code $LASTEXITCODE" }
+    if (-not $PreviewAppSource) {
+        & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-lock.mjs') $PackageLock (Join-Path $ProjectRoot 'upstream.lock.json')
+        if ($LASTEXITCODE -ne 0) { throw "package-lock verification failed with exit code $LASTEXITCODE" }
 
-    $PriorNpmCache = $env:npm_config_cache
-    $PriorPath = $env:PATH
-    try {
-        $env:npm_config_cache = Join-Path $CacheDir 'npm'
-        $env:PATH = $NodeFolder + [System.IO.Path]::PathSeparator + $PriorPath
-        & $NodeExe $NpmCli ci --prefix (Join-Path $Stage 'app') --omit=dev --no-audit --no-fund --install-links
-        if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
-    } finally {
-        $env:npm_config_cache = $PriorNpmCache
-        $env:PATH = $PriorPath
+        $PriorNpmCache = $env:npm_config_cache
+        $PriorPath = $env:PATH
+        try {
+            $env:npm_config_cache = Join-Path $CacheDir 'npm'
+            $env:PATH = $NodeFolder + [System.IO.Path]::PathSeparator + $PriorPath
+            & $NodeExe $NpmCli ci --prefix (Join-Path $Stage 'app') --omit=dev --no-audit --no-fund --install-links
+            if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
+        } finally {
+            $env:npm_config_cache = $PriorNpmCache
+            $env:PATH = $PriorPath
+        }
     }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-session-export-ui.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Session export UI adaptation failed with exit code $LASTEXITCODE" }
@@ -190,11 +223,11 @@ try {
     Copy-Item $WebView2WinForms (Join-Path $Stage 'Microsoft.Web.WebView2.WinForms.dll')
     Copy-Item $WebView2Loader (Join-Path $Stage 'WebView2Loader.dll')
     Copy-Item $WebView2License (Join-Path $Stage 'licenses\WebView2-LICENSE.txt')
-    $Notices = Join-Path $Downloads ("DeepSeek-Harness-THIRD_PARTY_NOTICES-$($Lock.dsh.reviewedCommit).md")
+    $Notices = Join-Path $Downloads ("DeepSeek-Harness-THIRD_PARTY_NOTICES-$($DshLock.reviewedCommit).md")
     if (-not (Test-Path -LiteralPath $Notices)) {
-        Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$($Lock.dsh.reviewedCommit)/THIRD_PARTY_NOTICES.md" -OutFile $Notices
+        Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$($DshLock.reviewedCommit)/THIRD_PARTY_NOTICES.md" -OutFile $Notices
     }
-    Assert-Sha256 $Notices $Lock.dsh.noticesSha256
+    Assert-Sha256 $Notices $DshLock.noticesSha256
     Copy-Item $Notices (Join-Path $Stage 'licenses\DeepSeek-Harness-THIRD_PARTY_NOTICES.md')
 
     $Components = [ordered]@{
@@ -202,9 +235,11 @@ try {
         portableVersion = $PortableVersion
         releaseChannel = $ReleaseChannel
         platform = 'windows-x64'
-        dshPackage = $Lock.dsh.package
-        dshVersion = $Lock.dsh.version
-        dshCommit = $Lock.dsh.reviewedCommit
+        dshPackage = $DshLock.package
+        dshVersion = $DshLock.version
+        dshCommit = $DshLock.reviewedCommit
+        dshChannel = if ($PreviewAppSource) { 'preview' } else { 'stable' }
+        dshPackageSetSha256 = if ($PreviewReceipt) { $PreviewReceipt.packageSetSha256 } else { $null }
         pluginMarketPackage = '@wsl043/dsh-portable-plugin-market'
         pluginMarketVersion = $Lock.pluginMarket.version
         defaultPlugins = @($DefaultPlugins | ForEach-Object { [ordered]@{ package = $_.package; version = $_.version; sha256 = $_.sha256; integrity = $_.integrity } })
@@ -317,8 +352,8 @@ try {
             targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{
                 kind = 'dsh-runtime-capsule'
-                dshVersion = $Lock.dsh.version
-                dshCommit = $Lock.dsh.reviewedCommit
+                dshVersion = $DshLock.version
+                dshCommit = $DshLock.reviewedCommit
                 requiredNodeVersion = $Lock.node.version
                 runtimeLayout = 'capsule-v1'
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
@@ -343,8 +378,8 @@ try {
             targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{
                 kind = 'dsh-runtime-capsule'
-                dshVersion = $Lock.dsh.version
-                dshCommit = $Lock.dsh.reviewedCommit
+                dshVersion = $DshLock.version
+                dshCommit = $DshLock.reviewedCommit
                 requiredNodeVersion = $Lock.node.version
                 runtimeLayout = 'capsule-v1'
                 bytes = (Get-Item -LiteralPath $UpdateComponent).Length
@@ -382,10 +417,15 @@ try {
     if (Test-Path -LiteralPath $ShaBackup) { Remove-Item -LiteralPath $ShaBackup -Force }
 
     $FootprintReport = Join-Path $OutputDir 'footprint-windows-x64.json'
+    $FootprintBudget = if ($PreviewAppSource) {
+        Join-Path $ProjectRoot 'config\footprint-budgets-preview.json'
+    } else {
+        Join-Path $ProjectRoot 'config\footprint-budgets.json'
+    }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\report-footprint.mjs') $Stage `
         --platform windows-x64 `
         --archive $Zip `
-        --budget (Join-Path $ProjectRoot 'config\footprint-budgets.json') `
+        --budget $FootprintBudget `
         --output $FootprintReport
     if ($LASTEXITCODE -ne 0) { throw 'Windows product footprint exceeded its reviewed budget.' }
 
@@ -454,7 +494,7 @@ try {
         EngineUpdateManifest = $EngineUpdateManifest
         FootprintReport = $FootprintReport
         Stage = $Stage
-        DshVersion = $Lock.dsh.version
+        DshVersion = $DshLock.version
     }
 } finally {
     $BuildLock.Dispose()

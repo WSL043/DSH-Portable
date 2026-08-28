@@ -1,6 +1,7 @@
 @echo off
 setlocal
 set "DSH_PORTABLE_TERMINAL=1"
+if not "%~1"=="" set "DSH_PORTABLE_ENVIRONMENT=%~1"
 set "PATH=%~dp0..;%PATH%"
 cd /d "%~dp0.."
 title DSH Terminal

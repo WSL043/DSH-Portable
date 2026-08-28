@@ -129,7 +129,7 @@ test('build script verifies downloads and emits ZIP plus checksum', async () => 
   assert.match(script, /File\]::Replace/)
   assert.doesNotMatch(script, /File\]::Replace\([^\n]+\$null/)
   assert.match(script, /UTF8Encoding\]::new\(\$false\)/)
-  assert.match(script, /Lock\.dsh\.noticesSha256/)
+  assert.match(script, /DshLock\.noticesSha256/)
   assert.doesNotMatch(script, /61f68731049dbea19ba91ad8cf363dd2778c5f7b1f9a63496a6a62c1129eefee/)
 })
 
@@ -139,7 +139,7 @@ test('all platform builders verify official notices through the reviewed upstrea
     read('scripts/build-macos.sh'),
     read('scripts/build-linux.sh'),
   ])
-  assert.match(windows, /Lock\.dsh\.noticesSha256/)
+  assert.match(windows, /DshLock\.noticesSha256/)
   assert.match(macos, /lock_value dsh\.noticesSha256/)
   assert.match(linux, /lock_value dsh\.noticesSha256/)
   for (const builder of [windows, macos, linux]) {

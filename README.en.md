@@ -129,11 +129,12 @@ Plugins that can be mounted safely take effect immediately, while client-only pl
 ## Updates and repair
 
 - DSH-Portable opens the local workspace first, then checks in the background. Product updates and official DeepSeek Harness core updates are independent, and **Check for updates at startup** is off by default for both; enable or run either one from **Settings → General → Portable**.
+- Choose the **Stable** or **Beta** update channel. Stable is intended for daily use; Beta receives preview builds only after Portable finished-product verification. Switching channels never downgrades the installed version.
 - The tray also exposes both manual checks. Network checking, waiting for a decision, and applying an update are separate states, so the menu does not remain stuck on “Checking”.
 - Every prompt names the target—DSH-Portable or DeepSeek Harness—and shows that target's current and next version.
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.
 - When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
-- Choose Later or **Skip this version**; installation waits for active tasks and a failed update rolls back.
+- Choose Later or **Skip this version**; installation waits for active tasks. A new version commits only after its workspace becomes ready; a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
 - **Settings → General → Portable** provides checks, repair, and a support report. Repair keeps user data and rebuilds only reproducible components.
 
 An official DSH update does not need to wait for a DSH-Portable feature release, but it never replaces a working environment directly. Finished-product tests on Windows, macOS, Linux x64, and Linux ARM64 must all pass before the independent core channel is published.

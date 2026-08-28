@@ -27,11 +27,10 @@ const marketManifest = JSON.parse(await readFile(
   'utf8',
 ))
 const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
-assert.deepEqual(
-  DEFAULT_PLUGINS.map(plugin => plugin.name).sort(),
-  ['dsh-chat-manager', 'dsh-image-viewer'],
-  'the finished product does not declare both 0.5 default plugins',
-)
+const components = JSON.parse(await readFile(path.join(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+const configuredDefaultNames = (components.defaultPlugins ?? []).map(plugin => plugin.package)
+const productDefaults = DEFAULT_PLUGINS.filter(plugin => configuredDefaultNames.includes(plugin.name))
+assert.deepEqual(productDefaults.map(plugin => plugin.name).sort(), configuredDefaultNames.sort(), 'finished-product default metadata')
 let running = false
 
 function lastJsonLine(output) {
@@ -95,13 +94,13 @@ try {
   const installed = await getJson(host.url, '/dsh-market/installed')
   assert.equal(installed.profile, 'web')
   assert.equal(typeof installed.installed, 'object')
-  for (const plugin of DEFAULT_PLUGINS) {
+  for (const plugin of productDefaults) {
     assert.match(JSON.stringify(installed.installed), new RegExp(plugin.name), `${plugin.name} is absent from the normal Installed list`)
   }
 
   const profileRoot = path.join(stateRoot, 'data', 'dsh-home', 'profiles', 'web')
   const profileManifest = JSON.parse(await readFile(path.join(profileRoot, 'package.json'), 'utf8'))
-  for (const plugin of DEFAULT_PLUGINS) {
+  for (const plugin of productDefaults) {
     assert.equal(
       String(profileManifest.dependencies?.[plugin.name]).replaceAll('\\', '/'),
       plugin.version,
@@ -109,7 +108,7 @@ try {
     )
   }
   const updates = await getJson(host.url, '/dsh-market/updates?force=1', 3)
-  for (const plugin of DEFAULT_PLUGINS) {
+  for (const plugin of productDefaults) {
     const defaultUpdate = updates.updates?.[plugin.name]
     assert.equal(defaultUpdate?.kind, 'npm', `${plugin.name} is outside the market update lifecycle`)
     assert.equal(defaultUpdate?.version, plugin.version, `the market did not resolve ${plugin.name}`)
@@ -132,13 +131,14 @@ try {
     windowsHide: true,
     maxBuffer: 8 * 1024 * 1024,
   })
-  assert.match(dumped.stdout, /id:\s*ui-workspace\s+[\s\S]{0,160}?disabled:\s*true/, 'official ui-workspace row is not disabled')
-  assert.match(dumped.stdout, /id:\s*ui-workspace-session-delete\s+[\s\S]{0,160}?name:\s*dsh-chat-manager/, 'chat manager row is not active')
-  assert.match(dumped.stdout, /name:\s*dsh-image-viewer/, 'image viewer is not active')
-
-  const pluginPatch = await readFile(path.join(profileRoot, 'node_modules', 'dsh-chat-manager', 'cordis.patch.yml'), 'utf8')
-  assert.match(pluginPatch, /id:\s*ui-workspace-session-delete/)
-  assert.match(pluginPatch, /id:\s*ui-workspace[\s\S]+disabled:\s*true/)
+  if (configuredDefaultNames.includes('dsh-chat-manager')) {
+    assert.match(dumped.stdout, /id:\s*ui-workspace\s+[\s\S]{0,160}?disabled:\s*true/, 'official ui-workspace row is not disabled')
+    assert.match(dumped.stdout, /id:\s*ui-workspace-session-delete\s+[\s\S]{0,160}?name:\s*dsh-chat-manager/, 'chat manager row is not active')
+    const pluginPatch = await readFile(path.join(profileRoot, 'node_modules', 'dsh-chat-manager', 'cordis.patch.yml'), 'utf8')
+    assert.match(pluginPatch, /id:\s*ui-workspace-session-delete/)
+    assert.match(pluginPatch, /id:\s*ui-workspace[\s\S]+disabled:\s*true/)
+  }
+  if (configuredDefaultNames.includes('dsh-image-viewer')) assert.match(dumped.stdout, /name:\s*dsh-image-viewer/, 'image viewer is not active')
 
   const catalog = await getJson(host.url, '/dsh-market/registry', 3)
   const plugins = catalog.registry?.plugins
@@ -148,7 +148,7 @@ try {
   const identities = plugins.map(canonicalPluginIdentity)
   assert.equal(new Set(identities).size, identities.length, 'the normalized catalog contains duplicate repositories')
 
-  process.stdout.write(`[plugin-marketplace-smoke] ${catalog.registry.plugins.length} live plugins; both Portable defaults installed once through the official web profile\n`)
+  process.stdout.write(`[plugin-marketplace-smoke] ${catalog.registry.plugins.length} live plugins; ${productDefaults.length} compatible defaults verified through the official web profile\n`)
 } finally {
   if (running) await stop().catch(() => {})
   await rm(stateRoot, { recursive: true, force: true })

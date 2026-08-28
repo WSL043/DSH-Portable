@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -46,6 +46,7 @@ test('Portable settings routes default to privacy-safe updates and preserve unre
     updateCheckEnabled: false,
     productUpdateCheckEnabled: false,
     engineUpdateCheckEnabled: false,
+    updateChannel: 'stable',
     taskNotificationsEnabled: true,
     closeBehavior: 'tray',
   })
@@ -62,8 +63,85 @@ test('Portable settings routes default to privacy-safe updates and preserve unre
   assert.equal(saved.updateCheckEnabled, true)
   assert.equal(saved.productUpdateCheckEnabled, true)
   assert.equal(saved.engineUpdateCheckEnabled, true)
+  assert.equal(saved.updateChannel, 'stable')
   assert.equal(saved.taskNotificationsEnabled, true)
   assert.equal(saved.closeBehavior, 'tray')
+})
+
+test('Portable update channel is explicit, persistent, and defaults to the installed product channel', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-channel-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await writeFile(path.join(root, 'licenses-placeholder'), '')
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root, stateRoot: root })
+
+  const initial = response()
+  await routes.get('/dsh-portable/settings').handler(request('GET'), initial)
+  assert.equal(initial.json().settings.updateChannel, 'stable')
+
+  const changed = response()
+  await routes.get('/dsh-portable/settings').handler(request('POST', { updateChannel: 'candidate' }), changed)
+  assert.equal(changed.status, 200)
+  assert.equal(changed.json().settings.updateChannel, 'candidate')
+  assert.equal(JSON.parse(await readFile(path.join(root, 'data', 'launcher-settings.json'), 'utf8')).updateChannel, 'candidate')
+
+  const ignored = response()
+  await routes.get('/dsh-portable/settings').handler(request('POST', { updateChannel: 'nightly' }), ignored)
+  assert.equal(ignored.json().settings.updateChannel, 'candidate')
+})
+
+test('shared product preferences do not diverge across isolated environments', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-shared-settings-'))
+  const environmentRoot = path.join(root, 'environments', 'research')
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, {
+    root, stateRoot: environmentRoot, baseStateRoot: root, environmentId: 'research',
+  })
+  const changed = response()
+  await routes.get('/dsh-portable/settings').handler(request('POST', { updateChannel: 'candidate' }), changed)
+  assert.equal(JSON.parse(await readFile(path.join(root, 'data', 'launcher-settings.json'), 'utf8')).updateChannel, 'candidate')
+  await assert.rejects(readFile(path.join(environmentRoot, 'data', 'launcher-settings.json'), 'utf8'), /ENOENT/)
+})
+
+test('Portable environments are explicit, isolated, and created without changing the current environment', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-environments-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, {
+    root,
+    stateRoot: root,
+    baseStateRoot: root,
+    environmentId: 'default',
+  })
+
+  const before = response()
+  await routes.get('/dsh-portable/environments').handler(request('GET'), before)
+  assert.deepEqual(before.json(), { current: 'default', items: [{ id: 'default', name: '' }] })
+
+  const created = response()
+  await routes.get('/dsh-portable/environments').handler(request('POST', { name: '研究任务' }), created)
+  assert.equal(created.status, 201)
+  assert.equal(created.json().created.name, '研究任务')
+  assert.match(created.json().created.id, /^env-[a-f0-9]{10}$/)
+  assert.equal(created.json().current, 'default')
+  const target = path.join(root, 'environments', created.json().created.id)
+  await access(path.join(target, 'data'))
+  await access(path.join(target, 'workspace'))
+
+  const duplicate = response()
+  await routes.get('/dsh-portable/environments').handler(request('POST', { name: '研究任务' }), duplicate)
+  assert.equal(duplicate.status, 400)
+})
+
+test('environment controls require an explicitly capable desktop host', async () => {
+  const source = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+  assert.match(source, /openEnvironment: false/)
+  assert.match(source, /webView2HostCapabilities[\s\S]+openEnvironment: true/)
+  assert.match(source, /environmentsSupported && h\('section'/)
+  assert.match(source, /dsh-portable\/open-environment/)
+  assert.match(source, /pendingEnvironmentRequests/)
+  assert.match(source, /dsh-portable\/open-environment-result/)
 })
 
 test('Portable settings expose product and official DSH checks as separate bounded actions', async (t) => {
@@ -92,6 +170,36 @@ test('Portable settings expose product and official DSH checks as separate bound
   await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'all' }), invalid)
   assert.equal(invalid.status, 400)
   assert.equal(calls.length, 2)
+})
+
+test('Portable settings expose the last automatic update recovery without offering unsafe arbitrary downgrades', async (t) => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
+  t.after(() => rm(stateRoot, { recursive: true, force: true }))
+  await mkdir(path.join(stateRoot, 'data', 'runtime'), { recursive: true })
+  await writeFile(path.join(stateRoot, 'data', 'runtime', 'last-update-result.json'), JSON.stringify({
+    schemaVersion: 1,
+    status: 'rolled-back',
+    restoredVersion: '0.5.2',
+    targetVersion: '0.6.0-beta.1',
+    recordedAt: '2026-08-28T00:00:00.0000000Z',
+  }))
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root: stateRoot, stateRoot })
+  const settings = response()
+  await routes.get('/dsh-portable/settings').handler(request('GET'), settings)
+  assert.equal(settings.status, 200)
+  assert.deepEqual(settings.json().lastUpdate, {
+    schemaVersion: 1,
+    status: 'rolled-back',
+    restoredVersion: '0.5.2',
+    targetVersion: '0.6.0-beta.1',
+    recordedAt: '2026-08-28T00:00:00.0000000Z',
+  })
+
+  const client = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+  assert.match(client, /新版本无法正常启动时，会自动恢复更新前的程序/)
+  assert.match(client, /上次更新未通过启动验证，已自动恢复/)
+  assert.doesNotMatch(client, /选择历史版本|Choose historical version/)
 })
 
 test('data import review exposes the real package contents before restart', async () => {
@@ -247,6 +355,10 @@ test('Portable preferences belong to the official General settings surface', asy
   assert.match(client, /engineUpdateCheckEnabled/)
   assert.match(client, /DeepSeek Harness/)
   assert.match(client, /\/dsh-portable\/check-update/)
+  assert.match(client, /channel-unpublished/)
+  assert.match(client, /engine-follows-product/)
+  assert.match(client, /预览版内核随 DSH-Portable 更新/)
+  assert.match(client, /此预览版尚未发布更新通道/)
   assert.match(client, /taskNotificationsEnabled/)
   assert.match(client, /closeBehavior/)
   assert.match(client, /\/dsh-portable\/doctor/)
