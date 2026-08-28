@@ -85,6 +85,12 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
   return result
 }
 
+export function upstreamLockNameForTag(tag) {
+  return /-rc\.[1-9]\d*$/.test(String(tag))
+    ? 'upstream.preview.lock.json'
+    : 'upstream.lock.json'
+}
+
 async function loadReleaseDescriptor(projectRoot, tag) {
   const directory = path.join(projectRoot, 'release-notes')
   const filename = `${tag}.json`
@@ -111,7 +117,7 @@ if (invokedDirectly) {
   const [, , input, output, tag] = process.argv
   if (!input || !output || !tag) throw new Error('usage: node render-release-notes.mjs <input> <output> <tag>')
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-  const upstream = JSON.parse(await readFile(path.join(projectRoot, 'upstream.lock.json'), 'utf8'))
+  const upstream = JSON.parse(await readFile(path.join(projectRoot, upstreamLockNameForTag(tag)), 'utf8'))
   const descriptor = await loadReleaseDescriptor(projectRoot, tag)
   const rendered = renderReleaseNotes(await readFile(input, 'utf8'), tag, upstream.dsh.version, descriptor)
   await writeFile(output, rendered, 'utf8')

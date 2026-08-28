@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 import { inflateSync } from 'node:zlib'
 
 import { classifyProductVersion } from '../scripts/version-policy.mjs'
-import { renderReleaseNotes } from '../scripts/render-release-notes.mjs'
+import { renderReleaseNotes, upstreamLockNameForTag } from '../scripts/render-release-notes.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
@@ -288,6 +288,11 @@ test('release notes are version-specific instead of replaying one fixed feature 
   assert.match(notes, new RegExp(regexEscape(current.en.summary)))
   assert.doesNotMatch(template, /设置中新增实时插件市场|DSH Settings now includes a live Plugin Market/)
   assert.doesNotMatch(template, /rc\.8|SQLite backend/)
+})
+
+test('release notes resolve the official DSH version from the matching product channel', () => {
+  assert.equal(upstreamLockNameForTag('v0.6.0-rc.1'), 'upstream.preview.lock.json')
+  assert.equal(upstreamLockNameForTag('v0.6.0'), 'upstream.lock.json')
 })
 
 test('0.4.1 notes describe its actual plugin-update and session-manager changes', async () => {
