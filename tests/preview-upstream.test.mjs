@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { productionPackageClosure } from '../scripts/stage-preview-runtime.mjs'
+import { npmCliCandidates, productionPackageClosure } from '../scripts/stage-preview-runtime.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -43,6 +43,12 @@ test('preview staging follows the production dependency closure instead of every
     productionPackageClosure(packages, '@deepseek-ai/dsh').map((entry) => entry.name),
     ['@deepseek-ai/dsh', '@deepseek-ai/peer', '@deepseek-ai/runtime'],
   )
+})
+
+test('preview staging resolves npm from standard Windows and Unix Node layouts', () => {
+  const candidates = npmCliCandidates(process.execPath, undefined)
+  assert.ok(candidates.some((candidate) => candidate.endsWith(path.join('node_modules', 'npm', 'bin', 'npm-cli.js'))))
+  assert.ok(candidates.some((candidate) => candidate.endsWith(path.join('lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'))))
 })
 
 test('Windows packaging consumes preview runtime only through an explicit receipt', async () => {

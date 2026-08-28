@@ -30,13 +30,20 @@ async function sha256(filename) {
   return createHash('sha256').update(bytes).digest('hex')
 }
 
+export function npmCliCandidates(executable = process.execPath, npmExecPath = process.env.npm_execpath) {
+  const executableDirectory = path.dirname(executable)
+  const runtimePrefix = path.dirname(executableDirectory)
+  return [...new Set([
+    npmExecPath,
+    path.join(executableDirectory, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(runtimePrefix, 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    path.join(runtimePrefix, 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ].filter(Boolean))]
+}
+
 function npmCliFromRuntime(explicit) {
   if (explicit) return path.resolve(explicit)
-  const candidates = [
-    process.env.npm_execpath,
-    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-    path.join(path.dirname(path.dirname(process.execPath)), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
-  ].filter(Boolean)
+  const candidates = npmCliCandidates()
   const candidate = candidates.find((filename) => existsSync(filename))
   if (!candidate) throw new Error(`npm CLI not found; pass --npm-cli. Checked:\n${candidates.join('\n')}`)
   return candidate
