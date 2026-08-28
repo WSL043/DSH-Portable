@@ -136,7 +136,7 @@ jobs:
           $Version = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $Policy = node scripts/version-policy.mjs $Version | ConvertFrom-StringData
           if ($Policy.channel -eq 'candidate') {
-            node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
+            node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
           }
       - name: Build Windows portable base
         shell: powershell
@@ -499,7 +499,7 @@ jobs:
         run: |
           CHANNEL="$(node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" | awk -F= '$1 == "channel" { print $2 }')"
           if [ "$CHANNEL" = candidate ]; then
-            node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
+            node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
             PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-macos.sh "${{ matrix.arch }}"
           else
             bash scripts/build-macos.sh "${{ matrix.arch }}"
@@ -643,7 +643,7 @@ jobs:
         run: |
           CHANNEL="$(node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" | awk -F= '$1 == "channel" { print $2 }')"
           if [ "$CHANNEL" = candidate ]; then
-            node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
+            node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
             PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-linux.sh "${{ matrix.arch }}"
           else
             bash scripts/build-linux.sh "${{ matrix.arch }}"

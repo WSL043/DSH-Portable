@@ -81,6 +81,7 @@ test('CI builds one immutable official preview package set and stages it nativel
   assert.match(workflow, /pnpm --dir upstream run release:pack --family vendor --out dist\/npm-vendor --concurrency 8/)
   assert.match(workflow, /pnpm --dir upstream\/native\/landlock-run\/packages\/entry pack --pack-destination/)
   assert.equal((workflow.match(/stage-preview-runtime\.mjs/g) ?? []).length, 3)
+  assert.equal((workflow.match(/--packed-root preview-packed\/upstream\/dist/g) ?? []).length, 3)
   assert.match(workflow, /build-windows\.ps1 -PreviewAppSource preview-app/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-macos\.sh/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-linux\.sh/)
