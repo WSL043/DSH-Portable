@@ -29,7 +29,7 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
   if (!/^v\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(String(tag))) {
     throw new Error('A stable or release-candidate tag is required to render release notes.')
   }
-  if (!/^\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(String(dshVersion))) {
+  if (!/^\d+\.\d+\.\d+(?:-(?:alpha|rc)\.[1-9]\d*)?$/.test(String(dshVersion))) {
     throw new Error('The pinned official DSH version is required to render release notes.')
   }
   const candidate = /-rc\./.test(tag)

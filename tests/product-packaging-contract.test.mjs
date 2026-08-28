@@ -293,6 +293,8 @@ test('release notes are version-specific instead of replaying one fixed feature 
 test('release notes resolve the official DSH version from the matching product channel', () => {
   assert.equal(upstreamLockNameForTag('v0.6.0-rc.1'), 'upstream.preview.lock.json')
   assert.equal(upstreamLockNameForTag('v0.6.0'), 'upstream.lock.json')
+  const notes = renderReleaseNotes('Official DSH {{DSH_VERSION}}', 'v0.6.0-rc.1', '0.1.2-alpha.1')
+  assert.equal(notes, 'Official DSH 0.1.2-alpha.1')
 })
 
 test('0.4.1 notes describe its actual plugin-update and session-manager changes', async () => {
