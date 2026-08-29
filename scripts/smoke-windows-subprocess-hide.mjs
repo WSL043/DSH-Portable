@@ -86,9 +86,19 @@ async function runParent() {
   const aclFile = (await readdir(aclLib)).find(name => /^types-[A-Za-z0-9_-]+\.js$/.test(name))
   assert.ok(aclFile, 'compiled Windows ACL module was not found')
   const aclSource = await readFile(path.join(aclLib, aclFile), 'utf8')
-  assert.match(aclSource, /dsh-portable-windows-acl-hide-v1/)
-  assert.equal(aclSource.match(/dwFlags: 257/g)?.length, 2)
-  assert.equal(aclSource.match(/wShowWindow: 0/g)?.length, 2)
+  let restrictedProcessSource
+  if (/dsh-portable-windows-acl-hide-v1/.test(aclSource)) {
+    restrictedProcessSource = aclSource
+  } else {
+    assert.match(aclSource, /dsh-portable-windows-acl-shared-process-v1/)
+    restrictedProcessSource = await readFile(
+      path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-win32-process', 'lib', 'index.js'),
+      'utf8',
+    )
+    assert.match(restrictedProcessSource, /dsh-portable-windows-process-hide-v1/)
+  }
+  assert.equal(restrictedProcessSource.match(/dwFlags: 257/g)?.length, 2)
+  assert.equal(restrictedProcessSource.match(/wShowWindow: 0/g)?.length, 2)
 
   const probeRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-console-probe-'))
   try {

@@ -118,6 +118,10 @@ test('finished-product smoke resolves the extracted runtime capsule instead of a
   assert.match(source, /ensureRuntimeCapsule\(root\)/)
   assert.match(source, /path\.join\(prepared\.runtimeRoot, 'app'\)/)
   assert.doesNotMatch(source, /const appRoot = path\.join\(root, 'app'\)/)
+  assert.match(source, /dsh-portable-windows-acl-hide-v1/)
+  assert.match(source, /dsh-portable-windows-acl-shared-process-v1/)
+  assert.match(source, /dsh-portable-windows-process-hide-v1/)
+  assert.match(source, /dsh-win32-process/)
 })
 
 test('the patch fails closed when an official DSH subprocess seam changes', () => {
