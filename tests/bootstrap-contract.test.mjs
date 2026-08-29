@@ -12,6 +12,10 @@ const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const source = path.join(projectRoot, 'launcher', 'windows', 'DSH-Bootstrap.cs')
 
+async function removeTestRoot(root) {
+  await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+}
+
 test('bootstrap failure help opens the offline package that is actually published', async () => {
   const bootstrap = await readFile(source, 'utf8')
   assert.match(bootstrap, /OfflineDownloadUrl\s*=\s*"[^"]+DSH-Portable-windows-x64-offline\.zip"/)
@@ -201,7 +205,7 @@ test('the recommended Windows bootstrap stays genuinely small', { skip: process.
     await compileBootstrap(executable)
     assert.ok((await stat(executable)).size < 1024 * 1024, 'bootstrap must remain below 1 MiB')
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -248,7 +252,7 @@ test('bootstrap installs atomically, verifies the payload, and reuses it offline
       assert.equal(archiveRequests(), 1, 'an installed portable folder must not need the network')
     })
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -295,7 +299,7 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
       'successful upgrades must remove staging and backup directories',
     )
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -342,7 +346,7 @@ test('a full-package update restores the prior program when the updated desktop 
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
     assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -387,7 +391,7 @@ test('a failed staged compatibility preflight leaves the installed program untou
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
     assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -429,7 +433,7 @@ test('a full-package update commits only after the updated desktop reports ready
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
     assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -456,7 +460,7 @@ test('bootstrap never commits a payload whose digest is wrong', { skip: process.
       await assert.rejects(stat(destination))
     })
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
 
@@ -487,6 +491,6 @@ test('bootstrap removes a rejected long-path payload without leaving staging dat
       )
     })
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await removeTestRoot(root)
   }
 })
