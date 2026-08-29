@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { InstallResult, PluginRunner } from './dsh-cli.ts'
 import { classifyPnpmFailure, HOST_NAMESPACE_RE, isTransientPnpmFailure } from './pnpm-compat.ts'
-import { conflictingEntryIds, hasDshManifest, hasLoadableEntry, pluginSubdirs, profileDir, readInstalled, readManifestDeps, readProfileBundles } from './profile.ts'
+import { conflictingEntryIds, dropFromManifest, hasDshManifest, hasLoadableEntry, pluginSubdirs, profileDir, readInstalled, readManifestDeps, readProfileBundles } from './profile.ts'
 import { logEvent } from './log.ts'
 import { cleanOrphanedStore } from './store.ts'
 
@@ -202,7 +202,7 @@ export async function validateAddedPlugins(
     // ship no entry of their own (#103) and must not be uninstalled here.
     if (!hasDshManifest(packageDir) || !hasLoadableEntry(dir, n)) {
       removedBroken.push(n)
-      await run(profile, ['remove', n])
+      await removeAndReconcile(run, profile, n, dir)
       continue
     }
     const clash = conflictingEntryIds(dir, n, existingBundles)
@@ -212,12 +212,22 @@ export async function validateAddedPlugins(
       removedBroken.push(n)
       logEvent('error', 'install',
         `${n}: loader entry id conflict with ${clash[0].owner} (${clash.map(hit => hit.id).join(', ')}) — removing, it would break the next boot`)
-      await run(profile, ['remove', n])
+      await removeAndReconcile(run, profile, n, dir)
       continue
     }
     keep.push(n)
   }
   return { keep, removedBroken, conflicts }
+}
+
+/** Reconcile pnpm's partial-remove shape: package gone, manifest write failed. */
+async function removeAndReconcile(run: PluginRunner, profile: string, name: string, dir: string): Promise<void> {
+  const result = await run(profile, ['remove', name])
+  if (!existsSync(join(dir, 'node_modules', name, 'package.json'))) {
+    dropFromManifest(profile, name, dir)
+  } else if (result.exitCode !== 0 || result.timedOut || result.cancelled) {
+    logEvent('warn', 'install', `${name}: validation cleanup did not remove the package; preserving its manifest rows`)
+  }
 }
 
 /**

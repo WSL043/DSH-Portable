@@ -33,7 +33,7 @@ import { findInstalledAlias, gitAllowBuildsKey, installTargetFor, verifiedNpmTar
 import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
-import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, versionOnChannel } from './updates.ts'
+import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.ts'
@@ -403,7 +403,7 @@ export function mountMarketRoutes(
   const unresolvedProfileBundles = (): string[] => {
     try {
       return analyzeProfile(activeProfileDir).bundles
-        .filter(layer => layer.directory === null)
+        .filter(layer => layer.directory === null && layer.unresolvedInbox !== true)
         .map(layer => layer.name)
     } catch (error) {
       logEvent('warn', 'profile-health', `bundle resolution check failed: ${error instanceof Error ? error.message : String(error)}`)
@@ -1298,6 +1298,7 @@ export function mountMarketRoutes(
             const selfChannel = SELF_NAMES.has(name) ? activeChannel() : null
             const tag = selfChannel === null ? 'latest' : DIST_TAG[selfChannel]
             const target = isGit ? spec.replace(/#.*$/, '') : `${name}@${tag}`
+            let expectedNpmVersion: string | null = null
             // Never let `@latest` walk a profile BACKWARDS (#64 by @ZeroOrigin64):
             // a package whose latest dist-tag was left on an older release turns
             // this update into a downgrade that also rewrites an exact pin to
@@ -1315,6 +1316,7 @@ export function mountMarketRoutes(
               const registryLatest = selfChannel === null
                 ? await fetchNpmLatest(name)
                 : await versionOnChannel(name, selfChannel, await fetchNpmLatest(name))
+              expectedNpmVersion = registryLatest
               const refuse = selfChannel === null
                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
                 : installedVersion !== null && registryLatest !== null && installedVersion === registryLatest
@@ -1373,17 +1375,40 @@ export function mountMarketRoutes(
             let ok = result.exitCode === 0 && !result.timedOut && !cancelled
             let stale = false
             let activation: Record<string, ReturnType<typeof verifyActivation>> | undefined
+            let rollbackOk = true
+            let rollbackDetail: string | null = null
+            let versionFailure: 'DOWNGRADE_DETECTED' | 'RESOLVED_VERSION_MISMATCH' | null = null
+            let versionFailureError: string | null = null
             if (ok) {
+              const afterVersion = readInstalledVersion(config.profile, name, activeProfileDir)
               stale = isStaleUpdate({
                 isGit,
                 beforeVersion,
-                afterVersion: readInstalledVersion(config.profile, name, activeProfileDir),
+                afterVersion,
                 beforeCommit,
                 afterCommit: repoKey !== null
                   ? readLockCommits(config.profile, activeProfileDir).get(repoKey) ?? null
                   : null,
               })
               if (stale) ok = false
+              if (ok && !isGit) {
+                versionFailure = resolvedNpmUpdateFailure({
+                  before: beforeVersion,
+                  target: expectedNpmVersion,
+                  after: afterVersion,
+                  allowDowngrade: selfChannel !== null,
+                })
+                if (versionFailure !== null) {
+                  ok = false
+                  const rollback = await rollbackUpdateBuild(name, manifestBefore)
+                  rollbackOk = rollback.ok
+                  rollbackDetail = rollback.detail
+                  versionFailureError = versionFailure === 'DOWNGRADE_DETECTED'
+                    ? `包管理器解析出了比已安装版本更旧的 ${afterVersion ?? 'unknown'}，已拒绝并${rollback.ok ? '恢复原版本' : '尝试恢复但失败'}。 / The package manager resolved an older version (${afterVersion ?? 'unknown'}); Portable rejected it and ${rollback.ok ? 'restored the previous build' : 'could not restore the previous build'}.`
+                    : `包管理器没有解析到预期版本 ${expectedNpmVersion ?? 'unknown'}（实际 ${afterVersion ?? 'unknown'}），已${rollback.ok ? '恢复原版本' : '尝试恢复但失败'}。 / The package manager did not resolve the expected ${expectedNpmVersion ?? 'unknown'} (got ${afterVersion ?? 'unknown'}); Portable ${rollback.ok ? 'restored the previous build' : 'could not restore the previous build'}.`
+                  logEvent('error', 'update', `${name}: ${versionFailure} target=${expectedNpmVersion ?? 'unknown'} actual=${afterVersion ?? 'unknown'}`)
+                }
+              }
             }
             // The new build has to be loadable (#159). pnpm exits 0 for any
             // tarball it can extract, and the version really did change, so
@@ -1397,8 +1422,6 @@ export function mountMarketRoutes(
             // the OLD code that is already in memory. The failure only
             // surfaces on the next boot, as a profile that will not start.
             let brokenEntry = false
-            let rollbackOk = true
-            let rollbackDetail: string | null = null
             if (ok && !hasLoadableEntry(activeProfileDir, name)) {
               brokenEntry = true
               ok = false
@@ -1527,8 +1550,9 @@ export function mountMarketRoutes(
               activationAction,
               compatibility,
               ignoredBuilds,
+              failureCode: versionFailure ?? undefined,
               staleReason: staleReason ?? undefined,
-              error: profileHealthError ?? trialError ?? brokenEntryError ?? staleError ?? undefined,
+              error: versionFailureError ?? profileHealthError ?? trialError ?? brokenEntryError ?? staleError ?? undefined,
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,

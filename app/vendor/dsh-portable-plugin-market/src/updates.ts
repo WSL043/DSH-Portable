@@ -111,6 +111,24 @@ async function fetchJson(url: string): Promise<unknown> {
   return res.json() as unknown
 }
 
+/** Verify what pnpm actually resolved after a nominal npm update. */
+export function resolvedNpmUpdateFailure(input: {
+  before: string | null
+  target: string | null
+  after: string | null
+  allowDowngrade?: boolean
+}): 'DOWNGRADE_DETECTED' | 'RESOLVED_VERSION_MISMATCH' | null {
+  const direction = input.before !== null && input.after !== null
+    ? compareVersions(input.after, input.before)
+    : null
+  if (input.allowDowngrade !== true && direction !== null && direction < 0) return 'DOWNGRADE_DETECTED'
+  if (input.target === null) return null
+  if (input.after === null) return 'RESOLVED_VERSION_MISMATCH'
+  const targetOrder = compareVersions(input.after, input.target)
+  if (targetOrder !== null ? targetOrder < 0 : input.after !== input.target) return 'RESOLVED_VERSION_MISMATCH'
+  return null
+}
+
 /** Extract the symbolic HEAD commit from git's pkt-line ref advertisement. */
 export function parseGitHeadAdvertisement(payload: string): string | null {
   return /([0-9a-f]{40}) HEAD/.exec(payload)?.[1] ?? null

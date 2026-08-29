@@ -320,14 +320,19 @@ test('the screenshot lightbox owns its portal container instead of sharing docum
     read('app/vendor/dsh-portable-plugin-market/client/client.js'),
   ])
   assert.match(section, /data-dsh-market-portal/)
-  assert.match(section, /marketPortalHost\(\)/)
+  assert.match(section, /useMarketPortalHost\(\)/)
+  assert.match(section, /useLayoutEffect\(\(\) => \{[\s\S]{0,500}document\.body\.appendChild\(host\)/)
+  const portalFactory = section.match(/function marketPortalHost\(\): HTMLElement \{[\s\S]*?\n\}/)?.[0] ?? ''
+  assert.doesNotMatch(portalFactory, /document\.body\.appendChild/)
+  assert.match(section, /useAutoCarousel\(shots\.length, startIndex, 0\)/)
   assert.doesNotMatch(section, /createPortal\([\s\S]{0,1800}document\.body/)
   assert.match(builtClient, /data-dsh-market-portal/)
 })
 
 test('the Portable market carries applicable upstream safety fixes as independently tested contracts', async () => {
-  const [{ classifyPnpmFailure }, verify, backup, patchSource, compatibilitySource] = await Promise.all([
+  const [{ classifyPnpmFailure }, { resolvedNpmUpdateFailure }, verify, backup, patchSource, compatibilitySource] = await Promise.all([
     import('../app/vendor/dsh-portable-plugin-market/src/pnpm-compat.ts'),
+    import('../app/vendor/dsh-portable-plugin-market/src/updates.ts'),
     import('../app/vendor/dsh-portable-plugin-market/src/verify.ts'),
     import('../app/vendor/dsh-portable-plugin-market/src/backup.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/patch.ts'),
@@ -336,6 +341,13 @@ test('the Portable market carries applicable upstream safety fixes as independen
 
   assert.equal(classifyPnpmFailure('ERR_PNPM_UNEXPECTED_STORE Unexpected store location')?.code, 'unexpected-store')
   assert.equal(classifyPnpmFailure('ERR_PNPM_PATCH_FAILED Could not apply patch C:/p/a.patch')?.code, 'patch-failed')
+  assert.equal(classifyPnpmFailure('{"message":"Cannot install package \\"fixture@https://example.invalid/fixture.tgz\\" because it has no \\"integrity\\" field"}')?.code, 'missing-tarball-integrity')
+  assert.equal(classifyPnpmFailure(JSON.stringify({ err: { message: "EPERM: operation not permitted, rename 'C:\\profile\\node_modules\\@scope\\plugin_tmp_1234'" } }))?.code, 'windows-file-locked')
+
+  assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0', after: '1.9.0' }), 'DOWNGRADE_DETECTED')
+  assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0', after: '2.0.5' }), 'RESOLVED_VERSION_MISMATCH')
+  assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0', after: '2.1.0' }), null)
+  assert.equal(resolvedNpmUpdateFailure({ before: '2.1.0-beta.1', target: '2.0.0', after: '2.0.0', allowDowngrade: true }), null)
 
   assert.match(compatibilitySource, /export function introducedDuplicateNames/)
   assert.match(compatibilitySource, /before\.duplicateNames[\s\S]+after\.duplicateNames\.filter/)
@@ -400,6 +412,69 @@ test('all activation cleanups run on uninstall and unpublished host peers get on
   assert.match(routes, /const unmounted = await hotUnmount\(name\)[\s\S]{0,240}await themes\.setEntryDisabled\(name, true\)/)
   assert.match(install, /AUTO_INSTALL_PEERS_OFF\s*=\s*'--config\.auto-install-peers=false'/)
   assert.match(install, /isUnpublishedHostPeer/)
+})
+
+test('profile checks distinguish an unknown in-box bundle from a missing community bundle', async () => {
+  const { buildBundleLayers } = await import('../app/vendor/dsh-portable-plugin-market/src/check.ts')
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dshm-inbox-resolution-'))
+  try {
+    const profile = path.join(temporary, 'profiles', 'web')
+    const inbox = '@deepseek-ai/dsh-web-app'
+    const direct = path.join(profile, 'node_modules', '@deepseek-ai', 'dsh-web-app')
+    const parent = path.join(temporary, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-web-app')
+    await mkdir(direct, { recursive: true })
+    await mkdir(parent, { recursive: true })
+    await writeFile(path.join(profile, 'package.json'), JSON.stringify({ name: 'profile' }))
+    await writeFile(path.join(direct, 'package.json'), JSON.stringify({ name: inbox, version: '0.0.1' }))
+    await writeFile(path.join(parent, 'package.json'), JSON.stringify({ name: inbox, dsh: { bundle: { patch: 'cordis.patch.yml' } } }))
+    await writeFile(path.join(parent, 'cordis.patch.yml'), '[]\n')
+
+    const resolved = buildBundleLayers(profile, [inbox], {}, null).bundles[0]
+    assert.equal(path.resolve(resolved.directory), path.resolve(parent), 'a stale direct profile copy must not shadow the host/workspace layer')
+    assert.equal(resolved.error, null)
+
+    await rm(path.join(temporary, 'profiles', 'node_modules'), { recursive: true, force: true })
+    const unknown = buildBundleLayers(profile, [inbox, 'missing-community'], {}, null).bundles
+    assert.equal(unknown[0].unresolvedInbox, true)
+    assert.equal(unknown[0].error, null)
+    assert.match(unknown[1].error, /not installed/)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('validation reconciles a manifest when pnpm removed a broken package before failing', async () => {
+  const { validateAddedPlugins } = await import('../app/vendor/dsh-portable-plugin-market/src/install.ts')
+  const profile = await mkdtemp(path.join(os.tmpdir(), 'dshm-validation-reconcile-'))
+  try {
+    const packageDir = path.join(profile, 'node_modules', 'broken-plugin')
+    await mkdir(packageDir, { recursive: true })
+    await writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ name: 'broken-plugin', version: '1.0.0' }))
+    await writeFile(path.join(profile, 'package.json'), JSON.stringify({
+      dependencies: { 'broken-plugin': '1.0.0' },
+      dsh: { profile: { bundles: ['broken-plugin'] } },
+    }))
+    const run = async () => {
+      await rm(packageDir, { recursive: true, force: true })
+      return { exitCode: 1, timedOut: false, cancelled: false, stdout: '', stderr: 'partial remove' }
+    }
+    const result = await validateAddedPlugins(run, 'web', new Set(), profile)
+    const manifest = JSON.parse(await readFile(path.join(profile, 'package.json'), 'utf8'))
+    assert.deepEqual(result.removedBroken, ['broken-plugin'])
+    assert.equal(manifest.dependencies['broken-plugin'], undefined)
+    assert.deepEqual(manifest.dsh.profile.bundles, [])
+  } finally {
+    await rm(profile, { recursive: true, force: true })
+  }
+})
+
+test('catalog state changes reset scrolling without browser scroll anchoring', async () => {
+  const [section, styles] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
+  ])
+  assert.match(section, /useLayoutEffect\(\(\) => \{[\s\S]{0,300}bodyRef\.current[\s\S]{0,300}\}, \[tab, q, cat, sortField, sortDir, timeRange, qInstalled, installedView\]\)/)
+  assert.match(styles, /\.body\s*\{[^}]*overflow-anchor:\s*none/s)
 })
 
 test('uninstall refuses to orphan user-authored patch references', async () => {
@@ -712,6 +787,9 @@ test('install and update routes gate success on post-operation profile health', 
   assert.match(routes, /installBootBefore/)
   assert.match(routes, /updateBootBefore/)
   assert.match(routes, /profile-health/)
+  assert.match(routes, /resolvedNpmUpdateFailure/)
+  assert.match(routes, /failureCode: versionFailure/)
+  assert.match(routes, /layer\.unresolvedInbox !== true/)
 })
 
 test('diagnostics classify peer mismatches before exposing repair actions', async () => {

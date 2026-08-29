@@ -59,6 +59,8 @@ export interface BundleLayer {
   patchPath: string | null
   /** Why this layer cannot load at boot (missing dir / no dsh.bundle / …). */
   error: string | null
+  /** The host owns this in-box layer, but its install anchor is unavailable. */
+  unresolvedInbox?: boolean
   /** Loader entry ids this bundle's patch inserts. */
   entries: string[]
   /** The patch file exists but could not be parsed as the entry-list dialect. */
@@ -308,7 +310,7 @@ function readNodeModulesVersion(base: string, name: string): string | null {
  * hoisting (`<profiles>/node_modules/…` when the profile lives under
  * `<profiles>/<name>`) and matches exactly what the Loader would import.
  */
-function resolveBundleDir(anchorPackageJson: string, name: string): string | null {
+function resolveBundleDir(anchorPackageJson: string, name: string, ignoredPackageDirectory?: string): string | null {
   let paths: string[] = []
   try {
     paths = createRequire(anchorPackageJson).resolve.paths(name) ?? []
@@ -317,6 +319,8 @@ function resolveBundleDir(anchorPackageJson: string, name: string): string | nul
   }
   for (const searchPath of paths) {
     const candidate = join(searchPath, name)
+    if (ignoredPackageDirectory !== undefined
+      && resolve(candidate).toLowerCase() === resolve(ignoredPackageDirectory).toLowerCase()) continue
     if (existsSync(join(candidate, 'package.json'))) return candidate
   }
   return null
@@ -744,14 +748,17 @@ export function buildBundleLayers(
   dshInstallDir: string | null,
 ): { bundles: BundleLayer[]; layers: LayerInput[] } {
   const bundles: BundleLayer[] = bundleNames.map((name) => {
+    const ignoredProfilePackage = dshInstallDir === null && INBOX_BUNDLES.has(name)
+      ? join(profileDirectory, 'node_modules', name)
+      : undefined
     const anchors = [
-      dshInstallDir !== null ? join(dshInstallDir, 'package.json') : null,
-      join(profileDirectory, 'package.json'),
+      dshInstallDir !== null ? { path: join(dshInstallDir, 'package.json') } : null,
+      { path: join(profileDirectory, 'package.json'), ignoredPackageDirectory: ignoredProfilePackage },
     ]
     let directory: string | null = null
     for (const anchor of anchors) {
       if (anchor === null) continue
-      directory = resolveBundleDir(anchor, name)
+      directory = resolveBundleDir(anchor.path, name, anchor.ignoredPackageDirectory)
       if (directory !== null) break
     }
     const layer: BundleLayer = {
@@ -765,6 +772,10 @@ export function buildBundleLayers(
       parseError: null,
     }
     if (directory === null) {
+      if (layer.kind === 'official') {
+        layer.unresolvedInbox = true
+        return layer
+      }
       layer.error = 'bundle package is not installed — the profile will fail to boot'
       return layer
     }

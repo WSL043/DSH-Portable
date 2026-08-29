@@ -183,7 +183,7 @@ function useAutoCarousel(count: number, initial: number, intervalMs = 3500): [nu
   const [index, setIndexState] = useState(initial)
   const [resetTick, setResetTick] = useState(0)
   useEffect(() => {
-    if (count <= 1) return
+    if (count <= 1 || intervalMs <= 0) return
     const timer = setInterval(() => { setIndexState(i => (i + 1) % count) }, intervalMs)
     return () => clearInterval(timer)
   }, [count, intervalMs, resetTick])
@@ -248,7 +248,8 @@ function CardShot({ plugin, onOpen }: { plugin: RegistryPlugin; onOpen: (shots: 
  * vs "full size" asset to fetch.
  */
 function ScreenshotLightbox({ shots, startIndex, onClose, t }: { shots: string[]; startIndex: number; onClose: () => void; t: Translate }) {
-  const [index, setIndex] = useAutoCarousel(shots.length, startIndex, 4000)
+  const [index, setIndex] = useAutoCarousel(shots.length, startIndex, 0)
+  const host = useMarketPortalHost()
   useEffect(() => {
     // Capture phase + stopPropagation: the Settings dialog underneath is a
     // Modal with its own Escape-to-close handling, also on window/document.
@@ -301,7 +302,7 @@ function ScreenshotLightbox({ shots, startIndex, onClose, t }: { shots: string[]
         </>
       )}
     </div>,
-    marketPortalHost(),
+    host,
   )
 }
 
@@ -312,10 +313,18 @@ function marketPortalHost(): HTMLElement {
     portalHost = document.createElement('div')
     portalHost.setAttribute('data-dsh-market-portal', '')
   }
-  // Moving our own node to the end keeps the lightbox above the host modal
-  // without letting either React root manage the other's children.
-  document.body.appendChild(portalHost)
   return portalHost
+}
+
+function useMarketPortalHost(): HTMLElement {
+  const host = marketPortalHost()
+  useLayoutEffect(() => {
+    // Commit the DOM mutation after render. Moving our own node to the end
+    // keeps the lightbox above the host modal without sharing React roots.
+    document.body.appendChild(host)
+    return () => host.remove()
+  }, [host])
+  return host
 }
 
 /** Test hook for browser-level lifecycle tests. */
@@ -1032,6 +1041,12 @@ export function MarketSection(props: MarketSectionProps) {
     const first = risks[0]
     return `${first.plugin}: ${first.peer} ${first.range} vs ${first.resolved}`
   }
+
+
+  useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (el) el.scrollTop = 0
+  }, [tab, q, cat, sortField, sortDir, timeRange, qInstalled, installedView])
 
   const shadowSummary = (entries: NonNullable<CompatibilityNotice['shadowedNames']>): string => {
     if (entries.length === 0) return ''

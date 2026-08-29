@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.31.1`
-(`3cbe62cf48ba3763dcefb40f9af2a41440c4d1a8`).
+Reviewed upstream baseline: `dsh-market` `v1.36.0`
+(`d5902420b1759f9620fe1042aedec7c3325d2ac5`).
 
 ## Compatibility matrix
 
@@ -25,7 +25,8 @@ Reviewed upstream baseline: `dsh-market` `v1.31.1`
 | Reconcile a manifest when a failed uninstall already removed the package | Adopted; only the half-removed case follows disk truth |
 | Tier confirmed peer mismatches into risk, warning, and information | Adopted; repair actions are offered only for directional risks |
 | Prevent an AI repair prompt from mutating its own running Harness | Adopted; defaults to read-only analysis and external apply/rollback scripts |
-| Keep screenshot portals inside the market root | Adopted |
+| Keep screenshot portals inside the market root and attach them only after React commits | Adopted |
+| Keep full-screen screenshot navigation manual | Adopted; card strips remain user-driven too |
 | Keep running plugin updates visible in the activity panel | Adopted |
 | Preserve an in-flight install across a Settings-page remount | Adopted; the host task URL remains authoritative |
 | Restore the exact dependency and bundle shape after a failed mutation | Adopted; order, duplicates, and field absence are preserved |
@@ -34,6 +35,12 @@ Reviewed upstream baseline: `dsh-market` `v1.31.1`
 | Normalize pnpm `workspace:` peer ranges and tolerate unknown protocols | Adopted; avoids false incompatibility warnings |
 | Accept catalog entries with more than one category | Adopted |
 | Check GitHub-only updates through the unmetered git ref advertisement | Adopted; still honors the configured proxy path |
+| Treat an unlocatable in-box bundle as unknown and ignore a stale direct profile shadow | Adopted; unresolved community bundles remain boot errors |
+| Verify the npm version actually resolved after update and roll back downgrades or target mismatches | Adopted; an explicit channel switch may move backwards only to its resolved target |
+| Reconcile validation-triggered removals when pnpm deleted the package before saving the manifest | Adopted; disk truth is used only when the package is gone |
+| Explain tarballs missing integrity metadata without inventing a checksum | Adopted |
+| Explain Windows locked-file rename failures without automatic retry | Adopted |
+| Reset scrolling when catalog state changes and disable browser scroll anchoring | Adopted |
 | Unicode profiles and Git subpath installs | Independently implemented and tested |
 | Catalog, images, filters, direct author links, list/card views | Portable-native implementation |
 | Plugin name and a separate source link point to the same repository | Keep the plugin name as the single project link; remove the duplicate footer action |
@@ -45,6 +52,7 @@ Reviewed upstream baseline: `dsh-market` `v1.31.1`
 | Reverse-proxy base-path routing | Not applicable to the native desktop host, which serves DSH at its own origin root |
 | Persistent market server logs and full-profile export | Excluded; Portable support reports and migration own those product-level surfaces |
 | Restore local development links to catalog sources | Deferred; useful for plugin authors but outside the beginner install path |
+| Personal notes, update-note previews, plugin discussions, and public update APIs | Deferred; these are product expansion rather than Portable safety fixes |
 | Third-party desktop-host compatibility branches | Reviewed only when they affect the official DSH contract |
 
 When `dsh-market` publishes a newer release, review its user-visible fixes

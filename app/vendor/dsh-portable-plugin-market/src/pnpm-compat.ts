@@ -39,7 +39,7 @@ export const HOST_NAMESPACE_RE = /^@deepseek-ai\//
 export interface PnpmFailure {
   code: 'adding-to-root' | 'not-a-workspace' | 'hoist-pattern-diff' | 'pnpm-missing' | 'release-age-violation'
     | 'ignored-builds' | 'git-prepare-not-allowed' | 'fetch-404' | 'transient-network' | 'fetch-timeout'
-    | 'unexpected-store' | 'patch-failed'
+    | 'unexpected-store' | 'patch-failed' | 'missing-tarball-integrity' | 'windows-file-locked'
   /** Bilingual, actionable message shown to the user instead of the raw wall of text. */
   message: string
   /** True when re-running `pnpm install` in the profile is the documented recovery. */
@@ -72,6 +72,19 @@ export function isFetchTimeoutFailure(output: string): boolean {
   return /operation was aborted due to timeout|TimeoutError|error \(23\)/i.test(output)
 }
 
+/** Include messages nested in pnpm's ndjson reporter records. */
+function withDecodedPnpmDiagnostics(output: string): string {
+  const messages: string[] = [output]
+  for (const line of output.split(/\r?\n/)) {
+    try {
+      const row = JSON.parse(line) as { message?: unknown; err?: { message?: unknown } }
+      if (typeof row.message === 'string') messages.push(row.message)
+      if (typeof row.err?.message === 'string') messages.push(row.err.message)
+    } catch { /* human reporter or partial line */ }
+  }
+  return messages.join('\n').replaceAll('\\"', '"')
+}
+
 /**
  * Map a failed pnpm run's combined output to a known failure mode.
  *
@@ -81,6 +94,7 @@ export function isFetchTimeoutFailure(output: string): boolean {
  * @returns the classified failure, or null when unrecognized (raw output is then shown as-is).
  */
 export function classifyPnpmFailure(output: string): PnpmFailure | null {
+  const decoded = withDecodedPnpmDiagnostics(output)
   if (output.includes('ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF')) {
     return {
       code: 'hoist-pattern-diff',
@@ -160,6 +174,16 @@ export function classifyPnpmFailure(output: string): PnpmFailure | null {
       message: '这个 git 插件需要在安装时执行构建脚本，被 pnpm 默认拦截。点击「允许构建脚本并重试」放行后重试即可 / this git-hosted plugin needs to run its build script at install time, which pnpm blocks by default — click "Allow build scripts and retry" to approve and retry',
     }
   }
+  const missingIntegrity = /Cannot (?:install|fetch) package "([^"@]+(?:@[^"@]+)?|@[^"/]+\/[^"@]+)@https?:\/\/[^"\s]+"[^\n]*no "integrity" field/i.exec(decoded)
+  if (missingIntegrity !== null || /Cannot (?:install|fetch) package .*no "integrity" field/i.test(decoded)) {
+    const pkg = missingIntegrity?.[1]
+    return {
+      code: 'missing-tarball-integrity',
+      recoverable: false,
+      ...(pkg === undefined ? {} : { pkg }),
+      message: `这个 tarball 依赖没有声明完整性校验${pkg === undefined ? '' : `（${pkg}）`}，为避免下载内容被替换，市场不会猜测或自动补写校验值。请让插件作者发布带 integrity 的锁定来源 / this tarball dependency has no integrity metadata${pkg === undefined ? '' : ` (${pkg})`}; the market will not guess or write a checksum automatically — ask the plugin author to publish a source pinned with integrity`,
+    }
+  }
   // #65: a dependency that no longer resolves — an unpublished package left
   // in the manifest by an earlier failed operation (pnpm writes package.json
   // before it finishes), or a private-registry package without credentials.
@@ -174,6 +198,15 @@ export function classifyPnpmFailure(output: string): PnpmFailure | null {
       recoverable: false,
       pkg,
       message: `有一个依赖在 registry 上不存在${zh}，pnpm 因此拒绝任何安装操作。它可能是之前失败操作残留在 profile package.json 里的幽灵依赖（可手动删除该行），也可能是需要登录的私有包 / a dependency cannot be resolved from the registry${en}; pnpm refuses every install while it is present. It may be a ghost entry left in the profile's package.json by an earlier failed operation (remove that line by hand), or a private package needing registry credentials`,
+    }
+  }
+  if (/ERR_PNPM_EPERM|EPERM:.*rename/i.test(decoded)) {
+    const locked = /node_modules[\\/]((?:@[^\\/]+[\\/])?[^\\/]+?)(?:_tmp_\d+)?(?:[\\/'"]|$)/i.exec(decoded)?.[1]?.replaceAll('\\', '/')
+    return {
+      code: 'windows-file-locked',
+      recoverable: false,
+      ...(locked === undefined ? {} : { pkg: locked }),
+      message: `Windows 正在占用插件文件${locked === undefined ? '' : `（${locked}）`}，pnpm 无法完成重命名；当前安装仍保持原状。请退出使用该插件的 DSH 窗口或重启后再试，并检查杀毒软件或索引器是否锁定目录 / Windows has a plugin file open${locked === undefined ? '' : ` (${locked})`}, so pnpm could not finish the rename; the current install remains intact. Quit DSH windows using it or restart before retrying, and check antivirus or indexing locks`,
     }
   }
   // #83: pnpm replays the WHOLE dependency tree on every add/remove, so a
