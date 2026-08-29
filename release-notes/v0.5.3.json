@@ -7,6 +7,7 @@
       "启动会复用已验证的依赖解析清单；移动目录、版本变化或生成项缺失时自动回到完整校验，在保持可移动和可修复的同时减少重复准备工作。",
       "launcher.log 现在记录运行时检查、依赖解析、插件准备、进程拉起与工作区就绪的分段耗时；支持报告同时包含当前和上一份轮转日志，并继续执行脱敏与大小限制。",
       "Windows 桌面宿主会隐藏普通工具、taskkill 与 ACL 受限 PowerShell 的控制台窗口；支持报告同时记录 OpenConsole、Windows Terminal 与相关运行时的即时进程计数，便于定位终端风暴。",
+      "全新配置默认使用已正式发布的 dsh-chat-manager 1.2.1；现有配置继续保持用户自己的插件选择，不会被静默改写。",
       "Windows 成品新增真实原生重启回归，验证旧窗口退出、新窗口启动和 boot id 更新的完整闭环。"
     ]
   },
@@ -17,6 +18,7 @@
       "Startup reuses a verified dependency-resolution inventory. Moving the folder, changing versions, or losing generated entries automatically falls back to full verification, preserving portability and repairability while reducing repeated preparation.",
       "launcher.log now records phase timings for runtime checks, dependency resolution, plugin preparation, process launch, and workspace readiness. Support reports include both the current and previous rotated launcher logs under the existing redaction and size limits.",
       "The Windows desktop host hides console windows from ordinary tools, taskkill helpers, and ACL-confined PowerShell. Support reports also capture point-in-time OpenConsole, Windows Terminal, and related runtime process counts for terminal-storm diagnosis.",
+      "Fresh profiles now use the released dsh-chat-manager 1.2.1 by default. Existing profiles keep their user-managed plugin selections and are not silently rewritten.",
       "The Windows finished-product gate now performs a real native restart and verifies the complete old-window exit, new-window launch, and boot-id transition."
     ]
   }
