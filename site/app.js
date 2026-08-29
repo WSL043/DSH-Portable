@@ -5,14 +5,14 @@ const releaseBase = "https://github.com/WSL043/DSH-Portable/releases/latest/down
 const copy = {
   en: {
     skip: "Skip to content", brandEdition: "Community portable edition", navPortable: "Portable", navDownload: "Download", navGithub: "GitHub", headerDownload: "Download",
-    heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "DeepSeek Harness,<br>wherever you work.", heroLede: "Sessions, settings, plugins, and workspace move together in one directory. Exit, copy, and continue on another computer.",
+    heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "DeepSeek Harness,<br>wherever you work.", heroLede: "No Node.js required. Sessions, settings, plugins, and workspace move together in one folder; exit, copy, and continue on another computer.",
     downloadFor: "Download for Windows", downloadMeta: "Latest stable · Portable · No install", otherPlatforms: "Other platforms", heroNote: "Open-source community project · Windows / macOS / Linux", stageCaption: "DeepSeek Harness running in DSH-Portable", scrollCue: "See how it moves",
     portableKicker: "Works where you do", portableTitle: "One directory. Any machine.", portableIntro: "Work normally. When it is time to move, exit fully from the tray and copy the whole DSH-Portable folder.", migrationGuide: "Read the complete migration guide",
-    factLauncher: "Windows portable launcher", factFiles: "Files in the complete package", factTargetsValue: "3 systems · 5 targets", factTargets: "Finished-product move tests",
+    factNodeValue: "No Node.js required", factLauncher: "Runtime included", factFiles: "User data and default workspace", factTargetsValue: "3 systems · 5 targets", factTargets: "Finished-product move tests",
     journeyDesktop: "Work on this computer", journeyDesktopText: "Sessions, plugins, and workspace keep saving inside the portable directory.", journeyMove: "Copy the whole directory", journeyMoveText: "Put it on a portable drive, USB drive, or any location you choose.", journeyContinue: "Continue on another computer", journeyContinueText: "Open it again and the app repairs paths it owns.",
     downloadsKicker: "Get DSH-Portable", downloadsTitle: "Choose your platform", downloadsIntro: "Your system is selected automatically. Each platform keeps a portable entry point and a complete offline package.", recommended: "Recommended",
     windowsPortable: "Windows portable", windowsPortableText: "Place the small bootstrap where you want the product; it prepares the complete folder beside itself.", downloadNow: "Download", offlineEdition: "Complete offline ZIP", offlineText: "For an offline computer or manual extraction", completeArchive: "All files", archiveText: "Release notes and other builds",
-    portableZip: "Portable ZIP", portableZipText: "Extract and run. Data stays in the same directory.", linuxAppText: "Grant execute permission and run. Data stays in the adjacent directory.", completeFolder: "Complete portable directory", downloadTrust: "Windows files are currently unsigned; the project is applying for open-source code signing provided by SignPath Foundation. <a href=\"https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md\">Read the code-signing policy</a>.", allDownloads: "View Release", checksums: "Checksums",
+    portableZip: "Portable ZIP", portableZipText: "Extract and run. Data stays in the same directory.", linuxAppText: "Grant execute permission and run. Data stays in the adjacent directory.", completeFolder: "Complete portable directory", downloadTrust: "Windows files are currently unsigned and may trigger SmartScreen; the project is applying for open-source code signing provided by SignPath Foundation. User data stays in <code>data/</code> and the default workspace in <code>workspace/</code>. <a href=\"https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md\">Read the code-signing policy</a>.", allDownloads: "View Release", checksums: "Checksums",
     insideKicker: "Ready when opened", insideTitle: "A desktop experience without extra setup.", insideIntro: "Portable does not mean stripped down. The window, tray, notifications, plugin market, updates, and repair tools stay in the product.",
     marketTitle: "Plugin market", marketText: "Browse, install, update, and disable community plugins from DSH Settings.", trayTitle: "Tray and notifications", trayText: "Return to recent sessions, create a new one, and receive a notification when work completes.", repairTitle: "Check and repair", repairText: "Preserve user data, rebuild reproducible components, and export a credential-free support report.", testedTitle: "Finished-product tests", testedText: "Install, start, exit, move, plugin, and update paths are continuously verified on all three platforms.",
     faqTitle: "Common questions", faqOfficialQ: "Is this an official DeepSeek desktop app?", faqOfficialA: "No. DSH-Portable is an independent community distribution that packages a product-tested preview of official DeepSeek Harness.", faqNodeQ: "Do I need Node.js first?", faqNodeA: "No. The runtime and plugin tools are included and do not modify the system PATH.", faqDataQ: "Will copying the folder lose my sessions?", faqDataA: "Fully exit from the tray, then copy the whole DSH-Portable folder. Sessions, settings, plugins, and the default workspace move together.", faqUpdateQ: "Will an update overwrite my data?", faqUpdateA: "No. Updates replace application components while user data and workspace remain in place.",
@@ -72,16 +72,6 @@ systemMotionPreference.addEventListener("change", () => {
   if (!readSavedMotion()) applyMotion("auto");
 });
 
-function readSavedLanguage() {
-  try { return localStorage.getItem("dsh-portable-language"); }
-  catch { return null; }
-}
-
-function saveLanguage(language) {
-  try { localStorage.setItem("dsh-portable-language", language); }
-  catch { /* Storage is an enhancement, not a requirement. */ }
-}
-
 function primaryLabel(language, currentPlatform) {
   const labels = language === "en"
     ? { windows: "Download for Windows", macos: "Download for macOS", linux: "Download for Linux" }
@@ -99,16 +89,17 @@ function setLanguage(language) {
   document.querySelector("[data-i18n='downloadFor']").textContent = primaryLabel(lang, platform);
   languageSwitch.textContent = lang === "en" ? "中" : "EN";
   languageSwitch.setAttribute("aria-label", lang === "en" ? "切换到中文" : "Switch to English");
+  languageSwitch.href = lang === "en" ? "../" : "en/";
+  languageSwitch.hreflang = lang === "en" ? "zh-CN" : "en";
+  languageSwitch.lang = lang === "en" ? "zh-CN" : "en";
   updateMotionControlCopy();
-  productShot.src = lang === "en" ? "assets/dsh-interface-en.png" : "assets/dsh-interface-zh.png";
+  const assetBase = lang === "en" ? "../assets/" : "assets/";
+  productShot.src = `${assetBase}${lang === "en" ? "dsh-interface-en.png" : "dsh-interface-zh.png"}`;
   productShot.alt = lang === "en" ? "DeepSeek Harness workspace in DSH-Portable" : "DSH-Portable 中的 DeepSeek Harness 桌面工作台";
   migrationGuide.href = lang === "en"
     ? "https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.en.md"
     : "https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md";
-  saveLanguage(lang);
 }
-
-languageSwitch.addEventListener("click", () => setLanguage(document.documentElement.lang.startsWith("en") ? "zh" : "en"));
 
 const platformTabs = [...document.querySelectorAll("[data-platform-tab]")];
 const platformPanels = [...document.querySelectorAll("[data-platform-panel]")];
@@ -230,7 +221,7 @@ if ("IntersectionObserver" in window && motionEnabled()) {
   document.querySelectorAll(".reveal").forEach((element) => element.classList.add("is-visible"));
 }
 
-const initialLanguage = readSavedLanguage() || (navigator.language?.toLowerCase().startsWith("zh") ? "zh" : "en");
+const initialLanguage = document.querySelector("meta[name='dsh-page-language']")?.content === "en" ? "en" : "zh";
 setLanguage(initialLanguage);
 updateScrollState();
 requestAnimationFrame(() => document.documentElement.classList.add("is-ready"));
