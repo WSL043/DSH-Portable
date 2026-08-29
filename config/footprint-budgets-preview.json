@@ -15,7 +15,7 @@
       "marketFiles": 230
     },
     "macos-x64": {
-      "archiveBytes": 77250000,
+      "archiveBytes": 77500000,
       "extractedBytes": 250000000,
       "files": 9500,
       "directories": 2950,
@@ -24,7 +24,7 @@
       "marketFiles": 230
     },
     "macos-arm64": {
-      "archiveBytes": 75000000,
+      "archiveBytes": 75250000,
       "extractedBytes": 245000000,
       "files": 9500,
       "directories": 2950,
