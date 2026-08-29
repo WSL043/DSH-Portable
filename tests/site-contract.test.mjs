@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { access, readFile } from "node:fs/promises";
+import { promisify } from "node:util";
 import test from "node:test";
+
+const execFileAsync = promisify(execFile);
+const repositoryRoot = new URL("../", import.meta.url);
 
 const html = await readFile(new URL("../site/index.html", import.meta.url), "utf8");
 const app = await readFile(new URL("../site/app.js", import.meta.url), "utf8");
@@ -35,6 +40,28 @@ test("website exposes accessible platform selection and bilingual content", () =
   assert.match(html, /data-language-switch/);
   assert.match(html, /data-i18n="heroTitle"/);
   assert.match(app, /setLanguage\(initialLanguage\)/);
+});
+
+test("website defaults to Chinese and builds an indexable English route", async () => {
+  assert.match(html, /<meta name="dsh-page-language" content="zh">/);
+  assert.match(html, /hreflang="zh-CN" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/"/);
+  assert.match(html, /hreflang="en" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/en\/"/);
+  assert.match(html, /hreflang="x-default" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/"/);
+  assert.match(app, /meta\[name=['"]dsh-page-language['"]\]/);
+  assert.doesNotMatch(app, /navigator\.language/);
+
+  await execFileAsync(process.execPath, ["scripts/build-site.mjs"], {
+    cwd: repositoryRoot,
+    windowsHide: true
+  });
+  const english = await readFile(new URL("../build/site/en/index.html", import.meta.url), "utf8");
+  assert.match(english, /<html lang="en">/);
+  assert.match(english, /<meta name="dsh-page-language" content="en">/);
+  assert.match(english, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/en\/">/);
+  assert.match(english, /<title>DSH-Portable[^<]*Portable DeepSeek Harness/);
+  assert.match(english, /class="language-switch" href="\.\.\/" hreflang="zh-CN"/);
+  assert.match(english, /href="\.\.\/styles\.css"/);
+  assert.match(english, /src="\.\.\/assets\/dsh-interface-en\.png"/);
 });
 
 test("website ships its cinematic product stage with motion safeguards", () => {
@@ -82,10 +109,22 @@ test("website publishes only through the currently verified Pages domain", async
 test("website exposes search-engine metadata without duplicating release files", () => {
   assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
   assert.match(html, /<script type="application\/ld\+json">[\s\S]*"@type":\s*"SoftwareApplication"/);
-  assert.match(html, /"downloadUrl":\s*"https:\/\/github\.com\/WSL043\/DSH-Portable\/releases\/latest"/);
+  assert.match(html, /"downloadUrl":\s*"https:\/\/github\.com\/WSL043\/DSH-Portable\/releases\/latest\/download\/DSH-Portable-windows-x64\.exe"/);
   assert.match(robots, /User-agent:\s*\*[\s\S]*Allow:\s*\/[\s\S]*Sitemap:\s*https:\/\/wsl043\.github\.io\/DSH-Portable\/sitemap\.xml/);
   assert.match(sitemap, /<loc>https:\/\/wsl043\.github\.io\/DSH-Portable\/<\/loc>/);
+  assert.match(sitemap, /<loc>https:\/\/wsl043\.github\.io\/DSH-Portable\/en\/<\/loc>/);
+  assert.match(sitemap, /xhtml:link rel="alternate" hreflang="zh-CN"/);
+  assert.match(sitemap, /xhtml:link rel="alternate" hreflang="en"/);
   assert.doesNotMatch(`${robots}\n${sitemap}`, /releases\/latest\/download/);
+});
+
+test("hero and trust copy use durable portable-product facts", () => {
+  assert.match(html, /无需 Node\.js/);
+  assert.match(app, /No Node\.js required/);
+  assert.doesNotMatch(html, /≈\s*55\s*KB|−15%/);
+  assert.match(`${html}\n${app}`, /SmartScreen/);
+  assert.match(`${html}\n${app}`, /data\/.*workspace\/|data and workspace/);
+  assert.doesNotMatch(`${html}\n${app}`, /google-analytics|googletagmanager|plausible|segment\.com/i);
 });
 
 test("Pages workflow deploys only the staged website", () => {

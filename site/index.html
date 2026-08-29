@@ -4,34 +4,41 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#050607">
-  <meta name="description" content="DSH-Portable：把 DeepSeek Harness、会话、设置、插件和工作区放进一个可移动目录。">
-  <meta property="og:title" content="DSH-Portable">
-  <meta property="og:description" content="DeepSeek Harness, wherever you work.">
+  <meta name="dsh-page-language" content="zh">
+  <meta name="description" content="DSH-Portable：无需 Node.js 的可移动 DeepSeek Harness 桌面版，会话、设置、插件和工作区随文件夹一起移动。">
+  <meta property="og:title" content="DSH-Portable｜可移动的 DeepSeek Harness 桌面版">
+  <meta property="og:description" content="无需 Node.js；会话、设置、插件和工作区随文件夹一起移动。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://wsl043.github.io/DSH-Portable/">
+  <meta property="og:locale" content="zh_CN">
   <meta property="og:image" content="https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png">
   <meta property="og:image:alt" content="DSH-Portable desktop workspace">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="DSH-Portable">
-  <meta name="twitter:description" content="DeepSeek Harness, wherever you work.">
+  <meta name="twitter:title" content="DSH-Portable｜可移动的 DeepSeek Harness 桌面版">
+  <meta name="twitter:description" content="无需 Node.js；会话、设置、插件和工作区随文件夹一起移动。">
   <meta name="twitter:image" content="https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png">
   <link rel="canonical" href="https://wsl043.github.io/DSH-Portable/">
+  <link rel="alternate" hreflang="zh-CN" href="https://wsl043.github.io/DSH-Portable/">
+  <link rel="alternate" hreflang="en" href="https://wsl043.github.io/DSH-Portable/en/">
+  <link rel="alternate" hreflang="x-default" href="https://wsl043.github.io/DSH-Portable/">
   <script type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "DSH-Portable",
-    "description": "A portable desktop distribution of DeepSeek Harness for Windows, macOS, and Linux.",
+    "description": "无需 Node.js 的可移动 DeepSeek Harness 社区桌面发行版，支持 Windows、macOS 和 Linux。",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
     "license": "https://github.com/WSL043/DSH-Portable/blob/main/LICENSE",
     "url": "https://wsl043.github.io/DSH-Portable/",
-    "downloadUrl": "https://github.com/WSL043/DSH-Portable/releases/latest",
+    "downloadUrl": "https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe",
     "codeRepository": "https://github.com/WSL043/DSH-Portable",
+    "screenshot": "https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png",
+    "softwareRequirements": "无需单独安装 Node.js",
     "inLanguage": ["zh-CN", "en"]
   }
   </script>
-  <title>DSH-Portable</title>
+  <title>DSH-Portable｜无需 Node.js 的可移动 DeepSeek Harness 桌面版</title>
   <link rel="icon" href="assets/DSH-Portable.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -45,7 +52,7 @@
       <a class="nav-link nav-link-wide" href="#downloads" data-i18n="navDownload">下载</a>
       <a class="nav-link nav-link-wide" href="https://github.com/WSL043/DSH-Portable" data-i18n="navGithub">GitHub</a>
       <button class="motion-control" type="button" aria-pressed="false" data-motion-control>动效</button>
-      <button class="language-switch" type="button" aria-label="Switch language" data-language-switch>EN</button>
+      <a class="language-switch" href="en/" hreflang="en" lang="en" aria-label="Switch to English" data-language-switch>EN</a>
       <a class="header-download" data-primary-download href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe" data-i18n="headerDownload">下载</a>
     </nav>
   </header>
@@ -57,7 +64,7 @@
         <div class="hero-copy" data-hero-copy>
           <p class="hero-kicker" data-i18n="heroKicker">DeepSeek Harness · 随处继续</p>
           <h1 data-i18n="heroTitle">把 DeepSeek Harness<br>带到任何地方。</h1>
-          <p class="hero-lede" data-i18n="heroLede">会话、设置、插件和工作区跟着同一个目录走。退出、复制，到另一台电脑继续。</p>
+          <p class="hero-lede" data-i18n="heroLede">无需 Node.js。会话、设置、插件和工作区跟着同一个文件夹走；退出、复制，到另一台电脑继续。</p>
           <div class="hero-actions">
             <a class="download-button" data-primary-download href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><span><strong data-i18n="downloadFor">下载 Windows 便携版</strong><small data-i18n="downloadMeta">最新稳定版 · 便携 · 无需安装</small></span></a>
             <a class="text-link" href="#downloads" data-i18n="otherPlatforms">其他平台</a>
@@ -65,7 +72,7 @@
           <p class="hero-note" data-i18n="heroNote">开源社区项目 · Windows / macOS / Linux</p>
         </div>
         <div class="product-stage" data-product-stage>
-          <ol class="path-stack" aria-hidden="true"><li>DSH-Portable/workspace/</li><li>DSH-Portable/plugins/</li><li>DSH-Portable/settings/</li><li>DSH-Portable/sessions/</li></ol>
+          <ol class="path-stack" aria-hidden="true"><li>DSH-Portable/workspace/</li><li>DSH-Portable/data/dsh-home/</li><li>DSH-Portable/data/webview2/</li><li>DSH-Portable/data/logs/</li></ol>
           <figure class="product-window"><img data-product-shot src="assets/dsh-interface-zh.png" alt="DSH-Portable 中的 DeepSeek Harness 桌面工作台"><figcaption data-i18n="stageCaption">DeepSeek Harness 运行在 DSH-Portable 中</figcaption></figure>
         </div>
       </div>
@@ -79,8 +86,8 @@
         <p data-i18n="portableIntro">平时照常工作。需要迁移时，从托盘完全退出，再复制整个 DSH-Portable 文件夹。</p>
         <a class="story-guide" data-migration-guide href="https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md" data-i18n="migrationGuide">查看完整迁移指南</a>
         <dl class="portable-facts" aria-label="Portable verification">
-          <div><dt>≈ 55 KB</dt><dd data-i18n="factLauncher">Windows 便携启动器</dd></div>
-          <div><dt>−15%</dt><dd data-i18n="factFiles">完整包文件数</dd></div>
+          <div><dt data-i18n="factNodeValue">无需 Node.js</dt><dd data-i18n="factLauncher">运行环境已内置</dd></div>
+          <div><dt>data/ + workspace/</dt><dd data-i18n="factFiles">用户数据与默认工作区</dd></div>
           <div><dt data-i18n="factTargetsValue">3 系统 · 5 架构</dt><dd data-i18n="factTargets">成品迁移测试</dd></div>
         </dl>
       </div>
@@ -108,7 +115,7 @@
           <div class="recommended-download"><div><span data-i18n="recommended">推荐</span><h3>AppImage</h3><p data-i18n="linuxAppText">添加执行权限后直接启动，数据保存在旁边的目录中。</p></div><a class="panel-download" data-linux-download="appimage" href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DeepSeek-Herness-linux-x64.AppImage" data-i18n="downloadNow">下载</a></div>
           <div class="download-options one-column"><a data-linux-download="archive" href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-linux-x64.tar.gz"><strong data-i18n="completeFolder">完整便携目录</strong><span>tar.gz</span></a></div>
         </div>
-        <p class="download-trust" data-i18n="downloadTrust">Windows 文件目前尚未签名；项目正在申请 SignPath Foundation 提供的开源代码签名。<a href="https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md">查看代码签名策略</a></p>
+        <p class="download-trust" data-i18n="downloadTrust">Windows 文件目前尚未签名，可能触发 SmartScreen；项目正在申请 SignPath Foundation 提供的开源代码签名。用户数据位于便携目录的 <code>data/</code>，默认工作区位于 <code>workspace/</code>。<a href="https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md">查看代码签名策略</a></p>
         <div class="release-links"><a href="https://github.com/WSL043/DSH-Portable/releases/latest" data-i18n="allDownloads">查看 Release</a><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/checksums.txt" data-i18n="checksums">校验文件</a></div>
       </div>
     </section>

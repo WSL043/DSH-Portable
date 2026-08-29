@@ -38,7 +38,7 @@ h1, h2, h3, p { margin-top: 0; }
 .header-actions { display: flex; align-items: center; gap: 28px; }
 .nav-link { color: #a4a6aa; font-size: 12px; transition: color .18s ease; }
 .nav-link:hover { color: white; }
-.language-switch, .motion-control { min-width: 36px; height: 30px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: rgba(255, 255, 255, .035); cursor: pointer; font-size: 11px; transition: color .18s ease, background .18s ease, border-color .18s ease; }
+.language-switch, .motion-control { min-width: 36px; height: 30px; display: inline-flex; align-items: center; justify-content: center; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 7px; background: rgba(255, 255, 255, .035); cursor: pointer; font-size: 11px; transition: color .18s ease, background .18s ease, border-color .18s ease; }
 .motion-control { min-width: 54px; color: #8f9296; }
 .motion-control[aria-pressed="true"] { color: #f1f1ee; border-color: rgba(255, 255, 255, .34); }
 .language-switch:hover, .motion-control:hover { border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .08); }
