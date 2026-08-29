@@ -97,14 +97,19 @@ try {
   const workspaceMarker = path.join(destination, 'workspace', 'finished-product-project.txt')
   await writeFile(dataMarker, '{"keep":true}\n')
   await writeFile(workspaceMarker, 'keep workspace\n')
-  await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
-    '--upgrade-existing',
-    '--manifest', `${origin}/portable-manifest.json`,
-    '--destination', destination,
-    '--allow-http',
-    '--no-launch',
-    '--result', resultFile,
-  ], { timeout: 10 * 60 * 1000, windowsHide: true })
+  try {
+    await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+      '--upgrade-existing',
+      '--manifest', `${origin}/portable-manifest.json`,
+      '--destination', destination,
+      '--allow-http',
+      '--no-launch',
+      '--result', resultFile,
+    ], { timeout: 10 * 60 * 1000, windowsHide: true })
+  } catch (error) {
+    const diagnostic = await readFile(resultFile, 'utf8').catch(() => '{"status":"missing-result"}')
+    throw new Error(`the packaged full updater failed: ${diagnostic.trim()}`, { cause: error })
+  }
   const upgraded = JSON.parse(await readFile(resultFile, 'utf8'))
   assert.equal(upgraded.status, 'updated')
   assert.equal(await readFile(dataMarker, 'utf8'), '{"keep":true}\n')
