@@ -15,10 +15,12 @@ const run = JSON.parse(await readFile(path.resolve(runArg), 'utf8'))
 const jobResponse = JSON.parse(await readFile(path.resolve(jobsArg), 'utf8'))
 
 if (run?.conclusion !== 'success') throw new Error('qualification workflow did not succeed')
-if (run?.head_branch !== 'main') throw new Error('qualification workflow must run on main')
+if (!['main', 'release/0.5.x'].includes(run?.head_branch)) {
+  throw new Error('qualification workflow must run on main or release/0.5.x')
+}
 if (run?.head_sha !== expectedCommit) throw new Error('qualification workflow commit does not match the release commit')
 if (run?.name !== 'Build and smoke test') throw new Error('unexpected qualification workflow')
-if (!['push', 'workflow_dispatch'].includes(run?.event)) throw new Error('qualification workflow must be a main push or manual main run')
+if (!['push', 'workflow_dispatch'].includes(run?.event)) throw new Error('qualification workflow must be a qualified push or manual run')
 if (!Number.isSafeInteger(run?.id) || run.id <= 0) throw new Error('qualification workflow is missing its run ID')
 if (run?.html_url !== `https://github.com/${repository}/actions/runs/${run.id}`) {
   throw new Error('qualification workflow URL does not belong to the release repository')
