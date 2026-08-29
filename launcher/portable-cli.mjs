@@ -1,6 +1,6 @@
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { closeSync, existsSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
@@ -17,9 +17,9 @@ import {
   buildDshEnv,
   clearPortableMoveLinks,
   ensureDesktopBridgeFallback,
+  ensureManagedProfileModuleFallback,
   environmentStateRoot,
   findRunningPortableEnvironments,
-  repairManagedProfileModuleFallback,
   ensurePortableDirectories,
   isOwnedDshProcess,
   isOwnedPortableBrowserProcess,
@@ -54,6 +54,23 @@ let layout = layoutForRoot(
 )
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
 const BROWSER_FORCE_SHUTDOWN_MS = 15000
+
+function startupLog(startedAt, phase, fields = {}) {
+  try {
+    mkdirSync(layout.logsDir, { recursive: true })
+    const details = Object.entries(fields)
+      .filter(([, value]) => value !== undefined && value !== null && value !== '')
+      .map(([key, value]) => `${key}=${String(value).replace(/[\r\n\s]+/g, '-')}`)
+      .join(' ')
+    appendFileSync(
+      path.join(layout.logsDir, 'launcher.log'),
+      `${new Date().toISOString()} [startup-cli] phase=${phase} elapsedMs=${Date.now() - startedAt}${details ? ` ${details}` : ''}\n`,
+      'utf8',
+    )
+  } catch {
+    // Diagnostics must never prevent the product from starting.
+  }
+}
 
 function requireRuntime({ desktopBridge = false } = {}) {
   const required = [layout.nodeExe, layout.dshBin, layout.hostBin]
@@ -360,8 +377,23 @@ function tailSince(filename, offset, maxBytes = 8000) {
 }
 
 async function start(noBrowser, portRetry = 0) {
+  const startedAt = Date.now()
+  startupLog(startedAt, 'begin', { portRetry })
+  try {
+    const result = await startAttempt(noBrowser, portRetry, startedAt)
+    startupLog(startedAt, 'complete', { status: result.status, port: result.port })
+    return result
+  } catch (error) {
+    startupLog(startedAt, 'failed', { type: error?.constructor?.name || 'Error', code: error?.code || 'none' })
+    throw error
+  }
+}
+
+async function startAttempt(noBrowser, portRetry, startedAt) {
   requireRuntime({ desktopBridge: true })
+  startupLog(startedAt, 'runtime-verified')
   await ensurePortableDirectories(layout)
+  startupLog(startedAt, 'directories-ready')
   let requestedRepair = null
   if (existsSync(layout.repairRequest)) {
     requestedRepair = {
@@ -371,14 +403,27 @@ async function start(noBrowser, portRetry = 0) {
     await writeJsonAtomic(layout.repairResult, requestedRepair)
     await rm(layout.repairRequest, { force: true })
   }
-  const repairedProfileFallback = await repairManagedProfileModuleFallback(layout)
-  await ensureDesktopBridgeFallback(layout)
+  startupLog(startedAt, 'requested-repair-ready', { applied: requestedRepair !== null })
+  const desktopBridgeFallback = await ensureDesktopBridgeFallback(layout)
+  startupLog(startedAt, 'desktop-bridge-ready', { changed: desktopBridgeFallback })
+  const repairedProfileFallback = await ensureManagedProfileModuleFallback(layout)
+  startupLog(startedAt, 'profile-resolver-ready', {
+    changed: repairedProfileFallback.changed,
+    cached: repairedProfileFallback.cached,
+    packages: repairedProfileFallback.packages,
+  })
   const migration = await migratePortableRoot(layout)
+  startupLog(startedAt, 'migration-ready', {
+    moved: migration.moved,
+    sessions: migration.sessionCount || 0,
+    storages: migration.storageCount || 0,
+  })
   const prior = readProcessState()
   if (ownedState(prior)) {
     const url = await waitForHost(prior, 15000)
     if (url) {
       const browser = noBrowser ? null : await openBrowser(url)
+      startupLog(startedAt, 'prior-host-ready', { pid: prior.pid, port: prior.port })
       return { status: 'already-running', environment: layout.environmentId, pid: prior.pid, port: prior.port, url, browser, migration }
     }
     throw new Error('DeepSeek Harness is still running but its local workspace is not ready. Stop the existing instance before retrying.')
@@ -389,14 +434,17 @@ async function start(noBrowser, portRetry = 0) {
   }
 
   await retirePendingExtensionOperation(layout)
+  startupLog(startedAt, 'pending-extension-ready')
 
   const defaultPlugins = await seedDefaultPlugins(layout)
+  startupLog(startedAt, 'default-plugins-ready', { status: defaultPlugins.status })
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
 
   const portReservation = await reservePort(prior?.port)
   const port = portReservation.port
+  startupLog(startedAt, 'port-reserved', { port })
   const stdoutLog = path.join(layout.logsDir, 'dsh.stdout.log')
   const stderrLog = path.join(layout.logsDir, 'dsh.stderr.log')
   const stdoutOffset = logSize(stdoutLog)
@@ -429,6 +477,7 @@ async function start(noBrowser, portRetry = 0) {
   child.unref()
   closeSync(stdout)
   closeSync(stderr)
+  startupLog(startedAt, 'host-spawned', { pid: child.pid, port })
 
   const state = {
     schemaVersion: 1,
@@ -462,12 +511,14 @@ async function start(noBrowser, portRetry = 0) {
       rmSync(layout.processState, { force: true })
       if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
       if (portConflict && portRetry < PORT_RANGE.last - PORT_RANGE.first) {
+        startupLog(startedAt, 'port-conflict-retry', { port })
         return start(noBrowser, portRetry + 1)
       }
       throw new Error(`DeepSeek Harness failed to start.\n${details}`)
     }
 
     state.url = url
+    startupLog(startedAt, 'host-ready', { pid: child.pid, port })
     await writeJsonAtomic(layout.processState, state)
     const browser = noBrowser ? null : await openBrowser(url)
     return { status: 'started', environment: layout.environmentId, pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }

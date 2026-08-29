@@ -13,6 +13,7 @@ import {
   browserLaunchSpec,
   buildDshEnv,
   clearPortableMoveLinks,
+  ensureManagedProfileModuleFallback,
   isOwnedPortableBrowserProcess,
   isOwnedDshProcess,
   isOwnedLauncherProcess,
@@ -34,6 +35,22 @@ test('Windows task cleanup suppresses localized taskkill output', async () => {
     assert.match(call, /stdio:\s*'ignore'/)
     assert.doesNotMatch(call, /encoding:\s*'utf8'/)
   }
+})
+
+test('startup records bounded phase timings without making diagnostics a launch dependency', async () => {
+  const cli = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
+  for (const phase of [
+    'runtime-verified',
+    'profile-resolver-ready',
+    'desktop-bridge-ready',
+    'default-plugins-ready',
+    'host-spawned',
+    'host-ready',
+    'complete',
+    'failed',
+  ]) assert.match(cli, new RegExp(`startupLog\\([^\\n]+['"]${phase}['"]`))
+  assert.match(cli, /\[startup-cli\][^\n]+elapsedMs=/)
+  assert.match(cli, /Diagnostics must never prevent the product from starting/)
 })
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
@@ -84,6 +101,27 @@ test('startup rebuilds the managed module fallback from the packaged dependency 
   assert.throws(() => realpathSync(
     path.join(layout.dshHome, 'profiles', 'node_modules', '@deepseek-ai', 'dsh-client-ui-jobs.stale'),
   ))
+
+  const verified = await ensureManagedProfileModuleFallback(layout)
+  assert.equal(verified.cached, false)
+  const cached = await ensureManagedProfileModuleFallback(layout)
+  assert.equal(cached.cached, true)
+  assert.equal(cached.packages, 3)
+
+  await rm(path.join(fallback, 'dsh-client-ui-goal'), { recursive: true, force: true })
+  const recovered = await ensureManagedProfileModuleFallback(layout)
+  assert.equal(recovered.cached, true)
+  assert.equal(recovered.changed, true)
+  assert.equal(
+    realpathSync(path.join(fallback, 'dsh-client-ui-goal')),
+    realpathSync(path.join(packaged, '@deepseek-ai', 'dsh-client-ui-goal')),
+  )
+
+  assert.equal(await clearPortableMoveLinks(layout), true)
+  const restoredAfterCleanStop = await ensureManagedProfileModuleFallback(layout)
+  assert.equal(restoredAfterCleanStop.cached, true)
+  assert.equal(restoredAfterCleanStop.changed, true)
+  assert.equal(restoredAfterCleanStop.packages, 3)
 })
 
 test('shutdown removes only generated absolute links so the portable root can move', async (t) => {

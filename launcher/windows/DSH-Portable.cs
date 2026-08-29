@@ -1300,6 +1300,7 @@ namespace DshPortable
 
         private void HandleDesktopRestartRequest(string requestId)
         {
+            WriteLauncherLog("restart-host", "request-received id=" + requestId);
             Dictionary<string, object> result = new Dictionary<string, object>
             {
                 { "type", "dsh-portable/restart-host-result" },
@@ -1310,24 +1311,33 @@ namespace DshPortable
             {
                 result["ok"] = false;
                 result["error"] = L("正在关闭，请稍候。", "The app is already closing.");
+                WriteLauncherLog("restart-host", "request-refused id=" + requestId + " reason=shutdown-running");
             }
             else if (trayState != null && trayState.hasRunningSession)
             {
                 result["ok"] = false;
                 result["error"] = L("任务仍在运行；完成后再重启即可，当前任务不会被中断。",
                     "A task is still running. Restart after it finishes; the current task was not interrupted.");
+                WriteLauncherLog("restart-host", "request-refused id=" + requestId + " reason=running-session");
             }
             else
             {
                 result["ok"] = true;
                 restartAfterShutdown = true;
+                WriteLauncherLog("restart-host", "request-accepted id=" + requestId);
             }
             try
             {
                 if (webView != null && webView.CoreWebView2 != null)
+                {
                     webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(result));
+                    WriteLauncherLog("restart-host", "reply-posted id=" + requestId + " ok=" + Convert.ToString(result["ok"], CultureInfo.InvariantCulture).ToLowerInvariant());
+                }
             }
-            catch { }
+            catch (Exception error)
+            {
+                WriteLauncherLog("restart-host", "reply-failed id=" + requestId + " error=" + error.GetType().Name);
+            }
             if (restartAfterShutdown) BeginDesktopShutdown();
         }
 
@@ -1881,6 +1891,8 @@ namespace DshPortable
             allowClose = true;
             if (restartAfterShutdown)
             {
+                WriteLauncherLog("restart-host", "relaunch-scheduled afterPid="
+                    + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture));
                 PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, RestartArguments());
             }
             DisposeTrayIcon();

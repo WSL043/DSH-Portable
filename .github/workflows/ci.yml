@@ -338,6 +338,7 @@ jobs:
             -FirstColdStartLimit ${{ matrix.firstColdStartSeconds }}
           ./scripts/smoke-windows-dom-ready.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-native-tray.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
           node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable')
           # WebView2 can keep the previous user-data browser process alive after
           # its host exits. Verify downloads from a separately extracted product
