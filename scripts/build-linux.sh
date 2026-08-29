@@ -115,6 +115,7 @@ done < <("$BUILD_NODE" "$PROJECT_ROOT/scripts/list-default-plugins.mjs" "$LOCK_F
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-session-export-ui.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-boot-handoff.mjs" "$STAGE/app"
+"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-windows-subprocess-hide.mjs" "$STAGE/app"
 rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" linux "$ARCH"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"

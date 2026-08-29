@@ -4,7 +4,12 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { diagnosePortable, exportPortableSupportReport, repairPortable } from '../launcher/repair-core.mjs'
+import {
+  diagnosePortable,
+  exportPortableSupportReport,
+  repairPortable,
+  summarizeWindowsTasklist,
+} from '../launcher/repair-core.mjs'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 
 async function fixture(t) {
@@ -143,6 +148,20 @@ test('support report is bounded, useful, and removes credentials and conversatio
   assert.match(source, /normal line/)
   assert.match(source, /previous startup phase/)
   assert.match(source, /launcher\.log\.previous/)
+  assert.match(source, /runtimeProcesses/)
   assert.doesNotMatch(source, /secret-token|sk-private|workspace-secret|private conversation/)
   assert.match(source, /\[REDACTED\]/)
+})
+
+test('Windows support diagnostics summarize terminal-storm process counts without command lines', () => {
+  const counts = summarizeWindowsTasklist([
+    '"OpenConsole.exe","100","Console","1","10,000 K"',
+    '"openconsole.exe","101","Console","1","10,000 K"',
+    '"WindowsTerminal.exe","102","Console","1","20,000 K"',
+    '"unrelated.exe","103","Console","1","1,000 K"',
+  ].join('\r\n'))
+  assert.equal(counts['OpenConsole.exe'], 2)
+  assert.equal(counts['WindowsTerminal.exe'], 1)
+  assert.equal(counts['DeepSeek-Herness.exe'], 0)
+  assert.equal(Object.hasOwn(counts, 'unrelated.exe'), false)
 })

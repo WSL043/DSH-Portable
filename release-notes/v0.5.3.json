@@ -1,0 +1,23 @@
+{
+  "version": "0.5.3",
+  "zh": {
+    "summary": "修复插件变更后的重启误报，缩短重复启动准备时间，并让远程故障日志更完整。",
+    "highlights": [
+      "从插件页面重启时，即使原生窗口在确认消息送达前开始关闭，Portable 也会继续确认新实例是否真正启动，不再把成功重启误报为超时；任务仍在运行等明确拒绝仍会立即说明原因。",
+      "启动会复用已验证的依赖解析清单；移动目录、版本变化或生成项缺失时自动回到完整校验，在保持可移动和可修复的同时减少重复准备工作。",
+      "launcher.log 现在记录运行时检查、依赖解析、插件准备、进程拉起与工作区就绪的分段耗时；支持报告同时包含当前和上一份轮转日志，并继续执行脱敏与大小限制。",
+      "Windows 桌面宿主会隐藏普通工具、taskkill 与 ACL 受限 PowerShell 的控制台窗口；支持报告同时记录 OpenConsole、Windows Terminal 与相关运行时的即时进程计数，便于定位终端风暴。",
+      "Windows 成品新增真实原生重启回归，验证旧窗口退出、新窗口启动和 boot id 更新的完整闭环。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes false restart failures after plugin changes, reduces repeated startup preparation, and improves remote diagnostics.",
+    "highlights": [
+      "When restarting from the Plugins page, Portable now verifies whether a new instance actually starts even if the native window closes before its acknowledgement arrives. Explicit refusals, such as an active task, still report immediately.",
+      "Startup reuses a verified dependency-resolution inventory. Moving the folder, changing versions, or losing generated entries automatically falls back to full verification, preserving portability and repairability while reducing repeated preparation.",
+      "launcher.log now records phase timings for runtime checks, dependency resolution, plugin preparation, process launch, and workspace readiness. Support reports include both the current and previous rotated launcher logs under the existing redaction and size limits.",
+      "The Windows desktop host hides console windows from ordinary tools, taskkill helpers, and ACL-confined PowerShell. Support reports also capture point-in-time OpenConsole, Windows Terminal, and related runtime process counts for terminal-storm diagnosis.",
+      "The Windows finished-product gate now performs a real native restart and verifies the complete old-window exit, new-window launch, and boot-id transition."
+    ]
+  }
+}

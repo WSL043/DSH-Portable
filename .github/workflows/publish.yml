@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: Successful Build and smoke test run ID for main
+        description: Successful Build and smoke test run ID for this release commit
         required: true
         type: string
       tag:
@@ -36,14 +36,18 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-      - name: Require a successful main build for this commit and version
+      - name: Require a successful qualified build for this release commit and version
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.run_id }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .conclusion)" = success
-          test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_branch)" = main
+          BRANCH="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_branch)"
+          case "$BRANCH" in
+            main|release/0.5.x) ;;
+            *) echo "Release builds must run from main or release/0.5.x, not $BRANCH" >&2; exit 1 ;;
+          esac
           test "$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" --jq .head_sha)" = "$GITHUB_SHA"
           test "$RELEASE_TAG" = "${{ steps.version.outputs.tag }}"
       - uses: actions/download-artifact@v8
