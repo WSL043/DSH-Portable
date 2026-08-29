@@ -71,6 +71,13 @@ test('all finished-product builders apply the subprocess hiding patch', async ()
   }
 })
 
+test('finished-product smoke resolves the extracted runtime capsule instead of assuming an expanded app', async () => {
+  const source = await readFile(new URL('../scripts/smoke-windows-subprocess-hide.mjs', import.meta.url), 'utf8')
+  assert.match(source, /ensureRuntimeCapsule\(root\)/)
+  assert.match(source, /path\.join\(prepared\.runtimeRoot, 'app'\)/)
+  assert.doesNotMatch(source, /const appRoot = path\.join\(root, 'app'\)/)
+})
+
 test('the patch fails closed when an official DSH subprocess seam changes', () => {
   assert.throws(
     () => patchWindowsSubprocessHide(fixture.replace('detached: platform !== "win32"', 'detached: false')),

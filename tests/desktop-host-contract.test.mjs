@@ -391,7 +391,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(workflow, /runner:\s*windows-2025/)
   assert.match(workflow, /smoke-windows-native-download\.mjs/)
   assert.match(workflow, /smoke-windows-native-workspace-picker\.mjs/)
-  assert.match(workflow, /smoke-windows-subprocess-hide\.mjs/)
+  assert.match(workflow, /smoke-windows-subprocess-hide\.mjs[^\n]*\n\s*if \(\$LASTEXITCODE -ne 0\) \{ throw "Windows subprocess hiding smoke failed/)
   assert.match(workflow, /smoke-portable-parallel-roots\.mjs/)
   assert.match(workflow, /smoke-windows-data-export\.mjs/)
   const dataExportSmoke = await read('scripts/smoke-windows-data-export.mjs')
