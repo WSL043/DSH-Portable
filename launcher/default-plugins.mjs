@@ -17,13 +17,13 @@ export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   reviewedCommit: '2b0d500fbecfe6dce3d289bacdb3f58330587536',
 }), Object.freeze({
   name: 'dsh-image-viewer',
-  version: '0.1.0-beta.3',
+  version: '0.1.0-beta.4',
   filename: 'dsh-image-viewer.tgz',
-  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.3.tgz',
-  sha256: 'f2a06ee671ae0b1cdcafa88d3fe40b00bed300401e3cb7f48c4502303ec7442a',
-  integrity: 'sha512-SdVDeYM2mJV1T2tv6/vTBsJgX7Sumcj/7avS0QiwwKWRZ8GlSQto40a8k3U/V8bCTHuh76MmW+vZGVFhUTbqaw==',
+  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.4.tgz',
+  sha256: 'fd78d28f91d9f1abcd7f9fca7876e1108f3293ebde57360d780d5dd388563c54',
+  integrity: 'sha512-h6Udsy6NPfH/FebRTazOnZqKcOubaz4vRR33boSM6SoeKXF6P86RKCxkqliNpOXo9UveTPww6LErY1uucjvzUw==',
   license: 'MIT',
-  reviewedCommit: 'c7869a1936e2538a26d3d404b8b4ecaa092ab699',
+  reviewedCommit: '1c7c6d8d941c98250a0bce2cf3639b4bf897c243',
 })])
 
 async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}) {
