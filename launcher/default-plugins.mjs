@@ -8,13 +8,13 @@ import { buildDshEnv } from './portable-core.mjs'
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-chat-manager',
-  version: '1.2.0',
+  version: '1.2.1',
   filename: 'dsh-chat-manager.tgz',
-  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.2.0.tgz',
-  sha256: '0360ce9a05620b16aff0beb4ddc4dfaa6e719f4fbbe96df37c76c21ec5a0711b',
-  integrity: 'sha512-8mLEBX97GeB9PNNy27RyeDwbR7Vc5yaNsVFvQAPCMN5aYo3JKpt+mZNOwl3ANydTjyqKqhQb/XAiRLlABtal7w==',
+  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.2.1.tgz',
+  sha256: '838022cb67a8211533e4edac7faf3f09fa6a18c9e37e464a9383236fe2db6a6b',
+  integrity: 'sha512-IFJcfYS571pTiRxq79faQ3fcLiIEyMAqJEtQPdq4T4t2ehOKlCRtbjZO9LdUCz8PKLM7pXZmwqmCnHxky9dR9w==',
   license: 'MIT',
-  reviewedCommit: '1effe0eb81d79d24ecd3c3114f09a07e885386e2',
+  reviewedCommit: '2b0d500fbecfe6dce3d289bacdb3f58330587536',
 }), Object.freeze({
   name: 'dsh-image-viewer',
   version: '0.1.0-beta.3',
