@@ -45,6 +45,13 @@ test('bootstrap relaunch preserves the updater environment for bounded handoff r
   assert.match(launch, /UseShellExecute = false/)
 })
 
+test('full updater lets the native stop command finish its complete graceful shutdown budget', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  const stop = bootstrap.match(/private void StopRunningPortable\(\)[\s\S]*?\n        \}/u)?.[0] ?? ''
+  assert.match(stop, /WaitForExit\(75000\)/)
+  assert.doesNotMatch(stop, /WaitForExit\(30000\)/)
+})
+
 test('full-package cleanup does not depend on a user PATH entry for PowerShell', async () => {
   const bootstrap = await readFile(source, 'utf8')
   assert.match(bootstrap, /SpecialFolder\.Windows[\s\S]+WindowsPowerShell[\s\S]+powershell\.exe/)

@@ -572,7 +572,10 @@ namespace DshPortableBootstrap
                 WindowStyle = ProcessWindowStyle.Hidden,
             }))
             {
-                if (process == null || !process.WaitForExit(30000) || process.ExitCode != 0)
+                // The native stop command itself allows up to 45 seconds for the
+                // desktop host and owned WebView2 processes to close. Keep the
+                // updater's outer wait longer than that graceful-shutdown budget.
+                if (process == null || !process.WaitForExit(75000) || process.ExitCode != 0)
                     throw new InvalidOperationException(BootstrapText.L("当前 DSH 服务未能安全停止；没有替换程序文件。", "The running DSH service could not be stopped safely. No program files were replaced."));
             }
             DateTime deadline = DateTime.UtcNow.AddSeconds(15);

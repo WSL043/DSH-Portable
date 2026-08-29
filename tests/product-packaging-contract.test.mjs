@@ -866,6 +866,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(bootstrapSmoke, /\.dsh-portable-install-/)
   assert.match(bootstrapSmoke, /maxRetries:\s*40/)
   assert.match(bootstrapSmoke, /process\.env\.CI/)
+  assert.match(bootstrapSmoke, /the packaged full updater failed:[\s\S]+resultFile/)
   assert.match(workflow, /DSH-Portable-update-macos-\$\{\{ matrix\.arch \}\}\.zip/)
   assert.match(workflow, /portable-update-macos-\$\{\{ matrix\.arch \}\}\.json/)
   assert.match(workflow, /verify-update-artifact\.mjs/)
