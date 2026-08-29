@@ -72,7 +72,7 @@ async function generate(value) {
   ])
 }
 
-test('release evidence binds curated downloads to the exact successful main qualification run', async () => {
+test('release evidence binds curated downloads to the exact successful qualification run', async () => {
   const value = await fixture()
   try {
     await generate(value)
@@ -98,6 +98,17 @@ test('release evidence binds curated downloads to the exact successful main qual
     assert.doesNotMatch(checksums, /release-(?:evidence|qualification)\.json/)
     assert.equal(checksums.trim().split(/\r?\n/).length, 3)
     assert.doesNotMatch(JSON.stringify(evidence), /[A-Z]:\\|\/home\/|runner\.temp|token|credential/i)
+  } finally {
+    await rm(value.root, { recursive: true, force: true })
+  }
+})
+
+test('release evidence accepts the dedicated stable maintenance branch', async () => {
+  const value = await fixture({ run: { event: 'workflow_dispatch', head_branch: 'release/0.5.x' } })
+  try {
+    await generate(value)
+    const evidence = JSON.parse(await readFile(value.evidenceFile, 'utf8'))
+    assert.equal(evidence.result, 'PASSED')
   } finally {
     await rm(value.root, { recursive: true, force: true })
   }
