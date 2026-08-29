@@ -239,13 +239,29 @@ test('Portable exposes a native restart contract and returns the host decision',
   })
   assert.equal((await restartPromise).ok, true)
 
+  const refusedPromise = client.window.__DSH_PORTABLE_HOST__.restart()
+  const refusedRequest = client.posted.at(-1)
+  client.send({
+    type: 'dsh-portable/restart-host-result',
+    schemaVersion: 1,
+    requestId: refusedRequest.requestId,
+    ok: false,
+    error: 'A task is still running.',
+  })
+  await assert.rejects(refusedPromise, error => {
+    assert.equal(error.code, 'DSH_PORTABLE_RESTART_REJECTED')
+    assert.match(error.message, /still running/)
+    return true
+  })
+
   const bridgeSource = await readFile(sourceUrl, 'utf8')
   assert.match(bridgeSource, /__DSH_PORTABLE_HOST__\s*=\s*\{\s*restart:\s*restartPortableHost\s*\}/)
   assert.match(bridgeSource, /dsh-portable\/restart-host-result/)
   const windowsHost = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   assert.match(windowsHost, /dsh-portable\/restart-host/)
   assert.match(windowsHost, /trayState != null && trayState\.hasRunningSession/)
-  assert.match(windowsHost, /if \(restartAfterShutdown\)[\s\S]{0,300}--dsh-restart-after-pid/)
+  assert.match(windowsHost, /restart-host[\s\S]*request-accepted[\s\S]*reply-posted/)
+  assert.match(windowsHost, /if \(restartAfterShutdown\)[\s\S]{0,500}--dsh-restart-after-pid/)
 
   runtime.dispose()
   assert.equal(client.window.__DSH_PORTABLE_HOST__, undefined)

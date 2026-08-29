@@ -137,13 +137,23 @@ window.__ModuleLoader__.load({
         const requestId = `host-restart-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         const timeout = setTimeout(() => {
           pendingHostRestartRequests.delete(requestId)
-          reject(new Error('Portable restart request timed out.'))
+          const error = new Error('Portable restart request timed out before the host reply was received.')
+          error.code = 'DSH_PORTABLE_RESTART_UNCONFIRMED'
+          reject(error)
         }, 10000)
         pendingHostRestartRequests.set(requestId, {
           resolve: value => { clearTimeout(timeout); resolve(value) },
           reject: error => { clearTimeout(timeout); reject(error) },
         })
-        host.bridge.postMessage({ type: 'dsh-portable/restart-host', schemaVersion: 1, requestId })
+        try {
+          host.bridge.postMessage({ type: 'dsh-portable/restart-host', schemaVersion: 1, requestId })
+        } catch (cause) {
+          pendingHostRestartRequests.delete(requestId)
+          clearTimeout(timeout)
+          const error = new Error('Portable restart request could not be confirmed by the host.', { cause })
+          error.code = 'DSH_PORTABLE_RESTART_UNCONFIRMED'
+          reject(error)
+        }
       })
     }
 
@@ -648,7 +658,11 @@ window.__ModuleLoader__.load({
             if (!pending) return
             pendingHostRestartRequests.delete(requestId)
             if (message.ok === true) pending.resolve(message)
-            else pending.reject(new Error(String(message.error || 'Portable restart was refused.')))
+            else {
+              const error = new Error(String(message.error || 'Portable restart was refused.'))
+              error.code = 'DSH_PORTABLE_RESTART_REJECTED'
+              pending.reject(error)
+            }
             return
           }
           if (message.type === 'dsh-portable/download') {
@@ -692,7 +706,11 @@ window.__ModuleLoader__.load({
           pendingDataExportRequests.clear()
           for (const pending of pendingDataImportRequests.values()) pending.resolve(null)
           pendingDataImportRequests.clear()
-          for (const pending of pendingHostRestartRequests.values()) pending.reject(new Error('Portable host closed.'))
+          for (const pending of pendingHostRestartRequests.values()) {
+            const error = new Error('Portable host closed before the restart reply was received.')
+            error.code = 'DSH_PORTABLE_RESTART_UNCONFIRMED'
+            pending.reject(error)
+          }
           pendingHostRestartRequests.clear()
           if (window.__DSH_PORTABLE_HOST__?.restart === restartPortableHost) delete window.__DSH_PORTABLE_HOST__
           webview.removeEventListener?.('message', receive)

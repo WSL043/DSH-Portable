@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -69,6 +70,7 @@ export function layoutForRoot(root, platform = process.platform, stateRoot = roo
     portableMeta: paths.join(dataDir, 'portable.json'),
     runtimeCapsule: paths.join(portableRoot, 'runtime-capsule.json'),
     processState: paths.join(stateDir, 'process.json'),
+    profileResolverState: paths.join(stateDir, 'profile-resolver.json'),
     repairRequest: paths.join(stateDir, 'repair-requested.json'),
     repairResult: paths.join(stateDir, 'repair-result.json'),
     runtimeDir,
@@ -343,9 +345,12 @@ export async function inspectManagedProfileModuleFallback(layout) {
 }
 
 export async function repairManagedProfileModuleFallback(layout) {
+  return repairManagedProfileModuleFallbackWithLinks(layout, await packagedDshDependencyClosure(layout))
+}
+
+async function repairManagedProfileModuleFallbackWithLinks(layout, links) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const fallbackRoot = paths.join(layout.dshHome, 'profiles', 'node_modules')
-  const links = await packagedDshDependencyClosure(layout)
   let changed = false
 
   // This root is DSH's generated module resolver, not a profile's plugin
@@ -409,6 +414,83 @@ export async function repairManagedProfileModuleFallback(layout) {
     changed = true
   }
   return changed
+}
+
+async function profileResolverIdentity(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const files = [
+    paths.join(layout.appDir, 'package.json'),
+    paths.join(layout.appDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'),
+    paths.join(layout.immutableRoot, 'licenses', 'COMPONENTS.json'),
+  ]
+  const hash = createHash('sha256')
+  hash.update(layout.platform)
+  for (const filename of files) {
+    hash.update('\0')
+    try {
+      hash.update(await readFile(filename))
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+      hash.update('<missing>')
+    }
+  }
+  return hash.digest('hex')
+}
+
+export async function ensureManagedProfileModuleFallback(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const fallbackRoot = paths.join(layout.dshHome, 'profiles', 'node_modules')
+  const identity = await profileResolverIdentity(layout)
+  let previous = null
+  try {
+    previous = JSON.parse(await readFile(layout.profileResolverState, 'utf8'))
+  } catch (error) {
+    if (error?.code !== 'ENOENT' && error instanceof SyntaxError === false) throw error
+  }
+
+  if (previous?.schemaVersion === 2 && previous.identity === identity
+    && Array.isArray(previous.packages) && previous.targets && typeof previous.targets === 'object') {
+    const links = new Map()
+    let valid = true
+    for (const [packageName, relativeTarget] of Object.entries(previous.targets)) {
+      if (!/^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(packageName)
+        || typeof relativeTarget !== 'string' || paths.isAbsolute(relativeTarget)) {
+        valid = false
+        break
+      }
+      const target = paths.resolve(layout.appDir, relativeTarget)
+      const relative = paths.relative(layout.appDir, target)
+      if (!relative || relative.startsWith(`..${paths.sep}`) || relative === '..') {
+        valid = false
+        break
+      }
+      links.set(packageName, target)
+    }
+    if (valid && links.size > 0) {
+      const changed = await repairManagedProfileModuleFallbackWithLinks(layout, links)
+      const packages = (await managedProfileResolverEntries(fallbackRoot, paths)).sort()
+      if (packages.length === previous.packages.length
+        && packages.every((packageName, index) => packageName === previous.packages[index])) {
+        return { changed, cached: true, packages: packages.length }
+      }
+    }
+  }
+
+  const links = await packagedDshDependencyClosure(layout)
+  const changed = await repairManagedProfileModuleFallbackWithLinks(layout, links)
+  const packages = (await managedProfileResolverEntries(fallbackRoot, paths)).sort()
+  const targets = Object.fromEntries([...links].map(([packageName, target]) => [
+    packageName,
+    paths.relative(layout.appDir, target),
+  ]))
+  await writeJsonAtomic(layout.profileResolverState, {
+    schemaVersion: 2,
+    identity,
+    packages,
+    targets,
+    verifiedAt: new Date().toISOString(),
+  })
+  return { changed, cached: false, packages: packages.length }
 }
 
 export async function clearPortableMoveLinks(layout) {

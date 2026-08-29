@@ -1220,7 +1220,7 @@ export function MarketSection(props: MarketSectionProps) {
     const previousBoot = bootId
     setRestarting(true)
     setInstallError(null)
-    const awaitNewBoot = () => {
+    const awaitNewBoot = (unconfirmedError?: unknown) => {
       const deadline = Date.now() + 60000
       const poll = () => {
         fetch('/dsh-market/status', { cache: 'no-store' })
@@ -1237,7 +1237,8 @@ export function MarketSection(props: MarketSectionProps) {
       const retry = () => {
         if (Date.now() > deadline) {
           setRestarting(false)
-          setInstallError(t('restartTimeout'))
+          const detail = unconfirmedError instanceof Error ? unconfirmedError.message : ''
+          setInstallError(t('restartTimeout') + (detail ? ': ' + detail : ''))
           return
         }
         setTimeout(poll, 1500)
@@ -1249,6 +1250,10 @@ export function MarketSection(props: MarketSectionProps) {
       portableRestart()
         .then(awaitNewBoot)
         .catch(error => {
+          if ((error as { code?: unknown })?.code === 'DSH_PORTABLE_RESTART_UNCONFIRMED') {
+            awaitNewBoot(error)
+            return
+          }
           setRestarting(false)
           setInstallError(t('restartFail') + ': ' + String(error instanceof Error ? error.message : error))
         })
