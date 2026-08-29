@@ -32,6 +32,17 @@ test('bootstrap UI follows the Windows display language with English fallback', 
   assert.match(bootstrap, /BootstrapText\.L\("网络有问题？下载离线完整包", "Network issue\? Download the full offline package"\)/)
 })
 
+test('bootstrap help is a successful bounded action instead of an unknown-option failure', async () => {
+  const bootstrap = await readFile(source, 'utf8')
+  assert.match(bootstrap, /argument == "--help" \|\| argument == "-h" \|\| argument == "\/\?"/)
+  assert.match(bootstrap, /options\.ShowHelp = true/)
+  const helpBranch = bootstrap.match(/if \(options\.ShowHelp\)[\s\S]*?return 0;/u)?.[0] ?? ''
+  assert.match(helpBranch, /BootstrapOptions\.HelpText\(\)/)
+  assert.match(helpBranch, /MessageBoxIcon\.Information/)
+  assert.doesNotMatch(helpBranch, /BootstrapInstaller|ExecuteAsync|Application\.Run/)
+  assert.match(bootstrap, /Use --help for usage/)
+})
+
 test('interactive first launch lets the user choose the portable parent folder', async () => {
   const bootstrap = await readFile(source, 'utf8')
   assert.match(bootstrap, /internal bool DestinationExplicit;/)

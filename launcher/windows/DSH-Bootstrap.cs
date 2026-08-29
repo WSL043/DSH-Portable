@@ -201,6 +201,27 @@ namespace DshPortableBootstrap
         internal bool NoLaunch;
         internal bool UpgradeExisting;
         internal bool DestinationExplicit;
+        internal bool ShowHelp;
+
+        internal static string HelpText()
+        {
+            string executable = Path.GetFileName(Application.ExecutablePath);
+            return BootstrapText.L(
+                "DSH-Portable 下载器和更新器\r\n\r\n"
+                + "用法：\r\n  " + executable + " [选项]\r\n\r\n"
+                + "选项：\r\n"
+                + "  --destination <路径>  选择 DSH-Portable 保存位置\r\n"
+                + "  --no-launch           准备完成后不启动 DSH-Portable\r\n"
+                + "  --help, -h, /?        显示此帮助\r\n\r\n"
+                + "不带选项启动时，可以在窗口中选择保存位置。",
+                "DSH-Portable downloader and updater\r\n\r\n"
+                + "Usage:\r\n  " + executable + " [options]\r\n\r\n"
+                + "Options:\r\n"
+                + "  --destination <path>  Choose where to keep DSH-Portable\r\n"
+                + "  --no-launch           Do not start DSH-Portable when ready\r\n"
+                + "  --help, -h, /?        Show this help\r\n\r\n"
+                + "With no options, choose the destination in the window.");
+        }
 
         internal static BootstrapOptions Parse(string[] args)
         {
@@ -211,7 +232,8 @@ namespace DshPortableBootstrap
             for (int index = 0; index < args.Length; index += 1)
             {
                 string argument = args[index];
-                if (argument == "--allow-http") options.AllowHttp = true;
+                if (argument == "--help" || argument == "-h" || argument == "/?") options.ShowHelp = true;
+                else if (argument == "--allow-http") options.AllowHttp = true;
                 else if (argument == "--no-launch") options.NoLaunch = true;
                 else if (argument == "--upgrade-existing") options.UpgradeExisting = true;
                 else if (argument == "--manifest") options.ManifestUrl = RequireValue(args, ref index, argument);
@@ -221,7 +243,9 @@ namespace DshPortableBootstrap
                     options.DestinationExplicit = true;
                 }
                 else if (argument == "--result") options.ResultFile = RequireValue(args, ref index, argument);
-                else throw new ArgumentException("Unknown option: " + argument);
+                else throw new ArgumentException(BootstrapText.L(
+                    "未知选项：" + argument + "。请使用 --help 查看帮助。",
+                    "Unknown option: " + argument + ". Use --help for usage."));
             }
 
             options.Destination = Path.GetFullPath(options.Destination);
@@ -1497,6 +1521,17 @@ namespace DshPortableBootstrap
             try
             {
                 options = BootstrapOptions.Parse(args);
+                if (options.ShowHelp)
+                {
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+                    MessageBox.Show(
+                        BootstrapOptions.HelpText(),
+                        BootstrapText.L("DSH-Portable 帮助", "DSH-Portable Help"),
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information);
+                    return 0;
+                }
                 if (!String.IsNullOrWhiteSpace(options.ResultFile))
                 {
                     BootstrapInstaller installer = new BootstrapInstaller(options, null, null);
