@@ -13,7 +13,7 @@ import {
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
-const LOG_NAMES = Object.freeze(['launcher.log', 'dsh.stdout.log', 'dsh.stderr.log'])
+const LOG_NAMES = Object.freeze(['launcher.log', 'launcher.log.previous', 'dsh.stdout.log', 'dsh.stderr.log'])
 
 async function runtimeChecks(layout) {
   const required = [

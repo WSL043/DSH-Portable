@@ -758,6 +758,13 @@ test('an in-flight install remains visible after the settings page remounts', as
   assert.match(section, /record\.url === busyUrl[\s\S]*state:\s*'failed'/)
 })
 
+test('native restart transport loss is verified by the next boot before reporting failure', async () => {
+  const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  assert.match(section, /DSH_PORTABLE_RESTART_UNCONFIRMED[\s\S]*awaitNewBoot\(error\)/)
+  assert.match(section, /setInstallError\(t\('restartFail'\)/)
+  assert.match(section, /next\.boot !== previousBoot[\s\S]*location\.reload\(\)/)
+})
+
 test('GitHub plugin update checks use the unmetered git ref advertisement', async () => {
   const source = await read('app/vendor/dsh-portable-plugin-market/src/updates.ts')
   assert.match(source, /export function parseGitHeadAdvertisement/)
