@@ -311,11 +311,17 @@ test('Windows staged-update preflight exits without leaving a hidden failure win
 
 test('Windows workspace readiness survives the official Alpha token redirect without logging the token', async () => {
   const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const traySmoke = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
   assert.match(host, /private static string WorkspaceOriginPath\(string value\)/)
   assert.match(host, /location\.origin[\s\S]+location\.pathname/)
   assert.match(host, /current===expected/)
   assert.match(host, /navigation-start:" \+ SafeWorkspaceUrl\(url\)/)
   assert.doesNotMatch(host, /navigation-start:" \+ url/)
+  assert.match(traySmoke, /function validateWorkspaceUrl\(value\)/)
+  assert.match(traySmoke, /parsed\.hostname !== '127\.0\.0\.1'/)
+  assert.match(traySmoke, /\^\[A-Za-z0-9_-\]\{32,128\}\$/)
+  assert.match(traySmoke, /redactSensitive\(JSON\.stringify\(latest\)\)/)
+  assert.doesNotMatch(traySmoke, /assert\.match\(launch\.url/)
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {

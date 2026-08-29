@@ -33,6 +33,40 @@ const activationScreenshotPath = process.env.DSH_SMOKE_PLUGIN_ACTIVATION_SCREENS
 const removeActivationPlugin = process.env.DSH_SMOKE_PLUGIN_REMOVE_AFTER === '1'
 const checkPortableUpdate = process.env.DSH_SMOKE_CHECK_PORTABLE_UPDATE === '1'
 
+function redactSensitive(value) {
+  return String(value || '')
+    .replace(/([?&]token=)[^&#\s"']+/gi, '$1[REDACTED]')
+    .replace(/("(?:token|authorization|cookie)"\s*:\s*")[^"]*/gi, '$1[REDACTED]')
+}
+
+function validateWorkspaceUrl(value) {
+  let parsed
+  try {
+    parsed = new URL(String(value))
+  } catch {
+    throw new Error('portable start returned an invalid workspace URL')
+  }
+  const tokens = parsed.searchParams.getAll('token')
+  const keys = [...parsed.searchParams.keys()]
+  const validToken = tokens.length === 0 || (
+    tokens.length === 1
+    && /^[A-Za-z0-9_-]{32,128}$/.test(tokens[0])
+  )
+  if (
+    parsed.protocol !== 'http:'
+    || parsed.hostname !== '127.0.0.1'
+    || !/^\d+$/.test(parsed.port)
+    || parsed.pathname !== '/'
+    || parsed.username
+    || parsed.password
+    || parsed.hash
+    || !validToken
+    || keys.some(key => key !== 'token')
+  ) {
+    throw new Error('portable start returned an unsafe workspace URL')
+  }
+}
+
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
 const runtimeEntry = path.join(root, 'launcher', 'runtime-entry.mjs')
@@ -57,7 +91,7 @@ function lastJsonLine(source) {
   for (let index = lines.length - 1; index >= 0; index -= 1) {
     try { return JSON.parse(lines[index]) } catch { /* continue */ }
   }
-  throw new Error(`portable command returned no JSON: ${source}`)
+  throw new Error(`portable command returned no JSON: ${redactSensitive(source)}`)
 }
 
 async function portable(args) {
@@ -168,7 +202,7 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
     if (predicate(latest)) return latest
     await new Promise(resolve => setTimeout(resolve, 100))
   }
-  throw new Error(`timed out waiting for ${label}; latest=${JSON.stringify(latest)}`)
+  throw new Error(`timed out waiting for ${label}; latest=${redactSensitive(JSON.stringify(latest))}`)
 }
 
 const initScript = String.raw`(() => {
@@ -232,7 +266,7 @@ try {
   const launch = await portable(['start', '--no-browser', '--json'])
   started = launch.status === 'started'
   assert.equal(started, true)
-  assert.match(launch.url, /^http:\/\/127\.0\.0\.1:\d+$/)
+  validateWorkspaceUrl(launch.url)
 
   profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-tray-headless-'))
   const debugPort = await reserveLoopbackPort()
@@ -313,7 +347,7 @@ try {
   let settings = await evaluate(client, clickButton(['Settings', '设置']))
   if (!settings?.clicked) {
     const sidebar = await evaluate(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']))
-    if (!sidebar?.clicked) throw new Error(`Settings and sidebar controls are unavailable: ${JSON.stringify(settings)}`)
+    if (!sidebar?.clicked) throw new Error(`Settings and sidebar controls are unavailable: ${redactSensitive(JSON.stringify(settings))}`)
     settings = await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, 'Settings button')
   }
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /Settings|设置/.test(item.textContent || '')))`, Boolean, 'Settings dialog')
