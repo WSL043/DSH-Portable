@@ -14,11 +14,14 @@ if (process.platform !== 'win32' || !process.argv[2]) {
   throw new Error('usage: node smoke-windows-subprocess-hide.mjs <DSH-Portable root> (Windows only)')
 }
 
-const appRoot = path.join(root, 'app')
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const trackedHosts = ['OpenConsole.exe', 'WindowsTerminal.exe', 'conhost.exe']
 const probeArg = process.argv.indexOf('--probe')
 const consoleProbeExe = probeArg >= 0 ? path.resolve(process.argv[probeArg + 1] || '') : ''
+
+const capsuleCore = await import(pathToFileURL(path.join(root, 'launcher', 'runtime-capsule.mjs')).href)
+const prepared = await capsuleCore.ensureRuntimeCapsule(root)
+const appRoot = path.join(prepared.runtimeRoot, 'app')
 
 async function processCounts() {
   const { stdout } = await execFileAsync('tasklist.exe', ['/FO', 'CSV', '/NH'], {
@@ -136,7 +139,7 @@ async function runParent() {
   assert.equal(after['OpenConsole.exe'], baseline['OpenConsole.exe'], 'OpenConsole remained after the smoke')
   assert.equal(after['WindowsTerminal.exe'], baseline['WindowsTerminal.exe'], 'Windows Terminal remained after the smoke')
   assert.ok(after['conhost.exe'] <= baseline['conhost.exe'], 'hidden console hosts remained after the smoke')
-  process.stdout.write(`${JSON.stringify({ status: 'passed', baseline, maximum, after })}\n`)
+  process.stdout.write(`${JSON.stringify({ status: 'passed', capsuleMode: prepared.mode === 'capsule', baseline, maximum, after })}\n`)
   } finally {
     await rm(probeRoot, { recursive: true, force: true })
   }
