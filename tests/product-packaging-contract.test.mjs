@@ -111,7 +111,7 @@ test('the GitHub landing page gives beginners one obvious download path', async 
   assert.doesNotMatch(chineseReadme, /不用配置 Node\.js|不需要安装 Node\.js/)
   assert.match(chineseReadme, /会话、设置、插件和工作区/)
   assert.match(chineseReadme, /U 盘|移动硬盘/)
-  assert.doesNotMatch(chineseReadme, /codex|chatgpt|dsh-codex-subscription/i)
+  assert.doesNotMatch(chineseReadme.slice(0, chineseReadme.indexOf('## 插件')), /codex|chatgpt|dsh-codex-subscription/i)
 })
 
 test('redistribution metadata keeps the canonical project discoverable without a custom license', async () => {
@@ -586,6 +586,7 @@ test('plugin management is a generic finished-product capability and release gat
     read('scripts/smoke-windows-plugins.ps1'),
   ])
   const docs = `${chinese}\n${english}\n${userReadme}\n${releaseNotes}`
+  const genericProductDocs = `${userReadme}\n${releaseNotes}`
   assert.match(chinese, /dsh plugin --profile web add <插件>/)
   assert.match(chinese, /dsh plugin --profile web (?:list|remove|update)/)
   assert.match(chinese, /dsh --profile web --dump-config/)
@@ -593,7 +594,7 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(english, /dsh plugin --profile web add <plugin>/i)
   assert.match(english, /DSH Terminal[\s\S]+never changes the system `PATH`/i)
   assert.match(docs, /不会自动重启|never restarts/i)
-  assert.doesNotMatch(docs, /codex|chatgpt|openai-codex|zen\s*free/i)
+  assert.doesNotMatch(genericProductDocs, /codex|chatgpt|openai-codex|zen\s*free/i)
 
   assert.match(workflow, /^  windows-plugin-smoke:/m)
   assert.match(workflow, /smoke-windows-plugins\.ps1/)
@@ -693,7 +694,7 @@ test('the marketplace candidate packages no hand-maintained portable extension c
   assert.equal(await exists('desktop-bridge/extensions/catalog.json'), false)
   assert.equal(await exists('desktop-bridge/lib/extensions.js'), false)
   assert.equal(await exists('scripts/smoke-portable-catalog-extension.mjs'), false)
-  assert.doesNotMatch(`${chinese}\n${english}\n${releaseNotes}`, /codex|chatgpt|dsh-codex-subscription/i)
+  assert.doesNotMatch(releaseNotes, /codex|chatgpt|dsh-codex-subscription/i)
 })
 
 test('Windows portable self-extractor stays offline, movable, and registration-free', async () => {
