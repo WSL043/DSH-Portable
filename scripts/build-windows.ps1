@@ -158,6 +158,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Permission localization adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-native-boot-handoff.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Native boot handoff adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-windows-subprocess-hide.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
 
     & $NodeExe (Join-Path $ProjectRoot 'scripts\prune-runtime.mjs') (Join-Path $Stage 'app') win32 x64

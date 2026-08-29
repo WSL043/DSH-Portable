@@ -1,7 +1,9 @@
 import { existsSync } from 'node:fs'
+import { execFile } from 'node:child_process'
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { promisify } from 'node:util'
 
 import {
   ensureDesktopBridgeFallback,
@@ -14,6 +16,16 @@ import {
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
 const LOG_NAMES = Object.freeze(['launcher.log', 'launcher.log.previous', 'dsh.stdout.log', 'dsh.stderr.log'])
+const execFileAsync = promisify(execFile)
+const WINDOWS_DIAGNOSTIC_PROCESSES = Object.freeze([
+  'DeepSeek-Herness.exe',
+  'OpenConsole.exe',
+  'WindowsTerminal.exe',
+  'conhost.exe',
+  'node.exe',
+  'powershell.exe',
+  'pwsh.exe',
+])
 
 async function runtimeChecks(layout) {
   const required = [
@@ -165,6 +177,36 @@ async function fileInventory(layout) {
   return result
 }
 
+export function summarizeWindowsTasklist(source) {
+  const tracked = Object.fromEntries(WINDOWS_DIAGNOSTIC_PROCESSES.map(name => [name, 0]))
+  for (const line of String(source ?? '').split(/\r?\n/)) {
+    const match = line.match(/^"([^"]+)"/)
+    if (!match) continue
+    const key = WINDOWS_DIAGNOSTIC_PROCESSES.find(name => name.toLowerCase() === match[1].toLowerCase())
+    if (key) tracked[key] += 1
+  }
+  return tracked
+}
+
+async function runtimeProcessSnapshot() {
+  if (process.platform !== 'win32') return { status: 'unsupported', reason: 'windows-only' }
+  try {
+    const { stdout } = await execFileAsync('tasklist.exe', ['/FO', 'CSV', '/NH'], {
+      encoding: 'utf8',
+      timeout: 5000,
+      windowsHide: true,
+      maxBuffer: 4 * 1024 * 1024,
+    })
+    return {
+      status: 'ok',
+      sampledAt: new Date().toISOString(),
+      counts: summarizeWindowsTasklist(stdout),
+    }
+  } catch (error) {
+    return { status: 'unavailable', reason: String(error?.code || error?.message || 'unknown').slice(0, 160) }
+  }
+}
+
 export async function exportPortableSupportReport(layout, output) {
   if (!output) throw new Error('A support report output path is required.')
   const logs = {}
@@ -177,6 +219,7 @@ export async function exportPortableSupportReport(layout, output) {
     diagnosis: await diagnosePortable(layout),
     components: await componentInventory(layout),
     files: await fileInventory(layout),
+    runtimeProcesses: await runtimeProcessSnapshot(),
     logs,
   }
   const bytes = Buffer.from(`${JSON.stringify(report, null, 2)}\n`, 'utf8')
