@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.38.0`
-(`8e0650f07de7775b146838fb37e3180e429773ec`).
+Reviewed upstream baseline: `dsh-market` `v1.38.1`
+(`df2a16b1ed2dfaf1f2505e184e738c0d6d428945`).
 
 ## Compatibility matrix
 
@@ -45,6 +45,8 @@ Reviewed upstream baseline: `dsh-market` `v1.38.0`
 | Restore and verify the exact previous npm version or GitHub commit after a failed update command | Adopted; the original dependency spelling is preserved even when recovery fails |
 | Unicode profiles and Git subpath installs | Independently implemented and tested |
 | Catalog, images, filters, direct author links, list/card views | Portable-native implementation |
+| Avoid runtime named imports from DSH settings helpers removed by Alpha 2 | Independently implemented with stable/Alpha capability checks and verified by both product lanes |
+| Rank search results by field relevance | Deferred; useful discovery polish, not an installation-safety or host-compatibility fix |
 | Plugin name and a separate source link point to the same repository | Keep the plugin name as the single project link; remove the duplicate footer action |
 | Market-level Discover, Themes, Installed, Advanced, and Backup navigation | Flattened to Discover and Installed; themes remain a catalog category, diagnostics is an Installed action, and Portable data migration owns transfer |
 | Market-managed DSH restart/supervisor | Not applicable; the desktop host owns lifecycle |
