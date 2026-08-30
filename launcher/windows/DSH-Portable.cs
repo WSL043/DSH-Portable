@@ -26,8 +26,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.0.1")]
-[assembly: AssemblyFileVersion("0.6.0.1")]
+[assembly: AssemblyVersion("0.6.0.2")]
+[assembly: AssemblyFileVersion("0.6.0.2")]
 
 namespace DshPortable
 {

@@ -3,11 +3,11 @@
   "channel": "beta",
   "dsh": {
     "package": "@deepseek-ai/dsh",
-    "version": "0.1.2-alpha.1",
-    "tag": "dsh-v0.1.2-alpha.1",
+    "version": "0.1.2-alpha.2",
+    "tag": "dsh-v0.1.2-alpha.2",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
-    "reviewedCommit": "cd5ef8148158c3a752a658978873241fdf8e2bbc",
-    "noticesSha256": "b0245871962b81ef8c6f4ade35b15c3effd0e72341fdf4472ce4982eccc01da7",
+    "reviewedCommit": "0a53fb55bea101816fa226bb964ae2bed71c343b",
+    "noticesSha256": "45c3d5ad23ea58fe6aaa2703488f74f03ea53cc0fa80c1024c24d63670570779",
     "buildProfile": "official",
     "packageManager": "pnpm@11.7.0",
     "packedFamilies": {
