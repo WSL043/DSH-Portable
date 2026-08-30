@@ -2,7 +2,10 @@ name: Build and smoke test
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - automation/verified-dependencies
+      - automation/official-preview
   pull_request:
   workflow_dispatch:
 
@@ -52,7 +55,7 @@ jobs:
         id: preview
         run: |
           node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-          node -e "const lock=require('./upstream.preview.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager)" >> "$GITHUB_OUTPUT"
+          node -e "const lock=require('./upstream.preview.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager); for (const [family,count] of Object.entries(lock.dsh.packedFamilies)) console.log(family+'Count='+count)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         if: steps.preview.outputs.channel == 'candidate'
         with:
@@ -70,9 +73,9 @@ jobs:
           pnpm --dir upstream run release:pack --family vendor --out dist/npm-vendor --concurrency 8
           mkdir -p upstream/dist/npm-landlock
           pnpm --dir upstream/native/landlock-run/packages/entry pack --pack-destination "$PWD/upstream/dist/npm-landlock"
-          test "$(find upstream/dist/npm -maxdepth 1 -name '*.tgz' | wc -l)" -eq 245
-          test "$(find upstream/dist/npm-vendor -maxdepth 1 -name '*.tgz' | wc -l)" -eq 9
-          test "$(find upstream/dist/npm-landlock -maxdepth 1 -name '*.tgz' | wc -l)" -eq 1
+          test "$(find upstream/dist/npm -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.dshCount }}"
+          test "$(find upstream/dist/npm-vendor -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.vendorCount }}"
+          test "$(find upstream/dist/npm-landlock -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.landlockCount }}"
       - name: Create a stable-channel marker
         if: steps.preview.outputs.channel != 'candidate'
         run: mkdir preview-packed && printf 'stable\n' > preview-packed/STABLE
@@ -787,3 +790,31 @@ jobs:
           chmod +x "artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage"
           APPIMAGE_EXTRACT_AND_RUN=1 xvfb-run -a "artifacts/DeepSeek-Herness-linux-${{ matrix.arch }}.AppImage" --diagnostic-root-json | tee "$RUNNER_TEMP/appimage-layout.json"
           grep -q '"mode":"appimage"' "$RUNNER_TEMP/appimage-layout.json"
+
+  product-qualification:
+    name: Product qualification
+    if: ${{ always() }}
+    needs:
+      - workflow-lint
+      - contracts
+      - windows-inno-build
+      - windows-update-smoke
+      - windows-portable-smoke
+      - windows-plugin-smoke
+      - windows-desktop-host
+      - windows-bootstrap-smoke
+      - windows-version-upgrade-smoke
+      - windows-extractor-smoke
+      - macos-portable-smoke
+      - macos-desktop-host
+      - macos-plugin-smoke
+      - linux-portable-smoke
+      - linux-plugin-smoke
+      - linux-desktop-host
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every product gate to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          node -e "const needs=JSON.parse(process.env.NEEDS); if (!Object.values(needs).every(({ result }) => result === 'success')) { console.error(needs); process.exit(1) }"

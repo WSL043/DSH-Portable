@@ -1,0 +1,63 @@
+name: Official DSH preview intake
+
+on:
+  schedule:
+    - cron: '41 */6 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: official-preview-intake
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - id: preview
+        name: Discover a newer official alpha package and immutable source tag
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-preview-upstream.mjs
+      - name: Run repository contracts before opening the review
+        if: steps.preview.outputs.changed == 'true'
+        run: |
+          npm ci --prefix app --ignore-scripts
+          npm test
+      - name: Open or refresh the official preview review pull request
+        if: steps.preview.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.preview.outputs.version }}
+          COMMIT: ${{ steps.preview.outputs.commit }}
+        run: |
+          set -euo pipefail
+          BRANCH=automation/official-preview
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git checkout -B "$BRANCH"
+          git add upstream.preview.lock.json
+          git commit -m "chore: review official DSH preview ${VERSION}"
+          git push --force origin "$BRANCH"
+          BODY=$(mktemp)
+          cat > "$BODY" <<EOF
+          Reviews official DeepSeek Harness preview `${VERSION}` at immutable commit `${COMMIT}` for the Portable candidate channel.
+
+          The full Windows, macOS, and Linux product qualification runs on this branch. Manual review and merge are required; this workflow never publishes or merges an Alpha automatically.
+          EOF
+          PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            gh pr edit "$PR" --title "Review official DSH preview ${VERSION}" --body-file "$BODY" --add-assignee WSL043
+          else
+            gh pr create --base main --head "$BRANCH" --title "Review official DSH preview ${VERSION}" --body-file "$BODY" --assignee WSL043
+          fi
+          gh workflow run ci.yml --ref "$BRANCH"
