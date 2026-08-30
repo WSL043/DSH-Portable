@@ -16,5 +16,30 @@
       "landlock": 1
     }
   },
-  "defaultPlugins": {}
+  "defaultPlugins": {
+    "sessionDelete": {
+      "package": "dsh-chat-manager",
+      "repository": "WSL043/dsh-chat-manager",
+      "releaseChannel": "stable",
+      "version": "1.2.2",
+      "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.2.2.tgz",
+      "sha256": "cb32c1201d5ba2922e354c05e4dec1e17ad0affdc1c3bd0e243d4d84d7048a1e",
+      "integrity": "sha512-yrBK7EliaXXwyftqG0AeNYa9qI+MeuuXqG164Q4ko5N3BxMg+5hR8X0cG/6IGrXZHC/X2kHKkph7ADY2F9QEqg==",
+      "license": "MIT",
+      "reviewedCommit": "65ec7ed3aa26811343359379379d3e58a55c5a92",
+      "filename": "dsh-chat-manager.tgz"
+    },
+    "imageViewer": {
+      "package": "dsh-image-viewer",
+      "repository": "WSL043/dsh-image-viewer",
+      "releaseChannel": "prerelease",
+      "version": "0.1.0-beta.5",
+      "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.5.tgz",
+      "sha256": "8e72e84ac602b92cd26638d0303968303bc9bafc033eb921d99cf5f532ceedc2",
+      "integrity": "sha512-9+98EVpcOnxikcAY9yVCcTLRWke5icqyPjek/1eiz9PQfidsgckEN9V00qQWM1AsqTWnZHa1lpHZEQajhqG1SA==",
+      "license": "MIT",
+      "reviewedCommit": "36f70c920bf1ea1cd85fad0a5be0c64af1269d48",
+      "filename": "dsh-image-viewer.tgz"
+    }
+  }
 }

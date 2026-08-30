@@ -129,7 +129,7 @@ jobs:
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$BRANCH"
-          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json launcher/default-plugins.mjs upstream.lock.json
+          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json launcher/default-plugins.mjs upstream.lock.json upstream.preview.lock.json
           git commit -m "chore: verify current DSH dependencies"
           git push --force origin "$BRANCH"
           BODY=$(mktemp)

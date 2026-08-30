@@ -456,12 +456,13 @@ test('all bundled defaults are accumulated by the unified dependency intake', as
   assert.match(updater, /assets[\s\S]+digest/)
   assert.match(updater, /createHash\(['"]sha256['"]\)/)
   assert.match(updater, /upstream\.lock\.json/)
+  assert.match(updater, /upstream\.preview\.lock\.json/)
   assert.match(updater, /path\.join\(root, ['"]launcher['"], ['"]default-plugins\.mjs['"]\)/)
   assert.match(updater, /GITHUB_OUTPUT/)
   assert.match(updater, /--check/)
   assert.match(ci, /node scripts\/update-default-plugin\.mjs --check/)
   assert.match(publish, /node scripts\/update-default-plugin\.mjs --check/)
-  assert.match(workflow, /launcher\/default-plugins\.mjs/)
+  assert.match(workflow, /launcher\/default-plugins\.mjs[\s\S]*upstream\.preview\.lock\.json/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {

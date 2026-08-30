@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { appendFile, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { isDeepStrictEqual } from 'node:util'
 import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -95,33 +96,44 @@ async function inspectPlugin(key, current) {
 }
 
 const lockPath = path.join(root, 'upstream.lock.json')
+const previewLockPath = path.join(root, 'upstream.preview.lock.json')
 const sourcePath = path.join(root, 'launcher', 'default-plugins.mjs')
-const [lockText, sourceText] = await Promise.all([
+const [lockText, previewLockText, sourceText] = await Promise.all([
   readFile(lockPath, 'utf8'),
+  readFile(previewLockPath, 'utf8'),
   readFile(sourcePath, 'utf8'),
 ])
 const lock = JSON.parse(lockText)
+const previewLock = JSON.parse(previewLockText)
 const inspections = await Promise.all(Object.entries(lock.defaultPlugins ?? {}).map(([key, plugin]) => inspectPlugin(key, plugin)))
 if (inspections.length === 0) throw new Error('no default plugins are locked')
 
 const changed = inspections.filter(item => item.changed)
-if (changed.length > 0 && checkOnly) {
-  throw new Error(`Bundled default plugins are behind their verified channels: ${changed.map(item => `${item.current.package}@${item.current.version} -> ${item.next.version}`).join(', ')}`)
+const nextDefaults = Object.fromEntries(inspections.map(item => [item.key, item.next]))
+const previewDrift = !isDeepStrictEqual(previewLock.defaultPlugins, nextDefaults)
+const needsUpdate = changed.length > 0 || previewDrift
+if (needsUpdate && checkOnly) {
+  const updates = changed.map(item => `${item.current.package}@${item.current.version} -> ${item.next.version}`)
+  if (previewDrift) updates.push('preview default lock differs from the verified plugin set')
+  throw new Error(`Bundled default plugins are behind their verified channels: ${updates.join(', ')}`)
 }
-if (changed.length > 0) {
+if (needsUpdate) {
   let nextSource = sourceText
   for (const item of changed) {
     lock.defaultPlugins[item.key] = item.next
     nextSource = replacePluginBlock(nextSource, item.current, item.next)
   }
+  previewLock.defaultPlugins = lock.defaultPlugins
   await writeFile(`${lockPath}.tmp`, `${JSON.stringify(lock, null, 2)}\n`, 'utf8')
   await rename(`${lockPath}.tmp`, lockPath)
+  await writeFile(`${previewLockPath}.tmp`, `${JSON.stringify(previewLock, null, 2)}\n`, 'utf8')
+  await rename(`${previewLockPath}.tmp`, previewLockPath)
   await writeFile(`${sourcePath}.tmp`, nextSource, 'utf8')
   await rename(`${sourcePath}.tmp`, sourcePath)
 }
 
 const result = {
-  changed: changed.length > 0,
+  changed: needsUpdate,
   plugins: inspections.map(item => ({ package: item.current.package, version: item.next.version, commit: item.next.reviewedCommit, changed: item.changed })),
 }
 console.log(JSON.stringify(result, null, 2))
