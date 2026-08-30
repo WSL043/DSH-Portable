@@ -18,7 +18,7 @@ test('stable and beta upstream locks are separate and immutable', async () => {
   assert.equal(preview.dsh.tag, `dsh-v${preview.dsh.version}`)
   assert.match(preview.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
   assert.equal(preview.dsh.buildProfile, 'official')
-  assert.deepEqual(preview.dsh.packedFamilies, { dsh: 241, vendor: 9, landlock: 1 })
+  assert.deepEqual(preview.dsh.packedFamilies, { dsh: 245, vendor: 9, landlock: 1 })
 })
 
 test('preview staging is an explicit build input and never rewrites the stable app lock', async () => {
