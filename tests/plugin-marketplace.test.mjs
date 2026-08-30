@@ -10,14 +10,25 @@ const root = path.resolve(import.meta.dirname, '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 
 test('the bundled market explicitly declares each verified official DSH preview train', async () => {
-  const [manifest, upstream] = await Promise.all([
+  const [manifest, upstream, preview] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/package.json').then(JSON.parse),
     read('upstream.lock.json').then(JSON.parse),
+    read('upstream.preview.lock.json').then(JSON.parse),
   ])
   const ranges = manifest.peerDependencies['@deepseek-ai/dsh-settings'].split(/\s*\|\|\s*/)
   assert.equal(new Set(ranges).size, ranges.length)
   assert.ok(ranges.every(range => /^\^\d+\.\d+\.\d+-(?:rc|alpha)\.\d+$/.test(range)))
   assert.ok(ranges.includes(`^${upstream.dsh.version}`))
+  assert.ok(ranges.includes(`^${preview.dsh.version}`))
+})
+
+test('market settings support the stable helper and the Alpha 2 service method', async () => {
+  const source = await read('app/vendor/dsh-portable-plugin-market/src/settings.ts')
+  assert.match(source, /import \* as dshSettings from '@deepseek-ai\/dsh-settings'/)
+  assert.doesNotMatch(source, /import \{[^}]*settingsNamespace/)
+  assert.match(source, /Reflect\.get\(dshSettings, 'installSettingsSection'\)/)
+  assert.match(source, /ctx\.inject\(\['settings'\]/)
+  assert.match(source, /installSection/)
 })
 
 test('the current product line pins one live visual catalog and no curated extension cards', async () => {
