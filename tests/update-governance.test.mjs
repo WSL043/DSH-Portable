@@ -25,12 +25,13 @@ test('official DSH alpha discovery opens a review-only pull request', async () =
 })
 
 test('bot dependency branches run without pull-request workflow approval and merge only after qualification', async () => {
-  const [ci, merge] = await Promise.all([
+  const [ci, merge, stableIntake] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('.github/workflows/merge-verified-dependencies.yml'),
+    read('.github/workflows/upstream-watch.yml'),
   ])
 
-  assert.match(ci, /push:[\s\S]+branches:[\s\S]+main[\s\S]+automation\/verified-dependencies[\s\S]+automation\/official-preview/)
+  assert.match(ci, /push:\s*\n\s+branches:\s*\[main\]/)
   assert.match(ci, /^  product-qualification:/m)
   assert.match(ci, /name:\s*Product qualification/)
   assert.match(ci, /if:\s*\$\{\{ always\(\) \}\}/)
@@ -39,4 +40,6 @@ test('bot dependency branches run without pull-request workflow approval and mer
   assert.match(merge, /workflow_run\.event == 'workflow_dispatch'/)
   assert.match(merge, /workflow_run\.name == 'Build and smoke test'/)
   assert.match(merge, /head_branch == 'automation\/verified-dependencies'/)
+  assert.match(stableIntake, /actions:\s*write/)
+  assert.match(stableIntake, /gh workflow run ci\.yml[^\n]+--ref "\$BRANCH"/)
 })
