@@ -141,9 +141,9 @@ for (const [clientPath, label] of [
   [conversationClientPath, 'Conversation permission'],
 ]) {
   const client = readFileSync(clientPath, 'utf8')
-  assert.match(client, /dsh-portable-permission-locale-v1/, `${label} client is missing the locale adapter`)
-  assert.match(client, /工作区写入/, `${label} client is missing the Chinese workspace-write label`)
-  assert.match(client, /完全访问/, `${label} client is missing the Chinese full-access label`)
+  assert.match(client, /dsh-portable-permission-locale-v1|"(?:access\.)?preset\.workspaceWrite": "可写入工作区"/, `${label} client is missing native localization or the locale adapter`)
+  assert.match(client, /工作区写入|可写入工作区/, `${label} client is missing the Chinese workspace-write label`)
+  assert.match(client, /完全访问|完全权限/, `${label} client is missing the Chinese full-access label`)
 }
 
 await new Promise((resolve) => {

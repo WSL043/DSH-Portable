@@ -70,7 +70,7 @@ jobs:
           pnpm --dir upstream run release:pack --family vendor --out dist/npm-vendor --concurrency 8
           mkdir -p upstream/dist/npm-landlock
           pnpm --dir upstream/native/landlock-run/packages/entry pack --pack-destination "$PWD/upstream/dist/npm-landlock"
-          test "$(find upstream/dist/npm -maxdepth 1 -name '*.tgz' | wc -l)" -eq 241
+          test "$(find upstream/dist/npm -maxdepth 1 -name '*.tgz' | wc -l)" -eq 245
           test "$(find upstream/dist/npm-vendor -maxdepth 1 -name '*.tgz' | wc -l)" -eq 9
           test "$(find upstream/dist/npm-landlock -maxdepth 1 -name '*.tgz' | wc -l)" -eq 1
       - name: Create a stable-channel marker

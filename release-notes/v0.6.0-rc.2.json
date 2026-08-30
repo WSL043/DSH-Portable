@@ -1,0 +1,23 @@
+{
+  "version": "0.6.0-rc.2",
+  "zh": {
+    "summary": "Beta 通道更新到官方 DeepSeek Harness Alpha 2，并加强高并发会话、插件更新和 Windows 桌面运行的可靠性。",
+    "highlights": [
+      "内置官方 DeepSeek Harness 0.1.2-alpha.2，并通过独立候选运行时构建；日常稳定通道仍保持在已验证的稳定兼容内核。",
+      "减少密集会话与子代理事件引起的重复投影刷新，降低大型任务下的界面更新压力。",
+      "Windows 后台子进程继续隐藏控制台窗口，并用成品测试监测 OpenConsole 和 Windows Terminal 数量，避免终端窗口风暴。",
+      "插件更新若在替换包文件后失败，会恢复原 npm 或 Git 包、版本和入口，避免留下新旧混合的损坏状态。",
+      "便携重启、启动交接和失败诊断更加完整；升级仍保留会话、设置、凭据、插件和工作区。"
+    ]
+  },
+  "en": {
+    "summary": "The Beta channel moves to the official DeepSeek Harness Alpha 2 and improves reliability for high-volume sessions, plugin updates, and the Windows desktop runtime.",
+    "highlights": [
+      "Bundles official DeepSeek Harness 0.1.2-alpha.2 through the independently built candidate runtime, while the daily Stable channel remains on its validated compatible core.",
+      "Reduces redundant session-projection refreshes during dense session and subagent event bursts, lowering UI update pressure in large tasks.",
+      "Keeps Windows background subprocess consoles hidden and monitors OpenConsole and Windows Terminal counts in finished-product tests to prevent terminal-window storms.",
+      "Restores the original npm or Git package, version, and entry point when a plugin update fails after replacing package files, avoiding a mixed broken installation.",
+      "Improves portable restart, startup handoff, and failure diagnostics while preserving sessions, settings, credentials, plugins, and workspaces across upgrades."
+    ]
+  }
+}

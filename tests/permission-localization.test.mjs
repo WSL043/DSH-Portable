@@ -68,6 +68,22 @@ const alphaConversationSource = [
   '\t\t\t"access.fullLabel": "Full access",',
 ].join('\n')
 
+const nativeAlpha2SettingsSource = [
+  '\t\t\t"preset.readOnly": "仅可查看",',
+  '\t\t\t"preset.workspaceWrite": "可写入工作区",',
+  '\t\t\t"preset.fullAccess": "完全权限",',
+  '\t\tfunction displayPermissionPreset(value, name, t) {',
+  '\t\t\tconst optionLabel = (option) => displayPermissionPreset(option.id, option.label, t);',
+].join('\n')
+
+const nativeAlpha2ConversationSource = [
+  '\t\t\t"access.preset.readOnly": "仅可查看",',
+  '\t\t\t"access.preset.workspaceWrite": "可写入工作区",',
+  '\t\t\t"access.preset.fullAccess": "完全权限",',
+  '\t\tfunction permissionLabel(value, name, t) {',
+  '\t\t\t\tlabel: permissionLabel(option.value, option.name, t),',
+].join('\n')
+
 test('known permission modes follow the active Chinese or English locale', () => {
   const settings = patchPermissionSettings(settingsSource)
   const conversation = patchConversationPermissions(conversationSource)
@@ -98,6 +114,11 @@ test('alpha permission presentation seams remain localized and idempotent', () =
   assert.match(conversation, /permissionModeLocaleKeys/)
   assert.equal(patchPermissionSettings(settings), settings)
   assert.equal(patchConversationPermissions(conversation), conversation)
+})
+
+test('official Alpha 2 native permission localization needs no Portable adapter', () => {
+  assert.equal(patchPermissionSettings(nativeAlpha2SettingsSource), nativeAlpha2SettingsSource)
+  assert.equal(patchConversationPermissions(nativeAlpha2ConversationSource), nativeAlpha2ConversationSource)
 })
 
 test('permission localization is guarded, idempotent, and part of every product build', async () => {

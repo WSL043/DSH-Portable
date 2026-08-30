@@ -4,6 +4,10 @@ import { fileURLToPath } from 'node:url'
 
 const MARKER = 'dsh-portable-permission-locale-v1'
 
+function includesAll(source, needles) {
+  return needles.every(needle => source.includes(needle))
+}
+
 function replaceRequired(source, needle, replacement, label, expected = 1) {
   const matches = source.split(needle).length - 1
   if (matches !== expected) {
@@ -14,6 +18,13 @@ function replaceRequired(source, needle, replacement, label, expected = 1) {
 
 export function patchPermissionSettings(input) {
   if (input.includes(MARKER)) return input
+  if (includesAll(input, [
+    '"preset.readOnly": "仅可查看"',
+    '"preset.workspaceWrite": "可写入工作区"',
+    '"preset.fullAccess": "完全权限"',
+    'function displayPermissionPreset(value, name, t)',
+    'displayPermissionPreset(option.id, option.label, t)',
+  ])) return input
 
   if (input.includes('\t\tfunction displayPermissionPreset(value, name) {')) {
     let output = replaceRequired(
@@ -115,6 +126,13 @@ export function patchPermissionSettings(input) {
 
 export function patchConversationPermissions(input) {
   if (input.includes(MARKER)) return input
+  if (includesAll(input, [
+    '"access.preset.readOnly": "仅可查看"',
+    '"access.preset.workspaceWrite": "可写入工作区"',
+    '"access.preset.fullAccess": "完全权限"',
+    'function permissionLabel(value, name, t)',
+    'permissionLabel(option.value, option.name, t)',
+  ])) return input
 
   if (input.includes('\t\tfunction optionLabel(option, t) {')) {
     let output = replaceRequired(

@@ -27,18 +27,18 @@
  * plugin configuration page, so a second door bought nothing and cost the
  * setting its memory.
  *
- * installSettingsSection rides the scoped fiber, so a host with no settings
- * service — every dsh before 0.1.0-rc.7 — simply never runs any of this and
- * the entry configuration stands as composed. That is why this needs no
- * version check of its own.
+ * The stable host exports installSettingsSection; Alpha 2 moved the same
+ * optional-service wiring onto ctx.settings.installSection. Both ride the
+ * scoped fiber, so a host with no settings service simply never runs any of
+ * this and the entry configuration stands as composed.
  */
 
 import type { Context } from '@deepseek-ai/cordis'
-import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
+import * as dshSettings from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 
 /** Namespace the card on the browser side keys itself to. */
-export const MARKET_SETTINGS_NS = settingsNamespace('dsh-market')
+export const MARKET_SETTINGS_NS = 'dsh-market'
 
 /** The market settings a user may edit at runtime. */
 export interface MarketSettings {
@@ -67,16 +67,20 @@ export function installMarketSettings(ctx: Context, resolved: { allowRestart?: b
   // presenting "unset" as "off".
   const entry = { allowRestart: resolved.allowRestart !== false }
   let source = (): MarketSettings => entry
-  installSettingsSection(
-    ctx,
-    MARKET_SETTINGS_NS,
-    MarketSettings,
-    entry,
-    {
-      setSource: (current) => { source = current },
-      // Assigns ONLY what this namespace owns. Writing back a field the
-      // market stores elsewhere is how the channel lost its memory.
-      onChange: () => { resolved.allowRestart = source().allowRestart },
-    },
-  )
+  const hooks = {
+    setSource: (current: () => MarketSettings) => { source = current },
+    // Assigns ONLY what this namespace owns. Writing back a field the
+    // market stores elsewhere is how the channel lost its memory.
+    onChange: () => { resolved.allowRestart = source().allowRestart },
+  }
+  const legacyInstall = Reflect.get(dshSettings, 'installSettingsSection')
+  if (typeof legacyInstall === 'function') {
+    legacyInstall(ctx, MARKET_SETTINGS_NS, MarketSettings, entry, hooks)
+    return
+  }
+  ctx.inject(['settings'], (settingsCtx) => {
+    const installSection = Reflect.get(settingsCtx.settings, 'installSection')
+    if (typeof installSection !== 'function') throw new Error('settings service has no installSection compatibility seam')
+    installSection.call(settingsCtx.settings, ctx, MARKET_SETTINGS_NS, MarketSettings, entry, hooks)
+  })
 }
