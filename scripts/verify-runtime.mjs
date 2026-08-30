@@ -116,7 +116,7 @@ assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'client.js')), true,
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'index.js')), true, 'desktop bridge host entry is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'cordis.patch.yml')), true, 'desktop bridge patch is missing')
 assert.equal(marketManifest.name, '@wsl043/dsh-portable-plugin-market')
-assert.match(marketManifest.version, /^0\.1\.0-beta\.\d+$/, 'pinned Portable visual market version')
+assert.match(marketManifest.version, /^0\.1\.0-beta\.\d+(?:\.\d+)?$/, 'pinned Portable visual market version')
 assert.equal(existsSync(marketClientPath), true, 'Portable plugin market client is missing')
 assert.match(
   readFileSync(marketClientPath, 'utf8'),

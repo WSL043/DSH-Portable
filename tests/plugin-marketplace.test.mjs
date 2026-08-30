@@ -37,7 +37,7 @@ test('the current product line pins one live visual catalog and no curated exten
   const market = lock.packages['node_modules/@wsl043/dsh-portable-plugin-market']
   assert.equal(market.resolved, 'vendor/dsh-portable-plugin-market')
   assert.equal(market.link, true)
-  assert.match(lock.packages['vendor/dsh-portable-plugin-market'].version, /^0\.1\.0-beta\.\d+$/)
+  assert.match(lock.packages['vendor/dsh-portable-plugin-market'].version, /^0\.1\.0-beta\.\d+(?:\.\d+)?$/)
 
   assert.match(patch, /id:\s*dsh-portable-plugin-market/)
   assert.match(patch, /name:\s*['"]@wsl043\/dsh-portable-plugin-market['"]/)
@@ -76,7 +76,7 @@ test('the Portable market is a native Plugins tab with readable cards and direct
 
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(market.name, '@wsl043/dsh-portable-plugin-market')
-  assert.match(market.version, /^0\.1\.0-beta\.\d+$/)
+  assert.match(market.version, /^0\.1\.0-beta\.\d+(?:\.\d+)?$/)
   assert.match(registration, /ctx\.slots\.inject\('settings\.plugins\.tab'/)
   assert.match(registration, /name:\s*'settings\.plugins\.tab'/)
   assert.doesNotMatch(registration, /ctx\.slots\.inject\('settings\.section'/)
