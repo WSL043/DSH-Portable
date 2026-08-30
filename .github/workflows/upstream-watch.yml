@@ -112,7 +112,9 @@ jobs:
             '' 'No candidate issue was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
         if: steps.upstream.outputs.changed == 'true' || steps.default_plugin.outputs.changed == 'true'
-        run: npm test
+        run: |
+          npm ci --prefix app --ignore-scripts
+          npm test
       - name: Open or refresh the short-lived verified dependency pull request
         if: steps.upstream.outputs.changed == 'true' || steps.default_plugin.outputs.changed == 'true'
         env:
