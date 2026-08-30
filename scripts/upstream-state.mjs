@@ -32,6 +32,38 @@ function compareSemver(leftValue, rightValue) {
   return 0
 }
 
+export function evaluatePreviewUpstream({ lock, registry, packageCommit }) {
+  const version = registry?.['dist-tags']?.alpha
+  const published = registry?.versions?.[version]
+  const integrity = published?.dist?.integrity
+  if (!version || !integrity) {
+    throw new Error('official npm alpha tag has no verifiable package integrity')
+  }
+  if (!/-alpha(?:\.|$)/.test(version)) {
+    throw new Error(`official npm alpha tag does not point to an alpha prerelease: ${version}`)
+  }
+
+  const currentVersion = lock.dsh.version
+  const comparison = compareSemver(version, currentVersion)
+  if (comparison === 0 && integrity !== lock.dsh.npmIntegrity) {
+    throw new Error(`integrity changed for the pinned official alpha ${version}`)
+  }
+  if (comparison <= 0) {
+    return {
+      changed: false,
+      version: currentVersion,
+      integrity: lock.dsh.npmIntegrity,
+      commit: lock.dsh.reviewedCommit,
+    }
+  }
+
+  const commit = packageCommit?.sha
+  if (!/^[0-9a-f]{40}$/.test(commit ?? '')) {
+    throw new Error(`official tag dsh-v${version} does not resolve to a commit`)
+  }
+  return { changed: true, version, integrity, commit }
+}
+
 export function evaluateUpstream({ lock, registry, commit, packageCommit, requestedTag = 'next' }) {
   const tags = registry?.['dist-tags'] ?? {}
   const selectedTag = requestedTag === 'latest'

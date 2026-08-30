@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 
-import { evaluateUpstream } from '../scripts/upstream-state.mjs'
+import { evaluatePreviewUpstream, evaluateUpstream } from '../scripts/upstream-state.mjs'
 
 test('the upstream refresher supports both standard and bundled Windows Node layouts', async () => {
   const source = await readFile(new URL('../scripts/update-upstream.mjs', import.meta.url), 'utf8')
@@ -110,4 +110,62 @@ test('same-version integrity drift fails closed instead of silently replacing th
     registry: registry({ integrity: 'sha512-replaced' }),
     commit: { sha: 'b'.repeat(40) },
   }), /integrity changed for the pinned DSH version/i)
+})
+
+const previewLock = {
+  dsh: {
+    version: '0.1.2-alpha.2',
+    npmIntegrity: 'sha512-preview-current',
+    reviewedCommit: 'd'.repeat(40),
+  },
+}
+
+function previewRegistry({ alpha = '0.1.2-alpha.2', integrity = 'sha512-preview-current' } = {}) {
+  return {
+    'dist-tags': { alpha },
+    versions: {
+      [alpha]: { dist: { integrity } },
+    },
+  }
+}
+
+test('a newer official alpha becomes a review-only preview candidate', () => {
+  const result = evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2-alpha.3', integrity: 'sha512-preview-next' }),
+    packageCommit: { sha: 'e'.repeat(40) },
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(result.version, '0.1.2-alpha.3')
+  assert.equal(result.integrity, 'sha512-preview-next')
+  assert.equal(result.commit, 'e'.repeat(40))
+})
+
+test('the official alpha monitor never downgrades the reviewed preview lock', () => {
+  const result = evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2-alpha.1', integrity: 'sha512-preview-old' }),
+    packageCommit: { sha: 'c'.repeat(40) },
+  })
+
+  assert.equal(result.changed, false)
+  assert.equal(result.version, '0.1.2-alpha.2')
+  assert.equal(result.commit, 'd'.repeat(40))
+})
+
+test('same-version official alpha integrity drift fails closed', () => {
+  assert.throws(() => evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ integrity: 'sha512-preview-replaced' }),
+    packageCommit: { sha: 'd'.repeat(40) },
+  }), /integrity changed for the pinned official alpha/i)
+})
+
+test('the official alpha monitor rejects a stable version on the alpha tag', () => {
+  assert.throws(() => evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2', integrity: 'sha512-not-alpha' }),
+    packageCommit: { sha: 'e'.repeat(40) },
+  }), /does not point to an alpha prerelease/i)
 })
