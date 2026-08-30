@@ -435,6 +435,36 @@ export function mountMarketRoutes(
     return { ok, detail: ok ? null : (reinstall.stderr || reinstall.stdout).slice(-300) }
   }
 
+  /** Restore the exact npm build that was installed before an update started. */
+  async function rollbackNpmBuild(
+    name: string,
+    manifestBefore: ProfileManifestSnapshot,
+    beforeVersion: string | null,
+  ): Promise<{ ok: boolean; detail: string | null }> {
+    restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
+    if (beforeVersion === null) {
+      return { ok: false, detail: 'the previous installed version is unknown; exact rollback is unavailable' }
+    }
+    const add = await runPlugin(config.profile, ['add', RELEASE_AGE_OVERRIDE, `${name}@${beforeVersion}`])
+      .finally(() => {
+        // The recovery add pins its target. Preserve the user's original
+        // durable range or tag spelling even when recovery itself fails.
+        restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
+      })
+    if (add.exitCode !== 0 || add.timedOut || add.cancelled) {
+      return { ok: false, detail: (add.stderr || add.stdout).slice(-300) }
+    }
+    const restoredVersion = readInstalledVersion(config.profile, name, activeProfileDir)
+    if (restoredVersion !== beforeVersion) {
+      return { ok: false, detail: `expected v${beforeVersion} after rollback, found v${restoredVersion ?? 'unknown'}` }
+    }
+    if (!hasLoadableEntry(activeProfileDir, name)) {
+      return { ok: false, detail: 'the previous version was reinstalled without a loadable entry' }
+    }
+    logEvent('info', 'update-rollback', `${name}: restored npm build v${beforeVersion}`)
+    return { ok: true, detail: null }
+  }
+
   interface PendingRollback {
     id: string
     kind: 'update' | 'install'
@@ -466,13 +496,24 @@ export function mountMarketRoutes(
     }
     restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
     const add = await runPlugin(config.profile, ['add', RELEASE_AGE_OVERRIDE, `${target}#${beforeCommit}`])
+      .finally(() => {
+        // Keep the durable floating GitHub source even when the exact
+        // recovery add fails after writing its commit-pinned target.
+        restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
+      })
     if (add.exitCode !== 0 || add.timedOut || add.cancelled) {
       return { ok: false, detail: (add.stderr || add.stdout).slice(-300) }
     }
-    // pnpm wrote a commit-pinned spec; the profile's durable spec must stay
-    // the original `github:owner/repo` form. The lockfile keeps the restored
-    // commit resolution for the next boot.
-    restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
+    const repoKey = target.startsWith('github:') ? target.slice('github:'.length).split('#')[0]!.toLowerCase() : null
+    const restoredCommit = repoKey === null
+      ? null
+      : readLockCommits(config.profile, activeProfileDir).get(repoKey) ?? null
+    if (restoredCommit !== beforeCommit) {
+      return { ok: false, detail: `expected commit ${beforeCommit} after rollback, found ${restoredCommit ?? 'unknown'}` }
+    }
+    if (!hasLoadableEntry(activeProfileDir, name)) {
+      return { ok: false, detail: 'the previous commit was reinstalled without a loadable entry' }
+    }
     logEvent('info', 'update-rollback', `${name}: restored github build at ${beforeCommit}`)
     return { ok: true, detail: null }
   }
@@ -1368,15 +1409,29 @@ export function mountMarketRoutes(
             const manifestBefore = readProfileManifestSnapshot(config.profile, activeProfileDir)
             const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
-            if ((result.exitCode !== 0 || result.timedOut) && !cancelled) {
-              const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
-              if (rolledBack.length > 0) logEvent('warn', 'update', `${name}: rolled back manifest residue of the failed run: ${rolledBack.join(', ')}`)
+            let rollbackOk = true
+            let rollbackDetail: string | null = null
+            let hardFailureRollbackError: string | null = null
+            // pnpm may replace package files before returning a non-zero exit
+            // or timing out. Restore the exact prior build, not only its
+            // manifest spelling; busy and user-cancelled runs do not own an
+            // automatic recovery mutation.
+            if ((result.exitCode !== 0 || result.timedOut) && !cancelled && result.busy !== true) {
+              const rollback = isGit
+                ? await rollbackGitBuild(name, manifestBefore, target, beforeCommit)
+                : await rollbackNpmBuild(name, manifestBefore, beforeVersion)
+              rollbackOk = rollback.ok
+              rollbackDetail = rollback.detail
+              if (rollback.ok) {
+                logEvent('warn', 'update', `${name}: failed update command; previous build restored and verified`)
+              } else {
+                hardFailureRollbackError = `${name} 更新失败，且更新前的构建未能验证恢复（${rollback.detail ?? 'unknown'}）；请先检查该 profile，再重新启动。 / ${name} update failed and restoration of the previous build could not be verified (${rollback.detail ?? 'unknown'}); inspect this profile before restarting.`
+                logEvent('error', 'update-rollback', `${name}: failed update command and restoration of the previous build could not be verified — ${rollback.detail ?? 'unknown'}`)
+              }
             }
             let ok = result.exitCode === 0 && !result.timedOut && !cancelled
             let stale = false
             let activation: Record<string, ReturnType<typeof verifyActivation>> | undefined
-            let rollbackOk = true
-            let rollbackDetail: string | null = null
             let versionFailure: 'DOWNGRADE_DETECTED' | 'RESOLVED_VERSION_MISMATCH' | null = null
             let versionFailureError: string | null = null
             if (ok) {
@@ -1552,7 +1607,7 @@ export function mountMarketRoutes(
               ignoredBuilds,
               failureCode: versionFailure ?? undefined,
               staleReason: staleReason ?? undefined,
-              error: versionFailureError ?? profileHealthError ?? trialError ?? brokenEntryError ?? staleError ?? undefined,
+              error: versionFailureError ?? profileHealthError ?? trialError ?? brokenEntryError ?? hardFailureRollbackError ?? staleError ?? undefined,
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,
