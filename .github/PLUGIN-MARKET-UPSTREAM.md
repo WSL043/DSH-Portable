@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.36.0`
-(`d5902420b1759f9620fe1042aedec7c3325d2ac5`).
+Reviewed upstream baseline: `dsh-market` `v1.38.0`
+(`8e0650f07de7775b146838fb37e3180e429773ec`).
 
 ## Compatibility matrix
 
@@ -41,6 +41,8 @@ Reviewed upstream baseline: `dsh-market` `v1.36.0`
 | Explain tarballs missing integrity metadata without inventing a checksum | Adopted |
 | Explain Windows locked-file rename failures without automatic retry | Adopted |
 | Reset scrolling when catalog state changes and disable browser scroll anchoring | Adopted |
+| Prompt for a page refresh after hot-removing a client-part plugin | Adopted |
+| Restore and verify the exact previous npm version or GitHub commit after a failed update command | Adopted; the original dependency spelling is preserved even when recovery fails |
 | Unicode profiles and Git subpath installs | Independently implemented and tested |
 | Catalog, images, filters, direct author links, list/card views | Portable-native implementation |
 | Plugin name and a separate source link point to the same repository | Keep the plugin name as the single project link; remove the duplicate footer action |
@@ -51,6 +53,10 @@ Reviewed upstream baseline: `dsh-market` `v1.36.0`
 | Profile snapshots and named plugin presets | Excluded; Portable data migration already owns full-profile recovery |
 | Reverse-proxy base-path routing | Not applicable to the native desktop host, which serves DSH at its own origin root |
 | Persistent market server logs and full-profile export | Excluded; Portable support reports and migration own those product-level surfaces |
+| Browser-side self-check facts in exported diagnostics | Deferred to the Portable support report so one privacy-bounded product report owns both host and WebView evidence |
+| Resolve a bundled Electron DSH host and normalize an implicit `DSH_HOME` | Not applicable; Portable supplies an explicit profile directory and a non-empty product-owned `DSH_HOME` |
+| Name pnpm 11.21+ missing-integrity entries | Deferred until the pinned private pnpm advances from 11.7; retain the current fail-closed checksum policy |
+| Offer online updates for local `file:` installs and settings deep links | Deferred; useful expansion, not an installation-safety fix for the beginner path |
 | Restore local development links to catalog sources | Deferred; useful for plugin authors but outside the beginner install path |
 | Personal notes, update-note previews, plugin discussions, and public update APIs | Deferred; these are product expansion rather than Portable safety fixes |
 | Third-party desktop-host compatibility branches | Reviewed only when they affect the official DSH contract |
