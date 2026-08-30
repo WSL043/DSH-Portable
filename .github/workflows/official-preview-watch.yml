@@ -50,7 +50,7 @@ jobs:
           git push --force origin "$BRANCH"
           BODY=$(mktemp)
           cat > "$BODY" <<EOF
-          Reviews official DeepSeek Harness preview `${VERSION}` at immutable commit `${COMMIT}` for the Portable candidate channel.
+          Reviews official DeepSeek Harness preview ${VERSION} at immutable commit ${COMMIT} for the Portable candidate channel.
 
           The full Windows, macOS, and Linux product qualification runs on this branch. Manual review and merge are required; this workflow never publishes or merges an Alpha automatically.
           EOF
