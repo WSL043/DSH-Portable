@@ -387,11 +387,11 @@ try {
     const text = document.body?.innerText || ''
     return {
       localized: ${JSON.stringify(targetLocale)} === 'zh'
-        ? /只读|工作区写入|完全访问/.test(text)
-        : /Read only|Workspace write|Full access/.test(text),
+        ? /只读|仅可查看|工作区写入|可写入工作区|完全访问|完全权限/.test(text)
+        : /Read [Oo]nly|Workspace [Ww]rite|Full access/.test(text),
       mixed: ${JSON.stringify(targetLocale)} === 'zh'
-        ? /Read only|Workspace Write|Workspace write|Full access/.test(text)
-        : /只读|工作区写入|完全访问/.test(text),
+        ? /Read [Oo]nly|Workspace [Ww]rite|Full access/.test(text)
+        : /只读|仅可查看|工作区写入|可写入工作区|完全访问|完全权限/.test(text),
     }
   })()`, value => value?.localized, 'localized permission label in General settings')
   assert.deepEqual(permissionLabels, { localized: true, mixed: false })
