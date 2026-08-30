@@ -399,6 +399,7 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.match(workflow, /cron:\s*['"]23 \*\/6 \* \* \*['"]/, 'official installable releases must be discovered without a weekly blind spot')
   assert.match(workflow, /workflow_dispatch:/)
   assert.match(workflow, /node scripts\/update-upstream\.mjs/)
+  assert.match(workflow, /npm ci --prefix app --ignore-scripts[\s\S]*npm test/)
   assert.match(workflow, /npm test/)
   assert.match(workflow, /automation\/verified-dependencies/)
   assert.match(workflow, /gh pr (?:create|edit)/)
@@ -455,12 +456,13 @@ test('all bundled defaults are accumulated by the unified dependency intake', as
   assert.match(updater, /assets[\s\S]+digest/)
   assert.match(updater, /createHash\(['"]sha256['"]\)/)
   assert.match(updater, /upstream\.lock\.json/)
+  assert.match(updater, /upstream\.preview\.lock\.json/)
   assert.match(updater, /path\.join\(root, ['"]launcher['"], ['"]default-plugins\.mjs['"]\)/)
   assert.match(updater, /GITHUB_OUTPUT/)
   assert.match(updater, /--check/)
   assert.match(ci, /node scripts\/update-default-plugin\.mjs --check/)
   assert.match(publish, /node scripts\/update-default-plugin\.mjs --check/)
-  assert.match(workflow, /launcher\/default-plugins\.mjs/)
+  assert.match(workflow, /launcher\/default-plugins\.mjs[\s\S]*upstream\.preview\.lock\.json/)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
