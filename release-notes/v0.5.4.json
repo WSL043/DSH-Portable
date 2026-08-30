@@ -1,0 +1,17 @@
+{
+  "version": "0.5.4",
+  "zh": {
+    "summary": "修复插件更新失败后旧版本可能未真正恢复的问题。",
+    "highlights": [
+      "插件更新命令失败或超时时，Portable 现在会重新安装并验证更新前的准确 npm 版本或 GitHub commit，而不再只恢复配置文件。",
+      "恢复过程始终保留用户原来的版本范围、标签或浮动 GitHub 来源写法；如果无法确认旧构建已恢复，会明确提示当前状态不适合直接重启。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes cases where a failed plugin update did not actually restore the previous build.",
+    "highlights": [
+      "When a plugin update command fails or times out, Portable now reinstalls and verifies the exact previous npm version or GitHub commit instead of restoring only the manifest.",
+      "Recovery always preserves the user's original range, tag, or floating GitHub source spelling. If the previous build cannot be verified, Portable explicitly warns that the current state is not safe to restart without inspection."
+    ]
+  }
+}
