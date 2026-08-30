@@ -485,6 +485,16 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.doesNotMatch(macSmoke, /System Events/)
 })
 
+test('Windows startup audit accepts log-backed loader evidence and persists failures', async () => {
+  const audit = await read('scripts/audit-windows-startup-transition.mjs')
+  assert.match(audit, /const bootLogSample = samples\.find\(sample => sample\.log\.includes\('dsh-boot-surface-visible'\)\)/)
+  assert.match(audit, /assert\.ok\(bootSample \|\| bootLogSample/)
+  assert.ok(
+    audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(bootSample || bootLogSample"),
+    'startup samples must be uploaded even when the transition assertion fails',
+  )
+})
+
 test('macOS package smokes treat the native app as a long-lived desktop process', async () => {
   const portableSmoke = await read('scripts/smoke-portable.mjs')
 
