@@ -3,6 +3,10 @@ import { createRequire } from 'node:module'
 import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import {
+  hasConversationPermissionLocalization,
+  hasPermissionSettingsLocalization,
+} from './patch-permission-localization.mjs'
 
 const appDir = path.resolve(process.argv[2] ?? '')
 if (!appDir || !existsSync(path.join(appDir, 'package.json'))) {
@@ -136,15 +140,14 @@ assert.match(
   /dsh-portable-native-download-v1/,
   'Session export client is missing the native desktop download lifecycle adapter',
 )
-for (const [clientPath, label] of [
-  [permissionSettingsClientPath, 'Permission settings'],
-  [conversationClientPath, 'Conversation permission'],
-]) {
-  const client = readFileSync(clientPath, 'utf8')
-  assert.match(client, /dsh-portable-permission-locale-v1|"(?:access\.)?preset\.workspaceWrite": "可写入工作区"/, `${label} client is missing native localization or the locale adapter`)
-  assert.match(client, /工作区写入|可写入工作区/, `${label} client is missing the Chinese workspace-write label`)
-  assert.match(client, /完全访问|完全权限/, `${label} client is missing the Chinese full-access label`)
-}
+assert.ok(
+  hasPermissionSettingsLocalization(readFileSync(permissionSettingsClientPath, 'utf8')),
+  'Permission settings client is missing native localization or the locale adapter',
+)
+assert.ok(
+  hasConversationPermissionLocalization(readFileSync(conversationClientPath, 'utf8')),
+  'Conversation permission client is missing native localization or the locale adapter',
+)
 
 await new Promise((resolve) => {
   process.stdout.write(`${JSON.stringify({ dshVersion: dshManifest.version, dshBin, marketVersion: marketManifest.version, pnpmVersion: pnpmManifest.version, pnpmBin, loaded })}\n`, resolve)

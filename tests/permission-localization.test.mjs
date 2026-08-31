@@ -2,6 +2,8 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import {
+  hasConversationPermissionLocalization,
+  hasPermissionSettingsLocalization,
   patchConversationPermissions,
   patchPermissionSettings,
 } from '../scripts/patch-permission-localization.mjs'
@@ -84,6 +86,22 @@ const nativeAlpha2ConversationSource = [
   '\t\t\t\tlabel: permissionLabel(option.value, option.name, t),',
 ].join('\n')
 
+const nativeAlpha3SettingsSource = [
+  '\t\t\t"preset.readOnly": "仅可查看",',
+  '\t\t\t"preset.workspaceWrite": "工作区内修改",',
+  '\t\t\t"preset.fullAccess": "完全权限",',
+  '\t\tfunction displayPermissionPreset(value, name, t) {',
+  '\t\t\tconst optionLabel = (option) => displayPermissionPreset(option.id, option.label, t);',
+].join('\n')
+
+const nativeAlpha3ConversationSource = [
+  '\t\t\t"access.preset.readOnly": "Read Only",',
+  '\t\t\t"access.preset.workspaceWrite": "Workspace Write",',
+  '\t\t\t"access.preset.fullAccess": "Full access",',
+  '\t\tfunction permissionLabel(value, name, t) {',
+  '\t\t\t\tlabel: permissionLabel(option.value, option.name, t),',
+].join('\n')
+
 test('known permission modes follow the active Chinese or English locale', () => {
   const settings = patchPermissionSettings(settingsSource)
   const conversation = patchConversationPermissions(conversationSource)
@@ -121,6 +139,22 @@ test('official Alpha 2 native permission localization needs no Portable adapter'
   assert.equal(patchConversationPermissions(nativeAlpha2ConversationSource), nativeAlpha2ConversationSource)
 })
 
+test('official Alpha 3 wording changes keep using native permission localization', () => {
+  assert.equal(hasPermissionSettingsLocalization(nativeAlpha3SettingsSource), true)
+  assert.equal(hasConversationPermissionLocalization(nativeAlpha3ConversationSource), true)
+  assert.equal(patchPermissionSettings(nativeAlpha3SettingsSource), nativeAlpha3SettingsSource)
+  assert.equal(patchConversationPermissions(nativeAlpha3ConversationSource), nativeAlpha3ConversationSource)
+
+  assert.equal(
+    hasPermissionSettingsLocalization(nativeAlpha3SettingsSource.replace('displayPermissionPreset(option.id, option.label, t)', 'option.label')),
+    false,
+  )
+  assert.equal(
+    hasConversationPermissionLocalization(nativeAlpha3ConversationSource.replace('permissionLabel(option.value, option.name, t)', 'option.name')),
+    false,
+  )
+})
+
 test('permission localization is guarded, idempotent, and part of every product build', async () => {
   const settings = patchPermissionSettings(settingsSource)
   const conversation = patchConversationPermissions(conversationSource)
@@ -145,6 +179,8 @@ test('permission localization is guarded, idempotent, and part of every product 
   assert.match(windows, /patch-permission-localization\.mjs/)
   assert.match(macos, /patch-permission-localization\.mjs/)
   assert.match(linux, /patch-permission-localization\.mjs/)
-  assert.match(verify, /dsh-portable-permission-locale-v1/)
+  assert.match(verify, /hasPermissionSettingsLocalization/)
+  assert.match(verify, /hasConversationPermissionLocalization/)
   assert.match(productSmoke, /permissionLabels/)
+  assert.match(productSmoke, /工作区内修改/)
 })

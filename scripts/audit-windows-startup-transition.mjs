@@ -9,8 +9,12 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
 const output = path.resolve(process.argv[3] || path.join(root, 'data', 'logs', 'startup-transition-audit'))
-if (!root) throw new Error('usage: node audit-windows-startup-transition.mjs <DSH-Portable root> [output]')
+const startupTimeoutSeconds = Number(process.argv[4] || 30)
+if (!root) throw new Error('usage: node audit-windows-startup-transition.mjs <DSH-Portable root> [output] [startup-timeout-seconds]')
 if (process.platform !== 'win32') throw new Error('the startup transition audit is Windows-only')
+if (!Number.isFinite(startupTimeoutSeconds) || startupTimeoutSeconds < 1 || startupTimeoutSeconds > 120) {
+  throw new Error('startup-timeout-seconds must be between 1 and 120')
+}
 
 const executable = path.join(root, 'DeepSeek-Herness.exe')
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
@@ -136,7 +140,7 @@ try {
   let capturedReveal = false
   let capturedWorkspace = false
   let workspaceStableSamples = 0
-  const deadline = Date.now() + 30000
+  const deadline = Date.now() + startupTimeoutSeconds * 1000
   while (Date.now() < deadline) {
     const state = await evaluate(client, `(() => {
       const visible = node => {
