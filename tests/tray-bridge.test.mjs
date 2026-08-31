@@ -409,10 +409,12 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(cli, /'--patch',\s*layout\.desktopBridgePatch/)
   assert.match(windowsBuild, /desktop-bridge/)
   assert.match(macBuild, /desktop-bridge/)
-  assert.match(windowsBuild, /shellSchema\s*=\s*23/)
-  assert.match(windowsBuild, /requiredShellSchema\s*=\s*23/)
-  assert.match(macBuild, /"shellSchema": 18/)
-  assert.match(macBuild, /"requiredShellSchema": 18/)
+  assert.match(windowsBuild, /shellSchema\s*=\s*24/)
+  assert.match(windowsBuild, /requiredShellSchema\s*=\s*24/)
+  assert.match(macBuild, /"shellSchema": 19/)
+  assert.match(macBuild, /"requiredShellSchema": 19/)
+  assert.match(macBuild, /"shellFingerprint": "\$SHELL_FINGERPRINT"/)
+  assert.match(macBuild, /"requiredShellFingerprint": "\$SHELL_FINGERPRINT"/)
 })
 
 test('Portable maintenance is a native General settings item backed by same-origin product routes', async () => {

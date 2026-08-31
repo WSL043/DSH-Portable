@@ -15,14 +15,16 @@ const allowChannelMigration = process.argv.includes('--allow-channel-migration')
 const runningHostUpgrade = process.argv.includes('--running-host')
 const simulateWebViewBusy = process.argv.includes('--simulate-webview-busy')
 const newArchive = path.join(artifacts, 'DSH-Portable-windows-x64-offline.zip')
+const componentArchive = path.join(artifacts, 'DSH-Portable-update-windows-x64.zip')
 const fullManifestPath = path.join(artifacts, 'portable-manifest.json')
 const componentManifestPath = path.join(artifacts, 'portable-update-windows-x64.json')
 
 assert.equal(process.platform, 'win32', 'the release upgrade smoke requires Windows')
 assert.ok(oldArchive, 'pass the prior Windows offline ZIP as the first argument')
 
-const [newArchiveBytes, fullManifestSource, componentManifestSource] = await Promise.all([
+const [newArchiveBytes, componentArchiveBytes, fullManifestSource, componentManifestSource] = await Promise.all([
   readFile(newArchive),
+  readFile(componentArchive),
   readFile(fullManifestPath, 'utf8').then(JSON.parse),
   readFile(componentManifestPath, 'utf8').then(JSON.parse),
 ])
@@ -78,6 +80,11 @@ const server = createServer((request, response) => {
     response.end(newArchiveBytes)
     return
   }
+  if (request.url === '/component.zip') {
+    response.writeHead(200, { 'content-type': 'application/zip', 'content-length': componentArchiveBytes.length })
+    response.end(componentArchiveBytes)
+    return
+  }
   response.writeHead(404).end()
 })
 
@@ -86,13 +93,6 @@ try {
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
   assert.notEqual(oldComponents.portableVersion, fullManifestSource.version, 'the prior package must differ from the target release')
-  const oldRuntimeLayout = oldComponents.runtimeLayout || 'expanded-v1'
-  assert.ok(
-    Number(oldComponents.shellSchema) < Number(componentManifestSource.requiredShellSchema)
-      || oldRuntimeLayout !== (componentManifestSource.targetRuntimeLayout || oldRuntimeLayout),
-    'the prior package does not exercise a complete-package compatibility boundary',
-  )
-
   const markers = new Map([
     [path.join(destination, 'data', 'dsh-home', 'settings.yaml'), 'locale:\n  preference: zh\n'],
     [path.join(destination, 'data', 'dsh-home', 'portable-upgrade-session.marker'), 'keep-session\n'],
@@ -112,28 +112,8 @@ try {
   }))
   componentManifestBody = Buffer.from(JSON.stringify({
     ...componentManifestSource,
-    component: { ...componentManifestSource.component, urls: [`${origin}/unused-component.zip`] },
+    component: { ...componentManifestSource.component, urls: [`${origin}/component.zip`] },
   }))
-
-  let launcherLogOffset = 0
-  if (runningHostUpgrade) {
-    const oldExecutable = path.join(destination, 'DeepSeek-Herness.exe')
-    oldHost = spawn(oldExecutable, [], {
-      cwd: destination,
-      env: {
-        ...process.env,
-        DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
-        DSH_PORTABLE_TEST_HIDDEN: '1',
-      },
-      windowsHide: true,
-      stdio: 'ignore',
-    })
-    await waitFor(
-      async () => (await launcherLog()).includes('environment-ready:'),
-      'the old native desktop host did not initialize WebView2 before the update',
-    )
-    launcherLogOffset = (await launcherLog()).length
-  }
 
   let decision = { status: 'full-package-required', delivery: 'full-package' }
   if (!allowChannelMigration) {
@@ -152,8 +132,8 @@ try {
       '--json',
     ], { timeout: 60 * 1000, windowsHide: true })
     decision = JSON.parse(decisionText)
-    assert.equal(decision.status, 'full-package-required')
-    assert.equal(decision.delivery, 'full-package')
+    assert.ok(['available', 'full-package-required'].includes(decision.status), `unexpected update decision: ${decision.status}`)
+    assert.equal(decision.delivery, decision.status === 'available' ? 'component' : 'full-package')
   } else {
     assert.notEqual(
       oldComponents.releaseChannel,
@@ -162,31 +142,72 @@ try {
     )
   }
 
-  try {
-    const updaterArguments = [
-      '--upgrade-existing',
-      '--manifest', `${origin}/portable-manifest.json`,
-      '--destination', destination,
+  let launcherLogOffset = 0
+  if (decision.delivery === 'full-package') {
+    if (runningHostUpgrade) {
+      const oldExecutable = path.join(destination, 'DeepSeek-Herness.exe')
+      oldHost = spawn(oldExecutable, [], {
+        cwd: destination,
+        env: {
+          ...process.env,
+          DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+          DSH_PORTABLE_TEST_HIDDEN: '1',
+        },
+        windowsHide: true,
+        stdio: 'ignore',
+      })
+      await waitFor(
+        async () => (await launcherLog()).includes('environment-ready:'),
+        'the old native desktop host did not initialize WebView2 before the update',
+      )
+      launcherLogOffset = (await launcherLog()).length
+    }
+    try {
+      const updaterArguments = [
+        '--upgrade-existing',
+        '--manifest', `${origin}/portable-manifest.json`,
+        '--destination', destination,
+        '--allow-http',
+        '--result', resultPath,
+      ]
+      if (!runningHostUpgrade) updaterArguments.push('--no-launch')
+      await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
+        timeout: 10 * 60 * 1000,
+        windowsHide: true,
+        env: runningHostUpgrade ? {
+          ...process.env,
+          DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+          DSH_PORTABLE_TEST_HIDDEN: '1',
+        } : process.env,
+      })
+    } catch (error) {
+      const diagnostic = await readFile(resultPath, 'utf8').catch(() => 'no updater result was written')
+      throw new Error(`the prior full updater failed: ${diagnostic}`, { cause: error })
+    }
+    const result = JSON.parse(await readFile(resultPath, 'utf8'))
+    assert.equal(result.status, 'updated')
+    assert.equal(result.version, fullManifestSource.version)
+  } else {
+    const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
+    const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
+    const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(
+      () => [path.join(destination, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs'],
+      () => [oldCli],
+    )
+    const { stdout } = await execFileAsync(oldNode, [
+      ...oldEntry,
+      'update',
+      '--update-manifest', `${origin}/portable-update-windows-x64.json`,
       '--allow-http',
-      '--result', resultPath,
-    ]
-    if (!runningHostUpgrade) updaterArguments.push('--no-launch')
-    await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
-      timeout: 10 * 60 * 1000,
-      windowsHide: true,
-      env: runningHostUpgrade ? {
-        ...process.env,
-        DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
-        DSH_PORTABLE_TEST_HIDDEN: '1',
-      } : process.env,
-    })
-  } catch (error) {
-    const diagnostic = await readFile(resultPath, 'utf8').catch(() => 'no updater result was written')
-    throw new Error(`the prior full updater failed: ${diagnostic}`, { cause: error })
+      '--force',
+      '--no-browser',
+      '--json',
+      '--progress-json',
+    ], { timeout: 5 * 60 * 1000, windowsHide: true })
+    const records = stdout.trim().split(/\r?\n/).map(JSON.parse)
+    assert.equal(records.at(-1)?.status, 'updated', 'the prior shell did not finish the compatible component update')
+    assert.ok(records.some((entry) => entry.phase === 'validating'), 'the prior shell did not validate the updated runtime')
   }
-  const result = JSON.parse(await readFile(resultPath, 'utf8'))
-  assert.equal(result.status, 'updated')
-  assert.equal(result.version, fullManifestSource.version)
 
   const newComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
   assert.equal(newComponents.portableVersion, fullManifestSource.version)
@@ -199,7 +220,7 @@ try {
   for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
   assert.ok((await stat(path.join(destination, 'DeepSeek-Herness.exe'))).isFile())
 
-  if (runningHostUpgrade) {
+  if (runningHostUpgrade && decision.delivery === 'full-package') {
     await waitFor(async () => {
       const currentLog = await launcherLog()
       return currentLog.slice(launcherLogOffset).includes('dsh-first-paint-ready')

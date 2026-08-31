@@ -55,6 +55,9 @@ async function main() {
     || !Number.isSafeInteger(requiredShellSchema) || requiredShellSchema < 1) {
     fail('Update compatibility metadata is incomplete.')
   }
+  if (manifest.requiredShellFingerprint != null && !/^[a-f0-9]{64}$/i.test(String(manifest.requiredShellFingerprint))) {
+    fail('Update shell fingerprint is invalid.')
+  }
   const component = manifest.component
   if (!component || !['dsh-app', 'dsh-runtime-capsule'].includes(component.kind) || !component.requiredNodeVersion) {
     fail('Update component metadata is incomplete.')
@@ -116,7 +119,8 @@ async function main() {
     || components.nodeVersion !== component.requiredNodeVersion
     || (component.runtimeLayout && components.runtimeLayout !== component.runtimeLayout)
     || Number(components.updaterSchema) < Number(manifest.minimumUpdaterSchema)
-    || Number(components.shellSchema) < Number(manifest.requiredShellSchema)) {
+    || Number(components.shellSchema) < Number(manifest.requiredShellSchema)
+    || (manifest.requiredShellFingerprint && components.shellFingerprint !== manifest.requiredShellFingerprint)) {
     fail('Installed component metadata does not match the update manifest.')
   }
 

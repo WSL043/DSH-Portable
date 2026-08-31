@@ -29,8 +29,10 @@ test('Linux uses architecture-specific component update channels', () => {
 
 test('Linux requires a compatible native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
-  assert.match(source, /"shellSchema": 10/)
-  assert.match(source, /"requiredShellSchema": 10/)
+  assert.match(source, /"shellSchema": 11/)
+  assert.match(source, /"requiredShellSchema": 11/)
+  assert.match(source, /"shellFingerprint": "\$SHELL_FINGERPRINT"/)
+  assert.match(source, /"requiredShellFingerprint": "\$SHELL_FINGERPRINT"/)
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {

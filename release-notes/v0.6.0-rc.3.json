@@ -1,0 +1,23 @@
+{
+  "version": "0.6.0-rc.3",
+  "zh": {
+    "summary": "修复 Beta 内核更新可能长时间停留在安装界面的问题，并加强回滚、诊断和发布前升级验证。",
+    "highlights": [
+      "当新版 DeepSeek Harness 需要更新桌面壳时，Portable 会改用完整包更新，不再让旧壳尝试不兼容的内核组件。",
+      "更新界面现在会区分下载、安装、启动验证、恢复原版本和重新启动，不再长时间停在同一条安装提示。",
+      "更新失败时继续自动恢复原版本；错误窗口只显示可操作的简短说明，详细信息写入经过脱敏且有大小上限的支持日志。",
+      "发布门禁会从同一通道的紧邻上一版本执行真实升级并启动验证，覆盖组件更新和完整包更新两条路径。",
+      "继续内置官方 DeepSeek Harness 0.1.2-alpha.2；Beta 与稳定更新通道保持分离。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes Beta core updates that could remain on the installing screen for an extended time, with stronger rollback, diagnostics, and pre-release upgrade validation.",
+    "highlights": [
+      "Uses a complete-package update when a newer DeepSeek Harness runtime also requires a newer desktop shell, instead of asking an older shell to install an incompatible core component.",
+      "Shows distinct download, install, startup validation, previous-version restore, and restart phases instead of remaining on one installing message.",
+      "Continues to restore the previous version automatically after a failed update; dialogs show a concise actionable message while bounded, redacted details go to the support log.",
+      "Upgrades and starts the immediate prior release from the same channel before publication, covering both component and complete-package delivery paths.",
+      "Continues to bundle official DeepSeek Harness 0.1.2-alpha.2 while keeping Beta and Stable update channels separate."
+    ]
+  }
+}

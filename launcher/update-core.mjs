@@ -100,6 +100,9 @@ function assertManifestShape(manifest) {
   if (manifest.updateKind != null && !['product', 'engine'].includes(manifest.updateKind)) {
     throw new Error(`Unsupported update kind: ${manifest.updateKind}`)
   }
+  if (manifest.requiredShellFingerprint != null && !/^[a-f0-9]{64}$/i.test(String(manifest.requiredShellFingerprint))) {
+    throw new Error('Update manifest shell fingerprint is invalid.')
+  }
 }
 
 export function evaluateUpdate(manifest, installed, platform) {
@@ -157,6 +160,7 @@ export function evaluateUpdate(manifest, installed, platform) {
   const component = manifest.component
   if (
     Number(manifest.requiredShellSchema ?? 0) > Number(installed.shellSchema ?? 0)
+    || (manifest.requiredShellFingerprint && manifest.requiredShellFingerprint !== installed.shellFingerprint)
     || (manifest.targetRuntimeLayout && manifest.targetRuntimeLayout !== (installed.runtimeLayout || 'expanded-v1'))
     || !component.requiredNodeVersion
     || component.requiredNodeVersion !== installed.nodeVersion
@@ -172,6 +176,7 @@ export function evaluateUpdate(manifest, installed, platform) {
     platform: manifest.platform,
     minimumUpdaterSchema: Number(manifest.minimumUpdaterSchema),
     requiredShellSchema: Number(manifest.requiredShellSchema),
+    requiredShellFingerprint: manifest.requiredShellFingerprint || null,
     component,
   }
 }
@@ -529,7 +534,7 @@ export async function resetManagedProfileModuleFallback(layout) {
   return fallback
 }
 
-export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {} }) {
+export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {}, onProgress = () => {} }) {
   if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
   const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
   if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-app') throw new Error('Staged update metadata is invalid.')
@@ -568,13 +573,16 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, be
     await resetManagedProfileModuleFallback(layout)
     await writeJournal(layout, { operationId, phase: 'testing', hadLicenses })
 
+    onProgress({ phase: 'validating' })
     const healthy = await healthCheck(metadata)
     if (!healthy) throw new Error('The updated DSH runtime did not pass its health check.')
     await writeJournal(layout, { operationId, phase: 'committed', hadLicenses })
   } catch (error) {
     if (error?.leavePending) throw error
+    onProgress({ phase: 'rolling-back' })
     await beforeRollback(error)
     await rollbackPendingAppUpdate(layout)
+    onProgress({ phase: 'rollback-complete' })
     throw new Error(`Update failed and was rolled back: ${error?.message ?? error}`, { cause: error })
   }
   let cleanupPending = false
@@ -587,7 +595,7 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, be
   return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
 }
 
-export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {} }) {
+export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {}, onProgress = () => {} }) {
   if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
   if (!layout.capsuleMode) throw new Error('A compact runtime update cannot be applied to an expanded installation.')
   const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
@@ -643,12 +651,15 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
       await rename(path.join(stagedLicenses, name), rootFile)
     }
     await writeJournal(layout, { operationId, kind: metadata.kind, phase: 'testing', hadLicenses })
+    onProgress({ phase: 'validating' })
     if (!await healthCheck(metadata)) throw new Error('The updated compact DSH runtime did not pass its health check.')
     await writeJournal(layout, { operationId, kind: metadata.kind, phase: 'committed', hadLicenses })
   } catch (error) {
     if (error?.leavePending) throw error
+    onProgress({ phase: 'rolling-back' })
     await beforeRollback(error)
     await rollbackPendingAppUpdate(layout)
+    onProgress({ phase: 'rollback-complete' })
     throw new Error(`Update failed and was rolled back: ${error?.message ?? error}`, { cause: error })
   }
   let cleanupPending = false
@@ -709,10 +720,13 @@ export async function installAvailableAppUpdate({
       || Number(components.shellSchema) < Number(update.requiredShellSchema)) {
       throw new Error('Downloaded component compatibility metadata does not match its manifest.')
     }
+    if (update.requiredShellFingerprint && components.shellFingerprint !== update.requiredShellFingerprint) {
+      throw new Error('Downloaded component shell fingerprint does not match its manifest.')
+    }
     onProgress({ phase: 'installing' })
     const applied = metadata.kind === 'dsh-runtime-capsule'
-      ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
-      : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback })
+      ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback, onProgress })
+      : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback, onProgress })
     onProgress({ phase: 'complete', percent: 100 })
     return { ...applied, updateKind: update.updateKind || 'product' }
   } catch (error) {
