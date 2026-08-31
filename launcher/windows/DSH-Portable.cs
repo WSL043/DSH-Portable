@@ -3888,7 +3888,7 @@ namespace DshPortable
 
         private void HandleStartupProgress(string jsonLine)
         {
-            if (IsDisposed || Disposing) return;
+            if (!IsHandleCreated || IsDisposed || Disposing) return;
             if (InvokeRequired)
             {
                 try { BeginInvoke(new Action<string>(HandleStartupProgress), jsonLine); }

@@ -540,6 +540,7 @@ test('Windows package exposes real GUI executables with matching icon and an iso
     source.indexOf('private void HandleStartupProgress'),
     source.indexOf('private static string FormatBytes'),
   )
+  assert.match(startupProgress, /IsHandleCreated/)
   assert.match(startupProgress, /IsDisposed/)
   assert.match(startupProgress, /catch \(InvalidOperationException\)/)
   assert.match(source, /progressType\s*==\s*"startup-progress"/)
