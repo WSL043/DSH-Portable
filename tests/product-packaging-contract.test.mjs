@@ -883,7 +883,9 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /verify-update-artifact\.mjs/)
   assert.match(workflow, /smoke-update-artifact\.mjs/)
   assert.match(updateSmoke, /rollbackVerified/)
-  assert.match(updateSmoke, /Update failed and was rolled back|rolled back/i)
+  assert.match(updateSmoke, /UPDATE_ROLLED_BACK/)
+  assert.match(updateSmoke, /portable-error/)
+  assert.match(updateSmoke, /authorization\|cookie/)
   assert.ok(
     workflow.indexOf('node scripts/smoke-update-artifact.mjs') < workflow.indexOf('node scripts/smoke-portable.mjs'),
     'the update smoke must run before the movable-root smoke renames the package',
