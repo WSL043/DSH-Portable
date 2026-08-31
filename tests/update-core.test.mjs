@@ -717,14 +717,25 @@ test('download, extract, and transactional apply form one verified update path',
         urls: [`http://127.0.0.1:${server.address().port}/component.zip`],
       },
     }
+    const sequence = []
     const result = await installAvailableAppUpdate({
       layout: fixture.layout,
       update,
       allowHttp: true,
+      beforeApply: async () => {
+        assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+        await assert.rejects(readFile(fixture.layout.updateJournal, 'utf8'), { code: 'ENOENT' })
+        sequence.push('before-apply')
+      },
+      preflight: async () => sequence.push('preflight'),
       healthCheck: async () => true,
       extract: (filename, destination) => extractUpdateArchive(filename, destination, { windowsExtractor: extractor }),
+      onProgress: (event) => sequence.push(event.phase),
     })
     assert.equal(result.status, 'updated')
+    assert.ok(sequence.indexOf('verifying') < sequence.indexOf('before-apply'))
+    assert.ok(sequence.indexOf('before-apply') < sequence.indexOf('preflight'))
+    assert.ok(sequence.indexOf('preflight') < sequence.indexOf('installing'))
     assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'new app')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
   } finally {
@@ -852,7 +863,7 @@ test('failed compact runtime health check restores the prior capsule and metadat
       healthCheck: async () => false,
       onProgress: (event) => progress.push(event.phase),
     }), /rolled back/i)
-    assert.deepEqual(progress, ['validating', 'rolling-back', 'rollback-complete'])
+    assert.deepEqual(progress, ['installing', 'validating', 'rolling-back', 'rollback-complete'])
     assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
     assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, '0.5.0-rc.1')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
@@ -877,6 +888,55 @@ test('app update commits only replaceable files and preserves portable user data
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'dsh-market-LICENSE.txt'), 'utf8'), 'new market license\n')
     assert.equal(await readFile(path.join(fixture.root, 'licenses', 'pnpm-LICENSE.txt'), 'utf8'), 'new pnpm license\n')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+    await assert.rejects(readFile(fixture.layout.updateJournal, 'utf8'), { code: 'ENOENT' })
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true })
+  }
+})
+
+test('app compatibility preflight fails before any installed file or journal is changed', async () => {
+  const fixture = await makeUpdateFixture()
+  try {
+    const progress = []
+    await assert.rejects(applyStagedAppUpdate({
+      layout: fixture.layout,
+      stagedRoot: fixture.stagedRoot,
+      healthCheck: async () => true,
+      preflight: async ({ metadata, stagedRoot }) => {
+        assert.equal(metadata.dshVersion, '0.1.0-rc.7')
+        assert.equal(stagedRoot, fixture.stagedRoot)
+        assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+        await assert.rejects(readFile(fixture.layout.updateJournal, 'utf8'), { code: 'ENOENT' })
+        throw new Error('existing profile does not compose')
+      },
+      onProgress: (event) => progress.push(event.phase),
+    }), /existing profile does not compose/i)
+    assert.deepEqual(progress, ['preflighting'])
+    assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+    assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, '0.1.0-rc.6-portable.5')
+    await assert.rejects(readFile(fixture.layout.updateJournal, 'utf8'), { code: 'ENOENT' })
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true })
+  }
+})
+
+test('compact runtime compatibility preflight fails before its capsule is replaced', async () => {
+  const fixture = await makeCapsuleUpdateFixture()
+  try {
+    const progress = []
+    await assert.rejects(applyStagedCapsuleUpdate({
+      layout: fixture.layout,
+      stagedRoot: fixture.stagedRoot,
+      healthCheck: async () => true,
+      preflight: async ({ metadata }) => {
+        assert.equal(metadata.kind, 'dsh-runtime-capsule')
+        assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+        throw new Error('existing profile does not compose')
+      },
+      onProgress: (event) => progress.push(event.phase),
+    }), /existing profile does not compose/i)
+    assert.deepEqual(progress, ['preflighting'])
+    assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
     await assert.rejects(readFile(fixture.layout.updateJournal, 'utf8'), { code: 'ENOENT' })
   } finally {
     await rm(fixture.root, { recursive: true, force: true })

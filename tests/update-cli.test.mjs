@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
@@ -30,6 +31,8 @@ import http from 'node:http'
 const args = process.argv.slice(2)
 if (args.includes('--version') || args.includes('-V')) {
   console.log(${JSON.stringify(version)})
+} else if (args.includes('--dump-config')) {
+  console.log('profile composed')
 } else if (args.includes('web')) {
   const port = Number(args[args.indexOf('--port') + 1])
   const server = http.createServer((_request, response) => {
@@ -112,8 +115,9 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'launcher'), { recursive: true })
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
+    await mkdir(path.join(root, 'data', 'dsh-home', 'profiles', 'web'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'startup-trace.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'startup-trace.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))
@@ -136,6 +140,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       defaultPlugins: [],
     })}\n`)
     await writeFile(path.join(root, 'data', 'private-session.txt'), 'keep me')
+    await writeFile(path.join(root, 'data', 'dsh-home', 'profiles', 'web', 'package.json'), '{}\n')
 
     const portableVersion = '0.1.0-rc.7-portable.1'
     const componentBuild = await makeComponentArchive(root, '0.1.0-rc.7', portableVersion)
@@ -143,6 +148,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     componentBuildRoot = componentBuild.buildRoot
     const archiveBytes = await readFile(archive)
     let origin
+    let hostWasRunningWhenComponentDownloaded = false
     server = http.createServer((request, response) => {
       if (request.url === '/update.json') {
         const body = Buffer.from(JSON.stringify({
@@ -164,6 +170,11 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
         }))
         response.writeHead(200, { 'content-length': body.length }).end(body)
       } else if (request.url === '/component.zip') {
+        try {
+          const state = JSON.parse(readFileSync(path.join(root, 'data', 'runtime', 'process.json'), 'utf8'))
+          process.kill(state.pid, 0)
+          hostWasRunningWhenComponentDownloaded = true
+        } catch { /* assertion below reports a premature stop */ }
         response.writeHead(200, { 'content-length': archiveBytes.length }).end(archiveBytes)
       } else response.writeHead(404).end()
     })
@@ -190,6 +201,10 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       timeout: 30000,
       windowsHide: true,
     })
+    await execFileAsync(runtimeNode, [cli, 'start', '--no-browser', '--json'], {
+      timeout: 30000,
+      windowsHide: true,
+    })
     const updated = await execFileAsync(runtimeNode, [cli, 'update', '--json', '--progress-json', '--no-browser', '--force', '--allow-http', '--update-manifest', `${origin}/update.json`], {
       timeout: 60000,
       windowsHide: true,
@@ -199,7 +214,9 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     const result = lines.at(-1)
     assert.ok(progress.some((event) => event.phase === 'downloading' && event.percent === 100))
     assert.ok(progress.some((event) => event.phase === 'verifying'))
+    assert.ok(progress.some((event) => event.phase === 'preflighting'))
     assert.ok(progress.some((event) => event.phase === 'installing'))
+    assert.equal(hostWasRunningWhenComponentDownloaded, true)
     assert.equal(result.status, 'updated')
     assert.equal(result.dshVersion, '0.1.0-rc.7')
     assert.equal(JSON.parse(await readFile(path.join(root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, portableVersion)

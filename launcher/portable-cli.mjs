@@ -43,6 +43,7 @@ import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
+import { preflightStagedDshProfiles } from './update-preflight.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { portablePublicError, recordPortableDiagnostic } from './diagnostic-policy.mjs'
 
@@ -715,14 +716,22 @@ async function update(options) {
     ? (event) => process.stdout.write(`${JSON.stringify({ type: 'update-progress', ...event })}\n`)
     : () => {}
 
-  const prior = readProcessState()
-  if (ownedState(prior)) await stop()
-  await assertSharedComponentsIdle({ allowCurrentDesktop: true })
+  let stoppedForApply = false
   try {
     const applied = await installAvailableAppUpdate({
       layout,
       update: available,
       allowHttp: options.allowHttp,
+      beforeApply: async () => {
+        reportProgress({ phase: 'stopping-current' })
+        const current = readProcessState()
+        if (ownedState(current)) {
+          stoppedForApply = true
+          await stop()
+        }
+        await assertSharedComponentsIdle({ allowCurrentDesktop: true })
+      },
+      preflight: preflightStagedDshProfiles,
       healthCheck: async (metadata) => {
         if (metadata.kind === 'dsh-runtime-capsule') {
           const prepared = await ensureRuntimeCapsule(root)
@@ -755,9 +764,11 @@ async function update(options) {
     return { ...applied, running, browser }
   } catch (error) {
     await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
+    if (!stoppedForApply) throw error
     let recovery = null
     try {
-      reportProgress({ phase: 'restarting-previous' })
+      const unchanged = error?.code === 'DSH_PROFILE_PREFLIGHT_FAILED'
+      reportProgress({ phase: unchanged ? 'restarting-current' : 'restarting-previous' })
       const restored = await ensureRuntimeCapsule(root)
       layout = layoutForRoot(
         root,
@@ -770,6 +781,11 @@ async function update(options) {
       reportProgress({ phase: 'recovered' })
     } catch (recoveryError) {
       throw new Error(`${error?.message ?? error}\nThe previous version was restored but could not restart: ${recoveryError?.message ?? recoveryError}`, { cause: error })
+    }
+    if (error?.code === 'DSH_PROFILE_PREFLIGHT_FAILED') {
+      const unchanged = new Error(`${error?.message ?? error}\nThe installed version was unchanged and restarted.`, { cause: error, recovery })
+      unchanged.code = error.code
+      throw unchanged
     }
     throw new Error(`${error?.message ?? error}\nThe previous version was restored and restarted.`, { cause: error, recovery })
   }

@@ -535,7 +535,7 @@ export async function resetManagedProfileModuleFallback(layout) {
   return fallback
 }
 
-export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {}, onProgress = () => {} }) {
+export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback = async () => {}, onProgress = () => {} }) {
   if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
   const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
   if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== 'dsh-app') throw new Error('Staged update metadata is invalid.')
@@ -553,6 +553,12 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, be
     throw new Error('Staged update is incomplete.')
   }
   if (!existsSync(layout.appDir)) throw new Error('The current DSH application is missing.')
+
+  if (typeof preflight === 'function') {
+    onProgress({ phase: 'preflighting' })
+    await preflight({ layout, stagedRoot, metadata })
+  }
+  onProgress({ phase: 'installing' })
 
   const { operationId, operationRoot } = operationFromStage(layout, stagedRoot)
   const paths = transactionPaths(layout, operationId)
@@ -596,7 +602,7 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, be
   return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
 }
 
-export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback = async () => {}, onProgress = () => {} }) {
+export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback = async () => {}, onProgress = () => {} }) {
   if (await readJson(layout.updateJournal, null)) throw new Error('A prior update must be recovered before another update can start.')
   if (!layout.capsuleMode) throw new Error('A compact runtime update cannot be applied to an expanded installation.')
   const metadata = await readJson(path.join(stagedRoot, 'component.json'), null)
@@ -630,6 +636,12 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
     || createHash('sha256').update(capsuleBytes).digest('hex') !== stagedManifest.sha256) {
     throw new Error('Staged compact runtime failed integrity verification.')
   }
+
+  if (typeof preflight === 'function') {
+    onProgress({ phase: 'preflighting' })
+    await preflight({ layout, stagedRoot, metadata })
+  }
+  onProgress({ phase: 'installing' })
 
   const { operationId, operationRoot } = operationFromStage(layout, stagedRoot)
   const paths = transactionPaths(layout, operationId)
@@ -678,6 +690,8 @@ export async function installAvailableAppUpdate({
   update,
   allowHttp = false,
   healthCheck,
+  preflight,
+  beforeApply,
   beforeRollback,
   download = downloadVerifiedComponent,
   extract = extractUpdateArchive,
@@ -724,10 +738,10 @@ export async function installAvailableAppUpdate({
     if (update.requiredShellFingerprint && components.shellFingerprint !== update.requiredShellFingerprint) {
       throw new Error('Downloaded component shell fingerprint does not match its manifest.')
     }
-    onProgress({ phase: 'installing' })
+    if (typeof beforeApply === 'function') await beforeApply({ layout, stagedRoot, metadata })
     const applied = metadata.kind === 'dsh-runtime-capsule'
-      ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, beforeRollback, onProgress })
-      : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, beforeRollback, onProgress })
+      ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback, onProgress })
+      : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback, onProgress })
     onProgress({ phase: 'complete', percent: 100 })
     return { ...applied, updateKind: update.updateKind || 'product' }
   } catch (error) {
