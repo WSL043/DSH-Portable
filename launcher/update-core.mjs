@@ -345,6 +345,7 @@ export async function readInstalledUpdateState(layout) {
     dshVersion: components.dshVersion,
     updaterSchema: Number(components.updaterSchema ?? 0),
     shellSchema: Number(components.shellSchema ?? 0),
+    shellFingerprint: components.shellFingerprint ?? '',
     nodeVersion: components.nodeVersion ?? '',
     runtimeLayout: components.runtimeLayout || 'expanded-v1',
   }

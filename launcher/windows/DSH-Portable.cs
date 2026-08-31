@@ -4195,7 +4195,8 @@ namespace DshPortable
                 }
                 process.WaitForExit();
                 stderr.Wait();
-                string message = RedactSensitiveText((stderr.Result + Environment.NewLine + String.Join(Environment.NewLine, stdout)).Trim());
+                string rawMessage = (stderr.Result + Environment.NewLine + String.Join(Environment.NewLine, stdout)).Trim();
+                string message = process.ExitCode == 0 ? rawMessage : RedactSensitiveText(rawMessage);
                 return Tuple.Create(process.ExitCode, message);
             }
         }

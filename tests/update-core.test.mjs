@@ -23,6 +23,7 @@ import {
   ignoreUpdate,
   installAvailableAppUpdate,
   platformUpdateKey,
+  readInstalledUpdateState,
   rollbackPendingAppUpdate,
   validateArchiveEntries,
 } from '../launcher/update-core.mjs'
@@ -126,6 +127,28 @@ test('update evaluation distinguishes current, component update, full package, a
   const missingCompatibility = updateManifest()
   delete missingCompatibility.minimumUpdaterSchema
   assert.throws(() => evaluateUpdate(missingCompatibility, installed, 'windows-x64'), /compatibility/i)
+})
+
+test('installed update state preserves the shell fingerprint used by compatibility checks', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-installed-update-state-'))
+  try {
+    const layout = layoutForRoot(root)
+    const shellFingerprint = 'a'.repeat(64)
+    await mkdir(path.join(root, 'licenses'), { recursive: true })
+    await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+      portableVersion: '0.6.0-rc.3',
+      releaseChannel: 'candidate',
+      dshVersion: '0.1.2-alpha.2',
+      updaterSchema: 1,
+      shellSchema: 24,
+      shellFingerprint,
+      nodeVersion: '24.19.0',
+      runtimeLayout: 'capsule-v1',
+    })}\n`)
+    assert.equal((await readInstalledUpdateState(layout)).shellFingerprint, shellFingerprint)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('an independently published official DSH component updates without changing the Portable version', () => {

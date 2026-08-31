@@ -530,6 +530,7 @@ test('Windows package exposes real GUI executables with matching icon and an iso
   assert.match(source, /HandleUpdateProgress/)
   assert.match(source, /FriendlyPortableUpdateError/)
   assert.match(source, /RedactSensitiveText/)
+  assert.match(source, /process\.ExitCode\s*==\s*0\s*\?\s*rawMessage\s*:\s*RedactSensitiveText\(rawMessage\)/)
   assert.match(source, /portable-cli-error/)
   assert.doesNotMatch(source, /throw new InvalidOperationException\(updated\.Item2\)/)
   assert.match(source, /phase == "validating"/)
