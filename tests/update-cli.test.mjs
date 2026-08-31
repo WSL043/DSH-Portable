@@ -113,7 +113,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'licenses'), { recursive: true })
     await mkdir(path.join(root, 'data'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'startup-trace.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'startup-trace.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))
@@ -181,7 +181,10 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
         timeout: 30000,
         windowsHide: true,
       }),
-      (error) => /Close the other Portable environment before changing shared components: research\./.test(error.stderr),
+      (error) => {
+        const payload = JSON.parse(error.stderr.trim())
+        return payload.type === 'portable-error' && payload.code === 'SHARED_COMPONENTS_BUSY'
+      },
     )
     await execFileAsync(runtimeNode, [cli, 'stop', '--environment', 'research', '--no-browser', '--json'], {
       timeout: 30000,

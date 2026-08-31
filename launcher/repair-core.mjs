@@ -12,6 +12,7 @@ import {
   inspectPackagedDshRuntime,
   repairManagedProfileModuleFallback,
 } from './portable-core.mjs'
+import { redactDiagnosticText } from './diagnostic-policy.mjs'
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
@@ -22,6 +23,8 @@ const LOG_NAMES = Object.freeze([
   'launcher.log.previous',
   'dsh.stdout.log',
   'dsh.stderr.log',
+  'portable-errors.jsonl',
+  'portable-errors.jsonl.previous',
 ])
 const execFileAsync = promisify(execFile)
 const WINDOWS_DIAGNOSTIC_PROCESSES = Object.freeze([
@@ -133,21 +136,10 @@ export async function repairPortable(layout, { running = false } = {}) {
   return { ...after, deferred: false, actions }
 }
 
-function redact(source) {
-  let value = String(source ?? '')
-  value = value.replace(/(["'](?:api[_-]?key|token|password|secret|authorization|cookie)["']\s*:\s*)["'][^"']*["']/gi, '$1"[REDACTED]"')
-  value = value.replace(/\b(Bearer\s+)[^\s"']+/gi, '$1[REDACTED]')
-  value = value.replace(/\b(api[_-]?key|token|password|secret|authorization|cookie)\b\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
-  value = value.replace(/\bsk-[A-Za-z0-9_-]{6,}\b/g, '[REDACTED]')
-  const home = os.homedir()
-  if (home) value = value.replaceAll(home, '<USER_HOME>')
-  return value
-}
-
 async function logTail(filename) {
   try {
     const source = await readFile(filename)
-    return redact(source.subarray(Math.max(0, source.length - LOG_TAIL_BYTES)).toString('utf8'))
+    return redactDiagnosticText(source.subarray(Math.max(0, source.length - LOG_TAIL_BYTES)).toString('utf8'))
   } catch (error) {
     if (error?.code === 'ENOENT') return ''
     return `unreadable: ${error?.code || error?.message || 'unknown'}`

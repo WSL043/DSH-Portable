@@ -44,6 +44,7 @@ import { diagnosePortable, exportPortableSupportReport, repairPortable } from '.
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
+import { portablePublicError, recordPortableDiagnostic } from './diagnostic-policy.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const baseStateRoot = process.env.DSH_PORTABLE_STATE_ROOT || root
@@ -55,6 +56,7 @@ let layout = layoutForRoot(
 )
 let startupTrace = traceFromEnvironment(layout.logsDir)
 let startupProgressJson = false
+let activeOptions = null
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
 const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
@@ -755,6 +757,7 @@ async function update(options) {
     await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     let recovery = null
     try {
+      reportProgress({ phase: 'restarting-previous' })
       const restored = await ensureRuntimeCapsule(root)
       layout = layoutForRoot(
         root,
@@ -764,6 +767,7 @@ async function update(options) {
         layout.environmentId,
       )
       recovery = await start(options.noBrowser)
+      reportProgress({ phase: 'recovered' })
     } catch (recoveryError) {
       throw new Error(`${error?.message ?? error}\nThe previous version was restored but could not restart: ${recoveryError?.message ?? recoveryError}`, { cause: error })
     }
@@ -794,6 +798,7 @@ function print(result, json) {
 async function main() {
   if (!['win32', 'darwin', 'linux'].includes(process.platform)) throw new Error('DSH-Portable supports Windows, macOS, and Linux.')
   const options = parseCli(process.argv.slice(2))
+  activeOptions = options
   startupProgressJson = options.command === 'start' && options.progressJson
   const environmentId = options.environment || process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
   const stateRoot = environmentStateRoot(baseStateRoot, environmentId, process.platform)
@@ -862,7 +867,13 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error?.stack ?? String(error))
+main().catch(async (error) => {
+  await recordPortableDiagnostic(layout?.logsDir, {
+    operation: activeOptions?.command || 'unknown',
+    error,
+  })
+  const publicError = portablePublicError(error)
+  if (activeOptions?.json) console.error(JSON.stringify({ type: 'portable-error', schemaVersion: 1, ...publicError }))
+  else console.error(publicError.message)
   process.exitCode = 1
 })

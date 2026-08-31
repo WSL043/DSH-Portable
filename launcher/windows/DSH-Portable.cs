@@ -26,8 +26,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.0.2")]
-[assembly: AssemblyFileVersion("0.6.0.2")]
+[assembly: AssemblyVersion("0.6.0.3")]
+[assembly: AssemblyFileVersion("0.6.0.3")]
 
 namespace DshPortable
 {
@@ -2799,7 +2799,10 @@ namespace DshPortable
             if (updated.Item1 != 0)
             {
                 await RestoreDesktopAfterUpdateAttemptAsync();
-                throw new InvalidOperationException(updated.Item2);
+                string code = JsonString(updated.Item2, "code");
+                string safeDetail = RedactSensitiveText(updated.Item2);
+                WriteLauncherLog("portable-cli-error", safeDetail.Length > 4096 ? safeDetail.Substring(0, 4096) : safeDetail);
+                throw new InvalidOperationException(FriendlyPortableUpdateError(code));
             }
             string url = JsonString(updated.Item2, "url");
             if (!IsTrustedLoopbackUrl(url))
@@ -4025,6 +4028,10 @@ namespace DshPortable
                 activityRing.Indeterminate = true;
                 if (phase == "verifying") statusLabel.Text = L("正在验证 DSH-Portable 更新…", "Verifying the DSH-Portable update…");
                 else if (phase == "installing") statusLabel.Text = L("正在安装 DSH-Portable 更新…", "Installing the DSH-Portable update…");
+                else if (phase == "validating") statusLabel.Text = L("正在验证新版本能否启动…", "Checking that the new version can start…");
+                else if (phase == "rolling-back") statusLabel.Text = L("新版本未通过验证，正在恢复原版本…", "The new version did not pass validation; restoring the previous version…");
+                else if (phase == "rollback-complete" || phase == "restarting-previous") statusLabel.Text = L("已恢复原版本，正在重新启动…", "The previous version was restored and is restarting…");
+                else if (phase == "recovered") statusLabel.Text = L("原版本已恢复，正在重新打开工作台…", "The previous version is ready; reopening the workspace…");
                 else if (phase == "complete") statusLabel.Text = L("正在重新打开工作台…", "Reopening the workspace…");
                 progressDetail.Text = phase == "complete" ? "100%" : L("会话、设置、插件和工作区保持不变", "Sessions, settings, plugins, and workspace stay in place");
             }
@@ -4069,6 +4076,31 @@ namespace DshPortable
             Match match = Regex.Match(json ?? String.Empty, "\\\"" + Regex.Escape(name) + "\\\"\\s*:\\s*(?<value>-?\\d+)");
             long value;
             return match.Success && Int64.TryParse(match.Groups["value"].Value, out value) ? value : 0;
+        }
+
+        private string FriendlyPortableUpdateError(string code)
+        {
+            if (String.Equals(code, "UPDATE_ROLLED_BACK", StringComparison.Ordinal)) return L(
+                "新版本未通过启动验证，已恢复并重新启动原版本。详细信息已写入支持日志。",
+                "The new version did not pass startup validation. The previous version was restored and restarted. Details were saved to the support log.");
+            if (String.Equals(code, "UPDATE_RECOVERY_FAILED", StringComparison.Ordinal)) return L(
+                "更新失败，原版本也未能自动重启。请重新打开 DSH-Portable 并导出支持报告。",
+                "The update failed and the previous version could not restart automatically. Reopen DSH-Portable and export a support report.");
+            return L(
+                "更新未能完成。安装仍可恢复；请导出支持报告以便排查。",
+                "The update could not be completed. The installation remains recoverable; export a support report for details.");
+        }
+
+        private static string RedactSensitiveText(string source)
+        {
+            string value = source ?? String.Empty;
+            value = Regex.Replace(value, "(?i)(Bearer\\s+)[^\\s\\\"']+", "$1[REDACTED]");
+            value = Regex.Replace(value,
+                "(?i)([\\\"']?[^\\s\\\"']*(?:token|password|secret|authorization|cookie|api[_-]?key)[^\\s\\\"']*[\\\"']?\\s*[:=]\\s*)[\\\"']?[^\\s,;}&\\\"']+",
+                "$1[REDACTED]");
+            value = Regex.Replace(value, "(?i)([?&](?:token|access_token|auth|authorization)=)[^&#\\s]+", "$1[REDACTED]");
+            value = Regex.Replace(value, "\\bsk-[A-Za-z0-9_-]{6,}\\b", "[REDACTED]");
+            return value;
         }
 
         private void HandleFailure(int exitCode, string message)
@@ -4163,7 +4195,8 @@ namespace DshPortable
                 }
                 process.WaitForExit();
                 stderr.Wait();
-                string message = (stderr.Result + Environment.NewLine + String.Join(Environment.NewLine, stdout)).Trim();
+                string rawMessage = (stderr.Result + Environment.NewLine + String.Join(Environment.NewLine, stdout)).Trim();
+                string message = process.ExitCode == 0 ? rawMessage : RedactSensitiveText(rawMessage);
                 return Tuple.Create(process.ExitCode, message);
             }
         }

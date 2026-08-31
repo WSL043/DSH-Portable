@@ -168,7 +168,10 @@ async function main() {
       assert.fail('The rollback probe unexpectedly succeeded.')
     } catch (error) {
       rollbackDiagnostic = `${error?.stderr ?? ''}\n${error?.stdout ?? ''}`
-      assert.match(rollbackDiagnostic, /Update failed and was rolled back/i)
+      const rollbackError = JSON.parse(rollbackDiagnostic.trim().split(/\r?\n/).filter(Boolean).at(-1))
+      assert.equal(rollbackError.type, 'portable-error')
+      assert.equal(rollbackError.code, 'UPDATE_ROLLED_BACK')
+      assert.doesNotMatch(rollbackDiagnostic, /(?:token|authorization|cookie)=/i)
     }
     const rollbackStatus = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
       encoding: 'utf8', timeout: 30000, windowsHide: true,

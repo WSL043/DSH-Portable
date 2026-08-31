@@ -528,6 +528,14 @@ test('Windows package exposes real GUI executables with matching icon and an iso
   assert.match(source, /full-package-required/)
   assert.match(source, /--progress-json/)
   assert.match(source, /HandleUpdateProgress/)
+  assert.match(source, /FriendlyPortableUpdateError/)
+  assert.match(source, /RedactSensitiveText/)
+  assert.match(source, /process\.ExitCode\s*==\s*0\s*\?\s*rawMessage\s*:\s*RedactSensitiveText\(rawMessage\)/)
+  assert.match(source, /portable-cli-error/)
+  assert.doesNotMatch(source, /throw new InvalidOperationException\(updated\.Item2\)/)
+  assert.match(source, /phase == "validating"/)
+  assert.match(source, /phase == "rolling-back"/)
+  assert.match(source, /phase == "restarting-previous"/)
   assert.match(source, /HandleStartupProgress/)
   const startupProgress = source.slice(
     source.indexOf('private void HandleStartupProgress'),
@@ -563,8 +571,11 @@ test('Windows package exposes real GUI executables with matching icon and an iso
   assert.match(build, /dsh-core-update-windows-x64\.json/)
   assert.match(build, /updaterSchema/)
   assert.match(build, /shellSchema/)
-  assert.match(build, /shellSchema\s*=\s*23/)
-  assert.match(build, /requiredShellSchema\s*=\s*23/)
+  assert.match(build, /shellSchema\s*=\s*24/)
+  assert.match(build, /requiredShellSchema\s*=\s*24/)
+  assert.match(build, /shell-fingerprint\.mjs/)
+  assert.match(build, /shellFingerprint\s*=\s*\$ShellFingerprint/)
+  assert.match(build, /requiredShellFingerprint\s*=\s*\$ShellFingerprint/)
   assert.match(source, new RegExp(`AssemblyFileVersion\\("${regexEscape(policy.windowsVersion)}"\\)`))
   assert.match(bootstrap, /ZipArchive/)
   assert.match(bootstrap, /internal sealed class BootstrapActivityRing : Control/)
@@ -782,8 +793,8 @@ test('macOS package is a movable signed app shell for both supported architectur
   assert.match(build, /DSH-Portable-update-macos-\$ARCH\.zip/)
   assert.match(build, /portable-update-macos-\$ARCH\.json/)
   assert.match(build, /dsh-core-update-macos-\$ARCH\.json/)
-  assert.match(build, /"shellSchema": 18/)
-  assert.match(build, /"requiredShellSchema": 18/)
+  assert.match(build, /"shellSchema": 19/)
+  assert.match(build, /"requiredShellSchema": 19/)
   assert.match(plist, new RegExp(`<key>CFBundleVersion<\\/key>\\s*<string>${regexEscape(policy.macBuildVersion)}<\\/string>`, 's'))
   assert.match(app, /check-update/)
   assert.match(app, /Check for Updates|检查更新/)
@@ -872,7 +883,9 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /verify-update-artifact\.mjs/)
   assert.match(workflow, /smoke-update-artifact\.mjs/)
   assert.match(updateSmoke, /rollbackVerified/)
-  assert.match(updateSmoke, /Update failed and was rolled back|rolled back/i)
+  assert.match(updateSmoke, /UPDATE_ROLLED_BACK/)
+  assert.match(updateSmoke, /portable-error/)
+  assert.match(updateSmoke, /authorization\|cookie/)
   assert.ok(
     workflow.indexOf('node scripts/smoke-update-artifact.mjs') < workflow.indexOf('node scripts/smoke-portable.mjs'),
     'the update smoke must run before the movable-root smoke renames the package',
@@ -928,7 +941,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(macDesktopHostSmoke, /--no-browser/)
 })
 
-test('CI upgrades a running published Windows product and injects the WebView2 restart race', async () => {
+test('CI upgrades the immediate prior Windows release through the declared component or full-package path', async () => {
   const [workflow, smoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/smoke-windows-version-upgrade.mjs'),
@@ -939,15 +952,19 @@ test('CI upgrades a running published Windows product and injects the WebView2 r
   assert.match(workflow, /Groups\[['"]base['"]\]\.Value[\s\S]+Groups\[['"]rc['"]\]\.Value/)
   assert.match(workflow, /-not \$_\.isPrerelease[\s\S]+\$_\.tagName -match '\^v\\d\+[\s\S]+\$_\.tagName -ne "v\$CandidateVersion"/)
   assert.doesNotMatch(workflow, /gh release view --repo "\$env:GITHUB_REPOSITORY" --json tagName/)
-  assert.match(workflow, /gh release download \$Release\.tagName/)
+  assert.match(workflow, /\$Prior\s*=\s*\$Eligible \| Select-Object -First 1/)
+  assert.match(workflow, /gh release download \$PriorTag/)
   assert.match(workflow, /COMPONENTS\.json/)
-  assert.match(workflow, /Components\.shellSchema[\s\S]+Target\.requiredShellSchema/)
-  assert.match(workflow, /Components\.runtimeLayout[\s\S]+Target\.targetRuntimeLayout/)
   assert.match(workflow, /smoke-windows-version-upgrade\.mjs[\s\S]+--running-host[\s\S]+--simulate-webview-busy/)
   assert.match(workflow, /Components\.releaseChannel[\s\S]+Target\.releaseChannel[\s\S]+--allow-channel-migration/)
   assert.match(smoke, /\['stable', 'candidate'\]\.includes\(fullManifestSource\.releaseChannel\)/)
   assert.match(smoke, /componentManifestSource\.releaseChannel, fullManifestSource\.releaseChannel/)
   assert.match(smoke, /oldComponents\.portableVersion, fullManifestSource\.version/)
+  assert.match(smoke, /\['available', 'full-package-required'\]\.includes\(decision\.status\)/)
+  assert.match(smoke, /decision\.delivery === 'full-package'/)
+  assert.match(smoke, /decision\.status === 'available' \? 'component' : 'full-package'/)
+  assert.match(smoke, /component\.zip/)
+  assert.match(smoke, /phase === 'validating'/)
 })
 
 test('Node runtime lock covers Windows, macOS, and both Linux CPU families', async () => {

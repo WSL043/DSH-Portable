@@ -75,6 +75,8 @@ fi
 NODE_EXE="$NODE_FOLDER/bin/node"
 NPM_CLI="$NODE_FOLDER/lib/node_modules/npm/bin/npm-cli.js"
 [[ -x "$NODE_EXE" && -f "$NPM_CLI" ]] || { echo "Pinned Node archive is incomplete" >&2; exit 1; }
+SHELL_FINGERPRINT="$("$NODE_EXE" "$PROJECT_ROOT/scripts/shell-fingerprint.mjs" macos)"
+[[ "$SHELL_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]] || { echo "macOS shell fingerprint generation failed" >&2; exit 1; }
 
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
@@ -82,6 +84,7 @@ cp -R "$PROJECT_ROOT/app/vendor" "$STAGE/app/vendor"
 cp "$PROJECT_ROOT/launcher/portable-core.mjs" "$STAGE/launcher/portable-core.mjs"
 cp "$PROJECT_ROOT/launcher/portable-cli.mjs" "$STAGE/launcher/portable-cli.mjs"
 cp "$PROJECT_ROOT/launcher/repair-core.mjs" "$STAGE/launcher/repair-core.mjs"
+cp "$PROJECT_ROOT/launcher/diagnostic-policy.mjs" "$STAGE/launcher/diagnostic-policy.mjs"
 cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs"
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
 cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
@@ -177,7 +180,8 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeSha256": "$NODE_SHA256",
   "runtimeLayout": "$(if [[ -n "$PREVIEW_APP_SOURCE" ]]; then printf official-source-pack; else printf npm-lock; fi)",
   "updaterSchema": 1,
-  "shellSchema": 18
+  "shellSchema": 19,
+  "shellFingerprint": "$SHELL_FINGERPRINT"
 }
 EOF
 
@@ -237,7 +241,8 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 18,
+  "requiredShellSchema": 19,
+  "requiredShellFingerprint": "$SHELL_FINGERPRINT",
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",
@@ -259,7 +264,8 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 18,
+  "requiredShellSchema": 19,
+  "requiredShellFingerprint": "$SHELL_FINGERPRINT",
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

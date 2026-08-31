@@ -398,7 +398,7 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Upgrade a running published release through the complete-package boundary
+      - name: Upgrade the immediate prior same-channel release through its declared delivery path
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
@@ -423,32 +423,23 @@ jobs:
               -not $_.isPrerelease -and $_.tagName -match '^v\d+\.\d+\.\d+$' -and $_.tagName -ne "v$CandidateVersion"
             } | Sort-Object publishedAt -Descending
           }
-          $PriorTag = $null
-          $PriorZip = $null
-          foreach ($Release in $Eligible) {
-            $TagDir = Join-Path $env:RUNNER_TEMP ("prior-release-" + $Release.tagName.TrimStart('v'))
-            New-Item -ItemType Directory -Force -Path $TagDir | Out-Null
-            gh release download $Release.tagName --repo "$env:GITHUB_REPOSITORY" `
-              --pattern 'DSH-Portable-windows-x64-offline.zip' --dir $TagDir
-            $Zip = Join-Path $TagDir 'DSH-Portable-windows-x64-offline.zip'
-            $ComponentsJson = tar.exe -xOf $Zip DSH-Portable/licenses/COMPONENTS.json
-            if ($LASTEXITCODE -ne 0 -or -not $ComponentsJson) {
-              throw "Could not read COMPONENTS.json from $($Release.tagName)."
-            }
-            $Components = $ComponentsJson | ConvertFrom-Json
-            $CrossesBoundary = [int]$Components.shellSchema -lt [int]$Target.requiredShellSchema `
-              -or [string]$Components.runtimeLayout -ne [string]$Target.targetRuntimeLayout
-            if ($CrossesBoundary) {
-              $PriorTag = $Release.tagName
-              $PriorZip = $Zip
-              break
-            }
-          }
+          $Prior = $Eligible | Select-Object -First 1
+          $PriorTag = $Prior.tagName
           if (-not $PriorTag) {
-            Write-Host 'No published release crosses this complete-package boundary; nothing to test.'
+            Write-Host 'No immediate prior release exists for this channel; nothing to test.'
             exit 0
           }
-          Write-Host "Testing complete-package upgrade from $PriorTag to $CandidateVersion."
+          $TagDir = Join-Path $env:RUNNER_TEMP ("prior-release-" + $PriorTag.TrimStart('v'))
+          New-Item -ItemType Directory -Force -Path $TagDir | Out-Null
+          gh release download $PriorTag --repo "$env:GITHUB_REPOSITORY" `
+            --pattern 'DSH-Portable-windows-x64-offline.zip' --dir $TagDir
+          $PriorZip = Join-Path $TagDir 'DSH-Portable-windows-x64-offline.zip'
+          $ComponentsJson = tar.exe -xOf $PriorZip DSH-Portable/licenses/COMPONENTS.json
+          if ($LASTEXITCODE -ne 0 -or -not $ComponentsJson) {
+            throw "Could not read COMPONENTS.json from $PriorTag."
+          }
+          $Components = $ComponentsJson | ConvertFrom-Json
+          Write-Host "Testing declared upgrade path from $PriorTag to $CandidateVersion."
           $UpgradeArguments = @(
             'scripts/smoke-windows-version-upgrade.mjs',
             $PriorZip,

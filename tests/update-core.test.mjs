@@ -23,6 +23,7 @@ import {
   ignoreUpdate,
   installAvailableAppUpdate,
   platformUpdateKey,
+  readInstalledUpdateState,
   rollbackPendingAppUpdate,
   validateArchiveEntries,
 } from '../launcher/update-core.mjs'
@@ -115,6 +116,9 @@ test('update evaluation distinguishes current, component update, full package, a
   assert.equal(fullUpdate.product.name, 'DSH-Portable')
   assert.equal(fullUpdate.engine.name, 'DeepSeek Harness')
   assert.equal(evaluateUpdate(updateManifest({ requiredShellSchema: 2 }), installed, 'windows-x64').status, 'full-package-required')
+  assert.equal(evaluateUpdate(updateManifest({ requiredShellFingerprint: 'a'.repeat(64) }), installed, 'windows-x64').status, 'full-package-required')
+  assert.equal(evaluateUpdate(updateManifest({ requiredShellFingerprint: 'a'.repeat(64) }), { ...installed, shellFingerprint: 'a'.repeat(64) }, 'windows-x64').status, 'available')
+  assert.throws(() => evaluateUpdate(updateManifest({ requiredShellFingerprint: 'invalid' }), installed, 'windows-x64'), /fingerprint/i)
   assert.equal(evaluateUpdate(updateManifest({
     component: { ...updateManifest().component, requiredNodeVersion: '25.0.0' },
   }), installed, 'windows-x64').status, 'full-package-required')
@@ -123,6 +127,28 @@ test('update evaluation distinguishes current, component update, full package, a
   const missingCompatibility = updateManifest()
   delete missingCompatibility.minimumUpdaterSchema
   assert.throws(() => evaluateUpdate(missingCompatibility, installed, 'windows-x64'), /compatibility/i)
+})
+
+test('installed update state preserves the shell fingerprint used by compatibility checks', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-installed-update-state-'))
+  try {
+    const layout = layoutForRoot(root)
+    const shellFingerprint = 'a'.repeat(64)
+    await mkdir(path.join(root, 'licenses'), { recursive: true })
+    await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+      portableVersion: '0.6.0-rc.3',
+      releaseChannel: 'candidate',
+      dshVersion: '0.1.2-alpha.2',
+      updaterSchema: 1,
+      shellSchema: 24,
+      shellFingerprint,
+      nodeVersion: '24.19.0',
+      runtimeLayout: 'capsule-v1',
+    })}\n`)
+    assert.equal((await readInstalledUpdateState(layout)).shellFingerprint, shellFingerprint)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
 })
 
 test('an independently published official DSH component updates without changing the Portable version', () => {
@@ -819,11 +845,14 @@ test('compact runtime update swaps only the capsule and preserves portable data'
 test('failed compact runtime health check restores the prior capsule and metadata', async () => {
   const fixture = await makeCapsuleUpdateFixture()
   try {
+    const progress = []
     await assert.rejects(applyStagedCapsuleUpdate({
       layout: fixture.layout,
       stagedRoot: fixture.stagedRoot,
       healthCheck: async () => false,
+      onProgress: (event) => progress.push(event.phase),
     }), /rolled back/i)
+    assert.deepEqual(progress, ['validating', 'rolling-back', 'rollback-complete'])
     assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
     assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, '0.5.0-rc.1')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')

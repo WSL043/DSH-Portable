@@ -136,7 +136,7 @@ function Get-ProductStatus {
                 Status = ($Raw | ConvertFrom-Json).status
             }
         }
-        if ($Raw -notmatch 'Another portable launcher is already starting or stopping DSH' -or [DateTime]::UtcNow -ge $Deadline) {
+        if ($Raw -notmatch 'Another portable launcher is already starting or stopping DSH|"code":"LAUNCH_IN_PROGRESS"' -or [DateTime]::UtcNow -ge $Deadline) {
             return [pscustomobject]@{ ExitCode = $ExitCode; Raw = $Raw; Status = '' }
         }
         Start-Sleep -Milliseconds 100

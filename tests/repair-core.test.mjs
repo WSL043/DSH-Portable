@@ -138,7 +138,7 @@ test('repair never mutates generated runtime state while DSH is running', async 
 test('support report is bounded, useful, and removes credentials and conversation content', async (t) => {
   const layout = await fixture(t)
   await mkdir(layout.logsDir, { recursive: true })
-  await writeFile(path.join(layout.logsDir, 'launcher.log'), `${'x'.repeat(200000)}\nBearer secret-token\napi_key=sk-private\ndsh web: http://127.0.0.1:3080/?token=workspace-secret\nnormal line`)
+  await writeFile(path.join(layout.logsDir, 'launcher.log'), `${'x'.repeat(200000)}\nBearer secret-token\napi_key=sk-private\ncontrolToken=portable-control-secret\n{"workspaceAuthToken":"workspace-auth-secret"}\ndsh web: http://127.0.0.1:3080/?token=workspace-secret\nnormal line`)
   await writeFile(path.join(layout.logsDir, 'launcher.log.previous'), 'previous startup phase')
   await writeFile(path.join(layout.logsDir, 'startup-latest.jsonl'), '{"startupId":"latest","phase":"complete","token":"startup-secret"}\n')
   await writeFile(path.join(layout.logsDir, 'startup-previous.jsonl'), '{"startupId":"previous","phase":"host-wait-begin"}\n')
@@ -154,7 +154,7 @@ test('support report is bounded, useful, and removes credentials and conversatio
   assert.match(source, /startup-previous\.jsonl/)
   assert.match(source, /host-wait-begin/)
   assert.match(source, /runtimeProcesses/)
-  assert.doesNotMatch(source, /secret-token|sk-private|workspace-secret|startup-secret|private conversation/)
+  assert.doesNotMatch(source, /secret-token|sk-private|portable-control-secret|workspace-auth-secret|workspace-secret|startup-secret|private conversation/)
   assert.match(source, /\[REDACTED\]/)
 })
 
