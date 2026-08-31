@@ -576,7 +576,7 @@ test('macOS package smokes treat the native app as a long-lived desktop process'
   assert.match(portableSmoke, /['"]\/usr\/bin\/open['"]/)
   assert.match(portableSmoke, /['"]-n['"], ['"]-W['"], app, ['"]--args['"], ['"]--skip-update-check['"]/)
   assert.match(portableSmoke, /waitForPortableStatus/)
-  assert.match(portableSmoke, /Another portable launcher is already starting or stopping DSH/)
+  assert.match(portableSmoke, /LAUNCH_IN_PROGRESS/)
   assert.match(portableSmoke, /requestMacAppQuit/)
 })
 

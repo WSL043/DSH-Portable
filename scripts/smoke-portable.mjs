@@ -63,7 +63,8 @@ async function waitForPortableStatus(root, expected, nativeHost, timeoutMs = 90_
     const result = await invokeCli(root, 'status', '--json')
     if (result.code !== 0) {
       const details = `${result.stderr}\n${result.stdout}`
-      if (details.includes('Another portable launcher is already starting or stopping DSH')) {
+      const errorCode = parseCliJson(details)?.code
+      if (errorCode === 'LAUNCH_IN_PROGRESS') {
         await delay(250)
         continue
       }

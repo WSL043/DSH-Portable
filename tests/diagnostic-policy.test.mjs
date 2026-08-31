@@ -27,6 +27,7 @@ test('diagnostic policy redacts credential-like keys and loopback authentication
 test('rolled-back update failures have a stable machine-readable code', () => {
   assert.equal(classifyPortableError(new Error('Update failed and was rolled back: boot failed\nThe previous version was restored and restarted.')), 'UPDATE_ROLLED_BACK')
   assert.equal(classifyPortableError(new Error('The previous version was restored but could not restart: boot failed')), 'UPDATE_RECOVERY_FAILED')
+  assert.equal(classifyPortableError(new Error('Another portable launcher is already starting or stopping DSH.')), 'LAUNCH_IN_PROGRESS')
   assert.equal(classifyPortableError(new Error('Close the other Portable environment before changing shared components: research.')), 'SHARED_COMPONENTS_BUSY')
 })
 

@@ -69,7 +69,7 @@ function Product-Status {
     do {
         $Raw = (& $Node $RuntimeEntry 'portable-cli.mjs' status --json 2>&1 | Out-String).Trim()
         if ($LASTEXITCODE -eq 0) { return ($Raw | ConvertFrom-Json) }
-        if ($Raw -notmatch 'Another portable launcher' -or [DateTime]::UtcNow -ge $Deadline) {
+        if ($Raw -notmatch 'Another portable launcher|"code":"LAUNCH_IN_PROGRESS"' -or [DateTime]::UtcNow -ge $Deadline) {
             throw "portable status failed: $Raw"
         }
         Start-Sleep -Milliseconds 100
