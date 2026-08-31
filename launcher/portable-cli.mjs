@@ -43,6 +43,7 @@ import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
+import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const baseStateRoot = process.env.DSH_PORTABLE_STATE_ROOT || root
@@ -52,10 +53,12 @@ let layout = layoutForRoot(
   baseStateRoot,
   process.env.DSH_PORTABLE_RUNTIME_ROOT || root,
 )
+let startupTrace = traceFromEnvironment(layout.logsDir)
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
 const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
 function startupLog(startedAt, phase, fields = {}) {
+  appendStartupTrace(startupTrace, 'portable-cli', phase, fields)
   try {
     mkdirSync(layout.logsDir, { recursive: true })
     const details = Object.entries(fields)
@@ -144,15 +147,22 @@ function requestGracefulShutdown(state, timeout = 2500) {
   })
 }
 
-async function waitForHost(state, timeoutMs = 60000, launchOutput = null) {
+async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhase = null) {
   const deadline = Date.now() + timeoutMs
   const identityGraceDeadline = Date.now() + 3000
+  let attempts = 0
+  let urlReported = false
+  if (onPhase) onPhase('host-wait-begin', { pid: state.pid, port: state.port })
   while (Date.now() < deadline) {
+    attempts += 1
     if (!ownedState(state)) {
       // WMI/CIM can briefly lag a just-spawned process on Windows. A live PID
       // gets a short identity grace period; mismatched or exited processes do
       // not get treated as owned and are never terminated here.
-      if (!(Date.now() < identityGraceDeadline && processExists(Number(state.pid)))) return null
+      if (!(Date.now() < identityGraceDeadline && processExists(Number(state.pid)))) {
+        if (onPhase) onPhase('host-process-exited', { attempts })
+        return null
+      }
       await new Promise((resolve) => setTimeout(resolve, 100))
       continue
     }
@@ -160,9 +170,17 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null) {
       ? officialWorkspaceUrl(tailSince(launchOutput.filename, launchOutput.offset, 16000), state.port)
       : null
     const url = loggedUrl || state.url || `http://127.0.0.1:${state.port}/`
-    if (await httpReady(url)) return url
+    if (!urlReported && (loggedUrl || state.url)) {
+      urlReported = true
+      if (onPhase) onPhase('host-url-discovered', { attempts, port: state.port })
+    }
+    if (await httpReady(url)) {
+      if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
+      return url
+    }
     await new Promise((resolve) => setTimeout(resolve, 250))
   }
+  if (onPhase) onPhase('host-wait-timeout', { attempts, timeoutMs })
   return null
 }
 
@@ -377,7 +395,13 @@ function tailSince(filename, offset, maxBytes = 8000) {
 }
 
 async function start(noBrowser, portRetry = 0) {
-  const startedAt = Date.now()
+  const startedAt = Number(process.env.DSH_PORTABLE_STARTUP_STARTED_AT) || Date.now()
+  if (!startupTrace) {
+    const startupId = randomUUID().replaceAll('-', '')
+    process.env.DSH_PORTABLE_STARTUP_ID = startupId
+    process.env.DSH_PORTABLE_STARTUP_STARTED_AT = String(startedAt)
+    startupTrace = beginStartupTrace(layout.logsDir, { startupId, startedAt, component: 'portable-cli', phase: 'process-start' })
+  }
   startupLog(startedAt, 'begin', { portRetry })
   try {
     const result = await startAttempt(noBrowser, portRetry, startedAt)
@@ -451,6 +475,9 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   const stderrOffset = logSize(stderrLog)
   const stdout = openSync(stdoutLog, 'a')
   const stderr = openSync(stderrLog, 'a')
+  const startupBoundary = `${new Date().toISOString()} [startup-boundary] startupId=${startupTrace?.startupId || 'untracked'} phase=host-spawn-request\n`
+  writeSync(stdout, startupBoundary)
+  writeSync(stderr, startupBoundary)
   const controlPipe = process.platform === 'win32'
     ? `\\\\.\\pipe\\dsh-portable-${randomUUID()}`
     : path.join('/tmp', `dshp-${process.pid}-${randomBytes(8).toString('hex')}.sock`)
@@ -469,6 +496,8 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
       ...buildDshEnv(layout),
       DSH_PORTABLE_CONTROL_PIPE: controlPipe,
       DSH_PORTABLE_CONTROL_TOKEN: controlToken,
+      DSH_PORTABLE_STARTUP_ID: process.env.DSH_PORTABLE_STARTUP_ID || '',
+      DSH_PORTABLE_STARTUP_STARTED_AT: process.env.DSH_PORTABLE_STARTUP_STARTED_AT || '',
     },
     detached: true,
     windowsHide: true,
@@ -491,7 +520,12 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   }
   await writeJsonAtomic(layout.processState, state)
   try {
-    const url = await waitForHost(state, 60000, { filename: stdoutLog, offset: stdoutOffset })
+    const url = await waitForHost(
+      state,
+      60000,
+      { filename: stdoutLog, offset: stdoutOffset },
+      (phase, fields) => startupLog(startedAt, phase, fields),
+    )
     const hostUnavailable = !url
     portReservation.release()
     if (hostUnavailable) {

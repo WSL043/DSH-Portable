@@ -380,6 +380,8 @@ namespace DshPortable
         private readonly string root;
         private readonly string environmentId;
         private readonly string stateRoot;
+        private readonly string startupId;
+        private readonly long startupStartedAt;
         private readonly int restoreMessage;
         private readonly int exitMessage;
         private readonly string[] launcherArgs;
@@ -388,6 +390,7 @@ namespace DshPortable
         private readonly bool hiddenForAutomation;
         private bool operationRunning = true;
         private bool desktopReady;
+        private bool startupTraceActive;
         private bool shutdownRunning;
         private bool restartAfterShutdown;
         private bool allowClose;
@@ -435,6 +438,14 @@ namespace DshPortable
                 StringComparison.Ordinal);
             hiddenForAutomation = testHidden;
             desktopStart = !nonInteractive && IsStartCommand(launcherArgs);
+            startupId = Guid.NewGuid().ToString("N");
+            startupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            startupTraceActive = desktopStart;
+            if (desktopStart)
+            {
+                BeginStartupTrace();
+                AppendStartupTrace("native-host", "process-start", null);
+            }
 
             // The workspace already carries the product identity. Keep the native
             // caption visually quiet instead of repeating it above the DSH shell.
@@ -2155,6 +2166,51 @@ namespace DshPortable
             catch { }
         }
 
+        private void BeginStartupTrace()
+        {
+            try
+            {
+                string directory = ResolveLauncherLogDirectory();
+                Directory.CreateDirectory(directory);
+                string latest = Path.Combine(directory, "startup-latest.jsonl");
+                string previous = Path.Combine(directory, "startup-previous.jsonl");
+                if (File.Exists(previous)) File.Delete(previous);
+                if (File.Exists(latest)) File.Move(latest, previous);
+            }
+            catch { }
+        }
+
+        private void AppendStartupTrace(string component, string phase, IDictionary<string, object> fields)
+        {
+            if (!startupTraceActive) return;
+            try
+            {
+                Dictionary<string, object> entry = new Dictionary<string, object>();
+                entry["timestamp"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
+                entry["startupId"] = startupId;
+                entry["elapsedMs"] = Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startupStartedAt);
+                string safeComponent = (component ?? String.Empty).Replace("\r", " ").Replace("\n", " ");
+                string safePhase = (phase ?? String.Empty).Replace("\r", " ").Replace("\n", " ");
+                safePhase = Regex.Replace(
+                    safePhase,
+                    "(?i)(api[_-]?key|token|password|secret|authorization|cookie)=[^\\s]+",
+                    "$1=[REDACTED]");
+                entry["component"] = safeComponent.Substring(0, Math.Min(80, safeComponent.Length));
+                entry["phase"] = safePhase.Substring(0, Math.Min(160, safePhase.Length));
+                if (fields != null)
+                {
+                    foreach (KeyValuePair<string, object> field in fields) entry[field.Key] = field.Value;
+                }
+                string directory = ResolveLauncherLogDirectory();
+                Directory.CreateDirectory(directory);
+                File.AppendAllText(
+                    Path.Combine(directory, "startup-latest.jsonl"),
+                    json.Serialize(entry) + Environment.NewLine,
+                    new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
         private List<string> OwnedWebViewProcessDiagnostics()
         {
             string dataRoot = ResolveWebViewDataRoot();
@@ -2473,7 +2529,9 @@ namespace DshPortable
                 {
                     statusLabel.Text = "Loading plugins…";
                     Task webViewInitialization = InitializeWebViewAsync();
+                    AppendStartupTrace("native-host", "portable-cli-begin", null);
                     Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json" }));
+                    AppendStartupTrace("native-host", "portable-cli-complete", new Dictionary<string, object> { { "exitCode", started.Item1 } });
                     if (started.Item1 != 0)
                     {
                         Task ignoredInitializationFailure = webViewInitialization.ContinueWith(
@@ -2497,6 +2555,8 @@ namespace DshPortable
                     await ShowDesktopAsync(url);
                     if (updateCheckEnabled) await CheckForDesktopUpdateAsync(false, "product");
                     if (engineUpdateCheckEnabled) await CheckForDesktopUpdateAsync(false, "engine");
+                    AppendStartupTrace("native-host", "startup-complete", null);
+                    startupTraceActive = false;
                     return;
                 }
 
@@ -2874,6 +2934,7 @@ namespace DshPortable
                 if (webViewStartupTrace.Count < 32) webViewStartupTrace.Add(elapsed + "ms " + phase);
             }
             WriteLauncherLog("startup", elapsed + "ms " + phase);
+            AppendStartupTrace("webview", phase, null);
         }
 
         private static string WorkspaceOriginPath(string value)
@@ -3005,6 +3066,7 @@ namespace DshPortable
             catch (EntryPointNotFoundException) { }
             launchPanel.Visible = false;
             WriteLauncherLog("startup", "dsh-first-paint-ready");
+            AppendStartupTrace("native-host", "interactive-ready", null);
             bool updateHealthReady = WriteUpdateHealthMarker();
             if (updateHealthReady && String.Equals(
                 Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"),
@@ -3846,6 +3908,8 @@ namespace DshPortable
 
         private void HandleFailure(int exitCode, string message)
         {
+            AppendStartupTrace("native-host", "startup-failed", new Dictionary<string, object> { { "exitCode", exitCode } });
+            startupTraceActive = false;
             operationRunning = false;
             if (String.Equals(
                 Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"),
@@ -3915,6 +3979,11 @@ namespace DshPortable
                 ? stateRoot
                 : Directory.GetParent(Directory.GetParent(stateRoot).FullName).FullName;
             start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = baseStateRoot;
+            if (startupTraceActive)
+            {
+                start.EnvironmentVariables["DSH_PORTABLE_STARTUP_ID"] = startupId;
+                start.EnvironmentVariables["DSH_PORTABLE_STARTUP_STARTED_AT"] = startupStartedAt.ToString(CultureInfo.InvariantCulture);
+            }
 
             using (Process process = Process.Start(start))
             {

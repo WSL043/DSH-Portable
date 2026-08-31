@@ -38,7 +38,11 @@ test('Windows task cleanup suppresses localized taskkill output', async () => {
 })
 
 test('startup records bounded phase timings without making diagnostics a launch dependency', async () => {
-  const cli = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
+  const [cli, runtimeEntry, host] = await Promise.all([
+    readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../launcher/runtime-entry.mjs', import.meta.url), 'utf8'),
+    readFile(new URL('../launcher/portable-host.mjs', import.meta.url), 'utf8'),
+  ])
   for (const phase of [
     'runtime-verified',
     'profile-resolver-ready',
@@ -50,6 +54,15 @@ test('startup records bounded phase timings without making diagnostics a launch 
     'failed',
   ]) assert.match(cli, new RegExp(`startupLog\\([^\\n]+['"]${phase}['"]`))
   assert.match(cli, /\[startup-cli\][^\n]+elapsedMs=/)
+  assert.match(cli, /DSH_PORTABLE_STARTUP_ID/)
+  assert.match(cli, /host-wait-begin/)
+  assert.match(cli, /host-url-discovered/)
+  assert.match(cli, /host-http-ready/)
+  assert.match(cli, /startup-boundary[^\n]+startupId/)
+  assert.match(runtimeEntry, /beginStartupTrace/)
+  assert.match(runtimeEntry, /runtime-capsule-ready/)
+  assert.match(host, /official-dsh-import-begin/)
+  assert.match(host, /official-dsh-import-failed/)
   assert.match(cli, /Diagnostics must never prevent the product from starting/)
 })
 
