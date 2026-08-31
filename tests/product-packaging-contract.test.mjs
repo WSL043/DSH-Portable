@@ -535,6 +535,17 @@ test('Windows package exposes real GUI executables with matching icon and an iso
   assert.match(source, /full-package-required/)
   assert.match(source, /--progress-json/)
   assert.match(source, /HandleUpdateProgress/)
+  assert.match(source, /HandleStartupProgress/)
+  const startupProgress = source.slice(
+    source.indexOf('private void HandleStartupProgress'),
+    source.indexOf('private static string FormatBytes'),
+  )
+  assert.match(startupProgress, /IsHandleCreated/)
+  assert.match(startupProgress, /IsDisposed/)
+  assert.match(startupProgress, /catch \(InvalidOperationException\)/)
+  assert.match(source, /progressType\s*==\s*"startup-progress"/)
+  assert.match(source, /Preparing the portable runtime/)
+  assert.match(source, /Loading plugins and sessions/)
   assert.match(source, /activityRing\.Value\s*=\s*percent/)
   assert.match(source, /activityRing\.Indeterminate\s*=\s*false/)
   assert.match(source, /progressDetail/)

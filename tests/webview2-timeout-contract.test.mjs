@@ -58,7 +58,7 @@ test('Windows overlaps cold WebView2 initialization with the first DSH start', a
     source.indexOf('private async Task CheckForDesktopUpdateAsync'),
   )
   const webViewStart = runLauncher.indexOf('Task webViewInitialization = InitializeWebViewAsync()')
-  const backendStart = runLauncher.indexOf('InvokePortableCli(new[] { "start", "--no-browser", "--json" })')
+  const backendStart = runLauncher.indexOf('InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }')
   const webViewAwait = runLauncher.indexOf('await webViewInitialization')
   assert.ok(webViewStart >= 0 && webViewStart < backendStart)
   assert.ok(webViewAwait > backendStart)
@@ -93,7 +93,7 @@ test('Windows cold start shows the local workspace before checking for updates i
     source.indexOf('private async Task RunLauncherAsync()'),
     source.indexOf('private void ShowDesktopOperation'),
   )
-  const startIndex = runLauncher.indexOf('InvokePortableCli(new[] { "start", "--no-browser", "--json" })')
+  const startIndex = runLauncher.indexOf('InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }')
   const desktopIndex = runLauncher.indexOf('await ShowDesktopAsync(url)')
   const automaticCheckIndex = runLauncher.indexOf('CheckForDesktopUpdateAsync(false, "product")')
   assert.ok(startIndex >= 0, 'the native host must start the local DSH service')
