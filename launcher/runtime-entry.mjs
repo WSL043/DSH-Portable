@@ -19,6 +19,10 @@ const requestedEnvironment = cliOptions?.environment || process.env.DSH_PORTABLE
 const effectiveStateRoot = environmentStateRoot(stateRoot || root, requestedEnvironment, process.platform)
 const logDirectory = path.join(effectiveStateRoot, 'data', 'logs')
 const isStart = cliOptions?.command === 'start'
+function reportStartupProgress(phase, fields = {}) {
+  if (!isStart || !cliOptions?.progressJson) return
+  process.stdout.write(`${JSON.stringify({ type: 'startup-progress', phase, ...fields })}\n`)
+}
 let startupTrace = traceFromEnvironment(logDirectory)
 if (!startupTrace && isStart) {
   const startupId = randomUUID().replaceAll('-', '')
@@ -29,9 +33,11 @@ if (!startupTrace && isStart) {
 } else {
   appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-entry-begin')
 }
+reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()
 const prepared = await ensureRuntimeCapsule(root)
 const preparationElapsed = performance.now() - preparationStarted
+reportStartupProgress('runtime-ready', { reused: prepared.reused === true })
 appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-capsule-ready', {
   mode: prepared.mode,
   elapsedMsRuntime: Math.round(preparationElapsed),

@@ -2527,10 +2527,10 @@ namespace DshPortable
             {
                 if (desktopStart)
                 {
-                    statusLabel.Text = "Loading plugins…";
+                    statusLabel.Text = L("正在准备便携运行环境…", "Preparing the portable runtime…");
                     Task webViewInitialization = InitializeWebViewAsync();
                     AppendStartupTrace("native-host", "portable-cli-begin", null);
-                    Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json" }));
+                    Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }, HandleStartupProgress));
                     AppendStartupTrace("native-host", "portable-cli-complete", new Dictionary<string, object> { { "exitCode", started.Item1 } });
                     if (started.Item1 != 0)
                     {
@@ -3886,6 +3886,20 @@ namespace DshPortable
             progressDetail.Visible = true;
         }
 
+        private void HandleStartupProgress(string jsonLine)
+        {
+            if (InvokeRequired) { BeginInvoke(new Action<string>(HandleStartupProgress), jsonLine); return; }
+            string phase = JsonString(jsonLine, "phase");
+            if (phase == "runtime-preparing")
+                statusLabel.Text = L("正在准备便携运行环境…", "Preparing the portable runtime…");
+            else if (phase == "runtime-ready")
+                statusLabel.Text = L("正在加载插件和会话…", "Loading plugins and sessions…");
+            else if (phase == "plugins-ready" || phase == "workspace-starting")
+                statusLabel.Text = L("正在启动本地工作台…", "Starting the local workspace…");
+            else if (phase == "workspace-ready")
+                statusLabel.Text = L("正在打开工作台…", "Opening the workspace…");
+        }
+
         private static string FormatBytes(long bytes)
         {
             if (bytes < 1024) return Math.Max(0, bytes) + " B";
@@ -3992,7 +4006,8 @@ namespace DshPortable
                 string line;
                 while ((line = process.StandardOutput.ReadLine()) != null)
                 {
-                    if (progressCallback != null && JsonString(line, "type") == "update-progress") progressCallback(line);
+                    string progressType = JsonString(line, "type");
+                    if (progressCallback != null && (progressType == "update-progress" || progressType == "startup-progress")) progressCallback(line);
                     else if (!String.IsNullOrWhiteSpace(line)) stdout.Add(line);
                 }
                 process.WaitForExit();

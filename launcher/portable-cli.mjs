@@ -54,11 +54,20 @@ let layout = layoutForRoot(
   process.env.DSH_PORTABLE_RUNTIME_ROOT || root,
 )
 let startupTrace = traceFromEnvironment(layout.logsDir)
+let startupProgressJson = false
 const BROWSER_GRACEFUL_SHUTDOWN_MS = 5000
 const BROWSER_FORCE_SHUTDOWN_MS = 15000
 
 function startupLog(startedAt, phase, fields = {}) {
   appendStartupTrace(startupTrace, 'portable-cli', phase, fields)
+  if (startupProgressJson) {
+    const visiblePhase = {
+      'default-plugins-ready': 'plugins-ready',
+      'host-spawned': 'workspace-starting',
+      'host-http-ready': 'workspace-ready',
+    }[phase]
+    if (visiblePhase) process.stdout.write(`${JSON.stringify({ type: 'startup-progress', phase: visiblePhase })}\n`)
+  }
   try {
     mkdirSync(layout.logsDir, { recursive: true })
     const details = Object.entries(fields)
@@ -785,6 +794,7 @@ function print(result, json) {
 async function main() {
   if (!['win32', 'darwin', 'linux'].includes(process.platform)) throw new Error('DSH-Portable supports Windows, macOS, and Linux.')
   const options = parseCli(process.argv.slice(2))
+  startupProgressJson = options.command === 'start' && options.progressJson
   const environmentId = options.environment || process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
   const stateRoot = environmentStateRoot(baseStateRoot, environmentId, process.platform)
   layout = layoutForRoot(
