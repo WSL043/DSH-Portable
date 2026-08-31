@@ -15,7 +15,14 @@ import {
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
-const LOG_NAMES = Object.freeze(['launcher.log', 'launcher.log.previous', 'dsh.stdout.log', 'dsh.stderr.log'])
+const LOG_NAMES = Object.freeze([
+  'startup-latest.jsonl',
+  'startup-previous.jsonl',
+  'launcher.log',
+  'launcher.log.previous',
+  'dsh.stdout.log',
+  'dsh.stderr.log',
+])
 const execFileAsync = promisify(execFile)
 const WINDOWS_DIAGNOSTIC_PROCESSES = Object.freeze([
   'DeepSeek-Herness.exe',
@@ -128,6 +135,7 @@ export async function repairPortable(layout, { running = false } = {}) {
 
 function redact(source) {
   let value = String(source ?? '')
+  value = value.replace(/(["'](?:api[_-]?key|token|password|secret|authorization|cookie)["']\s*:\s*)["'][^"']*["']/gi, '$1"[REDACTED]"')
   value = value.replace(/\b(Bearer\s+)[^\s"']+/gi, '$1[REDACTED]')
   value = value.replace(/\b(api[_-]?key|token|password|secret|authorization|cookie)\b\s*[:=]\s*[^\s,;]+/gi, '$1=[REDACTED]')
   value = value.replace(/\bsk-[A-Za-z0-9_-]{6,}\b/g, '[REDACTED]')

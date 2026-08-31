@@ -137,7 +137,7 @@ Plugins that can be mounted safely take effect immediately, while client-only pl
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.
 - When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
 - Choose Later or **Skip this version**; installation waits for active tasks. A new version commits only after its workspace becomes ready; a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
-- **Settings → General → Portable** provides checks, repair, and a support report. Repair keeps user data and rebuilds only reproducible components.
+- **Settings → General → Portable** provides checks, repair, and a redacted support report. The report includes complete phase-by-phase traces for the two latest launches, from native process creation to an interactive workspace. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
 
 An official DSH update does not need to wait for a DSH-Portable feature release, but it never replaces a working environment directly. Finished-product tests on Windows, macOS, Linux x64, and Linux ARM64 must all pass before the independent core channel is published.
 

@@ -1,8 +1,11 @@
 import { appendFile, mkdir } from 'node:fs/promises'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
+import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
+import { environmentStateRoot, parseCli } from './portable-core.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const [entryName, ...forwarded] = process.argv.slice(2)
@@ -10,13 +13,29 @@ if (!entryName || path.basename(entryName) !== entryName || !entryName.endsWith(
   throw new Error('Runtime entry requires one launcher module name.')
 }
 
+const stateRoot = process.env.DSH_PORTABLE_STATE_ROOT
+const cliOptions = entryName === 'portable-cli.mjs' ? parseCli(forwarded) : null
+const requestedEnvironment = cliOptions?.environment || process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
+const effectiveStateRoot = environmentStateRoot(stateRoot || root, requestedEnvironment, process.platform)
+const logDirectory = path.join(effectiveStateRoot, 'data', 'logs')
+const isStart = cliOptions?.command === 'start'
+let startupTrace = traceFromEnvironment(logDirectory)
+if (!startupTrace && isStart) {
+  const startupId = randomUUID().replaceAll('-', '')
+  const startedAt = Date.now()
+  process.env.DSH_PORTABLE_STARTUP_ID = startupId
+  process.env.DSH_PORTABLE_STARTUP_STARTED_AT = String(startedAt)
+  startupTrace = beginStartupTrace(logDirectory, { startupId, startedAt, phase: 'runtime-entry-begin' })
+} else {
+  appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-entry-begin')
+}
 const preparationStarted = performance.now()
 const prepared = await ensureRuntimeCapsule(root)
 const preparationElapsed = performance.now() - preparationStarted
-const stateRoot = process.env.DSH_PORTABLE_STATE_ROOT
-const logDirectory = stateRoot
-  ? path.join(path.resolve(stateRoot), 'data', 'logs')
-  : path.join(root, 'data', 'logs')
+appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-capsule-ready', {
+  mode: prepared.mode,
+  elapsedMsRuntime: Math.round(preparationElapsed),
+})
 try {
   await mkdir(logDirectory, { recursive: true })
   await appendFile(

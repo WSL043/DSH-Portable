@@ -84,7 +84,7 @@ NPM_CLI="$NODE_FOLDER/lib/node_modules/npm/bin/npm-cli.js"
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
 cp -R "$PROJECT_ROOT/app/vendor" "$STAGE/app/vendor"
-for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs repair-core.mjs data-transfer.mjs runtime-capsule.mjs; do
+for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs repair-core.mjs data-transfer.mjs runtime-capsule.mjs startup-trace.mjs; do
   cp "$PROJECT_ROOT/launcher/$file" "$STAGE/launcher/$file"
 done
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"

@@ -24,6 +24,10 @@ compatibility change and restores the previous version after a failed launch.
 The Windows and Linux trays and the macOS application menu can check manually.
 Automatic checks are off by default. Updates never interrupt a running task.
 
+For a slow or failed launch, export the redacted support report from Settings >
+General > Portable. It includes complete phase traces for the latest two launches;
+share that report instead of raw logs that may contain login tokens.
+
 On Windows, double-click dsh.exe or open DSH Terminal from the tray's More menu.
 On macOS and Linux, open DSH Terminal from the application menu or tray. Paste
 the official commands published by plugins without editing them:
