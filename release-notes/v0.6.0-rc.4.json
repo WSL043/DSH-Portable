@@ -1,0 +1,19 @@
+{
+  "version": "0.6.0-rc.4",
+  "zh": {
+    "summary": "缩短更新时工作台不可用的时间，并在替换内核前验证现有插件环境。",
+    "highlights": [
+      "下载和完整性校验期间保持当前工作台运行，只在准备应用更新时短暂停止。",
+      "新内核会先组合现有 Profile 与插件；发现不兼容时保持当前版本不变并重新打开工作台。",
+      "更新界面区分下载、暂停、插件兼容性检查、安装和启动验证，脱敏支持报告保留失败详情。"
+    ]
+  },
+  "en": {
+    "summary": "Reduces update downtime and validates existing plugin environments before replacing the core.",
+    "highlights": [
+      "The current workspace remains running during download and integrity verification, pausing only when the update is ready to apply.",
+      "The new core composes existing profiles and plugins first; an incompatibility leaves the installed version unchanged and reopens the workspace.",
+      "Update progress now distinguishes download, pause, plugin compatibility, installation, and startup validation while the redacted support report retains failure details."
+    ]
+  }
+}

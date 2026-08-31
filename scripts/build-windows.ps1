@@ -66,7 +66,7 @@ function Copy-PortableSources([string]$Target) {
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
     Copy-Item -Recurse (Join-Path $ProjectRoot 'app\vendor') (Join-Path $Target 'app\vendor')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'runtime-entry.mjs', 'startup-trace.mjs')) {
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'runtime-entry.mjs', 'startup-trace.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.zh-CN.txt') (Join-Path $Target 'DATA-MIGRATION.zh-CN.txt')
@@ -256,7 +256,7 @@ try {
         webView2Version = $Lock.webview2.version
         webView2Sha256 = $Lock.webview2.sha256
         updaterSchema = 1
-        shellSchema = 24
+        shellSchema = 25
         shellFingerprint = $ShellFingerprint
     }
     [System.IO.File]::WriteAllText(
@@ -353,7 +353,7 @@ try {
             releaseChannel = $ReleaseChannel
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 24
+            requiredShellSchema = 25
             requiredShellFingerprint = $ShellFingerprint
             targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{
@@ -380,7 +380,7 @@ try {
             releaseChannel = $ReleaseChannel
             platform = 'windows-x64'
             minimumUpdaterSchema = 1
-            requiredShellSchema = 24
+            requiredShellSchema = 25
             requiredShellFingerprint = $ShellFingerprint
             targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{

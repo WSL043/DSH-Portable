@@ -581,6 +581,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                     + " \(percent)%  ·  \(self.formatBytes(received)) / \(self.formatBytes(total))"
             } else if phase == "verifying" {
                 self.statusLabel.stringValue = L("正在验证 DSH-Portable 更新…", "Verifying the DSH-Portable update…")
+            } else if phase == "stopping-current" {
+                self.statusLabel.stringValue = L("下载已完成，正在暂停工作台以安全更新…", "Download complete. Pausing the workspace for a safe update…")
+            } else if phase == "preflighting" {
+                self.statusLabel.stringValue = L("正在检查现有插件与新内核是否兼容…", "Checking existing plugins against the new core…")
             } else if phase == "installing" {
                 self.statusLabel.stringValue = L("正在安装 DSH-Portable 更新…", "Installing the DSH-Portable update…")
             } else if phase == "complete" {

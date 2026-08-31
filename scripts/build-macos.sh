@@ -87,6 +87,7 @@ cp "$PROJECT_ROOT/launcher/repair-core.mjs" "$STAGE/launcher/repair-core.mjs"
 cp "$PROJECT_ROOT/launcher/diagnostic-policy.mjs" "$STAGE/launcher/diagnostic-policy.mjs"
 cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs"
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
+cp "$PROJECT_ROOT/launcher/update-preflight.mjs" "$STAGE/launcher/update-preflight.mjs"
 cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
 cp "$PROJECT_ROOT/launcher/data-transfer.mjs" "$STAGE/launcher/data-transfer.mjs"
 cp "$PROJECT_ROOT/launcher/runtime-capsule.mjs" "$STAGE/launcher/runtime-capsule.mjs"
@@ -180,7 +181,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeSha256": "$NODE_SHA256",
   "runtimeLayout": "$(if [[ -n "$PREVIEW_APP_SOURCE" ]]; then printf official-source-pack; else printf npm-lock; fi)",
   "updaterSchema": 1,
-  "shellSchema": 19,
+  "shellSchema": 20,
   "shellFingerprint": "$SHELL_FINGERPRINT"
 }
 EOF
@@ -241,7 +242,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 19,
+  "requiredShellSchema": 20,
   "requiredShellFingerprint": "$SHELL_FINGERPRINT",
   "component": {
     "kind": "dsh-app",
@@ -264,7 +265,7 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "macos-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 19,
+  "requiredShellSchema": 20,
   "requiredShellFingerprint": "$SHELL_FINGERPRINT",
   "component": {
     "kind": "dsh-app",

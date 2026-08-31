@@ -26,8 +26,8 @@ using Microsoft.Web.WebView2.WinForms;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.0.3")]
-[assembly: AssemblyFileVersion("0.6.0.3")]
+[assembly: AssemblyVersion("0.6.0.4")]
+[assembly: AssemblyFileVersion("0.6.0.4")]
 
 namespace DshPortable
 {
@@ -4027,10 +4027,13 @@ namespace DshPortable
             {
                 activityRing.Indeterminate = true;
                 if (phase == "verifying") statusLabel.Text = L("正在验证 DSH-Portable 更新…", "Verifying the DSH-Portable update…");
+                else if (phase == "stopping-current") statusLabel.Text = L("下载已完成，正在暂停工作台以安全更新…", "Download complete. Pausing the workspace for a safe update…");
+                else if (phase == "preflighting") statusLabel.Text = L("正在检查现有插件与新内核是否兼容…", "Checking existing plugins against the new core…");
                 else if (phase == "installing") statusLabel.Text = L("正在安装 DSH-Portable 更新…", "Installing the DSH-Portable update…");
                 else if (phase == "validating") statusLabel.Text = L("正在验证新版本能否启动…", "Checking that the new version can start…");
                 else if (phase == "rolling-back") statusLabel.Text = L("新版本未通过验证，正在恢复原版本…", "The new version did not pass validation; restoring the previous version…");
                 else if (phase == "rollback-complete" || phase == "restarting-previous") statusLabel.Text = L("已恢复原版本，正在重新启动…", "The previous version was restored and is restarting…");
+                else if (phase == "restarting-current") statusLabel.Text = L("当前版本未更改，正在重新打开工作台…", "The installed version was unchanged. Reopening the workspace…");
                 else if (phase == "recovered") statusLabel.Text = L("原版本已恢复，正在重新打开工作台…", "The previous version is ready; reopening the workspace…");
                 else if (phase == "complete") statusLabel.Text = L("正在重新打开工作台…", "Reopening the workspace…");
                 progressDetail.Text = phase == "complete" ? "100%" : L("会话、设置、插件和工作区保持不变", "Sessions, settings, plugins, and workspace stay in place");
@@ -4086,6 +4089,9 @@ namespace DshPortable
             if (String.Equals(code, "UPDATE_RECOVERY_FAILED", StringComparison.Ordinal)) return L(
                 "更新失败，原版本也未能自动重启。请重新打开 DSH-Portable 并导出支持报告。",
                 "The update failed and the previous version could not restart automatically. Reopen DSH-Portable and export a support report.");
+            if (String.Equals(code, "DSH_PROFILE_COMPATIBILITY_FAILED", StringComparison.Ordinal)) return L(
+                "新内核与现有插件 Profile 不兼容，当前版本未被替换并已重新打开。详细信息已写入支持日志。",
+                "The new core is incompatible with an existing plugin profile. The installed version was not replaced and has reopened. Details were saved to the support log.");
             return L(
                 "更新未能完成。安装仍可恢复；请导出支持报告以便排查。",
                 "The update could not be completed. The installation remains recoverable; export a support report for details.");

@@ -86,7 +86,7 @@ SHELL_FINGERPRINT="$("$NODE_EXE" "$PROJECT_ROOT/scripts/shell-fingerprint.mjs" l
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
 cp -R "$PROJECT_ROOT/app/vendor" "$STAGE/app/vendor"
-for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs repair-core.mjs diagnostic-policy.mjs data-transfer.mjs runtime-capsule.mjs startup-trace.mjs; do
+for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs update-preflight.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs repair-core.mjs diagnostic-policy.mjs data-transfer.mjs runtime-capsule.mjs startup-trace.mjs; do
   cp "$PROJECT_ROOT/launcher/$file" "$STAGE/launcher/$file"
 done
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"
@@ -178,7 +178,7 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "nodeSha256": "$NODE_SHA256",
   "runtimeLayout": "$(if [[ -n "$PREVIEW_APP_SOURCE" ]]; then printf official-source-pack; else printf npm-lock; fi)",
   "updaterSchema": 1,
-  "shellSchema": 11,
+  "shellSchema": 12,
   "shellFingerprint": "$SHELL_FINGERPRINT"
 }
 EOF
@@ -217,7 +217,7 @@ cat > "$UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "linux-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 11,
+  "requiredShellSchema": 12,
   "requiredShellFingerprint": "$SHELL_FINGERPRINT",
   "component": {
     "kind": "dsh-app",
@@ -240,7 +240,7 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
   "releaseChannel": "$RELEASE_CHANNEL",
   "platform": "linux-$ARCH",
   "minimumUpdaterSchema": 1,
-  "requiredShellSchema": 11,
+  "requiredShellSchema": 12,
   "requiredShellFingerprint": "$SHELL_FINGERPRINT",
   "component": {
     "kind": "dsh-app",

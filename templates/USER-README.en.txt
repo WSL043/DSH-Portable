@@ -19,7 +19,9 @@ folder; move both together.
 The launcher asks before installing an update. A normal update downloads only
 the changed DSH application component and keeps sessions, settings, credentials,
 and workspace in place. It requests the complete package only across a runtime
-compatibility change and restores the previous version after a failed launch.
+compatibility change. Before replacing the core, it composes existing profiles
+and plugins; an incompatible update leaves the installed version unchanged. A
+failed launch still restores the previous version.
 
 The Windows and Linux trays and the macOS application menu can check manually.
 Automatic checks are off by default. Updates never interrupt a running task.

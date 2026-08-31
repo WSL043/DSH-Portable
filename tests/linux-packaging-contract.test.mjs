@@ -29,8 +29,9 @@ test('Linux uses architecture-specific component update channels', () => {
 
 test('Linux requires a compatible native shell before installing the app component', async () => {
   const source = await read('scripts/build-linux.sh')
-  assert.match(source, /"shellSchema": 11/)
-  assert.match(source, /"requiredShellSchema": 11/)
+  assert.match(source, /"shellSchema": 12/)
+  assert.match(source, /"requiredShellSchema": 12/)
+  assert.match(source, /update-preflight\.mjs/)
   assert.match(source, /"shellFingerprint": "\$SHELL_FINGERPRINT"/)
   assert.match(source, /"requiredShellFingerprint": "\$SHELL_FINGERPRINT"/)
 })

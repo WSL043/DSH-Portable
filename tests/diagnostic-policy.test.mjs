@@ -6,6 +6,7 @@ import test from 'node:test'
 
 import {
   classifyPortableError,
+  portablePublicError,
   recordPortableDiagnostic,
   redactDiagnosticText,
 } from '../launcher/diagnostic-policy.mjs'
@@ -29,6 +30,9 @@ test('rolled-back update failures have a stable machine-readable code', () => {
   assert.equal(classifyPortableError(new Error('The previous version was restored but could not restart: boot failed')), 'UPDATE_RECOVERY_FAILED')
   assert.equal(classifyPortableError(new Error('Another portable launcher is already starting or stopping DSH.')), 'LAUNCH_IN_PROGRESS')
   assert.equal(classifyPortableError(new Error('Close the other Portable environment before changing shared components: research.')), 'SHARED_COMPONENTS_BUSY')
+  const incompatible = Object.assign(new Error('profile web failed'), { code: 'DSH_PROFILE_PREFLIGHT_FAILED' })
+  assert.equal(classifyPortableError(incompatible), 'DSH_PROFILE_COMPATIBILITY_FAILED')
+  assert.match(portablePublicError(incompatible).message, /installed version was not changed/i)
 })
 
 test('full diagnostics are stored redacted and bounded outside the user-facing error', async (t) => {
