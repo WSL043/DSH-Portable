@@ -346,6 +346,7 @@ namespace DshPortable
         private const int WebViewGracefulShutdownMs = 1500;
         private const int WebViewResourceInUseHResult = unchecked((int)0x800700AA);
         private const int WebViewInitializationMaxAttempts = 4;
+        private const int WebViewUnresponsivePromptThreshold = 2;
 
         private static string L(string chinese, string english)
         {
@@ -420,6 +421,10 @@ namespace DshPortable
         private TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs> webViewBrowserExited;
         private int ownedWebViewBrowserProcessId;
         private bool testWebViewBusyInjected;
+        private bool testWebViewCrashInjected;
+        private bool webViewRecoveryRunning;
+        private bool webViewUnresponsivePromptVisible;
+        private int webViewUnresponsiveCount;
 
         internal LauncherWindow(string[] args, string selectedEnvironmentId, string selectedStateRoot, int environmentRestoreMessage, int environmentExitMessage)
         {
@@ -1915,6 +1920,9 @@ namespace DshPortable
         {
             RecordWebViewPhase("browser-exited:" + eventArgs.BrowserProcessExitKind);
             if (webViewBrowserExited != null) webViewBrowserExited.TrySetResult(eventArgs);
+            if (desktopReady && !shutdownRunning && !allowClose
+                && String.Equals(eventArgs.BrowserProcessExitKind.ToString(), "Failed", StringComparison.OrdinalIgnoreCase))
+                ScheduleWebViewRecovery(true, "browser-process-exited");
         }
 
         private async Task WaitForWebViewExitAsync(int timeoutMs)
@@ -2958,11 +2966,110 @@ namespace DshPortable
             string failure = eventArgs.ProcessFailedKind + "/" + eventArgs.Reason
                 + " exit=" + eventArgs.ExitCode
                 + (String.IsNullOrWhiteSpace(eventArgs.ProcessDescription) ? "" : " " + eventArgs.ProcessDescription);
-            RecordWebViewPhase("process-failed:" + failure);
+            if (desktopReady) WriteLauncherLog("webview", "process-failed:" + failure);
+            else RecordWebViewPhase("process-failed:" + failure);
             if (webViewProcessFailure != null) webViewProcessFailure.TrySetResult(failure);
+            if (!desktopReady || shutdownRunning || allowClose) return;
+
+            if (eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited)
+                ScheduleWebViewRecovery(false, "renderer-process-exited");
+            else if (eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
+                ScheduleWebViewRecovery(true, "browser-process-exited");
+            else if (eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessUnresponsive)
+                ScheduleWebViewUnresponsivePrompt(failure);
         }
 
-        private async Task NavigateWorkspaceAsync(string url, bool updated)
+        private void ScheduleWebViewRecovery(bool recreate, string reason)
+        {
+            if (!IsHandleCreated || IsDisposed || Disposing || shutdownRunning || allowClose) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action<bool, string>(ScheduleWebViewRecovery), recreate, reason); }
+                catch (InvalidOperationException) { }
+                return;
+            }
+            if (webViewRecoveryRunning) return;
+            Task ignored = RecoverWebViewAsync(recreate, reason);
+        }
+
+        private void ScheduleWebViewUnresponsivePrompt(string failure)
+        {
+            if (!IsHandleCreated || IsDisposed || Disposing || shutdownRunning || allowClose) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action<string>(ScheduleWebViewUnresponsivePrompt), failure); }
+                catch (InvalidOperationException) { }
+                return;
+            }
+            webViewUnresponsiveCount += 1;
+            WriteLauncherLog("webview-unresponsive", "observation="
+                + webViewUnresponsiveCount.ToString(CultureInfo.InvariantCulture) + " " + failure);
+            if (webViewUnresponsiveCount < WebViewUnresponsivePromptThreshold
+                || webViewUnresponsivePromptVisible
+                || webViewRecoveryRunning) return;
+
+            webViewUnresponsivePromptVisible = true;
+            try
+            {
+                DialogResult decision = MessageBox.Show(this,
+                    L(
+                        "工作台持续无响应。可以继续等待，或只重新加载界面；正在运行的 DeepSeek Harness 后端和会话不会重启。\r\n\r\n是否重新加载界面？",
+                        "The workspace remains unresponsive. You can keep waiting or reload only the interface; the running DeepSeek Harness backend and sessions will not restart.\r\n\r\nReload the interface?"),
+                    L("DeepSeek Harness 无响应", "DeepSeek Harness is not responding"),
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning,
+                    MessageBoxDefaultButton.Button2);
+                if (decision == DialogResult.Yes) ScheduleWebViewRecovery(false, "renderer-unresponsive");
+                else WriteLauncherLog("webview-unresponsive", "user-kept-waiting");
+            }
+            finally { webViewUnresponsivePromptVisible = false; }
+        }
+
+        private async Task RecoverWebViewAsync(bool recreate, string reason)
+        {
+            if (webViewRecoveryRunning || shutdownRunning || allowClose) return;
+            Uri target = applicationUri;
+            if (target == null || !IsTrustedLoopbackUrl(target.AbsoluteUri)) return;
+
+            webViewRecoveryRunning = true;
+            WriteLauncherLog("webview-recovery", "begin mode=" + (recreate ? "recreate" : "reload") + " reason=" + reason);
+            try
+            {
+                launchPanel.Visible = true;
+                launchPanel.BringToFront();
+                statusLabel.Text = L("正在恢复工作台界面…", "Recovering the workspace interface…");
+                progressDetail.Visible = false;
+                activityRing.Indeterminate = true;
+                activityRing.Visible = true;
+
+                if (recreate)
+                {
+                    Task browserExited = webViewBrowserExited == null
+                        ? (Task)Task.FromResult<object>(null)
+                        : webViewBrowserExited.Task;
+                    await Task.WhenAny(browserExited, Task.Delay(5000));
+                    ResetWebViewAfterInitializationFailure();
+                    await InitializeWebViewAsync();
+                    await NavigateWorkspaceAsync(target.AbsoluteUri, false, false);
+                }
+                else await NavigateWorkspaceAsync(target.AbsoluteUri, false, true);
+
+                webViewUnresponsiveCount = 0;
+                WriteLauncherLog("webview-recovery", "complete mode=" + (recreate ? "recreate" : "reload") + " reason=" + reason);
+            }
+            catch (Exception error)
+            {
+                string message = error.GetBaseException().Message.Replace("\r", " ").Replace("\n", " | ");
+                WriteLauncherLog("webview-recovery", "failed mode=" + (recreate ? "recreate" : "reload")
+                    + " reason=" + reason + " error=" + error.GetBaseException().GetType().Name + ":" + message);
+                ShowFailure(L(
+                    "工作台界面恢复失败。DeepSeek Harness 后端仍保持运行；请导出支持报告后重新打开应用。\r\n",
+                    "The workspace interface could not recover. The DeepSeek Harness backend remains running; export a support report, then reopen the app.\r\n") + message);
+            }
+            finally { webViewRecoveryRunning = false; }
+        }
+
+        private async Task NavigateWorkspaceAsync(string url, bool updated, bool reload = false)
         {
             TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs> navigation =
                 new TaskCompletionSource<CoreWebView2NavigationCompletedEventArgs>();
@@ -2999,8 +3106,16 @@ namespace DshPortable
                 if (launchPanel.Visible) launchPanel.BringToFront();
             }
             else launchPanel.BringToFront();
-            RecordWebViewPhase("navigation-start:" + SafeWorkspaceUrl(url));
-            webView.CoreWebView2.Navigate(url);
+            if (reload)
+            {
+                RecordWebViewPhase("navigation-reload:" + SafeWorkspaceUrl(url));
+                webView.CoreWebView2.Reload();
+            }
+            else
+            {
+                RecordWebViewPhase("navigation-start:" + SafeWorkspaceUrl(url));
+                webView.CoreWebView2.Navigate(url);
+            }
             Task timeout = Task.Delay(WorkspaceNavigationTimeoutMs);
             Task winner = await Task.WhenAny(workspaceUsable.Task, navigation.Task, webViewProcessFailure.Task, timeout);
             if (winner == navigation.Task)
@@ -3065,6 +3180,11 @@ namespace DshPortable
             catch (DllNotFoundException) { }
             catch (EntryPointNotFoundException) { }
             launchPanel.Visible = false;
+            if (webViewRecoveryRunning)
+            {
+                WriteLauncherLog("webview-recovery", "surface-ready");
+                return;
+            }
             WriteLauncherLog("startup", "dsh-first-paint-ready");
             AppendStartupTrace("native-host", "interactive-ready", null);
             bool updateHealthReady = WriteUpdateHealthMarker();
@@ -3080,6 +3200,31 @@ namespace DshPortable
                 ShowInTaskbar = true;
                 if (Opacity < 1) Opacity = 1;
             }
+            InjectTestWebViewCrashAfterReady();
+        }
+
+        private void InjectTestWebViewCrashAfterReady()
+        {
+            if (testWebViewCrashInjected
+                || (!hiddenForAutomation
+                    && !String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
+                || !String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_CRASH_AFTER_READY"), "1", StringComparison.Ordinal)
+                || webView == null
+                || webView.CoreWebView2 == null) return;
+            testWebViewCrashInjected = true;
+            BeginInvoke(new Action(async delegate
+            {
+                await Task.Delay(500);
+                try
+                {
+                    WriteLauncherLog("webview-test", "renderer-crash-requested");
+                    await webView.CoreWebView2.CallDevToolsProtocolMethodAsync("Page.crash", "{}");
+                }
+                catch (Exception error)
+                {
+                    WriteLauncherLog("webview-test", "renderer-crash-call-ended " + error.GetBaseException().GetType().Name);
+                }
+            }));
         }
 
         private bool WriteUpdateHealthMarker()

@@ -50,6 +50,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     private var automaticUpdateMenuItem: NSMenuItem!
     private var productUpdateMenuItem: NSMenuItem!
     private var engineUpdateMenuItem: NSMenuItem!
+    private var webContentRecoveryAttempts = 0
+    private var webContentRecoveryPending = false
+    private var webContentRecoveryFailureShown = false
 
     private var installedMode: Bool {
         Bundle.main.bundleIdentifier == "io.github.wsl043.dsh-portable.installed"
@@ -82,6 +85,38 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private var launcherSettingsURL: URL {
         productDataRoot.appendingPathComponent("launcher-settings.json")
+    }
+
+    private var launcherLogURL: URL {
+        productDataRoot.appendingPathComponent("logs/launcher.log")
+    }
+
+    private func writeLauncherLog(_ category: String, _ message: String) {
+        let sanitized = message.replacingOccurrences(of: "\r", with: " ")
+            .replacingOccurrences(of: "\n", with: " | ")
+        let line = "\(ISO8601DateFormatter().string(from: Date())) [\(category)] \(sanitized)\n"
+        guard let data = line.data(using: .utf8) else { return }
+        do {
+            let logs = launcherLogURL.deletingLastPathComponent()
+            try FileManager.default.createDirectory(at: logs, withIntermediateDirectories: true)
+            if let size = try? launcherLogURL.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+               size > 2 * 1024 * 1024 {
+                let previous = logs.appendingPathComponent("launcher.log.previous")
+                try? FileManager.default.removeItem(at: previous)
+                try FileManager.default.moveItem(at: launcherLogURL, to: previous)
+            }
+            if !FileManager.default.fileExists(atPath: launcherLogURL.path) {
+                FileManager.default.createFile(atPath: launcherLogURL.path, contents: nil)
+            }
+            let handle = try FileHandle(forWritingTo: launcherLogURL)
+            defer { try? handle.close() }
+            try handle.seekToEnd()
+            try handle.write(contentsOf: data)
+        } catch {
+            if let diagnostic = ("DSH-Portable launcher log failed: \(error.localizedDescription)\n").data(using: .utf8) {
+                FileHandle.standardError.write(diagnostic)
+            }
+        }
     }
 
     private let nativeBridgeScript = """
@@ -908,6 +943,40 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         }
         if target.scheme == "http" || target.scheme == "https" { NSWorkspace.shared.open(target) }
         decisionHandler(.cancel)
+    }
+
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        writeLauncherLog("webview", "web-content-process-terminated")
+        guard backendStarted, !shuttingDown, !allowingClose else {
+            writeLauncherLog("webview-recovery", "ignored-during-shutdown")
+            return
+        }
+        guard !webContentRecoveryPending, webContentRecoveryAttempts < 1 else {
+            writeLauncherLog("webview-recovery", "failed reason=repeated-content-process-termination")
+            if !webContentRecoveryFailureShown {
+                webContentRecoveryFailureShown = true
+                let alert = NSAlert()
+                alert.messageText = L("工作台界面无法恢复", "The workspace interface could not recover")
+                alert.informativeText = L(
+                    "DeepSeek Harness 后端仍保持运行。请导出支持报告后重新打开应用。",
+                    "The DeepSeek Harness backend remains running. Export a support report, then reopen the app.")
+                alert.runModal()
+            }
+            return
+        }
+
+        webContentRecoveryPending = true
+        webContentRecoveryAttempts += 1
+        writeLauncherLog("webview-recovery", "begin mode=reload reason=content-process-terminated")
+        webView.reload()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard webContentRecoveryPending else { return }
+        webContentRecoveryPending = false
+        webContentRecoveryAttempts = 0
+        webContentRecoveryFailureShown = false
+        writeLauncherLog("webview-recovery", "complete")
     }
 
     func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration,

@@ -413,6 +413,38 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
   assert.match(build, /swiftc[\s\S]+DeepSeek-Herness\.swift/)
 })
 
+test('native desktop hosts diagnose renderer failures and recover without restarting DSH', async () => {
+  const [windowsHost, windowsSmoke, macHost] = await Promise.all([
+    read('launcher/windows/DSH-Portable.cs'),
+    read('scripts/smoke-windows-desktop-host.ps1'),
+    read('launcher/macos/DeepSeek-Herness.swift'),
+  ])
+
+  const windowsFailure = windowsHost.slice(
+    windowsHost.indexOf('private void OnWebViewProcessFailed'),
+    windowsHost.indexOf('private async Task NavigateWorkspaceAsync'),
+  )
+  assert.match(windowsFailure, /CoreWebView2ProcessFailedKind\.RenderProcessExited/)
+  assert.match(windowsFailure, /CoreWebView2ProcessFailedKind\.BrowserProcessExited/)
+  assert.match(windowsFailure, /CoreWebView2ProcessFailedKind\.RenderProcessUnresponsive/)
+  assert.match(windowsFailure, /desktopReady[^\n]+WriteLauncherLog\(["]webview["], ["]process-failed:/)
+  assert.match(windowsFailure, /RecoverWebViewAsync/)
+  assert.match(windowsFailure, /MessageBoxButtons\.YesNo/)
+  assert.match(windowsHost, /webview-recovery["], ["]begin/)
+  assert.match(windowsHost, /webview-recovery["], ["]complete/)
+  assert.match(windowsHost, /webViewRecoveryRunning/)
+  assert.match(windowsHost, /ResetWebViewAfterInitializationFailure\(\)[\s\S]+InitializeWebViewAsync\(\)/)
+  assert.match(windowsHost, /CoreWebView2\.Reload\(\)/)
+  assert.match(windowsSmoke, /DSH_PORTABLE_TEST_WEBVIEW2_CRASH_AFTER_READY/)
+  assert.match(windowsSmoke, /webview-recovery.+complete/)
+  assert.match(windowsSmoke, /renderer recovery restarted the DSH backend/i)
+
+  assert.match(macHost, /func webViewWebContentProcessDidTerminate\(_ webView: WKWebView\)/)
+  assert.match(macHost, /webContentRecoveryAttempts/)
+  assert.match(macHost, /webView\.reload\(\)/)
+  assert.match(macHost, /writeLauncherLog\(["]webview-recovery["], ["]complete["]\)/)
+})
+
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
   const [workflow, windowsSmoke, detachedUpdaterSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, parallelRootsSmoke, macSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),

@@ -151,6 +151,8 @@ try {
     $StartInfo.UseShellExecute = $false
     $StartInfo.EnvironmentVariables['DSH_PORTABLE_SKIP_UPDATE_CHECK'] = '1'
     $StartInfo.EnvironmentVariables['DSH_PORTABLE_STARTUP_HOLD_MS'] = '1200'
+    $StartInfo.EnvironmentVariables['DSH_PORTABLE_TEST_AUTOMATION'] = '1'
+    $StartInfo.EnvironmentVariables['DSH_PORTABLE_TEST_WEBVIEW2_CRASH_AFTER_READY'] = '1'
     $Process = [System.Diagnostics.Process]::Start($StartInfo)
 
     $StartupDeadline = [DateTime]::UtcNow.AddSeconds(20)
@@ -205,6 +207,24 @@ try {
     }
     if ($EmbeddedRenderers.Count -eq 0) { throw 'The native window did not initialize its embedded WebView2 renderer.' }
     $ColdStartClock.Stop()
+
+    $BackendPidBeforeRecovery = (Get-Content -Raw -LiteralPath $ProcessState | ConvertFrom-Json).pid
+    $RecoveryDeadline = [DateTime]::UtcNow.AddSeconds(30)
+    do {
+        Start-Sleep -Milliseconds 100
+        $Process.Refresh()
+        if ($Process.HasExited) { throw "Desktop host exited during renderer recovery: $($Process.ExitCode)" }
+        $RecoveryLog = Get-LauncherLogSinceStart
+    } while ($RecoveryLog -notmatch 'webview-recovery\] complete mode=reload reason=renderer-process-exited' -and [DateTime]::UtcNow -lt $RecoveryDeadline)
+    if ($RecoveryLog -notmatch 'webview-recovery\] complete mode=reload reason=renderer-process-exited') {
+        throw "The native desktop did not recover its crashed WebView2 renderer:`n$RecoveryLog"
+    }
+    $BackendPidAfterRecovery = (Get-Content -Raw -LiteralPath $ProcessState | ConvertFrom-Json).pid
+    if ($BackendPidAfterRecovery -ne $BackendPidBeforeRecovery) {
+        throw "WebView2 renderer recovery restarted the DSH backend ($BackendPidBeforeRecovery -> $BackendPidAfterRecovery)."
+    }
+    if ((Get-ProductStatus).Status -ne 'running') { throw 'WebView2 renderer recovery stopped the DSH backend.' }
+    $StartInfo.EnvironmentVariables.Remove('DSH_PORTABLE_TEST_WEBVIEW2_CRASH_AFTER_READY')
 
     # Resize through Win32 without desktop input. Closing to the tray must save
     # these bounds so a later native-host process can restore them.
