@@ -560,9 +560,14 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
 })
 
 test('Windows startup audit accepts log-backed loader evidence and persists failures', async () => {
-  const audit = await read('scripts/audit-windows-startup-transition.mjs')
+  const [audit, workflow] = await Promise.all([
+    read('scripts/audit-windows-startup-transition.mjs'),
+    read('.github/workflows/ci.yml'),
+  ])
   assert.match(audit, /const bootLogSample = samples\.find\(sample => sample\.log\.includes\('dsh-boot-surface-visible'\)\)/)
   assert.match(audit, /assert\.ok\(bootSample \|\| bootLogSample/)
+  assert.match(audit, /startupTimeoutSeconds/)
+  assert.match(workflow, /audit-windows-startup-transition\.mjs[^\r\n]+\$\{\{ matrix\.firstColdStartSeconds \}\}/)
   assert.ok(
     audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(bootSample || bootLogSample"),
     'startup samples must be uploaded even when the transition assertion fails',

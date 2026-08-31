@@ -317,7 +317,7 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           $StartupEvidence = Join-Path $env:RUNNER_TEMP "dsh-startup-transition-${{ matrix.label }}"
-          node scripts/audit-windows-startup-transition.mjs (Join-Path $Root 'DSH-Portable') $StartupEvidence
+          node scripts/audit-windows-startup-transition.mjs (Join-Path $Root 'DSH-Portable') $StartupEvidence ${{ matrix.firstColdStartSeconds }}
           if ($LASTEXITCODE -ne 0) { throw "Windows startup transition audit failed with exit code $LASTEXITCODE" }
           ./scripts/smoke-windows-detached-updater.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-desktop-move.ps1 `
