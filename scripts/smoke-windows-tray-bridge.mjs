@@ -666,14 +666,14 @@ try {
     const installedUi = await waitForValue(client, `(() => {
       const text = document.body?.innerText || ''
       const search = [...document.querySelectorAll('input')].some(item => ['Search plugins: notify, terminal, memory…', '搜索插件，比如：通知、终端、记忆…'].includes(item.placeholder || ''))
-      const defaultPlugins = ['dsh-chat-manager', 'dsh-image-viewer'].filter(name => text.includes(name))
+      const unexpectedDefaults = ['dsh-chat-manager', 'dsh-image-viewer'].filter(name => text.includes(name))
       const marketSelected = [...document.querySelectorAll('button')].some(item => {
         const label = (item.textContent || '').trim()
         return ['Plugin Market', '插件市场'].includes(label) && item.getAttribute('aria-selected') === 'true'
       })
-      return { search, defaultPlugins, marketSelected }
-    })()`, value => value?.search && value.defaultPlugins?.length === 2 && value.marketSelected === false, 'Installed sibling tab with both defaults', 60000)
-    assert.equal(installedUi.defaultPlugins.length, 2)
+      return { search, unexpectedDefaults, marketSelected }
+    })()`, value => value?.search && value.unexpectedDefaults?.length === 0 && value.marketSelected === false, 'Installed sibling tab without bundled defaults', 60000)
+    assert.deepEqual(installedUi.unexpectedDefaults, [])
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(installedScreenshotPath), { recursive: true })
     await writeFile(installedScreenshotPath, Buffer.from(screenshot.data, 'base64'))

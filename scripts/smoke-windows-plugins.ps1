@@ -38,8 +38,6 @@ $RegistryV2 = Join-Path $TestRoot 'plugin-v2.tgz'
 $RegistryChannel = Join-Path $TestRoot 'registry-channel.txt'
 $RegistryReady = Join-Path $TestRoot 'registry-ready.json'
 $ClsxArchive = Join-Path $TestRoot 'clsx.tgz'
-$DefaultPluginRegistryArchive = Join-Path $TestRoot 'default-plugin.tgz'
-$ImageViewerRegistryArchive = Join-Path $TestRoot 'image-viewer-plugin.tgz'
 $RegistryProcess = $null
 $PriorPath = $env:PATH
 $PriorStateRoot = $env:DSH_PORTABLE_STATE_ROOT
@@ -192,24 +190,7 @@ try {
     $ClsxManifest = Get-Content -Raw -LiteralPath (Join-Path $ClsxRoot 'package.json') | ConvertFrom-Json
     & tar.exe -czf $ClsxArchive -C (Split-Path -Parent $ClsxRoot) 'clsx'
     if ($LASTEXITCODE -ne 0) { throw 'could not create the clsx fixture archive' }
-    $Components = Get-Content -Raw -LiteralPath (Join-Path $Root 'licenses\COMPONENTS.json') | ConvertFrom-Json
     $RegistryArguments = @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version)
-    $DeclaredDefaults = @($Components.defaultPlugins)
-    if ($DeclaredDefaults.Count -gt 0) {
-        $DefaultPluginArchive = Join-Path $Root 'default-plugins\dsh-chat-manager.tgz'
-        $DefaultPlugin = $DeclaredDefaults | Where-Object { $_.package -eq 'dsh-chat-manager' } | Select-Object -First 1
-        if (-not $DefaultPlugin -or -not $DefaultPlugin.version -or -not (Test-Path -LiteralPath $DefaultPluginArchive -PathType Leaf)) {
-            throw 'finished product default session manager declaration and archive do not match'
-        }
-        Copy-Item -LiteralPath $DefaultPluginArchive -Destination $DefaultPluginRegistryArchive
-        $ImageViewer = $DeclaredDefaults | Where-Object { $_.package -eq 'dsh-image-viewer' } | Select-Object -First 1
-        $ImageViewerArchive = Join-Path $Root 'default-plugins\dsh-image-viewer.tgz'
-        if (-not $ImageViewer -or -not $ImageViewer.version -or -not (Test-Path -LiteralPath $ImageViewerArchive -PathType Leaf)) {
-            throw 'finished product default image viewer declaration and archive do not match'
-        }
-        Copy-Item -LiteralPath $ImageViewerArchive -Destination $ImageViewerRegistryArchive
-        $RegistryArguments += @($DefaultPluginRegistryArchive, [string]$DefaultPlugin.version, $ImageViewerRegistryArchive, [string]$ImageViewer.version)
-    }
     [System.IO.File]::WriteAllText($RegistryChannel, "1.0.0`n", [System.Text.UTF8Encoding]::new($false))
     $RegistryProcess = Start-Process -FilePath $Node -ArgumentList $RegistryArguments -PassThru -WindowStyle Hidden
     $ReadyDeadline = [DateTime]::UtcNow.AddSeconds(15)

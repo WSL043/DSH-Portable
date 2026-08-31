@@ -16,7 +16,6 @@ on:
         options:
           - all
           - official-dsh
-          - default-plugin
           - dsh-market
         default: all
       version:
@@ -58,10 +57,6 @@ jobs:
             '' "- signal: \`${SOURCE}\`" "- announced version: \`${VERSION:-not supplied}\`" \
             "- announced release: ${RELEASE_URL:-not supplied}" \
             '' 'Canonical registries and immutable releases are verified below; the signal itself is never trusted as package evidence.' >> "$GITHUB_STEP_SUMMARY"
-      - id: default_plugin
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/update-default-plugin.mjs
       - id: upstream
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -112,25 +107,23 @@ jobs:
             "- official master is now: \`${COMMIT}\`" \
             '' 'No candidate issue was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
-        if: steps.upstream.outputs.changed == 'true' || steps.default_plugin.outputs.changed == 'true'
+        if: steps.upstream.outputs.changed == 'true'
         run: |
           npm ci --prefix app --ignore-scripts
           npm test
       - name: Open or refresh the short-lived verified dependency pull request
-        if: steps.upstream.outputs.changed == 'true' || steps.default_plugin.outputs.changed == 'true'
+        if: steps.upstream.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DSH_VERSION: ${{ steps.upstream.outputs.version }}
           DSH_CHANGED: ${{ steps.upstream.outputs.changed }}
-          DEFAULT_PLUGIN_VERSIONS: ${{ steps.default_plugin.outputs.versions }}
-          DEFAULT_PLUGIN_CHANGED: ${{ steps.default_plugin.outputs.changed }}
         run: |
           set -euo pipefail
           BRANCH=automation/verified-dependencies
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$BRANCH"
-          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json launcher/default-plugins.mjs upstream.lock.json upstream.preview.lock.json
+          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json
           git commit -m "chore: verify current DSH dependencies"
           git push --force origin "$BRANCH"
           BODY=$(mktemp)
@@ -138,7 +131,6 @@ jobs:
           Keeps the packaged dependency closure current without coupling it to a DSH-Portable feature release.
 
           - DeepSeek Harness: ${DSH_VERSION} (changed: ${DSH_CHANGED})
-          - Portable defaults: ${DEFAULT_PLUGIN_VERSIONS} (changed: ${DEFAULT_PLUGIN_CHANGED})
 
           This pull request is merged only after the full Windows, macOS, and Linux product gate succeeds. Its branch is deleted after merge.
           EOF

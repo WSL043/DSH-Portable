@@ -131,15 +131,6 @@ try {
     windowsHide: true,
     maxBuffer: 8 * 1024 * 1024,
   })
-  if (configuredDefaultNames.includes('dsh-chat-manager')) {
-    assert.match(dumped.stdout, /id:\s*ui-workspace\s+[\s\S]{0,160}?disabled:\s*true/, 'official ui-workspace row is not disabled')
-    assert.match(dumped.stdout, /id:\s*ui-workspace-session-delete\s+[\s\S]{0,160}?name:\s*dsh-chat-manager/, 'chat manager row is not active')
-    const pluginPatch = await readFile(path.join(profileRoot, 'node_modules', 'dsh-chat-manager', 'cordis.patch.yml'), 'utf8')
-    assert.match(pluginPatch, /id:\s*ui-workspace-session-delete/)
-    assert.match(pluginPatch, /id:\s*ui-workspace[\s\S]+disabled:\s*true/)
-  }
-  if (configuredDefaultNames.includes('dsh-image-viewer')) assert.match(dumped.stdout, /name:\s*dsh-image-viewer/, 'image viewer is not active')
-
   const catalog = await getJson(host.url, '/dsh-market/registry', 3)
   const plugins = catalog.registry?.plugins
   assert.ok(Array.isArray(plugins) && plugins.length >= 1_000, 'the normalized live catalog is unexpectedly small')

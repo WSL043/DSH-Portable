@@ -112,7 +112,7 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
-Fresh install packages include the removable [DSH Chat Manager](https://github.com/WSL043/dsh-chat-manager) and [DSH Image Viewer](https://github.com/WSL043/dsh-image-viewer) offline. The former adds archive management and second-confirmation permanent session deletion; the latter provides native image viewing. Both follow the standard plugin update path afterward, and a normal upgrade does not reinstall a default plugin an existing user removed.
+Fresh installs do not install community plugins by default; add them as needed through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin without automatically uninstalling, reinstalling, or rewriting them.
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
 

@@ -45,20 +45,7 @@ assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge li
 assert.equal(desktopBridgeSource?.license, 'Apache-2.0', 'desktop bridge license')
 
 const defaultPlugins = upstream.defaultPlugins ?? {}
-assert.deepEqual(Object.keys(defaultPlugins).sort(), ['imageViewer', 'sessionDelete'])
-for (const [key, plugin] of Object.entries(defaultPlugins)) {
-  assert.match(plugin?.package ?? '', /^dsh-[a-z0-9-]+$/, `${key} package`)
-  assert.match(plugin?.repository ?? '', /^WSL043\/[A-Za-z0-9._-]+$/, `${key} repository`)
-  assert.ok(['stable', 'prerelease'].includes(plugin?.releaseChannel), `${key} release channel`)
-  assert.match(plugin?.version ?? '', /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, `${key} version`)
-  if (plugin.releaseChannel === 'stable') assert.match(plugin.version, /^\d+\.\d+\.\d+$/, `${key} stable version`)
-  assert.equal(plugin?.url, `https://registry.npmjs.org/${plugin.package}/-/${plugin.package}-${plugin.version}.tgz`, `${key} npm archive`)
-  assert.match(plugin?.sha256 ?? '', /^[0-9a-f]{64}$/, `${key} SHA-256`)
-  assert.match(plugin?.integrity ?? '', /^sha512-/, `${key} npm integrity`)
-  assert.equal(plugin?.license, 'MIT', `${key} license`)
-  assert.match(plugin?.reviewedCommit ?? '', /^[0-9a-f]{40}$/, `${key} reviewed release commit`)
-  assert.equal(plugin?.filename, `${plugin.package}.tgz`, `${key} bundled filename`)
-}
+assert.deepEqual(defaultPlugins, {}, 'Portable must not choose community plugins for new profiles')
 
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
