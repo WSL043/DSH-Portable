@@ -3888,7 +3888,13 @@ namespace DshPortable
 
         private void HandleStartupProgress(string jsonLine)
         {
-            if (InvokeRequired) { BeginInvoke(new Action<string>(HandleStartupProgress), jsonLine); return; }
+            if (IsDisposed || Disposing) return;
+            if (InvokeRequired)
+            {
+                try { BeginInvoke(new Action<string>(HandleStartupProgress), jsonLine); }
+                catch (InvalidOperationException) { }
+                return;
+            }
             string phase = JsonString(jsonLine, "phase");
             if (phase == "runtime-preparing")
                 statusLabel.Text = L("正在准备便携运行环境…", "Preparing the portable runtime…");
