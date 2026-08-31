@@ -432,37 +432,30 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
 })
 
-test('all bundled defaults are accumulated by the unified dependency intake', async () => {
-  const [workflow, updater, ci, publish] = await Promise.all([
+test('community plugins remain market-discovered rather than product defaults', async () => {
+  const [workflow, ci, publish, chinese, english] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
-    read('scripts/update-default-plugin.mjs'),
     read('.github/workflows/ci.yml'),
     read('.github/workflows/publish.yml'),
+    read('README.md'),
+    read('README.en.md'),
   ])
 
   assert.match(workflow, /schedule:/)
   assert.match(workflow, /repository_dispatch:/)
   assert.match(workflow, /workflow_dispatch:/)
-  assert.match(workflow, /node scripts\/update-default-plugin\.mjs/)
   assert.match(workflow, /npm test/)
   assert.match(workflow, /automation\/verified-dependencies/)
   assert.match(workflow, /gh pr (?:create|edit)/)
   assert.match(workflow, /timeout-minutes:\s*\d+/)
-  assert.match(updater, /registry\.npmjs\.org\/\$\{current\.package\}/)
-  assert.match(updater, /current\.repository/)
-  assert.match(updater, /current\.releaseChannel/)
-  assert.match(updater, /Object\.entries\(lock\.defaultPlugins/)
-  assert.match(updater, /repos\/\$\{current\.repository\}\/releases\/tags/)
-  assert.match(updater, /assets[\s\S]+digest/)
-  assert.match(updater, /createHash\(['"]sha256['"]\)/)
-  assert.match(updater, /upstream\.lock\.json/)
-  assert.match(updater, /upstream\.preview\.lock\.json/)
-  assert.match(updater, /path\.join\(root, ['"]launcher['"], ['"]default-plugins\.mjs['"]\)/)
-  assert.match(updater, /GITHUB_OUTPUT/)
-  assert.match(updater, /--check/)
-  assert.match(ci, /node scripts\/update-default-plugin\.mjs --check/)
-  assert.match(publish, /node scripts\/update-default-plugin\.mjs --check/)
-  assert.match(workflow, /launcher\/default-plugins\.mjs[\s\S]*upstream\.preview\.lock\.json/)
+  for (const source of [workflow, ci, publish]) {
+    assert.doesNotMatch(source, /update-default-plugin\.mjs|source:\s*default-plugin/)
+  }
+  assert.equal(await exists('scripts/update-default-plugin.mjs'), false)
+  assert.match(chinese, /全新安装不会默认安装社区插件/)
+  assert.match(chinese, /插件市场/)
+  assert.match(english, /Fresh installs do not install community plugins by default/i)
+  assert.match(english, /plugin market/i)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
@@ -627,7 +620,7 @@ test('plugin management is a generic finished-product capability and release gat
   assert.match(smoke, /\$ExitCode\s*=\s*\$LASTEXITCODE/)
   assert.match(smoke, /\$null\s+-ne\s+\$ProcessExitCode/)
   assert.match(smoke, /Product-Status/)
-  assert.match(smoke, /DeclaredDefaults\.Count -gt 0/)
+  assert.doesNotMatch(smoke, /dsh-chat-manager|dsh-image-viewer|DeclaredDefaults/)
   assert.match(smoke, /RegistryArguments/)
   assert.match(smoke, /\[System\.IO\.Directory\]::Move\(\$Root,\s*\$MovedRoot\)/)
   assert.doesNotMatch(smoke, /Move-Item\s+-LiteralPath\s+\$Root/)
@@ -655,26 +648,18 @@ test('macOS and Linux finished products verify official bare dsh syntax in an is
   assert.match(english, /macOS[\s\S]+Linux[\s\S]+DSH Terminal[\s\S]+dsh plugin/i)
 })
 
-test('removable offline defaults are installed only for a newly created web profile', async () => {
-  const [lock, windows, macos, linux, cli, core] = await Promise.all([
+test('fresh products bundle no default plugins and upgrades preserve user profiles', async () => {
+  const [lock, previewLock, windows, macos, linux, cli, core] = await Promise.all([
     read('upstream.lock.json').then(JSON.parse),
+    read('upstream.preview.lock.json').then(JSON.parse),
     read('scripts/build-windows.ps1'),
     read('scripts/build-macos.sh'),
     read('scripts/build-linux.sh'),
     read('launcher/portable-cli.mjs'),
     read('launcher/default-plugins.mjs'),
   ])
-  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['imageViewer', 'sessionDelete'])
-  for (const plugin of Object.values(lock.defaultPlugins)) {
-    assert.match(plugin.package, /^dsh-[a-z0-9-]+$/)
-    assert.match(plugin.version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/)
-    assert.equal(plugin.url, `https://registry.npmjs.org/${plugin.package}/-/${plugin.package}-${plugin.version}.tgz`)
-    assert.match(plugin.sha256, /^[0-9a-f]{64}$/)
-    assert.match(plugin.integrity, /^sha512-/)
-    assert.equal(plugin.license, 'MIT')
-    assert.match(plugin.reviewedCommit, /^[0-9a-f]{40}$/)
-    assert.equal(plugin.filename, `${plugin.package}.tgz`)
-  }
+  assert.deepEqual(lock.defaultPlugins, {})
+  assert.deepEqual(previewLock.defaultPlugins, {})
   for (const build of [windows, macos, linux]) {
     assert.match(build, /default-plugins/)
     assert.match(build, /DefaultPlugins|list-default-plugins/)
@@ -689,9 +674,10 @@ test('removable offline defaults are installed only for a newly created web prof
     assert.match(build, /runtime-capsule\.mjs/)
   }
   assert.match(cli, /seedDefaultPlugins/)
+  assert.match(core, /DEFAULT_PLUGINS\s*=\s*Object\.freeze\(\[\]\)/)
   assert.match(core, /profile-exists/)
-  assert.match(core, /\.dsh-portable-archives/)
-  assert.match(core, /file:\$\{paths\.relative/)
+  assert.match(core, /no-compatible-defaults/)
+  assert.doesNotMatch(core, /dsh-chat-manager|dsh-image-viewer|\.dsh-portable-archives/)
   for (const build of [windows, macos, linux]) {
     const updateSection = build.slice(build.indexOf('UPDATE_COMPONENT_ROOT'))
     assert.doesNotMatch(updateSection, /(?:cp|Copy-Item)[^\n]+default-plugins/)

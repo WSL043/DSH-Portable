@@ -3,9 +3,9 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import http from 'node:http'
 import path from 'node:path'
 
-const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1', defaultPluginArchive, defaultPluginVersion, imageViewerArchive, imageViewerVersion] = process.argv.slice(2)
+const [v1Archive, v2Archive, channelFile, readyFile, clsxArchive, clsxVersion = '2.1.1'] = process.argv.slice(2)
 if (!v1Archive || !v2Archive || !channelFile || !readyFile || !clsxArchive) {
-  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> [clsx-version] [default-plugin.tgz] [default-plugin-version] [image-viewer.tgz] [image-viewer-version]')
+  throw new Error('usage: dsh-plugin-registry.mjs <v1.tgz> <v2.tgz> <channel> <ready.json> <clsx.tgz> [clsx-version]')
 }
 
 const packageName = 'dsh-portable-smoke-plugin'
@@ -14,11 +14,6 @@ const releases = new Map([
   ['1.0.1', archiveRelease('1.0.1', v2Archive)],
 ])
 const clsxRelease = archiveRelease(clsxVersion, clsxArchive)
-const defaultReleases = new Map()
-if (defaultPluginArchive && defaultPluginVersion) {
-  defaultReleases.set('dsh-chat-manager', archiveRelease(defaultPluginVersion, defaultPluginArchive))
-}
-if (imageViewerArchive && imageViewerVersion) defaultReleases.set('dsh-image-viewer', archiveRelease(imageViewerVersion, imageViewerArchive))
 
 function archiveRelease(version, filename) {
   const body = readFileSync(filename)
@@ -77,26 +72,6 @@ function clsxMetadata(origin) {
   }
 }
 
-function defaultPluginMetadata(origin, name, release) {
-  return {
-    _id: name,
-    name,
-    'dist-tags': { latest: release.version },
-    versions: {
-      [release.version]: {
-        name,
-        version: release.version,
-        license: 'MIT',
-        dist: {
-          tarball: `${origin}/${name}/-/${name}-${release.version}.tgz`,
-          shasum: release.shasum,
-          integrity: release.integrity,
-        },
-      },
-    },
-  }
-}
-
 const server = http.createServer((request, response) => {
   const origin = `http://127.0.0.1:${server.address().port}`
   const pathname = new URL(request.url, origin).pathname
@@ -111,16 +86,6 @@ const server = http.createServer((request, response) => {
   }
   if (request.method === 'GET' && pathname === '/clsx') {
     const body = Buffer.from(JSON.stringify(clsxMetadata(origin)), 'utf8')
-    response.writeHead(200, {
-      'content-type': 'application/json',
-      'content-length': body.length,
-      'cache-control': 'no-store',
-    }).end(body)
-    return
-  }
-  const defaultMetadataName = pathname.slice(1)
-  if (request.method === 'GET' && defaultReleases.has(defaultMetadataName)) {
-    const body = Buffer.from(JSON.stringify(defaultPluginMetadata(origin, defaultMetadataName, defaultReleases.get(defaultMetadataName))), 'utf8')
     response.writeHead(200, {
       'content-type': 'application/json',
       'content-length': body.length,
@@ -144,18 +109,6 @@ const server = http.createServer((request, response) => {
       'content-length': clsxRelease.body.length,
       'cache-control': 'no-store',
     }).end(clsxRelease.body)
-    return
-  }
-  const defaultArchiveEntry = [...defaultReleases].find(([name, release]) => (
-    pathname === `/${name}/-/${name}-${release.version}.tgz`
-  ))
-  if (request.method === 'GET' && defaultArchiveEntry) {
-    const defaultArchiveRelease = defaultArchiveEntry[1]
-    response.writeHead(200, {
-      'content-type': 'application/octet-stream',
-      'content-length': defaultArchiveRelease.body.length,
-      'cache-control': 'no-store',
-    }).end(defaultArchiveRelease.body)
     return
   }
   response.writeHead(404, { 'content-type': 'text/plain' }).end('not found')

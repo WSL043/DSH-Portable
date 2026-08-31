@@ -57,8 +57,10 @@ test('the current product line pins one live visual catalog and no curated exten
   assert.doesNotMatch(patch, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
   assert.match(chinese, /可选 Provider：\[Codex Subscription\]\(https:\/\/github\.com\/WSL043\/dsh-codex-subscription\) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT\/Codex 订阅；不会默认安装。/)
   assert.match(english, /Optional provider: \[Codex Subscription\]\(https:\/\/github\.com\/WSL043\/dsh-codex-subscription\) connects a ChatGPT\/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default\./)
-  assert.match(chinese, /全新安装[\s\S]+永久删除会话/)
-  assert.match(english, /fresh install[\s\S]+permanent session deletion/i)
+  assert.match(chinese, /全新安装不会默认安装社区插件/)
+  assert.match(chinese, /普通升级会完整保留现有 Profile/)
+  assert.match(english, /Fresh installs do not install community plugins by default/i)
+  assert.match(english, /Normal upgrades preserve the existing Profile/i)
 })
 
 test('the packaged market ships runtime artifacts only', async () => {
@@ -888,12 +890,12 @@ test('finished products verify and smoke the visual market through the real DSH 
   assert.match(runtime, /assert\.match\(marketManifest\.version,\s*\/\^0\\\.1\\\.0-beta/s)
   assert.match(smoke, /\/dsh-market\/status/)
   assert.match(smoke, /\/dsh-market\/installed/)
-  assert.match(smoke, /dsh-chat-manager/)
   assert.match(smoke, /DEFAULT_PLUGINS/)
+  assert.match(smoke, /configuredDefaultNames/)
+  assert.match(smoke, /productDefaults/)
   assert.doesNotMatch(smoke, /['"]1\.0\.4['"]|['"]1\.0\.6['"]/) // version is read from the finished product
   assert.match(smoke, /--dump-config/)
-  assert.match(smoke, /ui-workspace-session-delete/)
-  assert.match(smoke, /ui-workspace[\s\S]+disabled/)
+  assert.doesNotMatch(smoke, /dsh-chat-manager|dsh-image-viewer|ui-workspace-session-delete/)
   assert.match(smoke, /\/dsh-market\/registry/)
   assert.match(smoke, /registry[^\n]+plugins/)
   assert.match(smoke, /plugins\.length\s*>=\s*1_000/)
