@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
+import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -203,7 +204,15 @@ try {
   await mkdir(path.dirname(fixtureSession), { recursive: true })
   await mkdir(fixtureProfile, { recursive: true })
   await writeFile(fixtureMarker, 'name: imported-by-native-ui-smoke\n')
-  await writeFile(fixtureSession, 'portable-session-migration-smoke')
+  const fixtureSessionBytes = Buffer.from(`${JSON.stringify({
+    type: 'session',
+    version: 1,
+    id: 'session-smoke',
+    createdAt: 1,
+    cwd: fixtureLayout.workspace,
+    delegationDepth: 0,
+  })}\n`)
+  await writeFile(fixtureSession, zstdCompressSync(fixtureSessionBytes))
   const importArchive = path.join(importFixtureRoot, 'import-private.dshdata')
   const debugPort = await reserveLoopbackPort()
   launcher = spawn(executable, [], {
@@ -395,10 +404,9 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200))
   }
   assert.equal(restarted, true)
-  assert.equal(
-    await readFile(path.join(root, 'data', 'dsh-home', 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd'), 'utf8'),
-    'portable-session-migration-smoke',
-  )
+  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd')
+  const migratedSession = JSON.parse(zstdDecompressSync(await readFile(migratedSessionFile)).toString('utf8').trim())
+  assert.equal(migratedSession.id, 'session-smoke')
   const migratedPlugin = JSON.parse(await readFile(path.join(
     root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package.json',
   ), 'utf8'))
