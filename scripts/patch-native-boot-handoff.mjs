@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const MARKER = 'dsh-portable-native-boot-handoff-v3'
+const MARKER = 'dsh-portable-native-boot-handoff-v4'
 const CSS_MARKER = 'dsh-portable-native-boot-logo-v1'
 
 function replaceRequired(source, needle, replacement, label) {
@@ -62,7 +62,6 @@ export function patchNativeBootHandoff(source) {
 \t\t\t\t\telse readyFrames = 0;
 \t\t\t\t\tif (readyFrames >= 3) {
 \t\t\t\t\t\tcompleted = true;
-\t\t\t\t\t\tnativeHost.postMessage({ type: "dsh-portable/surface-ready", schemaVersion: 1 });
 \t\t\t\t\t\tsetSurfaceReady(true);
 \t\t\t\t\t\treturn;
 \t\t\t\t\t}
@@ -76,6 +75,9 @@ export function patchNativeBootHandoff(source) {
 \t\t\t\t\tdisposed = true;
 \t\t\t\t};
 \t\t\t}, []);
+\t\t\t(0, react.useLayoutEffect)(() => {
+\t\t\t\tif (nativeHost !== void 0 && surfaceReady) nativeHost.postMessage({ type: "dsh-portable/surface-ready", schemaVersion: 1 });
+\t\t\t}, [nativeHost, surfaceReady]);
 \t\t\tif (nativeHost === void 0 && ready) return props.app();
 \t\t\tconst boot = (0, react.createElement)("div", {
 \t\t\t\tkey: "dsh-boot",

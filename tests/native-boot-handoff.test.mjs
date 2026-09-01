@@ -18,7 +18,7 @@ const upstream = `\t\tfunction BootHandoff(props) {
 
 test('the DSH renderer explicitly hands a settled surface to the native desktop host', () => {
   const output = patchNativeBootHandoff(upstream)
-  assert.match(output, /dsh-portable-native-boot-handoff-v3/)
+  assert.match(output, /dsh-portable-native-boot-handoff-v4/)
   assert.match(output, /globalThis\.chrome\?\.webview/)
   assert.match(output, /readyFrames >= 3/)
   assert.match(output, /visibleControls >= 2/)
@@ -26,6 +26,7 @@ test('the DSH renderer explicitly hands a settled surface to the native desktop 
   assert.doesNotMatch(output, /MutationObserver|lastMutation/)
   assert.match(output, /replace\(\/\\s\+\/g/)
   assert.match(output, /dsh-portable\/surface-ready/)
+  assert.match(output, /useLayoutEffect\)\(\(\) => \{[\s\S]+surfaceReady[\s\S]+nativeHost\.postMessage[\s\S]+\}, \[nativeHost, surfaceReady\]\)/)
   assert.match(output, /dsh-portable\/boot-visible/)
   assert.match(output, /nativeHost\.postMessage/)
   assert.doesNotMatch(output, /cloneNode|append\(overlay\)/)
