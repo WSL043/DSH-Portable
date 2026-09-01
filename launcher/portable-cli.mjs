@@ -39,7 +39,9 @@ import { workspaceDocumentReady } from './http-readiness.mjs'
 import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
+import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
+import { appendOperationTrace, beginOperationTrace } from './operation-trace.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 let layout = layoutForRoot(
@@ -403,6 +405,14 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
+  const repairedPluginProfiles = await repairIncompleteProfileDependencies({
+    layout,
+    trace: (phase, fields) => startupLog(startedAt, phase, fields),
+  })
+  startupLog(startedAt, 'plugin-profiles-ready', {
+    status: repairedPluginProfiles.status,
+    profiles: repairedPluginProfiles.profiles.length,
+  })
 
   const portReservation = await reservePort(prior?.port)
   const port = portReservation.port
@@ -480,7 +490,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     const url = `http://127.0.0.1:${port}`
     startupLog(startedAt, 'host-ready', { pid: child.pid, port })
     const browser = noBrowser ? null : await openBrowser(url)
-    return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }
+    return { status: 'started', pid: child.pid, port, url, browser, migration, defaultPlugins, repairedPluginProfiles, repairedProfileFallback, requestedRepair }
   } catch (error) {
     portReservation.release()
     let cleanupError = null
@@ -591,7 +601,15 @@ async function restoreData(options) {
   if (!options.input) throw new Error('restore-data requires --input.')
   const current = await status()
   if (current.status !== 'stopped') throw new Error('Close DSH-Portable before importing user data.')
-  return restoreDataArchive(layout, path.resolve(options.input), { password: dataPassword(options), conflict: options.conflict })
+  const operationTrace = beginOperationTrace(layout.logsDir, 'data-import')
+  const trace = (phase, fields) => appendOperationTrace(operationTrace, phase, fields)
+  trace('begin')
+  return restoreDataArchive(layout, path.resolve(options.input), {
+    password: dataPassword(options),
+    conflict: options.conflict,
+    trace,
+    validate: ({ changed, transaction }) => rehydrateImportedProfiles({ layout, changed, transaction, trace }),
+  })
 }
 
 async function checkUpdate(options) {

@@ -409,6 +409,9 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(dataExportSmoke, /document\.elementFromPoint/)
   assert.match(dataExportSmoke, /private export completion/)
   assert.match(dataExportSmoke, /waitForValue\(client, clickButton\(\['导入数据包', 'Import data package'\]\), value => value\?\.clicked, 'data import action'\)/)
+  assert.match(dataExportSmoke, /portable-session-migration-smoke/)
+  assert.match(dataExportSmoke, /profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package\.json/)
+  assert.match(dataExportSmoke, /migratedPlugin\.version, '1\.2\.2'/)
   assert.ok(
     dataExportSmoke.indexOf('private export completion') < dataExportSmoke.indexOf("'migration export action'"),
     'the real migration smoke must wait for the encrypted export modal to close before starting another export',

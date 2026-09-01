@@ -197,10 +197,16 @@ try {
   ])
   const fixtureLayout = layoutForRoot(importFixtureRoot, process.platform)
   const fixtureMarker = path.join(fixtureLayout.dshHome, '.agent-presets', 'import-smoke', 'agent.cordis.yml')
+  const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd')
+  const fixtureProfile = path.join(fixtureLayout.dshHome, 'profiles', 'web')
   await mkdir(path.dirname(fixtureMarker), { recursive: true })
+  await mkdir(path.dirname(fixtureSession), { recursive: true })
+  await mkdir(fixtureProfile, { recursive: true })
   await writeFile(fixtureMarker, 'name: imported-by-native-ui-smoke\n')
+  await writeFile(fixtureSession, 'portable-session-migration-smoke')
+  await writeFile(path.join(fixtureProfile, 'package.json'), '{"dependencies":{"dsh-chat-manager":"1.2.2"}}\n')
   const importArchive = path.join(importFixtureRoot, 'import-private.dshdata')
-  await createDataArchive(fixtureLayout, importArchive, { categories: ['settings'], password })
+  await createDataArchive(fixtureLayout, importArchive, { categories: ['settings', 'sessions', 'plugins'], password })
   const debugPort = await reserveLoopbackPort()
   launcher = spawn(executable, [], {
     cwd: root,
@@ -375,6 +381,14 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200))
   }
   assert.equal(restarted, true)
+  assert.equal(
+    await readFile(path.join(root, 'data', 'dsh-home', 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd'), 'utf8'),
+    'portable-session-migration-smoke',
+  )
+  const migratedPlugin = JSON.parse(await readFile(path.join(
+    root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package.json',
+  ), 'utf8'))
+  assert.equal(migratedPlugin.version, '1.2.2')
   await portable(['stop', '--no-browser', '--json'])
   await rm(path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke'), { recursive: true, force: true })
 

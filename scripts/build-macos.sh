@@ -72,6 +72,8 @@ cp "$PROJECT_ROOT/launcher/portable-host.mjs" "$STAGE/launcher/portable-host.mjs
 cp "$PROJECT_ROOT/launcher/update-core.mjs" "$STAGE/launcher/update-core.mjs"
 cp "$PROJECT_ROOT/launcher/dsh-cli.mjs" "$STAGE/launcher/dsh-cli.mjs"
 cp "$PROJECT_ROOT/launcher/data-transfer.mjs" "$STAGE/launcher/data-transfer.mjs"
+cp "$PROJECT_ROOT/launcher/data-import-preflight.mjs" "$STAGE/launcher/data-import-preflight.mjs"
+cp "$PROJECT_ROOT/launcher/operation-trace.mjs" "$STAGE/launcher/operation-trace.mjs"
 cp "$PROJECT_ROOT/launcher/runtime-capsule.mjs" "$STAGE/launcher/runtime-capsule.mjs"
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.en.txt" "$STAGE/DATA-MIGRATION.en.txt"

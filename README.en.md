@@ -140,7 +140,7 @@ An official DSH update does not need to wait for a DSH-Portable feature release,
 
 ## Portable data
 
-Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, choose **Export migration package** or **Export encrypted private package** under **Settings → General → Portable → Data and migration**. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device. Runtimes, caches, logs, and workspace files are deliberately excluded.
+Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, choose **Export migration package** or **Export encrypted private package** under **Settings → General → Portable → Data and migration**. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device; it is still an integrity-checked compressed container rather than a text file. Runtimes, caches, logs, and workspace files are deliberately excluded. Import restores plugin dependencies and validates each profile; any failure restores the previous data automatically.
 
 `DATA-MIGRATION.en.txt` in every finished package documents the English inspect and restore commands; `DATA-MIGRATION.zh-CN.txt` provides a separate Chinese guide. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`.
 
