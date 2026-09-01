@@ -94,21 +94,31 @@ try {
     $StartInfo.EnvironmentVariables['DSH_PORTABLE_SKIP_UPDATE_CHECK'] = '1'
     $StartInfo.EnvironmentVariables['DSH_PORTABLE_TEST_HIDDEN'] = '1'
     $StartInfo.EnvironmentVariables['DSH_PORTABLE_TEST_STALLED_RESOURCE_URL'] = "http://127.0.0.1:$($Server.Port)/never-finishes.png"
+    $StartInfo.EnvironmentVariables['DSH_PORTABLE_TEST_CONTINUOUS_DOM_MUTATION'] = '1'
 
+    $StartedAt = [DateTime]::UtcNow
+    $StartupTrace = Join-Path $Root 'data\logs\startup-latest.jsonl'
     $Clock = [System.Diagnostics.Stopwatch]::StartNew()
     $Process = [System.Diagnostics.Process]::Start($StartInfo)
     $Deadline = [DateTime]::UtcNow.AddSeconds(25)
     $DesktopWidth = 0
+    $InteractiveReady = $false
     do {
         Start-Sleep -Milliseconds 100
         $Process.Refresh()
         if ($Process.HasExited) { throw "Desktop host exited before the usable DOM appeared: $($Process.ExitCode)" }
         $DesktopWidth = [DshStalledHttpServer]::WindowWidth($Process.Id)
-    } while ($DesktopWidth -lt 900 -and [DateTime]::UtcNow -lt $Deadline)
+        if (Test-Path -LiteralPath $StartupTrace) {
+            $Trace = Get-Item -LiteralPath $StartupTrace
+            if ($Trace.LastWriteTimeUtc -ge $StartedAt) {
+                $InteractiveReady = (Get-Content -Raw -LiteralPath $StartupTrace) -match '"phase":"interactive-ready"'
+            }
+        }
+    } while (($DesktopWidth -lt 900 -or -not $InteractiveReady) -and [DateTime]::UtcNow -lt $Deadline)
     $Clock.Stop()
 
-    if ($DesktopWidth -lt 900) {
-        throw 'The desktop host kept waiting for NavigationCompleted after the workspace DOM was usable.'
+    if ($DesktopWidth -lt 900 -or -not $InteractiveReady) {
+        throw 'The desktop host did not report an interactive workspace while the DOM was usable and continuously updating.'
     }
     if ($Clock.Elapsed.TotalSeconds -ge 25) {
         throw "The usable-DOM gate took $([Math]::Round($Clock.Elapsed.TotalSeconds, 3)) seconds."
@@ -118,6 +128,7 @@ try {
         Root = $Root
         StalledResource = $StartInfo.EnvironmentVariables['DSH_PORTABLE_TEST_STALLED_RESOURCE_URL']
         WorkspaceVisibleSeconds = [Math]::Round($Clock.Elapsed.TotalSeconds, 3)
+        InteractiveReady = $InteractiveReady
         Status = 'passed'
     }
 } finally {
