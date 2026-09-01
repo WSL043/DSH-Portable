@@ -3287,22 +3287,14 @@ namespace DshPortable
                 + "var rootVisible=rootRect.width>=Math.max(320,innerWidth*.8)&&rootRect.height>=Math.max(240,innerHeight*.8)"
                 + "&&rootStyle.display!=='none'&&rootStyle.visibility!=='hidden'&&rootStyle.opacity!=='0';"
                 + "if(!rootVisible)return 0;"
-                + "var now=performance.now();var gate=window[key];"
-                + "if(!gate){gate={since:now,lastMutation:now,lastSignature:'',stablePolls:0};"
-                + "gate.observer=new MutationObserver(function(records){"
-                + "for(var i=0;i<records.length;i++){var record=records[i];"
-                + "if(record.type==='childList'||record.type==='characterData'){gate.lastMutation=performance.now();gate.stablePolls=0;break;}}});"
-                + "gate.observer.observe(root,{subtree:true,childList:true,characterData:true});window[key]=gate;}"
+                + "var gate=window[key];if(!gate){gate={readyPolls:0};window[key]=gate;}"
                 + "var visibleControls=0;var controls=root.querySelectorAll('button,input,textarea,[contenteditable=true],[role=button]');"
                 + "for(var index=0;index<controls.length;index++){var node=controls[index];var rect=node.getBoundingClientRect();var style=getComputedStyle(node);"
                 + "if(rect.width>=20&&rect.height>=20&&style.display!=='none'&&style.visibility!=='hidden'&&style.opacity!=='0')visibleControls++;}"
                 + "var text=String(root.innerText||'').replace(/\\s+/g,' ').trim();"
-                + "var signature=[root.children.length,root.querySelectorAll('*').length,visibleControls,text.length].join(':');"
-                + "if(signature!==gate.lastSignature){gate.lastSignature=signature;gate.since=now;gate.stablePolls=0;return 0;}"
-                + "gate.stablePolls++;"
                 + "var fontsReady=!document.fonts||document.fonts.status==='loaded';"
-                + "return fontsReady&&visibleControls>=2&&text.length>0&&gate.stablePolls>=3"
-                + "&&now-gate.since>=300&&now-gate.lastMutation>=300?2:0;"
+                + "if(fontsReady&&visibleControls>=2&&text.length>0)gate.readyPolls++;else gate.readyPolls=0;"
+                + "return gate.readyPolls>=3?2:0;"
                 + "}catch(_){return 0;}})()";
             await Task.Delay(50);
             // The official DSH boot overlay remains in the WebView while the
@@ -3327,9 +3319,14 @@ namespace DshPortable
             try
             {
                 string diagnostics = await webView.CoreWebView2.ExecuteScriptAsync(
-                    "(function(){try{var body=document.body;return {url:String(location.href||''),ready:document.readyState,"
-                    + "children:body?body.querySelectorAll('*').length:0,text:body?String(body.innerText||'').length:0,"
-                    + "width:body?body.getBoundingClientRect().width:0,height:body?body.getBoundingClientRect().height:0};}"
+                    "(function(){try{var body=document.body;var root=document.querySelector('#root');var rootRect=root?root.getBoundingClientRect():null;"
+                    + "var visibleControls=0;if(root){var controls=root.querySelectorAll('button,input,textarea,[contenteditable=true],[role=button]');"
+                    + "for(var i=0;i<controls.length;i++){var rect=controls[i].getBoundingClientRect();var style=getComputedStyle(controls[i]);"
+                    + "if(rect.width>=20&&rect.height>=20&&style.display!=='none'&&style.visibility!=='hidden'&&style.opacity!=='0')visibleControls++;}}"
+                    + "return {url:String(location.href||''),ready:document.readyState,children:body?body.querySelectorAll('*').length:0,"
+                    + "text:body?String(body.innerText||'').length:0,width:body?body.getBoundingClientRect().width:0,height:body?body.getBoundingClientRect().height:0,"
+                    + "root:!!root,rootWidth:rootRect?rootRect.width:0,rootHeight:rootRect?rootRect.height:0,visibleControls:visibleControls,"
+                    + "bootVisible:!!document.querySelector('[data-dsh-boot]'),readyPolls:window.__dshPortableStartupGate?window.__dshPortableStartupGate.readyPolls:0};}"
                     + "catch(error){return {error:String(error&&error.message||error)}}})()");
                 RecordWebViewPhase("first-paint-timeout:" + diagnostics);
             }
@@ -3507,6 +3504,19 @@ namespace DshPortable
                 await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                     "document.addEventListener('DOMContentLoaded',function(){"
                     + "var image=document.createElement('img');image.hidden=true;image.src=" + resource + ";document.body.appendChild(image);"
+                    + "},{once:true});");
+            }
+            if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
+                && String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_CONTINUOUS_DOM_MUTATION"), "1", StringComparison.Ordinal))
+            {
+                await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "document.addEventListener('DOMContentLoaded',function(){"
+                    + "var root=document.querySelector('#root');if(!root)return;"
+                    + "var install=function(){"
+                    + "if(root.querySelectorAll('button,input,textarea,[contenteditable=true],[role=button]').length<2){requestAnimationFrame(install);return;}"
+                    + "var pulse=document.createElement('span');pulse.hidden=true;root.appendChild(pulse);"
+                    + "setInterval(function(){pulse.textContent=String(performance.now());},50);"
+                    + "};requestAnimationFrame(install);"
                     + "},{once:true});");
             }
             webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;

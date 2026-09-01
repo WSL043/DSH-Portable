@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const MARKER = 'dsh-portable-native-boot-handoff-v2'
+const MARKER = 'dsh-portable-native-boot-handoff-v3'
 const CSS_MARKER = 'dsh-portable-native-boot-logo-v1'
 
 function replaceRequired(source, needle, replacement, label) {
@@ -39,30 +39,34 @@ export function patchNativeBootHandoff(source) {
 \t\t\t\t\treturn;
 \t\t\t\t}
 \t\t\t\tconst root = document.querySelector("#root");
-\t\t\t\tlet lastMutation = performance.now();
-\t\t\t\tlet frame = 0;
+\t\t\t\tlet readyFrames = 0;
 \t\t\t\tlet disposed = false;
 \t\t\t\tlet completed = false;
-\t\t\t\tconst observer = new MutationObserver((records) => {
-\t\t\t\t\tif (records.some((record) => record.type === "childList" || record.type === "characterData")) lastMutation = performance.now();
-\t\t\t\t});
-\t\t\t\tif (root !== null) observer.observe(root, { subtree: true, childList: true, characterData: true });
 \t\t\t\tconst started = performance.now();
 \t\t\t\tconst finish = () => {
 \t\t\t\t\tif (disposed || completed) return;
 \t\t\t\t\tconst now = performance.now();
 \t\t\t\t\tconst fontsReady = document.fonts === void 0 || document.fonts.status === "loaded";
-\t\t\t\t\tconst text = String(root?.innerText || "").replace(/\s+/g, " ").trim();
-\t\t\t\t\tconst controls = root?.querySelectorAll("button,input,textarea,[contenteditable=true],[role=button]").length || 0;
-\t\t\t\t\tif (frame >= 2 && fontsReady && text.length > 0 && controls >= 2 && now - lastMutation >= 300) {
+\t\t\t\t\tconst rootRect = root?.getBoundingClientRect();
+\t\t\t\t\tconst rootStyle = root === null ? null : getComputedStyle(root);
+\t\t\t\t\tconst rootVisible = rootRect !== void 0 && rootRect.width >= Math.max(320, innerWidth * 0.8) && rootRect.height >= Math.max(240, innerHeight * 0.8)
+\t\t\t\t\t\t&& rootStyle?.display !== "none" && rootStyle?.visibility !== "hidden" && rootStyle?.opacity !== "0";
+\t\t\t\t\tconst text = String(root?.innerText || "").replace(/\\s+/g, " ").trim();
+\t\t\t\t\tlet visibleControls = 0;
+\t\t\t\t\tfor (const control of root?.querySelectorAll("button,input,textarea,[contenteditable=true],[role=button]") || []) {
+\t\t\t\t\t\tconst rect = control.getBoundingClientRect();
+\t\t\t\t\t\tconst style = getComputedStyle(control);
+\t\t\t\t\t\tif (rect.width >= 20 && rect.height >= 20 && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") visibleControls += 1;
+\t\t\t\t\t}
+\t\t\t\t\tif (fontsReady && rootVisible && text.length > 0 && visibleControls >= 2) readyFrames += 1;
+\t\t\t\t\telse readyFrames = 0;
+\t\t\t\t\tif (readyFrames >= 3) {
 \t\t\t\t\t\tcompleted = true;
-\t\t\t\t\t\tobserver.disconnect();
 \t\t\t\t\t\tnativeHost.postMessage({ type: "dsh-portable/surface-ready", schemaVersion: 1 });
 \t\t\t\t\t\tsetSurfaceReady(true);
 \t\t\t\t\t\treturn;
 \t\t\t\t\t}
 \t\t\t\t\tif (now - started >= 10000) return;
-\t\t\t\t\tframe += 1;
 \t\t\t\t\trequestAnimationFrame(finish);
 \t\t\t\t};
 \t\t\t\tnativeHost.postMessage({ type: "dsh-portable/boot-visible", schemaVersion: 1 });
@@ -70,7 +74,6 @@ export function patchNativeBootHandoff(source) {
 \t\t\t\trequestAnimationFrame(finish);
 \t\t\t\treturn () => {
 \t\t\t\t\tdisposed = true;
-\t\t\t\t\tobserver.disconnect();
 \t\t\t\t};
 \t\t\t}, []);
 \t\t\tif (nativeHost === void 0 && ready) return props.app();

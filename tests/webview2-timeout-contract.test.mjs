@@ -15,6 +15,9 @@ test('Windows desktop host waits for the usable DOM and reports the failing boun
   assert.match(source, /ProbeWorkspaceDomAsync\(url\)/)
   assert.match(source, /WaitForWorkspaceHandoffAsync\(url, workspaceSurfaceReady\.Task\)/)
   assert.match(source, /WaitForWorkspaceHandoffAsync[\s\S]+getBoundingClientRect\(\)[\s\S]+await Task\.Delay\(50\)/)
+  assert.match(source, /gate\.readyPolls\+\+/)
+  assert.match(source, /visibleControls>=2/)
+  assert.doesNotMatch(source, /gate\.lastMutation|MutationObserver\(function\(records\)/)
   assert.match(source, /surface-handoff:/)
   assert.match(source, /dsh-portable\/surface-ready/)
   assert.match(source, /native-bridge/)
@@ -35,6 +38,8 @@ test('Windows desktop host waits for the usable DOM and reports the failing boun
   assert.doesNotMatch(source, /工作台未能在 30 秒内打开|workspace did not open within 30 seconds/)
   assert.match(source, /60 秒内打开/)
   assert.match(source, /within 60 seconds/)
+  assert.match(source, /first-paint-timeout:/)
+  assert.match(source, /visibleControls:visibleControls/)
 })
 
 test('Windows finished-product smoke proves usable DOM wins over a stalled subresource', async () => {
@@ -44,9 +49,13 @@ test('Windows finished-product smoke proves usable DOM wins over a stalled subre
     readFile(path.join(projectRoot, '.github', 'workflows', 'ci.yml'), 'utf8'),
   ])
   assert.match(source, /DSH_PORTABLE_TEST_STALLED_RESOURCE_URL/)
+  assert.match(source, /DSH_PORTABLE_TEST_CONTINUOUS_DOM_MUTATION/)
   assert.match(source, /AddScriptToExecuteOnDocumentCreatedAsync/)
   assert.match(smoke, /DshStalledHttpServer/)
   assert.match(smoke, /never-finishes\.png/)
+  assert.match(smoke, /DSH_PORTABLE_TEST_CONTINUOUS_DOM_MUTATION/)
+  assert.match(smoke, /"phase":"interactive-ready"/)
+  assert.match(smoke, /-not \$InteractiveReady/)
   assert.match(smoke, /DesktopWidth\s+-lt\s+900/)
   assert.match(workflow, /smoke-windows-dom-ready\.ps1/)
 })
