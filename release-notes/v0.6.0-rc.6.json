@@ -1,0 +1,21 @@
+{
+  "version": "0.6.0-rc.6",
+  "zh": {
+    "summary": "将归档恢复能力归回已有的 Chat Manager 插件身份，并保留可回复的任务完成通知。",
+    "highlights": [
+      "全新 Portable 默认包含 Image Viewer 与已有的 Chat Manager；两者都是普通插件，可以删除，升级或再次启动不会擅自装回。",
+      "Chat Manager 当前只补充官方界面尚未提供的归档会话恢复入口，不复制搜索、删除或工作区管理等官方能力。",
+      "开启任务完成通知后，Windows 会可靠提示；鼠标悬浮可展开完整回复，Reply 会回到原任务，任务栏图标会显示未读完成任务数量。",
+      "继续内置官方 DeepSeek Harness 0.1.2-alpha.3；Beta 与稳定更新通道保持分离。"
+    ]
+  },
+  "en": {
+    "summary": "Returns archived-session recovery to the existing Chat Manager plugin identity while retaining actionable task-completion notifications.",
+    "highlights": [
+      "Fresh Portable installs include Image Viewer and the existing Chat Manager as ordinary removable plugins; removing either remains respected across restarts and upgrades.",
+      "Chat Manager now only supplies the archived-session restore entry point missing from the official interface, without duplicating search, deletion, or workspace management.",
+      "When completion notifications are enabled, Windows reliably alerts you; hover expands the complete reply, Reply returns to the originating task, and the taskbar icon shows the unread completion count.",
+      "Continues to bundle official DeepSeek Harness 0.1.2-alpha.3 while keeping Beta and Stable update channels separate."
+    ]
+  }
+}

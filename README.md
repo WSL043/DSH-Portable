@@ -114,7 +114,7 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 可选 Provider：[Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT/Codex 订阅；不会默认安装。
 
-全新安装仅预装两个经过审核、可自行卸载的插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 用于查看任务中的图片，[Session Recovery](https://github.com/WSL043/dsh-session-recovery) 只补充官方界面暂未提供的归档会话恢复入口。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件；如果你卸载了任一默认插件，后续启动或升级不会自动装回。
+全新安装仅预装两个经过审核、可自行卸载的插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 用于查看任务中的图片，[Chat Manager](https://github.com/WSL043/dsh-chat-manager) 是已有的会话管理插件，当前只补充官方界面暂未提供的归档会话恢复入口。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件；如果你卸载了任一默认插件，后续启动或升级不会自动装回。
 
 Windows 可双击 `dsh.exe`，或从托盘的 **更多 → DSH 终端** 打开；macOS 可从应用菜单打开 **DSH 终端**；Linux 可从托盘打开 **DSH 终端**。在这个专用终端里，第三方插件提供的官方命令可以原样粘贴：
 

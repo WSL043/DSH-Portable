@@ -16,10 +16,9 @@ async function fixture(t) {
   return layoutForRoot(root, process.platform)
 }
 
-test('fresh products declare only the reviewed image viewer and session recovery defaults', () => {
-  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['imageViewer', 'sessionRecovery'])
-  assert.deepEqual(DEFAULT_PLUGINS.map(plugin => plugin.name), ['dsh-image-viewer', 'dsh-session-recovery'])
-  assert.equal(DEFAULT_PLUGINS.some(plugin => plugin.name === 'dsh-chat-manager'), false)
+test('fresh products declare only the reviewed image viewer and existing chat manager defaults', () => {
+  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
+  assert.deepEqual(DEFAULT_PLUGINS.map(plugin => plugin.name), ['dsh-image-viewer', 'dsh-chat-manager'])
 })
 
 test('a fresh product seeds both reviewed archives and promotes their update specs', async (t) => {
@@ -37,12 +36,12 @@ test('a fresh product seeds both reviewed archives and promotes their update spe
     },
   })
 
-  assert.deepEqual(result, { status: 'seeded', profile: 'web', plugins: ['dsh-image-viewer', 'dsh-session-recovery'] })
+  assert.deepEqual(result, { status: 'seeded', profile: 'web', plugins: ['dsh-image-viewer', 'dsh-chat-manager'] })
   assert.equal(invocation.command, layout.nodeExe)
   assert.deepEqual(invocation.args.slice(0, 4), [layout.dshBin, 'plugin', '--profile', 'web'])
   const manifest = JSON.parse(await readFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), 'utf8'))
   assert.equal(manifest.dependencies['dsh-image-viewer'], '0.1.0-beta.8')
-  assert.match(manifest.dependencies['dsh-session-recovery'], /^https:\/\/github\.com\/WSL043\/dsh-session-recovery\/releases\/download\//)
+  assert.equal(manifest.dependencies['dsh-chat-manager'], '1.3.0-beta.0')
 })
 
 test('upgrades preserve an existing profile and all user-selected plugins byte-for-byte', async (t) => {
