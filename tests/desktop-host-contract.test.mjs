@@ -483,9 +483,16 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(dataExportSmoke, /private export completion/)
   assert.match(dataExportSmoke, /waitForValue\(client, clickButton\(\['导入数据包', 'Import data package'\]\), value => value\?\.clicked, 'data import action'\)/)
   assert.match(dataExportSmoke, /portable-session-migration-smoke/)
+  assert.match(dataExportSmoke, /cp\(path\.join\(root, 'data', 'dsh-home', 'profiles', 'web'\), fixtureProfile/)
+  assert.match(dataExportSmoke, /const currentBundles = fixtureManifest\.dsh\?\.profile\?\.bundles/)
   assert.match(dataExportSmoke, /profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package\.json/)
   assert.match(dataExportSmoke, /migratedPlugin\.version, '1\.2\.2'/)
   assert.match(dataExportSmoke, /const restartDeadline = Date\.now\(\) \+ 240000/)
+  assert.match(
+    dataExportSmoke,
+    /'restart and import'\)\n\s+client\.close\(\)\n\s+const importedMarker/,
+    'the native migration smoke must release its DevTools connection before waiting for the restarted WebView2 host',
+  )
   assert.ok(
     dataExportSmoke.indexOf('private export completion') < dataExportSmoke.indexOf("'migration export action'"),
     'the real migration smoke must wait for the encrypted export modal to close before starting another export',
