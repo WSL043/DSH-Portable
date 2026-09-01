@@ -73,6 +73,7 @@ function fakeContext(initialSessions) {
   const listListeners = new Set()
   const eventListeners = new Map()
   const opened = []
+  const sent = []
   let cleared = 0
   let locale = { active: 'zh', revision: 1 }
   let theme = { active: { colorScheme: 'dark' }, revision: 1 }
@@ -108,6 +109,20 @@ function fakeContext(initialSessions) {
       },
       open(id) { opened.push(id) },
       clear() { cleared += 1 },
+      scope(id) {
+        if (!listSnapshot.byId?.[id] || listSnapshot.byId[id].origin === 'subagent') return undefined
+        return { conversation: { async send(text) { sent.push({ sessionId: id, text }) } } }
+      },
+      binding(id) {
+        const item = listSnapshot.byId?.[id]
+        if (!item) return undefined
+        return {
+          eventSource: {
+            getSnapshot: () => ({ entries: item.events ?? [] }),
+            subscribe() { return () => {} },
+          },
+        }
+      },
     },
     workspaces: {
       list: {
@@ -148,6 +163,7 @@ function fakeContext(initialSessions) {
   return {
     ctx,
     opened,
+    sent,
     get cleared() { return cleared },
     get downloadSnapshot() { return downloadSnapshot },
     slotEntries,
@@ -317,6 +333,10 @@ function sessionList(count = 12) {
       updatedAt: index * 100,
       running: index === count - 1,
       completed: index === count - 2,
+      events: index === count - 2 ? [{
+        type: 'event',
+        event: { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: `完整回复 ${index}\n第二行` }] } } },
+      }] : [],
       pendingInteraction: index === count - 2 ? 'question' : undefined,
       agentPreset: index % 2 === 0 ? 'coding' : undefined,
       blank: false,
@@ -348,6 +368,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   assert.equal(initial.sessions.some(item => item.id === 'blank' || item.id === 'child'), false)
   assert.equal(initial.sessions[0].running, true)
   assert.equal(initial.sessions[1].completed, true, 'the bridge must forward the official task-completion signal')
+  assert.equal(initial.sessions[1].finalReply, '完整回复 10\n第二行')
   assert.equal(initial.sessions[1].pendingInteraction, 'question')
 
   runtime.emit('locale/change', { active: 'en', revision: 2 })
@@ -358,8 +379,12 @@ test('private tray bridge projects bounded official runtime state and invokes on
   client.send({ type: 'dsh-portable/action', action: 'open-session', sessionId: 'session-9' })
   client.send({ type: 'dsh-portable/action', action: 'open-session', sessionId: 'unknown' })
   client.send({ type: 'dsh-portable/action', action: 'new-session' })
+  client.send({ type: 'dsh-portable/action', action: 'reply-session', sessionId: 'session-9', reply: '继续完善' })
+  client.send({ type: 'dsh-portable/action', action: 'reply-session', sessionId: 'unknown', reply: '不能误发' })
+  await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(runtime.opened, ['session-9'])
   assert.equal(runtime.cleared, 1)
+  assert.deepEqual(runtime.sent, [{ sessionId: 'session-9', text: '继续完善' }])
 
   client.send({
     type: 'dsh-portable/download',
@@ -548,7 +573,7 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(build, /System\.Web\.Extensions\.dll/)
 })
 
-test('Windows task completion notifications are edge-triggered, private, clickable, and user-controlled', async () => {
+test('Windows task completion notifications are actionable, expandable, badged, and user-controlled', async () => {
   const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
 
   assert.match(source, /public bool completed \{ get; set; \}/)
@@ -585,7 +610,8 @@ test('Windows task completion notifications are edge-triggered, private, clickab
   )
   assert.match(handler, /taskCompletionState\.TryGetValue\(session\.id, out previouslyCompleted\) && previouslyCompleted/)
   assert.match(handler, /List<TrayBridgeSession> completedThisFrame/)
-  assert.match(handler, /session\.completed && !wasCompleted && taskNotificationsEnabled/)
+  assert.match(handler, /session\.completed && !wasCompleted/)
+  assert.match(handler, /if \(taskNotificationsEnabled\) completedThisFrame\.Add\(session\)/)
   assert.match(handler, /completedThisFrame\.Add\(session\)/)
   assert.match(handler, /ShowTaskCompletionNotifications\(completedThisFrame\)/)
   assert.match(handler, /taskCompletionState\.Clear\(\)/, 'sessions absent from a later snapshot must lose their old completion bit')
@@ -595,14 +621,26 @@ test('Windows task completion notifications are edge-triggered, private, clickab
   assert.ok(notificationStart >= 0 && notificationEnd > notificationStart)
   const notification = source.slice(notificationStart, notificationEnd)
   assert.match(notification, /trayIcon\.Visible = true/)
-  assert.match(notification, /sessions\.Count == 1/)
-  assert.match(notification, /ShowBalloonTip\([\s\S]+MenuTitle\(session\.title\)/)
-  assert.match(notification, /sessions\.Count\.ToString/)
-  assert.doesNotMatch(notification, /\b(answer|response|cwd|path|log|reason|details)\b/i)
-  assert.match(
-    source,
-    /trayIcon\.BalloonTipClicked \+= delegate[\s\S]+RestoreFromTray\(\);[\s\S]+if \(!String\.IsNullOrEmpty\(sessionId\)\) PostBridgeAction\("open-session", sessionId\);/,
-  )
+  assert.match(notification, /sessions\.Take\(3\)/)
+  assert.match(notification, /new TaskCompletionNotification/)
+  assert.match(notification, /notification\.ReplyRequested[\s\S]+PostBridgeReply/)
+  assert.match(source, /TaskCompletionNotification/)
+  assert.match(source, /finalReply/)
+  assert.match(source, /reply-session/)
+  assert.match(source, /TaskbarList|SetOverlayIcon/)
+  assert.match(source, /unreadCompletedSessions/)
+  assert.match(source, /MouseEnter[\s\S]+Expand/)
+  assert.doesNotMatch(source, /Console\.Write.*finalReply|Log.*finalReply/)
+  assert.match(source, /MarkTaskCompletionHandled\(sessionId\)[\s\S]+PostBridgeAction\("open-session", sessionId\)/)
+})
+
+test('Windows native smoke exercises compiled notification hover expansion and exact-session reply', async () => {
+  const smoke = await readFile(new URL('../scripts/smoke-windows-native-tray.ps1', import.meta.url), 'utf8')
+  assert.match(smoke, /TaskCompletionNotification/)
+  assert.match(smoke, /OnMouseEnter/)
+  assert.match(smoke, /bodyFull/)
+  assert.match(smoke, /ReplyRequested/)
+  assert.match(smoke, /SubmitReply/)
 })
 
 test('Windows CI verifies the real tray bridge in a background browser without desktop input', async () => {

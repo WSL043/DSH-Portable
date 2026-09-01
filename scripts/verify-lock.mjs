@@ -45,7 +45,19 @@ assert.equal(desktopBridgeSource?.name, desktopBridgePackage, 'desktop bridge li
 assert.equal(desktopBridgeSource?.license, 'Apache-2.0', 'desktop bridge license')
 
 const defaultPlugins = upstream.defaultPlugins ?? {}
-assert.deepEqual(defaultPlugins, {}, 'Portable must not choose community plugins for new profiles')
+assert.deepEqual(Object.keys(defaultPlugins).sort(), ['imageViewer', 'sessionRecovery'], 'Portable must pin only the two reviewed defaults')
+assert.deepEqual(Object.values(defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-session-recovery'])
+assert.equal(Object.values(defaultPlugins).some(plugin => plugin.package === 'dsh-chat-manager'), false, 'legacy chat manager must stay removed')
+assert.equal(new Set(Object.values(defaultPlugins).map(plugin => plugin.filename)).size, 2, 'default plugin archive names must be unique')
+for (const plugin of Object.values(defaultPlugins)) {
+  assert.match(plugin.version, /^\d+\.\d+\.\d+-beta\.\d+$/, `${plugin.package} pinned prerelease version`)
+  assert.match(plugin.url, /^https:\/\//, `${plugin.package} artifact URL`)
+  assert.match(plugin.sha256, /^[0-9a-f]{64}$/, `${plugin.package} SHA-256`)
+  assert.match(plugin.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/, `${plugin.package} npm integrity`)
+  assert.match(plugin.reviewedCommit, /^[0-9a-f]{40}$/, `${plugin.package} reviewed commit`)
+  assert.equal(plugin.license, 'MIT', `${plugin.package} license`)
+  assert.ok(plugin.spec, `${plugin.package} lifecycle spec`)
+}
 
 const serializedRoot = JSON.stringify(root)
 for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {

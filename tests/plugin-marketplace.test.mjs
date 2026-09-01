@@ -65,9 +65,9 @@ test('the current product line pins one live visual catalog and no curated exten
   assert.doesNotMatch(patch, /session-delete|dsh-codex-subscription|ChatGPT\s*\/\s*Codex/i)
   assert.match(chinese, /可选 Provider：\[Codex Subscription\]\(https:\/\/github\.com\/WSL043\/dsh-codex-subscription\) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT\/Codex 订阅；不会默认安装。/)
   assert.match(english, /Optional provider: \[Codex Subscription\]\(https:\/\/github\.com\/WSL043\/dsh-codex-subscription\) connects a ChatGPT\/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default\./)
-  assert.match(chinese, /全新安装不会默认安装社区插件/)
+  assert.match(chinese, /全新安装仅预装两个经过审核、可自行卸载的插件/)
   assert.match(chinese, /普通升级会完整保留现有 Profile/)
-  assert.match(english, /Fresh installs do not install community plugins by default/i)
+  assert.match(english, /Fresh installs include only two reviewed, removable defaults/i)
   assert.match(english, /Normal upgrades preserve the existing Profile/i)
 })
 

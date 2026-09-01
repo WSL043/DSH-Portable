@@ -22,7 +22,34 @@
     "reviewedBasisTag": "v1.38.1",
     "reviewedBasisCommit": "df2a16b1ed2dfaf1f2505e184e738c0d6d428945"
   },
-  "defaultPlugins": {},
+  "defaultPlugins": {
+    "imageViewer": {
+      "package": "dsh-image-viewer",
+      "repository": "WSL043/dsh-image-viewer",
+      "releaseChannel": "prerelease",
+      "version": "0.1.0-beta.8",
+      "spec": "0.1.0-beta.8",
+      "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.8.tgz",
+      "sha256": "f0da55533daba11b3ae14561fe451ff84637113c38b8ca3e699548d9bae1780c",
+      "integrity": "sha512-lMLQdMmXYJtkQAUWl4KgZDC15kztfYlJPjmxwQ/CpLPBQ7XmwvKUPq3Wz9OuWsZqG92kbt5Zv5/Uthpkt/Cu1w==",
+      "license": "MIT",
+      "reviewedCommit": "65fecc574f01d635906a0aa049e8522ef8ca3dcb",
+      "filename": "dsh-image-viewer.tgz"
+    },
+    "sessionRecovery": {
+      "package": "dsh-session-recovery",
+      "repository": "WSL043/dsh-session-recovery",
+      "releaseChannel": "prerelease",
+      "version": "0.1.0-beta.1",
+      "spec": "https://github.com/WSL043/dsh-session-recovery/releases/download/v0.1.0-beta.1/dsh-session-recovery-0.1.0-beta.1.tgz",
+      "url": "https://github.com/WSL043/dsh-session-recovery/releases/download/v0.1.0-beta.1/dsh-session-recovery-0.1.0-beta.1.tgz",
+      "sha256": "4d0243b280b1babc0cb2200e8f0d8972fd816be8af4ea3843e80947faf38aa9e",
+      "integrity": "sha512-D02jzm05DAPsat7hQYQA2hxoFPDc+bjoWfBY+VOd8XWrVXUtiVTnn6Z67Hf/EalNLDcJhK4jydTXWkJoULzgYg==",
+      "license": "MIT",
+      "reviewedCommit": "6c2879f4809b6797133187602f22160b940c4ed1",
+      "filename": "dsh-session-recovery.tgz"
+    }
+  },
   "webview2": {
     "package": "Microsoft.Web.WebView2",
     "version": "1.0.4078.44",
