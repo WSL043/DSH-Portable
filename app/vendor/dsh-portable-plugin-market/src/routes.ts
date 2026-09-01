@@ -465,14 +465,17 @@ export function mountMarketRoutes(
     return { ok: true, detail: null }
   }
 
+  type UpdateRollbackSource =
+    | { kind: 'npm'; beforeVersion: string | null }
+    | { kind: 'github'; target: string; beforeCommit: string | null }
+
   interface PendingRollback {
     id: string
     kind: 'update' | 'install'
     names: string[]
     manifestBefore?: ProfileManifestSnapshot
-    /** github: updates must re-add the pre-update commit, not just reinstall. */
-    gitTarget?: string
-    beforeCommit?: string | null
+    /** Exact pre-update source captured before pnpm mutates the profile. */
+    updateSource?: UpdateRollbackSource
   }
 
   const pendingRollbacks = new Map<string, PendingRollback>()
@@ -516,6 +519,17 @@ export function mountMarketRoutes(
     }
     logEvent('info', 'update-rollback', `${name}: restored github build at ${beforeCommit}`)
     return { ok: true, detail: null }
+  }
+
+  /** Restore the exact build captured before an update, regardless of failure phase. */
+  async function rollbackExactUpdateBuild(
+    name: string,
+    manifestBefore: ProfileManifestSnapshot,
+    source: UpdateRollbackSource,
+  ): Promise<{ ok: boolean; detail: string | null }> {
+    return source.kind === 'github'
+      ? rollbackGitBuild(name, manifestBefore, source.target, source.beforeCommit)
+      : rollbackNpmBuild(name, manifestBefore, source.beforeVersion)
   }
 
   async function removeInstalledPackage(name: string): Promise<{ ok: boolean; hot: boolean; detail: string | null }> {
@@ -1396,6 +1410,9 @@ export function mountMarketRoutes(
             const beforeCommit = repoKey !== null
               ? readLockCommits(config.profile, activeProfileDir).get(repoKey) ?? null
               : null
+            const updateSource: UpdateRollbackSource = isGit
+              ? { kind: 'github', target, beforeCommit }
+              : { kind: 'npm', beforeVersion }
             // force: the user chose to install a fresh release without the
             // default one-day safety wait; scoped to this single command.
             const addArgs = force ? ['add', RELEASE_AGE_OVERRIDE, target] : ['add', target]
@@ -1417,9 +1434,7 @@ export function mountMarketRoutes(
             // manifest spelling; busy and user-cancelled runs do not own an
             // automatic recovery mutation.
             if ((result.exitCode !== 0 || result.timedOut) && !cancelled && result.busy !== true) {
-              const rollback = isGit
-                ? await rollbackGitBuild(name, manifestBefore, target, beforeCommit)
-                : await rollbackNpmBuild(name, manifestBefore, beforeVersion)
+              const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
               rollbackOk = rollback.ok
               rollbackDetail = rollback.detail
               if (rollback.ok) {
@@ -1455,7 +1470,7 @@ export function mountMarketRoutes(
                 })
                 if (versionFailure !== null) {
                   ok = false
-                  const rollback = await rollbackUpdateBuild(name, manifestBefore)
+                  const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
                   rollbackOk = rollback.ok
                   rollbackDetail = rollback.detail
                   versionFailureError = versionFailure === 'DOWNGRADE_DETECTED'
@@ -1480,7 +1495,7 @@ export function mountMarketRoutes(
             if (ok && !hasLoadableEntry(activeProfileDir, name)) {
               brokenEntry = true
               ok = false
-              const rollback = await rollbackUpdateBuild(name, manifestBefore)
+              const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
               rollbackOk = rollback.ok
               rollbackDetail = rollback.detail
               logEvent('error', 'update',
@@ -1498,7 +1513,7 @@ export function mountMarketRoutes(
               if (!trial.ok) {
                 ok = false
                 const first = trial.errors[0]?.message ?? 'the composition would not boot'
-                const rollback = await rollbackUpdateBuild(name, manifestBefore)
+                const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
                 rollbackOk = rollback.ok
                 rollbackDetail = rollback.detail
                 trialError = rollback.ok
@@ -1513,7 +1528,7 @@ export function mountMarketRoutes(
               const newlyUnresolved = introducedUnresolvedBundles(updateBootBefore, unresolvedProfileBundles())
               if (newlyUnresolved.length > 0) {
                 ok = false
-                const rollback = await rollbackUpdateBuild(name, manifestBefore)
+                const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
                 rollbackOk = rollback.ok
                 rollbackDetail = rollback.detail
                 profileHealthError = rollback.ok
@@ -1552,7 +1567,7 @@ export function mountMarketRoutes(
                     kind: 'update',
                     names: [name],
                     manifestBefore,
-                    ...(isGit ? { gitTarget: target, beforeCommit } : {}),
+                    updateSource,
                   }),
                 }
                 logEvent('warn', 'update-compat', `${name}: introduced host-compatibility risks — ${risks.map(risk => `${risk.peer}@${risk.range} vs ${risk.resolved}`).join('; ')}`)
@@ -2119,9 +2134,9 @@ export function mountMarketRoutes(
             let detail: string | null = null
             if (pending.kind === 'update') {
               const name = pending.names[0]!
-              const result = pending.gitTarget !== undefined
-                ? await rollbackGitBuild(name, pending.manifestBefore!, pending.gitTarget, pending.beforeCommit ?? null)
-                : await rollbackUpdateBuild(name, pending.manifestBefore!)
+              const result = pending.updateSource === undefined
+                ? { ok: false, detail: 'the exact pre-update source is unavailable' }
+                : await rollbackExactUpdateBuild(name, pending.manifestBefore!, pending.updateSource)
               ok = result.ok
               detail = result.detail
             } else {

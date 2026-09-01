@@ -227,6 +227,10 @@ export function readMarketState(profileDir: string): MarketState {
 
 /** Persist the whole market state; `disabled` is the single written key. */
 export function writeMarketState(profileDir: string, state: MarketState): void {
+  // Most callers own only the disable/group fields. A missing channel means
+  // "leave the user's choice alone", not "silently return to the channel
+  // inferred from the running build".
+  const channel = state.channel ?? readMarketState(profileDir).channel
   mkdirSync(join(profileDir, HOT_DIR), { recursive: true, mode: 0o700 })
   writeFileSync(stateFile(profileDir), JSON.stringify({
     disabled: [...state.disabled],
@@ -234,7 +238,7 @@ export function writeMarketState(profileDir: string, state: MarketState): void {
     groupOrder: state.groupOrder,
     // Omitted while unchosen, so "never picked" survives a round trip and
     // keeps deriving from the running build.
-    ...(state.channel === undefined ? {} : { channel: state.channel }),
+    ...(channel === undefined ? {} : { channel }),
   }))
 }
 

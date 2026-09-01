@@ -39,6 +39,39 @@ test('market settings support the stable helper and the Alpha 2 service method',
   assert.match(source, /installSection/)
 })
 
+test('partial market-state writes preserve the user-selected release channel', async (t) => {
+  const profile = await mkdtemp(path.join(os.tmpdir(), 'dshm-market-state-'))
+  t.after(() => rm(profile, { recursive: true, force: true }))
+  const { readMarketState, writeMarketState } = await import('../app/vendor/dsh-portable-plugin-market/src/hot.ts')
+
+  writeMarketState(profile, {
+    disabled: new Set(),
+    groups: {},
+    groupOrder: [],
+    channel: 'beta',
+  })
+  writeMarketState(profile, {
+    disabled: new Set(['example-plugin']),
+    groups: {},
+    groupOrder: [],
+  })
+
+  const restored = readMarketState(profile)
+  assert.equal(restored.channel, 'beta')
+  assert.deepEqual([...restored.disabled], ['example-plugin'])
+})
+
+test('every rejected update and deferred update rollback restores the exact prior build', async () => {
+  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
+  const updateRoute = routes.slice(routes.indexOf("path: '/dsh-market/update'"), routes.indexOf("path: '/dsh-market/setup-pnpm'"))
+  const rollbackRoute = routes.slice(routes.indexOf("path: '/dsh-market/rollback'"), routes.indexOf("path: '/dsh-market/install'"))
+
+  assert.doesNotMatch(updateRoute, /rollbackUpdateBuild/)
+  assert.match(updateRoute, /rollbackExactUpdateBuild\(name, manifestBefore, updateSource\)/)
+  assert.match(updateRoute, /updateSource,/)
+  assert.match(rollbackRoute, /rollbackExactUpdateBuild\(name, pending\.manifestBefore!, pending\.updateSource\)/)
+})
+
 test('the current product line pins one live visual catalog and no curated extension cards', async () => {
   const [product, app, lock, patch, chinese, english] = await Promise.all([
     read('package.json').then(JSON.parse),
