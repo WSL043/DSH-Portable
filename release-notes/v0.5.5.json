@@ -1,0 +1,19 @@
+{
+  "version": "0.5.5",
+  "zh": {
+    "summary": "紧急修复迁移包导入后插件 Profile 缺失依赖、导致 Portable 无法启动的问题。",
+    "highlights": [
+      "导入现在会恢复插件依赖并验证每个 Profile；依赖下载或启动验证失败时，会自动撤销本次文件与插件改动。",
+      "已被旧版导入流程损坏的 Profile 会在覆盖到 0.5.5 后自动修复，无需重新导入数据包。",
+      "迁移过程新增完整的分阶段日志并进入脱敏支持报告；内容寻址的插件归档也会随迁移包保留。"
+    ]
+  },
+  "en": {
+    "summary": "Urgently fixes migration imports that left plugin profiles without dependencies and prevented Portable from starting.",
+    "highlights": [
+      "Import now restores plugin dependencies and validates every profile; a dependency or startup failure rolls back both imported files and generated plugin state.",
+      "Profiles already damaged by an older import repair themselves after upgrading the program files to 0.5.5, without importing the package again.",
+      "Migration now records a complete phased trace in the redacted support report and preserves content-addressed plugin archives."
+    ]
+  }
+}
