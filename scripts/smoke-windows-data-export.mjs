@@ -371,7 +371,9 @@ try {
   const importDeadline = Date.now() + 120000
   while (!existsSync(importedMarker) && Date.now() < importDeadline) await new Promise(resolve => setTimeout(resolve, 200))
   assert.equal(await readFile(importedMarker, 'utf8'), 'name: imported-by-native-ui-smoke\n')
-  const restartDeadline = Date.now() + 90000
+  // Dependency restoration may legitimately consume the bounded 180-second
+  // install window before the native host can restart the imported profile.
+  const restartDeadline = Date.now() + 240000
   let restarted = false
   while (Date.now() < restartDeadline) {
     try {
