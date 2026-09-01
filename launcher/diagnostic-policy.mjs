@@ -19,6 +19,7 @@ export function redactDiagnosticText(source) {
 
 export function classifyPortableError(error) {
   if (error?.code === 'DSH_PROFILE_PREFLIGHT_FAILED') return 'DSH_PROFILE_COMPATIBILITY_FAILED'
+  if (error?.code === 'DSH_DATA_IMPORT_PROFILE_FAILED') return 'DATA_IMPORT_ROLLED_BACK'
   const source = String(error?.stack ?? error?.message ?? error ?? '')
   if (/restored but could not restart|previous version could not be restarted/i.test(source)) return 'UPDATE_RECOVERY_FAILED'
   if (/rolled back[\s\S]*previous version was restored and restarted/i.test(source)) return 'UPDATE_ROLLED_BACK'
@@ -40,6 +41,7 @@ export function portablePublicError(error) {
     LAUNCH_IN_PROGRESS: 'DSH-Portable is already starting or stopping. Try again in a moment.',
     SHARED_COMPONENTS_BUSY: 'Close the other running DSH-Portable environments before changing shared components.',
     DSH_PROFILE_COMPATIBILITY_FAILED: 'The new DeepSeek Harness version is incompatible with an existing plugin profile. The installed version was not changed; export a support report for details.',
+    DATA_IMPORT_ROLLED_BACK: 'The data package was not applied because an imported plugin profile could not start. The previous data was restored; export a support report for details.',
     UPDATE_FAILED: 'The update could not be completed. The installation was left in a recoverable state; export a support report for details.',
     PORTABLE_COMMAND_FAILED: 'DSH-Portable could not complete the requested operation. Export a support report for details.',
   }

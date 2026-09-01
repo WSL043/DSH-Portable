@@ -160,7 +160,7 @@ try {
       }))
       return {
         at: performance.now(),
-        url: location.href,
+        url: String(location.origin || '') + String(location.pathname || ''),
         ready: document.readyState,
         bootVisible: visible(boot),
         bodyText: String(document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 240),

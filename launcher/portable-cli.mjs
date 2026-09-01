@@ -42,10 +42,12 @@ import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.m
 import { seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
+import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 import { preflightStagedDshProfiles } from './update-preflight.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { portablePublicError, recordPortableDiagnostic } from './diagnostic-policy.mjs'
+import { appendOperationTrace, beginOperationTrace } from './operation-trace.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const baseStateRoot = process.env.DSH_PORTABLE_STATE_ROOT || root
@@ -181,12 +183,16 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
     const loggedUrl = launchOutput
       ? officialWorkspaceUrl(tailSince(launchOutput.filename, launchOutput.offset, 16000), state.port)
       : null
-    const url = loggedUrl || state.url || `http://127.0.0.1:${state.port}/`
+    const url = loggedUrl || state.url || null
     if (!urlReported && (loggedUrl || state.url)) {
       urlReported = true
       if (onPhase) onPhase('host-url-discovered', { attempts, port: state.port })
     }
-    if (await httpReady(url)) {
+    if (!url) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      continue
+    }
+    if (await httpReady(url, 1200, { preserveAccessToken: true })) {
       if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
       return url
     }
@@ -477,6 +483,14 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
+  const repairedPluginProfiles = await repairIncompleteProfileDependencies({
+    layout,
+    trace: (phase, fields) => startupLog(startedAt, phase, fields),
+  })
+  startupLog(startedAt, 'plugin-profiles-ready', {
+    status: repairedPluginProfiles.status,
+    profiles: repairedPluginProfiles.profiles.length,
+  })
 
   const portReservation = await reservePort(prior?.port)
   const port = portReservation.port
@@ -567,7 +581,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     startupLog(startedAt, 'host-ready', { pid: child.pid, port })
     await writeJsonAtomic(layout.processState, state)
     const browser = noBrowser ? null : await openBrowser(url)
-    return { status: 'started', environment: layout.environmentId, pid: child.pid, port, url, browser, migration, defaultPlugins, repairedProfileFallback, requestedRepair }
+    return { status: 'started', environment: layout.environmentId, pid: child.pid, port, url, browser, migration, defaultPlugins, repairedPluginProfiles, repairedProfileFallback, requestedRepair }
   } catch (error) {
     portReservation.release()
     let cleanupError = null
@@ -679,7 +693,15 @@ async function restoreData(options) {
   if (!options.input) throw new Error('restore-data requires --input.')
   const current = await status()
   if (current.status !== 'stopped') throw new Error('Close DSH-Portable before importing user data.')
-  return restoreDataArchive(layout, path.resolve(options.input), { password: dataPassword(options), conflict: options.conflict })
+  const operationTrace = beginOperationTrace(layout.logsDir, 'data-import')
+  const trace = (phase, fields) => appendOperationTrace(operationTrace, phase, fields)
+  trace('begin')
+  return restoreDataArchive(layout, path.resolve(options.input), {
+    password: dataPassword(options),
+    conflict: options.conflict,
+    trace,
+    validate: ({ changed, transaction }) => rehydrateImportedProfiles({ layout, changed, transaction, trace }),
+  })
 }
 
 async function checkUpdate(options) {

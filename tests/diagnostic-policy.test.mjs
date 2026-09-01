@@ -33,6 +33,9 @@ test('rolled-back update failures have a stable machine-readable code', () => {
   const incompatible = Object.assign(new Error('profile web failed'), { code: 'DSH_PROFILE_PREFLIGHT_FAILED' })
   assert.equal(classifyPortableError(incompatible), 'DSH_PROFILE_COMPATIBILITY_FAILED')
   assert.match(portablePublicError(incompatible).message, /installed version was not changed/i)
+  const importFailure = Object.assign(new Error('profile web failed'), { code: 'DSH_DATA_IMPORT_PROFILE_FAILED' })
+  assert.equal(classifyPortableError(importFailure), 'DATA_IMPORT_ROLLED_BACK')
+  assert.match(portablePublicError(importFailure).message, /data package was not applied.*previous data was restored/i)
 })
 
 test('full diagnostics are stored redacted and bounded outside the user-facing error', async (t) => {

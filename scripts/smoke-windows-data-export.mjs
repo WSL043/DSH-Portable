@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
+import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -197,10 +198,22 @@ try {
   ])
   const fixtureLayout = layoutForRoot(importFixtureRoot, process.platform)
   const fixtureMarker = path.join(fixtureLayout.dshHome, '.agent-presets', 'import-smoke', 'agent.cordis.yml')
+  const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd')
+  const fixtureProfile = path.join(fixtureLayout.dshHome, 'profiles', 'web')
   await mkdir(path.dirname(fixtureMarker), { recursive: true })
+  await mkdir(path.dirname(fixtureSession), { recursive: true })
+  await mkdir(fixtureProfile, { recursive: true })
   await writeFile(fixtureMarker, 'name: imported-by-native-ui-smoke\n')
+  const fixtureSessionBytes = Buffer.from(`${JSON.stringify({
+    type: 'session',
+    version: 1,
+    id: 'session-smoke',
+    createdAt: 1,
+    cwd: fixtureLayout.workspace,
+    delegationDepth: 0,
+  })}\n`)
+  await writeFile(fixtureSession, zstdCompressSync(fixtureSessionBytes))
   const importArchive = path.join(importFixtureRoot, 'import-private.dshdata')
-  await createDataArchive(fixtureLayout, importArchive, { categories: ['settings'], password })
   const debugPort = await reserveLoopbackPort()
   launcher = spawn(executable, [], {
     cwd: root,
@@ -221,6 +234,19 @@ try {
   await client.send('Runtime.enable')
   await client.send('Page.enable')
   await waitForValue(client, 'document.readyState', value => value === 'complete', 'DSH document readiness', 60000)
+
+  await cp(path.join(root, 'data', 'dsh-home', 'profiles', 'web'), fixtureProfile, {
+    recursive: true,
+    filter: source => !source.split(path.sep).includes('node_modules'),
+  })
+  const fixtureManifestFile = path.join(fixtureProfile, 'package.json')
+  const fixtureManifest = JSON.parse(await readFile(fixtureManifestFile, 'utf8'))
+  const currentBundles = fixtureManifest.dsh?.profile?.bundles
+  assert.ok(Array.isArray(currentBundles) && currentBundles.length > 0, 'the finished product did not initialize a real web profile')
+  fixtureManifest.dependencies = { ...fixtureManifest.dependencies, 'dsh-chat-manager': '1.2.2' }
+  fixtureManifest.dsh.profile.bundles = [...new Set([...currentBundles, 'dsh-chat-manager'])]
+  await writeFile(fixtureManifestFile, `${JSON.stringify(fixtureManifest, null, 2)}\n`)
+  await createDataArchive(fixtureLayout, importArchive, { categories: ['settings', 'sessions', 'plugins'], password })
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
     const dismissed = await evaluate(client, clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later']))
@@ -361,11 +387,14 @@ try {
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /确认导入|Confirm import/.test(item.textContent || '')))`, Boolean, 'import confirmation dialog')
   await capture(client, '06-import-confirm-modal.png')
   await waitForValue(client, clickButton(['重启并导入', 'Restart and import']), value => value?.clicked, 'restart and import')
+  client.close()
   const importedMarker = path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke', 'agent.cordis.yml')
   const importDeadline = Date.now() + 120000
   while (!existsSync(importedMarker) && Date.now() < importDeadline) await new Promise(resolve => setTimeout(resolve, 200))
   assert.equal(await readFile(importedMarker, 'utf8'), 'name: imported-by-native-ui-smoke\n')
-  const restartDeadline = Date.now() + 90000
+  // Dependency restoration may legitimately consume the bounded 180-second
+  // install window before the native host can restart the imported profile.
+  const restartDeadline = Date.now() + 240000
   let restarted = false
   while (Date.now() < restartDeadline) {
     try {
@@ -375,6 +404,13 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200))
   }
   assert.equal(restarted, true)
+  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd')
+  const migratedSession = JSON.parse(zstdDecompressSync(await readFile(migratedSessionFile)).toString('utf8').trim())
+  assert.equal(migratedSession.id, 'session-smoke')
+  const migratedPlugin = JSON.parse(await readFile(path.join(
+    root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package.json',
+  ), 'utf8'))
+  assert.equal(migratedPlugin.version, '1.2.2')
   await portable(['stop', '--no-browser', '--json'])
   await rm(path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke'), { recursive: true, force: true })
 

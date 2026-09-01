@@ -25,6 +25,8 @@ const LOG_NAMES = Object.freeze([
   'dsh.stderr.log',
   'portable-errors.jsonl',
   'portable-errors.jsonl.previous',
+  'data-import-latest.jsonl',
+  'data-import-previous.jsonl',
 ])
 const execFileAsync = promisify(execFile)
 const WINDOWS_DIAGNOSTIC_PROCESSES = Object.freeze([

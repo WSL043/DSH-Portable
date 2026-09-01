@@ -41,6 +41,7 @@ if (args.includes('--version') || args.includes('-V')) {
   })
   process.on('SIGTERM', () => server.close(() => process.exit(0)))
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
+  console.log('dsh web: http://127.0.0.1:' + port + '/')
 } else {
   throw new Error('unexpected fake DSH command: ' + args.join(' '))
 }
@@ -117,7 +118,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await mkdir(path.join(root, 'data'), { recursive: true })
     await mkdir(path.join(root, 'data', 'dsh-home', 'profiles', 'web'), { recursive: true })
     await copyFile(process.execPath, runtimeNode)
-    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'runtime-capsule.mjs', 'startup-trace.mjs']) {
+    for (const name of ['portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'data-import-preflight.mjs', 'operation-trace.mjs', 'runtime-capsule.mjs', 'startup-trace.mjs']) {
       await copyFile(path.join(projectRoot, 'launcher', name), path.join(root, 'launcher', name))
     }
     if (process.platform === 'win32') await compileUpdateExtractor(path.join(root, 'launcher', 'DSH-UpdateExtractor.exe'))

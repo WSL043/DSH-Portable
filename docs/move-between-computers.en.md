@@ -21,9 +21,9 @@ If you do not want to copy the runtime, open **Settings → General → Portable
 - **Export migration package** is convenient between devices you trust.
 - **Export encrypted private package** contains the same data but requires a password, making it the safer choice for cloud storage or removable media.
 
-Both packages contain sessions, settings, plugin configuration, and API credentials. Neither includes the runtime, caches, logs, or workspace files. An unencrypted migration package is sensitive and should never be shared publicly.
+Both packages contain sessions, settings, plugin configuration, and API credentials. Neither includes the runtime, caches, logs, or workspace files. An unencrypted migration package is sensitive and should never be shared publicly. It is still a compressed, integrity-checked container rather than a text file; use the import review screen or `dsh portable inspect` for a summary.
 
-Importing into an existing environment fills missing data by default. Before an explicit overwrite, Portable creates a rollback copy under `data/backups/`.
+Importing into an existing environment fills missing data by default. Before an explicit overwrite, Portable creates a rollback copy under `data/backups/`. An import commits only after plugin dependencies are restored and every profile composes; dependency download or validation failure restores the previous data automatically. Registry plugins may need network access the first time they are restored on a new computer.
 
 ## Verify portability without a second computer
 
@@ -40,4 +40,3 @@ This checks Portable-managed data only. Code repositories, images, and documents
 - Do not move the directory during an update or repair.
 - If Windows still reports files in use, reopen DSH-Portable, run **Settings → General → Portable → Run check**, then exit fully from the tray.
 - If the problem remains, export the redacted support report from the same page and [file a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml). Do not attach API keys, unencrypted migration packages, or private conversations.
-

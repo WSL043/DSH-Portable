@@ -419,10 +419,12 @@ test('simultaneous portable roots cannot mistake another root on the same port f
   const startBody = source.slice(source.indexOf('async function start('), source.indexOf('async function stop()'))
 
   assert.ok(
-    waitBody.indexOf('ownedState(state)') < waitBody.indexOf('httpReady(url)'),
+    waitBody.indexOf('ownedState(state)') < waitBody.indexOf('httpReady(url,'),
     'process ownership must be proven before accepting a ready loopback page',
   )
+  assert.match(waitBody, /httpReady\(url,\s*1200,\s*\{ preserveAccessToken: true \}\)/)
   assert.match(waitBody, /officialWorkspaceUrl\([\s\S]+state\.port\)/)
+  assert.match(waitBody, /const url = loggedUrl \|\| state\.url \|\| null[\s\S]+if \(!url\)[\s\S]+continue[\s\S]+httpReady\(url,/)
   assert.match(startBody, /EADDRINUSE|address already in use/i)
   assert.match(startBody, /portRetry\s*<\s*PORT_RANGE\.last\s*-\s*PORT_RANGE\.first/)
   assert.match(startBody, /start\(noBrowser,\s*portRetry\s*\+\s*1\)/)

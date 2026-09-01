@@ -482,6 +482,19 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(dataExportSmoke, /document\.elementFromPoint/)
   assert.match(dataExportSmoke, /private export completion/)
   assert.match(dataExportSmoke, /waitForValue\(client, clickButton\(\['导入数据包', 'Import data package'\]\), value => value\?\.clicked, 'data import action'\)/)
+  assert.match(dataExportSmoke, /id: 'session-smoke'/)
+  assert.match(dataExportSmoke, /zstdCompressSync\(fixtureSessionBytes\)/)
+  assert.match(dataExportSmoke, /zstdDecompressSync\(await readFile\(migratedSessionFile\)\)/)
+  assert.match(dataExportSmoke, /cp\(path\.join\(root, 'data', 'dsh-home', 'profiles', 'web'\), fixtureProfile/)
+  assert.match(dataExportSmoke, /const currentBundles = fixtureManifest\.dsh\?\.profile\?\.bundles/)
+  assert.match(dataExportSmoke, /profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package\.json/)
+  assert.match(dataExportSmoke, /migratedPlugin\.version, '1\.2\.2'/)
+  assert.match(dataExportSmoke, /const restartDeadline = Date\.now\(\) \+ 240000/)
+  assert.match(
+    dataExportSmoke,
+    /'restart and import'\)\n\s+client\.close\(\)\n\s+const importedMarker/,
+    'the native migration smoke must release its DevTools connection before waiting for the restarted WebView2 host',
+  )
   assert.ok(
     dataExportSmoke.indexOf('private export completion') < dataExportSmoke.indexOf("'migration export action'"),
     'the real migration smoke must wait for the encrypted export modal to close before starting another export',
@@ -566,6 +579,8 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
   assert.match(audit, /const bootLogSample = samples\.find\(sample => sample\.log\.includes\('dsh-boot-surface-visible'\)\)/)
   assert.match(audit, /assert\.ok\(bootSample \|\| bootLogSample/)
   assert.match(audit, /startupTimeoutSeconds/)
+  assert.match(audit, /url: String\(location\.origin \|\| ''\) \+ String\(location\.pathname \|\| ''\)/)
+  assert.doesNotMatch(audit, /url: location\.href/)
   assert.match(workflow, /audit-windows-startup-transition\.mjs[^\r\n]+\$\{\{ matrix\.firstColdStartSeconds \}\}/)
   assert.ok(
     audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(bootSample || bootLogSample"),

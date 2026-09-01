@@ -13,7 +13,7 @@ const MAX_DOCUMENT_BYTES = 768 * 1024 * 1024
 const MAX_FILES = 100_000
 const DEFAULT_CATEGORIES = ['settings', 'sessions', 'plugins']
 const ALL_CATEGORIES = new Set([...DEFAULT_CATEGORIES, 'credentials', 'workspace'])
-const PROFILE_SKIP = new Set(['node_modules', '.dsh-portable-archives', '.git', 'pnpm-lock.yaml'])
+const PROFILE_SKIP = new Set(['node_modules', '.git', 'pnpm-lock.yaml'])
 const SECRET_NAME = /(^|\/)(\.credentials\.yaml|config\.toml|\.env(?:\.[^/]+)?|credentials?\.(?:json|ya?ml)|secrets?\.(?:json|ya?ml))$/i
 
 function sha256(value) {
@@ -228,33 +228,90 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   const conflict = options.conflict ?? 'keep'
   if (!['keep', 'replace'].includes(conflict)) throw new Error('Conflict mode must be keep or replace.')
   const { document, encrypted } = decodeArchive(await readFile(path.resolve(filename)), options.password)
+  const trace = typeof options.trace === 'function' ? options.trace : () => {}
+  trace('archive-validated', { files: document.files.length, categories: document.categories.length, encrypted })
   const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
-  const rollbackDirectory = path.join(layout.dataDir, 'backups', `before-import-${stamp}`)
+  const rollbackDirectory = path.join(layout.dataDir, 'backups', `before-import-${stamp}-${randomBytes(6).toString('hex')}`)
   const conflicts = []
+  const changed = []
+  const generated = []
   let imported = 0
   let unchanged = 0
   let replaced = 0
-  for (const file of document.files) {
-    const bytes = Buffer.from(file.data, 'base64')
-    const target = await safeTarget(layout.stateRoot, file.path)
-    if (existsSync(target)) {
-      const previous = await readFile(target)
-      if (sha256(previous) === file.sha256) { unchanged += 1; continue }
-      if (conflict === 'keep') { conflicts.push(file.path); continue }
-      const rollback = await safeTarget(rollbackDirectory, file.path)
+  let retainedGeneratedBackup = false
+
+  async function prepareGeneratedPath(target) {
+    const absolute = path.resolve(target)
+    const relative = normalizedRelative(layout.stateRoot, absolute)
+    if (generated.some(entry => entry.target === absolute)) return
+    const rollback = path.join(rollbackDirectory, 'generated', ...relative.split('/'))
+    if (existsSync(absolute)) {
       await mkdir(path.dirname(rollback), { recursive: true })
-      await writeFile(rollback, previous, { mode: 0o600 })
-      replaced += 1
+      await rename(absolute, rollback)
+      generated.push({ target: absolute, rollback })
+      retainedGeneratedBackup = true
+    } else {
+      generated.push({ target: absolute, rollback: null })
     }
-    await mkdir(path.dirname(target), { recursive: true })
-    const temporary = `${target}.dsh-import-${process.pid}`
-    await writeFile(temporary, bytes, { mode: 0o600 })
-    await rename(temporary, target)
-    imported += 1
   }
-  if (replaced === 0) await rm(rollbackDirectory, { recursive: true, force: true })
+
+  async function rollbackImport() {
+    trace('rollback-begin', { changed: changed.length, generated: generated.length })
+    for (const entry of [...generated].reverse()) {
+      await rm(entry.target, { recursive: true, force: true }).catch(() => {})
+      if (entry.rollback && existsSync(entry.rollback)) {
+        await mkdir(path.dirname(entry.target), { recursive: true })
+        await rename(entry.rollback, entry.target)
+      }
+    }
+    for (const entry of [...changed].reverse()) {
+      await rm(entry.target, { force: true }).catch(() => {})
+      if (entry.rollback && existsSync(entry.rollback)) {
+        await mkdir(path.dirname(entry.target), { recursive: true })
+        await rename(entry.rollback, entry.target)
+      }
+    }
+    await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
+    trace('rollback-complete')
+  }
+
+  try {
+    for (const file of document.files) {
+      const bytes = Buffer.from(file.data, 'base64')
+      const target = await safeTarget(layout.stateRoot, file.path)
+      let rollback = null
+      if (existsSync(target)) {
+        const previous = await readFile(target)
+        if (sha256(previous) === file.sha256) { unchanged += 1; continue }
+        if (conflict === 'keep') { conflicts.push(file.path); continue }
+        rollback = await safeTarget(rollbackDirectory, file.path)
+        await mkdir(path.dirname(rollback), { recursive: true })
+        await writeFile(rollback, previous, { mode: 0o600 })
+        replaced += 1
+      }
+      await mkdir(path.dirname(target), { recursive: true })
+      const temporary = `${target}.dsh-import-${process.pid}`
+      await writeFile(temporary, bytes, { mode: 0o600 })
+      await rename(temporary, target)
+      changed.push({ target, rollback, path: file.path, category: file.category })
+      imported += 1
+    }
+    if (typeof options.validate === 'function') {
+      trace('operability-validation-begin', { imported, unchanged, conflicts: conflicts.length, replaced })
+      await options.validate({
+        changed: changed.map(({ path: archivePath, category }) => ({ path: archivePath, category })),
+        transaction: { prepareGeneratedPath },
+      })
+      trace('operability-validation-complete')
+    }
+  } catch (error) {
+    await rollbackImport()
+    throw error
+  }
+  if (replaced === 0 && !retainedGeneratedBackup) await rm(rollbackDirectory, { recursive: true, force: true })
+  trace('complete', { imported, unchanged, conflicts: conflicts.length, replaced })
   return {
     status: 'restored', encrypted, categories: document.categories, imported, unchanged, conflicts, replaced,
-    rollbackDirectory: replaced > 0 ? rollbackDirectory : null,
+    rollbackDirectory: replaced > 0 || retainedGeneratedBackup ? rollbackDirectory : null,
   }
 }
