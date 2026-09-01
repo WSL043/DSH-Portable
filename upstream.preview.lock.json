@@ -31,18 +31,18 @@
       "reviewedCommit": "65fecc574f01d635906a0aa049e8522ef8ca3dcb",
       "filename": "dsh-image-viewer.tgz"
     },
-    "sessionRecovery": {
-      "package": "dsh-session-recovery",
-      "repository": "WSL043/dsh-session-recovery",
+    "chatManager": {
+      "package": "dsh-chat-manager",
+      "repository": "WSL043/dsh-chat-manager",
       "releaseChannel": "prerelease",
-      "version": "0.1.0-beta.1",
-      "spec": "https://github.com/WSL043/dsh-session-recovery/releases/download/v0.1.0-beta.1/dsh-session-recovery-0.1.0-beta.1.tgz",
-      "url": "https://github.com/WSL043/dsh-session-recovery/releases/download/v0.1.0-beta.1/dsh-session-recovery-0.1.0-beta.1.tgz",
-      "sha256": "4d0243b280b1babc0cb2200e8f0d8972fd816be8af4ea3843e80947faf38aa9e",
-      "integrity": "sha512-D02jzm05DAPsat7hQYQA2hxoFPDc+bjoWfBY+VOd8XWrVXUtiVTnn6Z67Hf/EalNLDcJhK4jydTXWkJoULzgYg==",
+      "version": "1.3.0-beta.0",
+      "spec": "1.3.0-beta.0",
+      "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.3.0-beta.0.tgz",
+      "sha256": "e7647aacec3f365cb661a312dd4ce66780c29935cbc36ad5f63afc597e4ed00a",
+      "integrity": "sha512-Y7y29ky5AayIZ3F61sOOyAgZ9S0fFozqw72/4wwyIpADs+ohdOXRGOZrx4o026toG0ig+hbCX7Qkw4aazNrjoA==",
       "license": "MIT",
-      "reviewedCommit": "6c2879f4809b6797133187602f22160b940c4ed1",
-      "filename": "dsh-session-recovery.tgz"
+      "reviewedCommit": "126d135dadb0f41747d6c9b6d72d36f76e6500a9",
+      "filename": "dsh-chat-manager.tgz"
     }
   }
 }

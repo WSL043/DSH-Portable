@@ -678,10 +678,9 @@ test('fresh products bundle only reviewed removable defaults and upgrades preser
     read('launcher/portable-cli.mjs'),
     read('launcher/default-plugins.mjs'),
   ])
-  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['imageViewer', 'sessionRecovery'])
+  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
   assert.deepEqual(previewLock.defaultPlugins, lock.defaultPlugins)
-  assert.deepEqual(Object.values(lock.defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-session-recovery'])
-  assert.equal(Object.values(lock.defaultPlugins).some(plugin => plugin.package === 'dsh-chat-manager'), false)
+  assert.deepEqual(Object.values(lock.defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-chat-manager'])
   assert.equal(new Set(Object.values(lock.defaultPlugins).map(plugin => plugin.filename)).size, 2)
   for (const plugin of Object.values(lock.defaultPlugins)) {
     assert.match(plugin.sha256, /^[0-9a-f]{64}$/)
@@ -704,11 +703,10 @@ test('fresh products bundle only reviewed removable defaults and upgrades preser
   }
   assert.match(cli, /seedDefaultPlugins/)
   assert.match(core, /name:\s*'dsh-image-viewer'/)
-  assert.match(core, /name:\s*'dsh-session-recovery'/)
+  assert.match(core, /name:\s*'dsh-chat-manager'/)
   assert.match(core, /profile-exists/)
   assert.match(core, /no-compatible-defaults/)
   assert.match(core, /\.dsh-portable-archives/)
-  assert.doesNotMatch(core, /dsh-chat-manager/)
   for (const build of [windows, macos, linux]) {
     const updateSection = build.slice(build.indexOf('UPDATE_COMPONENT_ROOT'))
     assert.doesNotMatch(updateSection, /(?:cp|Copy-Item)[^\n]+default-plugins/)
