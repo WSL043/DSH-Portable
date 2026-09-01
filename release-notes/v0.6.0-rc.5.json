@@ -1,0 +1,21 @@
+{
+  "version": "0.6.0-rc.5",
+  "zh": {
+    "summary": "修复工作台已经可用却仍停留在启动界面、随后误报超时的问题。",
+    "highlights": [
+      "持续更新状态文字的工作台不再被误判为尚未稳定；界面满足可见、可交互条件后即可完成启动。",
+      "启动判断仍会拒绝空白页、错误页和只有加载动画的页面，不会用提前显示掩盖真实故障。",
+      "超时支持日志新增工作台尺寸、可见控件、启动层和连续就绪检查结果，便于定位其他电脑上的启动问题。",
+      "继续内置官方 DeepSeek Harness 0.1.2-alpha.3；Beta 与稳定更新通道保持分离。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes a startup timeout that could be reported after the workspace was already usable.",
+    "highlights": [
+      "Workspaces with continuously updating status text can now complete startup once the surface is visible and interactive.",
+      "The readiness gate still rejects blank, error-only, and loading-only pages instead of masking a real startup failure.",
+      "Timeout support logs now include workspace dimensions, visible controls, boot-overlay state, and consecutive readiness results for diagnosis on other computers.",
+      "Continues to bundle official DeepSeek Harness 0.1.2-alpha.3 while keeping Beta and Stable update channels separate."
+    ]
+  }
+}
