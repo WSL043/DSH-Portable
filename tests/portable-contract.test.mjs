@@ -424,6 +424,7 @@ test('simultaneous portable roots cannot mistake another root on the same port f
   )
   assert.match(waitBody, /httpReady\(url,\s*1200,\s*\{ preserveAccessToken: true \}\)/)
   assert.match(waitBody, /officialWorkspaceUrl\([\s\S]+state\.port\)/)
+  assert.match(waitBody, /const url = loggedUrl \|\| state\.url \|\| null[\s\S]+if \(!url\)[\s\S]+continue[\s\S]+httpReady\(url,/)
   assert.match(startBody, /EADDRINUSE|address already in use/i)
   assert.match(startBody, /portRetry\s*<\s*PORT_RANGE\.last\s*-\s*PORT_RANGE\.first/)
   assert.match(startBody, /start\(noBrowser,\s*portRetry\s*\+\s*1\)/)

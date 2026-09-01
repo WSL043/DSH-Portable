@@ -41,6 +41,7 @@ if (args.includes('--version') || args.includes('-V')) {
   })
   process.on('SIGTERM', () => server.close(() => process.exit(0)))
   await new Promise((resolve) => server.listen(port, '127.0.0.1', resolve))
+  console.log('dsh web: http://127.0.0.1:' + port + '/')
 } else {
   throw new Error('unexpected fake DSH command: ' + args.join(' '))
 }

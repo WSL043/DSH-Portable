@@ -579,6 +579,8 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
   assert.match(audit, /const bootLogSample = samples\.find\(sample => sample\.log\.includes\('dsh-boot-surface-visible'\)\)/)
   assert.match(audit, /assert\.ok\(bootSample \|\| bootLogSample/)
   assert.match(audit, /startupTimeoutSeconds/)
+  assert.match(audit, /url: String\(location\.origin \|\| ''\) \+ String\(location\.pathname \|\| ''\)/)
+  assert.doesNotMatch(audit, /url: location\.href/)
   assert.match(workflow, /audit-windows-startup-transition\.mjs[^\r\n]+\$\{\{ matrix\.firstColdStartSeconds \}\}/)
   assert.ok(
     audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(bootSample || bootLogSample"),

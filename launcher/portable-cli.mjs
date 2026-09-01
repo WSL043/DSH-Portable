@@ -183,10 +183,14 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
     const loggedUrl = launchOutput
       ? officialWorkspaceUrl(tailSince(launchOutput.filename, launchOutput.offset, 16000), state.port)
       : null
-    const url = loggedUrl || state.url || `http://127.0.0.1:${state.port}/`
+    const url = loggedUrl || state.url || null
     if (!urlReported && (loggedUrl || state.url)) {
       urlReported = true
       if (onPhase) onPhase('host-url-discovered', { attempts, port: state.port })
+    }
+    if (!url) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      continue
     }
     if (await httpReady(url, 1200, { preserveAccessToken: true })) {
       if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
