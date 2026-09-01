@@ -16,14 +16,18 @@ export function officialWorkspaceUrl(output, expectedPort) {
   return result
 }
 
-function requestTarget(target) {
+function requestTarget(target, options = {}) {
   if (Number.isSafeInteger(Number(target))) {
     return { hostname: '127.0.0.1', port: Number(target), path: '/' }
   }
   try {
     const url = new URL(String(target))
     if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') return null
-    return { hostname: url.hostname, port: Number(url.port || 80), path: `${url.pathname}${url.search}` }
+    return {
+      hostname: url.hostname,
+      port: Number(url.port || 80),
+      path: options.preserveAccessToken ? (url.pathname || '/') : `${url.pathname}${url.search}`,
+    }
   } catch {
     return null
   }
@@ -49,9 +53,9 @@ function responseCookieHeader(setCookie) {
     .join('; ')
 }
 
-export function workspaceDocumentReady(target, timeout = 1200) {
+export function workspaceDocumentReady(target, timeout = 1200, options = {}) {
   return new Promise((resolve) => {
-    const requestOptions = requestTarget(target)
+    const requestOptions = requestTarget(target, options)
     if (!requestOptions) {
       resolve(false)
       return
@@ -81,7 +85,9 @@ export function workspaceDocumentReady(target, timeout = 1200) {
         if (length > MAX_WORKSPACE_DOCUMENT_BYTES) request.destroy(new Error('workspace document is too large'))
       })
       response.once('end', () => finish(
-        status === 200
+        options.preserveAccessToken
+          ? status >= 200 && status < 500
+          : status === 200
           && contentType.startsWith('text/html')
           && length > 0
           && length <= MAX_WORKSPACE_DOCUMENT_BYTES,

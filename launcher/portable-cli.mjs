@@ -188,7 +188,7 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
       urlReported = true
       if (onPhase) onPhase('host-url-discovered', { attempts, port: state.port })
     }
-    if (await httpReady(url)) {
+    if (await httpReady(url, 1200, { preserveAccessToken: true })) {
       if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
       return url
     }

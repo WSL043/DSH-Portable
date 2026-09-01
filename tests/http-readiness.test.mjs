@@ -79,3 +79,25 @@ test('workspace readiness can use a validated token URL', async () => {
     assert.equal(await workspaceDocumentReady(`http://example.com:${port}/?token=portable`, 1000), false)
   })
 })
+
+test('host readiness leaves a one-time workspace token for the WebView', async () => {
+  let tokenRequests = 0
+  let bareRequests = 0
+  await withServer((request, response) => {
+    if (request.url === '/?token=portable') {
+      tokenRequests += 1
+      response.writeHead(tokenRequests === 1 ? 303 : 401, tokenRequests === 1 ? {
+        location: '/',
+        'set-cookie': 'dsh-auth=verified; Path=/; HttpOnly; SameSite=Strict',
+      } : { 'content-type': 'text/plain' }).end(tokenRequests === 1 ? undefined : 'token already consumed')
+      return
+    }
+    bareRequests += 1
+    response.writeHead(401, { 'content-type': 'text/plain' }).end('authentication required')
+  }, async (port) => {
+    const workspaceUrl = `http://127.0.0.1:${port}/?token=portable`
+    assert.equal(await workspaceDocumentReady(workspaceUrl, 1000, { preserveAccessToken: true }), true)
+    assert.equal(tokenRequests, 0)
+    assert.equal(bareRequests, 1)
+  })
+})
