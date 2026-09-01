@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.38.1`
-(`df2a16b1ed2dfaf1f2505e184e738c0d6d428945`).
+Reviewed upstream baseline: `dsh-market` `v1.39.0`
+(`ee95b359c818ab9b8c3cf86a46e20757d72fdc63`).
 
 ## Compatibility matrix
 
@@ -37,6 +37,8 @@ Reviewed upstream baseline: `dsh-market` `v1.38.1`
 | Check GitHub-only updates through the unmetered git ref advertisement | Adopted; still honors the configured proxy path |
 | Treat an unlocatable in-box bundle as unknown and ignore a stale direct profile shadow | Adopted; unresolved community bundles remain boot errors |
 | Verify the npm version actually resolved after update and roll back downgrades or target mismatches | Adopted; an explicit channel switch may move backwards only to its resolved target |
+| Preserve a selected market channel across plugin toggle and group writes | Adopted; partial state writers keep fields they do not own |
+| Make every rejected npm or GitHub update rollback source-exact | Adopted; automatic and deferred rollback require the captured prior version or commit |
 | Reconcile validation-triggered removals when pnpm deleted the package before saving the manifest | Adopted; disk truth is used only when the package is gone |
 | Explain tarballs missing integrity metadata without inventing a checksum | Adopted |
 | Explain Windows locked-file rename failures without automatic retry | Adopted |
