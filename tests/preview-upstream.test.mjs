@@ -19,7 +19,7 @@ test('stable and beta upstream locks are separate and immutable', async () => {
   assert.match(preview.dsh.npmIntegrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
   assert.match(preview.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
   assert.equal(preview.dsh.buildProfile, 'official')
-  assert.deepEqual(preview.dsh.packedFamilies, { dsh: 244, vendor: 9, landlock: 1 })
+  assert.deepEqual(preview.dsh.packedFamilies, { dsh: 242, vendor: 9, landlock: 1 })
   assert.deepEqual(preview.defaultPlugins, stable.defaultPlugins)
 })
 
