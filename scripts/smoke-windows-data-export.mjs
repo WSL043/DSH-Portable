@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -204,9 +204,7 @@ try {
   await mkdir(fixtureProfile, { recursive: true })
   await writeFile(fixtureMarker, 'name: imported-by-native-ui-smoke\n')
   await writeFile(fixtureSession, 'portable-session-migration-smoke')
-  await writeFile(path.join(fixtureProfile, 'package.json'), '{"dependencies":{"dsh-chat-manager":"1.2.2"}}\n')
   const importArchive = path.join(importFixtureRoot, 'import-private.dshdata')
-  await createDataArchive(fixtureLayout, importArchive, { categories: ['settings', 'sessions', 'plugins'], password })
   const debugPort = await reserveLoopbackPort()
   launcher = spawn(executable, [], {
     cwd: root,
@@ -227,6 +225,19 @@ try {
   await client.send('Runtime.enable')
   await client.send('Page.enable')
   await waitForValue(client, 'document.readyState', value => value === 'complete', 'DSH document readiness', 60000)
+
+  await cp(path.join(root, 'data', 'dsh-home', 'profiles', 'web'), fixtureProfile, {
+    recursive: true,
+    filter: source => !source.split(path.sep).includes('node_modules'),
+  })
+  const fixtureManifestFile = path.join(fixtureProfile, 'package.json')
+  const fixtureManifest = JSON.parse(await readFile(fixtureManifestFile, 'utf8'))
+  const currentBundles = fixtureManifest.dsh?.profile?.bundles
+  assert.ok(Array.isArray(currentBundles) && currentBundles.length > 0, 'the finished product did not initialize a real web profile')
+  fixtureManifest.dependencies = { ...fixtureManifest.dependencies, 'dsh-chat-manager': '1.2.2' }
+  fixtureManifest.dsh.profile.bundles = [...new Set([...currentBundles, 'dsh-chat-manager'])]
+  await writeFile(fixtureManifestFile, `${JSON.stringify(fixtureManifest, null, 2)}\n`)
+  await createDataArchive(fixtureLayout, importArchive, { categories: ['settings', 'sessions', 'plugins'], password })
 
   for (let attempt = 0; attempt < 16; attempt += 1) {
     const dismissed = await evaluate(client, clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later']))
@@ -367,6 +378,7 @@ try {
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /确认导入|Confirm import/.test(item.textContent || '')))`, Boolean, 'import confirmation dialog')
   await capture(client, '06-import-confirm-modal.png')
   await waitForValue(client, clickButton(['重启并导入', 'Restart and import']), value => value?.clicked, 'restart and import')
+  client.close()
   const importedMarker = path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke', 'agent.cordis.yml')
   const importDeadline = Date.now() + 120000
   while (!existsSync(importedMarker) && Date.now() < importDeadline) await new Promise(resolve => setTimeout(resolve, 200))
