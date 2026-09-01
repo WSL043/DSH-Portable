@@ -1,20 +1,24 @@
 {
   "version": "0.6.0-rc.5",
   "zh": {
-    "summary": "修复工作台已经可用却仍停留在启动界面、随后误报超时的问题。",
+    "summary": "带来可直接回复的 Windows 任务完成通知、两个可删除的默认插件，并修复工作台已可用却仍误报启动超时的问题。",
     "highlights": [
+      "开启任务完成通知后，Windows 会可靠提示；鼠标悬浮可展开完整回复，Reply 会回到原任务，任务栏图标会显示未读完成任务数量。",
+      "全新 Portable 默认包含 Image Viewer 与 Session Recovery；它们都是普通插件，可以删除，而且升级或再次启动不会擅自装回。",
+      "Session Recovery 只补充官方界面尚未提供的归档会话恢复入口，不复制搜索、删除、工作区管理等官方能力。",
       "持续更新状态文字的工作台不再被误判为尚未稳定；界面满足可见、可交互条件后即可完成启动。",
-      "启动判断仍会拒绝空白页、错误页和只有加载动画的页面，不会用提前显示掩盖真实故障。",
-      "超时支持日志新增工作台尺寸、可见控件、启动层和连续就绪检查结果，便于定位其他电脑上的启动问题。",
+      "启动判断仍会拒绝空白页、错误页和只有加载动画的页面；超时日志也会记录工作台尺寸、可见控件与连续就绪结果。",
       "继续内置官方 DeepSeek Harness 0.1.2-alpha.3；Beta 与稳定更新通道保持分离。"
     ]
   },
   "en": {
-    "summary": "Fixes a startup timeout that could be reported after the workspace was already usable.",
+    "summary": "Adds actionable Windows task-completion notifications and two removable default plugins, while fixing a startup timeout that could be reported after the workspace was already usable.",
     "highlights": [
+      "When completion notifications are enabled, Windows reliably alerts you; hover expands the complete reply, Reply returns to the originating task, and the taskbar icon shows the unread completion count.",
+      "Fresh Portable installs include Image Viewer and Session Recovery as ordinary removable plugins; removing either remains respected across restarts and upgrades.",
+      "Session Recovery only supplies the archived-session restore entry point missing from the official interface, without duplicating search, deletion, or workspace management.",
       "Workspaces with continuously updating status text can now complete startup once the surface is visible and interactive.",
-      "The readiness gate still rejects blank, error-only, and loading-only pages instead of masking a real startup failure.",
-      "Timeout support logs now include workspace dimensions, visible controls, boot-overlay state, and consecutive readiness results for diagnosis on other computers.",
+      "The readiness gate still rejects blank, error-only, and loading-only pages, while timeout logs record workspace dimensions, visible controls, and consecutive readiness results.",
       "Continues to bundle official DeepSeek Harness 0.1.2-alpha.3 while keeping Beta and Stable update channels separate."
     ]
   }
