@@ -14,12 +14,17 @@ In a regular Windows PowerShell window, replace dsh above with .\dsh.exe.
 Migration and encrypted private packages contain the same sessions, settings,
 plugin configuration, and API credentials. They exclude runtimes, caches, logs,
 and workspace files. Keep an unencrypted package only on a trusted device.
+An unencrypted package is still a compressed, integrity-checked container rather
+than a text file; use inspect or the import review screen for a safe summary.
 
 Export either package from Settings > General > Portable > Data and migration.
 Encrypted private packages require a password; lost passwords cannot be recovered.
 
 Restore keeps existing files by default and imports missing data. Explicit
-replacement creates a rollback copy under data/backups first.
+replacement creates a rollback copy under data/backups first. Portable restores
+plugin dependencies and verifies each profile before committing; a download or
+validation failure rolls the whole import back. Registry plugins may need network
+access the first time they are restored on a new computer.
 
 If a very old or damaged launcher cannot update in place, run the current small
 bootstrap against the existing Portable folder. If the launcher itself is damaged,

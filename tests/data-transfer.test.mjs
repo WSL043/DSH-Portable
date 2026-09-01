@@ -12,6 +12,7 @@ async function fixture() {
   const layout = layoutForRoot(root, process.platform)
   await mkdir(path.join(layout.dshHome, 'sessions', 'workspace-a', 'session-one'), { recursive: true })
   await mkdir(path.join(layout.dshHome, 'profiles', 'web', 'node_modules', 'ignored'), { recursive: true })
+  await mkdir(path.join(layout.dshHome, 'profiles', 'web', '.dsh-portable-archives'), { recursive: true })
   await mkdir(path.join(layout.dataDir, 'webview2'), { recursive: true })
   await mkdir(layout.workspace, { recursive: true })
   await writeFile(path.join(layout.dataDir, 'launcher-settings.json'), '{"updateCheck":false}\n')
@@ -21,6 +22,7 @@ async function fixture() {
   await writeFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), '{"dependencies":{"plugin-a":"1.0.0"}}\n')
   await writeFile(path.join(layout.dshHome, 'profiles', 'web', 'cordis.patch.yml'), 'plugins: []\n')
   await writeFile(path.join(layout.dshHome, 'profiles', 'web', 'node_modules', 'ignored', 'large.js'), 'ignore')
+  await writeFile(path.join(layout.dshHome, 'profiles', 'web', '.dsh-portable-archives', 'sha512-test.tgz'), 'portable plugin archive')
   await writeFile(path.join(layout.dataDir, 'webview2', 'cache.bin'), 'ignore')
   await writeFile(path.join(layout.workspace, 'project.txt'), 'workspace')
   return { root, layout }
@@ -37,6 +39,7 @@ test('data archive defaults to durable settings, sessions and reproducible plugi
   assert.ok(inspected.files.includes('data/dsh-home/settings.yaml'))
   assert.ok(inspected.files.includes('data/dsh-home/sessions/workspace-a/session-one/session.jsonl.zstd'))
   assert.ok(inspected.files.includes('data/dsh-home/profiles/web/package.json'))
+  assert.ok(inspected.files.includes('data/dsh-home/profiles/web/.dsh-portable-archives/sha512-test.tgz'))
   assert.ok(!inspected.files.some(file => file.includes('node_modules')))
   assert.ok(!inspected.files.some(file => file.includes('webview2')))
   assert.ok(!inspected.files.includes('data/dsh-home/.credentials.yaml'))
@@ -104,6 +107,64 @@ test('restore can explicitly replace conflicts after creating a rollback snapsho
   assert.equal(await readFile(path.join(target.layout.dshHome, 'settings.yaml'), 'utf8'), 'locale: zh-CN\n')
   assert.ok(result.rollbackDirectory)
   assert.equal(await readFile(path.join(result.rollbackDirectory, 'data', 'dsh-home', 'settings.yaml'), 'utf8'), 'locale: en-US\n')
+})
+
+test('restore rolls back every imported file and validator-generated path when operability validation fails', async () => {
+  const source = await fixture()
+  const output = path.join(source.layout.root, 'backup.dshdata')
+  await createDataArchive(source.layout, output)
+
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-data-transfer-target-'))
+  const layout = layoutForRoot(root, process.platform)
+  await mkdir(layout.dshHome, { recursive: true })
+  await writeFile(path.join(layout.dshHome, 'settings.yaml'), 'locale: en-US\n')
+  const generated = path.join(layout.dshHome, 'profiles', 'web', 'node_modules')
+
+  await assert.rejects(
+    restoreDataArchive(layout, output, {
+      conflict: 'replace',
+      validate: async ({ transaction }) => {
+        await transaction.prepareGeneratedPath(generated)
+        await mkdir(generated, { recursive: true })
+        await writeFile(path.join(generated, 'installed.txt'), 'generated')
+        throw new Error('profile does not compose')
+      },
+    }),
+    /profile does not compose/,
+  )
+
+  assert.equal(await readFile(path.join(layout.dshHome, 'settings.yaml'), 'utf8'), 'locale: en-US\n')
+  await assert.rejects(readFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json')), error => error.code === 'ENOENT')
+  await assert.rejects(readFile(path.join(generated, 'installed.txt')), error => error.code === 'ENOENT')
+  await assert.rejects(
+    readFile(path.join(layout.dshHome, 'sessions', 'workspace-a', 'session-one', 'session.jsonl.zstd')),
+    error => error.code === 'ENOENT',
+  )
+})
+
+test('successful restore can replace generated plugin state while retaining its rollback snapshot', async () => {
+  const source = await fixture()
+  await writeFile(path.join(source.layout.dshHome, 'profiles', 'web', 'package.json'), '{"dependencies":{"plugin-a":"2.0.0"}}\n')
+  const output = path.join(source.layout.root, 'backup.dshdata')
+  await createDataArchive(source.layout, output)
+  const target = await fixture()
+  const generated = path.join(target.layout.dshHome, 'profiles', 'web', 'node_modules')
+
+  const result = await restoreDataArchive(target.layout, output, {
+    conflict: 'replace',
+    validate: async ({ transaction }) => {
+      await transaction.prepareGeneratedPath(generated)
+      await mkdir(generated, { recursive: true })
+      await writeFile(path.join(generated, 'installed.txt'), 'new generated state')
+    },
+  })
+
+  assert.ok(result.rollbackDirectory)
+  assert.equal(await readFile(path.join(generated, 'installed.txt'), 'utf8'), 'new generated state')
+  assert.equal(
+    await readFile(path.join(result.rollbackDirectory, 'generated', 'data', 'dsh-home', 'profiles', 'web', 'node_modules', 'ignored', 'large.js'), 'utf8'),
+    'ignore',
+  )
 })
 
 test('restore rejects archive entries outside their durable data category', async () => {
