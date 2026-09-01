@@ -38,6 +38,7 @@ namespace DshPortable
         public long updatedAt { get; set; }
         public bool running { get; set; }
         public bool completed { get; set; }
+        public string finalReply { get; set; }
         public string pendingInteraction { get; set; }
         public string agentPreset { get; set; }
     }
@@ -61,6 +62,159 @@ namespace DshPortable
         public int width { get; set; }
         public int height { get; set; }
         public bool maximized { get; set; }
+    }
+
+    internal static class TaskbarBadge
+    {
+        [ComImport, Guid("56FDF344-FD6D-11D0-958A-006097C9A090"), ClassInterface(ClassInterfaceType.None)]
+        private class TaskbarList { }
+
+        [ComImport, Guid("EA1AFB91-9E28-4B86-90E9-9E9F8A5EEA84"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        private interface ITaskbarList3
+        {
+            void HrInit();
+            void AddTab(IntPtr hwnd);
+            void DeleteTab(IntPtr hwnd);
+            void ActivateTab(IntPtr hwnd);
+            void SetActiveAlt(IntPtr hwnd);
+            void MarkFullscreenWindow(IntPtr hwnd, [MarshalAs(UnmanagedType.Bool)] bool fullscreen);
+            void SetProgressValue(IntPtr hwnd, ulong completed, ulong total);
+            void SetProgressState(IntPtr hwnd, int flags);
+            void RegisterTab(IntPtr tab, IntPtr mdi);
+            void UnregisterTab(IntPtr tab);
+            void SetTabOrder(IntPtr tab, IntPtr insertBefore);
+            void SetTabActive(IntPtr tab, IntPtr mdi, uint reserved);
+            void ThumbBarAddButtons(IntPtr hwnd, uint count, IntPtr buttons);
+            void ThumbBarUpdateButtons(IntPtr hwnd, uint count, IntPtr buttons);
+            void ThumbBarSetImageList(IntPtr hwnd, IntPtr imageList);
+            void SetOverlayIcon(IntPtr hwnd, IntPtr icon, [MarshalAs(UnmanagedType.LPWStr)] string description);
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool DestroyIcon(IntPtr icon);
+
+        internal static void SetOverlayIcon(IntPtr window, int count)
+        {
+            if (window == IntPtr.Zero) return;
+            ITaskbarList3 taskbar = null;
+            IntPtr iconHandle = IntPtr.Zero;
+            try
+            {
+                taskbar = (ITaskbarList3)new TaskbarList();
+                taskbar.HrInit();
+                if (count <= 0)
+                {
+                    taskbar.SetOverlayIcon(window, IntPtr.Zero, String.Empty);
+                    return;
+                }
+                using (Bitmap bitmap = new Bitmap(32, 32))
+                using (Graphics graphics = Graphics.FromImage(bitmap))
+                using (Brush badge = new SolidBrush(Color.FromArgb(220, 46, 56)))
+                using (Font font = new Font("Segoe UI", count > 9 ? 11F : 15F, FontStyle.Bold, GraphicsUnit.Pixel))
+                {
+                    graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    graphics.Clear(Color.Transparent);
+                    graphics.FillEllipse(badge, 1, 1, 30, 30);
+                    string text = count > 9 ? "9+" : count.ToString(CultureInfo.InvariantCulture);
+                    TextRenderer.DrawText(graphics, text, font, new Rectangle(0, 0, 32, 32), Color.White,
+                        TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+                    iconHandle = bitmap.GetHicon();
+                }
+                taskbar.SetOverlayIcon(window, iconHandle, count.ToString(CultureInfo.InvariantCulture) + " completed tasks");
+            }
+            catch { }
+            finally
+            {
+                if (iconHandle != IntPtr.Zero) DestroyIcon(iconHandle);
+                if (taskbar != null && Marshal.IsComObject(taskbar)) Marshal.ReleaseComObject(taskbar);
+            }
+        }
+    }
+
+    internal sealed class TaskCompletionNotification : Form
+    {
+        private readonly string sessionId;
+        private readonly Label bodyPreview;
+        private readonly TextBox bodyFull;
+        private readonly TextBox replyBox;
+        private readonly Button replyButton;
+        private readonly System.Windows.Forms.Timer dismissTimer;
+        private readonly int stackIndex;
+        private bool expanded;
+
+        internal event Action<string> OpenRequested;
+        internal event Action<string, string> ReplyRequested;
+
+        internal TaskCompletionNotification(TrayBridgeSession session, bool chinese, int index)
+        {
+            sessionId = session.id;
+            stackIndex = index;
+            FormBorderStyle = FormBorderStyle.None;
+            ShowInTaskbar = false;
+            TopMost = true;
+            StartPosition = FormStartPosition.Manual;
+            BackColor = Color.FromArgb(34, 35, 38);
+            ForeColor = Color.White;
+            Padding = new Padding(16);
+            ClientSize = new Size(392, 154);
+
+            Label heading = new Label { AutoSize = false, Text = chinese ? "任务已完成" : "Task completed", Font = new Font("Segoe UI", 9F, FontStyle.Bold), Bounds = new Rectangle(16, 14, 330, 20) };
+            Label title = new Label { AutoEllipsis = true, Text = session.title ?? session.id, Bounds = new Rectangle(16, 38, 352, 22), Font = new Font("Segoe UI", 10F, FontStyle.Regular) };
+            bodyPreview = new Label { AutoEllipsis = true, Text = String.IsNullOrWhiteSpace(session.finalReply) ? (chinese ? "打开任务查看结果" : "Open the task to view its result") : session.finalReply.Replace("\r", " ").Replace("\n", " "), Bounds = new Rectangle(16, 64, 352, 22), ForeColor = Color.FromArgb(205, 208, 213) };
+            bodyFull = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, BackColor = BackColor, ForeColor = Color.FromArgb(225, 227, 230), Text = session.finalReply ?? String.Empty, Bounds = new Rectangle(16, 64, 352, 230), Visible = false };
+            replyBox = new TextBox { BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(49, 51, 55), ForeColor = Color.White, Bounds = new Rectangle(16, 104, 278, 28) };
+            replyButton = new Button { FlatStyle = FlatStyle.Flat, Text = chinese ? "回复" : "Reply", Bounds = new Rectangle(302, 103, 66, 30), BackColor = Color.FromArgb(67, 91, 214), ForeColor = Color.White };
+            replyButton.FlatAppearance.BorderSize = 0;
+            replyButton.Click += delegate { SubmitReply(); };
+            replyBox.KeyDown += delegate(object sender, KeyEventArgs args) { if (args.KeyCode == Keys.Enter && !args.Shift) { args.SuppressKeyPress = true; SubmitReply(); } };
+            title.Click += delegate { if (OpenRequested != null) OpenRequested(sessionId); Close(); };
+            bodyPreview.Click += delegate { if (OpenRequested != null) OpenRequested(sessionId); Close(); };
+
+            Controls.Add(heading);
+            Controls.Add(title);
+            Controls.Add(bodyPreview);
+            Controls.Add(bodyFull);
+            Controls.Add(replyBox);
+            Controls.Add(replyButton);
+            foreach (Control control in Controls) control.MouseEnter += delegate { Expand(); };
+            MouseEnter += delegate { Expand(); };
+
+            dismissTimer = new System.Windows.Forms.Timer { Interval = 12000 };
+            dismissTimer.Tick += delegate { dismissTimer.Stop(); Close(); };
+            Shown += delegate { PlaceNearTaskbar(); dismissTimer.Start(); };
+            FormClosed += delegate { dismissTimer.Dispose(); };
+        }
+
+        protected override bool ShowWithoutActivation { get { return true; } }
+
+        private void PlaceNearTaskbar()
+        {
+            Rectangle area = Screen.FromPoint(Cursor.Position).WorkingArea;
+            Location = new Point(area.Right - Width - 12, Math.Max(area.Top + 12, area.Bottom - Height - 12 - stackIndex * (Height + 10)));
+        }
+
+        private void Expand()
+        {
+            if (expanded) return;
+            expanded = true;
+            dismissTimer.Stop();
+            bodyPreview.Visible = false;
+            bodyFull.Visible = true;
+            bodyFull.Height = 230;
+            replyBox.Top = 306;
+            replyButton.Top = 305;
+            ClientSize = new Size(392, 354);
+            PlaceNearTaskbar();
+        }
+
+        private void SubmitReply()
+        {
+            string reply = replyBox.Text.Trim();
+            if (reply.Length == 0 || reply.Length > 8000 || reply.IndexOf('\0') >= 0) return;
+            if (ReplyRequested != null) ReplyRequested(sessionId, reply);
+            replyBox.Clear();
+            Close();
+        }
     }
 
     internal sealed class DshMenuColorTable : ProfessionalColorTable
@@ -378,6 +532,8 @@ namespace DshPortable
         private readonly ToolStripMenuItem taskNotificationsItem;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly Dictionary<string, bool> taskCompletionState = new Dictionary<string, bool>(StringComparer.Ordinal);
+        private readonly HashSet<string> unreadCompletedSessions = new HashSet<string>(StringComparer.Ordinal);
+        private readonly List<TaskCompletionNotification> taskCompletionNotifications = new List<TaskCompletionNotification>();
         private readonly string root;
         private readonly string environmentId;
         private readonly string stateRoot;
@@ -814,6 +970,7 @@ namespace DshPortable
             };
             item.Click += delegate
             {
+                MarkTaskCompletionHandled(session.id);
                 RestoreFromTray();
                 PostBridgeAction("open-session", session.id);
             };
@@ -1084,6 +1241,33 @@ namespace DshPortable
             catch { trayBridgeReady = false; RebuildTrayMenu(); }
         }
 
+        private void PostBridgeReply(string sessionId, string reply)
+        {
+            if (!trayBridgeReady || webView.CoreWebView2 == null || String.IsNullOrWhiteSpace(sessionId)) return;
+            string text = (reply ?? String.Empty).Trim();
+            if (text.Length == 0 || text.Length > 8000 || text.IndexOf('\0') >= 0) return;
+            Dictionary<string, object> message = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/action" },
+                { "action", "reply-session" },
+                { "sessionId", sessionId },
+                { "reply", text },
+            };
+            try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
+            catch { trayBridgeReady = false; RebuildTrayMenu(); }
+        }
+
+        private void MarkTaskCompletionHandled(string sessionId)
+        {
+            if (String.IsNullOrWhiteSpace(sessionId)) return;
+            if (unreadCompletedSessions.Remove(sessionId)) UpdateTaskbarBadge();
+        }
+
+        private void UpdateTaskbarBadge()
+        {
+            if (IsHandleCreated) TaskbarBadge.SetOverlayIcon(Handle, unreadCompletedSessions.Count);
+        }
+
         private void HandleTaskCompletionNotifications(TrayBridgeState state)
         {
             List<TrayBridgeSession> sessions = state.sessions ?? new List<TrayBridgeSession>();
@@ -1091,25 +1275,37 @@ namespace DshPortable
             if (!taskCompletionBaselineReady)
             {
                 taskCompletionState.Clear();
+                unreadCompletedSessions.Clear();
                 foreach (TrayBridgeSession session in sessions)
                 {
                     if (session != null && !String.IsNullOrWhiteSpace(session.id))
+                    {
                         taskCompletionState[session.id] = session.completed;
+                        if (session.completed && !String.Equals(state.currentSessionId, session.id, StringComparison.Ordinal))
+                            unreadCompletedSessions.Add(session.id);
+                    }
                 }
                 taskCompletionBaselineReady = true;
+                UpdateTaskbarBadge();
                 return;
             }
 
             foreach (TrayBridgeSession session in sessions)
             {
                 if (session == null || String.IsNullOrWhiteSpace(session.id)) continue;
+                if (!session.completed || String.Equals(state.currentSessionId, session.id, StringComparison.Ordinal))
+                    unreadCompletedSessions.Remove(session.id);
                 bool previouslyCompleted;
                 bool wasCompleted = taskCompletionState.TryGetValue(session.id, out previouslyCompleted) && previouslyCompleted;
-                if (session.completed && !wasCompleted && taskNotificationsEnabled)
-                    completedThisFrame.Add(session);
+                if (session.completed && !wasCompleted)
+                {
+                    unreadCompletedSessions.Add(session.id);
+                    if (taskNotificationsEnabled) completedThisFrame.Add(session);
+                }
             }
 
             if (completedThisFrame.Count > 0) ShowTaskCompletionNotifications(completedThisFrame);
+            UpdateTaskbarBadge();
 
             taskCompletionState.Clear();
             foreach (TrayBridgeSession session in sessions)
@@ -1123,22 +1319,32 @@ namespace DshPortable
         {
             if (sessions == null || sessions.Count == 0) return;
             trayIcon.Visible = true;
-            if (sessions.Count == 1)
+            foreach (TrayBridgeSession session in sessions.Take(3))
             {
-                TrayBridgeSession session = sessions[0];
                 notificationSessionId = session.id;
-                trayIcon.ShowBalloonTip(5000,
-                    L("任务已完成", "Task completed"),
-                    MenuTitle(session.title).Replace("&&", "&"),
-                    ToolTipIcon.Info);
-                return;
+                TaskCompletionNotification notification = new TaskCompletionNotification(
+                    session,
+                    uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase),
+                    taskCompletionNotifications.Count);
+                notification.OpenRequested += delegate(string sessionId)
+                {
+                    MarkTaskCompletionHandled(sessionId);
+                    RestoreFromTray();
+                    PostBridgeAction("open-session", sessionId);
+                };
+                notification.ReplyRequested += delegate(string sessionId, string reply)
+                {
+                    MarkTaskCompletionHandled(sessionId);
+                    PostBridgeReply(sessionId, reply);
+                };
+                notification.FormClosed += delegate
+                {
+                    taskCompletionNotifications.Remove(notification);
+                    notification.Dispose();
+                };
+                taskCompletionNotifications.Add(notification);
+                notification.Show(this);
             }
-
-            notificationSessionId = null;
-            trayIcon.ShowBalloonTip(5000,
-                L("多个任务已完成", "Tasks completed"),
-                L("已完成 " + sessions.Count.ToString() + " 个任务。", sessions.Count.ToString() + " tasks completed."),
-                ToolTipIcon.Info);
         }
 
         private static void ApplyRoundedCorners(ToolStripDropDown menu)
@@ -1848,12 +2054,15 @@ namespace DshPortable
         {
             base.OnHandleCreated(eventArgs);
             TaskbarIdentity.Apply(Handle, "io.github.wsl043.dsh-portable");
+            UpdateTaskbarBadge();
         }
 
         protected override void OnFormClosed(FormClosedEventArgs eventArgs)
         {
             SaveDesktopWindowState();
             UnregisterDesktopHostProcess();
+            foreach (TaskCompletionNotification notification in taskCompletionNotifications.ToArray()) notification.Close();
+            TaskbarBadge.SetOverlayIcon(Handle, 0);
             DisposeTrayIcon();
             trayIcon.Dispose();
             base.OnFormClosed(eventArgs);

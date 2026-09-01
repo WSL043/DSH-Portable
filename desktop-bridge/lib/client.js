@@ -609,6 +609,25 @@ window.__ModuleLoader__.load({
       return ctx.theme.getTheme()?.active?.colorScheme === 'dark' ? 'dark' : 'light'
     }
 
+    function finalAssistantReply(ctx, sessionId) {
+      const entries = ctx.sessions.binding?.(sessionId)?.eventSource?.getSnapshot?.()?.entries
+      if (!Array.isArray(entries)) return ''
+      for (let index = entries.length - 1; index >= 0; index -= 1) {
+        const entry = entries[index]
+        const event = entry?.type === 'event' ? entry.event : entry
+        if (event?.type !== 'assistant/message') continue
+        const content = event.data?.message?.content
+        if (!Array.isArray(content)) continue
+        const text = content
+          .filter(block => block?.type === 'text' && typeof block.text === 'string')
+          .map(block => block.text)
+          .join('')
+          .trim()
+        if (text !== '') return text.slice(0, 32768)
+      }
+      return ''
+    }
+
     function sessionState(ctx) {
       const source = ctx.sessions.list.getSnapshot()
       const sourceSessions = (source.ids ?? [])
@@ -619,15 +638,19 @@ window.__ModuleLoader__.load({
         .filter(item => item && !item.blank && item.origin !== 'subagent')
         .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
         .slice(0, 10)
-        .map(item => ({
-          id: String(item.id),
-          title: String(item.displayTitle || item.title || item.id),
-          updatedAt: Number(item.updatedAt || 0),
-          running: Boolean(item.running),
-          completed: Boolean(item.completed),
-          pendingInteraction: item.pendingInteraction == null ? '' : String(item.pendingInteraction),
-          agentPreset: item.agentPreset == null ? '' : String(item.agentPreset),
-        }))
+        .map(item => {
+          const completed = Boolean(item.completed)
+          return {
+            id: String(item.id),
+            title: String(item.displayTitle || item.title || item.id),
+            updatedAt: Number(item.updatedAt || 0),
+            running: Boolean(item.running),
+            completed,
+            finalReply: completed ? finalAssistantReply(ctx, item.id) : '',
+            pendingInteraction: item.pendingInteraction == null ? '' : String(item.pendingInteraction),
+            agentPreset: item.agentPreset == null ? '' : String(item.agentPreset),
+          }
+        })
       return {
         type: 'dsh-portable/state',
         schemaVersion: 1,
@@ -801,6 +824,17 @@ window.__ModuleLoader__.load({
             ctx.sessions.clear()
             return
           }
+          if (message.action === 'reply-session') {
+            const sessionId = String(message.sessionId || '')
+            const reply = typeof message.reply === 'string' ? message.reply.trim() : ''
+            if (reply === '' || reply.length > 8000 || reply.includes('\0')) return
+            const snapshot = ctx.sessions.list.getSnapshot()
+            if (!snapshot.byId?.[sessionId] || snapshot.byId[sessionId].origin === 'subagent') return
+            const scoped = ctx.sessions.scope?.(sessionId)
+            if (typeof scoped?.conversation?.send !== 'function') return
+            void scoped.conversation.send(reply).catch(error => console.warn('[dsh-portable] notification reply failed:', error))
+            return
+          }
           if (message.action !== 'open-session') return
           const sessionId = String(message.sessionId || '')
           const snapshot = ctx.sessions.list.getSnapshot()
@@ -851,6 +885,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.inject = inject
+    exports.finalAssistantReply = finalAssistantReply
     exports.ensurePortableWorkspace = ensurePortableWorkspace
     exports.apply = apply
     return exports

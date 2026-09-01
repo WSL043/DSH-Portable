@@ -103,8 +103,8 @@ try {
   for (const plugin of productDefaults) {
     assert.equal(
       String(profileManifest.dependencies?.[plugin.name]).replaceAll('\\', '/'),
-      plugin.version,
-      `${plugin.name} must enter the normal npm plugin lifecycle after offline installation`,
+      plugin.spec ?? plugin.version,
+      `${plugin.name} must enter its declared plugin lifecycle after offline installation`,
     )
   }
   const updates = await getJson(host.url, '/dsh-market/updates?force=1', 3)

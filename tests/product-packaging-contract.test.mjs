@@ -436,7 +436,7 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.doesNotMatch(updater, /process\.platform\s*===\s*['"]win32['"]\s*\?\s*['"]npm\.cmd['"]/)
 })
 
-test('community plugins remain market-discovered rather than product defaults', async () => {
+test('plugins beyond the two reviewed defaults remain market-discovered', async () => {
   const [workflow, ci, publish, chinese, english] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     read('.github/workflows/ci.yml'),
@@ -456,9 +456,11 @@ test('community plugins remain market-discovered rather than product defaults', 
     assert.doesNotMatch(source, /update-default-plugin\.mjs|source:\s*default-plugin/)
   }
   assert.equal(await exists('scripts/update-default-plugin.mjs'), false)
-  assert.match(chinese, /全新安装不会默认安装社区插件/)
+  assert.match(chinese, /全新安装仅预装两个经过审核、可自行卸载的插件/)
+  assert.match(chinese, /其他社区插件仍按需从插件市场/)
   assert.match(chinese, /插件市场/)
-  assert.match(english, /Fresh installs do not install community plugins by default/i)
+  assert.match(english, /Fresh installs include only two reviewed, removable defaults/i)
+  assert.match(english, /Other community plugins remain opt-in through the Plugin Market/i)
   assert.match(english, /plugin market/i)
 })
 
@@ -666,7 +668,7 @@ test('macOS and Linux finished products verify official bare dsh syntax in an is
   assert.match(english, /macOS[\s\S]+Linux[\s\S]+DSH Terminal[\s\S]+dsh plugin/i)
 })
 
-test('fresh products bundle no default plugins and upgrades preserve user profiles', async () => {
+test('fresh products bundle only reviewed removable defaults and upgrades preserve user profiles', async () => {
   const [lock, previewLock, windows, macos, linux, cli, core] = await Promise.all([
     read('upstream.lock.json').then(JSON.parse),
     read('upstream.preview.lock.json').then(JSON.parse),
@@ -676,8 +678,17 @@ test('fresh products bundle no default plugins and upgrades preserve user profil
     read('launcher/portable-cli.mjs'),
     read('launcher/default-plugins.mjs'),
   ])
-  assert.deepEqual(lock.defaultPlugins, {})
-  assert.deepEqual(previewLock.defaultPlugins, {})
+  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['imageViewer', 'sessionRecovery'])
+  assert.deepEqual(previewLock.defaultPlugins, lock.defaultPlugins)
+  assert.deepEqual(Object.values(lock.defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-session-recovery'])
+  assert.equal(Object.values(lock.defaultPlugins).some(plugin => plugin.package === 'dsh-chat-manager'), false)
+  assert.equal(new Set(Object.values(lock.defaultPlugins).map(plugin => plugin.filename)).size, 2)
+  for (const plugin of Object.values(lock.defaultPlugins)) {
+    assert.match(plugin.sha256, /^[0-9a-f]{64}$/)
+    assert.match(plugin.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
+    assert.match(plugin.reviewedCommit, /^[0-9a-f]{40}$/)
+    assert.ok(plugin.spec)
+  }
   for (const build of [windows, macos, linux]) {
     assert.match(build, /default-plugins/)
     assert.match(build, /DefaultPlugins|list-default-plugins/)
@@ -692,10 +703,12 @@ test('fresh products bundle no default plugins and upgrades preserve user profil
     assert.match(build, /runtime-capsule\.mjs/)
   }
   assert.match(cli, /seedDefaultPlugins/)
-  assert.match(core, /DEFAULT_PLUGINS\s*=\s*Object\.freeze\(\[\]\)/)
+  assert.match(core, /name:\s*'dsh-image-viewer'/)
+  assert.match(core, /name:\s*'dsh-session-recovery'/)
   assert.match(core, /profile-exists/)
   assert.match(core, /no-compatible-defaults/)
-  assert.doesNotMatch(core, /dsh-chat-manager|dsh-image-viewer|\.dsh-portable-archives/)
+  assert.match(core, /\.dsh-portable-archives/)
+  assert.doesNotMatch(core, /dsh-chat-manager/)
   for (const build of [windows, macos, linux]) {
     const updateSection = build.slice(build.indexOf('UPDATE_COMPONENT_ROOT'))
     assert.doesNotMatch(updateSection, /(?:cp|Copy-Item)[^\n]+default-plugins/)

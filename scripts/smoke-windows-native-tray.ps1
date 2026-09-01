@@ -89,6 +89,51 @@ function Assert-MenuRowsFillWidth([Windows.Forms.ToolStripDropDown]$DropDown, [s
     }
 }
 
+function Test-TaskCompletionNotification {
+    $NotificationType = $Assembly.GetType('DshPortable.TaskCompletionNotification', $true)
+    $Signature = [Type[]]@($SessionType, [bool], [int])
+    $NotificationConstructor = $NotificationType.GetConstructor($ConstructorMembers, $null, $Signature, $null)
+    if (-not $NotificationConstructor) { throw 'TaskCompletionNotification constructor is missing' }
+
+    $Session = [Activator]::CreateInstance($SessionType, $true)
+    $FullReply = "Full reply line one.`r`nLine two must remain visible after hover."
+    Set-Property $SessionType $Session 'id' 'notification-session-9'
+    Set-Property $SessionType $Session 'title' 'Verify task completion notification'
+    Set-Property $SessionType $Session 'finalReply' $FullReply
+    Set-Property $SessionType $Session 'completed' $true
+
+    $Notification = $NotificationConstructor.Invoke([object[]]@($Session, $true, 0))
+    try {
+        if ($Notification.ClientSize.Height -ne 154) { throw 'Task notification did not start in compact mode' }
+        $NotificationType.GetMethod('OnMouseEnter', $InstanceMembers).Invoke($Notification, @([EventArgs]::Empty)) | Out-Null
+        $BodyFull = [Windows.Forms.TextBox]$NotificationType.GetField('bodyFull', $AllFields).GetValue($Notification)
+        $BodyPreview = [Windows.Forms.Label]$NotificationType.GetField('bodyPreview', $AllFields).GetValue($Notification)
+        if ($Notification.ClientSize.Height -ne 354 -or $BodyFull.Text -ne $FullReply -or $BodyFull.Height -ne 230) {
+            throw 'Hover did not expand the compiled notification to its complete reply'
+        }
+        if ($BodyPreview.Visible) { throw 'Compact reply preview remained visible after hover expansion' }
+
+        $Captured = @{ SessionId = $null; Reply = $null }
+        $ReplyScript = {
+            param([string]$SessionId, [string]$Reply)
+            $Captured.SessionId = $SessionId
+            $Captured.Reply = $Reply
+        }.GetNewClosure()
+        $ReplyHandler = [Action[string, string]]$ReplyScript
+        $ReplyEvent = $NotificationType.GetEvent('ReplyRequested', $AllFields)
+        $ReplyEvent.GetAddMethod($true).Invoke($Notification, @($ReplyHandler)) | Out-Null
+        $ReplyBox = [Windows.Forms.TextBox]$NotificationType.GetField('replyBox', $AllFields).GetValue($Notification)
+        $ReplyBox.Text = ' Continue refining '
+        $NotificationType.GetMethod('SubmitReply', $InstanceMembers).Invoke($Notification, [object[]]::new(0)) | Out-Null
+        if ($Captured.SessionId -ne 'notification-session-9' -or $Captured.Reply -ne 'Continue refining') {
+            throw 'Compiled notification reply was not routed to the exact originating session'
+        }
+    }
+    finally {
+        $Notification.Dispose()
+    }
+}
+
 try {
     $State = [Activator]::CreateInstance($StateType, $true)
     Set-Property $StateType $State 'type' 'dsh-portable/state'
@@ -101,6 +146,8 @@ try {
     Add-Session $Sessions 'session-3' 'Verify the Linux package' '' $false ''
     Add-Session $Sessions 'session-4' 'Prepare release notes' 'review' $false ''
     Set-Property $StateType $State 'sessions' $Sessions
+
+    Test-TaskCompletionNotification
 
     $WindowType.GetField('trayState', $AllFields).SetValue($Window, $State)
     $WindowType.GetField('trayBridgeReady', $AllFields).SetValue($Window, $true)
@@ -287,7 +334,7 @@ try {
         }
     }
 
-    Write-Host 'Windows native tray smoke passed: one compact menu, recent sessions, locale, theme, and command fallback.'
+    Write-Host 'Windows native tray smoke passed: compact menu, notification hover expansion, exact-session reply, locale, theme, and command fallback.'
 }
 finally {
     $Window.Dispose()

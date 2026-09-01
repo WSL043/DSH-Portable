@@ -45,6 +45,8 @@
 
 This is not a renamed browser shortcut sold as a “no-install build.” Its runtime and plugin tools live inside the product folder, so the destination computer does not need Node.js or pnpm and DSH-Portable never modifies the system `PATH`. The dedicated window, tray, recent sessions, task notifications, remembered placement, and update experience remain intact.
 
+On Windows, enabling **Task completion notifications** shows an actionable notification for every newly completed task. Hover expands the complete final reply, and Reply continues the exact originating task. The taskbar icon displays the number of completed tasks you have not opened or replied to yet.
+
 | Where you start | What Portable handles |
 | --- | --- |
 | **Online** | Download the roughly 60 KB launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
@@ -112,7 +114,7 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
-Fresh installs do not install community plugins by default; add them as needed through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin without automatically uninstalling, reinstalling, or rewriting them.
+Fresh installs include only two reviewed, removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) displays images produced by tasks, while [Session Recovery](https://github.com/WSL043/dsh-session-recovery) only fills the archived-session restore entry point that the official UI does not yet expose. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
 
