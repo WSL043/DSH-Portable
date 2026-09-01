@@ -8,22 +8,22 @@ import { buildDshEnv } from './portable-core.mjs'
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-chat-manager',
-  version: '1.2.1',
+  version: '1.2.2',
   filename: 'dsh-chat-manager.tgz',
-  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.2.1.tgz',
-  sha256: '838022cb67a8211533e4edac7faf3f09fa6a18c9e37e464a9383236fe2db6a6b',
-  integrity: 'sha512-IFJcfYS571pTiRxq79faQ3fcLiIEyMAqJEtQPdq4T4t2ehOKlCRtbjZO9LdUCz8PKLM7pXZmwqmCnHxky9dR9w==',
+  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.2.2.tgz',
+  sha256: 'cb32c1201d5ba2922e354c05e4dec1e17ad0affdc1c3bd0e243d4d84d7048a1e',
+  integrity: 'sha512-yrBK7EliaXXwyftqG0AeNYa9qI+MeuuXqG164Q4ko5N3BxMg+5hR8X0cG/6IGrXZHC/X2kHKkph7ADY2F9QEqg==',
   license: 'MIT',
-  reviewedCommit: '2b0d500fbecfe6dce3d289bacdb3f58330587536',
+  reviewedCommit: '65ec7ed3aa26811343359379379d3e58a55c5a92',
 }), Object.freeze({
   name: 'dsh-image-viewer',
-  version: '0.1.0-beta.4',
+  version: '0.1.0-beta.7',
   filename: 'dsh-image-viewer.tgz',
-  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.4.tgz',
-  sha256: 'fd78d28f91d9f1abcd7f9fca7876e1108f3293ebde57360d780d5dd388563c54',
-  integrity: 'sha512-h6Udsy6NPfH/FebRTazOnZqKcOubaz4vRR33boSM6SoeKXF6P86RKCxkqliNpOXo9UveTPww6LErY1uucjvzUw==',
+  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.7.tgz',
+  sha256: '4c6901b1c633599da7a59ebc76a2b0a2b2ac55e269710c0c6c68975a86561c5d',
+  integrity: 'sha512-a7amIo0GAW4ixeNq02sC4mdO2psRU+KKWW+set3RHK7qQ+jYv23dIUTAnUnlkSbrZxhztvz45M6/fl6nQE/oOA==',
   license: 'MIT',
-  reviewedCommit: '1c7c6d8d941c98250a0bce2cf3639b4bf897c243',
+  reviewedCommit: '5b2a47c219d73bfc2f1bd58a040465fb93a15bf3',
 })])
 
 async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}) {
