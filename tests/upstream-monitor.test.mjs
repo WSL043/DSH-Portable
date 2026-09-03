@@ -31,7 +31,7 @@ function registry({ latest = '0.1.0-rc.6', next = '0.1.0-rc.6', integrity = 'sha
     'dist-tags': tags,
     versions: {
       [latest]: { dist: { integrity: latest === '0.1.0-rc.6' ? integrity : 'sha512-latest' } },
-      ...(next ? { [next]: { dist: { integrity: next === '0.1.0-rc.6' ? integrity : 'sha512-next' } } } : {}),
+      ...(next ? { [next]: { dist: { integrity: next === '0.1.0-rc.6' ? integrity : 'sha512-next' } } : {}),
     },
   }
 }
@@ -120,32 +120,106 @@ const previewLock = {
   },
 }
 
-function previewRegistry({ alpha = '0.1.2-alpha.2', integrity = 'sha512-preview-current' } = {}) {
-  return {
-    'dist-tags': { alpha },
-    versions: {
-      [alpha]: { dist: { integrity } },
-    },
+function previewRegistry({
+  alpha = '0.1.2-alpha.2',
+  next = '0.1.1-rc.2',
+  latest = '0.1.1-rc.2',
+  beta,
+  rc,
+  integrity = 'sha512-preview-current',
+  integrities = {},
+} = {}) {
+  const tags = { alpha, next, latest }
+  if (beta) tags.beta = beta
+  if (rc) tags.rc = rc
+  const versions = {}
+  for (const version of new Set(Object.values(tags).filter(Boolean))) {
+    versions[version] = {
+      dist: {
+        integrity: integrities[version]
+          ?? (version === '0.1.2-alpha.2' ? integrity : `sha512-${version}`),
+      },
+    }
   }
+  return { 'dist-tags': tags, versions }
 }
 
-test('a newer official alpha becomes a review-only preview candidate', () => {
+test('a newer official alpha becomes a review-only candidate', () => {
   const result = evaluatePreviewUpstream({
     lock: previewLock,
-    registry: previewRegistry({ alpha: '0.1.2-alpha.3', integrity: 'sha512-preview-next' }),
+    registry: previewRegistry({
+      alpha: '0.1.2-alpha.3',
+      integrities: { '0.1.2-alpha.3': 'sha512-preview-next' },
+    }),
     packageCommit: { sha: 'e'.repeat(40) },
   })
 
   assert.equal(result.changed, true)
+  assert.equal(result.selectedTag, 'alpha')
   assert.equal(result.version, '0.1.2-alpha.3')
   assert.equal(result.integrity, 'sha512-preview-next')
   assert.equal(result.commit, 'e'.repeat(40))
 })
 
-test('the official alpha monitor never downgrades the reviewed preview lock', () => {
+test('a newer release candidate on next outranks the alpha train', () => {
   const result = evaluatePreviewUpstream({
     lock: previewLock,
-    registry: previewRegistry({ alpha: '0.1.2-alpha.1', integrity: 'sha512-preview-old' }),
+    registry: previewRegistry({
+      alpha: '0.1.2-alpha.5',
+      next: '0.1.2-rc.1',
+    }),
+    packageCommit: { sha: 'f'.repeat(40) },
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(result.selectedTag, 'next')
+  assert.equal(result.version, '0.1.2-rc.1')
+  assert.equal(result.integrity, 'sha512-0.1.2-rc.1')
+  assert.equal(result.commit, 'f'.repeat(40))
+})
+
+test('an explicit rc tag is eligible even when next has not moved yet', () => {
+  const result = evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({
+      alpha: '0.1.2-alpha.5',
+      rc: '0.1.2-rc.1',
+    }),
+    packageCommit: { sha: 'f'.repeat(40) },
+  })
+
+  assert.equal(result.changed, true)
+  assert.equal(result.selectedTag, 'rc')
+  assert.equal(result.version, '0.1.2-rc.1')
+})
+
+test('a stable latest never replaces the review-only candidate lock', () => {
+  const rcLock = {
+    dsh: {
+      version: '0.1.2-rc.1',
+      npmIntegrity: 'sha512-rc-current',
+      reviewedCommit: 'f'.repeat(40),
+    },
+  }
+  const result = evaluatePreviewUpstream({
+    lock: rcLock,
+    registry: previewRegistry({
+      alpha: '0.1.2-alpha.5',
+      next: '0.1.2',
+      latest: '0.1.2',
+    }),
+    packageCommit: { sha: 'a'.repeat(40) },
+  })
+
+  assert.equal(result.changed, false)
+  assert.equal(result.version, '0.1.2-rc.1')
+  assert.equal(result.commit, 'f'.repeat(40))
+})
+
+test('the official candidate monitor never downgrades the reviewed lock', () => {
+  const result = evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2-alpha.1' }),
     packageCommit: { sha: 'c'.repeat(40) },
   })
 
@@ -154,18 +228,32 @@ test('the official alpha monitor never downgrades the reviewed preview lock', ()
   assert.equal(result.commit, 'd'.repeat(40))
 })
 
-test('same-version official alpha integrity drift fails closed', () => {
+test('same-version official candidate integrity drift fails closed', () => {
   assert.throws(() => evaluatePreviewUpstream({
     lock: previewLock,
     registry: previewRegistry({ integrity: 'sha512-preview-replaced' }),
     packageCommit: { sha: 'd'.repeat(40) },
-  }), /integrity changed for the pinned official alpha/i)
+  }), /integrity changed for the pinned official candidate/i)
 })
 
-test('the official alpha monitor rejects a stable version on the alpha tag', () => {
-  assert.throws(() => evaluatePreviewUpstream({
+test('non-candidate prerelease tags are ignored instead of widening the channel', () => {
+  const result = evaluatePreviewUpstream({
     lock: previewLock,
-    registry: previewRegistry({ alpha: '0.1.2', integrity: 'sha512-not-alpha' }),
+    registry: {
+      'dist-tags': {
+        alpha: '0.1.2-alpha.2',
+        next: '0.1.3-dev.9',
+        latest: '0.1.1-rc.2',
+      },
+      versions: {
+        '0.1.2-alpha.2': { dist: { integrity: 'sha512-preview-current' } },
+        '0.1.3-dev.9': { dist: { integrity: 'sha512-dev' } },
+        '0.1.1-rc.2': { dist: { integrity: 'sha512-old-rc' } },
+      },
+    },
     packageCommit: { sha: 'e'.repeat(40) },
-  }), /does not point to an alpha prerelease/i)
+  })
+
+  assert.equal(result.changed, false)
+  assert.equal(result.version, '0.1.2-alpha.2')
 })
