@@ -32,23 +32,45 @@ function compareSemver(leftValue, rightValue) {
   return 0
 }
 
-export function evaluatePreviewUpstream({ lock, registry, packageCommit }) {
-  const version = registry?.['dist-tags']?.alpha
-  const published = registry?.versions?.[version]
-  const integrity = published?.dist?.integrity
-  if (!version || !integrity) {
-    throw new Error('official npm alpha tag has no verifiable package integrity')
+const OFFICIAL_CANDIDATE_TAGS = ['alpha', 'beta', 'rc', 'next', 'latest']
+const OFFICIAL_CANDIDATE_VERSION = /-(?:alpha|beta|rc)(?:\.|$)/
+
+/**
+ * Pick the newest official prerelease exposed through the bounded candidate
+ * tag set. `next`/`latest` are included because upstream promotes RC builds
+ * through those ordinary npm channels; stable versions on either tag are
+ * deliberately ignored here and remain the stable intake's responsibility.
+ *
+ * Unknown prerelease trains (dev/canary/nightly) are also ignored so a
+ * repointed `next` tag cannot silently widen Portable's Beta channel.
+ */
+export function selectPreviewCandidate(registry) {
+  const tags = registry?.['dist-tags'] ?? {}
+  let selected = null
+  for (const tag of OFFICIAL_CANDIDATE_TAGS) {
+    const version = tags[tag]
+    if (typeof version !== 'string' || !OFFICIAL_CANDIDATE_VERSION.test(version)) continue
+    const published = registry?.versions?.[version]
+    const integrity = published?.dist?.integrity
+    if (!integrity) {
+      throw new Error(`official npm candidate tag ${tag} has no verifiable package integrity for ${version}`)
+    }
+    if (selected === null || compareSemver(version, selected.version) > 0) {
+      selected = { tag, version, integrity }
+    }
   }
-  if (!/-alpha(?:\.|$)/.test(version)) {
-    throw new Error(`official npm alpha tag does not point to an alpha prerelease: ${version}`)
+  return selected
+}
+
+export function evaluatePreviewUpstream({ lock, registry, packageCommit }) {
+  const currentVersion = lock.dsh.version
+  const currentIntegrity = registry?.versions?.[currentVersion]?.dist?.integrity
+  if (currentIntegrity && currentIntegrity !== lock.dsh.npmIntegrity) {
+    throw new Error(`integrity changed for the pinned official candidate ${currentVersion}`)
   }
 
-  const currentVersion = lock.dsh.version
-  const comparison = compareSemver(version, currentVersion)
-  if (comparison === 0 && integrity !== lock.dsh.npmIntegrity) {
-    throw new Error(`integrity changed for the pinned official alpha ${version}`)
-  }
-  if (comparison <= 0) {
+  const selected = selectPreviewCandidate(registry)
+  if (selected === null) {
     return {
       changed: false,
       version: currentVersion,
@@ -57,11 +79,28 @@ export function evaluatePreviewUpstream({ lock, registry, packageCommit }) {
     }
   }
 
+  const comparison = compareSemver(selected.version, currentVersion)
+  if (comparison <= 0) {
+    return {
+      changed: false,
+      selectedTag: selected.tag,
+      version: currentVersion,
+      integrity: lock.dsh.npmIntegrity,
+      commit: lock.dsh.reviewedCommit,
+    }
+  }
+
   const commit = packageCommit?.sha
   if (!/^[0-9a-f]{40}$/.test(commit ?? '')) {
-    throw new Error(`official tag dsh-v${version} does not resolve to a commit`)
+    throw new Error(`official tag dsh-v${selected.version} does not resolve to a commit`)
   }
-  return { changed: true, version, integrity, commit }
+  return {
+    changed: true,
+    selectedTag: selected.tag,
+    version: selected.version,
+    integrity: selected.integrity,
+    commit,
+  }
 }
 
 export function evaluateUpstream({ lock, registry, commit, packageCommit, requestedTag = 'next' }) {
