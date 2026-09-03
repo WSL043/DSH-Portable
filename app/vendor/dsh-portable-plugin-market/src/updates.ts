@@ -7,6 +7,7 @@
 import { DIST_TAG, type Channel } from './channels.ts'
 import { marketFetch } from './net.ts'
 import { profileDir, readInstalled, readInstalledVersion, readLockCommits } from './profile.ts'
+import { githubRefOfTarget } from './sources.ts'
 
 export interface UpdateStatus {
   kind: 'github' | 'npm' | 'linked'
@@ -134,15 +135,26 @@ export function parseGitHeadAdvertisement(payload: string): string | null {
   return /([0-9a-f]{40}) HEAD/.exec(payload)?.[1] ?? null
 }
 
+/** Resolve a selected branch/tag from git's ref advertisement, or HEAD when no ref is selected. */
+export function parseGitRefAdvertisement(payload: string, ref?: string): string | null {
+  if (ref === undefined) return parseGitHeadAdvertisement(payload)
+  const quoted = ref.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`)
+  for (const namespace of ['heads', 'tags']) {
+    const found = new RegExp(String.raw`([0-9a-f]{40}) refs/${namespace}/${quoted}(?![^\s])`, 'u').exec(payload)
+    if (found !== null) return found[1]!
+  }
+  return null
+}
+
 /** Read GitHub HEAD through the same endpoint `git clone` uses, without REST quota. */
-async function fetchGitHead(repo: string): Promise<string | null> {
+async function fetchGitHead(repo: string, ref?: string): Promise<string | null> {
   try {
     const response = await marketFetch(`https://github.com/${repo}/info/refs?service=git-upload-pack`, {
       headers: { 'user-agent': 'git/2.40.0' },
       signal: AbortSignal.timeout(10_000),
     })
     if (!response.ok) return null
-    return parseGitHeadAdvertisement(await response.text())
+    return parseGitRefAdvertisement(await response.text(), ref)
   } catch {
     return null
   }
@@ -272,7 +284,7 @@ export async function checkUpdates(
     try {
       if (spec.startsWith('github:') && gh !== null) {
         const current = lockCommits.get(gh[1].toLowerCase()) ?? null
-        const latest = await fetchGitHead(gh[1])
+        const latest = await fetchGitHead(gh[1], githubRefOfTarget(spec) ?? undefined)
         result[name] = {
           kind: 'github', version, current, latest,
           updateAvailable: current !== null && latest !== null && current !== latest,

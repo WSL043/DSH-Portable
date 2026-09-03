@@ -29,7 +29,7 @@ import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
 import { trialValidate } from './trial.ts'
-import { findInstalledAlias, gitAllowBuildsKey, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
+import { findInstalledAlias, gitAllowBuildsKey, githubPinnedTarget, githubUpdateTarget, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
 import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
@@ -498,7 +498,7 @@ export function mountMarketRoutes(
       return { ok: false, detail: 'the previous commit is unknown; nothing to roll back to' }
     }
     restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
-    const add = await runPlugin(config.profile, ['add', RELEASE_AGE_OVERRIDE, `${target}#${beforeCommit}`])
+    const add = await runPlugin(config.profile, ['add', RELEASE_AGE_OVERRIDE, githubPinnedTarget(target, beforeCommit)])
       .finally(() => {
         // Keep the durable floating GitHub source even when the exact
         // recovery add fails after writing its commit-pinned target.
@@ -1352,7 +1352,7 @@ export function mountMarketRoutes(
             // The market follows its channel; everything else is `latest`.
             const selfChannel = SELF_NAMES.has(name) ? activeChannel() : null
             const tag = selfChannel === null ? 'latest' : DIST_TAG[selfChannel]
-            const target = isGit ? spec.replace(/#.*$/, '') : `${name}@${tag}`
+            const target = isGit ? githubUpdateTarget(spec) : `${name}@${tag}`
             let expectedNpmVersion: string | null = null
             // Never let `@latest` walk a profile BACKWARDS (#64 by @ZeroOrigin64):
             // a package whose latest dist-tag was left on an older release turns

@@ -129,6 +129,69 @@ export function gitAllowBuildsKey(name: string, spec: string): string | null {
 }
 
 /**
+ * Durable GitHub target to use for an explicit update.
+ *
+ * A floating branch/tag is part of the user's source selection and
+ * must survive an update. A 40-hex commit is an immutable install pin,
+ * so updating deliberately drops it and re-resolves the same repository
+ * (while keeping a monorepo path selector).
+ */
+export function githubUpdateTarget(spec: string): string {
+  if (!spec.startsWith('github:')) return spec
+  const fragmentAt = spec.indexOf('#')
+  if (fragmentAt === -1) return spec
+  const repo = spec.slice(0, fragmentAt)
+  let ref: string | null = null
+  let subpath: string | null = null
+  for (const selector of spec.slice(fragmentAt + 1).split('&')) {
+    if (selector.startsWith('path:/')) {
+      const candidate = selector.slice('path:/'.length)
+      if (subpath !== null || !validSubpath(candidate)) return repo
+      subpath = candidate
+      continue
+    }
+    if (selector === '' || /^[0-9a-f]{40}$/i.test(selector)) continue
+    if (ref !== null) return repo
+    ref = selector
+  }
+  const selectors = [
+    ...(ref === null ? [] : [ref]),
+    ...(subpath === null ? [] : [`path:/${subpath}`]),
+  ]
+  return selectors.length === 0 ? repo : `${repo}#${selectors.join('&')}`
+}
+
+/** Branch/tag selected by a github: spec for update comparison. */
+export function githubRefOfTarget(spec: string): string | null {
+  if (!spec.startsWith('github:')) return null
+  const fragmentAt = spec.indexOf('#')
+  if (fragmentAt === -1) return null
+  for (const selector of spec.slice(fragmentAt + 1).split('&')) {
+    if (selector === '' || selector.startsWith('path:/')) continue
+    if (/^[0-9a-f]{40}$/i.test(selector) || selector.startsWith('semver:')) return null
+    return selector
+  }
+  return null
+}
+
+/** Exact rollback target: captured commit plus the original monorepo subpath. */
+export function githubPinnedTarget(spec: string, commit: string): string {
+  if (!spec.startsWith('github:') || !/^[0-9a-f]{40}$/i.test(commit)) return spec
+  const floating = githubUpdateTarget(spec)
+  const fragmentAt = floating.indexOf('#')
+  const repo = fragmentAt === -1 ? floating : floating.slice(0, fragmentAt)
+  let subpath: string | null = null
+  if (fragmentAt !== -1) {
+    for (const selector of floating.slice(fragmentAt + 1).split('&')) {
+      if (!selector.startsWith('path:/')) continue
+      const candidate = selector.slice('path:/'.length)
+      if (validSubpath(candidate)) subpath = candidate
+    }
+  }
+  return `${repo}#${commit}${subpath === null ? '' : `&path:/${subpath}`}`
+}
+
+/**
  * The pnpm install target for a registry entry. Registry tarballs beat
  * full-repo GitHub downloads: smaller, prebuilt, and CDN/mirror served. The
  * npm name comes from our curated registry, which only maps repo-verified
