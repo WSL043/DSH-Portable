@@ -216,6 +216,20 @@ test('a stable latest never replaces the review-only candidate lock', () => {
   assert.equal(result.commit, 'f'.repeat(40))
 })
 
+test('explicit candidate tags fail closed when upstream points them at the wrong train', () => {
+  assert.throws(() => evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2' }),
+    packageCommit: { sha: 'e'.repeat(40) },
+  }), /alpha tag does not point to an alpha prerelease/i)
+
+  assert.throws(() => evaluatePreviewUpstream({
+    lock: previewLock,
+    registry: previewRegistry({ rc: '0.1.2-beta.1' }),
+    packageCommit: { sha: 'e'.repeat(40) },
+  }), /rc tag does not point to a rc prerelease/i)
+})
+
 test('the official candidate monitor never downgrades the reviewed lock', () => {
   const result = evaluatePreviewUpstream({
     lock: previewLock,
