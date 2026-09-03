@@ -33,7 +33,14 @@ function compareSemver(leftValue, rightValue) {
 }
 
 const OFFICIAL_CANDIDATE_TAGS = ['alpha', 'beta', 'rc', 'next', 'latest']
-const OFFICIAL_CANDIDATE_VERSION = /-(?:alpha|beta|rc)(?:\.|$)/
+const EXPLICIT_CANDIDATE_TAGS = new Set(['alpha', 'beta', 'rc'])
+const CANDIDATE_TRAINS = new Set(['alpha', 'beta', 'rc'])
+
+function candidateTrain(version) {
+  const parsed = parseSemver(version)
+  const train = parsed?.prerelease?.[0]
+  return CANDIDATE_TRAINS.has(train) ? train : null
+}
 
 /**
  * Pick the newest official prerelease exposed through the bounded candidate
@@ -41,15 +48,23 @@ const OFFICIAL_CANDIDATE_VERSION = /-(?:alpha|beta|rc)(?:\.|$)/
  * through those ordinary npm channels; stable versions on either tag are
  * deliberately ignored here and remain the stable intake's responsibility.
  *
- * Unknown prerelease trains (dev/canary/nightly) are also ignored so a
- * repointed `next` tag cannot silently widen Portable's Beta channel.
+ * Explicit alpha/beta/rc tags remain fail-closed: if upstream points one at a
+ * different train or a stable build, that is a publishing inconsistency, not
+ * permission to silently reinterpret the tag. Unknown prerelease trains on
+ * next/latest (dev/canary/nightly) are ignored so those generic tags cannot
+ * silently widen Portable's Beta channel.
  */
 export function selectPreviewCandidate(registry) {
   const tags = registry?.['dist-tags'] ?? {}
   let selected = null
   for (const tag of OFFICIAL_CANDIDATE_TAGS) {
     const version = tags[tag]
-    if (typeof version !== 'string' || !OFFICIAL_CANDIDATE_VERSION.test(version)) continue
+    if (typeof version !== 'string') continue
+    const train = candidateTrain(version)
+    if (EXPLICIT_CANDIDATE_TAGS.has(tag) && train !== tag) {
+      throw new Error(`official npm ${tag} tag does not point to a ${tag} prerelease: ${version}`)
+    }
+    if (train === null) continue
     const published = registry?.versions?.[version]
     const integrity = published?.dist?.integrity
     if (!integrity) {
