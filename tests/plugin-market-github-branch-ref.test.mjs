@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 
 const sources = await import('../app/vendor/dsh-portable-plugin-market/src/sources.ts')
+const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 
 const commit = 'c'.repeat(40)
 
@@ -32,4 +34,13 @@ test('exact GitHub rollback replaces the branch with the captured commit and kee
     sources.githubPinnedTarget('github:m/mono#publish&path:/packages/plug', commit),
     `github:m/mono#${commit}&path:/packages/plug`,
   )
+})
+
+test('the branch helpers are wired into update detection, update action, and exact rollback', async () => {
+  const updates = await read('app/vendor/dsh-portable-plugin-market/src/updates.ts')
+  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
+  assert.match(updates, /githubRefOfTarget\(spec\)/)
+  assert.match(routes, /githubUpdateTarget\(spec\)/)
+  assert.match(routes, /githubPinnedTarget\(target, beforeCommit\)/)
+  assert.doesNotMatch(routes, /const target = isGit \? spec\.replace\(\/#\.\*\$\/, ''\)/)
 })
