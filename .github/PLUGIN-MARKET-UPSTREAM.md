@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.39.0`
-(`ee95b359c818ab9b8c3cf86a46e20757d72fdc63`).
+Reviewed upstream baseline: `dsh-market` `v1.40.0`
+(`ad3548f47775c0e4dba3d61cd874ffbc9804f8c7`).
 
 ## Compatibility matrix
 
@@ -28,6 +28,7 @@ Reviewed upstream baseline: `dsh-market` `v1.39.0`
 | Keep screenshot portals inside the market root and attach them only after React commits | Adopted |
 | Keep full-screen screenshot navigation manual | Adopted; card strips remain user-driven too |
 | Keep running plugin updates visible in the activity panel | Adopted |
+| Keep failed plugin updates visible with their concrete server error | Already covered; the operation remains `failed`, the activity surface is opened, and error/stderr/stdout detail is surfaced |
 | Preserve an in-flight install across a Settings-page remount | Adopted; the host task URL remains authoritative |
 | Restore the exact dependency and bundle shape after a failed mutation | Adopted; order, duplicates, and field absence are preserved |
 | Reject a successful mutation that newly leaves unresolved profile bundles | Adopted; the previous profile state is restored before reporting failure |
@@ -35,6 +36,7 @@ Reviewed upstream baseline: `dsh-market` `v1.39.0`
 | Normalize pnpm `workspace:` peer ranges and tolerate unknown protocols | Adopted; avoids false incompatibility warnings |
 | Accept catalog entries with more than one category | Adopted |
 | Check GitHub-only updates through the unmetered git ref advertisement | Adopted; still honors the configured proxy path |
+| Preserve the selected GitHub branch/tag across update detection and update action | Adopted; commit pins still re-resolve, branch/tag and monorepo `path:` stay selected, and exact rollback replaces the floating ref with the captured commit |
 | Treat an unlocatable in-box bundle as unknown and ignore a stale direct profile shadow | Adopted; unresolved community bundles remain boot errors |
 | Verify the npm version actually resolved after update and roll back downgrades or target mismatches | Adopted; an explicit channel switch may move backwards only to its resolved target |
 | Preserve a selected market channel across plugin toggle and group writes | Adopted; partial state writers keep fields they do not own |
