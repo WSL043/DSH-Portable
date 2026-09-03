@@ -7,7 +7,7 @@ import { evaluatePreviewUpstream } from './upstream-state.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const headers = {
   accept: 'application/vnd.github+json',
-  'user-agent': 'DSH-Portable-official-preview',
+  'user-agent': 'DSH-Portable-official-candidate',
   ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
 }
 
@@ -39,14 +39,13 @@ const [registry, lock] = await Promise.all([
   json('https://registry.npmjs.org/@deepseek-ai%2Fdsh'),
   readFile(lockPath, 'utf8').then(JSON.parse),
 ])
-const alphaVersion = registry?.['dist-tags']?.alpha
 const provisional = evaluatePreviewUpstream({
   lock,
   registry,
   packageCommit: { sha: lock.dsh.reviewedCommit },
 })
 const packageCommit = provisional.changed
-  ? await officialTagCommit(alphaVersion)
+  ? await officialTagCommit(provisional.version)
   : { sha: lock.dsh.reviewedCommit }
 const state = evaluatePreviewUpstream({ lock, registry, packageCommit })
 
@@ -74,6 +73,7 @@ console.log(JSON.stringify(state, null, 2))
 if (process.env.GITHUB_OUTPUT) {
   await appendFile(process.env.GITHUB_OUTPUT, [
     `changed=${state.changed}`,
+    `selectedTag=${state.selectedTag ?? ''}`,
     `version=${state.version}`,
     `commit=${state.commit}`,
     '',
