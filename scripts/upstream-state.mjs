@@ -62,7 +62,8 @@ export function selectPreviewCandidate(registry) {
     if (typeof version !== 'string') continue
     const train = candidateTrain(version)
     if (EXPLICIT_CANDIDATE_TAGS.has(tag) && train !== tag) {
-      throw new Error(`official npm ${tag} tag does not point to a ${tag} prerelease: ${version}`)
+      const article = tag === 'alpha' ? 'an' : 'a'
+      throw new Error(`official npm ${tag} tag does not point to ${article} ${tag} prerelease: ${version}`)
     }
     if (train === null) continue
     const published = registry?.versions?.[version]
