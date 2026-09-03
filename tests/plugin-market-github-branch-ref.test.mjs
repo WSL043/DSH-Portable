@@ -14,6 +14,10 @@ test('GitHub updates keep a selected branch or tag and monorepo subpath', () => 
     'github:m/mono#publish&path:/packages/plug',
   )
   assert.equal(
+    sources.githubUpdateTarget('github:m/mono#path:/packages/plug&publish'),
+    'github:m/mono#publish&path:/packages/plug',
+  )
+  assert.equal(
     sources.githubUpdateTarget('github:m/mono#v2.1.0&path:/packages/plug'),
     'github:m/mono#v2.1.0&path:/packages/plug',
   )
@@ -25,6 +29,7 @@ test('GitHub updates keep a selected branch or tag and monorepo subpath', () => 
 
 test('GitHub update checks follow a selected branch but not an immutable pin', () => {
   assert.equal(sources.githubRefOfTarget('github:m/mono#publish&path:/packages/plug'), 'publish')
+  assert.equal(sources.githubRefOfTarget('github:m/mono#path:/packages/plug&publish'), 'publish')
   assert.equal(sources.githubRefOfTarget(`github:m/mono#${commit}&path:/packages/plug`), null)
   assert.equal(sources.githubRefOfTarget('github:m/mono#semver:^2.0.0'), null)
   assert.equal(sources.githubRefOfTarget('left-pad@latest'), null)
@@ -48,6 +53,10 @@ test('git advertisement lookup resolves the exact selected ref', () => {
 test('exact GitHub rollback replaces the branch with the captured commit and keeps subpath', () => {
   assert.equal(
     sources.githubPinnedTarget('github:m/mono#publish&path:/packages/plug', commit),
+    `github:m/mono#${commit}&path:/packages/plug`,
+  )
+  assert.equal(
+    sources.githubPinnedTarget('github:m/mono#path:/packages/plug&publish', commit),
     `github:m/mono#${commit}&path:/packages/plug`,
   )
 })
