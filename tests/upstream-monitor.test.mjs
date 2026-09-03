@@ -31,7 +31,7 @@ function registry({ latest = '0.1.0-rc.6', next = '0.1.0-rc.6', integrity = 'sha
     'dist-tags': tags,
     versions: {
       [latest]: { dist: { integrity: latest === '0.1.0-rc.6' ? integrity : 'sha512-latest' } },
-      ...(next ? { [next]: { dist: { integrity: next === '0.1.0-rc.6' ? integrity : 'sha512-next' } } : {}),
+      ...(next ? { [next]: { dist: { integrity: next === '0.1.0-rc.6' ? integrity : 'sha512-next' } } } : {}),
     },
   }
 }
