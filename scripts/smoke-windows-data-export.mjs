@@ -502,6 +502,24 @@ try {
   await waitForValue(
     client,
     `(() => {
+      const visibleExactText = text => [...document.querySelectorAll('*')].find(candidate => {
+        if ((candidate.textContent || '').trim() !== text) return false
+        const rect = candidate.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      })
+      if (visibleExactText('Portable migration proof')) return { ready: true, expanded: true }
+      const workspace = visibleExactText('Portable migration smoke')
+      if (!workspace) return { ready: false }
+      workspace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+      return { ready: true, expanded: false }
+    })()`,
+    value => value?.ready,
+    'imported workspace is available in the restarted DSH workspace list',
+    60000,
+  )
+  await waitForValue(
+    client,
+    `(() => {
       const title = 'Portable migration proof'
       const item = [...document.querySelectorAll('*')].find(candidate => {
         if ((candidate.textContent || '').trim() !== title) return false

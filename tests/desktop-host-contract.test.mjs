@@ -510,6 +510,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
     'the native migration smoke must release its DevTools connection before waiting for the restarted WebView2 host',
   )
   assert.match(dataExportSmoke, /waitForPage\(debugPort, null, 120000, previousWebSocketDebuggerUrl\)/)
+  assert.match(dataExportSmoke, /imported workspace is available in the restarted DSH workspace list/)
   assert.match(dataExportSmoke, /const title = 'Portable migration proof'/)
   assert.match(dataExportSmoke, /dispatchEvent\(new MouseEvent\('click'/)
   assert.doesNotMatch(dataExportSmoke, /bridge\.postMessage\(\{ type: 'dsh-portable\/action', action: 'open-session'/)
