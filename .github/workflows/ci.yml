@@ -42,13 +42,11 @@ jobs:
           node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
           node -e "const lock=require('./upstream.preview.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager); for (const [family,count] of Object.entries(lock.dsh.packedFamilies)) console.log(family+'Count='+count)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
-        if: steps.preview.outputs.channel == 'candidate'
         with:
           repository: deepseek-ai/deepseek-harness
           ref: ${{ steps.preview.outputs.commit }}
           path: upstream
       - name: Build and pack the locked official DSH source
-        if: steps.preview.outputs.channel == 'candidate'
         run: |
           test "$(git -C upstream rev-parse HEAD)" = "${{ steps.preview.outputs.commit }}"
           npm install --global "${{ steps.preview.outputs.packageManager }}"
@@ -61,9 +59,6 @@ jobs:
           test "$(find upstream/dist/npm -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.dshCount }}"
           test "$(find upstream/dist/npm-vendor -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.vendorCount }}"
           test "$(find upstream/dist/npm-landlock -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.landlockCount }}"
-      - name: Create a stable-channel marker
-        if: steps.preview.outputs.channel != 'candidate'
-        run: mkdir preview-packed && printf 'stable\n' > preview-packed/STABLE
       - uses: actions/upload-artifact@v7
         with:
           name: preview-packed-runtime
@@ -71,8 +66,7 @@ jobs:
             upstream/dist/npm
             upstream/dist/npm-vendor
             upstream/dist/npm-landlock
-            preview-packed/STABLE
-          if-no-files-found: ignore
+          if-no-files-found: error
           compression-level: 0
 
   contracts:
@@ -107,24 +101,12 @@ jobs:
         with:
           name: preview-packed-runtime
           path: preview-packed
-      - name: Stage the locked official preview runtime when required
+      - name: Stage the locked official source runtime
         shell: powershell
-        run: |
-          $Version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $Policy = node scripts/version-policy.mjs $Version | ConvertFrom-StringData
-          if ($Policy.channel -eq 'candidate') {
-            node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
-          }
+        run: node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
       - name: Build Windows portable base
         shell: powershell
-        run: |
-          $Version = (Get-Content package.json -Raw | ConvertFrom-Json).version
-          $Policy = node scripts/version-policy.mjs $Version | ConvertFrom-StringData
-          if ($Policy.channel -eq 'candidate') {
-            ./scripts/build-windows.ps1 -PreviewAppSource preview-app
-          } else {
-            ./scripts/build-windows.ps1
-          }
+        run: ./scripts/build-windows.ps1 -PreviewAppSource preview-app
       - uses: actions/upload-artifact@v7
         with:
           name: windows-x64-build
@@ -487,13 +469,8 @@ jobs:
           path: preview-packed
       - name: Build the product from the matching stable or preview runtime
         run: |
-          CHANNEL="$(node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" | awk -F= '$1 == "channel" { print $2 }')"
-          if [ "$CHANNEL" = candidate ]; then
-            node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
-            PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-macos.sh "${{ matrix.arch }}"
-          else
-            bash scripts/build-macos.sh "${{ matrix.arch }}"
-          fi
+          node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
+          PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-macos.sh "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-build
@@ -631,13 +608,8 @@ jobs:
           path: preview-packed
       - name: Build the product from the matching stable or preview runtime
         run: |
-          CHANNEL="$(node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" | awk -F= '$1 == "channel" { print $2 }')"
-          if [ "$CHANNEL" = candidate ]; then
-            node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
-            PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-linux.sh "${{ matrix.arch }}"
-          else
-            bash scripts/build-linux.sh "${{ matrix.arch }}"
-          fi
+          node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
+          PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-linux.sh "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}-build

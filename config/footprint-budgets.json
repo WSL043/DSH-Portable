@@ -3,16 +3,16 @@
   "platforms": {
     "windows-x64": {
       "archiveBytes": 71500000,
-      "extractedBytes": 202000000,
+      "extractedBytes": 215000000,
       "files": 9600,
       "directories": 2850,
       "items": 12400,
-      "appBytes": 107000000,
+      "appBytes": 120000000,
       "appFiles": 9550,
       "appDirectories": 2800,
       "appItems": 12350,
-      "marketBytes": 350000,
-      "marketFiles": 8
+      "marketBytes": 400000,
+      "marketFiles": 12
     },
     "macos-x64": {
       "archiveBytes": 77000000,
@@ -20,8 +20,8 @@
       "files": 9500,
       "directories": 2800,
       "items": 12300,
-      "marketBytes": 350000,
-      "marketFiles": 8
+      "marketBytes": 400000,
+      "marketFiles": 12
     },
     "macos-arm64": {
       "archiveBytes": 75000000,
@@ -29,8 +29,8 @@
       "files": 9500,
       "directories": 2800,
       "items": 12300,
-      "marketBytes": 350000,
-      "marketFiles": 8
+      "marketBytes": 400000,
+      "marketFiles": 12
     },
     "linux-x64": {
       "archiveBytes": 90000000,
@@ -38,8 +38,8 @@
       "files": 14250,
       "directories": 3875,
       "items": 18150,
-      "marketBytes": 350000,
-      "marketFiles": 8
+      "marketBytes": 400000,
+      "marketFiles": 12
     },
     "linux-arm64": {
       "archiveBytes": 89500000,
@@ -47,8 +47,8 @@
       "files": 14250,
       "directories": 3875,
       "items": 18150,
-      "marketBytes": 350000,
-      "marketFiles": 8
+      "marketBytes": 400000,
+      "marketFiles": 12
     }
   }
 }

@@ -7,14 +7,17 @@ import { npmCliCandidates, productionPackageClosure } from '../scripts/stage-pre
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-test('stable and candidate upstream locks are separate and immutable', async () => {
+test('the stable release explicitly promotes the reviewed candidate without mutating its lock format', async () => {
   const [stable, preview] = await Promise.all([
     readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
   ])
-  assert.equal(stable.dsh.version, '0.1.1-rc.2')
+  assert.equal(stable.dsh.version, '0.1.2-rc.1')
+  assert.equal(stable.dsh.version, preview.dsh.version)
+  assert.equal(stable.dsh.integrity, preview.dsh.npmIntegrity)
+  assert.equal(stable.dsh.reviewedCommit, preview.dsh.reviewedCommit)
   assert.equal(preview.channel, 'beta')
-  assert.match(preview.dsh.version, /^\d+\.\d+\.\d+-(?:alpha|rc)\.[1-9]\d*$/)
+  assert.match(preview.dsh.version, /^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.[1-9]\d*$/)
   assert.equal(preview.dsh.tag, `dsh-v${preview.dsh.version}`)
   assert.match(preview.dsh.npmIntegrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
   assert.match(preview.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
@@ -60,26 +63,27 @@ test('Windows packaging consumes preview runtime only through an explicit receip
   assert.match(build, /upstream\.preview\.lock\.json/)
   assert.match(build, /Preview app receipt does not match/)
   assert.match(build, /if \(-not \$PreviewAppSource\) \{[\s\S]+verify-lock\.mjs[\s\S]+npm ci failed/)
-  assert.match(build, /dshChannel = if \(\$PreviewAppSource\) \{ 'preview' \} else \{ 'stable' \}/)
+  assert.match(build, /dshChannel = if \(\$ReleaseChannel -eq 'candidate'\) \{ 'preview' \} else \{ 'stable' \}/)
   assert.match(build, /footprint-budgets-preview\.json/)
   assert.match(build, /Candidate builds require -PreviewAppSource/)
+  assert.match(build, /Stable source-pack receipt does not match upstream\.lock\.json/)
+  assert.match(build, /\$ReleaseChannel -eq 'candidate'[\s\S]+footprint-budgets-preview\.json/)
 })
 
-test('macOS and Linux candidate packaging fail closed without the staged official preview runtime', async () => {
+test('macOS and Linux packaging fail closed unless the staged official source pack matches the selected lock', async () => {
   for (const filename of ['build-macos.sh', 'build-linux.sh']) {
     const build = await readFile(path.join(root, 'scripts', filename), 'utf8')
     assert.match(build, /PREVIEW_APP_SOURCE/)
     assert.match(build, /Candidate builds require PREVIEW_APP_SOURCE/)
-    assert.match(build, /Stable builds must not consume PREVIEW_APP_SOURCE/)
     assert.match(build, /preview-runtime\.json/)
     assert.match(build, /upstream\.preview\.lock\.json/)
-    assert.match(build, /Preview app receipt does not match upstream\.preview\.lock\.json/)
+    assert.match(build, /source-pack receipt does not match selected upstream lock/i)
     assert.match(build, /dshPackageSetSha256/)
     assert.match(build, /footprint-budgets-preview\.json/)
   }
 })
 
-test('CI builds one immutable official preview package set and stages it natively on every platform', async () => {
+test('CI builds one immutable official source package set and stages it natively on every platform', async () => {
   const workflow = await readFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8')
   assert.match(workflow, /preview-packed-runtime:/)
   assert.match(workflow, /repository: deepseek-ai\/deepseek-harness/)
@@ -90,6 +94,7 @@ test('CI builds one immutable official preview package set and stages it nativel
   assert.match(workflow, /pnpm --dir upstream\/native\/landlock-run\/packages\/entry pack --pack-destination/)
   assert.equal((workflow.match(/stage-preview-runtime\.mjs/g) ?? []).length, 3)
   assert.equal((workflow.match(/--packed-root preview-packed\/upstream\/dist/g) ?? []).length, 3)
+  assert.doesNotMatch(workflow, /if: steps\.preview\.outputs\.channel == 'candidate'/)
   assert.match(workflow, /build-windows\.ps1 -PreviewAppSource preview-app/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-macos\.sh/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-linux\.sh/)

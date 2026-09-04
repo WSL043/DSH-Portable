@@ -27,8 +27,8 @@ using Microsoft.Toolkit.Uwp.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.0.10001")]
-[assembly: AssemblyFileVersion("0.6.0.10001")]
+[assembly: AssemblyVersion("0.6.0.65534")]
+[assembly: AssemblyFileVersion("0.6.0.65534")]
 
 namespace DshPortable
 {
