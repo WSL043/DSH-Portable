@@ -86,6 +86,21 @@ async function defaultRunCli(root, baseStateRoot, environmentId, args) {
   return output ? JSON.parse(output.split(/\r?\n/).at(-1)) : {}
 }
 
+export async function windowsNotificationAvailability() {
+  if (process.platform !== 'win32') return { status: 'not-windows' }
+  try {
+    const { stdout = '' } = await execFileAsync('reg.exe', [
+      'query', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\PushNotifications',
+      '/v', 'ToastEnabled',
+    ], { encoding: 'utf8', windowsHide: true, timeout: 3000 })
+    const match = /ToastEnabled\s+REG_DWORD\s+0x([0-9a-f]+)/i.exec(stdout)
+    return { status: match && Number.parseInt(match[1], 16) === 0 ? 'disabled-system' : 'available' }
+  } catch {
+    // Windows normally omits the value when notifications use their default.
+    return { status: 'available' }
+  }
+}
+
 const ENVIRONMENT_ID = /^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$/
 const RESERVED_ENVIRONMENT_ID = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
 
@@ -173,6 +188,7 @@ export function mountPortableRoutes(webServer, options = {}) {
   const repairResult = path.join(stateRoot, 'data', 'runtime', 'repair-result.json')
   const updateResult = path.join(stateRoot, 'data', 'runtime', 'last-update-result.json')
   const runCli = options.runCli || ((args) => defaultRunCli(root, baseStateRoot, currentEnvironment, args))
+  const notificationAvailability = options.notificationAvailability || windowsNotificationAvailability
   const disposers = []
   const register = route => disposers.push(webServer.register(route))
   const installedUpdateChannel = () => {
@@ -192,6 +208,7 @@ export function mountPortableRoutes(webServer, options = {}) {
       })(),
       lastRepair: readJsonFile(repairResult),
       lastUpdate: readJsonFile(updateResult),
+      notificationAvailability: await notificationAvailability(),
       workspacePath: path.join(stateRoot, 'workspace'),
       environments: environmentSnapshot(baseStateRoot, currentEnvironment, environmentRegistryFile),
     })
@@ -229,8 +246,17 @@ export function mountPortableRoutes(webServer, options = {}) {
     try {
       const body = await readJson(request)
       if (!['product', 'engine'].includes(body.scope)) return sendJson(response, 400, { error: 'invalid update scope' })
-      sendJson(response, 200, await runCli(['check-update', '--scope', body.scope, '--json', '--force']))
+      const args = ['check-update', '--scope', body.scope, '--json']
+      if (body.background !== true) args.push('--force')
+      sendJson(response, 200, await runCli(args))
     } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+  } })
+
+  register({ kind: 'exact', path: '/dsh-portable/engine-versions', handler: async (request, response) => {
+    if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try { sendJson(response, 200, await runCli(['list-updates', '--scope', 'engine', '--json'])) }
+    catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 
   register({ kind: 'exact', path: '/dsh-portable/doctor', handler: async (request, response) => {

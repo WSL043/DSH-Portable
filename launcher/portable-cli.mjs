@@ -36,6 +36,7 @@ import {
   deferUpdate,
   ignoreUpdate,
   installAvailableAppUpdate,
+  listEngineVersions,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
 import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
@@ -718,6 +719,18 @@ async function checkUpdate(options) {
   })
 }
 
+async function listUpdates(options) {
+  requireRuntime()
+  await ensurePortableDirectories(layout)
+  await migratePortableRoot(layout)
+  if (options.updateScope !== 'engine') throw new Error('Version selection is currently supported for the DeepSeek Harness engine only.')
+  return listEngineVersions({
+    layout,
+    releaseChannel: preferredUpdateChannel(options),
+    allowHttp: options.allowHttp,
+  })
+}
+
 async function update(options) {
   requireRuntime()
   await ensurePortableDirectories(layout)
@@ -895,6 +908,7 @@ async function main() {
       result = await cleanUnusedRuntimeCaches(root)
     }
     else if (options.command === 'check-update') result = await checkUpdate(options)
+    else if (options.command === 'list-updates') result = await listUpdates(options)
     else if (options.command === 'defer-update') result = await deferUpdate(layout, { scope: options.updateScope })
     else if (options.command === 'ignore-update') result = await ignoreUpdate(layout, '', { scope: options.updateScope })
     else if (options.command === 'update') result = await update(options)

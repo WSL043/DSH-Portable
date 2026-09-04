@@ -38,6 +38,11 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /AppendStartupTrace\("native-host", "startup-failed"/)
   assert.match(host, /FormBorderStyle\s*=\s*desktopStart\s*\?\s*FormBorderStyle\.Sizable/)
   assert.match(host, /NotifyIcon/)
+  assert.match(host, /dsh-portable\/open-update/)
+  assert.match(host, /CheckForDesktopUpdateAsync\(true, requestedScope, requestedManifest\)/)
+  assert.match(host, /IsTrustedEngineManifestUrl\(requestedManifest\)/)
+  assert.match(host, /DSH-Portable-Updates\/releases\/download\/update-channel-core-/)
+  assert.match(host, /--update-manifest/)
   assert.match(host, /launcher-settings\.json/)
   assert.match(host, /--diagnostic-root-json[\s\S]+nonInteractive|nonInteractive[\s\S]+--diagnostic-root-json/)
   assert.match(host, /关闭窗口时/)
@@ -67,8 +72,8 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   const reveal = navigationFlow.slice(navigationFlow.indexOf('private void RevealDesktopSurface'), navigationFlow.indexOf('private async Task<string> WaitForWorkspaceHandoffAsync'))
   assert.ok(reveal.indexOf('webView.BringToFront();') < reveal.indexOf('launchPanel.Visible = false;'), 'the ready WebView must replace the loading surface before the loading surface is removed')
   assert.match(reveal, /webView\.Update\(\);[\s\S]+DwmFlush\(\);[\s\S]+launchPanel\.Visible\s*=\s*false;[\s\S]+Opacity\s*=\s*1/)
-  assert.match(host, /ShowInTaskbar = !nonInteractive && !testHidden && !desktopStart/)
-  assert.match(host, /else if \(desktopStart\) Opacity = 0/)
+  assert.match(host, /ShowInTaskbar = !nonInteractive && !testHidden/)
+  assert.doesNotMatch(host, /else if \(desktopStart\) Opacity = 0/)
   assert.match(reveal, /ShowInTaskbar\s*=\s*true;[\s\S]+Opacity\s*=\s*1/)
   assert.match(host, /launchPanel\.Visible = true/)
   assert.match(host, /launchPanel\.BringToFront\(\)/)
@@ -203,6 +208,10 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.match(host, /FolderBrowserDialog/)
   assert.match(host, /dialog\.SelectedPath = portableWorkspace/)
   assert.match(host, /ShowDialog\(this\)/)
+  const picker = host.slice(host.indexOf('private void ShowWorkspaceDirectoryPicker('), host.indexOf('private System.Threading.Timer ArmOwnedDialogCancellationAutomation('))
+  assert.match(picker, /bool previousTopMost = TopMost/)
+  assert.match(picker, /TopMost = true/)
+  assert.match(picker, /finally[\s\S]+TopMost = previousTopMost/)
   assert.match(host, /dsh-portable\/pick-directory-result/)
   assert.match(host, /BeginInvoke/)
   assert.match(host, /ArmOwnedDialogCancellationAutomation/)
@@ -216,7 +225,7 @@ test('Windows workspace selection is owned by the native DSH window instead of a
   assert.doesNotMatch(launcherBlock, /windowsHide:\s*true/)
   assert.match(smoke, /postMessage\(\{ type: 'dsh-portable\/pick-directory'/)
   assert.match(smoke, /location\.href/)
-  assert.match(smoke, /dialog-detected/)
+  assert.match(smoke, /dialog-detected hwnd=\\d\+ owner=\\d\+ ownerTopMost=true/)
   assert.match(smoke, /dialog-closed result=Cancel/)
   assert.doesNotMatch(smoke, /window-probe\.ps1/)
 })
@@ -225,7 +234,7 @@ test('Windows desktop uses compact native chrome without sacrificing resize or S
   const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   assert.match(host, /FormBorderStyle\s*=\s*desktopStart\s*\?\s*FormBorderStyle\.Sizable/)
   assert.match(host, /FormBorderStyle\s*=\s*FormBorderStyle\.Sizable/)
-  assert.match(host, /ShowIcon\s*=\s*false/)
+  assert.match(host, /ShowIcon\s*=\s*true/)
   assert.match(host, /Text\s*=\s*desktopStart\s*\?\s*String\.Empty\s*:\s*"DeepSeek-Herness"/)
   assert.match(host, /DwmwaUseImmersiveDarkMode\s*=\s*20/)
   assert.match(host, /DwmwaCaptionColor\s*=\s*35/)
@@ -601,6 +610,16 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(macSmoke, /pgrep -f/)
   assert.doesNotMatch(macSmoke, /DSH_PORTABLE_SKIP_UPDATE_CHECK=1 "\$START"/)
   assert.doesNotMatch(macSmoke, /System Events/)
+})
+
+test('candidate builders overlay current Portable-owned integrations after importing the official preview runtime', async () => {
+  const [windows, macos, linux] = await Promise.all([
+    read('scripts/build-windows.ps1'), read('scripts/build-macos.sh'), read('scripts/build-linux.sh'),
+  ])
+  for (const source of [windows, macos, linux]) {
+    assert.match(source, /dsh-portable-desktop-bridge/)
+    assert.match(source, /dsh-portable-plugin-market/)
+  }
 })
 
 test('Windows startup audit accepts log-backed loader evidence and persists failures', async () => {

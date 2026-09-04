@@ -16,10 +16,11 @@ window.__ModuleLoader__.load({
         previousVersion: '上一版本',
         product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。启动检查默认关闭。',
         engine: 'DeepSeek Harness', engineHint: '官方内核。仅推送通过 Portable 兼容验证的版本；启动检查默认关闭。',
-        startupCheck: '启动时检查', checkUpdate: '检查更新',
+        startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用；可从系统托盘选择安装。',
         incompatible: '此内核需要先更新 DSH-Portable。', engineFollowsProduct: '预览版内核随 DSH-Portable 更新。', channelUnpublished: '此预览版尚未发布更新通道。', updateUnavailable: '暂时无法连接更新服务。',
-        notifications: '任务完成通知', notificationsHint: '任务在后台完成时显示系统通知。',
+        notifications: '任务完成通知', notificationsHint: '任务在后台完成时显示系统通知。', notificationsSystemDisabled: 'Windows 通知已关闭；开启后，后台和托盘任务完成提醒才会显示。',
+        updateReady: '有可用更新', environmentActive: '当前独立环境：{0}',
         desktop: '桌面行为',
         close: '关闭窗口时', tray: '最小化到托盘', exit: '退出程序',
         environments: '环境', environmentTitle: '独立环境', environmentHint: '每个环境分别保存会话、设置、凭据、插件和工作区；打开另一个环境不会中断当前任务。',
@@ -52,10 +53,11 @@ window.__ModuleLoader__.load({
         previousVersion: 'the previous version',
         product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations. Startup checks are off by default.',
         engine: 'DeepSeek Harness', engineHint: 'Official core. Only Portable-verified builds are offered; startup checks are off by default.',
-        startupCheck: 'Check at startup', checkUpdate: 'Check for updates',
+        startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available; install it from the system tray.',
         incompatible: 'Update DSH-Portable before installing this core.', engineFollowsProduct: 'Preview core updates are delivered with DSH-Portable.', channelUnpublished: 'No update channel has been published for this preview yet.', updateUnavailable: 'The update service is unavailable right now.',
-        notifications: 'Task completion notifications', notificationsHint: 'Show a system notification when a background task finishes.',
+        notifications: 'Task completion notifications', notificationsHint: 'Show a system notification when a background task finishes.', notificationsSystemDisabled: 'Windows notifications are turned off. Enable them to receive background and tray task completion alerts.',
+        updateReady: 'Update available', environmentActive: 'Current isolated environment: {0}',
         desktop: 'Desktop behavior',
         close: 'When closing the window', tray: 'Minimize to tray', exit: 'Exit application',
         environments: 'Environments', environmentTitle: 'Isolated environments', environmentHint: 'Each environment keeps separate sessions, settings, credentials, plugins, and workspace. Opening another environment does not interrupt this one.',
@@ -95,6 +97,7 @@ window.__ModuleLoader__.load({
       importData: true,
       restartHost: true,
       openEnvironment: false,
+      openUpdate: false,
       preferences: true,
       sessionProjection: true,
     })
@@ -102,6 +105,7 @@ window.__ModuleLoader__.load({
     const webView2HostCapabilities = Object.freeze({
       ...completeHostCapabilities,
       openEnvironment: true,
+      openUpdate: true,
     })
 
     function nativeHostTransport() {
@@ -211,6 +215,78 @@ window.__ModuleLoader__.load({
       })
     }
 
+    let portableShellSummary = null
+    let portableShellSummaryPromise = null
+    const portableShellSummaryListeners = new Set()
+
+    function loadPortableShellSummary() {
+      if (portableShellSummary) return Promise.resolve(portableShellSummary)
+      if (portableShellSummaryPromise) return portableShellSummaryPromise
+      portableShellSummaryPromise = fetch('/dsh-portable/settings', { cache: 'no-store' })
+        .then(response => response.json())
+        .then(async body => {
+          const enabled = [
+            body.settings?.productUpdateCheckEnabled ? 'product' : '',
+            body.settings?.engineUpdateCheckEnabled ? 'engine' : '',
+          ].filter(Boolean)
+          const checks = await Promise.all(enabled.map(scope => fetch('/dsh-portable/check-update', {
+            method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ scope, background: true }),
+          }).then(response => response.json()).catch(() => null)))
+          portableShellSummary = {
+            environments: body.environments,
+            availableScopes: enabled.filter((_scope, index) => ['available', 'full-package-required'].includes(checks[index]?.status)),
+          }
+          for (const listener of portableShellSummaryListeners) listener(portableShellSummary)
+          return portableShellSummary
+        })
+        .catch(() => {
+          portableShellSummary = { environments: null, availableScopes: [] }
+          for (const listener of portableShellSummaryListeners) listener(portableShellSummary)
+          return portableShellSummary
+        })
+        .finally(() => { portableShellSummaryPromise = null })
+      return portableShellSummaryPromise
+    }
+
+    function usePortableShellSummary() {
+      const [summary, setSummary] = React.useState(null)
+      React.useEffect(() => {
+        let active = true
+        const update = value => { if (active) setSummary(value) }
+        portableShellSummaryListeners.add(update)
+        loadPortableShellSummary().then(update)
+        return () => { active = false; portableShellSummaryListeners.delete(update) }
+      }, [])
+      return summary
+    }
+
+    function PortableUpdateAction({ wide, primitives }) {
+      const h = React.createElement
+      const summary = usePortableShellSummary()
+      const scopes = summary?.availableScopes || []
+      if (scopes.length === 0) return null
+      const lang = String(document.documentElement.lang || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
+      const label = copy[lang].updateReady
+      return h('div', { className: 'dshPortableFooterUpdate' },
+        h(primitives.Tooltip, { label, side: 'top' }, h('button', {
+          type: 'button', className: 'dshPortableFooterUpdateButton', 'aria-label': label,
+          onClick: () => postToNativeHost({ type: 'dsh-portable/open-update', schemaVersion: 1, scope: scopes.includes('product') ? 'product' : 'engine' }, 'openUpdate'),
+        }, h(primitives.IconDownloadOutline16, { size: 16 }), h('span', { className: 'dshPortableUpdateDot', 'aria-hidden': true }))))
+    }
+
+    function PortableEnvironmentChip({ primitives }) {
+      const h = React.createElement
+      const summary = usePortableShellSummary()
+      const environments = summary?.environments
+      if (!environments || environments.current === 'default') return null
+      const current = environments.items?.find(item => item.id === environments.current)
+      const name = current?.name || environments.current
+      const lang = String(document.documentElement.lang || '').toLowerCase().startsWith('zh') ? 'zh' : 'en'
+      const label = format(copy[lang].environmentActive, name)
+      return h('span', { className: 'dshPortableEnvironmentChip', title: label, 'aria-label': label },
+        h(primitives.IconFolderOpenOutline16, { size: 14 }), h('span', null, name))
+    }
+
     function PortableSettings(ctx, primitives) {
       const h = React.createElement
       const useEffect = React.useEffect
@@ -220,6 +296,10 @@ window.__ModuleLoader__.load({
       const [settings, setSettings] = useState(null)
       const [versions, setVersions] = useState({ portable: '', engine: '' })
       const [lastUpdate, setLastUpdate] = useState(null)
+      const [notificationAvailability, setNotificationAvailability] = useState('unknown')
+      const [engineVersions, setEngineVersions] = useState([])
+      const [engineVersion, setEngineVersion] = useState('')
+      const [engineVersionManifestUrls, setEngineVersionManifestUrls] = useState({})
       const [environments, setEnvironments] = useState({ current: 'default', items: [{ id: 'default', name: '' }] })
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
@@ -245,6 +325,7 @@ window.__ModuleLoader__.load({
             setSettings(body.settings)
             setVersions(body.versions || { portable: '', engine: '' })
             setLastUpdate(body.lastUpdate || null)
+            setNotificationAvailability(body.notificationAvailability?.status || 'unknown')
             if (body.environments) setEnvironments(body.environments)
             if (body.lastRepair?.needsFullPackage) setStatus('maintenance', t('fullPackage'))
             else if (body.lastRepair?.ok) setStatus('maintenance', t('repaired'))
@@ -252,6 +333,17 @@ window.__ModuleLoader__.load({
           .catch(error => { if (active) setStatus('portable', format(t('failed'), error.message || error)) })
         return () => { active = false }
       }, [])
+      useEffect(() => {
+        let active = true
+        fetch('/dsh-portable/engine-versions', { cache: 'no-store' }).then(res => res.json()).then(body => {
+          if (!active || body.error) return
+          const items = Array.isArray(body.versions) ? body.versions : []
+          setEngineVersions(items)
+          setEngineVersion(body.current || '')
+          setEngineVersionManifestUrls(Object.fromEntries(items.map(item => [item.version, item.manifestUrl])))
+        }).catch(() => {})
+        return () => { active = false }
+      }, [settings?.updateChannel])
 
       const update = patch => {
         setSettings(current => ({ ...current, ...patch }))
@@ -315,6 +407,13 @@ window.__ModuleLoader__.load({
         finally { setBusy('') }
       }
       const checkUpdate = scope => {
+        if (scope === 'engine' && engineVersion && engineVersion !== versions.engine && engineVersionManifestUrls[engineVersion]) {
+          postToNativeHost({
+            type: 'dsh-portable/open-update', schemaVersion: 1, scope: 'engine',
+            manifestUrl: engineVersionManifestUrls[engineVersion],
+          }, 'openUpdate')
+          return
+        }
         const name = `update-${scope}`
         setBusy(name); setStatus(name, '')
         fetch('/dsh-portable/check-update', {
@@ -447,13 +546,18 @@ window.__ModuleLoader__.load({
           version && h('div', { style: styles.version }, format(t('currentVersion'), version)),
           inlineStatus(`update-${scope}`)),
         h('div', { style: styles.rowActions },
+          scope === 'engine' && engineVersions.length > 0 && h(PortableSelector, {
+            primitives, value: engineVersion || version, label: t('versionChoice'),
+            items: [{ id: version, label: version }, ...engineVersions.filter(item => item.version !== version).map(item => ({ id: item.version, label: item.version }))],
+            onSelect: setEngineVersion,
+          }),
           h(PortableSelector, {
             primitives, value: settings[key] ? 'on' : 'off', label: `${title} · ${t('startupCheck')}`,
             items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
             onSelect: value => update({ [key]: value === 'on' }),
           }),
           h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => checkUpdate(scope) },
-            busy === `update-${scope}` ? t('checking') : t('checkUpdate'))))
+            busy === `update-${scope}` ? t('checking') : scope === 'engine' && engineVersion && engineVersion !== version ? t('installVersion') : t('checkUpdate'))))
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
         h('div', { style: styles.sectionHeading }, t('updates')),
         h('div', { style: styles.item },
@@ -492,7 +596,7 @@ window.__ModuleLoader__.load({
             h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setEnvironmentDialog(true) }, t('newEnvironment')))))
       const desktopSection = h('section', { style: styles.section, 'aria-label': t('desktop') },
         h('div', { style: styles.sectionHeading }, t('desktop')),
-        booleanRow('taskNotificationsEnabled', t('notifications'), t('notificationsHint')),
+        booleanRow('taskNotificationsEnabled', t('notifications'), notificationAvailability === 'disabled-system' ? t('notificationsSystemDisabled') : t('notificationsHint')),
         h('div', { style: styles.item },
           h('div', { style: styles.text }, h('div', { style: styles.label }, t('close'))),
           h(PortableSelector, {
@@ -722,17 +826,26 @@ window.__ModuleLoader__.load({
       if (React?.createElement && React?.useState && React?.useEffect) {
         try {
           const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-          if (primitives?.Button && primitives?.Input && primitives?.Menu && primitives?.Modal && primitives?.IconChevronDownOutline14) {
+          if (primitives?.Button && primitives?.Input && primitives?.Menu && primitives?.Modal && primitives?.Tooltip
+            && primitives?.IconChevronDownOutline14 && primitives?.IconDownloadOutline16 && primitives?.IconFolderOpenOutline16) {
             if (!document.getElementById('dsh-portable-settings-controls')) {
               const style = document.createElement('style')
               style.id = 'dsh-portable-settings-controls'
-              style.textContent = '.dshPortableSelector{background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;border-radius:18px;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex;white-space:nowrap}.dshPortableSelector:hover{background:var(--dsw-alias-interactive-bg-hover)}.dshPortableSelectorChevron{flex:none}'
+              style.textContent = '.dshPortableSelector{background:var(--dsw-alias-bg-module-platform);height:36px;font:inherit;color:var(--dsw-alias-label-primary);cursor:pointer;border:none;border-radius:18px;align-items:center;gap:12px;padding:0 14px;font-size:14px;line-height:22px;display:inline-flex;white-space:nowrap}.dshPortableSelector:hover{background:var(--dsw-alias-interactive-bg-hover)}.dshPortableSelectorChevron{flex:none}.dshPortableFooterUpdate{flex:none;align-items:center;align-self:flex-end;width:36px;height:36px;margin:0 0 -36px auto;display:flex;position:relative;z-index:1}.dshPortableFooterUpdateButton{width:36px;height:36px;color:var(--dsw-alias-label-primary);cursor:pointer;background:transparent;border:0;border-radius:50%;justify-content:center;align-items:center;padding:0;font:inherit;display:inline-flex;position:relative}.dshPortableFooterUpdateButton:hover{background:var(--dsw-alias-interactive-bg-hover)}.dshPortableUpdateDot{position:absolute;right:4px;top:4px;width:7px;height:7px;border-radius:50%;background:var(--dsw-alias-state-business-primary)}.dshPortableEnvironmentChip{height:28px;max-width:180px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-interactive-bg-hover-solid);border-radius:14px;align-items:center;gap:6px;padding:0 10px;font-size:13px;line-height:20px;display:inline-flex}.dshPortableEnvironmentChip span{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}'
               document.head.appendChild(style)
             }
             const SettingsSection = () => PortableSettings(ctx, primitives)
             ctx.slots.inject('settings.general.item', () => ctx.slots.register({
               name: 'settings.general.item', id: 'portable', order: 60,
             }, SettingsSection))
+            const UpdateAction = props => PortableUpdateAction({ ...props, primitives })
+            ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+              name: 'sidebar.footer.action', id: 'portable-update', order: 80, label: () => copy[localeOf(ctx)].updateReady,
+            }, UpdateAction))
+            const EnvironmentChip = () => PortableEnvironmentChip({ primitives })
+            ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+              name: 'conversation.input.left', id: 'portable-environment', order: 80,
+            }, EnvironmentChip))
           }
         } catch (error) { console.warn('[dsh-portable] settings section unavailable:', error) }
       }
@@ -744,6 +857,7 @@ window.__ModuleLoader__.load({
 
       ctx.effect(() => {
         let active = true
+        const sessionEventStops = new Map()
         let workspaceRequestSequence = 0
         const pendingWorkspaceRequests = new Map()
         const originalPickDirectory = ctx.workspaces?.pickDirectory
@@ -760,7 +874,28 @@ window.__ModuleLoader__.load({
           })
           ctx.workspaces.pickDirectory = nativePickDirectory
         }
+        const syncSessionEventSubscriptions = () => {
+          const snapshot = ctx.sessions.list.getSnapshot()
+          const desired = new Set((snapshot.ids ?? [])
+            .map(id => snapshot.byId?.[id])
+            .filter(item => item && !item.blank && item.origin !== 'subagent')
+            .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
+            .slice(0, 10)
+            .map(item => String(item.id)))
+          for (const [id, stop] of sessionEventStops) {
+            if (desired.has(id)) continue
+            stop?.()
+            sessionEventStops.delete(id)
+          }
+          for (const id of desired) {
+            if (sessionEventStops.has(id)) continue
+            const eventSource = ctx.sessions.binding?.(id)?.eventSource
+            if (typeof eventSource?.subscribe !== 'function') continue
+            sessionEventStops.set(id, eventSource.subscribe(() => queueMicrotask(publish)))
+          }
+        }
         const publish = () => {
+          syncSessionEventSubscriptions()
           if (active && host.capabilities.sessionProjection === true) webview.postMessage(sessionState(ctx))
         }
         const receive = event => {
@@ -878,6 +1013,8 @@ window.__ModuleLoader__.load({
           if (window.__DSH_PORTABLE_HOST__?.restart === restartPortableHost) delete window.__DSH_PORTABLE_HOST__
           webview.removeEventListener?.('message', receive)
           stopSessions?.()
+          for (const stop of sessionEventStops.values()) stop?.()
+          sessionEventStops.clear()
           stopLocale?.()
           stopTheme?.()
         }

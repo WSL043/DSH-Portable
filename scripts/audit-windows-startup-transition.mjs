@@ -10,6 +10,8 @@ const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
 const output = path.resolve(process.argv[3] || path.join(root, 'data', 'logs', 'startup-transition-audit'))
 const startupTimeoutSeconds = Number(process.argv[4] || 30)
+const environmentId = String(process.argv[5] || '')
+const stopArgs = ['stop', '--no-browser', '--json', ...(environmentId ? ['--environment', environmentId] : [])]
 if (!root) throw new Error('usage: node audit-windows-startup-transition.mjs <DSH-Portable root> [output] [startup-timeout-seconds]')
 if (process.platform !== 'win32') throw new Error('the startup transition audit is Windows-only')
 if (!Number.isFinite(startupTimeoutSeconds) || startupTimeoutSeconds < 1 || startupTimeoutSeconds > 120) {
@@ -19,7 +21,7 @@ if (!Number.isFinite(startupTimeoutSeconds) || startupTimeoutSeconds < 1 || star
 const executable = path.join(root, 'DeepSeek-Herness.exe')
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
-const launcherLog = path.join(root, 'data', 'logs', 'launcher.log')
+const launcherLog = path.join(environmentId ? path.join(root, 'environments', environmentId) : root, 'data', 'logs', 'launcher.log')
 for (const filename of [executable, portableNode, portableCli]) {
   if (!existsSync(filename)) throw new Error(`portable file is missing: ${filename}`)
 }
@@ -109,14 +111,14 @@ let launcher = null
 let client = null
 const logOffset = existsSync(launcherLog) ? (await readFile(launcherLog)).length : 0
 try {
-  await execFileAsync(portableNode, [portableCli, 'stop', '--no-browser', '--json'], {
+  await execFileAsync(portableNode, [portableCli, ...stopArgs], {
     cwd: root,
     windowsHide: true,
     timeout: 60000,
   }).catch(() => {})
   await mkdir(output, { recursive: true })
   const debugPort = await reservePort()
-  launcher = spawn(executable, [], {
+  launcher = spawn(executable, environmentId ? ['--environment', environmentId] : [], {
     cwd: root,
     env: {
       ...process.env,
@@ -220,19 +222,50 @@ try {
   assert.ok(revealSample.bodyText.length > 0, 'the native surface revealed an empty workspace')
   assert.ok(revealSample.visibleControls >= 2, 'the native surface revealed before primary controls were ready')
   assert.ok(workspaceSample, 'the settled DSH workspace did not remain stable after native handoff')
+  const dismissedWelcome = await evaluate(client, `(() => {
+    const button = [...document.querySelectorAll('button')].find(node => /^(Continue|继续)$/.test(String(node.textContent || '').trim()))
+    if (!button) return false
+    button.click()
+    return true
+  })()`)
+  if (dismissedWelcome) {
+    const dismissalDeadline = Date.now() + 5000
+    while (Date.now() < dismissalDeadline) {
+      const visible = await evaluate(client, `![...document.querySelectorAll('button')].some(node => /^(Continue|继续)$/.test(String(node.textContent || '').trim()))`)
+      if (visible) break
+      await new Promise(resolve => setTimeout(resolve, 50))
+    }
+  }
+  const dismissedProvider = await evaluate(client, `(() => {
+    const button = [...document.querySelectorAll('button')].find(node => /^(Configure later|稍后配置)$/.test(String(node.textContent || '').trim()))
+    if (!button) return false
+    button.click()
+    return true
+  })()`)
+  if (dismissedWelcome || dismissedProvider) {
+    await new Promise(resolve => setTimeout(resolve, 250))
+    await capture(client, '04-main-workspace.png')
+  }
+  const portableShell = await evaluate(client, `({
+    updateActions: document.querySelectorAll('.dshPortableFooterUpdate').length,
+    environmentChips: document.querySelectorAll('.dshPortableEnvironmentChip').length,
+  })`)
   console.log(JSON.stringify({
     output,
     samples: samples.length,
     capturedBoot,
     capturedReveal,
     capturedWorkspace,
+    dismissedWelcome,
+    dismissedProvider,
+    portableShell,
     revealAt: Math.round(revealSample.at),
     workspaceAt: Math.round(workspaceSample.at),
     settledAfterRevealMs: Math.round(workspaceSample.at - revealSample.at),
   }))
 } finally {
   client?.close()
-  await execFileAsync(portableNode, [portableCli, 'stop', '--no-browser', '--json'], {
+  await execFileAsync(portableNode, [portableCli, ...stopArgs], {
     cwd: root,
     windowsHide: true,
     timeout: 60000,

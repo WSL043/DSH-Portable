@@ -717,17 +717,18 @@ namespace DshPortable
             // caption visually quiet instead of repeating it above the DSH shell.
             Text = desktopStart ? String.Empty : "DeepSeek-Herness";
             Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-            ShowIcon = false;
+            // Keep the executable-owned DSH icon on the native frame so the
+            // taskbar never falls back to the hosted WebView/Node identity.
+            ShowIcon = true;
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedSingle;
             MaximizeBox = desktopStart;
             MinimizeBox = desktopStart;
-            // Reveal the desktop only after the official DSH WebView boot
-            // surface is ready, so startup remains one continuous surface.
-            ShowInTaskbar = !nonInteractive && !testHidden && !desktopStart;
+            // Show a responsive native loading surface immediately. The real
+            // DSH WebView replaces it only after its boot surface is ready.
+            ShowInTaskbar = !nonInteractive && !testHidden;
             if (nonInteractive) Opacity = 0;
             else if (testHidden) Opacity = 1;
-            else if (desktopStart) Opacity = 0;
             ClientSize = desktopStart ? new Size(1280, 820) : new Size(440, 160);
             MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
             BackColor = SystemColors.Window;
@@ -905,7 +906,7 @@ namespace DshPortable
             webView = CreateDesktopWebView();
             Controls.Add(webView);
             Controls.Add(launchPanel);
-            launchPanel.Visible = !desktopStart;
+            launchPanel.Visible = true;
             if (launchPanel.Visible) launchPanel.BringToFront();
             if (desktopStart)
             {
@@ -1569,6 +1570,24 @@ namespace DshPortable
                     return;
                 }
                 if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/open-update", StringComparison.Ordinal))
+                {
+                    object scopeValue;
+                    string requestedScope = message.TryGetValue("scope", out scopeValue)
+                        ? Convert.ToString(scopeValue)
+                        : String.Empty;
+                    object manifestValue;
+                    string requestedManifest = message.TryGetValue("manifestUrl", out manifestValue)
+                        ? Convert.ToString(manifestValue)
+                        : String.Empty;
+                    if (!String.Equals(requestedScope, "product", StringComparison.Ordinal)
+                        && !String.Equals(requestedScope, "engine", StringComparison.Ordinal)) return;
+                    if (!String.IsNullOrEmpty(requestedManifest)
+                        && (!String.Equals(requestedScope, "engine", StringComparison.Ordinal) || !IsTrustedEngineManifestUrl(requestedManifest))) return;
+                    BeginInvoke((MethodInvoker)(async delegate { await CheckForDesktopUpdateAsync(true, requestedScope, requestedManifest); }));
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/pick-directory", StringComparison.Ordinal))
                 {
                     if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION"), "1", StringComparison.Ordinal))
@@ -1746,9 +1765,11 @@ namespace DshPortable
                 { "schemaVersion", 1 },
                 { "requestId", requestId },
             };
+            bool previousTopMost = TopMost;
             try
             {
                 RestoreFromTray();
+                TopMost = true;
                 Activate();
                 BringToFront();
                 using (FolderBrowserDialog dialog = new FolderBrowserDialog())
@@ -1773,6 +1794,10 @@ namespace DshPortable
             {
                 result["error"] = error.Message;
             }
+            finally
+            {
+                TopMost = previousTopMost;
+            }
             try
             {
                 if (webView != null && webView.CoreWebView2 != null)
@@ -1787,6 +1812,7 @@ namespace DshPortable
                 return null;
             int processId = Process.GetCurrentProcess().Id;
             int closeRequested = 0;
+            bool ownerTopMost = TopMost;
             return new System.Threading.Timer(delegate
             {
                 if (System.Threading.Interlocked.CompareExchange(ref closeRequested, 0, 0) != 0) return;
@@ -1805,6 +1831,7 @@ namespace DshPortable
                     GetClassName(window, className, className.Capacity);
                     WriteLauncherLog(category, "dialog-detected hwnd=" + window.ToInt64().ToString(CultureInfo.InvariantCulture)
                         + " owner=" + owner.ToInt64().ToString(CultureInfo.InvariantCulture)
+                        + " ownerTopMost=" + (ownerTopMost ? "true" : "false")
                         + " class=" + className.ToString());
                     PostMessage(window, WmClose, IntPtr.Zero, IntPtr.Zero);
                     return false;
@@ -2962,6 +2989,11 @@ namespace DshPortable
 
         private async Task CheckForDesktopUpdateAsync(bool manual, string scope)
         {
+            await CheckForDesktopUpdateAsync(manual, scope, String.Empty);
+        }
+
+        private async Task CheckForDesktopUpdateAsync(bool manual, string scope, string manifestUrl)
+        {
             bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
             string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
             bool scopeEnabled = String.Equals(scope, "engine", StringComparison.Ordinal)
@@ -2974,9 +3006,11 @@ namespace DshPortable
             RebuildTrayMenu();
             try
             {
-                string[] checkArguments = manual
-                    ? new[] { "check-update", "--scope", scope, "--json", "--force" }
-                    : new[] { "check-update", "--scope", scope, "--json" };
+                string[] checkArguments = !String.IsNullOrEmpty(manifestUrl)
+                    ? new[] { "check-update", "--scope", scope, "--json", "--force", "--update-manifest", manifestUrl }
+                    : manual
+                        ? new[] { "check-update", "--scope", scope, "--json", "--force" }
+                        : new[] { "check-update", "--scope", scope, "--json" };
                 Tuple<int, string> check = await Task.Run(() => InvokePortableCli(checkArguments));
                 if (check.Item1 != 0)
                 {
@@ -3098,7 +3132,7 @@ namespace DshPortable
                     await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
                     return;
                 }
-                await ApplyDesktopUpdateAsync(scope);
+                await ApplyDesktopUpdateAsync(scope, manifestUrl);
             }
             catch (Exception error)
             {
@@ -3133,7 +3167,7 @@ namespace DshPortable
             CenterLaunchContent();
         }
 
-        private async Task ApplyDesktopUpdateAsync(string scope)
+        private async Task ApplyDesktopUpdateAsync(string scope, string manifestUrl = "")
         {
             bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
             string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
@@ -3141,8 +3175,10 @@ namespace DshPortable
                 ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
                 : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
             trayBridgeReady = false;
-            Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(
-                new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }, HandleUpdateProgress));
+            string[] updateArguments = String.IsNullOrEmpty(manifestUrl)
+                ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }
+                : new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--update-manifest", manifestUrl };
+            Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(updateArguments, HandleUpdateProgress));
             if (updated.Item1 != 0)
             {
                 await RestoreDesktopAfterUpdateAttemptAsync();
@@ -3194,6 +3230,17 @@ namespace DshPortable
                 "正在交给独立更新器，当前窗口将安全关闭…",
                 "Handing off to the updater; this window will close safely…"));
             BeginDesktopShutdown();
+        }
+
+        private static bool IsTrustedEngineManifestUrl(string manifestUrl)
+        {
+            Uri manifest;
+            return Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
+                && manifest.Scheme == Uri.UriSchemeHttps
+                && String.Equals(manifest.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+                && manifest.AbsolutePath.StartsWith("/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-", StringComparison.Ordinal)
+                && manifest.AbsolutePath.Contains("/dsh-core-update-")
+                && manifest.AbsolutePath.EndsWith(".json", StringComparison.Ordinal);
         }
 
         private List<string> OtherRunningEnvironmentHosts()

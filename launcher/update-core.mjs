@@ -48,6 +48,11 @@ export function defaultEngineUpdateManifestUrl(releaseChannel = 'stable', platfo
   return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-${releaseChannel}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
 }
 
+export function defaultEngineUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
+  normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-${releaseChannel}/dsh-core-index-${platformUpdateKey(platform, arch)}.json`
+}
+
 function parseSemanticVersion(value) {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(String(value ?? ''))
   if (!match) throw new Error(`${value} is not a valid semantic version.`)
@@ -105,7 +110,7 @@ function assertManifestShape(manifest) {
   }
 }
 
-export function evaluateUpdate(manifest, installed, platform) {
+export function evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange = false } = {}) {
   assertManifestShape(manifest)
   const updateKind = manifest.updateKind || 'product'
   const installedReleaseChannel = normalizeReleaseChannel(installed.releaseChannel, installed.portableVersion)
@@ -148,7 +153,8 @@ export function evaluateUpdate(manifest, installed, platform) {
   }
   const productComparison = comparePortableVersions(installed.portableVersion, manifest.portableVersion)
   if (updateKind === 'engine') {
-    if (engineCurrent && comparePortableVersions(engineCurrent, engineLatest) >= 0) return describe('current', 'none')
+    const engineComparison = engineCurrent ? comparePortableVersions(engineCurrent, engineLatest) : -1
+    if (engineComparison === 0 || (!allowEngineVersionChange && engineComparison > 0)) return describe('current', 'none')
     if (productComparison !== 0) return describe('core-incompatible', 'none')
   } else if (productComparison >= 0) {
     return describe('current', 'none')
@@ -351,6 +357,40 @@ export async function readInstalledUpdateState(layout) {
   }
 }
 
+export async function listEngineVersions({
+  layout,
+  indexUrl,
+  releaseChannel,
+  allowHttp = false,
+  fetchImpl = fetch,
+  timeoutMs = 5000,
+}) {
+  const installed = await readInstalledUpdateState(layout)
+  if (releaseChannel) installed.releaseChannel = normalizeReleaseChannel(releaseChannel, installed.portableVersion)
+  indexUrl ||= defaultEngineUpdateIndexUrl(installed.releaseChannel, layout.platform, process.arch)
+  const index = await fetchJson(indexUrl, { allowHttp, fetchImpl, timeoutMs })
+  if (!index || index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 20) {
+    throw new Error('Unsupported engine version catalog.')
+  }
+  const platform = platformUpdateKey(layout.platform, process.arch)
+  const versions = []
+  const seen = new Set()
+  for (const entry of index.versions) {
+    const version = String(entry?.version || '')
+    const manifestUrl = String(entry?.manifestUrl || '')
+    const manifest = entry?.manifest
+    parseSemanticVersion(version)
+    validateRemoteUrl(manifestUrl, allowHttp)
+    if (seen.has(version) || manifest?.updateKind !== 'engine' || manifest?.component?.dshVersion !== version) continue
+    const evaluated = evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange: true })
+    if (!['available', 'current'].includes(evaluated.status)) continue
+    seen.add(version)
+    versions.push({ version, manifestUrl, status: evaluated.status })
+  }
+  versions.sort((left, right) => comparePortableVersions(right.version, left.version))
+  return { schemaVersion: 1, current: installed.dshVersion, releaseChannel: installed.releaseChannel, versions }
+}
+
 export async function checkForUpdate({
   layout,
   manifestUrl,
@@ -365,6 +405,7 @@ export async function checkForUpdate({
   const installed = await readInstalledUpdateState(layout)
   if (releaseChannel) installed.releaseChannel = normalizeReleaseChannel(releaseChannel, installed.portableVersion)
   const updateCheckCache = updateCacheForScope(layout, scope)
+  const explicitManifest = Boolean(manifestUrl)
   manifestUrl ||= scope === 'engine'
     ? defaultEngineUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
     : defaultUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
@@ -379,7 +420,9 @@ export async function checkForUpdate({
   }
   const cachedKind = cached?.manifest?.updateKind || 'product'
   if (!force && cachedKind === scope && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
-    const evaluated = evaluateUpdate(cached.manifest, installed, platform)
+    const evaluated = evaluateUpdate(cached.manifest, installed, platform, {
+      allowEngineVersionChange: scope === 'engine' && explicitManifest,
+    })
     const ignoredIdentity = cached.ignoredIdentity || (cached.ignoredVersion ? `product:${cached.ignoredVersion}` : '')
     if (evaluated.updateIdentity && ignoredIdentity === evaluated.updateIdentity) {
       return { ...evaluated, status: 'ignored', cached: true, checkedAt: cached.checkedAt }
@@ -393,8 +436,9 @@ export async function checkForUpdate({
     const manifest = await fetchJson(manifestUrl, { allowHttp, fetchImpl, timeoutMs })
     const manifestKind = manifest.updateKind || 'product'
     if (manifestKind !== scope) throw new Error(`Update kind mismatch: expected ${scope}, received ${manifestKind}.`)
-    const result = evaluateUpdate(manifest, installed, platform)
-    const cachedResult = cached?.manifest ? evaluateUpdate(cached.manifest, installed, platform) : null
+    const evaluationOptions = { allowEngineVersionChange: scope === 'engine' && explicitManifest }
+    const result = evaluateUpdate(manifest, installed, platform, evaluationOptions)
+    const cachedResult = cached?.manifest ? evaluateUpdate(cached.manifest, installed, platform, evaluationOptions) : null
     const deferredUntil = cachedResult?.updateIdentity === result.updateIdentity ? Number(cached.deferredUntil ?? 0) : 0
     const ignoredIdentity = (cached?.ignoredIdentity || (cached?.ignoredVersion ? `product:${cached.ignoredVersion}` : '')) === result.updateIdentity
       ? result.updateIdentity

@@ -71,6 +71,7 @@ async function loadBridgeClient(options = {}) {
 function fakeContext(initialSessions) {
   let listSnapshot = initialSessions
   const listListeners = new Set()
+  const sessionEventListeners = new Map()
   const eventListeners = new Map()
   const opened = []
   const sent = []
@@ -119,7 +120,12 @@ function fakeContext(initialSessions) {
         return {
           eventSource: {
             getSnapshot: () => ({ entries: item.events ?? [] }),
-            subscribe() { return () => {} },
+            subscribe(listener) {
+              const listeners = sessionEventListeners.get(id) ?? new Set()
+              listeners.add(listener)
+              sessionEventListeners.set(id, listeners)
+              return () => listeners.delete(listener)
+            },
           },
         }
       },
@@ -179,6 +185,8 @@ function fakeContext(initialSessions) {
       listSnapshot = value
       for (const listener of listListeners) listener()
     },
+    replaceSessionsSilently(value) { listSnapshot = value },
+    emitSessionEvent(id) { for (const listener of sessionEventListeners.get(id) ?? []) listener() },
     dispose() {
       for (const dispose of disposers.reverse()) dispose()
     },
@@ -299,6 +307,7 @@ test('Portable uses one capability-aware host transport outside WebView2', async
       importData: true,
       restartHost: true,
       openEnvironment: false,
+      openUpdate: false,
       preferences: true,
       sessionProjection: true,
     },
@@ -417,6 +426,32 @@ test('private tray bridge projects bounded official runtime state and invokes on
   runtime.dispose()
   runtime.setSessions(sessionList(2))
   assert.equal(client.posted.length, beforeDispose)
+})
+
+test('task completion projection follows session events even when the list store does not publish', async () => {
+  const client = await loadBridgeClient()
+  const initial = sessionList(1)
+  initial.byId['session-0'].running = true
+  initial.byId['session-0'].completed = false
+  initial.byId['session-0'].events = []
+  const runtime = fakeContext(initial)
+  client.exports.apply(runtime.ctx)
+
+  const completed = structuredClone(initial)
+  completed.byId['session-0'].running = false
+  completed.byId['session-0'].completed = true
+  completed.byId['session-0'].events = [{
+    type: 'event',
+    event: { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: '后台完成' }] } } },
+  }]
+  runtime.replaceSessionsSilently(completed)
+  runtime.emitSessionEvent('session-0')
+  await new Promise(resolve => setImmediate(resolve))
+
+  const projected = client.posted.at(-1)
+  assert.equal(projected.sessions[0].completed, true)
+  assert.equal(projected.sessions[0].finalReply, '后台完成')
+  runtime.dispose()
 })
 
 test('portable launch and packages compose the bridge as a private official DSH overlay', async () => {
@@ -642,6 +677,32 @@ test('Windows task completion notifications use the native action center with ex
   assert.match(source, /AddText\([\s\S]*finalReply/)
   assert.doesNotMatch(source, /Console\.Write.*finalReply|Log.*finalReply/)
   assert.match(source, /MarkTaskCompletionHandled\(sessionId\)[\s\S]+PostBridgeAction\("open-session", sessionId\)/)
+})
+
+test('Portable settings explain when Windows has disabled system notifications', async () => {
+  const [server, client] = await Promise.all([
+    readFile(new URL('../desktop-bridge/lib/index.js', import.meta.url), 'utf8'),
+    readFile(sourceUrl, 'utf8'),
+  ])
+  assert.match(server, /disabled-system/)
+  assert.match(server, /PushNotifications[\s\S]+ToastEnabled/)
+  assert.match(client, /Windows 通知已关闭/)
+  assert.match(client, /Windows notifications are turned off/)
+  assert.match(client, /notificationAvailability/)
+})
+
+test('Portable projects update availability and isolated environment context into official shell slots', async () => {
+  const client = await readFile(sourceUrl, 'utf8')
+  assert.match(client, /slots\.inject\('sidebar\.footer\.action'/)
+  assert.match(client, /name:\s*'sidebar\.footer\.action',\s*id:\s*'portable-update'/)
+  assert.match(client, /productUpdateCheckEnabled/)
+  assert.match(client, /engineUpdateCheckEnabled/)
+  assert.match(client, /background:\s*true/)
+  assert.match(client, /dsh-portable\/open-update/)
+  assert.match(client, /IconDownloadOutline16/)
+  assert.match(client, /slots\.inject\('conversation\.input\.left'/)
+  assert.match(client, /name:\s*'conversation\.input\.left',\s*id:\s*'portable-environment'/)
+  assert.match(client, /environments\.current\s*===\s*'default'/)
 })
 
 test('Windows native smoke exercises a real action-center notification and exact-session reply', async () => {

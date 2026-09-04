@@ -35,6 +35,7 @@ test('Portable settings routes default to privacy-safe updates and preserve unre
     root: stateRoot,
     stateRoot,
     runCli: () => ({ status: 'ok' }),
+    notificationAvailability: async () => ({ status: 'disabled-system' }),
   })
   t.after(dispose)
 
@@ -51,6 +52,7 @@ test('Portable settings routes default to privacy-safe updates and preserve unre
     closeBehavior: 'tray',
   })
   assert.deepEqual(getBefore.json().versions, { portable: '', engine: '' })
+  assert.deepEqual(getBefore.json().notificationAvailability, { status: 'disabled-system' })
   assert.equal(getBefore.json().lastRepair, null)
 
   const update = response()
@@ -166,13 +168,23 @@ test('Portable settings expose product and official DSH checks as separate bound
   assert.equal(engine.status, 200)
   assert.deepEqual(calls[1], ['check-update', '--scope', 'engine', '--json', '--force'])
 
+  const background = response()
+  await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'engine', background: true }), background)
+  assert.equal(background.status, 200)
+  assert.deepEqual(calls[2], ['check-update', '--scope', 'engine', '--json'])
+
+  const versions = response()
+  await routes.get('/dsh-portable/engine-versions').handler(request('GET'), versions)
+  assert.equal(versions.status, 200)
+  assert.deepEqual(calls[3], ['list-updates', '--scope', 'engine', '--json'])
+
   const invalid = response()
   await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'all' }), invalid)
   assert.equal(invalid.status, 400)
-  assert.equal(calls.length, 2)
+  assert.equal(calls.length, 4)
 })
 
-test('Portable settings expose the last automatic update recovery without offering unsafe arbitrary downgrades', async (t) => {
+test('Portable settings expose recovery and only select versions returned by the verified catalog', async (t) => {
   const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
   t.after(() => rm(stateRoot, { recursive: true, force: true }))
   await mkdir(path.join(stateRoot, 'data', 'runtime'), { recursive: true })
@@ -199,7 +211,8 @@ test('Portable settings expose the last automatic update recovery without offeri
   const client = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
   assert.match(client, /新版本无法正常启动时，会自动恢复更新前的程序/)
   assert.match(client, /上次更新未通过启动验证，已自动恢复/)
-  assert.doesNotMatch(client, /选择历史版本|Choose historical version/)
+  assert.match(client, /\/dsh-portable\/engine-versions/)
+  assert.match(client, /engineVersionManifestUrls/)
 })
 
 test('data import review exposes the real package contents before restart', async () => {
@@ -330,7 +343,8 @@ test('Portable preferences belong to the official General settings surface', asy
 
   assert.match(client, /settings\.general\.item/)
   assert.doesNotMatch(client, /settings\.section/)
-  assert.doesNotMatch(client, /id:\s*['"]portable['"][\s\S]+label:/)
+  const settingsRegistration = client.slice(client.indexOf("name: 'settings.general.item'"), client.indexOf('}, SettingsSection)'))
+  assert.doesNotMatch(settingsRegistration, /label:/)
   assert.match(client, /borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"]/);
   assert.match(client, /padding:\s*['"]20px 0 8px['"]/);
   assert.match(client, /section:\s*\{[^}]*gap:\s*0[^}]*marginTop:\s*18/s)

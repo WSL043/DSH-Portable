@@ -415,31 +415,35 @@ async function repairManagedProfileModuleFallbackWithLinks(layout, links) {
     changed = true
   }
 
-  for (const [packageName, target] of links) {
-    const fallback = paths.join(fallbackRoot, packageName)
-    await mkdir(paths.dirname(fallback), { recursive: true })
-    let current = null
-    try {
-      current = await lstat(fallback)
-    } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
-    }
-    if (current) {
-      if (current.isSymbolicLink()) {
-        try {
-          if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) continue
-        } catch {
-          // A moved or partially updated portable directory leaves a dangling link.
-        }
-        await unlink(fallback)
-      } else {
-        // This location is DSH's generated installation fallback, never the
-        // profile-local third-party plugin directory. Replace only this leaf.
-        await rm(fallback, { recursive: true, force: true })
+  const entries = [...links]
+  for (let index = 0; index < entries.length; index += 32) {
+    const results = await Promise.all(entries.slice(index, index + 32).map(async ([packageName, target]) => {
+      const fallback = paths.join(fallbackRoot, packageName)
+      await mkdir(paths.dirname(fallback), { recursive: true })
+      let current = null
+      try {
+        current = await lstat(fallback)
+      } catch (error) {
+        if (error?.code !== 'ENOENT') throw error
       }
-    }
-    await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
-    changed = true
+      if (current) {
+        if (current.isSymbolicLink()) {
+          try {
+            if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) return false
+          } catch {
+            // A moved or partially updated portable directory leaves a dangling link.
+          }
+          await unlink(fallback)
+        } else {
+          // This location is DSH's generated installation fallback, never the
+          // profile-local third-party plugin directory. Replace only this leaf.
+          await rm(fallback, { recursive: true, force: true })
+        }
+      }
+      await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
+      return true
+    }))
+    if (results.some(Boolean)) changed = true
   }
   return changed
 }
@@ -673,7 +677,7 @@ export function parseCli(argv) {
       conflict = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
