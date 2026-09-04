@@ -402,7 +402,7 @@ try {
       updates: /(?:^|\\n)(?:Updates|更新)(?:\\n|$)/.test(text),
       product: /DSH-Portable/.test(text),
       engine: /DeepSeek Harness/.test(text),
-      notifications: /Task completion notifications|任务完成通知/.test(text),
+      notifications: /Task notifications|任务通知/.test(text),
       maintenance: /Check and repair|检查与修复/.test(text),
     }
   })()`, value => value?.title && value.updates && value.product && value.engine && value.notifications && value.maintenance, 'Portable controls in General settings')
