@@ -351,7 +351,9 @@ jobs:
           New-Item -ItemType Directory -Force -Path $MigrationRoot, $MigrationEvidence | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $MigrationRoot
           if ($LASTEXITCODE -ne 0) { throw "Windows migration-smoke extraction failed with exit code $LASTEXITCODE" }
-          node scripts/smoke-windows-data-export.mjs (Join-Path $MigrationRoot 'DSH-Portable') $MigrationEvidence
+          $MigrationProduct = Join-Path $MigrationRoot 'DSH-Portable'
+          $MigrationNode = Join-Path $MigrationProduct 'runtime\node\node.exe'
+          & $MigrationNode scripts/smoke-windows-data-export.mjs $MigrationProduct $MigrationEvidence
           if ($LASTEXITCODE -ne 0) { throw "Windows native data migration smoke failed with exit code $LASTEXITCODE" }
       - name: Upload native migration evidence
         if: always()
