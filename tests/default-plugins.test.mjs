@@ -19,6 +19,8 @@ async function fixture(t) {
 test('fresh products declare only the reviewed image viewer and existing chat manager defaults', () => {
   assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
   assert.deepEqual(DEFAULT_PLUGINS.map(plugin => plugin.name), ['dsh-image-viewer', 'dsh-chat-manager'])
+  assert.equal(lock.defaultPlugins.imageViewer.version, '0.1.0-beta.9')
+  assert.equal(lock.defaultPlugins.chatManager.version, '1.3.1')
 })
 
 test('a fresh product seeds both reviewed archives and promotes their update specs', async (t) => {
@@ -40,8 +42,8 @@ test('a fresh product seeds both reviewed archives and promotes their update spe
   assert.equal(invocation.command, layout.nodeExe)
   assert.deepEqual(invocation.args.slice(0, 4), [layout.dshBin, 'plugin', '--profile', 'web'])
   const manifest = JSON.parse(await readFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), 'utf8'))
-  assert.equal(manifest.dependencies['dsh-image-viewer'], '0.1.0-beta.8')
-  assert.equal(manifest.dependencies['dsh-chat-manager'], '1.3.0-beta.0')
+  assert.equal(manifest.dependencies['dsh-image-viewer'], '0.1.0-beta.9')
+  assert.equal(manifest.dependencies['dsh-chat-manager'], '1.3.1')
 })
 
 test('upgrades preserve an existing profile and all user-selected plugins byte-for-byte', async (t) => {

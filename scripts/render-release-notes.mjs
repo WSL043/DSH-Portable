@@ -48,6 +48,10 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
       en: '**This is an RC build for final validation. It is expected to meet the stable-release bar and is not offered to stable users.**',
     },
   }
+  const alphaMigrationNotice = {
+    zh: '历史 RC 标签不会改写；由于 SemVer 会把同版本号的 RC 排在 Alpha 之后，使用 0.6.0 历史 RC 的用户需要从本页手动下载一次完整包。此后 Alpha、Beta、RC 和正式版将按正常成熟度顺序推进。',
+    en: 'Historical RC tags remain unchanged. Because SemVer orders an RC after an Alpha with the same base version, users of the historical 0.6.0 RC builds must manually download a complete package from this page once. Future Alpha, Beta, RC, and stable releases will then advance in conventional maturity order.',
+  }
   const release = descriptor === null
     ? {
         zh: { summary: `${tag.slice(1)} 的用户更新。`, highlights: [] },
@@ -70,10 +74,10 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
       ? 'Candidate artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.'
       : 'Stable artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.',
     '{{CHANNEL_UPGRADE_NOTICE_ZH}}': candidate
-      ? '如果你正在使用仍指向稳定更新通道的较早候选版，请从本页手动下载一次与你的系统匹配的完整包；从此版本开始，后续候选版只检查候选更新通道，正式版发布后会正常升级到正式版。'
+      ? stage === 'alpha' ? alphaMigrationNotice.zh : '如果你正在使用仍指向稳定更新通道的较早候选版，请从本页手动下载一次与你的系统匹配的完整包；从此版本开始，后续候选版只检查候选更新通道，正式版发布后会正常升级到正式版。'
       : '',
     '{{CHANNEL_UPGRADE_NOTICE_EN}}': candidate
-      ? 'If an earlier candidate still checks the stable update channel, manually download the complete package for your system from this release once. From this version onward, candidates check only the candidate channel and will advance to the final stable release when it is published.'
+      ? stage === 'alpha' ? alphaMigrationNotice.en : 'If an earlier candidate still checks the stable update channel, manually download the complete package for your system from this release once. From this version onward, candidates check only the candidate channel and will advance to the final stable release when it is published.'
       : '',
     '{{WINDOWS_PRIMARY_FILENAME}}': candidate
       ? 'DSH-Portable-windows-x64-offline.zip'

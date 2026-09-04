@@ -7,7 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
-import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
+import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -25,6 +25,23 @@ for (const filename of [executable, portableNode, portableCli, runtimeEntry]) {
   if (!existsSync(filename)) throw new Error(`portable file is missing: ${filename}`)
 }
 
+async function readProductDefaultPlugins() {
+  const componentsFile = path.join(root, 'licenses', 'COMPONENTS.json')
+  const productComponents = JSON.parse(await readFile(componentsFile, 'utf8'))
+  const defaultPlugins = productComponents.defaultPlugins
+  assert.ok(Array.isArray(defaultPlugins) && defaultPlugins.length > 0, 'finished product has no default plugin metadata')
+  assert.equal(new Set(defaultPlugins.map(plugin => plugin?.package)).size, defaultPlugins.length, 'default plugin metadata contains duplicate packages')
+  for (const plugin of defaultPlugins) {
+    assert.match(String(plugin?.package || ''), /^(?:@[^/]+\/)?[^/]+$/, 'default plugin metadata has an invalid package name')
+    assert.match(String(plugin?.version || ''), /^\S+$/, 'default plugin metadata has an invalid version')
+  }
+  return { productComponents, defaultPlugins }
+}
+
+function profilePackageJson(profileRoot, packageName) {
+  return path.join(profileRoot, 'node_modules', ...String(packageName).split('/'), 'package.json')
+}
+
 async function reserveLoopbackPort() {
   const server = createServer()
   await new Promise((resolve, reject) => {
@@ -38,15 +55,17 @@ async function reserveLoopbackPort() {
   return port
 }
 
-async function waitForPage(port, launcher, timeoutMs = 90000) {
+async function waitForPage(port, launcher, timeoutMs = 90000, previousWebSocketDebuggerUrl = '') {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    if (launcher.exitCode !== null) throw new Error(`desktop host exited before WebView2 became ready: ${launcher.exitCode}`)
+    if (launcher && launcher.exitCode !== null) throw new Error(`desktop host exited before WebView2 became ready: ${launcher.exitCode}`)
     try {
       const response = await fetch(`http://127.0.0.1:${port}/json/list`)
       if (response.ok) {
         const targets = await response.json()
-        const page = targets.find(target => target.type === 'page' && /^http:\/\/127\.0\.0\.1:\d+/.test(target.url || ''))
+        const page = targets.find(target => target.type === 'page'
+          && /^http:\/\/127\.0\.0\.1:\d+/.test(target.url || '')
+          && target.webSocketDebuggerUrl !== previousWebSocketDebuggerUrl)
         if (page?.webSocketDebuggerUrl) return page
       }
     } catch { /* WebView2 is still starting */ }
@@ -192,27 +211,62 @@ try {
   await stopDetachedDesktopHosts()
   const password = 'Portable-test-2026!'
   importFixtureRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-import-fixture-'))
-  const [{ createDataArchive }, { layoutForRoot }] = await Promise.all([
+  const [{ createDataArchive }, { layoutForRoot, projectKey }] = await Promise.all([
     import(pathToFileURL(path.join(root, 'launcher', 'data-transfer.mjs')).href),
     import(pathToFileURL(path.join(root, 'launcher', 'portable-core.mjs')).href),
   ])
+  const { defaultPlugins } = await readProductDefaultPlugins()
   const fixtureLayout = layoutForRoot(importFixtureRoot, process.platform)
   const fixtureMarker = path.join(fixtureLayout.dshHome, '.agent-presets', 'import-smoke', 'agent.cordis.yml')
-  const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd')
+  const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', projectKey(fixtureLayout.workspace), 'session-smoke', 'session.jsonl.zstd')
   const fixtureProfile = path.join(fixtureLayout.dshHome, 'profiles', 'web')
   await mkdir(path.dirname(fixtureMarker), { recursive: true })
   await mkdir(path.dirname(fixtureSession), { recursive: true })
   await mkdir(fixtureProfile, { recursive: true })
   await writeFile(fixtureMarker, 'name: imported-by-native-ui-smoke\n')
-  const fixtureSessionBytes = Buffer.from(`${JSON.stringify({
+  const sessionHeader = Buffer.from(`${JSON.stringify({
     type: 'session',
-    version: 1,
+    version: 0,
     id: 'session-smoke',
     createdAt: 1,
     cwd: fixtureLayout.workspace,
     delegationDepth: 0,
   })}\n`)
-  await writeFile(fixtureSession, zstdCompressSync(fixtureSessionBytes))
+  const sessionEvents = Buffer.from([
+    { type: 'turn/start', seq: 0, time: 2, data: { turn: 0 } },
+    {
+      type: 'user/message',
+      seq: 1,
+      time: 3,
+      surfaceOp: 'append',
+      data: {
+        id: 'migration-user-message',
+        role: 'user',
+        source: { kind: 'user' },
+        content: [{ type: 'text', text: 'Portable migration session smoke' }],
+      },
+    },
+    {
+      type: 'assistant/message',
+      seq: 2,
+      time: 4,
+      surfaceOp: 'append',
+      data: {
+        turn: 0,
+        step: 0,
+        message: {
+          id: 'migration-assistant-message',
+          role: 'assistant',
+          source: { kind: 'model', provider: 'smoke', model: 'smoke' },
+          content: [{ type: 'text', text: 'migration-session-proof-2026-09-04' }],
+        },
+      },
+    },
+    { type: 'turn/end', seq: 3, time: 5, data: { turn: 0, reason: { kind: 'completed' } } },
+  ].map(event => JSON.stringify(event)).join('\n') + '\n')
+  const zstdOptions = { params: { [zlibConstants.ZSTD_c_checksumFlag]: 1 } }
+  const fixtureSessionBytes = Buffer.concat([zstdCompressSync(sessionHeader, zstdOptions), zstdCompressSync(sessionEvents, zstdOptions)])
+  await writeFile(fixtureSession, fixtureSessionBytes)
   const importArchive = path.join(importFixtureRoot, 'import-private.dshdata')
   const debugPort = await reserveLoopbackPort()
   launcher = spawn(executable, [], {
@@ -243,8 +297,9 @@ try {
   const fixtureManifest = JSON.parse(await readFile(fixtureManifestFile, 'utf8'))
   const currentBundles = fixtureManifest.dsh?.profile?.bundles
   assert.ok(Array.isArray(currentBundles) && currentBundles.length > 0, 'the finished product did not initialize a real web profile')
-  fixtureManifest.dependencies = { ...fixtureManifest.dependencies, 'dsh-chat-manager': '1.2.2' }
-  fixtureManifest.dsh.profile.bundles = [...new Set([...currentBundles, 'dsh-chat-manager'])]
+  const defaultDependencies = Object.fromEntries(defaultPlugins.map(plugin => [plugin.package, plugin.version]))
+  fixtureManifest.dependencies = { ...fixtureManifest.dependencies, ...defaultDependencies }
+  fixtureManifest.dsh.profile.bundles = [...new Set([...currentBundles, ...defaultPlugins.map(plugin => plugin.package)])]
   await writeFile(fixtureManifestFile, `${JSON.stringify(fixtureManifest, null, 2)}\n`)
   await createDataArchive(fixtureLayout, importArchive, { categories: ['settings', 'sessions', 'plugins'], password })
 
@@ -387,6 +442,8 @@ try {
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /确认导入|Confirm import/.test(item.textContent || '')))`, Boolean, 'import confirmation dialog')
   await capture(client, '06-import-confirm-modal.png')
   await waitForValue(client, clickButton(['重启并导入', 'Restart and import']), value => value?.clicked, 'restart and import')
+  const initialClientExceptions = client.exceptions
+  const previousWebSocketDebuggerUrl = page.webSocketDebuggerUrl
   client.close()
   const importedMarker = path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke', 'agent.cordis.yml')
   const importDeadline = Date.now() + 120000
@@ -404,13 +461,46 @@ try {
     await new Promise(resolve => setTimeout(resolve, 200))
   }
   assert.equal(restarted, true)
-  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', 'migration-smoke', 'session-smoke', 'session.jsonl.zstd')
-  const migratedSession = JSON.parse(zstdDecompressSync(await readFile(migratedSessionFile)).toString('utf8').trim())
+  const restartedPage = await waitForPage(debugPort, null, 120000, previousWebSocketDebuggerUrl)
+  client = new CdpClient(restartedPage.webSocketDebuggerUrl)
+  await client.open()
+  await client.send('Runtime.enable')
+  await client.send('Page.enable')
+  await waitForValue(client, 'document.readyState', value => value === 'complete', 'restarted DSH document readiness', 60000)
+
+  const openSession = await evaluate(client, `(() => {
+    const bridge = window.chrome?.webview
+    if (!bridge?.postMessage) return { posted: false }
+    bridge.postMessage({ type: 'dsh-portable/action', action: 'open-session', sessionId: 'session-smoke' })
+    return { posted: true }
+  })()`)
+  assert.equal(openSession.posted, true, 'the restarted WebView does not expose the native DSH bridge')
+  await waitForValue(
+    client,
+    'document.body?.innerText || ""',
+    text => String(text).includes('migration-session-proof-2026-09-04'),
+    'migrated session is readable through the restarted DSH WebView',
+    60000,
+  )
+
+  const expectedPackages = defaultPlugins.map(plugin => plugin.package)
+  const installedState = await waitForValue(
+    client,
+    `fetch('/dsh-market/installed', { cache: 'no-store' }).then(response => response.ok ? response.json() : ({})).catch(() => ({}))`,
+    state => state?.profile === 'web' && expectedPackages.every(packageName => Object.hasOwn(state.installed || {}, packageName)),
+    'default plugins loaded through the restarted DSH surface',
+    60000,
+  )
+  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', projectKey(fixtureLayout.workspace), 'session-smoke', 'session.jsonl.zstd')
+  const migratedSession = JSON.parse(zstdDecompressSync(await readFile(migratedSessionFile)).toString('utf8').split(/\r?\n/)[0])
   assert.equal(migratedSession.id, 'session-smoke')
-  const migratedPlugin = JSON.parse(await readFile(path.join(
-    root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package.json',
-  ), 'utf8'))
-  assert.equal(migratedPlugin.version, '1.2.2')
+  const migratedPlugins = await Promise.all(defaultPlugins.map(async plugin => ({
+    package: plugin.package,
+    expectedVersion: plugin.version,
+    version: JSON.parse(await readFile(profilePackageJson(path.join(root, 'data', 'dsh-home', 'profiles', 'web'), plugin.package), 'utf8')).version,
+  })))
+  assert.equal(migratedPlugins.every(plugin => plugin.version === plugin.expectedVersion), true, JSON.stringify(migratedPlugins))
+  assert.equal(defaultPlugins.every(plugin => Object.hasOwn(installedState.installed || {}, plugin.package)), true, JSON.stringify(installedState))
   await portable(['stop', '--no-browser', '--json'])
   await rm(path.join(root, 'data', 'dsh-home', '.agent-presets', 'import-smoke'), { recursive: true, force: true })
 
@@ -421,7 +511,7 @@ try {
   await rm(passwordFile, { force: true })
   assert.match(standardInspect.stdout, /"categories"/)
   assert.match(privateInspect.stdout, /"categories"/)
-  assert.deepEqual(client.exceptions, [])
+  assert.deepEqual([...initialClientExceptions, ...client.exceptions], [])
 
   process.stdout.write(`${JSON.stringify({
     status: 'passed',

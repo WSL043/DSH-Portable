@@ -40,12 +40,37 @@ async function prepareWebView2(root) {
   return { core, winforms }
 }
 
-async function compileLauncher(output, webview2) {
+async function downloadAndExtract(root, name, url, expectedSha256) {
+  const archive = path.join(root, name)
+  const extracted = path.join(root, `${name}-extracted`)
+  const response = await fetch(url)
+  assert.equal(response.ok, true, `${name} download failed: ${response.status}`)
+  const bytes = Buffer.from(await response.arrayBuffer())
+  assert.equal(createHash('sha256').update(bytes).digest('hex'), expectedSha256)
+  await writeFile(archive, bytes)
+  await mkdir(extracted)
+  await execFileAsync('tar.exe', ['-x', '-f', archive, '-C', extracted])
+  return extracted
+}
+
+async function prepareNotificationRuntime(root) {
+  const lock = JSON.parse(await readFile(path.join(projectRoot, 'upstream.lock.json'), 'utf8'))
+  const toolkit = await downloadAndExtract(root, 'windows-notifications.nupkg', lock.windowsNotifications.url, lock.windowsNotifications.sha256)
+  const valueTuple = await downloadAndExtract(root, 'system-valuetuple.nupkg', lock.windowsNotifications.valueTupleUrl, lock.windowsNotifications.valueTupleSha256)
+  const notification = path.join(toolkit, 'lib', 'net461', 'Microsoft.Toolkit.Uwp.Notifications.dll')
+  const tuple = path.join(valueTuple, 'lib', 'net461', 'System.ValueTuple.dll')
+  await copyFile(notification, path.join(root, path.basename(notification)))
+  await copyFile(tuple, path.join(root, path.basename(tuple)))
+  return { notification, tuple }
+}
+
+async function compileLauncher(output, webview2, notifications) {
   await execFileAsync(cscPath(), [
     '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
     '/reference:System.dll', '/reference:System.Core.dll',
     '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
     `/reference:${webview2.core}`, `/reference:${webview2.winforms}`,
+    `/reference:${notifications.notification}`, `/reference:${notifications.tuple}`,
     `/out:${output}`,
     ...sources,
   ])
@@ -65,7 +90,8 @@ test('Windows launcher preserves UTF-8 diagnostics from the DSH subprocess', { s
     await copyFile(new URL('../launcher/portable-core.mjs', import.meta.url), path.join(root, 'launcher', 'portable-core.mjs'))
     await copyFile(new URL('../launcher/startup-trace.mjs', import.meta.url), path.join(root, 'launcher', 'startup-trace.mjs'))
     const webview2 = await prepareWebView2(root)
-    await compileLauncher(executable, webview2)
+    const notifications = await prepareNotificationRuntime(root)
+    await compileLauncher(executable, webview2, notifications)
 
     await assert.rejects(execFileAsync(executable, ['--json'], {
       env: { ...process.env, DSH_PORTABLE_LAUNCHER_DIAGNOSTIC: diagnostic },

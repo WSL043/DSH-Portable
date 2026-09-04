@@ -17,6 +17,15 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /RegisterNotificationIdentity\(\)[\s\S]+Software\\Classes\\AppUserModelId/)
   assert.match(host, /SetValue\("DisplayName",\s*"DeepSeek Harness"/)
   assert.match(host, /SetValue\("IconUri",\s*Application\.ExecutablePath/)
+  assert.match(host, /DshPortableEphemeral/)
+  assert.match(host, /DshPortableOwnerPid/)
+  assert.match(host, /Process\.GetProcessById\(ownerPid\)/)
+  assert.match(host, /ToastNotificationManagerCompat\.Uninstall\(\)/)
+  assert.match(host, /CleanupRegistration\(\)[\s\S]+ToastNotificationManagerCompat\.Uninstall\(\)[\s\S]+CleanupFixedIdentity/)
+  assert.match(host, /NativeTaskNotification\.CleanupRegistration\(\)/)
+  assert.match(host, /DeleteSubKeyTree\(aumidPath,\s*false\)/)
+  assert.match(host, /desktopStart\s*=\s*!nonInteractive[\s\S]+if \(desktopStart\)[\s\S]+NativeTaskNotification\.ActionRequested/)
+  assert.match(host, /if \(LauncherWindow\.IsStartInvocation\(args\)\)[\s\S]+NativeTaskNotification\.CleanupRegistration\(\)[\s\S]+RegisterNotificationIdentity\(\)/)
   assert.match(host, /SetCurrentProcessExplicitAppUserModelID\(AppUserModelId\)/)
   assert.match(host, /start["']\s*,\s*["']--no-browser["']\s*,\s*["']--json/)
   assert.match(host, /startup-latest\.jsonl/)
@@ -483,18 +492,28 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(dataExportSmoke, /private export completion/)
   assert.match(dataExportSmoke, /waitForValue\(client, clickButton\(\['导入数据包', 'Import data package'\]\), value => value\?\.clicked, 'data import action'\)/)
   assert.match(dataExportSmoke, /id: 'session-smoke'/)
-  assert.match(dataExportSmoke, /zstdCompressSync\(fixtureSessionBytes\)/)
+  assert.match(dataExportSmoke, /Buffer\.concat\(\[zstdCompressSync\(sessionHeader, zstdOptions\), zstdCompressSync\(sessionEvents, zstdOptions\)\]\)/)
   assert.match(dataExportSmoke, /zstdDecompressSync\(await readFile\(migratedSessionFile\)\)/)
   assert.match(dataExportSmoke, /cp\(path\.join\(root, 'data', 'dsh-home', 'profiles', 'web'\), fixtureProfile/)
   assert.match(dataExportSmoke, /const currentBundles = fixtureManifest\.dsh\?\.profile\?\.bundles/)
-  assert.match(dataExportSmoke, /profiles', 'web', 'node_modules', 'dsh-chat-manager', 'package\.json/)
-  assert.match(dataExportSmoke, /migratedPlugin\.version, '1\.2\.2'/)
+  assert.match(dataExportSmoke, /projectKey\(fixtureLayout\.workspace\)/)
+  assert.match(dataExportSmoke, /version: 0/)
+  assert.match(dataExportSmoke, /licenses', 'COMPONENTS\.json'/)
+  assert.match(dataExportSmoke, /const defaultPlugins = productComponents\.defaultPlugins/)
+  assert.match(dataExportSmoke, /defaultPlugins\.map\(plugin => \[plugin\.package, plugin\.version\]\)/)
+  assert.doesNotMatch(dataExportSmoke, /1\.2\.2/, 'the migration smoke must not pin the retired chat-manager version')
+  assert.match(dataExportSmoke, /migratedPlugins\.every\(plugin => plugin\.version === plugin\.expectedVersion\)/)
   assert.match(dataExportSmoke, /const restartDeadline = Date\.now\(\) \+ 240000/)
   assert.match(
     dataExportSmoke,
-    /'restart and import'\)\n\s+client\.close\(\)\n\s+const importedMarker/,
+    /'restart and import'\)\n\s+const initialClientExceptions = client\.exceptions\n\s+const previousWebSocketDebuggerUrl = page\.webSocketDebuggerUrl\n\s+client\.close\(\)\n\s+const importedMarker/,
     'the native migration smoke must release its DevTools connection before waiting for the restarted WebView2 host',
   )
+  assert.match(dataExportSmoke, /waitForPage\(debugPort, null, 120000, previousWebSocketDebuggerUrl\)/)
+  assert.match(dataExportSmoke, /bridge\.postMessage\(\{ type: 'dsh-portable\/action', action: 'open-session'/)
+  assert.match(dataExportSmoke, /migrated session is readable through the restarted DSH WebView/)
+  assert.match(dataExportSmoke, /dsh-market\/installed/)
+  assert.doesNotMatch(dataExportSmoke, /sessions', 'migration-smoke'/, 'the migration smoke must use DSH project-key session layout')
   assert.ok(
     dataExportSmoke.indexOf('private export completion') < dataExportSmoke.indexOf("'migration export action'"),
     'the real migration smoke must wait for the encrypted export modal to close before starting another export',

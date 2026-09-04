@@ -996,3 +996,15 @@ test('Node runtime lock covers Windows, macOS, and both Linux CPU families', asy
   assert.match(lock.node.runtimes['linux-x64'].archive, /linux-x64\.tar\.xz$/)
   for (const runtime of Object.values(lock.node.runtimes)) assert.match(runtime.sha256, /^[0-9a-f]{64}$/)
 })
+
+test('Windows packages pin the native notification runtime and its notices', async () => {
+  const [lock, build] = await Promise.all([
+    read('upstream.lock.json').then(JSON.parse),
+    read('scripts/build-windows.ps1'),
+  ])
+  assert.equal(lock.windowsNotifications?.package, 'Microsoft.Toolkit.Uwp.Notifications')
+  assert.match(lock.windowsNotifications?.sha256 ?? '', /^[0-9a-f]{64}$/)
+  assert.match(build, /Microsoft\.Toolkit\.Uwp\.Notifications\.dll/)
+  assert.match(build, /System\.ValueTuple\.dll/)
+  assert.match(build, /Windows-Notifications-LICENSE\.txt/)
+})

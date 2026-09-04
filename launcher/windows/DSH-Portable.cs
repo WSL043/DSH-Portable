@@ -20,6 +20,7 @@ using System.Windows.Forms;
 using System.Web.Script.Serialization;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
+using Microsoft.Toolkit.Uwp.Notifications;
 
 [assembly: AssemblyTitle("DeepSeek-Herness")]
 [assembly: AssemblyDescription("Native desktop host for DeepSeek Harness")]
@@ -52,6 +53,191 @@ namespace DshPortable
         public string currentSessionId { get; set; }
         public bool hasRunningSession { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
+    }
+
+    internal static class NativeTaskNotification
+    {
+        private const string AppUserModelId = "io.github.wsl043.dsh-portable";
+        private const string RegistrationRoot = @"Software\Classes\AppUserModelId\";
+        private static bool registered;
+        private static bool processExitHooked;
+        internal static event Action<string, string, string> ActionRequested;
+
+        internal static bool Register()
+        {
+            if (registered) return true;
+            try
+            {
+                ToastNotificationManagerCompat.OnActivated += HandleActivated;
+                if (!processExitHooked)
+                {
+                    AppDomain.CurrentDomain.ProcessExit += HandleProcessExit;
+                    processExitHooked = true;
+                }
+                registered = true;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static void Unregister()
+        {
+            try
+            {
+                if (registered) ToastNotificationManagerCompat.OnActivated -= HandleActivated;
+            }
+            catch { }
+            finally
+            {
+                registered = false;
+                CleanupRegistration();
+            }
+        }
+
+        private static void HandleProcessExit(object sender, EventArgs eventArgs)
+        {
+            CleanupRegistration();
+        }
+
+        // ToastNotificationManagerCompat owns the unpackaged AUMID, COM
+        // activator, and notification assets. Its official Uninstall entry
+        // point must run from this EXE before we remove our own fixed identity.
+        internal static void CleanupRegistration()
+        {
+            try
+            {
+                ToastNotificationManagerCompat.Uninstall();
+            }
+            catch { }
+            CleanupFixedIdentity();
+        }
+
+        private static void CleanupFixedIdentity()
+        {
+            string aumidPath = RegistrationRoot + AppUserModelId;
+            try
+            {
+                int ownerPid = 0;
+                bool owned = false;
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(aumidPath))
+                {
+                    if (key == null) return;
+                    object marker = key.GetValue("DshPortableEphemeral");
+                    Int32.TryParse(key.GetValue("DshPortableOwnerPid") as string, out ownerPid);
+                    owned = String.Equals(marker == null ? null : marker.ToString(), "1", StringComparison.Ordinal);
+                }
+                if (!owned) return;
+                if (ownerPid > 0 && ownerPid != Process.GetCurrentProcess().Id)
+                {
+                    try { using (Process.GetProcessById(ownerPid)) { return; } }
+                    catch (ArgumentException) { }
+                    catch (InvalidOperationException) { }
+                }
+                Registry.CurrentUser.DeleteSubKeyTree(aumidPath, false);
+            }
+            catch { }
+        }
+
+        internal static bool TryParseActivation(
+            string argument,
+            IEnumerable<KeyValuePair<string, object>> userInput,
+            out string action,
+            out string sessionId,
+            out string reply)
+        {
+            action = String.Empty;
+            sessionId = String.Empty;
+            reply = String.Empty;
+            try
+            {
+                ToastArguments arguments = ToastArguments.Parse(argument ?? String.Empty);
+                string parsedAction;
+                string parsedSessionId;
+                if (!arguments.TryGetValue("action", out parsedAction)
+                    || !arguments.TryGetValue("sessionId", out parsedSessionId)
+                    || (String.Equals(parsedAction, "reply", StringComparison.Ordinal) == false
+                        && String.Equals(parsedAction, "open", StringComparison.Ordinal) == false)
+                    || String.IsNullOrWhiteSpace(parsedSessionId)) return false;
+                action = parsedAction;
+                sessionId = parsedSessionId;
+                if (String.Equals(action, "reply", StringComparison.Ordinal))
+                {
+                    if (userInput == null) return false;
+                    bool found = false;
+                    foreach (KeyValuePair<string, object> input in userInput)
+                    {
+                        if (!String.Equals(input.Key, "reply", StringComparison.Ordinal)) continue;
+                        found = true;
+                        if (input.Value == null) return false;
+                        reply = input.Value.ToString().Trim();
+                        break;
+                    }
+                    if (!found || reply.Length == 0 || reply.Length > 8000 || reply.IndexOf('\0') >= 0) return false;
+                }
+                return true;
+            }
+            catch
+            {
+                action = String.Empty;
+                sessionId = String.Empty;
+                reply = String.Empty;
+                return false;
+            }
+        }
+
+        private static void HandleActivated(ToastNotificationActivatedEventArgsCompat eventArgs)
+        {
+            try
+            {
+                PropertyInfo userInputProperty = eventArgs == null ? null : eventArgs.GetType().GetProperty("UserInput");
+                object valueSet = userInputProperty == null ? null : userInputProperty.GetValue(eventArgs, null);
+                IEnumerable<KeyValuePair<string, object>> userInput = valueSet as IEnumerable<KeyValuePair<string, object>>;
+                string action;
+                string sessionId;
+                string reply;
+                if (!TryParseActivation(eventArgs == null ? String.Empty : eventArgs.Argument, userInput,
+                    out action, out sessionId, out reply)) return;
+                Action<string, string, string> requested = ActionRequested;
+                if (requested != null) requested(action, sessionId, reply);
+            }
+            catch { }
+        }
+
+        internal static bool Show(TrayBridgeSession session, bool chinese)
+        {
+            if (session == null || String.IsNullOrWhiteSpace(session.id) || !Register()) return false;
+            try
+            {
+                string finalReply = String.IsNullOrWhiteSpace(session.finalReply)
+                    ? (chinese ? "打开任务查看结果" : "Open the task to view its result")
+                    : session.finalReply.Trim();
+                new ToastContentBuilder()
+                    .AddArgument("action", "open")
+                    .AddArgument("sessionId", session.id)
+                    .AddText(chinese ? "任务已完成" : "Task completed")
+                    .AddText(String.IsNullOrWhiteSpace(session.title) ? session.id : session.title.Trim())
+                    .AddText(finalReply)
+                    .AddInputTextBox("reply", chinese ? "回复此任务" : "Reply to this task", String.Empty)
+                    .AddButton(new ToastButton()
+                        .SetContent(chinese ? "回复" : "Reply")
+                        .AddArgument("action", "reply")
+                        .AddArgument("sessionId", session.id)
+                        .SetTextBoxId("reply"))
+                    .AddButton(new ToastButton()
+                        .SetContent(chinese ? "打开" : "Open")
+                        .AddArgument("action", "open")
+                        .AddArgument("sessionId", session.id))
+                    .Show();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
     }
 
     internal sealed class DesktopWindowState
@@ -128,92 +314,6 @@ namespace DshPortable
                 if (iconHandle != IntPtr.Zero) DestroyIcon(iconHandle);
                 if (taskbar != null && Marshal.IsComObject(taskbar)) Marshal.ReleaseComObject(taskbar);
             }
-        }
-    }
-
-    internal sealed class TaskCompletionNotification : Form
-    {
-        private readonly string sessionId;
-        private readonly Label bodyPreview;
-        private readonly TextBox bodyFull;
-        private readonly TextBox replyBox;
-        private readonly Button replyButton;
-        private readonly System.Windows.Forms.Timer dismissTimer;
-        private readonly int stackIndex;
-        private bool expanded;
-
-        internal event Action<string> OpenRequested;
-        internal event Action<string, string> ReplyRequested;
-
-        internal TaskCompletionNotification(TrayBridgeSession session, bool chinese, int index)
-        {
-            sessionId = session.id;
-            stackIndex = index;
-            FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            TopMost = true;
-            StartPosition = FormStartPosition.Manual;
-            BackColor = Color.FromArgb(34, 35, 38);
-            ForeColor = Color.White;
-            Padding = new Padding(16);
-            ClientSize = new Size(392, 154);
-
-            Label heading = new Label { AutoSize = false, Text = chinese ? "任务已完成" : "Task completed", Font = new Font("Segoe UI", 9F, FontStyle.Bold), Bounds = new Rectangle(16, 14, 330, 20) };
-            Label title = new Label { AutoEllipsis = true, Text = session.title ?? session.id, Bounds = new Rectangle(16, 38, 352, 22), Font = new Font("Segoe UI", 10F, FontStyle.Regular) };
-            bodyPreview = new Label { AutoEllipsis = true, Text = String.IsNullOrWhiteSpace(session.finalReply) ? (chinese ? "打开任务查看结果" : "Open the task to view its result") : session.finalReply.Replace("\r", " ").Replace("\n", " "), Bounds = new Rectangle(16, 64, 352, 22), ForeColor = Color.FromArgb(205, 208, 213) };
-            bodyFull = new TextBox { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, BackColor = BackColor, ForeColor = Color.FromArgb(225, 227, 230), Text = session.finalReply ?? String.Empty, Bounds = new Rectangle(16, 64, 352, 230), Visible = false };
-            replyBox = new TextBox { BorderStyle = BorderStyle.FixedSingle, BackColor = Color.FromArgb(49, 51, 55), ForeColor = Color.White, Bounds = new Rectangle(16, 104, 278, 28) };
-            replyButton = new Button { FlatStyle = FlatStyle.Flat, Text = chinese ? "回复" : "Reply", Bounds = new Rectangle(302, 103, 66, 30), BackColor = Color.FromArgb(67, 91, 214), ForeColor = Color.White };
-            replyButton.FlatAppearance.BorderSize = 0;
-            replyButton.Click += delegate { SubmitReply(); };
-            replyBox.KeyDown += delegate(object sender, KeyEventArgs args) { if (args.KeyCode == Keys.Enter && !args.Shift) { args.SuppressKeyPress = true; SubmitReply(); } };
-            title.Click += delegate { if (OpenRequested != null) OpenRequested(sessionId); Close(); };
-            bodyPreview.Click += delegate { if (OpenRequested != null) OpenRequested(sessionId); Close(); };
-
-            Controls.Add(heading);
-            Controls.Add(title);
-            Controls.Add(bodyPreview);
-            Controls.Add(bodyFull);
-            Controls.Add(replyBox);
-            Controls.Add(replyButton);
-            foreach (Control control in Controls) control.MouseEnter += delegate { Expand(); };
-            MouseEnter += delegate { Expand(); };
-
-            dismissTimer = new System.Windows.Forms.Timer { Interval = 12000 };
-            dismissTimer.Tick += delegate { dismissTimer.Stop(); Close(); };
-            Shown += delegate { PlaceNearTaskbar(); dismissTimer.Start(); };
-            FormClosed += delegate { dismissTimer.Dispose(); };
-        }
-
-        protected override bool ShowWithoutActivation { get { return true; } }
-
-        private void PlaceNearTaskbar()
-        {
-            Rectangle area = Screen.FromPoint(Cursor.Position).WorkingArea;
-            Location = new Point(area.Right - Width - 12, Math.Max(area.Top + 12, area.Bottom - Height - 12 - stackIndex * (Height + 10)));
-        }
-
-        private void Expand()
-        {
-            if (expanded) return;
-            expanded = true;
-            dismissTimer.Stop();
-            bodyPreview.Visible = false;
-            bodyFull.Visible = true;
-            bodyFull.Height = 230;
-            replyBox.Top = 306;
-            replyButton.Top = 305;
-            ClientSize = new Size(392, 354);
-            PlaceNearTaskbar();
-        }
-
-        private void SubmitReply()
-        {
-            string reply = replyBox.Text.Trim();
-            if (reply.Length == 0 || reply.Length > 8000 || reply.IndexOf('\0') >= 0) return;
-            if (ReplyRequested != null) ReplyRequested(sessionId, reply);
-            replyBox.Clear();
-            Close();
         }
     }
 
@@ -533,7 +633,7 @@ namespace DshPortable
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly Dictionary<string, bool> taskCompletionState = new Dictionary<string, bool>(StringComparer.Ordinal);
         private readonly HashSet<string> unreadCompletedSessions = new HashSet<string>(StringComparer.Ordinal);
-        private readonly List<TaskCompletionNotification> taskCompletionNotifications = new List<TaskCompletionNotification>();
+        private readonly Queue<Tuple<string, string, string>> pendingNotificationActions = new Queue<Tuple<string, string, string>>();
         private readonly string root;
         private readonly string environmentId;
         private readonly string stateRoot;
@@ -599,6 +699,11 @@ namespace DshPortable
                 StringComparison.Ordinal);
             hiddenForAutomation = testHidden;
             desktopStart = !nonInteractive && IsStartCommand(launcherArgs);
+            if (desktopStart)
+            {
+                NativeTaskNotification.ActionRequested += HandleNativeNotificationAction;
+                NativeTaskNotification.Register();
+            }
             startupId = Guid.NewGuid().ToString("N");
             startupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             startupTraceActive = desktopStart;
@@ -1257,6 +1362,58 @@ namespace DshPortable
             catch { trayBridgeReady = false; RebuildTrayMenu(); }
         }
 
+        private void HandleNativeNotificationAction(string action, string sessionId, string reply)
+        {
+            if (IsDisposed) return;
+            if (InvokeRequired)
+            {
+                try
+                {
+                    BeginInvoke((MethodInvoker)delegate { QueueNotificationAction(action, sessionId, reply); });
+                    return;
+                }
+                catch (InvalidOperationException) { }
+            }
+            QueueNotificationAction(action, sessionId, reply);
+        }
+
+        private void QueueNotificationAction(string action, string sessionId, string reply)
+        {
+            if ((!String.Equals(action, "open", StringComparison.Ordinal) && !String.Equals(action, "reply", StringComparison.Ordinal))
+                || String.IsNullOrWhiteSpace(sessionId)) return;
+            string text = (reply ?? String.Empty).Trim();
+            if (String.Equals(action, "reply", StringComparison.Ordinal)
+                && (text.Length == 0 || text.Length > 8000 || text.IndexOf('\0') >= 0)) return;
+            if (!trayBridgeReady || webView == null || webView.CoreWebView2 == null)
+            {
+                while (pendingNotificationActions.Count >= 16) pendingNotificationActions.Dequeue();
+                pendingNotificationActions.Enqueue(Tuple.Create(action, sessionId, text));
+                return;
+            }
+            DispatchNotificationAction(action, sessionId, text);
+        }
+
+        private void DispatchNotificationAction(string action, string sessionId, string reply)
+        {
+            MarkTaskCompletionHandled(sessionId);
+            if (String.Equals(action, "reply", StringComparison.Ordinal))
+            {
+                PostBridgeReply(sessionId, reply);
+                return;
+            }
+            RestoreFromTray();
+            PostBridgeAction("open-session", sessionId);
+        }
+
+        private void FlushNotificationActions()
+        {
+            while (trayBridgeReady && webView != null && webView.CoreWebView2 != null && pendingNotificationActions.Count > 0)
+            {
+                Tuple<string, string, string> pending = pendingNotificationActions.Dequeue();
+                DispatchNotificationAction(pending.Item1, pending.Item2, pending.Item3);
+            }
+        }
+
         private void MarkTaskCompletionHandled(string sessionId)
         {
             if (String.IsNullOrWhiteSpace(sessionId)) return;
@@ -1322,28 +1479,7 @@ namespace DshPortable
             foreach (TrayBridgeSession session in sessions.Take(3))
             {
                 notificationSessionId = session.id;
-                TaskCompletionNotification notification = new TaskCompletionNotification(
-                    session,
-                    uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase),
-                    taskCompletionNotifications.Count);
-                notification.OpenRequested += delegate(string sessionId)
-                {
-                    MarkTaskCompletionHandled(sessionId);
-                    RestoreFromTray();
-                    PostBridgeAction("open-session", sessionId);
-                };
-                notification.ReplyRequested += delegate(string sessionId, string reply)
-                {
-                    MarkTaskCompletionHandled(sessionId);
-                    PostBridgeReply(sessionId, reply);
-                };
-                notification.FormClosed += delegate
-                {
-                    taskCompletionNotifications.Remove(notification);
-                    notification.Dispose();
-                };
-                taskCompletionNotifications.Add(notification);
-                notification.Show(this);
+                NativeTaskNotification.Show(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
             }
         }
 
@@ -1511,6 +1647,7 @@ namespace DshPortable
                     HandleTaskCompletionNotifications(state);
                     trayState = state;
                     trayBridgeReady = true;
+                    FlushNotificationActions();
                     RebuildTrayMenu();
                 });
             }
@@ -2061,7 +2198,8 @@ namespace DshPortable
         {
             SaveDesktopWindowState();
             UnregisterDesktopHostProcess();
-            foreach (TaskCompletionNotification notification in taskCompletionNotifications.ToArray()) notification.Close();
+            NativeTaskNotification.ActionRequested -= HandleNativeNotificationAction;
+            NativeTaskNotification.Unregister();
             TaskbarBadge.SetOverlayIcon(Handle, 0);
             DisposeTrayIcon();
             trayIcon.Dispose();
@@ -4588,6 +4726,8 @@ namespace DshPortable
                     key.SetValue("DisplayName", "DeepSeek Harness", RegistryValueKind.ExpandString);
                     key.SetValue("IconUri", Application.ExecutablePath, RegistryValueKind.ExpandString);
                     key.SetValue("IconBackgroundColor", "00000000", RegistryValueKind.String);
+                    key.SetValue("DshPortableEphemeral", "1", RegistryValueKind.String);
+                    key.SetValue("DshPortableOwnerPid", Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture), RegistryValueKind.String);
                 }
             }
             catch { }
@@ -4640,7 +4780,11 @@ namespace DshPortable
                 }
             }
             PortableProcessJob.Initialize();
-            RegisterNotificationIdentity();
+            if (LauncherWindow.IsStartInvocation(args))
+            {
+                NativeTaskNotification.CleanupRegistration();
+                RegisterNotificationIdentity();
+            }
             SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
