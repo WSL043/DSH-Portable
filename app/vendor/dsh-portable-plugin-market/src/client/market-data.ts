@@ -235,22 +235,32 @@ export function hasCategory(plugin: Pick<RegistryPlugin, 'category'>, category: 
   return Array.isArray(plugin.category) ? plugin.category.includes(category) : plugin.category === category
 }
 
+const searchScriptBoundary = /(?:\p{Script=Han}(?=[\p{Script=Latin}\p{N}])|[\p{Script=Latin}\p{N}](?=\p{Script=Han}))/gu
+
+function searchText(value: string): string {
+  return value.normalize('NFKC').toLowerCase()
+    .replace(searchScriptBoundary, '$& ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ')
+}
+
 /**
  * The discover list: category filter, then the published-within window, then
  * search across name / owner / localized description, then the selected sort.
  * Pure — the section renders exactly this.
  */
 export function visiblePlugins(plugins: RegistryPlugin[], options: ListQuery): RegistryPlugin[] {
-  const query = options.query.trim().toLowerCase()
+  const query = searchText(options.query)
   const list = plugins.filter((p) => {
     if (isMarketItself(p)) return false
     if (options.category !== 'all' && !hasCategory(p, options.category)) return false
     if (options.sinceDays !== undefined && !withinDays(p.added, options.sinceDays)) return false
     if (query === '') return true
     const desc = (p.description && (p.description[options.lang] || p.description.en)) || ''
-    return p.name.toLowerCase().includes(query)
-      || p.owner.toLowerCase().includes(query)
-      || desc.toLowerCase().includes(query)
+    return searchText(p.name).includes(query)
+      || searchText(p.owner).includes(query)
+      || searchText(desc).includes(query)
   })
   // A github:-only entry has no npm package and therefore no download count
   // at all — that is a coverage gap, not a "0 downloads" verdict, and must
@@ -341,10 +351,8 @@ export function pageItems(current: number, total: number): Array<number | '…'>
     return all
   }
   const items: Array<number | '…'> = [1]
-  let start = Math.max(2, current - 1)
-  let end = Math.min(total - 1, current + 1)
-  if (current <= 4) end = 5
-  if (current >= total - 3) start = total - 4
+  const start = Math.max(2, current - 1)
+  const end = Math.min(total - 1, current + 1)
   if (start > 2) items.push('…')
   for (let i = start; i <= end; i++) items.push(i)
   if (end < total - 1) items.push('…')

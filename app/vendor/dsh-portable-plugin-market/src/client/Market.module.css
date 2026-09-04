@@ -5,7 +5,7 @@
  * only carries layout, cards, and the few bespoke surfaces without a
  * primitive (progress bar, banners, tabs, swatches). */
 
-.root{height:100%;display:flex;flex-direction:column;min-width:0;color:var(--dsw-alias-label-primary,#1f2328);position:relative}
+.root{height:100%;display:flex;flex-direction:column;min-width:0;color:var(--dsw-alias-label-primary,#1f2328);position:relative;container-type:inline-size}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);align-items:flex-end}
 .operationBar{display:flex;align-items:center;justify-content:flex-end;min-height:32px;margin-bottom:8px}
 .notices{display:flex;flex-direction:column;gap:12px;padding:12px 4px 0}
@@ -330,10 +330,13 @@
 .backupCheckList .spec{flex:0 1 30%;max-width:30%;text-align:right;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .staleAction{margin-top:8px}
 .pct{font-weight:600;font-size:11px;flex-shrink:0;color:var(--dsw-alias-label-secondary,#6b7280)}
-.pager{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 4px;flex-wrap:wrap}
-.pagerPages{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
-.pageEllipsis{color:var(--dsw-alias-label-secondary,#9ca3af);font-size:12px;padding:0 2px}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:16px 0 4px;flex-wrap:nowrap}
+.pagerPages{display:flex;align-items:center;justify-content:center;gap:4px;flex-wrap:nowrap;flex:1;min-width:0}
+.pagerMeta{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;flex-shrink:0}
+.pagerPages button,.pagerMeta button{padding:0 8px;min-width:0}
+.pageEllipsis{color:var(--dsw-alias-label-secondary,#9ca3af);font-size:12px;padding:0 1px}
 .pageInfo{font-size:12px;color:var(--dsw-alias-label-secondary,#6b7280);white-space:nowrap}
+@container (max-width:544px){.pager{flex-wrap:wrap;justify-content:center;gap:8px}.pagerPages{flex-basis:100%}}
 /* #60: per-plugin enable/disable switches, deprecation badges, custom groups */
 .depBadge{border:1px solid var(--dsw-alias-state-warn-primary,#b45309);color:var(--dsw-alias-state-warn-primary,#b45309);border-radius:4px;flex-shrink:0;padding:1px 6px;font-size:11px;line-height:16px;font-weight:600;white-space:nowrap;margin-left:6px}
 .deprecate{font-size:12px;line-height:18px;color:var(--dsw-alias-state-warn-primary,#b45309);background:var(--dsw-alias-bg-layer-2,#fdf3e3);border:1px solid var(--dsw-alias-border-l2,#f3e3c3);border-radius:8px;padding:8px 10px;margin:0}
