@@ -540,9 +540,10 @@ export function MarketSection(props: MarketSectionProps) {
   const [rollingBack, setRollingBack] = useState(false)
   const [updates, setUpdates] = useState<Record<string, UpdateStatus>>({})
   const [updatingName, setUpdatingName] = useState<string | null>(null)
-  // Plugin blocked by pnpm's fresh-release safety wait; arms the update-now button.
+  // A stale update is kept separate from ordinary operation errors so the
+  // user can retry when pnpm reports that no version changed for an unknown
+  // reason.
   const [staleName, setStaleName] = useState<string | null>(null)
-  const [freshReleaseConfirmation, setFreshReleaseConfirmation] = useState<{ name: string; version: string | null } | null>(null)
   /** 1-based discover page; reset to 1 whenever the list shape changes. */
   const [page, setPage] = useState(1)
   /** Cards per discover page; changing it jumps back to page 1. */
@@ -1304,18 +1305,17 @@ export function MarketSection(props: MarketSectionProps) {
       .catch(() => {})
   }, [])
 
-  const doUpdate = useCallback((name: string, force = false) => {
+  const doUpdate = useCallback((name: string) => {
     setInstallError(null)
     setActivationWarnings([])
     setStaleName(null)
-    setFreshReleaseConfirmation(null)
     setUpdatingName(name)
     const updateRecordId = nextRecordId()
     setRecords(list => enqueue(list, { id: updateRecordId, kind: 'update', name, state: 'running' }))
     return fetch('/dsh-market/update', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(force ? { name, force: true } : { name }),
+      body: JSON.stringify({ name }),
     })
       .then(res => res.json().then(body => ({ status: res.status, body })))
       .then(({ status, body }) => {
@@ -1340,11 +1340,6 @@ export function MarketSection(props: MarketSectionProps) {
           refreshInstalled()
         } else {
           if (status === 409) {
-            if (body.confirmationRequired === true && body.staleReason === 'release-age') {
-              setRecords(list => drop(list, updateRecordId))
-              setFreshReleaseConfirmation({ name, version: updates[name]?.latest ?? null })
-              return
-            }
             if (body.agentsBusy === true) {
               const running = Array.isArray(body.runningAgents) && body.runningAgents.length > 0 ? ` (${body.runningAgents.join(', ')})` : ''
               setRecords(list => patchRecord(list, updateRecordId, { state: 'failed', reason: t('agentBusyUpdate') + running }))
@@ -2193,17 +2188,6 @@ export function MarketSection(props: MarketSectionProps) {
           </div>
         )}
         {tab === 'installed' && <HostDependencyDiagnostics findings={hostDependencyFindings} t={t} />}
-        {freshReleaseConfirmation !== null && (
-          <div className={css.banner}>
-            <IconWarningOutline16 size={14} className={css.bannerIcon} />
-            <span className={css.grow}>
-              {t('freshUpdateConfirm')
-                .replace('{0}', freshReleaseConfirmation.name)
-                .replace('{1}', freshReleaseConfirmation.version ?? '')}
-            </span>
-            <Button size="sm" onClick={() => doUpdate(freshReleaseConfirmation.name, true)}>{t('updateNow')}</Button>
-          </div>
-        )}
       </div>
       {buildsSkipped !== null && (
         <div className={css.banner}>
@@ -2253,7 +2237,7 @@ export function MarketSection(props: MarketSectionProps) {
           {installError}
           <div className={css.staleAction}>
             {staleName !== null && (
-              <Button size="sm" onClick={() => doUpdate(staleName, true)}>{t('updateNow')}</Button>
+              <Button size="sm" onClick={() => doUpdate(staleName)}>{t('updateNow')}</Button>
             )}
           </div>
         </div>

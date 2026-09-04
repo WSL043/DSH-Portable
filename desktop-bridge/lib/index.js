@@ -248,6 +248,7 @@ export function mountPortableRoutes(webServer, options = {}) {
       if (!['product', 'engine'].includes(body.scope)) return sendJson(response, 400, { error: 'invalid update scope' })
       const args = ['check-update', '--scope', body.scope, '--json']
       if (body.background !== true) args.push('--force')
+      args.push('--wait-for-lock-ms', '10000')
       sendJson(response, 200, await runCli(args))
     } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
@@ -255,7 +256,7 @@ export function mountPortableRoutes(webServer, options = {}) {
   register({ kind: 'exact', path: '/dsh-portable/engine-versions', handler: async (request, response) => {
     if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-    try { sendJson(response, 200, await runCli(['list-updates', '--scope', 'engine', '--json'])) }
+    try { sendJson(response, 200, await runCli(['list-updates', '--scope', 'engine', '--json', '--wait-for-lock-ms', '10000'])) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 

@@ -45,7 +45,7 @@
 
 它不是把网页快捷方式改名为“免安装版”。运行环境和插件工具都在自己的目录内，不要求目标电脑预装 Node.js 或 pnpm，也不修改系统 `PATH`；独立窗口、系统托盘、最近会话、任务完成通知、窗口位置恢复和更新流程仍然完整保留。
 
-Windows 开启“任务完成通知”后，每个新完成的任务都会弹出可操作通知；鼠标悬浮会展开完整回复，可以直接 Reply 回原任务。任务栏图标右上角会显示尚未查看的完成任务数量，打开或回复对应任务后才会清除。
+Windows 开启“任务通知”后，后台任务完成或等待回答、批准时会显示系统通知。完成通知可直接回复原任务；审批通知提供“拒绝”和“允许一次”，简单单选问题可直接选择答案，复杂问题则打开对应任务处理。通知的展开方式由 Windows 控制。任务栏图标会显示尚未查看的完成任务数量，打开或回复对应任务后清除。
 
 | 从哪里开始 | Portable 为你处理什么 |
 | --- | --- |
@@ -168,6 +168,8 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 - [提交 Bug 报告](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
 - [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
+
+内置 DSH 0.1.2-rc.1 存在已知网络兼容限制：Clash/Mihomo 的 Fake-IP DNS 可能使 `web_fetch` 返回 `WEB_BLOCKED_URL`。相关进展见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)。
 
 请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 

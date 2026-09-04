@@ -161,22 +161,22 @@ test('Portable settings expose product and official DSH checks as separate bound
   await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'product' }), product)
   assert.equal(product.status, 200)
   assert.deepEqual(product.json(), { status: 'current', updateKind: 'product' })
-  assert.deepEqual(calls[0], ['check-update', '--scope', 'product', '--json', '--force'])
+  assert.deepEqual(calls[0], ['check-update', '--scope', 'product', '--json', '--force', '--wait-for-lock-ms', '10000'])
 
   const engine = response()
   await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'engine' }), engine)
   assert.equal(engine.status, 200)
-  assert.deepEqual(calls[1], ['check-update', '--scope', 'engine', '--json', '--force'])
+  assert.deepEqual(calls[1], ['check-update', '--scope', 'engine', '--json', '--force', '--wait-for-lock-ms', '10000'])
 
   const background = response()
   await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'engine', background: true }), background)
   assert.equal(background.status, 200)
-  assert.deepEqual(calls[2], ['check-update', '--scope', 'engine', '--json'])
+  assert.deepEqual(calls[2], ['check-update', '--scope', 'engine', '--json', '--wait-for-lock-ms', '10000'])
 
   const versions = response()
   await routes.get('/dsh-portable/engine-versions').handler(request('GET'), versions)
   assert.equal(versions.status, 200)
-  assert.deepEqual(calls[3], ['list-updates', '--scope', 'engine', '--json'])
+  assert.deepEqual(calls[3], ['list-updates', '--scope', 'engine', '--json', '--wait-for-lock-ms', '10000'])
 
   const invalid = response()
   await routes.get('/dsh-portable/check-update').handler(request('POST', { scope: 'all' }), invalid)

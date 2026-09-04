@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -64,11 +64,28 @@ async function prepareNotificationRuntime(root) {
   return { notification, tuple }
 }
 
+async function notificationCompileReferences() {
+  const windows = process.env.WINDIR || 'C:\\Windows'
+  const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)'
+  const referencesRoot = path.join(programFilesX86, 'Windows Kits', '10', 'References')
+  const contractFiles = (await readdir(referencesRoot, { recursive: true }))
+    .filter(filename => filename.endsWith('Windows.Foundation.UniversalApiContract.winmd'))
+    .sort()
+  assert.ok(contractFiles.length > 0, 'Windows.Foundation.UniversalApiContract.winmd is unavailable')
+  return [
+    path.join(programFilesX86, 'Windows Kits', '10', 'UnionMetadata', 'Facade', 'Windows.winmd'),
+    path.join(referencesRoot, contractFiles.at(-1)),
+    path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'System.Runtime.WindowsRuntime.dll'),
+  ]
+}
+
 async function compileLauncher(output, webview2, notifications) {
+  const winrt = await notificationCompileReferences()
   await execFileAsync(cscPath(), [
     '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
     '/reference:System.dll', '/reference:System.Core.dll',
-    '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+    '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll', '/reference:System.Web.Extensions.dll',
+    ...winrt.map(filename => `/reference:${filename}`),
     `/reference:${webview2.core}`, `/reference:${webview2.winforms}`,
     `/reference:${notifications.notification}`, `/reference:${notifications.tuple}`,
     `/out:${output}`,

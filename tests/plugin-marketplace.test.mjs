@@ -648,35 +648,20 @@ test('plugin updates remain visible in the market activity panel', async () => {
   assert.match(updateFlow, /drop\(list, updateRecordId\)/)
 })
 
-test('a newly published plugin asks for confirmation before pnpm mutates the profile', async () => {
-  const routes = await read('app/vendor/dsh-portable-plugin-market/src/routes.ts')
-  const updateRoute = routes.slice(routes.indexOf("path: '/dsh-market/update'"), routes.indexOf("path: '/dsh-market/setup-pnpm'"))
-  const confirmation = updateRoute.indexOf('confirmationRequired: true')
-  const mutation = updateRoute.indexOf('await runPlugin(config.profile, addArgs)')
-
-  assert.ok(confirmation >= 0, 'fresh releases must produce an explicit confirmation response')
-  assert.ok(mutation >= 0, 'test fixture must include the real plugin mutation boundary')
-  assert.ok(confirmation < mutation, 'confirmation must happen before pnpm changes the profile')
-  assert.match(updateRoute, /if \(!force && !isGit[\s\S]*latestPublishedRecently\(name\)/)
-  assert.match(updateRoute, /staleReason:\s*'release-age'/)
-  assert.match(updateRoute, /force:[\s\S]*RELEASE_AGE_OVERRIDE/)
-
-  const client = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
-  assert.match(client, /body\.confirmationRequired === true[\s\S]*setFreshReleaseConfirmation/)
-})
-
-test('fresh-release confirmation is a plugin-scoped warning rather than a global error', async () => {
-  const [client, locales, styles] = await Promise.all([
+test('an explicit plugin update applies fresh releases without a second age confirmation', async () => {
+  const [routes, client, locales] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/locales.ts'),
-    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
   ])
+  const updateRoute = routes.slice(routes.indexOf("path: '/dsh-market/update'"), routes.indexOf("path: '/dsh-market/setup-pnpm'"))
 
-  assert.match(client, /freshReleaseConfirmation/)
-  assert.match(client, /confirmationRequired === true[\s\S]*setFreshReleaseConfirmation/)
-  assert.match(client, /className=\{css\.banner\}[\s\S]*freshReleaseConfirmation[\s\S]*doUpdate\(freshReleaseConfirmation\.name, true\)/)
-  assert.match(locales, /freshUpdateConfirm:/)
-  assert.match(styles, /\.banner\s*\{/)
+  assert.doesNotMatch(updateRoute, /if \(!force && !isGit[\s\S]*latestPublishedRecently\(name\)/)
+  assert.doesNotMatch(updateRoute, /confirmationRequired/)
+  assert.ok(updateRoute.includes('await runPlugin(config.profile, addArgs)'))
+  assert.match(updateRoute, /const addArgs = \['add', RELEASE_AGE_OVERRIDE, target\]/)
+  assert.doesNotMatch(client, /freshReleaseConfirmation|confirmationRequired/)
+  assert.doesNotMatch(locales, /freshUpdateConfirm:/)
 })
 
 test('AI repair prompt does not recommend bundle surgery for peer-range-only warnings', async () => {

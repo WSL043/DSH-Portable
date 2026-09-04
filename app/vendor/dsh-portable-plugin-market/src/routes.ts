@@ -60,7 +60,15 @@ export type { UpdateStatus } from './updates.ts'
  */
 async function resolveInstallTarget(entry: { name: string; url: string; npm?: unknown; tarball?: unknown }): Promise<string | null> {
   const catalogTarget = installTargetFor(entry)
-  if (catalogTarget === null || !catalogTarget.startsWith('github:')) return catalogTarget
+  if (catalogTarget === null) return null
+  // An unversioned catalog npm mapping is deliberately a floating install,
+  // but make the dist-tag explicit so pnpm cannot reuse a stale dependency
+  // spelling as the user's intended target. Prebuilt archives and GitHub
+  // sources remain exactly as curated.
+  const explicitLatest = typeof entry.npm === 'string' && catalogTarget === entry.npm
+    ? `${catalogTarget}@latest`
+    : catalogTarget
+  if (!catalogTarget.startsWith('github:')) return explicitLatest
   try {
     const response = await marketFetch(`https://registry.npmjs.org/${encodeURIComponent(entry.name)}/latest`, {
       signal: AbortSignal.timeout(10_000),
@@ -91,7 +99,7 @@ async function resolveInstallTarget(entry: { name: string; url: string; npm?: un
     const npmTarget = verifiedNpmTargetFor(entry, metadata, attestations)
     if (npmTarget !== null) {
       logEvent('info', 'install-source', `${entry.name}: catalog npm mapping is pending; using repository-verified npm package`)
-      return npmTarget
+      return `${npmTarget}@latest`
     }
   } catch (error) {
     logEvent('warn', 'install-source', `${entry.name}: npm ownership probe unavailable; keeping curated source (${String(error).slice(0, 160)})`)
@@ -1315,9 +1323,8 @@ export function mountMarketRoutes(
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown; force?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
-            const force = body.force === true
             const spec = readInstalled(config.profile, activeProfileDir)[name]
             if (spec === undefined) {
               sendJson(response, 400, { error: 'plugin is not installed' })
@@ -1382,20 +1389,6 @@ export function mountMarketRoutes(
                 })
                 return
               }
-              // pnpm intentionally delays very fresh registry releases. Do
-              // not run a command that will silently keep the old version and
-              // only explain that afterwards. Ask first, without touching the
-              // profile; the existing explicit retry scopes the age bypass to
-              // this package and this one command.
-              if (!force && !isGit && selfChannel === null && await latestPublishedRecently(name) === true) {
-                sendJson(response, 409, {
-                  error: '这个版本刚发布。为保留新包安全等待，Portable 不会自动绕过；如果你确认现在更新，请选择「立即更新」。 / This version was newly published. Portable keeps the fresh-package safety wait unless you explicitly choose "Update now".',
-                  stale: true,
-                  staleReason: 'release-age',
-                  confirmationRequired: true,
-                })
-                return
-              }
             }
             const repoKey = isGit ? spec.slice('github:'.length).replace(/#.*$/, '').toLowerCase() : null
             // Captured BEFORE pnpm replaces the files: afterwards the loader
@@ -1413,9 +1406,11 @@ export function mountMarketRoutes(
             const updateSource: UpdateRollbackSource = isGit
               ? { kind: 'github', target, beforeCommit }
               : { kind: 'npm', beforeVersion }
-            // force: the user chose to install a fresh release without the
-            // default one-day safety wait; scoped to this single command.
-            const addArgs = force ? ['add', RELEASE_AGE_OVERRIDE, target] : ['add', target]
+            // Updating is already an explicit user action. Apply the target in
+            // this one request, including a one-shot release-age override so a
+            // freshly published latest version cannot be silently held by pnpm
+            // and turned into a second "Update now" click.
+            const addArgs = ['add', RELEASE_AGE_OVERRIDE, target]
             // RAW manifest snapshot for failure rollback (#65) — pnpm writes
             // package.json before it finishes, so a hard-failed add leaves
             // ghost/bumped entries that break every later pnpm run.
@@ -2284,7 +2279,15 @@ export function mountMarketRoutes(
             // every later pnpm run — of anything. Cancelled runs keep their
             // partial state on purpose (the user sees the diff and decides).
             const manifestBefore = readProfileManifestSnapshot(config.profile, activeProfileDir)
-            const result = await runPlugin(config.profile, ['add', target])
+            // Explicit latest installs must not be held behind pnpm's
+            // minimumReleaseAge gate. GitHub and prebuilt archive targets keep
+            // their curated source and normal config unchanged.
+            const addArgs = target.endsWith('@latest')
+              && !target.startsWith('github:')
+              && !/^https?:\/\//i.test(target)
+              ? ['add', RELEASE_AGE_OVERRIDE, target]
+              : ['add', target]
+            const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
             if ((result.exitCode !== 0 || result.timedOut) && !cancelled) {
               const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)

@@ -6,6 +6,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@deepseek-ai/dsh": "0.1.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.1.2-rc.1",
     "@wsl043/dsh-portable-desktop-bridge": "file:../desktop-bridge",
     "@wsl043/dsh-portable-plugin-market": "file:vendor/dsh-portable-plugin-market",
     "pnpm": "11.7.0"

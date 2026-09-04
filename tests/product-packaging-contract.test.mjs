@@ -862,6 +862,25 @@ test('macOS package is a movable signed app shell for both supported architectur
   )
 })
 
+test('scheduled core publication can stop after producing the engine component', async () => {
+  const [windows, macos, linux] = await Promise.all([
+    read('scripts/build-windows.ps1'),
+    read('scripts/build-macos.sh'),
+    read('scripts/build-linux.sh'),
+  ])
+  assert.match(windows, /\[switch\]\$CoreOnly/)
+  assert.match(windows, /if \(\$CoreOnly\)[\s\S]+EngineUpdateManifest/)
+  for (const source of [macos, linux]) {
+    assert.match(source, /DSH_PORTABLE_CORE_ONLY/)
+    assert.match(source, /DSH_PORTABLE_CORE_ONLY[^\n]+1[\s\S]+exit 0/)
+  }
+})
+
+test('the bundled plugin market declares every runtime import at the app root', async () => {
+  const app = JSON.parse(await read('app/package.json'))
+  assert.equal(app.dependencies['@deepseek-ai/dsh-settings'], '0.1.2-rc.1')
+})
+
 test('CI executes contracts and real package smoke tests on Windows and both Mac architectures', async () => {
   const workflow = await read('.github/workflows/ci.yml')
   const upstreamWorkflow = await read('.github/workflows/upstream-watch.yml')

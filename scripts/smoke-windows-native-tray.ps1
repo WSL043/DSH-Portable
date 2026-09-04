@@ -32,15 +32,16 @@ $SessionType = $Assembly.GetType('DshPortable.TrayBridgeSession', $true)
 if ($Assembly.GetType('DshPortable.TrayTaskFlyout', $false)) {
     throw 'Rejected task-flyout type is still present in the compiled launcher'
 }
-$ConstructorSignature = [Type[]]@([string[]], [string], [string], [int], [int])
+$ConstructorSignature = [Type[]]@([string[]], [string], [string], [int], [int], [int])
 $Constructor = $WindowType.GetConstructor($ConstructorMembers, $null, $ConstructorSignature, $null)
 if (-not $Constructor) { throw 'LauncherWindow environment-aware constructor is missing' }
-$ConstructorArgs = New-Object 'System.Object[]' 5
+$ConstructorArgs = New-Object 'System.Object[]' 6
 $ConstructorArgs[0] = [string[]]@('--desktop')
 $ConstructorArgs[1] = 'default'
 $ConstructorArgs[2] = $ResolvedRoot
 $ConstructorArgs[3] = 0
 $ConstructorArgs[4] = 0
+$ConstructorArgs[5] = 0
 $Window = $Constructor.Invoke($ConstructorArgs)
 $WindowType.GetField('root', $AllFields).SetValue($Window, $ResolvedRoot)
 $LoadUpdateCheckEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers)
@@ -78,6 +79,25 @@ function Add-Session([object]$List, [string]$Id, [string]$Title, [string]$Preset
     $List.Add($Session)
 }
 
+function Save-DesktopCapture([string]$Filename) {
+    Start-Sleep -Milliseconds 900
+    $Bounds = [Windows.Forms.SystemInformation]::VirtualScreen
+    $CaptureWidth = [Math]::Min(560, $Bounds.Width)
+    $CaptureHeight = [Math]::Min(650, $Bounds.Height)
+    $CaptureLeft = $Bounds.Right - $CaptureWidth
+    $CaptureTop = $Bounds.Bottom - $CaptureHeight
+    $Capture = New-Object Drawing.Bitmap $CaptureWidth, $CaptureHeight
+    $Graphics = [Drawing.Graphics]::FromImage($Capture)
+    try {
+        $Graphics.CopyFromScreen($CaptureLeft, $CaptureTop, 0, 0, $Capture.Size)
+        $Capture.Save((Join-Path $CaptureDirectory $Filename))
+    }
+    finally {
+        $Graphics.Dispose()
+        $Capture.Dispose()
+    }
+}
+
 function Assert-MenuRowsFillWidth([Windows.Forms.ToolStripDropDown]$DropDown, [string]$Name) {
     $ContentRight = $DropDown.ClientSize.Width
     foreach ($Item in $DropDown.Items) {
@@ -111,6 +131,7 @@ function Test-NativeTaskNotification {
     # in baseline tracking and host routing.
     $Window.Hide()
     $Window.ShowInTaskbar = $false
+    $WindowType.GetField('uiLanguage', $AllFields).SetValue($Window, 'zh')
     $WindowType.GetField('taskNotificationsEnabled', $AllFields).SetValue($Window, $true)
     $Baseline = [Activator]::CreateInstance($StateType, $true)
     Set-Property $StateType $Baseline 'type' 'dsh-portable/state'
@@ -136,15 +157,46 @@ function Test-NativeTaskNotification {
     $Pair = [Collections.Generic.KeyValuePair[string, object]]
     $ReplyInputs = [Collections.Generic.List[Collections.Generic.KeyValuePair[string, object]]]::new()
     $ReplyInputs.Add([Activator]::CreateInstance($Pair, @('reply', 'Continue refining')))
-    $ParseArguments = [object[]]@("action=reply;sessionId=$sessionId", $ReplyInputs, '', '', '')
+    $ParseArguments = [object[]]@("action=reply;sessionId=$sessionId", $ReplyInputs, '', '', '', '')
     $Parsed = $NativeNotificationType.GetMethod('TryParseActivation', $AllFields).Invoke($null, $ParseArguments)
-    if (-not $Parsed -or $ParseArguments[2] -ne 'reply' -or $ParseArguments[3] -ne $sessionId -or $ParseArguments[4] -ne 'Continue refining') {
+    if (-not $Parsed -or $ParseArguments[2] -ne 'reply' -or $ParseArguments[3] -ne $sessionId -or $ParseArguments[4] -ne '' -or $ParseArguments[5] -ne 'Continue refining') {
         throw 'Native Reply parser did not preserve the exact task and reply text'
     }
-    $InvalidParseArguments = [object[]]@("action=reply;sessionId=$sessionId", $null, '', '', '')
+    $InvalidParseArguments = [object[]]@("action=reply;sessionId=$sessionId", $null, '', '', '', '')
     if ($NativeNotificationType.GetMethod('TryParseActivation', $AllFields).Invoke($null, $InvalidParseArguments)) {
         throw 'Native Reply parser accepted an activation with no reply input'
     }
+
+    # Exercise the activator-to-environment inbox, not just its parser. The
+    # same activation id must be delivered once and an expired action rejected.
+    $InstanceKey = $WindowType.GetMethod('ResolveEnvironmentInstanceKey', $AllFields).Invoke($null, @($ResolvedRoot, 'default'))
+    $RootKey = $WindowType.GetMethod('ResolveEnvironmentInstanceKey', $AllFields).Invoke($null, @($ResolvedRoot, 'notification-root'))
+    $NativeNotificationType.GetMethod('ConfigureOwner', $AllFields).Invoke($null, @($ResolvedRoot, 'default', $InstanceKey)) | Out-Null
+    $RootMap = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey("Software\WSL043\DSH-Portable\NotificationRoots\$RootKey")
+    try {
+        $RootMap.SetValue('Root', $ResolvedRoot, [Microsoft.Win32.RegistryValueKind]::String)
+        $RootMap.SetValue('Executable', [IO.Path]::GetFullPath($Launcher), [Microsoft.Win32.RegistryValueKind]::String)
+    }
+    finally { $RootMap.Dispose() }
+    $Inbox = Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::LocalApplicationData)) "DSH-Portable\notification-activations\$InstanceKey"
+    if (Test-Path -LiteralPath $Inbox) { Remove-Item -LiteralPath $Inbox -Recurse -Force }
+    $CreatedAt = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+    $ActivationId = [Guid]::NewGuid().ToString('N')
+    $NativeNotificationType.GetMethod('SetOwnerReady', $AllFields).Invoke($null, @($true)) | Out-Null
+    $OpenActivation = "action=open;sessionId=$sessionId;environmentId=default;instanceKey=$InstanceKey;rootKey=$RootKey;activationId=$ActivationId;createdAt=$CreatedAt"
+    $NativeNotificationType.GetMethod('DispatchActivation', $AllFields).Invoke($null, @($OpenActivation, $null)) | Out-Null
+    $NativeNotificationType.GetMethod('DispatchActivation', $AllFields).Invoke($null, @($OpenActivation, $null)) | Out-Null
+    $ExpiredId = [Guid]::NewGuid().ToString('N')
+    $ExpiredAt = $CreatedAt - 604801
+    $ExpiredActivation = "action=open;sessionId=$sessionId;environmentId=default;instanceKey=$InstanceKey;rootKey=$RootKey;activationId=$ExpiredId;createdAt=$ExpiredAt"
+    $NativeNotificationType.GetMethod('DispatchActivation', $AllFields).Invoke($null, @($ExpiredActivation, $null)) | Out-Null
+    $pendingActions = $WindowType.GetField('pendingNotificationActions', $AllFields).GetValue($Window)
+    if ($pendingActions.Count -ne 1) { throw "Environment notification inbox did not deduplicate or reject expiry (pending=$($pendingActions.Count))" }
+    $pendingOpen = $pendingActions.Dequeue()
+    if ($pendingOpen.Item1 -ne $ActivationId -or $pendingOpen.Item2 -ne 'open' -or $pendingOpen.Item3 -ne $sessionId) {
+        throw 'Environment notification inbox did not deliver to the exact owner'
+    }
+    if (Test-Path -LiteralPath $Inbox) { Remove-Item -LiteralPath $Inbox -Recurse -Force }
 
     # Exercise the same exact-session queue used by an Action Center Reply
     # activation while the WebView is unavailable. The queued tuple must retain
@@ -155,30 +207,56 @@ function Test-NativeTaskNotification {
         $Window,
         [Reflection.BindingFlags]::Default,
         $null,
-        [object[]]@('reply', $sessionId, $replyText),
+        [object[]]@([Guid]::NewGuid().ToString('N'), 'reply', $sessionId, '', $replyText),
         [Globalization.CultureInfo]::InvariantCulture
     ) | Out-Null
     $pendingActions = $WindowType.GetField('pendingNotificationActions', $AllFields).GetValue($Window)
     $pendingReply = $pendingActions.Dequeue()
-    if ($pendingReply.Item1 -ne 'reply' -or $pendingReply.Item2 -ne $sessionId -or $pendingReply.Item3 -ne $replyText) {
+    if ($pendingReply.Item2 -ne 'reply' -or $pendingReply.Item3 -ne $sessionId -or $pendingReply.Item4 -ne '' -or $pendingReply.Item5 -ne $replyText) {
         throw 'Native Reply did not preserve the exact originating task and reply text'
     }
 
     # Local visual acceptance passes CaptureDirectory and inspects this real
     # desktop capture. CI exercises the same hidden-window completion route.
     if ($CaptureDirectory) {
-        Start-Sleep -Milliseconds 900
-        $Bounds = [Windows.Forms.SystemInformation]::VirtualScreen
-        $Capture = New-Object Drawing.Bitmap $Bounds.Width, $Bounds.Height
-        $Graphics = [Drawing.Graphics]::FromImage($Capture)
-        try {
-            $Graphics.CopyFromScreen($Bounds.Left, $Bounds.Top, 0, 0, $Bounds.Size)
-            $Capture.Save((Join-Path $CaptureDirectory 'native-task-notification.png'))
-        }
-        finally {
-            $Graphics.Dispose()
-            $Capture.Dispose()
-        }
+        Save-DesktopCapture 'native-task-notification.png'
+    }
+
+
+    # A new approval transition uses a persistent notification with bounded
+    # native actions. Its activation must preserve the exact pending key and
+    # response so the bridge can reject stale approvals before answering DSH.
+    $WindowType.GetField('notificationSessionId', $AllFields).SetValue($Window, $null)
+    Set-Property $SessionType $Session 'pendingInteraction' 'approval'
+    Set-Property $SessionType $Session 'pendingInteractionKey' 'approval:smoke-1'
+    Set-Property $SessionType $Session 'pendingInteractionPrompt' 'Allow the native smoke command?'
+    $InteractionOptions = [Collections.Generic.List[string]]::new()
+    $InteractionOptions.Add('rejected')
+    $InteractionOptions.Add('allowed-once')
+    Set-Property $SessionType $Session 'pendingInteractionOptions' $InteractionOptions
+    $CompletionHandler.Invoke($Window, @($Baseline)) | Out-Null
+    if ($WindowType.GetField('notificationSessionId', $AllFields).GetValue($Window) -ne $sessionId) {
+        throw 'Approval transition did not reach the native attention notification route'
+    }
+
+    $ResolveArguments = [object[]]@("action=resolve-interaction;sessionId=$sessionId;interactionKey=approval:smoke-1;response=allowed-once", $null, '', '', '', '')
+    $Resolved = $NativeNotificationType.GetMethod('TryParseActivation', $AllFields).Invoke($null, $ResolveArguments)
+    if (-not $Resolved -or $ResolveArguments[2] -ne 'resolve-interaction' -or $ResolveArguments[3] -ne $sessionId -or $ResolveArguments[4] -ne 'approval:smoke-1' -or $ResolveArguments[5] -ne 'allowed-once') {
+        throw 'Native approval parser did not preserve the exact pending interaction and response'
+    }
+    $WindowType.GetMethod('QueueNotificationAction', $InstanceMembers).Invoke(
+        $Window,
+        [Reflection.BindingFlags]::Default,
+        $null,
+        [object[]]@([Guid]::NewGuid().ToString('N'), 'resolve-interaction', $sessionId, 'approval:smoke-1', 'rejected'),
+        [Globalization.CultureInfo]::InvariantCulture
+    ) | Out-Null
+    $pendingApproval = $pendingActions.Dequeue()
+    if ($pendingApproval.Item2 -ne 'resolve-interaction' -or $pendingApproval.Item3 -ne $sessionId -or $pendingApproval.Item4 -ne 'approval:smoke-1' -or $pendingApproval.Item5 -ne 'rejected') {
+        throw 'Native approval queue did not preserve the exact pending interaction and response'
+    }
+    if ($CaptureDirectory) {
+        Save-DesktopCapture 'native-task-attention.png'
     }
 }
 
@@ -382,7 +460,7 @@ try {
         }
     }
 
-    Write-Host 'Windows native tray smoke passed: compact menu, real Action Center notification, exact-session reply queue, locale, theme, and command fallback.'
+    Write-Host 'Windows native tray smoke passed: compact menu, native Action Center delivery path, exact-session reply queue, locale, theme, and command fallback.'
 }
 finally {
     $NativeNotificationType = $Assembly.GetType('DshPortable.NativeTaskNotification', $false)
