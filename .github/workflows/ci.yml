@@ -103,7 +103,7 @@ jobs:
           path: preview-packed
       - name: Stage the locked official source runtime
         shell: powershell
-        run: node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
+        run: node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
       - name: Build Windows portable base
         shell: powershell
         run: ./scripts/build-windows.ps1 -PreviewAppSource preview-app
@@ -469,7 +469,7 @@ jobs:
           path: preview-packed
       - name: Build the product from the matching stable or preview runtime
         run: |
-          node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
+          node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
           PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-macos.sh "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v7
         with:
@@ -608,7 +608,7 @@ jobs:
           path: preview-packed
       - name: Build the product from the matching stable or preview runtime
         run: |
-          node scripts/stage-preview-runtime.mjs --packed-root preview-packed/upstream/dist --output preview-app
+          node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
           PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-linux.sh "${{ matrix.arch }}"
       - uses: actions/upload-artifact@v7
         with:

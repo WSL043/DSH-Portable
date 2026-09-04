@@ -93,7 +93,7 @@ test('CI builds one immutable official source package set and stages it natively
   assert.match(workflow, /pnpm --dir upstream run release:pack --family vendor --out dist\/npm-vendor --concurrency 8/)
   assert.match(workflow, /pnpm --dir upstream\/native\/landlock-run\/packages\/entry pack --pack-destination/)
   assert.equal((workflow.match(/stage-preview-runtime\.mjs/g) ?? []).length, 3)
-  assert.equal((workflow.match(/--packed-root preview-packed\/upstream\/dist/g) ?? []).length, 3)
+  assert.equal((workflow.match(/--packed-root preview-packed(?:\s|$)/gm) ?? []).length, 3)
   assert.doesNotMatch(workflow, /if: steps\.preview\.outputs\.channel == 'candidate'/)
   assert.match(workflow, /build-windows\.ps1 -PreviewAppSource preview-app/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-macos\.sh/)
