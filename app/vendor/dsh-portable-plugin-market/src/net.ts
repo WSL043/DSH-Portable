@@ -39,10 +39,15 @@ import { EnvHttpProxyAgent, fetch as undiciFetch } from 'undici'
  *
  * Blank-is-unset is ours, and only widens that last one: undici would hand a
  * whitespace-only value to `new URL()` and throw out of the constructor.
+ * Scheme-less host:port values are common in Windows and npm proxy settings;
+ * proxy agents require URLs, so those default to `http://`.
  */
 export function configuredProxy(): string | null {
-  const pick = (raw: string | undefined): string | null =>
-    raw === undefined || raw.trim() === '' ? null : raw.trim()
+  const pick = (raw: string | undefined): string | null => {
+    const value = raw?.trim()
+    if (value === undefined || value === '') return null
+    return /^[a-z][a-z\d+.-]*:\/\//iu.test(value) ? value : `http://${value}`
+  }
   const https = pick(process.env.https_proxy ?? process.env.HTTPS_PROXY)
   return https ?? pick(process.env.http_proxy ?? process.env.HTTP_PROXY)
 }

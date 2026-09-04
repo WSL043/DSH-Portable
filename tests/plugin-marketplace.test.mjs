@@ -9,6 +9,22 @@ import test from 'node:test'
 const root = path.resolve(import.meta.dirname, '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 
+test('scheme-less proxy settings are normalized before the market creates its HTTP agent', async () => {
+  const keys = ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY']
+  const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]))
+  try {
+    for (const key of keys) delete process.env[key]
+    process.env.HTTPS_PROXY = '127.0.0.1:7890'
+    const { configuredProxy } = await import('../app/vendor/dsh-portable-plugin-market/src/net.ts')
+    assert.equal(configuredProxy(), 'http://127.0.0.1:7890')
+  } finally {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key]
+      else process.env[key] = previous[key]
+    }
+  }
+})
+
 function caretPrereleaseRangeCovers(range, version) {
   const rangeMatch = /^\^(\d+)\.(\d+)\.(\d+)-(alpha|beta|rc)\.(\d+)$/.exec(range)
   const versionMatch = /^(\d+)\.(\d+)\.(\d+)-(alpha|beta|rc)\.(\d+)$/.exec(version)
@@ -881,6 +897,35 @@ test('catalog entries remain visible when upstream assigns more than one categor
   }
   assert.deepEqual(visiblePlugins([plugin], { category: 'ui', query: '', lang: 'en', sort: 'stars-desc' }), [plugin])
   assert.deepEqual(themePlugins([plugin]), [plugin])
+})
+
+test('catalog search treats adjacent Han and Latin terms like their spaced forms', async () => {
+  const { visiblePlugins } = await import('../app/vendor/dsh-portable-plugin-market/src/client/market-data.ts')
+  const plugin = {
+    name: 'mcp-tools', owner: 'author', url: 'https://github.com/author/mcp-tools',
+    category: 'tools', description: { zh: 'MCP 管理工具' },
+  }
+  const search = query => visiblePlugins([plugin], {
+    category: 'all', query, lang: 'zh', sort: 'stars-desc',
+  })
+  assert.deepEqual(search('MCP管理'), [plugin])
+  assert.deepEqual(search('管理MCP'), [])
+  plugin.description.zh = '管理 MCP 工具'
+  assert.deepEqual(search('管理MCP'), [plugin])
+})
+
+test('the discover pager stays compact on the real settings-column width', async () => {
+  const [{ pageItems }, css, section] = await Promise.all([
+    import('../app/vendor/dsh-portable-plugin-market/src/client/market-data.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
+  ])
+  assert.ok(pageItems(1, 17).filter(item => typeof item === 'number').length <= 5)
+  assert.match(css, /\.root\{[^}]*container-type:inline-size/)
+  assert.match(css, /\.pager\{[^}]*flex-wrap:nowrap/)
+  assert.match(css, /\.pagerMeta\{[^}]*flex-wrap:nowrap/)
+  assert.match(section, /className=\{css\.pagerMeta\}/)
+  assert.doesNotMatch(section, /aria-label=\{t\('(?:first|last)Page'\)\}/)
 })
 
 test('an in-flight install remains visible after the settings page remounts', async () => {

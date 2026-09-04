@@ -2494,7 +2494,6 @@ export function MarketSection(props: MarketSectionProps) {
                               <div className={css.pagerPages}>
                                 {totalPages > 1 && (
                                   <>
-                                    <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => goToPage(1)} aria-label={t('firstPage')}>«</Button>
                                     <Button
                                       variant="outline"
                                       size="sm"
@@ -2520,28 +2519,29 @@ export function MarketSection(props: MarketSectionProps) {
                                       disabled={currentPage === totalPages}
                                       onClick={() => goToPage(currentPage + 1)}
                                     >{t('nextPage')}<IconChevronRightOutline14 size={14} /></Button>
-                                    <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => goToPage(totalPages)} aria-label={t('lastPage')}>»</Button>
-                                    <span className={css.pageInfo}>{t('pageInfo').replace('{0}', String(currentPage)).replace('{1}', String(totalPages))}</span>
                                   </>
                                 )}
                               </div>
-                              <Menu
-                                open={sizeOpen}
-                                onClose={() => setSizeOpen(false)}
-                                onSelect={id => changePageSize(Number(id))}
-                                selectedId={String(pageSize)}
-                                align="end"
-                                portal
-                                anchor={(
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    icon={<IconChevronDownOutline14 size={14} />}
-                                    onClick={() => setSizeOpen(o => !o)}
-                                  >{t('perPage') + ' ' + pageSize}</Button>
-                                )}
-                                items={PAGE_SIZES.map(size => ({ id: String(size), label: String(size) }))}
-                              />
+                              <div className={css.pagerMeta}>
+                                {totalPages > 1 && <span className={css.pageInfo}>{t('pageInfo').replace('{0}', String(currentPage)).replace('{1}', String(totalPages))}</span>}
+                                <Menu
+                                  open={sizeOpen}
+                                  onClose={() => setSizeOpen(false)}
+                                  onSelect={id => changePageSize(Number(id))}
+                                  selectedId={String(pageSize)}
+                                  align="end"
+                                  portal
+                                  anchor={(
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      icon={<IconChevronDownOutline14 size={14} />}
+                                      onClick={() => setSizeOpen(o => !o)}
+                                    >{t('perPage') + ' ' + pageSize}</Button>
+                                  )}
+                                  items={PAGE_SIZES.map(size => ({ id: String(size), label: String(size) }))}
+                                />
+                              </div>
                             </div>
                           </>
                         )}

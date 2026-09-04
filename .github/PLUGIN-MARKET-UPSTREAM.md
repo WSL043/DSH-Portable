@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.40.0`
-(`ad3548f47775c0e4dba3d61cd874ffbc9804f8c7`).
+Reviewed upstream baseline: `dsh-market` `v1.41.0`
+(`f064d182d05559c8d55edc0230bf0411427e2f97`).
 
 ## Compatibility matrix
 
@@ -37,6 +37,9 @@ Reviewed upstream baseline: `dsh-market` `v1.40.0`
 | Accept catalog entries with more than one category | Adopted |
 | Check GitHub-only updates through the unmetered git ref advertisement | Adopted; still honors the configured proxy path |
 | Preserve the selected GitHub branch/tag across update detection and update action | Adopted; commit pins still re-resolve, branch/tag and monorepo `path:` stay selected, and exact rollback replaces the floating ref with the captured commit |
+| Normalize scheme-less proxy settings before constructing the HTTP agent | Adopted; common Windows and npm `host:port` values become explicit `http://` URLs while configured schemes stay unchanged |
+| Split adjacent Han and Latin/number search boundaries | Adopted; compact mixed-script queries match their spaced catalog text without plugin-specific aliases |
+| Keep the Discover pager compact inside the settings column | Adopted; the bounded page window and single-row desktop layout retain first/last numbered pages, with a two-row narrow fallback |
 | Treat an unlocatable in-box bundle as unknown and ignore a stale direct profile shadow | Adopted; unresolved community bundles remain boot errors |
 | Verify the npm version actually resolved after update and roll back downgrades or target mismatches | Adopted; an explicit channel switch may move backwards only to its resolved target |
 | Preserve a selected market channel across plugin toggle and group writes | Adopted; partial state writers keep fields they do not own |
@@ -65,6 +68,11 @@ Reviewed upstream baseline: `dsh-market` `v1.40.0`
 | Offer online updates for local `file:` installs and settings deep links | Deferred; useful expansion, not an installation-safety fix for the beginner path |
 | Restore local development links to catalog sources | Deferred; useful for plugin authors but outside the beginner install path |
 | Personal notes, update-note previews, plugin discussions, and public update APIs | Deferred; these are product expansion rather than Portable safety fixes |
+| Favorites and stale-bookmark management | Deferred; useful discovery expansion, not a compatibility or installation-safety fix |
+| Discovery-time DSH host-version filtering | Deferred; validate registry-call volume, cache behavior, and the official compatibility contract before adding another network-backed verdict |
+| Per-service GitHub public-proxy fallback and a persisted custom prefix | Deferred; requires separate live route, TLS, payload-validation, and privacy review rather than copying public proxy defaults |
+| Migrate historical Git installs to a catalog-declared npm package | Deferred; changing source and publisher needs a separate product contract and finished-product rollback proof |
+| Canonicalize upstream market plugin pages to its catalog site | Not applicable; Portable has no mirrored per-plugin public website pages |
 | Third-party desktop-host compatibility branches | Reviewed only when they affect the official DSH contract |
 
 When `dsh-market` publishes a newer release, review its user-visible fixes
