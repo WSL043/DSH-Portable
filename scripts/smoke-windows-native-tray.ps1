@@ -171,6 +171,7 @@ function Test-NativeTaskNotification {
     # same activation id must be delivered once and an expired action rejected.
     $InstanceKey = $WindowType.GetMethod('ResolveEnvironmentInstanceKey', $AllFields).Invoke($null, @($ResolvedRoot, 'default'))
     $RootKey = $WindowType.GetMethod('ResolveEnvironmentInstanceKey', $AllFields).Invoke($null, @($ResolvedRoot, 'notification-root'))
+    $NativeNotificationType.GetMethod('ConfigureOwner', $AllFields).Invoke($null, @($ResolvedRoot, 'default', $InstanceKey)) | Out-Null
     $RootMap = [Microsoft.Win32.Registry]::CurrentUser.CreateSubKey("Software\WSL043\DSH-Portable\NotificationRoots\$RootKey")
     try {
         $RootMap.SetValue('Root', $ResolvedRoot, [Microsoft.Win32.RegistryValueKind]::String)
@@ -190,7 +191,7 @@ function Test-NativeTaskNotification {
     $ExpiredActivation = "action=open;sessionId=$sessionId;environmentId=default;instanceKey=$InstanceKey;rootKey=$RootKey;activationId=$ExpiredId;createdAt=$ExpiredAt"
     $NativeNotificationType.GetMethod('DispatchActivation', $AllFields).Invoke($null, @($ExpiredActivation, $null)) | Out-Null
     $pendingActions = $WindowType.GetField('pendingNotificationActions', $AllFields).GetValue($Window)
-    if ($pendingActions.Count -ne 1) { throw 'Environment notification inbox did not deduplicate or reject expiry' }
+    if ($pendingActions.Count -ne 1) { throw "Environment notification inbox did not deduplicate or reject expiry (pending=$($pendingActions.Count))" }
     $pendingOpen = $pendingActions.Dequeue()
     if ($pendingOpen.Item1 -ne $ActivationId -or $pendingOpen.Item2 -ne 'open' -or $pendingOpen.Item3 -ne $sessionId) {
         throw 'Environment notification inbox did not deliver to the exact owner'
