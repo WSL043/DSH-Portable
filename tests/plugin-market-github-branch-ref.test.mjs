@@ -38,14 +38,16 @@ test('GitHub update checks follow a selected branch but not an immutable pin', (
 test('git advertisement lookup resolves the exact selected ref', () => {
   const branchCommit = 'a'.repeat(40)
   const otherCommit = 'b'.repeat(40)
+  const peeledTagCommit = 'd'.repeat(40)
   const payload = [
     `${otherCommit} HEAD`,
     `${branchCommit} refs/heads/release.1`,
     `${otherCommit} refs/heads/releaseX1`,
     `${otherCommit} refs/tags/v2.0.0`,
+    `${peeledTagCommit} refs/tags/v2.0.0^{}`,
   ].join('\n')
   assert.equal(updatesModule.parseGitRefAdvertisement(payload, 'release.1'), branchCommit)
-  assert.equal(updatesModule.parseGitRefAdvertisement(payload, 'v2.0.0'), otherCommit)
+  assert.equal(updatesModule.parseGitRefAdvertisement(payload, 'v2.0.0'), peeledTagCommit)
   assert.equal(updatesModule.parseGitRefAdvertisement(payload, 'release'), null)
   assert.equal(updatesModule.parseGitRefAdvertisement(payload), otherCommit)
 })

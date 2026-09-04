@@ -139,10 +139,14 @@ export function parseGitHeadAdvertisement(payload: string): string | null {
 export function parseGitRefAdvertisement(payload: string, ref?: string): string | null {
   if (ref === undefined) return parseGitHeadAdvertisement(payload)
   const quoted = ref.replace(/[.*+?^${}()|[\]\\]/gu, String.raw`\$&`)
-  for (const namespace of ['heads', 'tags']) {
-    const found = new RegExp(String.raw`([0-9a-f]{40}) refs/${namespace}/${quoted}(?![^\s])`, 'u').exec(payload)
-    if (found !== null) return found[1]!
-  }
+  const branch = new RegExp(String.raw`([0-9a-f]{40}) refs/heads/${quoted}(?![^\s])`, 'u').exec(payload)
+  if (branch !== null) return branch[1]!
+  // Annotated tags advertise both the tag object and its peeled commit.
+  // Compare the installed commit with the peeled target when it is present.
+  const peeledTag = new RegExp(String.raw`([0-9a-f]{40}) refs/tags/${quoted}\^\{\}(?![^\s])`, 'u').exec(payload)
+  if (peeledTag !== null) return peeledTag[1]!
+  const tag = new RegExp(String.raw`([0-9a-f]{40}) refs/tags/${quoted}(?![^\s])`, 'u').exec(payload)
+  if (tag !== null) return tag[1]!
   return null
 }
 
