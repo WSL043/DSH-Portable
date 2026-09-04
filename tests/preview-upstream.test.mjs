@@ -115,3 +115,22 @@ test('preview footprint has a separate reviewed budget without weakening stable 
     )
   }
 })
+
+test('promoted stable source packs retain realistic headroom from candidate qualification', async () => {
+  const [stableLock, previewLock, stable, preview] = await Promise.all([
+    readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
+    readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
+    readFile(path.join(root, 'config', 'footprint-budgets.json'), 'utf8').then(JSON.parse),
+    readFile(path.join(root, 'config', 'footprint-budgets-preview.json'), 'utf8').then(JSON.parse),
+  ])
+  assert.equal(stableLock.dsh.version, previewLock.dsh.version)
+  assert.equal(stableLock.dsh.reviewedCommit, previewLock.dsh.reviewedCommit)
+  for (const platform of Object.keys(preview.platforms)) {
+    for (const metric of ['archiveBytes', 'extractedBytes', 'files', 'directories', 'items']) {
+      assert.ok(
+        stable.platforms[platform][metric] >= preview.platforms[platform][metric] * 0.95,
+        `${platform} stable ${metric} budget must retain at least 95% of its qualified candidate headroom`,
+      )
+    }
+  }
+})
