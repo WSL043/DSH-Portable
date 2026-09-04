@@ -140,7 +140,20 @@ const clickButton = names => `(() => {
     const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
     return Boolean(point && (point === item || item.contains(point)))
   })
-  if (!button) return { clicked: false, labels: [...document.querySelectorAll('button,[role="button"]')].slice(0, 80).map(item => (item.textContent || item.getAttribute('aria-label') || '').trim()) }
+  if (!button) {
+    const matches = [...document.querySelectorAll('button,[role="button"]')]
+      .filter(item => names.includes(((item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || '')).trim()))
+      .map(item => {
+        const rect = item.getBoundingClientRect()
+        const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+        const chain = []
+        for (let current = point; current && chain.length < 5; current = current.parentElement) {
+          chain.push({ tag: current.tagName, className: String(current.className || '').slice(0, 160), text: (current.textContent || '').trim().slice(0, 80) })
+        }
+        return { rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, point: chain }
+      })
+    return { clicked: false, matches, labels: [...document.querySelectorAll('button,[role="button"]')].slice(0, 80).map(item => (item.textContent || item.getAttribute('aria-label') || '').trim()) }
+  }
   button.click()
   return { clicked: true }
 })()`
@@ -346,7 +359,18 @@ try {
 
   const more = await evaluate(client, clickButton(['更多', 'More']))
   assert.equal(more.clicked, true, `maintenance menu unavailable: ${JSON.stringify(more)}`)
-  await waitForValue(client, clickChoice(['导出支持报告', 'Export support report']), value => value?.clicked, 'support report action')
+  const supportAction = await waitForValue(client, `(() => {
+    const names = new Set(${JSON.stringify(['导出支持报告', 'Export support report'])})
+    const target = [...document.querySelectorAll('[role="menuitem"],[role="option"],[data-radix-collection-item],button')]
+      .find(item => names.has((item.textContent || '').trim()))
+    if (!target) return null
+    const rect = target.getBoundingClientRect()
+    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
+    if (!point || (point !== target && !target.contains(point))) return null
+    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
+  })()`, value => Number.isFinite(value?.x) && Number.isFinite(value?.y), 'support report action')
+  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: supportAction.x, y: supportAction.y, button: 'left', clickCount: 1 })
+  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: supportAction.x, y: supportAction.y, button: 'left', clickCount: 1 })
   const supportReport = await waitForSupportReport()
   assert.equal(existsSync(supportReport), true)
 
@@ -356,15 +380,12 @@ try {
     return Boolean(target)
   })()`)
   await new Promise(resolve => setTimeout(resolve, 150))
-  const privateTarget = await evaluate(client, `(() => {
-    const target = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出加密私密包|Export encrypted private package)$/.test((item.textContent || '').trim()))
-    if (!target) return { found: false }
-    const rect = target.getBoundingClientRect()
-    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-    return { found: true, rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, point: point?.outerHTML?.slice(0, 300) || '' }
-  })()`)
-  const privateOpen = await evaluate(client, clickButton(['导出加密私密包', 'Export encrypted private package']))
-  assert.equal(privateOpen.clicked, true, `private export action unavailable: ${JSON.stringify({ privateOpen, privateTarget })}`)
+  await waitForValue(
+    client,
+    clickButton(['导出加密私密包', 'Export encrypted private package']),
+    value => value?.clicked,
+    'private export action after transient settings overlays close',
+  )
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /导出加密私密包|Export encrypted private package/.test(item.textContent || '')))`, Boolean, 'private export dialog')
   const privateGeometry = await evaluate(client, `(() => {
     const dialog = [...document.querySelectorAll('[role="dialog"]')].find(item => /导出加密私密包|Export encrypted private package/.test(item.textContent || ''))

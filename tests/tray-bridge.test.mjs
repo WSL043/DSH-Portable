@@ -207,6 +207,14 @@ test('Portable registers its owned workspace only for a truly empty first run', 
   assert.equal(emptyReadyRuntime.createdWorkspaces.length, 1)
   assert.equal(emptyReadyRuntime.createdWorkspaces[0].path, 'C:\\Portable\\workspace')
   assert.deepEqual(emptyReadyRuntime.startedWorkspaces, ['portable-workspace'])
+
+  const danglingCurrent = fakeContext({ ids: [], byId: {}, current: '', phase: 'ready' })
+  assert.equal((await client.exports.ensurePortableWorkspace(danglingCurrent.ctx, 'C:\\Portable\\workspace')).status, 'created')
+  assert.equal(danglingCurrent.createdWorkspaces.length, 1)
+
+  const activeSession = fakeContext({ ids: ['session-1'], byId: { 'session-1': { id: 'session-1' } }, current: 'session-1', phase: 'ready' })
+  assert.equal((await client.exports.ensurePortableWorkspace(activeSession.ctx, 'C:\\Portable\\workspace')).status, 'preserved')
+  assert.deepEqual(activeSession.createdWorkspaces, [])
 })
 
 test('Portable desktop bridge owns workspace picking through the WebView host and restores the runtime on dispose', async () => {
