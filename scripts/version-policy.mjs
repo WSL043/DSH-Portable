@@ -2,23 +2,28 @@ import { pathToFileURL } from 'node:url'
 
 export function classifyProductVersion(value) {
   const version = String(value ?? '').trim()
-  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-rc\.([1-9]\d*))?$/.exec(version)
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(alpha|beta|rc)\.([1-9]\d*))?$/.exec(version)
   if (!match) {
-    throw new Error(`${version || '<empty>'} is not a supported stable or release-candidate version.`)
+    throw new Error(`${version || '<empty>'} is not a supported stable, alpha, beta, or release-candidate version.`)
   }
   const numbers = match.slice(1, 4).map(Number)
-  const releaseCandidate = match[4] ? Number(match[4]) : null
-  if (numbers.some((part) => part > 65534) || (releaseCandidate !== null && releaseCandidate > 65533)) {
-    throw new Error(`${version} is outside the supported stable or release-candidate version range.`)
+  const stage = match[4] ?? 'stable'
+  const prereleaseNumber = match[5] ? Number(match[5]) : null
+  if (numbers.some((part) => part > 65534) || (prereleaseNumber !== null && prereleaseNumber > 199)) {
+    throw new Error(`${version} is outside the supported stable, alpha, beta, or release-candidate version range.`)
   }
+  const channel = stage === 'stable' ? 'stable' : 'candidate'
+  const windowsStageBase = { alpha: 10000, beta: 30000, rc: 50000 }
+  const macStageBase = { alpha: 100, beta: 400, rc: 700 }
   return {
     version,
     tag: `v${version}`,
-    channel: releaseCandidate === null ? 'stable' : 'candidate',
-    updateChannelTag: `update-channel-${releaseCandidate === null ? 'stable' : 'candidate'}`,
-    prerelease: releaseCandidate !== null,
-    windowsVersion: `${numbers.join('.')}.${releaseCandidate ?? 65534}`,
-    macBuildVersion: String(numbers[0] * 1_000_000_000 + numbers[1] * 1_000_000 + numbers[2] * 1000 + (releaseCandidate ?? 999)),
+    channel,
+    stage,
+    updateChannelTag: `update-channel-${channel}`,
+    prerelease: stage !== 'stable',
+    windowsVersion: `${numbers.join('.')}.${stage === 'stable' ? 65534 : windowsStageBase[stage] + prereleaseNumber}`,
+    macBuildVersion: String(numbers[0] * 1_000_000_000 + numbers[1] * 1_000_000 + numbers[2] * 1000 + (stage === 'stable' ? 999 : macStageBase[stage] + prereleaseNumber)),
   }
 }
 

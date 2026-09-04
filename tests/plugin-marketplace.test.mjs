@@ -10,8 +10,8 @@ const root = path.resolve(import.meta.dirname, '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 
 function caretPrereleaseRangeCovers(range, version) {
-  const rangeMatch = /^\^(\d+)\.(\d+)\.(\d+)-(rc|alpha)\.(\d+)$/.exec(range)
-  const versionMatch = /^(\d+)\.(\d+)\.(\d+)-(rc|alpha)\.(\d+)$/.exec(version)
+  const rangeMatch = /^\^(\d+)\.(\d+)\.(\d+)-(alpha|beta|rc)\.(\d+)$/.exec(range)
+  const versionMatch = /^(\d+)\.(\d+)\.(\d+)-(alpha|beta|rc)\.(\d+)$/.exec(version)
   if (!rangeMatch || !versionMatch) return false
   return rangeMatch.slice(1, 5).every((part, index) => part === versionMatch[index + 1])
     && Number(versionMatch[5]) >= Number(rangeMatch[5])
@@ -25,7 +25,7 @@ test('the bundled market peer ranges cover each verified official DSH channel', 
   ])
   const ranges = manifest.peerDependencies['@deepseek-ai/dsh-settings'].split(/\s*\|\|\s*/)
   assert.equal(new Set(ranges).size, ranges.length)
-  assert.ok(ranges.every(range => /^\^\d+\.\d+\.\d+-(?:rc|alpha)\.\d+$/.test(range)))
+  assert.ok(ranges.every(range => /^\^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/.test(range)))
   assert.ok(ranges.some(range => caretPrereleaseRangeCovers(range, upstream.dsh.version)))
   assert.ok(ranges.some(range => caretPrereleaseRangeCovers(range, preview.dsh.version)))
 })
@@ -82,7 +82,7 @@ test('the current product line pins one live visual catalog and no curated exten
     read('README.en.md'),
   ])
 
-  assert.match(product.version, /^0\.[456]\.\d+(?:-rc\.[1-9]\d*)?$/)
+  assert.match(product.version, /^0\.[456]\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/)
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(app.dependencies.dshmarket, undefined)
 

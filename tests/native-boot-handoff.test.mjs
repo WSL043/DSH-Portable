@@ -63,4 +63,7 @@ test('Windows keeps the native fallback invisible until the real DSH boot surfac
   assert.match(bootReveal, /dsh-boot-surface-visible/)
   assert.match(bootReveal, /ShowInTaskbar\s*=\s*true/)
   assert.match(bootReveal, /Opacity\s*=\s*1/)
+  const bootMessage = source.slice(source.indexOf('dsh-portable/boot-visible'), source.indexOf('dsh-portable/surface-ready'))
+  assert.match(bootMessage, /RevealDesktopBootSurface\(\);/)
+  assert.doesNotMatch(bootMessage, /BeginInvoke\([^\n]+RevealDesktopBootSurface/)
 })

@@ -573,7 +573,7 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(build, /System\.Web\.Extensions\.dll/)
 })
 
-test('Windows task completion notifications are actionable, expandable, badged, and user-controlled', async () => {
+test('Windows task completion notifications use the native action center with exact-session reply and a taskbar badge', async () => {
   const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
 
   assert.match(source, /public bool completed \{ get; set; \}/)
@@ -622,25 +622,36 @@ test('Windows task completion notifications are actionable, expandable, badged, 
   const notification = source.slice(notificationStart, notificationEnd)
   assert.match(notification, /trayIcon\.Visible = true/)
   assert.match(notification, /sessions\.Take\(3\)/)
-  assert.match(notification, /new TaskCompletionNotification/)
-  assert.match(notification, /notification\.ReplyRequested[\s\S]+PostBridgeReply/)
-  assert.match(source, /TaskCompletionNotification/)
+  assert.match(notification, /NativeTaskNotification\.Show/)
+  assert.doesNotMatch(source, /TaskCompletionNotification\s*:\s*Form|new\s+TaskCompletionNotification|List<TaskCompletionNotification>/, 'completion alerts must not fall back to a self-drawn WinForms window')
+  assert.match(source, /NativeTaskNotification\.Unregister\(\)/, 'native toast activation must be detached during host shutdown')
+  assert.match(source, /ToastNotificationManagerCompat\.Uninstall\(\)[\s\S]+CleanupFixedIdentity/, 'Toolkit-owned AUMID/COM/assets must use the official cleanup entry point')
+  assert.match(source, /internal static bool TryParseActivation\([\s\S]+IEnumerable<KeyValuePair<string, object>> userInput/, 'activation parsing must be a testable pure function')
+  assert.match(source, /reply\.Length == 0 \|\| reply\.Length > 8000[\s\S]+return false/, 'invalid inline replies must be rejected instead of silently forwarded')
+  assert.doesNotMatch(source, /GetMethod\("Add"\)|ToastActivationProbe|ValueSetProbe/, 'activation handling must not depend on the unsafe WinRT probe reflection path')
+  assert.match(source, /DeleteSubKeyTree\(aumidPath,\s*false\)/, 'only the product-owned fixed AUMID may be removed directly')
+  assert.match(source, /ToastNotificationManagerCompat\.OnActivated/)
+  assert.match(source, /ToastArguments\.Parse/)
+  assert.match(source, /AddInputTextBox\("reply"/)
+  assert.match(source, /SetTextBoxId\("reply"\)/)
+  assert.match(source, /QueueNotificationAction[\s\S]+PostBridgeReply/)
   assert.match(source, /finalReply/)
   assert.match(source, /reply-session/)
   assert.match(source, /TaskbarList|SetOverlayIcon/)
   assert.match(source, /unreadCompletedSessions/)
-  assert.match(source, /MouseEnter[\s\S]+Expand/)
+  assert.match(source, /AddText\([\s\S]*finalReply/)
   assert.doesNotMatch(source, /Console\.Write.*finalReply|Log.*finalReply/)
   assert.match(source, /MarkTaskCompletionHandled\(sessionId\)[\s\S]+PostBridgeAction\("open-session", sessionId\)/)
 })
 
-test('Windows native smoke exercises compiled notification hover expansion and exact-session reply', async () => {
+test('Windows native smoke exercises a real action-center notification and exact-session reply', async () => {
   const smoke = await readFile(new URL('../scripts/smoke-windows-native-tray.ps1', import.meta.url), 'utf8')
-  assert.match(smoke, /TaskCompletionNotification/)
-  assert.match(smoke, /OnMouseEnter/)
-  assert.match(smoke, /bodyFull/)
-  assert.match(smoke, /ReplyRequested/)
-  assert.match(smoke, /SubmitReply/)
+  assert.match(smoke, /NativeTaskNotification/)
+  assert.match(smoke, /ToastNotificationManagerCompat/)
+  assert.match(smoke, /reply/)
+  assert.match(smoke, /sessionId/)
+  assert.match(smoke, /CopyFromScreen|capture/i)
+  assert.doesNotMatch(smoke, /TaskCompletionNotification\s*:\s*Form|OnMouseEnter|bodyFull|ReplyRequested/, 'the native smoke must not exercise the removed WinForms notification')
 })
 
 test('Windows CI verifies the real tray bridge in a background browser without desktop input', async () => {

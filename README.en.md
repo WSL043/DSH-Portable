@@ -133,7 +133,7 @@ Plugins that can be mounted safely take effect immediately, while client-only pl
 ## Updates and repair
 
 - DSH-Portable opens the local workspace first, then checks in the background. Product updates and official DeepSeek Harness core updates are independent, and **Check for updates at startup** is off by default for both; enable or run either one from **Settings → General → Portable**.
-- Choose the **Stable** or **Beta** update channel. Stable is intended for daily use; Beta receives preview builds only after Portable finished-product verification. Switching channels never downgrades the installed version.
+- Choose the **Stable** or **Candidate** update channel. Stable is intended for daily use; Candidate carries Alpha, Beta, or RC builds according to their actual maturity, after the matching Portable finished-product gates pass. Switching channels never downgrades the installed version. See the [release-stage policy](docs/release-policy.md).
 - The tray also exposes both manual checks. Network checking, waiting for a decision, and applying an update are separate states, so the menu does not remain stuck on “Checking”.
 - Every prompt names the target—DSH-Portable or DeepSeek Harness—and shows that target's current and next version.
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.

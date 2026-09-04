@@ -587,8 +587,9 @@ test('moving the whole folder migrates only its owned workspace references', asy
 
   const sessionDir = path.join(first.dshHome, 'sessions', projectKey(first.workspace), 'session-one')
   await mkdir(sessionDir, { recursive: true })
-  const sessionBytes = Buffer.from(`${JSON.stringify({ type: 'session', version: 1, id: 'session-one', createdAt: 1, cwd: first.workspace, delegationDepth: 0 })}\n${JSON.stringify({ type: 'event', text: first.workspace })}\n`)
-  await writeFile(path.join(sessionDir, 'session.jsonl.zstd'), zstdCompressSync(sessionBytes))
+  const headerFrame = zstdCompressSync(Buffer.from(`${JSON.stringify({ type: 'session', version: 0, id: 'session-one', createdAt: 1, cwd: first.workspace, isSeeded: false, delegationDepth: 0 })}\n`))
+  const eventFrame = zstdCompressSync(Buffer.from(`${JSON.stringify({ type: 'event', text: first.workspace })}\n`))
+  await writeFile(path.join(sessionDir, 'session.jsonl.zstd'), Buffer.concat([headerFrame, eventFrame]))
 
   await rename(firstRoot, movedRoot)
   const moved = layoutForRoot(movedRoot)
@@ -600,7 +601,8 @@ test('moving the whole folder migrates only its owned workspace references', asy
   assert.equal(workspaceStore.tables.workspaces.external.path, 'C:\\External Project')
 
   const migratedFile = path.join(moved.dshHome, 'sessions', projectKey(moved.workspace), 'session-one', 'session.jsonl.zstd')
-  const decoded = zstdDecompressSync(await readFile(migratedFile)).toString('utf8').trim().split('\n').map(JSON.parse)
-  assert.equal(decoded[0].cwd, moved.workspace)
-  assert.equal(decoded[1].text, first.workspace, 'historical message content is not rewritten')
+  const migratedBytes = await readFile(migratedFile)
+  const secondFrame = migratedBytes.indexOf(Buffer.from([0x28, 0xB5, 0x2F, 0xFD]), 4)
+  assert.equal(JSON.parse(zstdDecompressSync(migratedBytes.subarray(0, secondFrame)).toString('utf8')).cwd, moved.workspace)
+  assert.equal(JSON.parse(zstdDecompressSync(migratedBytes.subarray(secondFrame)).toString('utf8')).text, first.workspace, 'historical message content is not rewritten')
 })

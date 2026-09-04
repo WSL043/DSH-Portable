@@ -41,10 +41,20 @@ test('bot dependency branches run without pull-request workflow approval and mer
   assert.match(ci, /name:\s*Product qualification/)
   assert.match(ci, /if:\s*\$\{\{ always\(\) \}\}/)
   assert.match(ci, /toJSON\(needs\)/)
-  assert.match(ci, /every\(\(\{ result \}\) => result === 'success'\)/)
+  assert.match(ci, /eventName === 'pull_request'/)
   assert.match(merge, /workflow_run\.event == 'workflow_dispatch'/)
   assert.match(merge, /workflow_run\.name == 'Build and smoke test'/)
   assert.match(merge, /head_branch == 'automation\/verified-dependencies'/)
   assert.match(stableIntake, /actions:\s*write/)
   assert.match(stableIntake, /gh workflow run ci\.yml[^\n]+--ref "\$BRANCH"/)
+})
+
+test('pull requests use one contract runner while main retains full product qualification', async () => {
+  const ci = await read('.github/workflows/ci.yml')
+
+  assert.match(ci, /preview-packed-runtime:\s*\n\s+name:[^\n]+\n\s+if:\s*\$\{\{ github\.event_name != 'pull_request' \}\}/)
+  assert.match(ci, /include:\s*\$\{\{ fromJSON\(github\.event_name == 'pull_request'/)
+  assert.match(ci, /"runner":"ubuntu-22\.04","label":"linux-x64"/)
+  assert.match(ci, /EVENT_NAME:\s*\$\{\{ github\.event_name \}\}/)
+  assert.match(ci, /nonRequiredResults\.every\(result => result === 'skipped'\)/)
 })

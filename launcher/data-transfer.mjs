@@ -4,6 +4,8 @@ import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/
 import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
+import { projectKey, relocateSessionHeaderBytes } from './portable-core.mjs'
+
 const MAGIC_PLAIN = Buffer.from('DSHDAT1U')
 const MAGIC_ENCRYPTED = Buffer.from('DSHDAT1E')
 const FORMAT = 'dsh-portable-data'
@@ -136,6 +138,9 @@ function decodeArchive(bytes, password) {
 
 function validateDocument(document) {
   if (document?.format !== FORMAT || document?.version !== VERSION || !Array.isArray(document.files)) throw new Error('Unsupported data package format.')
+  if (document.portableWorkspace !== undefined && (typeof document.portableWorkspace !== 'string' || document.portableWorkspace.length === 0)) {
+    throw new Error('Invalid portable workspace metadata.')
+  }
   const categories = normalizeCategories(document.categories)
   if (document.files.length > MAX_FILES) throw new Error('Data package contains too many files.')
   const seen = new Set()
@@ -180,7 +185,14 @@ export async function createDataArchive(layout, output, options = {}) {
     if (sourceBytes > MAX_ARCHIVE_BYTES) throw new Error('Selected user data is too large for one data package.')
     files.push({ path: spec.archivePath, category: spec.category, bytes: bytes.length, sha256: sha256(bytes), data: bytes.toString('base64') })
   }
-  const document = { format: FORMAT, version: VERSION, createdAt: new Date().toISOString(), categories, files }
+  const document = {
+    format: FORMAT,
+    version: VERSION,
+    createdAt: new Date().toISOString(),
+    categories,
+    portableWorkspace: layout.workspace,
+    files,
+  }
   const compressed = gzipSync(Buffer.from(JSON.stringify(document)), { level: 6 })
   const archive = options.password ? encrypt(compressed, String(options.password)) : Buffer.concat([MAGIC_PLAIN, compressed])
   await mkdir(path.dirname(path.resolve(output)), { recursive: true })
@@ -224,6 +236,33 @@ async function safeTarget(root, relativePath) {
   return target
 }
 
+function replaceExactStrings(value, before, after) {
+  if (value === before) return after
+  if (Array.isArray(value)) return value.map(item => replaceExactStrings(item, before, after))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceExactStrings(item, before, after)]))
+  }
+  return value
+}
+
+function relocatePortableWorkspaceEntry(file, bytes, before, after) {
+  if (!before || before === after || file.category !== 'sessions') return { archivePath: file.path, bytes }
+  const sourcePrefix = `data/dsh-home/sessions/${projectKey(before)}/`
+  const targetPrefix = `data/dsh-home/sessions/${projectKey(after)}/`
+  const archivePath = file.path.startsWith(sourcePrefix) ? targetPrefix + file.path.slice(sourcePrefix.length) : file.path
+  if (file.path.startsWith('data/dsh-home/storages/') && file.path.endsWith('.json')) {
+    const parsed = JSON.parse(bytes.toString('utf8'))
+    return { archivePath, bytes: Buffer.from(`${JSON.stringify(replaceExactStrings(parsed, before, after), null, 2)}\n`, 'utf8') }
+  }
+  if (file.path.startsWith(sourcePrefix) && file.path.endsWith('/session.jsonl.zstd')) {
+    return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, true) }
+  }
+  if (file.path.startsWith(sourcePrefix) && file.path.endsWith('/session.jsonl')) {
+    return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, false) }
+  }
+  return { archivePath, bytes }
+}
+
 export async function restoreDataArchive(layout, filename, options = {}) {
   const conflict = options.conflict ?? 'keep'
   if (!['keep', 'replace'].includes(conflict)) throw new Error('Conflict mode must be keep or replace.')
@@ -239,6 +278,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   let unchanged = 0
   let replaced = 0
   let retainedGeneratedBackup = false
+  const restorePaths = new Set()
 
   async function prepareGeneratedPath(target) {
     const absolute = path.resolve(target)
@@ -277,14 +317,22 @@ export async function restoreDataArchive(layout, filename, options = {}) {
 
   try {
     for (const file of document.files) {
-      const bytes = Buffer.from(file.data, 'base64')
-      const target = await safeTarget(layout.stateRoot, file.path)
+      const relocated = relocatePortableWorkspaceEntry(
+        file,
+        Buffer.from(file.data, 'base64'),
+        document.portableWorkspace,
+        layout.workspace,
+      )
+      const bytes = relocated.bytes
+      if (restorePaths.has(relocated.archivePath)) throw new Error(`Duplicate relocated data package path: ${relocated.archivePath}`)
+      restorePaths.add(relocated.archivePath)
+      const target = await safeTarget(layout.stateRoot, relocated.archivePath)
       let rollback = null
       if (existsSync(target)) {
         const previous = await readFile(target)
-        if (sha256(previous) === file.sha256) { unchanged += 1; continue }
-        if (conflict === 'keep') { conflicts.push(file.path); continue }
-        rollback = await safeTarget(rollbackDirectory, file.path)
+        if (sha256(previous) === sha256(bytes)) { unchanged += 1; continue }
+        if (conflict === 'keep') { conflicts.push(relocated.archivePath); continue }
+        rollback = await safeTarget(rollbackDirectory, relocated.archivePath)
         await mkdir(path.dirname(rollback), { recursive: true })
         await writeFile(rollback, previous, { mode: 0o600 })
         replaced += 1
@@ -293,7 +341,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
       const temporary = `${target}.dsh-import-${process.pid}`
       await writeFile(temporary, bytes, { mode: 0o600 })
       await rename(temporary, target)
-      changed.push({ target, rollback, path: file.path, category: file.category })
+      changed.push({ target, rollback, path: relocated.archivePath, category: file.category })
       imported += 1
     }
     if (typeof options.validate === 'function') {
