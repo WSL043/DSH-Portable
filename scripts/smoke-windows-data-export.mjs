@@ -140,20 +140,7 @@ const clickButton = names => `(() => {
     const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
     return Boolean(point && (point === item || item.contains(point)))
   })
-  if (!button) {
-    const matches = [...document.querySelectorAll('button,[role="button"]')]
-      .filter(item => names.includes(((item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || '')).trim()))
-      .map(item => {
-        const rect = item.getBoundingClientRect()
-        const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-        const chain = []
-        for (let current = point; current && chain.length < 5; current = current.parentElement) {
-          chain.push({ tag: current.tagName, className: String(current.className || '').slice(0, 160), text: (current.textContent || '').trim().slice(0, 80) })
-        }
-        return { rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom }, point: chain }
-      })
-    return { clicked: false, matches, labels: [...document.querySelectorAll('button,[role="button"]')].slice(0, 80).map(item => (item.textContent || item.getAttribute('aria-label') || '').trim()) }
-  }
+  if (!button) return { clicked: false, labels: [...document.querySelectorAll('button,[role="button"]')].slice(0, 80).map(item => (item.textContent || item.getAttribute('aria-label') || '').trim()) }
   button.click()
   return { clicked: true }
 })()`
@@ -230,27 +217,50 @@ try {
   ])
   const { defaultPlugins } = await readProductDefaultPlugins()
   const fixtureLayout = layoutForRoot(importFixtureRoot, process.platform)
+  const fixtureSessionId = 'session-11111111-1111-4111-8111-111111111111'
+  const fixtureTimestamp = Date.parse('2026-09-04T00:00:00.000Z')
   const fixtureMarker = path.join(fixtureLayout.dshHome, '.agent-presets', 'import-smoke', 'agent.cordis.yml')
-  const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', projectKey(fixtureLayout.workspace), 'session-smoke', 'session.jsonl.zstd')
+  const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', projectKey(fixtureLayout.workspace), fixtureSessionId, 'session.jsonl.zstd')
+  const fixtureWorkspaceStorage = path.join(fixtureLayout.dshHome, 'storages', 'workspace.json')
   const fixtureProfile = path.join(fixtureLayout.dshHome, 'profiles', 'web')
+  await mkdir(fixtureLayout.workspace, { recursive: true })
   await mkdir(path.dirname(fixtureMarker), { recursive: true })
   await mkdir(path.dirname(fixtureSession), { recursive: true })
+  await mkdir(path.dirname(fixtureWorkspaceStorage), { recursive: true })
   await mkdir(fixtureProfile, { recursive: true })
   await writeFile(fixtureMarker, 'name: imported-by-native-ui-smoke\n')
+  const fixtureWorkspaceId = 'migration-workspace-smoke'
+  await writeFile(fixtureWorkspaceStorage, `${JSON.stringify({
+    unit: { name: 'workspace', version: 2 },
+    global: { initialized: true, workspaceIds: [fixtureWorkspaceId], archivedSessionIds: [] },
+    tables: {
+      workspaces: {
+        [fixtureWorkspaceId]: {
+          path: fixtureLayout.workspace,
+          title: 'Portable migration smoke',
+          sessionIds: [fixtureSessionId],
+          createdAt: '2026-09-04T00:00:00.000Z',
+          updatedAt: '2026-09-04T00:00:00.000Z',
+        },
+      },
+    },
+  }, null, 2)}\n`)
   const sessionHeader = Buffer.from(`${JSON.stringify({
     type: 'session',
     version: 0,
-    id: 'session-smoke',
-    createdAt: 1,
+    id: fixtureSessionId,
+    createdAt: fixtureTimestamp,
     cwd: fixtureLayout.workspace,
     delegationDepth: 0,
+    agentPreset: 'standard',
   })}\n`)
   const sessionEvents = Buffer.from([
-    { type: 'turn/start', seq: 0, time: 2, data: { turn: 0 } },
+    { type: 'turn/start', seq: 0, time: fixtureTimestamp + 1, data: { turn: 1 } },
+    { type: 'step/start', seq: 1, time: fixtureTimestamp + 2, data: { turn: 1, step: 1 } },
     {
       type: 'user/message',
-      seq: 1,
-      time: 3,
+      seq: 2,
+      time: fixtureTimestamp + 3,
       surfaceOp: 'append',
       data: {
         id: 'migration-user-message',
@@ -260,13 +270,23 @@ try {
       },
     },
     {
+      type: 'session/title',
+      seq: 3,
+      time: fixtureTimestamp + 4,
+      data: {
+        title: 'Portable migration proof',
+        messageSeqs: [2],
+        source: { kind: 'fallback' },
+      },
+    },
+    {
       type: 'assistant/message',
-      seq: 2,
-      time: 4,
+      seq: 4,
+      time: fixtureTimestamp + 5,
       surfaceOp: 'append',
       data: {
-        turn: 0,
-        step: 0,
+        turn: 1,
+        step: 1,
         message: {
           id: 'migration-assistant-message',
           role: 'assistant',
@@ -275,7 +295,8 @@ try {
         },
       },
     },
-    { type: 'turn/end', seq: 3, time: 5, data: { turn: 0, reason: { kind: 'completed' } } },
+    { type: 'step/end', seq: 5, time: fixtureTimestamp + 6, data: { turn: 1, step: 1 } },
+    { type: 'turn/end', seq: 6, time: fixtureTimestamp + 7, data: { turn: 1, reason: { kind: 'completed' } } },
   ].map(event => JSON.stringify(event)).join('\n') + '\n')
   const zstdOptions = { params: { [zlibConstants.ZSTD_c_checksumFlag]: 1 } }
   const fixtureSessionBytes = Buffer.concat([zstdCompressSync(sessionHeader, zstdOptions), zstdCompressSync(sessionEvents, zstdOptions)])
@@ -359,18 +380,7 @@ try {
 
   const more = await evaluate(client, clickButton(['更多', 'More']))
   assert.equal(more.clicked, true, `maintenance menu unavailable: ${JSON.stringify(more)}`)
-  const supportAction = await waitForValue(client, `(() => {
-    const names = new Set(${JSON.stringify(['导出支持报告', 'Export support report'])})
-    const target = [...document.querySelectorAll('[role="menuitem"],[role="option"],[data-radix-collection-item],button')]
-      .find(item => names.has((item.textContent || '').trim()))
-    if (!target) return null
-    const rect = target.getBoundingClientRect()
-    const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
-    if (!point || (point !== target && !target.contains(point))) return null
-    return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-  })()`, value => Number.isFinite(value?.x) && Number.isFinite(value?.y), 'support report action')
-  await client.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: supportAction.x, y: supportAction.y, button: 'left', clickCount: 1 })
-  await client.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: supportAction.x, y: supportAction.y, button: 'left', clickCount: 1 })
+  await waitForValue(client, clickChoice(['导出支持报告', 'Export support report']), value => value?.clicked, 'support report action')
   const supportReport = await waitForSupportReport()
   assert.equal(existsSync(supportReport), true)
 
@@ -489,13 +499,23 @@ try {
   await client.send('Page.enable')
   await waitForValue(client, 'document.readyState', value => value === 'complete', 'restarted DSH document readiness', 60000)
 
-  const openSession = await evaluate(client, `(() => {
-    const bridge = window.chrome?.webview
-    if (!bridge?.postMessage) return { posted: false }
-    bridge.postMessage({ type: 'dsh-portable/action', action: 'open-session', sessionId: 'session-smoke' })
-    return { posted: true }
-  })()`)
-  assert.equal(openSession.posted, true, 'the restarted WebView does not expose the native DSH bridge')
+  await waitForValue(
+    client,
+    `(() => {
+      const title = 'Portable migration proof'
+      const item = [...document.querySelectorAll('*')].find(candidate => {
+        if ((candidate.textContent || '').trim() !== title) return false
+        const rect = candidate.getBoundingClientRect()
+        return rect.width > 0 && rect.height > 0
+      })
+      if (!item) return { clicked: false }
+      item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
+      return { clicked: true }
+    })()`,
+    value => value?.clicked,
+    'migrated session is available in the restarted DSH session list',
+    60000,
+  )
   await waitForValue(
     client,
     'document.body?.innerText || ""',
@@ -512,9 +532,9 @@ try {
     'default plugins loaded through the restarted DSH surface',
     60000,
   )
-  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', projectKey(fixtureLayout.workspace), 'session-smoke', 'session.jsonl.zstd')
+  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', projectKey(fixtureLayout.workspace), fixtureSessionId, 'session.jsonl.zstd')
   const migratedSession = JSON.parse(zstdDecompressSync(await readFile(migratedSessionFile)).toString('utf8').split(/\r?\n/)[0])
-  assert.equal(migratedSession.id, 'session-smoke')
+  assert.equal(migratedSession.id, fixtureSessionId)
   const migratedPlugins = await Promise.all(defaultPlugins.map(async plugin => ({
     package: plugin.package,
     expectedVersion: plugin.version,
