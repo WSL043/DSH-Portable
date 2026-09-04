@@ -118,6 +118,12 @@ function fakeContext(initialSessions) {
         const item = listSnapshot.byId?.[id]
         if (!item) return undefined
         return {
+          session: {
+            async prompt(content, mode) {
+              sent.push({ sessionId: id, content: structuredClone(content), mode })
+              return item.promptResult ?? { ok: true }
+            },
+          },
           eventSource: {
             getSnapshot: () => ({ entries: item.events ?? [] }),
             subscribe(listener) {
@@ -408,7 +414,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   await new Promise(resolve => setImmediate(resolve))
   assert.deepEqual(runtime.opened, ['session-9'])
   assert.equal(runtime.cleared, 1)
-  assert.deepEqual(runtime.sent, [{ sessionId: 'session-9', text: '继续完善' }])
+  assert.deepEqual(runtime.sent, [{ sessionId: 'session-9', content: [{ type: 'text', text: '继续完善' }], mode: 'queue' }])
 
   client.send({
     type: 'dsh-portable/download',
@@ -544,12 +550,31 @@ test('notification delivery defers an absent session until the official list is 
     ids: ['late-session'], current: null, phase: 'ready',
     byId: { 'late-session': { id: 'late-session', blank: false, origin: 'user' } },
   })
+  runtime.ctx.sessions.scope = () => { throw new Error('conversation is not injected') }
   client.send(action)
   await new Promise(resolve => setImmediate(resolve))
-  assert.deepEqual(runtime.sent, [{ sessionId: 'late-session', text: 'continue' }])
+  assert.deepEqual(runtime.sent, [{ sessionId: 'late-session', content: [{ type: 'text', text: 'continue' }], mode: 'queue' }])
   assert.deepEqual(client.posted.at(-1), {
     type: 'dsh-portable/notification-action-result', activationId: 'c'.repeat(32), terminal: true,
   })
+
+  runtime.setSessions({
+    ids: ['late-session'], current: null, phase: 'ready',
+    byId: {
+      'late-session': {
+        id: 'late-session', blank: false, origin: 'user',
+        promptResult: { ok: false, error: { code: 'missing-key', message: 'Missing API key' } },
+      },
+    },
+  })
+  client.send({ ...action, activationId: 'd'.repeat(32), reply: 'retry once' })
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(runtime.sent.at(-1), {
+    sessionId: 'late-session', content: [{ type: 'text', text: 'retry once' }], mode: 'queue',
+  })
+  assert.deepEqual(client.posted.at(-1), {
+    type: 'dsh-portable/notification-action-result', activationId: 'd'.repeat(32), terminal: true,
+  }, 'a business failure after prompt admission must not be replayed')
 })
 
 test('task completion projection follows session events even when the list store does not publish', async () => {

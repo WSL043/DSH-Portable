@@ -1008,9 +1008,14 @@ window.__ModuleLoader__.load({
             const snapshot = ctx.sessions.list.getSnapshot()
             if (snapshot?.phase !== 'ready' && !snapshot.byId?.[sessionId]) { acknowledgeNotification(activationId, false); return }
             if (!snapshot.byId?.[sessionId] || snapshot.byId[sessionId].origin === 'subagent') { acknowledgeNotification(activationId, true); return }
-            const scoped = ctx.sessions.scope?.(sessionId)
-            if (typeof scoped?.conversation?.send !== 'function') { acknowledgeNotification(activationId, false); return }
-            void scoped.conversation.send(reply)
+            let session
+            try { session = ctx.sessions.binding?.(sessionId)?.session }
+            catch { acknowledgeNotification(activationId, false); return }
+            if (typeof session?.prompt !== 'function') { acknowledgeNotification(activationId, false); return }
+            void Promise.resolve().then(() => session.prompt([{ type: 'text', text: reply }], 'queue'))
+              .then(result => {
+                if (!result?.ok) throw new Error(`Session prompt failed: ${result?.error?.code || 'unknown'}`)
+              })
               .then(() => acknowledgeNotification(activationId, true))
               .catch(error => { console.warn('[dsh-portable] notification reply failed:', error); acknowledgeNotification(activationId, true) })
             return
