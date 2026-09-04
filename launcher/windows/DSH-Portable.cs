@@ -1514,7 +1514,7 @@ namespace DshPortable
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/boot-visible", StringComparison.Ordinal))
                 {
                     RecordWebViewPhase("boot-visible-message");
-                    BeginInvoke((MethodInvoker)RevealDesktopBootSurface);
+                    RevealDesktopBootSurface();
                     return;
                 }
                 if (message != null && message.TryGetValue("type", out messageType)
