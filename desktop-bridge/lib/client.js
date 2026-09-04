@@ -709,7 +709,7 @@ window.__ModuleLoader__.load({
         })
       }
       if ((snapshot.items || []).length > 0) return { status: 'preserved' }
-      if (ctx.sessions?.list?.getSnapshot?.().current !== undefined) return { status: 'preserved' }
+      if (ctx.sessions?.list?.getSnapshot?.().current != null) return { status: 'preserved' }
       const workspace = await ctx.workspaces.create({ path: target })
       if (workspace?.workspaceId && typeof ctx.workspaces.startSession === 'function') {
         ctx.workspaces.startSession(workspace.workspaceId)
