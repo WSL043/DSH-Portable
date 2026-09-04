@@ -508,32 +508,44 @@ try {
         return rect.width > 0 && rect.height > 0
       })
       if (visibleExactText('Portable migration proof')) return { ready: true, expanded: true }
-      const workspace = visibleExactText('Portable migration smoke')
+      const workspaceLabel = visibleExactText('Portable migration smoke')
+      const workspace = workspaceLabel?.closest('[role="treeitem"][aria-expanded]')
       if (!workspace) return { ready: false }
-      workspace.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
-      return { ready: true, expanded: false }
+      const expanded = workspace.getAttribute('aria-expanded') === 'true'
+      if (!expanded) workspace.click()
+      return { ready: true, expanded }
     })()`,
     value => value?.ready,
     'imported workspace is available in the restarted DSH workspace list',
     60000,
   )
-  await waitForValue(
-    client,
-    `(() => {
-      const title = 'Portable migration proof'
-      const item = [...document.querySelectorAll('*')].find(candidate => {
-        if ((candidate.textContent || '').trim() !== title) return false
-        const rect = candidate.getBoundingClientRect()
-        return rect.width > 0 && rect.height > 0
-      })
-      if (!item) return { clicked: false }
-      item.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }))
-      return { clicked: true }
-    })()`,
-    value => value?.clicked,
-    'migrated session is available in the restarted DSH session list',
-    60000,
-  )
+  try {
+    await waitForValue(
+      client,
+      `(() => {
+        const title = 'Portable migration proof'
+        const item = [...document.querySelectorAll('*')].find(candidate => {
+          if ((candidate.textContent || '').trim() !== title) return false
+          const rect = candidate.getBoundingClientRect()
+          return rect.width > 0 && rect.height > 0
+        })?.closest('[role="treeitem"]')
+        if (!item) return {
+          clicked: false,
+          treeitems: [...document.querySelectorAll('[role="treeitem"]')]
+            .slice(0, 40)
+            .map(row => ({ text: (row.textContent || '').trim(), expanded: row.getAttribute('aria-expanded') })),
+        }
+        item.click()
+        return { clicked: true }
+      })()`,
+      value => value?.clicked,
+      'migrated session is available in the restarted DSH session list',
+      60000,
+    )
+  } catch (error) {
+    await capture(client, '07-restored-session-list-failure.png')
+    throw error
+  }
   await waitForValue(
     client,
     'document.body?.innerText || ""',
