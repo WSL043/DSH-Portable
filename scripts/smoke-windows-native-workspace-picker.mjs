@@ -182,8 +182,8 @@ try {
   const launcherLog = existsSync(launcherLogPath) ? await readFile(launcherLogPath, 'utf8') : '(launcher.log is missing)'
   assert.match(launcherLog, /\[workspace-picker\] dialog-detected hwnd=\d+ owner=\d+ ownerTopMost=true class=\S+/)
   assert.match(launcherLog, /\[workspace-picker\] dialog-closed result=Cancel/)
-  assert.match(launcherLog, /\[data-export-dialog\] dialog-detected hwnd=\d+ owner=\d+ class=\S+/)
-  assert.match(launcherLog, /\[data-import-dialog\] dialog-detected hwnd=\d+ owner=\d+ class=\S+/)
+  assert.match(launcherLog, /\[data-export-dialog\] dialog-detected hwnd=\d+ owner=\d+ ownerTopMost=false class=\S+/)
+  assert.match(launcherLog, /\[data-import-dialog\] dialog-detected hwnd=\d+ owner=\d+ ownerTopMost=false class=\S+/)
   process.stdout.write(`${JSON.stringify({ status: 'passed', nativeDialog: true, workspace: 'cancelled', dataExport: 'cancelled', dataImport: 'cancelled' })}\n`)
 } finally {
   client?.close()
