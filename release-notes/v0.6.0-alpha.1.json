@@ -1,0 +1,21 @@
+{
+  "version": "0.6.0-alpha.1",
+  "zh": {
+    "summary": "0.6.0 开发线首个 Alpha，重点验证原生任务通知、迁移备份和默认插件兼容性。",
+    "highlights": [
+      "Windows 任务完成通知改用系统通知中心；本 Alpha 提供完整回复、原任务 inline Reply 和任务栏未读角标，供真实使用验证。",
+      "迁移与备份链路扩大成品验收范围，覆盖导出、加密导入、重启恢复、会话内容和插件状态。",
+      "全新安装仍只默认提供 Image Viewer 和现有 Chat Manager；两者都是可删除的普通插件，删除后不会自动装回。",
+      "本版本属于开发测试阶段，可能仍有明显问题，不应视为 Beta、RC 或正式稳定版。"
+    ]
+  },
+  "en": {
+    "summary": "The first 0.6.0 Alpha focuses on validating native task notifications, migration and backup, and default-plugin compatibility.",
+    "highlights": [
+      "Windows task completion alerts now use Action Center; this Alpha includes full results, originating-task inline Reply, and an unread taskbar badge for real-world validation.",
+      "Migration and backup product acceptance now covers export, encrypted import, restart recovery, session content, and plugin state.",
+      "Fresh installs still include only Image Viewer and the existing Chat Manager as ordinary removable plugins; removed defaults stay removed.",
+      "This is a development-stage build that may still contain significant issues. It is not a Beta, RC, or stable release."
+    ]
+  }
+}
