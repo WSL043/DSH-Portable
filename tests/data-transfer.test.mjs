@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict'
+import { existsSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from '../launcher/data-transfer.mjs'
-import { layoutForRoot } from '../launcher/portable-core.mjs'
+import { layoutForRoot, projectKey } from '../launcher/portable-core.mjs'
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-data-transfer-'))
@@ -94,6 +96,46 @@ test('restore keeps target conflicts by default and imports missing data', async
   assert.equal(await readFile(path.join(target.layout.dshHome, 'sessions', 'workspace-a', 'session-one', 'session.jsonl.zstd'), 'utf8'), 'session-one')
   assert.ok(result.conflicts.includes('data/dsh-home/settings.yaml'))
   assert.equal(await readFile(path.join(target.layout.dshHome, 'sessions', 'workspace-b', 'session-two', 'session.jsonl.zstd'), 'utf8'), 'target')
+})
+
+test('restore relocates the source portable workspace without rewriting historical event text', async () => {
+  const source = await fixture()
+  const sessionId = 'session-11111111-1111-4111-8111-111111111111'
+  const workspaceStore = path.join(source.layout.dshHome, 'storages', 'workspace.json')
+  const projectionStore = path.join(source.layout.dshHome, 'storages', 'session_projcache.json')
+  const sourceSession = path.join(source.layout.dshHome, 'sessions', projectKey(source.layout.workspace), sessionId, 'session.jsonl.zstd')
+  const externalWorkspace = path.join(source.root, 'external-project')
+  await mkdir(path.dirname(sourceSession), { recursive: true })
+  await mkdir(path.dirname(workspaceStore), { recursive: true })
+  await writeFile(workspaceStore, `${JSON.stringify({ workspaces: {
+    portable: { path: source.layout.workspace },
+    external: { path: externalWorkspace },
+  } })}\n`)
+  await writeFile(projectionStore, `${JSON.stringify({ sessions: { [sessionId]: { cwd: source.layout.workspace } } })}\n`)
+  const header = `${JSON.stringify({ type: 'session', id: sessionId, cwd: source.layout.workspace })}\n`
+  const events = `${JSON.stringify({ type: 'user/message', data: { content: `historical ${source.layout.workspace}` } })}\n`
+  const eventFrame = zstdCompressSync(Buffer.from(events))
+  await writeFile(sourceSession, Buffer.concat([zstdCompressSync(Buffer.from(header)), eventFrame]))
+
+  const output = path.join(source.layout.root, 'portable-workspace.dshdata')
+  await createDataArchive(source.layout, output, { categories: ['sessions'] })
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-data-transfer-relocated-'))
+  const target = layoutForRoot(targetRoot, process.platform)
+  await restoreDataArchive(target, output)
+
+  const targetSession = path.join(target.dshHome, 'sessions', projectKey(target.workspace), sessionId, 'session.jsonl.zstd')
+  assert.equal(existsSync(path.join(target.dshHome, 'sessions', projectKey(source.layout.workspace))), false)
+  const restoredWorkspaces = JSON.parse(await readFile(workspaceStore.replace(source.layout.dshHome, target.dshHome), 'utf8')).workspaces
+  assert.equal(restoredWorkspaces.portable.path, target.workspace)
+  assert.equal(restoredWorkspaces.external.path, externalWorkspace)
+  assert.equal(JSON.parse(await readFile(projectionStore.replace(source.layout.dshHome, target.dshHome), 'utf8')).sessions[sessionId].cwd, target.workspace)
+  const restoredBytes = await readFile(targetSession)
+  const restoredHeader = JSON.parse(zstdDecompressSync(restoredBytes).toString('utf8').trim())
+  assert.equal(restoredHeader.cwd, target.workspace)
+  assert.equal(restoredBytes.subarray(-eventFrame.length).equals(eventFrame), true)
+  const repeated = await restoreDataArchive(target, output)
+  assert.deepEqual(repeated.conflicts, [])
+  assert.equal(repeated.unchanged, 4)
 })
 
 test('restore can explicitly replace conflicts after creating a rollback snapshot', async () => {

@@ -274,6 +274,7 @@ try {
     id: fixtureSessionId,
     createdAt: fixtureTimestamp,
     cwd: fixtureLayout.workspace,
+    isSeeded: false,
     delegationDepth: 0,
     agentPreset: 'standard',
   })}\n`)
@@ -522,26 +523,41 @@ try {
   await client.send('Page.enable')
   await waitForValue(client, 'document.readyState', value => value === 'complete', 'restarted DSH document readiness', 60000)
 
-  await waitForValue(
-    client,
-    `(() => {
-      const visibleExactText = text => [...document.querySelectorAll('*')].find(candidate => {
-        if ((candidate.textContent || '').trim() !== text) return false
-        const rect = candidate.getBoundingClientRect()
-        return rect.width > 0 && rect.height > 0
-      })
-      if (visibleExactText('Portable migration proof')) return { ready: true, expanded: true }
-      const workspaceLabel = visibleExactText('Portable migration smoke')
-      const workspace = workspaceLabel?.closest('[role="treeitem"][aria-expanded]')
-      if (!workspace) return { ready: false }
-      const expanded = workspace.getAttribute('aria-expanded') === 'true'
-      if (!expanded) workspace.click()
-      return { ready: true, expanded }
-    })()`,
-    value => value?.ready,
-    'imported workspace is available in the restarted DSH workspace list',
-    60000,
-  )
+  try {
+    await waitForValue(
+      client,
+      `(() => {
+        const visibleExactText = text => [...document.querySelectorAll('*')].find(candidate => {
+          if ((candidate.textContent || '').trim() !== text) return false
+          const rect = candidate.getBoundingClientRect()
+          return rect.width > 0 && rect.height > 0
+        })
+        if (visibleExactText('Portable migration proof')) return { ready: true, expanded: true }
+        const workspace = [...document.querySelectorAll('[role="treeitem"][aria-expanded]')].find(candidate => {
+          if ((candidate.textContent || '').trim() !== 'Portable migration smoke') return false
+          const rect = candidate.getBoundingClientRect()
+          return rect.width > 0 && rect.height > 0
+        })
+        if (!workspace) return {
+          ready: false,
+          url: String(location.origin || '') + String(location.pathname || ''),
+          bodyText: String(document.body?.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 500),
+          treeitems: [...document.querySelectorAll('[role="treeitem"]')]
+            .slice(0, 40)
+            .map(row => ({ text: (row.textContent || '').trim(), expanded: row.getAttribute('aria-expanded') })),
+        }
+        const expanded = workspace.getAttribute('aria-expanded') === 'true'
+        if (!expanded) workspace.click()
+        return { ready: true, expanded }
+      })()`,
+      value => value?.ready,
+      'imported workspace is available in the restarted DSH workspace list',
+      60000,
+    )
+  } catch (error) {
+    await capture(client, '07-restored-workspace-list-failure.png')
+    throw error
+  }
   try {
     await waitForValue(
       client,
@@ -585,7 +601,7 @@ try {
     'default plugins loaded through the restarted DSH surface',
     60000,
   )
-  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', projectKey(fixtureLayout.workspace), fixtureSessionId, 'session.jsonl.zstd')
+  const migratedSessionFile = path.join(root, 'data', 'dsh-home', 'sessions', projectKey(path.join(root, 'workspace')), fixtureSessionId, 'session.jsonl.zstd')
   const migratedSession = JSON.parse(zstdDecompressSync(await readFile(migratedSessionFile)).toString('utf8').split(/\r?\n/)[0])
   assert.equal(migratedSession.id, fixtureSessionId)
   const migratedPlugins = await Promise.all(defaultPlugins.map(async plugin => ({
