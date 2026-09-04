@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       tag:
-        description: Stable vX.Y.Z or candidate vX.Y.Z-rc.N tag matching package.json
+        description: Stable or conventional vX.Y.Z-alpha.N, beta.N, or rc.N tag matching package.json
         required: true
         type: string
 

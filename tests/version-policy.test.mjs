@@ -5,33 +5,55 @@ import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
 import { classifyProductVersion } from '../scripts/version-policy.mjs'
-import { renderReleaseNotes } from '../scripts/render-release-notes.mjs'
+import { renderReleaseNotes, upstreamLockNameForTag } from '../scripts/render-release-notes.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 const regexEscape = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-test('stable and release-candidate versions have unambiguous GitHub channels', () => {
+test('stable, alpha, beta, and release-candidate versions preserve their conventional stage', () => {
   assert.deepEqual(classifyProductVersion('0.2.0'), {
     version: '0.2.0',
     tag: 'v0.2.0',
     channel: 'stable',
+    stage: 'stable',
     updateChannelTag: 'update-channel-stable',
     prerelease: false,
     windowsVersion: '0.2.0.65534',
     macBuildVersion: '2000999',
   })
+  assert.deepEqual(classifyProductVersion('0.6.0-alpha.1'), {
+    version: '0.6.0-alpha.1',
+    tag: 'v0.6.0-alpha.1',
+    channel: 'candidate',
+    stage: 'alpha',
+    updateChannelTag: 'update-channel-candidate',
+    prerelease: true,
+    windowsVersion: '0.6.0.10001',
+    macBuildVersion: '6000101',
+  })
+  assert.deepEqual(classifyProductVersion('0.6.0-beta.2'), {
+    version: '0.6.0-beta.2',
+    tag: 'v0.6.0-beta.2',
+    channel: 'candidate',
+    stage: 'beta',
+    updateChannelTag: 'update-channel-candidate',
+    prerelease: true,
+    windowsVersion: '0.6.0.30002',
+    macBuildVersion: '6000402',
+  })
   assert.deepEqual(classifyProductVersion('0.3.0-rc.4'), {
     version: '0.3.0-rc.4',
     tag: 'v0.3.0-rc.4',
     channel: 'candidate',
+    stage: 'rc',
     updateChannelTag: 'update-channel-candidate',
     prerelease: true,
-    windowsVersion: '0.3.0.4',
-    macBuildVersion: '3000004',
+    windowsVersion: '0.3.0.50004',
+    macBuildVersion: '3000704',
   })
-  for (const invalid of ['v0.2.0', '0.2', '0.2.0-rc', '0.2.0-rc.0', '0.2.0-beta.1']) {
-    assert.throws(() => classifyProductVersion(invalid), /stable or release-candidate version/i)
+  for (const invalid of ['v0.2.0', '0.2', '0.2.0-rc', '0.2.0-rc.0', '0.2.0-preview.1', '0.2.0-alpha.200']) {
+    assert.throws(() => classifyProductVersion(invalid), /stable, alpha, beta, or release-candidate version/i)
   }
 })
 
@@ -63,6 +85,23 @@ test('candidate notes recommend a self-contained candidate package instead of th
   assert.match(stable, /Run it once/)
   assert.doesNotMatch(stable, /candidate channel|候选更新通道/i)
   assert.doesNotMatch(stable, /\{\{[^}]+\}\}/)
+})
+
+test('prerelease notes name the actual maturity stage and all prereleases use the preview lock', () => {
+  const source = '{{RELEASE_INTRO_ZH}}\n{{RELEASE_INTRO_EN}}'
+  const alpha = renderReleaseNotes(source, 'v0.6.0-alpha.1', '0.1.2-alpha.5')
+  const beta = renderReleaseNotes(source, 'v0.6.0-beta.1', '0.1.2-alpha.5')
+  const rc = renderReleaseNotes(source, 'v0.6.0-rc.1', '0.1.2-alpha.5')
+  assert.match(alpha, /Alpha/)
+  assert.match(alpha, /开发阶段/)
+  assert.match(beta, /Beta/)
+  assert.match(beta, /真实测试/)
+  assert.match(rc, /RC/)
+  assert.match(rc, /最终验证/)
+  for (const tag of ['v0.6.0-alpha.1', 'v0.6.0-beta.1', 'v0.6.0-rc.1']) {
+    assert.equal(upstreamLockNameForTag(tag), 'upstream.preview.lock.json')
+  }
+  assert.equal(upstreamLockNameForTag('v0.6.0'), 'upstream.lock.json')
 })
 
 test('stable release notes never describe the product as a candidate', async () => {

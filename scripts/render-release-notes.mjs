@@ -26,13 +26,28 @@ function highlights(items) {
 }
 
 export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
-  if (!/^v\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(String(tag))) {
-    throw new Error('A stable or release-candidate tag is required to render release notes.')
+  if (!/^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/.test(String(tag))) {
+    throw new Error('A stable, alpha, beta, or release-candidate tag is required to render release notes.')
   }
-  if (!/^\d+\.\d+\.\d+(?:-(?:alpha|rc)\.[1-9]\d*)?$/.test(String(dshVersion))) {
+  if (!/^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/.test(String(dshVersion))) {
     throw new Error('The pinned official DSH version is required to render release notes.')
   }
-  const candidate = /-rc\./.test(tag)
+  const stage = /-(alpha|beta|rc)\./.exec(tag)?.[1] ?? 'stable'
+  const candidate = stage !== 'stable'
+  const releaseIntro = {
+    alpha: {
+      zh: '**这是 Alpha 开发阶段版本，功能仍可能不完整或不稳定，不会推送给稳定版用户。**',
+      en: '**This is an Alpha development build. Features may still be incomplete or unstable, and it is not offered to stable users.**',
+    },
+    beta: {
+      zh: '**这是 Beta 真实测试阶段版本，主要功能已经可用，但仍可能发现回归，不会推送给稳定版用户。**',
+      en: '**This is a Beta build for real-world testing. Core features are usable, but regressions may remain, and it is not offered to stable users.**',
+    },
+    rc: {
+      zh: '**这是 RC 最终验证阶段版本，当前构建已基本达到正式发布标准，不会推送给稳定版用户。**',
+      en: '**This is an RC build for final validation. It is expected to meet the stable-release bar and is not offered to stable users.**',
+    },
+  }
   const release = descriptor === null
     ? {
         zh: { summary: `${tag.slice(1)} 的用户更新。`, highlights: [] },
@@ -42,12 +57,8 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
   const replacements = {
     '{{PRODUCT_VERSION}}': tag.slice(1),
     '{{DSH_VERSION}}': dshVersion,
-    '{{RELEASE_INTRO_ZH}}': candidate
-      ? `**这是候选版，不会推送给稳定版用户。**`
-      : '',
-    '{{RELEASE_INTRO_EN}}': candidate
-      ? `**This is a release candidate and is not offered to stable users.**`
-      : '',
+    '{{RELEASE_INTRO_ZH}}': candidate ? releaseIntro[stage].zh : '',
+    '{{RELEASE_INTRO_EN}}': candidate ? releaseIntro[stage].en : '',
     '{{RELEASE_SUMMARY_ZH}}': release.zh.summary,
     '{{RELEASE_SUMMARY_EN}}': release.en.summary,
     '{{RELEASE_HIGHLIGHTS_ZH}}': highlights(release.zh.highlights),
@@ -86,7 +97,7 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
 }
 
 export function upstreamLockNameForTag(tag) {
-  return /-rc\.[1-9]\d*$/.test(String(tag))
+  return /-(?:alpha|beta|rc)\.[1-9]\d*$/.test(String(tag))
     ? 'upstream.preview.lock.json'
     : 'upstream.lock.json'
 }
@@ -100,7 +111,7 @@ async function loadReleaseDescriptor(projectRoot, tag) {
   )
   const fingerprint = JSON.stringify({ zh: descriptor.zh, en: descriptor.en })
   for (const candidate of await readdir(directory)) {
-    if (candidate === filename || !/^v\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?\.json$/.test(candidate)) continue
+    if (candidate === filename || !/^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?\.json$/.test(candidate)) continue
     const other = validateReleaseDescriptor(
       JSON.parse(await readFile(path.join(directory, candidate), 'utf8')),
       candidate.slice(0, -'.json'.length),
