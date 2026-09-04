@@ -7,14 +7,14 @@ import { npmCliCandidates, productionPackageClosure } from '../scripts/stage-pre
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-test('stable and beta upstream locks are separate and immutable', async () => {
+test('stable and candidate upstream locks are separate and immutable', async () => {
   const [stable, preview] = await Promise.all([
     readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
   ])
   assert.equal(stable.dsh.version, '0.1.1-rc.2')
   assert.equal(preview.channel, 'beta')
-  assert.match(preview.dsh.version, /^\d+\.\d+\.\d+-alpha\.[1-9]\d*$/)
+  assert.match(preview.dsh.version, /^\d+\.\d+\.\d+-(?:alpha|rc)\.[1-9]\d*$/)
   assert.equal(preview.dsh.tag, `dsh-v${preview.dsh.version}`)
   assert.match(preview.dsh.npmIntegrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
   assert.match(preview.dsh.reviewedCommit, /^[0-9a-f]{40}$/)

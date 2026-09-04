@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
-import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
+import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import path from 'node:path'
 
 const DEFAULT_PORT = 3080
@@ -953,17 +953,62 @@ async function migrateStorageJson(dshHome, before, after) {
   return changed
 }
 
-async function migrateSessionHeader(filename, before, after, compressed) {
-  const source = await readFile(filename)
-  const decoded = compressed ? zstdDecompressSync(source) : source
+function firstZstdFrameEnd(buffer) {
+  let offset = 0
+  if (buffer.length < 5 || buffer.readUInt32LE(0) !== 0xFD2FB528) throw new Error('session artifact has an invalid Zstandard header')
+  offset += 4
+  const descriptor = buffer.readUInt8(offset)
+  offset += 1
+  if ((descriptor & 24) !== 0) throw new Error('session artifact has an invalid Zstandard frame descriptor')
+  const contentSizeFlag = descriptor >>> 6
+  const singleSegment = (descriptor & 32) !== 0
+  const checksum = (descriptor & 4) !== 0
+  const dictionaryFlag = descriptor & 3
+  const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag
+  const contentSizeBytes = contentSizeFlag === 0 ? (singleSegment ? 1 : 0) : 1 << contentSizeFlag
+  const remainingHeaderBytes = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes
+  if (buffer.length - offset < remainingHeaderBytes) throw new Error('session artifact has an incomplete Zstandard frame header')
+  offset += remainingHeaderBytes
+  for (;;) {
+    if (buffer.length - offset < 3) throw new Error('session artifact has an incomplete Zstandard block header')
+    const blockHeader = buffer.readUIntLE(offset, 3)
+    offset += 3
+    const lastBlock = (blockHeader & 1) !== 0
+    const blockType = (blockHeader >>> 1) & 3
+    const blockSize = blockHeader >>> 3
+    if (blockType === 3) throw new Error('session artifact has an invalid Zstandard block type')
+    const payloadBytes = blockType === 1 ? 1 : blockSize
+    if (buffer.length - offset < payloadBytes) throw new Error('session artifact has an incomplete Zstandard block')
+    offset += payloadBytes
+    if (lastBlock) break
+  }
+  if (checksum) {
+    if (buffer.length - offset < 4) throw new Error('session artifact has an incomplete Zstandard checksum')
+    offset += 4
+  }
+  return offset
+}
+
+export function relocateSessionHeaderBytes(source, before, after, compressed) {
+  const frameEnd = compressed ? firstZstdFrameEnd(source) : source.length
+  const decoded = compressed ? zstdDecompressSync(source.subarray(0, frameEnd)) : source
   const newline = decoded.indexOf(10)
-  if (newline < 0) throw new Error(`session artifact has no header: ${filename}`)
+  if (newline < 0) throw new Error('session artifact has no header')
   const header = JSON.parse(decoded.subarray(0, newline).toString('utf8'))
-  if (header.cwd !== before) return false
+  if (header.cwd !== before) return source
   header.cwd = after
   const rest = decoded.subarray(newline + 1)
   const next = Buffer.concat([Buffer.from(`${JSON.stringify(header)}\n`, 'utf8'), rest])
-  await atomicWrite(filename, compressed ? zstdCompressSync(next) : next)
+  if (!compressed) return next
+  const headerFrame = zstdCompressSync(next, { params: { [zlibConstants.ZSTD_c_checksumFlag]: 1 } })
+  return Buffer.concat([headerFrame, source.subarray(frameEnd)])
+}
+
+async function migrateSessionHeader(filename, before, after, compressed) {
+  const source = await readFile(filename)
+  const migrated = relocateSessionHeaderBytes(source, before, after, compressed)
+  if (migrated === source) return false
+  await atomicWrite(filename, migrated)
   return true
 }
 

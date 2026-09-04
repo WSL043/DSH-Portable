@@ -182,7 +182,7 @@ try {
       capturedBoot = true
       await capture(client, '01-native-dsh-loader.png')
     }
-    if (state.log.includes('dsh-first-paint-ready') && !capturedReveal) {
+    if (state.log.includes('dsh-first-paint-ready') && !state.bootVisible && state.bodyText.length > 0 && !capturedReveal) {
       capturedReveal = true
       await capture(client, '02-reveal-frame.png')
     }
@@ -201,7 +201,9 @@ try {
 
   const bootSample = samples.find(sample => sample.bootVisible)
   const bootLogSample = samples.find(sample => sample.log.includes('dsh-boot-surface-visible'))
-  const revealSample = samples.find(sample => sample.log.includes('dsh-first-paint-ready'))
+  const revealSample = samples.find(sample => sample.log.includes('dsh-first-paint-ready')
+    && !sample.bootVisible
+    && sample.bodyText.length > 0)
   const workspaceSample = samples.find(sample => revealSample
     && sample.at > revealSample.at
     && !sample.bootVisible

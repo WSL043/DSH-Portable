@@ -49,7 +49,13 @@ assert.deepEqual(Object.keys(defaultPlugins).sort(), ['chatManager', 'imageViewe
 assert.deepEqual(Object.values(defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-chat-manager'])
 assert.equal(new Set(Object.values(defaultPlugins).map(plugin => plugin.filename)).size, 2, 'default plugin archive names must be unique')
 for (const plugin of Object.values(defaultPlugins)) {
-  assert.match(plugin.version, /^\d+\.\d+\.\d+-beta\.\d+$/, `${plugin.package} pinned prerelease version`)
+  assert.ok(['stable', 'prerelease'].includes(plugin.releaseChannel), `${plugin.package} release channel`)
+  if (plugin.releaseChannel === 'stable') {
+    assert.match(plugin.version, /^\d+\.\d+\.\d+$/, `${plugin.package} pinned stable version`)
+  } else {
+    assert.match(plugin.version, /^\d+\.\d+\.\d+-beta\.\d+$/, `${plugin.package} pinned prerelease version`)
+  }
+  assert.equal(plugin.spec, plugin.version, `${plugin.package} exact lifecycle spec`)
   assert.match(plugin.url, /^https:\/\//, `${plugin.package} artifact URL`)
   assert.match(plugin.sha256, /^[0-9a-f]{64}$/, `${plugin.package} SHA-256`)
   assert.match(plugin.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/, `${plugin.package} npm integrity`)

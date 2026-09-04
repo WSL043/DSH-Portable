@@ -49,6 +49,14 @@ $WebView2Core = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.
 $WebView2WinForms = Join-Path $WebView2Extracted 'lib\net462\Microsoft.Web.WebView2.WinForms.dll'
 $WebView2Loader = Join-Path $WebView2Extracted 'runtimes\win-x64\native\WebView2Loader.dll'
 $WebView2License = Join-Path $WebView2Extracted 'LICENSE.txt'
+$NotificationArchive = Join-Path $Downloads ("Microsoft.Toolkit.Uwp.Notifications.$($Lock.windowsNotifications.version).nupkg")
+$NotificationExtracted = Join-Path $CacheDir ("Microsoft.Toolkit.Uwp.Notifications-$($Lock.windowsNotifications.version)")
+$NotificationAssembly = Join-Path $NotificationExtracted 'lib\net461\Microsoft.Toolkit.Uwp.Notifications.dll'
+$NotificationLicense = Join-Path $NotificationExtracted 'License.md'
+$ValueTupleArchive = Join-Path $Downloads ("System.ValueTuple.$($Lock.windowsNotifications.valueTupleVersion).nupkg")
+$ValueTupleExtracted = Join-Path $CacheDir ("System.ValueTuple-$($Lock.windowsNotifications.valueTupleVersion)")
+$ValueTupleAssembly = Join-Path $ValueTupleExtracted 'lib\net461\System.ValueTuple.dll'
+$ValueTupleLicense = Join-Path $ValueTupleExtracted 'LICENSE.TXT'
 $DefaultPlugins = @($DefaultPluginsLock.PSObject.Properties | ForEach-Object { $_.Value })
 
 function Assert-Sha256([string]$Filename, [string]$Expected) {
@@ -116,6 +124,27 @@ try {
     foreach ($RequiredWebView2File in @($WebView2Core, $WebView2WinForms, $WebView2Loader, $WebView2License)) {
         if (-not (Test-Path -LiteralPath $RequiredWebView2File)) {
             throw "Pinned WebView2 SDK cache is incomplete: $RequiredWebView2File"
+        }
+    }
+
+    foreach ($Dependency in @(
+        @{ Name = 'Microsoft notification toolkit'; Archive = $NotificationArchive; Extracted = $NotificationExtracted; Url = $Lock.windowsNotifications.url; Sha256 = $Lock.windowsNotifications.sha256 },
+        @{ Name = 'System.ValueTuple'; Archive = $ValueTupleArchive; Extracted = $ValueTupleExtracted; Url = $Lock.windowsNotifications.valueTupleUrl; Sha256 = $Lock.windowsNotifications.valueTupleSha256 }
+    )) {
+        if (-not (Test-Path -LiteralPath $Dependency.Archive)) {
+            Write-Host "Downloading pinned $($Dependency.Name)"
+            Invoke-WebRequest -UseBasicParsing -Uri $Dependency.Url -OutFile $Dependency.Archive
+        }
+        Assert-Sha256 $Dependency.Archive $Dependency.Sha256
+        if (-not (Test-Path -LiteralPath $Dependency.Extracted)) {
+            New-Item -ItemType Directory -Force -Path $Dependency.Extracted | Out-Null
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [System.IO.Compression.ZipFile]::ExtractToDirectory($Dependency.Archive, $Dependency.Extracted)
+        }
+    }
+    foreach ($RequiredNotificationFile in @($NotificationAssembly, $NotificationLicense, $ValueTupleAssembly, $ValueTupleLicense)) {
+        if (-not (Test-Path -LiteralPath $RequiredNotificationFile)) {
+            throw "Pinned Windows notification dependency cache is incomplete: $RequiredNotificationFile"
         }
     }
 
@@ -227,6 +256,10 @@ try {
     Copy-Item $WebView2WinForms (Join-Path $Stage 'Microsoft.Web.WebView2.WinForms.dll')
     Copy-Item $WebView2Loader (Join-Path $Stage 'WebView2Loader.dll')
     Copy-Item $WebView2License (Join-Path $Stage 'licenses\WebView2-LICENSE.txt')
+    Copy-Item $NotificationAssembly (Join-Path $Stage 'Microsoft.Toolkit.Uwp.Notifications.dll')
+    Copy-Item $ValueTupleAssembly (Join-Path $Stage 'System.ValueTuple.dll')
+    Copy-Item $NotificationLicense (Join-Path $Stage 'licenses\Windows-Notifications-LICENSE.txt')
+    Copy-Item $ValueTupleLicense (Join-Path $Stage 'licenses\System.ValueTuple-LICENSE.txt')
     $Notices = Join-Path $Downloads ("DeepSeek-Harness-THIRD_PARTY_NOTICES-$($DshLock.reviewedCommit).md")
     if (-not (Test-Path -LiteralPath $Notices)) {
         Invoke-WebRequest -UseBasicParsing -Uri "https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/$($DshLock.reviewedCommit)/THIRD_PARTY_NOTICES.md" -OutFile $Notices
@@ -246,6 +279,7 @@ try {
         dshPackageSetSha256 = if ($PreviewReceipt) { $PreviewReceipt.packageSetSha256 } else { $null }
         pluginMarketPackage = '@wsl043/dsh-portable-plugin-market'
         pluginMarketVersion = $Lock.pluginMarket.version
+        windowsNotificationRuntime = "$($Lock.windowsNotifications.package)@$($Lock.windowsNotifications.version)"
         defaultPlugins = @($DefaultPlugins | ForEach-Object { [ordered]@{ package = $_.package; version = $_.version; sha256 = $_.sha256; integrity = $_.integrity } })
         pnpmVersion = $Lock.pnpm.version
         pnpmIntegrity = $Lock.pnpm.integrity
@@ -276,6 +310,7 @@ try {
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
         '/reference:System.Web.Extensions.dll',
         "/reference:$WebView2Core", "/reference:$WebView2WinForms",
+        "/reference:$NotificationAssembly", "/reference:$ValueTupleAssembly",
         "/out:$LauncherExe",
         (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs'),
         (Join-Path $ProjectRoot 'launcher\windows\PortableProcessJob.cs')
