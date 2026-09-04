@@ -222,6 +222,7 @@ try {
   const fixtureMarker = path.join(fixtureLayout.dshHome, '.agent-presets', 'import-smoke', 'agent.cordis.yml')
   const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', projectKey(fixtureLayout.workspace), fixtureSessionId, 'session.jsonl.zstd')
   const fixtureWorkspaceStorage = path.join(fixtureLayout.dshHome, 'storages', 'workspace.json')
+  const fixtureSessionProjectionCache = path.join(fixtureLayout.dshHome, 'storages', 'session_projcache.json')
   const fixtureProfile = path.join(fixtureLayout.dshHome, 'profiles', 'web')
   await mkdir(fixtureLayout.workspace, { recursive: true })
   await mkdir(path.dirname(fixtureMarker), { recursive: true })
@@ -241,6 +242,28 @@ try {
           sessionIds: [fixtureSessionId],
           createdAt: '2026-09-04T00:00:00.000Z',
           updatedAt: '2026-09-04T00:00:00.000Z',
+        },
+      },
+    },
+  }, null, 2)}\n`)
+  await writeFile(fixtureSessionProjectionCache, `${JSON.stringify({
+    unit: { name: 'session_projcache', version: 3 },
+    global: null,
+    tables: {
+      sessions: {
+        [fixtureSessionId]: {
+          identity: {
+            createdAt: fixtureTimestamp,
+            cwd: fixtureLayout.workspace,
+          },
+          rows: {
+            title: { ver: 1, seq: 6, val: 'Portable migration proof' },
+            sessionListMetadata: {
+              ver: 1,
+              seq: 6,
+              val: { blank: false, lastPromptAt: fixtureTimestamp + 3 },
+            },
+          },
         },
       },
     },
