@@ -8,7 +8,9 @@ if (!assetsArg || !runArg || !jobsArg || !outputArg || !repository || !expectedC
 }
 if (!/^[^/\s]+\/[^/\s]+$/.test(repository)) throw new Error('repository must use owner/name form')
 if (!/^[a-f0-9]{40}$/.test(expectedCommit)) throw new Error('expected commit must be a full lowercase SHA-1')
-if (!/^v\d+\.\d+\.\d+(?:-rc\.[1-9]\d*)?$/.test(tag)) throw new Error('tag must be a stable or release-candidate version')
+if (!/^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/.test(tag)) {
+  throw new Error('tag must be a stable or conventional alpha, beta, or release-candidate version')
+}
 
 const assets = path.resolve(assetsArg)
 const run = JSON.parse(await readFile(path.resolve(runArg), 'utf8'))
@@ -62,7 +64,7 @@ for (const name of present) {
 
 const manifest = JSON.parse(await readFile(path.join(assets, 'portable-manifest.json'), 'utf8'))
 const version = tag.slice(1)
-const channel = tag.includes('-rc.') ? 'candidate' : 'stable'
+const channel = /-(?:alpha|beta|rc)\./.test(tag) ? 'candidate' : 'stable'
 if (manifest?.version !== version || manifest?.releaseChannel !== channel) {
   throw new Error('portable-manifest.json does not match the requested release tag and channel')
 }

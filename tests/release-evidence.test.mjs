@@ -21,8 +21,8 @@ async function fixture(overrides = {}) {
     'DSH-Portable-linux-x64.tar.gz': Buffer.from('linux'),
     'portable-manifest.json': Buffer.from(JSON.stringify({
       schemaVersion: 1,
-      version: '0.4.14',
-      releaseChannel: 'stable',
+      version: overrides.version ?? '0.4.14',
+      releaseChannel: overrides.releaseChannel ?? 'stable',
       payloads: {},
     })),
   }
@@ -59,7 +59,7 @@ async function fixture(overrides = {}) {
   return { root, assets, runFile, jobsFile, evidenceFile }
 }
 
-async function generate(value) {
+async function generate(value, tag = 'v0.4.14') {
   return execFileAsync(process.execPath, [
     script,
     value.assets,
@@ -68,7 +68,7 @@ async function generate(value) {
     value.evidenceFile,
     'WSL043/DSH-Portable',
     commit,
-    'v0.4.14',
+    tag,
   ])
 }
 
@@ -100,6 +100,29 @@ test('release evidence binds curated downloads to the exact successful main qual
     assert.doesNotMatch(JSON.stringify(evidence), /[A-Z]:\\|\/home\/|runner\.temp|token|credential/i)
   } finally {
     await rm(value.root, { recursive: true, force: true })
+  }
+})
+
+test('release evidence accepts conventional alpha and beta tags as candidate releases', async () => {
+  for (const tag of ['v0.6.0-alpha.1', 'v0.6.0-beta.2']) {
+    const value = await fixture({ version: tag.slice(1), releaseChannel: 'candidate' })
+    try {
+      const { stdout } = await generate(value, tag)
+      assert.equal(JSON.parse(stdout).channel, 'candidate')
+    } finally {
+      await rm(value.root, { recursive: true, force: true })
+    }
+  }
+})
+
+test('release evidence rejects malformed conventional prerelease tags', async () => {
+  for (const tag of ['v0.6.0-alpha.0', 'v0.6.0-beta', 'v0.6.0-preview.1']) {
+    const value = await fixture({ version: tag.slice(1), releaseChannel: 'candidate' })
+    try {
+      await assert.rejects(generate(value, tag))
+    } finally {
+      await rm(value.root, { recursive: true, force: true })
+    }
   }
 })
 
