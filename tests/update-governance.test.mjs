@@ -4,13 +4,15 @@ import test from 'node:test'
 
 const read = (relative) => readFile(new URL(`../${relative}`, import.meta.url), 'utf8')
 
-test('official DSH alpha discovery opens a review-only pull request', async () => {
-  const [workflow, updater] = await Promise.all([
+test('official DSH candidate discovery opens a review-only pull request', async () => {
+  const [workflow, updater, state] = await Promise.all([
     read('.github/workflows/official-preview-watch.yml'),
     read('scripts/update-preview-upstream.mjs'),
+    read('scripts/upstream-state.mjs'),
   ])
 
   assert.match(workflow, /cron:\s*['"]41 \*\/6 \* \* \*['"]/)
+  assert.match(workflow, /official DSH candidate/i)
   assert.match(workflow, /node scripts\/update-preview-upstream\.mjs/)
   assert.match(workflow, /automation\/official-preview/)
   assert.match(workflow, /gh pr (?:create|edit)/)
@@ -18,8 +20,11 @@ test('official DSH alpha discovery opens a review-only pull request', async () =
   assert.match(workflow, /gh workflow run ci\.yml[^\n]+--ref "\$BRANCH"/)
   assert.match(workflow, /actions:\s*write/)
   assert.doesNotMatch(workflow, /gh pr merge|workflow_run:/)
-  assert.match(updater, /dist-tags/)
+  assert.match(state, /OFFICIAL_CANDIDATE_TAGS/)
+  assert.match(state, /dist-tags/)
   assert.match(updater, /officialTagCommit/)
+  assert.match(updater, /provisional\.version/)
+  assert.doesNotMatch(updater, /const alphaVersion/)
   assert.match(updater, /upstream\.preview\.lock\.json/)
   assert.doesNotMatch(updater, /upstream\.lock\.json/)
 })
