@@ -52,13 +52,11 @@ test('every platform build applies the same native surface handoff', async () =>
   }
 })
 
-test('Windows keeps the native fallback invisible until the real DSH boot surface exists', async () => {
+test('Windows shows a native loading surface immediately and replaces it with the real DSH surface', async () => {
   const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
-  assert.match(source, /ShowInTaskbar = !nonInteractive && !testHidden && !desktopStart/)
-  assert.match(source, /else if \(desktopStart\) Opacity = 0/)
-  assert.match(source, /launchPanel\.Visible = !desktopStart/)
-  const navigation = source.slice(source.indexOf('private async Task NavigateWorkspaceAsync'), source.indexOf('private void RevealDesktopSurface'))
-  assert.doesNotMatch(navigation, /launchPanel\.Visible\s*=\s*true/)
+  assert.match(source, /ShowInTaskbar = !nonInteractive && !testHidden/)
+  assert.doesNotMatch(source, /else if \(desktopStart\) Opacity = 0/)
+  assert.match(source, /launchPanel\.Visible = true/)
   const bootReveal = source.slice(source.indexOf('private void RevealDesktopBootSurface'), source.indexOf('private async Task<string> WaitForWorkspaceHandoffAsync'))
   assert.match(bootReveal, /dsh-boot-surface-visible/)
   assert.match(bootReveal, /ShowInTaskbar\s*=\s*true/)

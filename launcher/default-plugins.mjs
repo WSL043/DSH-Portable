@@ -5,6 +5,7 @@ import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promis
 import path from 'node:path'
 
 import { buildDshEnv } from './portable-core.mjs'
+import { comparePortableVersions } from './update-core.mjs'
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-image-viewer',
@@ -63,6 +64,72 @@ async function verifyPackagedArchive(filename, expectedSha256, adapters) {
   if (actual !== expectedSha256) throw new Error('The packaged default plugin archive failed its integrity check.')
 }
 
+function exactVersionFromSpec(value) {
+  const match = /^(?:v)?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/.exec(String(value ?? '').trim())
+  return match?.[1] ?? null
+}
+
+function installedDefaultVersion(profileRoot, plugin, adapters = {}) {
+  const exists = adapters.existsSync ?? existsSync
+  const load = adapters.readFileSync ?? readFileSync
+  const manifest = JSON.parse(load(path.join(profileRoot, 'package.json'), 'utf8'))
+  const spec = manifest.dependencies?.[plugin.name]
+  if (spec === undefined) return null
+  const installedManifest = path.join(profileRoot, 'node_modules', plugin.name, 'package.json')
+  if (exists(installedManifest)) {
+    try {
+      const version = exactVersionFromSpec(JSON.parse(load(installedManifest, 'utf8')).version)
+      if (version !== null) return version
+    } catch { /* fall back to an exact manifest dependency */ }
+  }
+  return exactVersionFromSpec(spec)
+}
+
+async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, adapters = {}) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  const candidates = plugins.filter((plugin) => {
+    const installed = installedDefaultVersion(profileRoot, plugin, adapters)
+    return installed !== null && comparePortableVersions(installed, plugin.version) < 0
+  })
+  if (candidates.length === 0) return { status: 'skipped', profile, reason: 'defaults-current' }
+
+  const archiveRoot = paths.join(profileRoot, '.dsh-portable-archives')
+  const makeDirectory = adapters.mkdir ?? mkdir
+  const copy = adapters.copyFile ?? copyFile
+  const load = adapters.readFile ?? readFile
+  const save = adapters.writeFile ?? writeFile
+  const move = adapters.rename ?? rename
+  const run = adapters.spawnSync ?? spawnSync
+  const manifestPath = paths.join(profileRoot, 'package.json')
+  const manifestBefore = await load(manifestPath, 'utf8')
+  try {
+    await makeDirectory(archiveRoot, { recursive: true })
+    const relativeArchives = []
+    for (const plugin of candidates) {
+      const packagedArchive = paths.join(layout.root, 'default-plugins', plugin.filename)
+      const verify = adapters.verifyArchive ?? ((filename) => verifyPackagedArchive(filename, plugin.sha256, adapters))
+      await verify(packagedArchive, plugin)
+      const profileArchive = paths.join(archiveRoot, plugin.filename)
+      await copy(packagedArchive, profileArchive)
+      relativeArchives.push(`file:${paths.relative(profileRoot, profileArchive).replaceAll('\\', '/')}`)
+    }
+    const result = run(layout.nodeExe, [layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives], {
+      cwd: profileRoot,
+      env: buildDshEnv(layout),
+      encoding: 'utf8',
+      windowsHide: true,
+    })
+    if (result?.error) throw result.error
+    if (result?.status !== 0) throw new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.`)
+    await promoteBundledPluginsToRegistryLifecycle(profileRoot, candidates, adapters)
+    return { status: 'updated', profile, plugins: candidates.map(plugin => plugin.name) }
+  } catch (error) {
+    const temporary = `${manifestPath}.${process.pid}.restore.tmp`
+    await save(temporary, manifestBefore, 'utf8').then(() => move(temporary, manifestPath)).catch(() => {})
+    return { status: 'warning', code: 'default_plugin_update_failed', profile, message: error?.message ?? String(error) }
+  }
+}
+
 export async function seedDefaultPlugins(layout, adapters = {}) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const profile = 'web'
@@ -73,7 +140,9 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
   const plugins = defaultsForProduct(layout, adapters)
   if (plugins.length === 0) return { status: 'skipped', profile, reason: 'no-compatible-defaults' }
   const recoveringInterruptedSeed = exists(profileRoot) && exists(seedMarker)
-  if (exists(profileRoot) && !recoveringInterruptedSeed) return { status: 'skipped', profile, reason: 'profile-exists' }
+  if (exists(profileRoot) && !recoveringInterruptedSeed) {
+    return refreshInstalledDefaults(layout, profileRoot, profile, plugins, adapters)
+  }
 
   const archiveRoot = paths.join(profileRoot, '.dsh-portable-archives')
   const makeDirectory = adapters.mkdir ?? mkdir

@@ -567,6 +567,7 @@ test('Windows package exposes real GUI executables with matching icon and an iso
   assert.match(build, /DeepSeek-Herness\.exe/)
   assert.doesNotMatch(build, /Stop DeepSeek-Herness\.exe/)
   assert.match(build, /DSH-Portable-windows-x64-offline\.zip/)
+  assert.match(build, /PreviewAppSource[\s\S]+desktop-bridge[\s\S]+dsh-portable-desktop-bridge/)
   assert.match(build, /DSH-Bootstrap\.cs/)
   assert.match(build, /DSH-FullUpdater\.exe/)
   assert.match(build, /portable-manifest\.json/)

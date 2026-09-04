@@ -14,6 +14,7 @@ import {
   applyStagedCapsuleUpdate,
   checkForUpdate,
   comparePortableVersions,
+  defaultEngineUpdateIndexUrl,
   defaultEngineUpdateManifestUrl,
   defaultUpdateManifestUrl,
   deferUpdate,
@@ -22,6 +23,7 @@ import {
   extractUpdateArchive,
   ignoreUpdate,
   installAvailableAppUpdate,
+  listEngineVersions,
   platformUpdateKey,
   readInstalledUpdateState,
   rollbackPendingAppUpdate,
@@ -219,6 +221,55 @@ test('installed release channel selects an isolated machine update feed', () => 
     defaultEngineUpdateManifestUrl('stable', 'win32', 'x64'),
     'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-update-windows-x64.json',
   )
+  assert.equal(
+    defaultEngineUpdateIndexUrl('stable', 'win32', 'x64'),
+    'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json',
+  )
+})
+
+test('engine version catalog exposes only verified compatible manifests and preserves explicit targets', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-engine-versions-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
+    portableVersion: '0.4.10', releaseChannel: 'stable', dshVersion: '0.1.1-rc.2',
+    updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+  })}\n`)
+  const compatible = engineUpdateManifest({ platform: platformUpdateKey(process.platform, process.arch) })
+  const compatibleOlder = engineUpdateManifest({
+    platform: platformUpdateKey(process.platform, process.arch),
+    component: { ...engineUpdateManifest().component, dshVersion: '0.1.1-rc.1' },
+  })
+  const wrongShell = engineUpdateManifest({
+    platform: platformUpdateKey(process.platform, process.arch), requiredShellSchema: 2,
+    component: { ...engineUpdateManifest().component, dshVersion: '0.1.1-rc.4' },
+  })
+  const result = await listEngineVersions({
+    layout,
+    indexUrl: 'https://updates.invalid/index.json',
+    fetchImpl: async () => new Response(JSON.stringify({
+      schemaVersion: 1,
+      versions: [
+        { version: '0.1.1-rc.3', manifestUrl: 'https://updates.invalid/0.1.1-rc.3.json', manifest: compatible },
+        { version: '0.1.1-rc.1', manifestUrl: 'https://updates.invalid/0.1.1-rc.1.json', manifest: compatibleOlder },
+        { version: '0.1.1-rc.4', manifestUrl: 'https://updates.invalid/0.1.1-rc.4.json', manifest: wrongShell },
+      ],
+    }), { status: 200 }),
+  })
+  assert.equal(result.current, '0.1.1-rc.2')
+  assert.deepEqual(result.versions.map(item => item.version), ['0.1.1-rc.3', '0.1.1-rc.1'])
+  assert.equal(result.versions[0].manifestUrl, 'https://updates.invalid/0.1.1-rc.3.json')
+
+  const selectedOlder = await checkForUpdate({
+    layout,
+    scope: 'engine',
+    manifestUrl: 'https://updates.invalid/0.1.1-rc.1.json',
+    force: true,
+    fetchImpl: async () => new Response(JSON.stringify(compatibleOlder), { status: 200 }),
+  })
+  assert.equal(selectedOlder.status, 'available')
+  assert.equal(selectedOlder.engineLatest, '0.1.1-rc.1')
 })
 
 test('product and official DSH checks use isolated feeds and caches', async () => {

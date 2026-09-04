@@ -134,6 +134,9 @@ if [[ -n "$PREVIEW_APP_SOURCE" ]]; then
   "$BUILD_NODE" -e 'const fs=require("fs"); const receipt=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const lock=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); if(receipt.dshVersion!==lock.dsh.version||receipt.dshCommit!==lock.dsh.reviewedCommit) throw new Error("Preview app receipt does not match upstream.preview.lock.json")' "$PREVIEW_APP_SOURCE/preview-runtime.json" "$COMPONENT_LOCK_FILE"
   rm -rf "$STAGE/app"
   cp -R "$PREVIEW_APP_SOURCE" "$STAGE/app"
+  rm -rf "$STAGE/app/node_modules/@wsl043/dsh-portable-desktop-bridge" "$STAGE/app/node_modules/@wsl043/dsh-portable-plugin-market"
+  cp -R "$PROJECT_ROOT/desktop-bridge" "$STAGE/app/node_modules/@wsl043/dsh-portable-desktop-bridge"
+  cp -R "$PROJECT_ROOT/app/vendor/dsh-portable-plugin-market" "$STAGE/app/node_modules/@wsl043/dsh-portable-plugin-market"
 else
   "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-lock.mjs" "$PROJECT_ROOT/app/package-lock.json" "$LOCK_FILE"
   (
