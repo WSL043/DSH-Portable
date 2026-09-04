@@ -606,6 +606,7 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
   ])
   assert.match(audit, /const bootLogSample = samples\.find\(sample => sample\.log\.includes\('dsh-boot-surface-visible'\)\)/)
   assert.match(audit, /assert\.ok\(bootSample \|\| bootLogSample/)
+  assert.match(audit, /const revealSample = samples\.find\(sample => sample\.log\.includes\('dsh-first-paint-ready'\)\s*&& !sample\.bootVisible\s*&& sample\.bodyText\.length > 0\)/)
   assert.match(audit, /startupTimeoutSeconds/)
   assert.match(audit, /url: String\(location\.origin \|\| ''\) \+ String\(location\.pathname \|\| ''\)/)
   assert.doesNotMatch(audit, /url: location\.href/)
