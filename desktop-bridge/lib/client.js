@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: '@wsl043/dsh-portable-desktop-bridge',
   factory: function (require) {
     const exports = {}
-    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'sessionLogDownload']
+    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload']
     const React = require('react')
 
     const copy = {
@@ -19,7 +19,7 @@ window.__ModuleLoader__.load({
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用；可从系统托盘选择安装。',
         incompatible: '此内核需要先更新 DSH-Portable。', engineFollowsProduct: '预览版内核随 DSH-Portable 更新。', channelUnpublished: '此预览版尚未发布更新通道。', updateUnavailable: '暂时无法连接更新服务。',
-        notifications: '任务完成通知', notificationsHint: '任务在后台完成时显示系统通知。', notificationsSystemDisabled: 'Windows 通知已关闭；开启后，后台和托盘任务完成提醒才会显示。',
+        notifications: '任务通知', notificationsHint: '任务在后台完成，或等待回答和批准时显示系统通知。', notificationsSystemDisabled: 'Windows 通知已关闭；开启后，后台任务完成和待处理提醒才会显示。',
         updateReady: '有可用更新', environmentActive: '当前独立环境：{0}',
         desktop: '桌面行为',
         close: '关闭窗口时', tray: '最小化到托盘', exit: '退出程序',
@@ -56,7 +56,7 @@ window.__ModuleLoader__.load({
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available; install it from the system tray.',
         incompatible: 'Update DSH-Portable before installing this core.', engineFollowsProduct: 'Preview core updates are delivered with DSH-Portable.', channelUnpublished: 'No update channel has been published for this preview yet.', updateUnavailable: 'The update service is unavailable right now.',
-        notifications: 'Task completion notifications', notificationsHint: 'Show a system notification when a background task finishes.', notificationsSystemDisabled: 'Windows notifications are turned off. Enable them to receive background and tray task completion alerts.',
+        notifications: 'Task notifications', notificationsHint: 'Show a system notification when a background task finishes or needs an answer or approval.', notificationsSystemDisabled: 'Windows notifications are turned off. Enable them to receive background completion and attention alerts.',
         updateReady: 'Update available', environmentActive: 'Current isolated environment: {0}',
         desktop: 'Desktop behavior',
         close: 'When closing the window', tray: 'Minimize to tray', exit: 'Exit application',
@@ -732,6 +732,24 @@ window.__ModuleLoader__.load({
       return ''
     }
 
+    function notificationInteraction(interaction) {
+      if (!interaction || typeof interaction !== 'object') return { prompt: '', options: [] }
+      if (interaction.kind === 'approval') {
+        const fallback = interaction.toolName == null ? '' : `Tool ${String(interaction.toolName)} requests approval`
+        const prompt = String(interaction.reason || fallback).trim().slice(0, 512)
+        return { prompt, options: ['rejected', 'allowed-once'] }
+      }
+      if (interaction.kind !== 'question' && interaction.kind !== 'plan-review') return { prompt: '', options: [] }
+      const questions = Array.isArray(interaction.questions) ? interaction.questions : []
+      if (questions.length !== 1 || questions[0]?.multiSelect === true) return { prompt: '', options: [] }
+      const options = Array.isArray(questions[0]?.options)
+        ? questions[0].options.map(option => String(option?.label || '').trim()).filter(Boolean)
+        : []
+      if (options.length === 0 || options.length > 4 || new Set(options).size !== options.length
+        || options.some(option => option.length > 80 || option.includes('\0'))) return { prompt: '', options: [] }
+      return { prompt: String(questions[0]?.question || '').trim().slice(0, 512), options }
+    }
+
     function sessionState(ctx) {
       const source = ctx.sessions.list.getSnapshot()
       const sourceSessions = (source.ids ?? [])
@@ -744,6 +762,14 @@ window.__ModuleLoader__.load({
         .slice(0, 10)
         .map(item => {
           const completed = Boolean(item.completed)
+          const interaction = item.pendingInteraction
+          const pendingInteraction = typeof interaction === 'string'
+            ? interaction
+            : interaction?.kind == null ? '' : String(interaction.kind)
+          const pendingInteractionKey = typeof interaction === 'object' && interaction?.key != null
+            ? String(interaction.key)
+            : pendingInteraction
+          const notification = notificationInteraction(interaction)
           return {
             id: String(item.id),
             title: String(item.displayTitle || item.title || item.id),
@@ -751,7 +777,10 @@ window.__ModuleLoader__.load({
             running: Boolean(item.running),
             completed,
             finalReply: completed ? finalAssistantReply(ctx, item.id) : '',
-            pendingInteraction: item.pendingInteraction == null ? '' : String(item.pendingInteraction),
+            pendingInteraction,
+            pendingInteractionKey,
+            pendingInteractionPrompt: notification.prompt,
+            pendingInteractionOptions: notification.options,
             agentPreset: item.agentPreset == null ? '' : String(item.agentPreset),
           }
         })
@@ -801,22 +830,25 @@ window.__ModuleLoader__.load({
     async function ensurePortableWorkspace(ctx, workspacePath) {
       const target = String(workspacePath || '').trim()
       if (!target || !ctx.workspaces?.list?.getSnapshot || typeof ctx.workspaces.create !== 'function') return { status: 'unavailable' }
+      const baselineReady = value => value?.baselinesReady === true || value?.phase === 'ready'
       let snapshot = ctx.workspaces.list.getSnapshot()
-      if (!snapshot.baselinesReady) {
+      if (!baselineReady(snapshot)) {
         snapshot = await new Promise(resolve => {
           const stop = ctx.workspaces.list.subscribe(() => {
             const next = ctx.workspaces.list.getSnapshot()
-            if (!next.baselinesReady) return
+            if (!baselineReady(next)) return
             stop?.()
             resolve(next)
           })
         })
       }
       if ((snapshot.items || []).length > 0) return { status: 'preserved' }
-      if (ctx.sessions?.list?.getSnapshot?.().current !== undefined) return { status: 'preserved' }
+      if (ctx.sessions?.list?.getSnapshot?.().current != null) return { status: 'preserved' }
       const workspace = await ctx.workspaces.create({ path: target })
-      if (workspace?.workspaceId && typeof ctx.workspaces.startSession === 'function') {
-        ctx.workspaces.startSession(workspace.workspaceId)
+      const startSession = ctx.uiWorkspace?.startSession?.bind(ctx.uiWorkspace)
+        || ctx.workspaces.startSession?.bind(ctx.workspaces)
+      if (workspace?.workspaceId && startSession) {
+        startSession(workspace.workspaceId)
       }
       return { status: 'created', workspaceId: workspace?.workspaceId }
     }
@@ -843,14 +875,23 @@ window.__ModuleLoader__.load({
               name: 'sidebar.footer.action', id: 'portable-update', order: 80, label: () => copy[localeOf(ctx)].updateReady,
             }, UpdateAction))
             const EnvironmentChip = () => PortableEnvironmentChip({ primitives })
-            ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
-              name: 'conversation.input.left', id: 'portable-environment', order: 80,
+            ctx.slots.inject('conversation.hero.portableContext', () => ctx.slots.register({
+              name: 'conversation.hero.portableContext', id: 'portable-environment', order: 80,
+            }, EnvironmentChip))
+            ctx.slots.inject('conversation.session.header.utilities', () => ctx.slots.register({
+              name: 'conversation.session.header.utilities', id: 'portable-environment', order: 80,
             }, EnvironmentChip))
           }
         } catch (error) { console.warn('[dsh-portable] settings section unavailable:', error) }
       }
       if (!host) return
       const webview = host.bridge
+      const resolvingInteractions = new Set()
+      const acknowledgeNotification = (activationId, terminal) => {
+        const id = typeof activationId === 'string' ? activationId : ''
+        if (!/^[0-9a-f]{32}$/i.test(id)) return
+        webview.postMessage({ type: 'dsh-portable/notification-action-result', activationId: id, terminal: terminal === true })
+      }
 
       window.__DSH_PORTABLE_HOST__ = { restart: restartPortableHost }
       window.__DSH_PORTABLE_HOST__.capabilities = host.capabilities
@@ -960,22 +1001,65 @@ window.__ModuleLoader__.load({
             return
           }
           if (message.action === 'reply-session') {
+            const activationId = message.activationId
             const sessionId = String(message.sessionId || '')
             const reply = typeof message.reply === 'string' ? message.reply.trim() : ''
-            if (reply === '' || reply.length > 8000 || reply.includes('\0')) return
+            if (reply === '' || reply.length > 8000 || reply.includes('\0')) { acknowledgeNotification(activationId, true); return }
             const snapshot = ctx.sessions.list.getSnapshot()
-            if (!snapshot.byId?.[sessionId] || snapshot.byId[sessionId].origin === 'subagent') return
+            if (snapshot?.phase !== 'ready' && !snapshot.byId?.[sessionId]) { acknowledgeNotification(activationId, false); return }
+            if (!snapshot.byId?.[sessionId] || snapshot.byId[sessionId].origin === 'subagent') { acknowledgeNotification(activationId, true); return }
             const scoped = ctx.sessions.scope?.(sessionId)
-            if (typeof scoped?.conversation?.send !== 'function') return
-            void scoped.conversation.send(reply).catch(error => console.warn('[dsh-portable] notification reply failed:', error))
+            if (typeof scoped?.conversation?.send !== 'function') { acknowledgeNotification(activationId, false); return }
+            void scoped.conversation.send(reply)
+              .then(() => acknowledgeNotification(activationId, true))
+              .catch(error => { console.warn('[dsh-portable] notification reply failed:', error); acknowledgeNotification(activationId, true) })
+            return
+          }
+          if (message.action === 'resolve-interaction') {
+            const activationId = message.activationId
+            const sessionId = String(message.sessionId || '')
+            const interactionKey = String(message.interactionKey || '')
+            const response = typeof message.response === 'string' ? message.response.trim() : ''
+            if (!sessionId || !interactionKey || interactionKey.length > 256 || !response
+              || response.length > 80 || interactionKey.includes('\0') || response.includes('\0')) { acknowledgeNotification(activationId, true); return }
+            const snapshot = ctx.sessions.list.getSnapshot()
+            if (snapshot?.phase !== 'ready' && !snapshot.byId?.[sessionId]) { acknowledgeNotification(activationId, false); return }
+            const session = snapshot.byId?.[sessionId]
+            const pending = session?.pendingInteraction
+            if (!session || session.origin === 'subagent' || !pending || typeof pending !== 'object'
+              || String(pending.key || '') !== interactionKey || typeof pending.answer !== 'function') { acknowledgeNotification(activationId, true); return }
+            const eligibility = notificationInteraction(pending)
+            if (!eligibility.options.includes(response)) { acknowledgeNotification(activationId, true); return }
+            const resolutionId = `${sessionId}\0${interactionKey}`
+            if (resolvingInteractions.has(resolutionId)) return
+            resolvingInteractions.add(resolutionId)
+            if (pending.kind === 'approval') {
+              void pending.answer(response)
+                .then(() => acknowledgeNotification(activationId, true))
+                .catch(error => { console.warn('[dsh-portable] notification approval failed:', error); acknowledgeNotification(activationId, true) })
+                .finally(() => resolvingInteractions.delete(resolutionId))
+              return
+            }
+            const questions = Array.isArray(pending.questions) ? pending.questions : []
+            const matched = Array.isArray(questions[0]?.options)
+              ? questions[0].options.find(option => String(option?.label || '').trim() === response)
+              : undefined
+            if (!matched || questions[0]?.id == null) { resolvingInteractions.delete(resolutionId); acknowledgeNotification(activationId, true); return }
+            void pending.answer({ answers: [{ id: questions[0].id, selected: [String(matched.label)] }] })
+              .then(() => acknowledgeNotification(activationId, true))
+              .catch(error => { console.warn('[dsh-portable] notification question failed:', error); acknowledgeNotification(activationId, true) })
+              .finally(() => resolvingInteractions.delete(resolutionId))
             return
           }
           if (message.action !== 'open-session') return
+          const activationId = message.activationId
           const sessionId = String(message.sessionId || '')
           const snapshot = ctx.sessions.list.getSnapshot()
+          if (snapshot?.phase !== 'ready' && !snapshot.byId?.[sessionId]) { acknowledgeNotification(activationId, false); return }
           if (snapshot.byId?.[sessionId] && snapshot.byId[sessionId].origin !== 'subagent') {
             ctx.sessions.open(sessionId)
           }
+          acknowledgeNotification(activationId, true)
         }
 
         webview.addEventListener('message', receive)

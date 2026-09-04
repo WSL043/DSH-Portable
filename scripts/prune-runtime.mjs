@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, readFile, readdir, rm, stat } from 'node:fs/promises'
+import { access, readFile, readdir, rm, rmdir, stat } from 'node:fs/promises'
 import path from 'node:path'
 
 const appDir = path.resolve(process.argv[2] ?? '')
@@ -52,6 +52,13 @@ const sourceOnlyPackages = [
   ['openai', 'src'],
   ['zod', 'src'],
   ['ajv', 'lib'],
+  ['lexical', 'src'],
+  ['@lexical', 'html', 'src'],
+  ['@lexical', 'extension', 'src'],
+  ['@lexical', 'list', 'src'],
+  ['@lexical', 'utils', 'src'],
+  ['@lexical', 'clipboard', 'src'],
+  ['@lexical', 'selection', 'src'],
   ['@wsl043', 'dsh-portable-plugin-market', 'src'],
 ]
 const reviewedPackagingOnlyPayloads = [
@@ -188,6 +195,18 @@ async function removeDebugSymbols(root) {
   }
 }
 
+async function removeEmptyDirectories(root) {
+  for (const entry of await readdir(root, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const directory = path.join(root, entry.name)
+    await removeEmptyDirectories(directory)
+    if ((await readdir(directory)).length === 0) {
+      await rmdir(directory)
+      removed.directories += 1
+    }
+  }
+}
+
 const before = await bytes(ptyRoot)
 for (const entry of await readdir(prebuildRoot, { withFileTypes: true })) {
   if (entry.isDirectory() && entry.name !== target) {
@@ -280,6 +299,8 @@ try {
 } catch (error) {
   if (error?.code !== 'ENOENT') throw error
 }
+
+await removeEmptyDirectories(nodeModules)
 
 const targetFiles = await readdir(nativeRoot)
 assert.equal(targetFiles.some((name) => name.endsWith('.node')), true, `node-pty target ${target} has no native module`)

@@ -145,6 +145,9 @@ function fakeContext(initialSessions) {
       startSession(id) { startedWorkspaces.push(id) },
       async pickDirectory() { return 'node-owned-picker' },
     },
+    uiWorkspace: {
+      startSession(id) { startedWorkspaces.push(id) },
+    },
     sessionLogDownload: {
       store: {
         getSnapshot: () => downloadSnapshot,
@@ -202,6 +205,17 @@ test('Portable registers its owned workspace only for a truly empty first run', 
   assert.equal(fresh.createdWorkspaces.length, 1)
   assert.equal(fresh.createdWorkspaces[0].path, 'C:\\Portable\\workspace')
   assert.deepEqual(fresh.startedWorkspaces, ['portable-workspace'])
+
+  const freshWithNullCurrent = fakeContext({ ids: [], byId: {}, current: null, phase: 'ready' })
+  freshWithNullCurrent.setWorkspaces({ items: [], archivedSessionIds: [], state: 'idle', phase: 'ready', error: null })
+  const createdFromNull = await Promise.race([
+    client.exports.ensurePortableWorkspace(freshWithNullCurrent.ctx, 'C:\\Portable\\workspace'),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('workspace baseline wait timed out')), 100)),
+  ])
+  assert.equal(createdFromNull.status, 'created')
+  assert.equal(freshWithNullCurrent.createdWorkspaces.length, 1)
+  assert.equal(freshWithNullCurrent.createdWorkspaces[0].path, 'C:\\Portable\\workspace')
+  assert.deepEqual(freshWithNullCurrent.startedWorkspaces, ['portable-workspace'])
 
   const existing = fakeContext({ ids: [], byId: {}, current: undefined, phase: 'ready' })
   existing.setWorkspaces({ items: [{ workspaceId: 'user', path: 'D:\\UserProject', sessionIds: [] }], baselinesReady: true, recentWorkspaceId: 'user' })
@@ -346,7 +360,7 @@ function sessionList(count = 12) {
         type: 'event',
         event: { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: `完整回复 ${index}\n第二行` }] } } },
       }] : [],
-      pendingInteraction: index === count - 2 ? 'question' : undefined,
+      pendingInteraction: index === count - 2 ? { kind: 'question', key: `question:${index}` } : undefined,
       agentPreset: index % 2 === 0 ? 'coding' : undefined,
       blank: false,
     }
@@ -361,7 +375,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList())
 
-  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'sessionLogDownload'])
+  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload'])
   client.exports.apply(runtime.ctx)
   assert.equal(runtime.slotEntries.length, 0)
 
@@ -379,6 +393,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   assert.equal(initial.sessions[1].completed, true, 'the bridge must forward the official task-completion signal')
   assert.equal(initial.sessions[1].finalReply, '完整回复 10\n第二行')
   assert.equal(initial.sessions[1].pendingInteraction, 'question')
+  assert.equal(initial.sessions[1].pendingInteractionKey, 'question:10')
 
   runtime.emit('locale/change', { active: 'en', revision: 2 })
   runtime.emit('theme/change', { active: { colorScheme: 'light' }, revision: 2 })
@@ -426,6 +441,115 @@ test('private tray bridge projects bounded official runtime state and invokes on
   runtime.dispose()
   runtime.setSessions(sessionList(2))
   assert.equal(client.posted.length, beforeDispose)
+})
+
+test('native notifications expose only safely answerable pending interactions and reject stale actions', async () => {
+  const client = await loadBridgeClient()
+  const answered = []
+  const approval = {
+    kind: 'approval',
+    key: 'approval:7',
+    toolName: 'shell',
+    reason: '允许执行构建命令？',
+    async answer(value) { answered.push({ sessionId: 'approval-session', value }) },
+  }
+  const question = {
+    kind: 'question',
+    key: 'question:9',
+    questions: [{
+      id: 'release-channel',
+      question: '选择发布通道',
+      options: [
+        { label: 'Stable', description: '正式版' },
+        { label: 'Preview', description: '预览版' },
+      ],
+    }],
+    async answer(value) { answered.push({ sessionId: 'question-session', value }) },
+  }
+  const complexQuestion = {
+    kind: 'question',
+    key: 'question:complex',
+    questions: [{ id: 'one', question: '第一题', options: [{ label: 'A' }] }, { id: 'two', question: '第二题' }],
+    async answer(value) { answered.push({ sessionId: 'complex-session', value }) },
+  }
+  const sessions = {
+    ids: ['approval-session', 'question-session', 'complex-session'],
+    current: '',
+    phase: 'ready',
+    byId: {
+      'approval-session': { id: 'approval-session', displayTitle: '构建任务', updatedAt: 3, running: true, blank: false, pendingInteraction: approval },
+      'question-session': { id: 'question-session', displayTitle: '发布任务', updatedAt: 2, running: true, blank: false, pendingInteraction: question },
+      'complex-session': { id: 'complex-session', displayTitle: '复杂任务', updatedAt: 1, running: true, blank: false, pendingInteraction: complexQuestion },
+    },
+  }
+  const runtime = fakeContext(sessions)
+  client.exports.apply(runtime.ctx)
+
+  const projected = client.posted.at(-1).sessions
+  assert.deepEqual(projected[0].pendingInteractionOptions, ['rejected', 'allowed-once'])
+  assert.equal(projected[0].pendingInteractionPrompt, '允许执行构建命令？')
+  assert.deepEqual(projected[1].pendingInteractionOptions, ['Stable', 'Preview'])
+  assert.equal(projected[1].pendingInteractionPrompt, '选择发布通道')
+  assert.deepEqual(projected[2].pendingInteractionOptions, [], 'multi-question batches must open in DSH instead of being partially answered')
+
+  client.send({
+    type: 'dsh-portable/action', action: 'resolve-interaction', sessionId: 'approval-session',
+    activationId: 'a'.repeat(32), interactionKey: 'approval:7', response: 'allowed-once',
+  })
+  client.send({
+    type: 'dsh-portable/action', action: 'resolve-interaction', sessionId: 'approval-session',
+    activationId: 'a'.repeat(32), interactionKey: 'approval:7', response: 'allowed-once',
+  })
+  client.send({
+    type: 'dsh-portable/action', action: 'resolve-interaction', sessionId: 'question-session',
+    interactionKey: 'question:stale', response: 'Stable',
+  })
+  client.send({
+    type: 'dsh-portable/action', action: 'resolve-interaction', sessionId: 'question-session',
+    interactionKey: 'question:9', response: 'Unknown',
+  })
+  client.send({
+    type: 'dsh-portable/action', action: 'resolve-interaction', sessionId: 'question-session',
+    activationId: 'b'.repeat(32), interactionKey: 'question:9', response: 'Preview',
+  })
+  client.send({
+    type: 'dsh-portable/action', action: 'resolve-interaction', sessionId: 'question-session',
+    activationId: 'b'.repeat(32), interactionKey: 'question:9', response: 'Preview',
+  })
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.deepEqual(JSON.parse(JSON.stringify(answered)), [
+    { sessionId: 'approval-session', value: 'allowed-once' },
+    { sessionId: 'question-session', value: { answers: [{ id: 'release-channel', selected: ['Preview'] }] } },
+  ])
+  assert.deepEqual(client.posted.filter(item => item.type === 'dsh-portable/notification-action-result'), [
+    { type: 'dsh-portable/notification-action-result', activationId: 'a'.repeat(32), terminal: true },
+    { type: 'dsh-portable/notification-action-result', activationId: 'b'.repeat(32), terminal: true },
+  ])
+})
+
+test('notification delivery defers an absent session until the official list is ready', async () => {
+  const client = await loadBridgeClient()
+  const runtime = fakeContext({ ids: [], byId: {}, current: null, phase: 'loading' })
+  client.exports.apply(runtime.ctx)
+  const action = {
+    type: 'dsh-portable/action', action: 'reply-session', activationId: 'c'.repeat(32),
+    sessionId: 'late-session', reply: 'continue',
+  }
+  client.send(action)
+  assert.deepEqual(client.posted.at(-1), {
+    type: 'dsh-portable/notification-action-result', activationId: 'c'.repeat(32), terminal: false,
+  })
+  runtime.setSessions({
+    ids: ['late-session'], current: null, phase: 'ready',
+    byId: { 'late-session': { id: 'late-session', blank: false, origin: 'user' } },
+  })
+  client.send(action)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(runtime.sent, [{ sessionId: 'late-session', text: 'continue' }])
+  assert.deepEqual(client.posted.at(-1), {
+    type: 'dsh-portable/notification-action-result', activationId: 'c'.repeat(32), terminal: true,
+  })
 })
 
 test('task completion projection follows session events even when the list store does not publish', async () => {
@@ -660,12 +784,16 @@ test('Windows task completion notifications use the native action center with ex
   assert.match(notification, /NativeTaskNotification\.Show/)
   assert.doesNotMatch(source, /TaskCompletionNotification\s*:\s*Form|new\s+TaskCompletionNotification|List<TaskCompletionNotification>/, 'completion alerts must not fall back to a self-drawn WinForms window')
   assert.match(source, /NativeTaskNotification\.Unregister\(\)/, 'native toast activation must be detached during host shutdown')
-  assert.match(source, /ToastNotificationManagerCompat\.Uninstall\(\)[\s\S]+CleanupFixedIdentity/, 'Toolkit-owned AUMID/COM/assets must use the official cleanup entry point')
+  assert.doesNotMatch(source, /ToastNotificationManagerCompat\.Uninstall\(\)/, 'stable actionable notifications must not be removed from Action Center when the process exits')
   assert.match(source, /internal static bool TryParseActivation\([\s\S]+IEnumerable<KeyValuePair<string, object>> userInput/, 'activation parsing must be a testable pure function')
-  assert.match(source, /reply\.Length == 0 \|\| reply\.Length > 8000[\s\S]+return false/, 'invalid inline replies must be rejected instead of silently forwarded')
+  assert.match(source, /response\.Length == 0 \|\| response\.Length > 8000[\s\S]+return false/, 'invalid inline replies must be rejected instead of silently forwarded')
   assert.doesNotMatch(source, /GetMethod\("Add"\)|ToastActivationProbe|ValueSetProbe/, 'activation handling must not depend on the unsafe WinRT probe reflection path')
   assert.match(source, /DeleteSubKeyTree\(aumidPath,\s*false\)/, 'only the product-owned fixed AUMID may be removed directly')
-  assert.match(source, /ToastNotificationManagerCompat\.OnActivated/)
+  assert.match(source, /class DshNotificationActivator\s*:\s*NotificationActivator/)
+  assert.match(source, /DesktopNotificationManagerCompat\.RegisterAumidAndComServer<DshNotificationActivator>\(AppUserModelId\)/)
+  assert.match(source, /DesktopNotificationManagerCompat\.RegisterActivator<DshNotificationActivator>\(\)/)
+  assert.match(source, /DesktopNotificationManagerCompat\.CreateToastNotifier\(\)\.Show/)
+  assert.doesNotMatch(source, /ToastNotificationManagerCompat\.OnActivated/, 'the transient executable-path identity must not own actionable task notifications')
   assert.match(source, /ToastArguments\.Parse/)
   assert.match(source, /AddInputTextBox\("reply"/)
   assert.match(source, /SetTextBoxId\("reply"\)/)
@@ -676,7 +804,62 @@ test('Windows task completion notifications use the native action center with ex
   assert.match(source, /unreadCompletedSessions/)
   assert.match(source, /AddText\([\s\S]*finalReply/)
   assert.doesNotMatch(source, /Console\.Write.*finalReply|Log.*finalReply/)
-  assert.match(source, /MarkTaskCompletionHandled\(sessionId\)[\s\S]+PostBridgeAction\("open-session", sessionId\)/)
+  assert.match(source, /MarkTaskCompletionHandled\(sessionId\)[\s\S]+PostBridgeAction\("open-session", sessionId, activationId\)/)
+})
+
+test('Windows notifications distinguish background completion from tasks that need attention', async () => {
+  const source = (await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')).replace(/\r\n/g, '\n')
+  const client = await readFile(sourceUrl, 'utf8')
+
+  assert.match(source, /Dictionary<string, string> taskInteractionState/)
+  assert.match(source, /AddArgument\("environmentId", ownerEnvironmentId\)/)
+  assert.match(source, /AddArgument\("instanceKey", ownerInstanceKey\)/)
+  assert.match(source, /AddArgument\("rootKey", ownerRootKey\)/)
+  assert.match(source, /TryResolveTrustedRoot\(envelope\.rootKey/)
+  assert.match(source, /AddArgument\("activationId", activationId\)/)
+  assert.match(source, /createdAt < now - 604800/)
+  assert.match(source, /--dsh-notification-dispatch/)
+  assert.match(source, /lock \(activationSync\)[\s\S]+DrainOwnerActivations/)
+  assert.match(source, /DrainOwnerActivations\(\)/)
+  assert.match(source, /dsh-portable\/notification-action-result/)
+  assert.match(client, /notification-action-result/)
+  assert.match(source, /File\.WriteAllText\(done, String\.Empty/)
+  assert.match(source, /private bool IsCurrentTaskVisibleAndFocused\(TrayBridgeState state, TrayBridgeSession session\)/)
+
+  const handlerStart = source.indexOf('private void HandleTaskCompletionNotifications(')
+  const handlerEnd = source.indexOf('\n        private ', handlerStart + 1)
+  assert.ok(handlerStart >= 0 && handlerEnd > handlerStart)
+  const handler = source.slice(handlerStart, handlerEnd)
+  assert.match(handler, /IsCurrentTaskVisibleAndFocused\(state, session\)/)
+  assert.match(handler, /session\.completed && !wasCompleted && !currentTaskVisible/)
+  assert.match(handler, /pendingInteraction[\s\S]+previousInteraction[\s\S]+attentionThisFrame\.Add\(session\)/)
+  assert.match(handler, /ShowTaskAttentionNotifications\(attentionThisFrame\)/)
+
+  const completionStart = source.indexOf('internal static bool ShowCompletion(')
+  const completionEnd = source.indexOf('\n    }\n\n    internal sealed class DesktopWindowState', completionStart + 1)
+  assert.ok(completionStart >= 0 && completionEnd > completionStart)
+  const completion = source.slice(completionStart, completionEnd)
+  assert.match(completion, /AddInputTextBox\("reply"/)
+  assert.match(completion, /SetTextBoxId\("reply"\)/)
+
+  const attentionStart = source.indexOf('internal static bool ShowAttention(')
+  const attentionEnd = source.indexOf('\n        internal static bool ShowCompletion(', attentionStart + 1)
+  assert.ok(attentionStart >= 0 && attentionEnd > attentionStart)
+  const attention = source.slice(attentionStart, attentionEnd)
+  assert.match(attention, /Task needs your attention|任务需要你处理/)
+  assert.match(attention, /AddArgument\("action", "open"\)/)
+  assert.doesNotMatch(attention, /AddInputTextBox|SetTextBoxId/, 'pending interactions must use bounded choices instead of an unsafe free-form answer')
+  assert.match(source, /public string pendingInteractionPrompt \{ get; set; \}/)
+  assert.match(source, /public List<string> pendingInteractionOptions \{ get; set; \}/)
+  assert.match(attention, /resolve-interaction/)
+  assert.match(attention, /interactionKey/)
+  assert.match(attention, /allowed-once/)
+  assert.match(attention, /rejected/)
+  assert.match(attention, /pendingInteractionOptions[\s\S]+\.Take\(4\)/)
+  assert.match(source, /PostBridgeInteractionAnswer/)
+  assert.match(source, /interactionKey[\s\S]+response/)
+  assert.match(source, /L\("任务通知", "Task notifications"\)/)
+  assert.match(client, /notificationsHint:\s*'任务在后台完成，或等待回答和批准时显示系统通知。'/)
 })
 
 test('Portable settings explain when Windows has disabled system notifications', async () => {
@@ -700,19 +883,34 @@ test('Portable projects update availability and isolated environment context int
   assert.match(client, /background:\s*true/)
   assert.match(client, /dsh-portable\/open-update/)
   assert.match(client, /IconDownloadOutline16/)
-  assert.match(client, /slots\.inject\('conversation\.input\.left'/)
-  assert.match(client, /name:\s*'conversation\.input\.left',\s*id:\s*'portable-environment'/)
+  assert.match(client, /slots\.inject\('conversation\.hero\.portableContext'/)
+  assert.match(client, /name:\s*'conversation\.hero\.portableContext',\s*id:\s*'portable-environment'/)
+  assert.match(client, /slots\.inject\('conversation\.session\.header\.utilities'/)
+  assert.match(client, /name:\s*'conversation\.session\.header\.utilities',\s*id:\s*'portable-environment'/)
   assert.match(client, /environments\.current\s*===\s*'default'/)
 })
 
-test('Windows native smoke exercises a real action-center notification and exact-session reply', async () => {
+test('Windows native smoke exercises the native action-center delivery path and exact-session reply', async () => {
   const smoke = await readFile(new URL('../scripts/smoke-windows-native-tray.ps1', import.meta.url), 'utf8')
   assert.match(smoke, /NativeTaskNotification/)
   assert.match(smoke, /ToastNotificationManagerCompat/)
   assert.match(smoke, /reply/)
   assert.match(smoke, /sessionId/)
   assert.match(smoke, /CopyFromScreen|capture/i)
+  assert.match(smoke, /pendingInteraction[\s\S]+approval/)
+  assert.match(smoke, /resolve-interaction/)
+  assert.match(smoke, /allowed-once/)
+  assert.match(smoke, /rejected/)
+  assert.match(smoke, /native-task-attention\.png/)
   assert.doesNotMatch(smoke, /TaskCompletionNotification\s*:\s*Form|OnMouseEnter|bodyFull|ReplyRequested/, 'the native smoke must not exercise the removed WinForms notification')
+})
+
+test('Windows launcher compiles the stable interactive notification identity against WinRT', async () => {
+  const build = await readFile(new URL('../scripts/build-windows.ps1', import.meta.url), 'utf8')
+  assert.match(build, /Windows Kits\\10\\UnionMetadata\\Facade\\Windows\.winmd/)
+  assert.match(build, /Windows\.Foundation\.UniversalApiContract\.winmd/)
+  assert.match(build, /System\.Runtime\.WindowsRuntime\.dll/)
+  assert.match(build, /RequiredNotificationReference/)
 })
 
 test('Windows CI verifies the real tray bridge in a background browser without desktop input', async () => {

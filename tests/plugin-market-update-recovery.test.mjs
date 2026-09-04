@@ -23,22 +23,23 @@ async function writeInstalledPlugin(profile, version) {
     name: 'fixture-plugin',
     version,
     main: 'lib/index.js',
-    dsh: {},
+    dsh: { bundle: { patch: 'cordis.patch.yml' } },
   }))
   await writeFile(path.join(plugin, 'lib', 'index.js'), `export const version = '${version}'\n`)
+  await writeFile(path.join(plugin, 'cordis.patch.yml'), '- insert: []\n')
 }
 
-async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd }) {
+async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd, installed = true }) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
   t.after(() => rm(profile, { recursive: true, force: true }))
   const manifestFile = path.join(profile, 'package.json')
   await writeFile(manifestFile, JSON.stringify({
     name: 'portable-profile',
-    dependencies: { 'fixture-plugin': spec },
-    dsh: { profile: { bundles: ['fixture-plugin'] } },
+    dependencies: installed ? { 'fixture-plugin': spec } : {},
+    dsh: { profile: { bundles: installed ? ['fixture-plugin'] : [] } },
   }, null, 2))
   if (lockfile !== '') await writeFile(path.join(profile, 'pnpm-lock.yaml'), lockfile)
-  await writeInstalledPlugin(profile, '1.0.0')
+  if (installed) await writeInstalledPlugin(profile, '1.0.0')
 
   const calls = []
   const commandRuntime = {
@@ -74,13 +75,45 @@ async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd }) {
   t.after(dispose)
 
   const originalFetch = globalThis.fetch
+  const proxyKeys = ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY']
+  const previousProxy = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]))
+  for (const key of proxyKeys) delete process.env[key]
   globalThis.fetch = async (url) => {
+    if (String(url) === 'https://awesome-dsh-plugin.com/plugins.json') {
+      return new Response(JSON.stringify({
+        updated: '2026-09-05T00:00:00.000Z',
+        count: 1,
+        categories: {},
+        plugins: [{
+          name: 'fixture-plugin',
+          owner: 'owner',
+          url: 'https://github.com/owner/fixture-plugin',
+          category: 'utility',
+          description: { zh: 'fixture', en: 'fixture' },
+          npm: 'fixture-plugin',
+          install: 'npm',
+          added: '2026-09-05',
+        }],
+      }), { status: 200 })
+    }
     if (String(url).endsWith('/fixture-plugin/latest')) {
       return new Response(JSON.stringify({ version: '1.2.0' }), { status: 200 })
     }
+    if (String(url) === 'https://registry.npmjs.org/fixture-plugin') {
+      return new Response(JSON.stringify({
+        'dist-tags': { latest: '1.2.0' },
+        time: { '1.2.0': new Date(Date.now() - 60_000).toISOString() },
+      }), { status: 200 })
+    }
     throw new Error(`unexpected fetch: ${String(url)}`)
   }
-  t.after(() => { globalThis.fetch = originalFetch })
+  t.after(() => {
+    globalThis.fetch = originalFetch
+    for (const key of proxyKeys) {
+      if (previousProxy[key] === undefined) delete process.env[key]
+      else process.env[key] = previousProxy[key]
+    }
+  })
 
   const server = createServer((request, response) => {
     const handler = routes.get(new URL(request.url, 'http://127.0.0.1').pathname)
@@ -110,8 +143,57 @@ async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd }) {
       })
       return { response, body: await response.json() }
     },
+    async install(url = 'https://github.com/owner/fixture-plugin') {
+      const response = await originalFetch(`${origin}/dsh-market/install`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: JSON.stringify({ url }),
+      })
+      return { response, body: await response.json() }
+    },
   }
 }
+
+test('an explicit npm update applies a fresh latest release in one request', async (t) => {
+  const bed = await updateTestbed(t, {
+    async onAdd({ args, target, manifestFile, profile }) {
+      assert.deepEqual(args.slice(0, 3), ['add', '--config.minimumReleaseAge=0', 'fixture-plugin@latest'])
+      assert.equal(target, 'fixture-plugin@latest')
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
+      await writeInstalledPlugin(profile, '1.2.0')
+      return ok()
+    },
+  })
+
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 200, JSON.stringify(body))
+  assert.equal(body.ok, true)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 1)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '^1.2.0')
+})
+
+test('a fresh npm install applies the latest release in one request', async (t) => {
+  const bed = await updateTestbed(t, {
+    installed: false,
+    async onAdd({ args, target, manifestFile, profile }) {
+      assert.deepEqual(args, ['add', '--config.minimumReleaseAge=0', 'fixture-plugin@latest'])
+      assert.equal(target, 'fixture-plugin@latest')
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
+      await writeInstalledPlugin(profile, '1.2.0')
+      return ok()
+    },
+  })
+
+  const { response, body } = await bed.install()
+  assert.equal(response.status, 200, JSON.stringify(body))
+  assert.equal(body.ok, true)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 1)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '^1.2.0')
+})
 
 test('a hard-failed npm update restores and verifies the previous package bytes', async (t) => {
   const bed = await updateTestbed(t, {

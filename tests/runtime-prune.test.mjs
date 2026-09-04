@@ -70,6 +70,10 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, 'openai/package.json', '{"name":"openai","main":"index.js"}')
   await fixtureFile(appDir, 'openai/index.js', 'export default true')
   await fixtureFile(appDir, 'openai/src/internal.ts', 'export type SourceOnly = true')
+  await fixtureFile(appDir, 'lexical/package.json', '{"name":"lexical","main":"./dist/Lexical.js","module":"./dist/Lexical.mjs"}')
+  await fixtureFile(appDir, 'lexical/dist/Lexical.js', 'module.exports = true')
+  await fixtureFile(appDir, 'lexical/src/LexicalEditor.ts', 'source only')
+  await mkdir(path.join(appDir, 'node_modules', 'example-package', 'empty', 'nested'), { recursive: true })
   await fixtureFile(appDir, 'runtime-ts/package.json', '{"name":"runtime-ts","main":"src/index.ts"}')
   await fixtureFile(appDir, 'runtime-ts/src/index.ts', 'export default true')
   await fixtureFile(appDir, '@wsl043/dsh-portable-plugin-market/package.json', '{"name":"@wsl043/dsh-portable-plugin-market","main":"lib/index.js"}')
@@ -122,6 +126,7 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     '@mistralai/mistralai/esm/index.js',
     '@mixmark-io/domino/lib/index.js',
     'openai/index.js',
+    'lexical/dist/Lexical.js',
     'runtime-ts/src/index.ts',
     '@wsl043/dsh-portable-plugin-market/lib/index.js',
     '@aws-sdk/core/dist-cjs/index.js',
@@ -152,6 +157,8 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     '@mixmark-io/domino/test',
     '@mixmark-io/domino/.yarn',
     'openai/src',
+    'lexical/src',
+    'example-package/empty',
     '../vendor',
     '@aws-sdk/core/dist-es',
     '@opentelemetry/api/build/esm',

@@ -16,8 +16,10 @@ const [lockfile, upstream] = await Promise.all([
 assert.equal(lockfile.lockfileVersion, 3, 'npm lockfile version must be 3')
 const root = lockfile.packages?.['']
 const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'
+const settingsPackage = '@deepseek-ai/dsh-settings'
 assert.deepEqual(root?.dependencies, {
   [upstream.dsh.package]: upstream.dsh.version,
+  [settingsPackage]: upstream.dsh.version,
   [desktopBridgePackage]: 'file:../desktop-bridge',
   [upstream.pluginMarket.package]: 'file:vendor/dsh-portable-plugin-market',
   [upstream.pnpm.package]: upstream.pnpm.version,
@@ -26,6 +28,7 @@ const installed = lockfile.packages?.[`node_modules/${upstream.dsh.package}`]
 assert.equal(installed?.version, upstream.dsh.version, 'pinned DSH version')
 assert.equal(installed?.integrity, upstream.dsh.integrity, 'pinned DSH integrity')
 assert.equal(installed?.license, 'MIT', 'DSH npm license')
+assert.equal(lockfile.packages?.[`node_modules/${settingsPackage}`]?.version, upstream.dsh.version, 'plugin market settings runtime')
 const packageManager = lockfile.packages?.[`node_modules/${upstream.pnpm.package}`]
 assert.equal(packageManager?.version, upstream.pnpm.version, 'pinned pnpm version')
 assert.equal(packageManager?.integrity, upstream.pnpm.integrity, 'pinned pnpm integrity')

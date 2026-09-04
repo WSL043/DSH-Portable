@@ -98,7 +98,7 @@ if (changed) {
 
   const installArgs = [
     'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact',
-    `@deepseek-ai/dsh@${version}`, `pnpm@${currentLock.pnpm.version}`,
+    `@deepseek-ai/dsh@${version}`, `@deepseek-ai/dsh-settings@${version}`, `pnpm@${currentLock.pnpm.version}`,
   ]
   const npmCliCandidates = [
     process.env.npm_execpath,

@@ -20,13 +20,21 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   assert.match(host, /DshPortableEphemeral/)
   assert.match(host, /DshPortableOwnerPid/)
   assert.match(host, /Process\.GetProcessById\(ownerPid\)/)
-  assert.match(host, /ToastNotificationManagerCompat\.Uninstall\(\)/)
-  assert.match(host, /CleanupRegistration\(\)[\s\S]+ToastNotificationManagerCompat\.Uninstall\(\)[\s\S]+CleanupFixedIdentity/)
+  assert.match(host, /DesktopNotificationManagerCompat\.RegisterAumidAndComServer<DshNotificationActivator>/)
+  assert.match(host, /CleanupRegistration\(\)[\s\S]+CleanupFixedIdentity/)
+  assert.doesNotMatch(host, /ToastNotificationManagerCompat\.Uninstall\(\)/)
   assert.match(host, /NativeTaskNotification\.CleanupRegistration\(\)/)
   assert.match(host, /DeleteSubKeyTree\(aumidPath,\s*false\)/)
   assert.match(host, /desktopStart\s*=\s*!nonInteractive[\s\S]+if \(desktopStart\)[\s\S]+NativeTaskNotification\.ActionRequested/)
   assert.match(host, /if \(LauncherWindow\.IsStartInvocation\(args\)\)[\s\S]+NativeTaskNotification\.CleanupRegistration\(\)[\s\S]+RegisterNotificationIdentity\(\)/)
   assert.match(host, /SetCurrentProcessExplicitAppUserModelID\(AppUserModelId\)/)
+  assert.match(host, /IsNotificationActivationInvocation\(args\)[\s\S]+RunNotificationActivationBroker\(executableRoot\)[\s\S]+return;/)
+  assert.ok(
+    host.indexOf('IsNotificationActivationInvocation(args)') < host.indexOf('new Mutex(true,'),
+    'COM activation must enter its bounded broker before environment single-instance exit routing',
+  )
+  assert.match(host, /Timer \{ Interval = 15000 \}/)
+  assert.match(host, /ConfigureOwner\(root, environmentId,[\s\S]+SetOwnerReady\(true\)/)
   assert.match(host, /start["']\s*,\s*["']--no-browser["']\s*,\s*["']--json/)
   assert.match(host, /startup-latest\.jsonl/)
   assert.match(host, /DSH_PORTABLE_STARTUP_ID/)
@@ -638,6 +646,15 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
     audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(bootSample || bootLogSample"),
     'startup samples must be uploaded even when the transition assertion fails',
   )
+})
+
+test('Windows startup audit can create a real existing session before checking its environment chip', async () => {
+  const audit = await read('scripts/audit-windows-startup-transition.mjs')
+
+  assert.match(audit, /DSH_PORTABLE_AUDIT_EXISTING_SESSION_PROOF/)
+  assert.match(audit, /new InputEvent\('input'/)
+  assert.match(audit, /existing session user message/)
+  assert.match(audit, /05-environment-chip-existing-session\.png/)
 })
 
 test('macOS package smokes treat the native app as a long-lived desktop process', async () => {

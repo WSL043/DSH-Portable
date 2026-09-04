@@ -145,6 +145,7 @@ fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-session-export-ui.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-boot-handoff.mjs" "$STAGE/app"
+"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-portable-hero-context.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-windows-subprocess-hide.mjs" "$STAGE/app"
 rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" darwin "$ARCH"
@@ -282,6 +283,10 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
   }
 }
 EOF
+
+if [[ "${DSH_PORTABLE_CORE_ONLY:-0}" == 1 ]]; then
+  exit 0
+fi
 
 ZIP="$OUTPUT_DIR/DSH-Portable-macos-$ARCH.zip"
 rm -f "$ZIP" "$ZIP.sha256"

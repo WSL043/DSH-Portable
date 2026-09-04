@@ -45,7 +45,7 @@
 
 This is not a renamed browser shortcut sold as a “no-install build.” Its runtime and plugin tools live inside the product folder, so the destination computer does not need Node.js or pnpm and DSH-Portable never modifies the system `PATH`. The dedicated window, tray, recent sessions, task notifications, remembered placement, and update experience remain intact.
 
-On Windows, enabling **Task completion notifications** shows an actionable notification for every newly completed task. Hover expands the complete final reply, and Reply continues the exact originating task. The taskbar icon displays the number of completed tasks you have not opened or replied to yet.
+On Windows, enabling **Task notifications** shows a system notification when a background task finishes or needs an answer or approval. Completion notifications let you reply to the originating task. Approval notifications offer Reject and Allow once; simple single-choice questions offer their answers, while complex questions open the corresponding task. Windows controls notification expansion. The taskbar icon counts completed tasks you have not opened or replied to yet.
 
 | Where you start | What Portable handles |
 | --- | --- |
@@ -167,6 +167,8 @@ Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and 
 - [Report a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml)
 - [Request an improvement](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [Join a discussion](https://github.com/WSL043/DSH-Portable/discussions)
+
+The bundled DSH 0.1.2-rc.1 has a known network compatibility limitation: Clash/Mihomo Fake-IP DNS can cause `web_fetch` to return `WEB_BLOCKED_URL`. See the [upstream discussion](https://github.com/deepseek-ai/deepseek-harness/discussions/5202) for progress.
 
 Do not paste API keys, login credentials, or private conversations into an issue.
 

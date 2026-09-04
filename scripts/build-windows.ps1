@@ -2,7 +2,8 @@
 param(
     [string]$OutputDir,
     [string]$CacheDir,
-    [string]$PreviewAppSource
+    [string]$PreviewAppSource,
+    [switch]$CoreOnly
 )
 
 $ErrorActionPreference = 'Stop'
@@ -232,6 +233,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Permission localization adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-native-boot-handoff.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Native boot handoff adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw "Portable Hero context adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-windows-subprocess-hide.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
@@ -312,6 +315,15 @@ try {
     $Csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
     if (-not (Test-Path -LiteralPath $Csc)) { $Csc = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe' }
     if (-not (Test-Path -LiteralPath $Csc)) { throw 'The Windows .NET Framework C# compiler is unavailable.' }
+    $WindowsWinmd = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\UnionMetadata\Facade\Windows.winmd'
+    $UniversalApiContract = Get-ChildItem (Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\References') -Recurse -Filter 'Windows.Foundation.UniversalApiContract.winmd' -ErrorAction SilentlyContinue |
+        Sort-Object @{ Expression = { [version]$_.Directory.Parent.Parent.Name }; Descending = $true }, @{ Expression = { [version]$_.Directory.Name }; Descending = $true } |
+        Select-Object -First 1 -ExpandProperty FullName
+    $WindowsRuntimeAssembly = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\System.Runtime.WindowsRuntime.dll'
+    if (-not (Test-Path -LiteralPath $WindowsRuntimeAssembly)) { $WindowsRuntimeAssembly = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\System.Runtime.WindowsRuntime.dll' }
+    foreach ($RequiredNotificationReference in @($WindowsWinmd, $UniversalApiContract, $WindowsRuntimeAssembly)) {
+        if (-not (Test-Path -LiteralPath $RequiredNotificationReference)) { throw "Windows notification compile reference is unavailable: $RequiredNotificationReference" }
+    }
     $LauncherExe = Join-Path $Stage 'DeepSeek-Herness.exe'
     $CompilerArgs = @(
         '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
@@ -319,6 +331,7 @@ try {
         "/win32manifest:$ProjectRoot\launcher\windows\DSH-Portable.manifest",
         '/reference:System.dll', '/reference:System.Core.dll', '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
         '/reference:System.Web.Extensions.dll',
+        "/reference:$WindowsWinmd", "/reference:$UniversalApiContract", "/reference:$WindowsRuntimeAssembly",
         "/reference:$WebView2Core", "/reference:$WebView2WinForms",
         "/reference:$NotificationAssembly", "/reference:$ValueTupleAssembly",
         "/out:$LauncherExe",
@@ -441,6 +454,17 @@ try {
         } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
         [System.Text.UTF8Encoding]::new($false)
     )
+
+    if ($CoreOnly) {
+        [pscustomobject]@{
+            UpdateComponent = $UpdateComponent
+            UpdateComponentSha256 = $UpdateComponentHash
+            EngineUpdateManifest = $EngineUpdateManifest
+            Stage = $Stage
+            DshVersion = $DshLock.version
+        }
+        return
+    }
 
     $Zip = Join-Path $OutputDir 'DSH-Portable-windows-x64-offline.zip'
     $ZipCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-offline-$BuildId.zip")

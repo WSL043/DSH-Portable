@@ -18,6 +18,7 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
   ])
   assert.deepEqual(runtime.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
+    '@deepseek-ai/dsh-settings': upstream.dsh.version,
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
     pnpm: '11.7.0',
@@ -73,6 +74,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
   const rootPackage = lockfile.packages['']
   assert.deepEqual(rootPackage.dependencies, {
     '@deepseek-ai/dsh': upstream.dsh.version,
+    '@deepseek-ai/dsh-settings': upstream.dsh.version,
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
     pnpm: upstream.pnpm.version,

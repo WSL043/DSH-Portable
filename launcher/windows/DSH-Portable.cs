@@ -21,6 +21,7 @@ using System.Web.Script.Serialization;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Toolkit.Uwp.Notifications;
+using Windows.UI.Notifications;
 
 [assembly: AssemblyTitle("DeepSeek-Herness")]
 [assembly: AssemblyDescription("Native desktop host for DeepSeek Harness")]
@@ -41,6 +42,9 @@ namespace DshPortable
         public bool completed { get; set; }
         public string finalReply { get; set; }
         public string pendingInteraction { get; set; }
+        public string pendingInteractionKey { get; set; }
+        public string pendingInteractionPrompt { get; set; }
+        public List<string> pendingInteractionOptions { get; set; }
         public string agentPreset { get; set; }
     }
 
@@ -55,25 +59,108 @@ namespace DshPortable
         public List<TrayBridgeSession> sessions { get; set; }
     }
 
+    [ComVisible(true)]
+    [ClassInterface(ClassInterfaceType.None)]
+    [Guid("FE67BADC-9348-428F-B76A-C021C42D3E80")]
+    public sealed class DshNotificationActivator : NotificationActivator
+    {
+        public override void OnActivated(string arguments, NotificationUserInput userInput, string appUserModelId)
+        {
+            IEnumerable<KeyValuePair<string, object>> values = userInput == null
+                ? null
+                : userInput.Select(item => new KeyValuePair<string, object>(item.Key, item.Value));
+            NativeTaskNotification.DispatchActivation(arguments, values);
+        }
+    }
+
     internal static class NativeTaskNotification
     {
         private const string AppUserModelId = "io.github.wsl043.dsh-portable";
         private const string RegistrationRoot = @"Software\Classes\AppUserModelId\";
+        private const string RootMapRegistry = @"Software\WSL043\DSH-Portable\NotificationRoots\";
         private static bool registered;
-        private static bool processExitHooked;
-        internal static event Action<string, string, string> ActionRequested;
+        private static string executableRoot;
+        private static string ownerEnvironmentId;
+        private static string ownerInstanceKey;
+        private static string ownerRootKey;
+        private static bool ownerReady;
+        private static readonly object activationSync = new object();
+        private static readonly HashSet<string> inflightActivations = new HashSet<string>(StringComparer.Ordinal);
+        internal static event Action<string, string, string, string, string> ActionRequested;
+
+        private sealed class ActivationEnvelope
+        {
+            public string activationId { get; set; }
+            public long createdAt { get; set; }
+            public string environmentId { get; set; }
+            public string instanceKey { get; set; }
+            public string rootKey { get; set; }
+            public string action { get; set; }
+            public string sessionId { get; set; }
+            public string interactionKey { get; set; }
+            public string response { get; set; }
+        }
+
+        internal static void ConfigureOwner(string root, string environmentId, string instanceKey)
+        {
+            executableRoot = Path.GetFullPath(root);
+            ownerEnvironmentId = environmentId;
+            ownerInstanceKey = instanceKey;
+            ownerRootKey = LauncherWindow.ResolveEnvironmentInstanceKey(executableRoot, "notification-root");
+            ownerReady = false;
+            RegisterTrustedRoot(ownerRootKey, executableRoot);
+        }
+
+        internal static void ConfigureBroker(string root)
+        {
+            executableRoot = Path.GetFullPath(root);
+            ownerEnvironmentId = null;
+            ownerInstanceKey = null;
+            ownerRootKey = null;
+            ownerReady = false;
+        }
+
+        private static void RegisterTrustedRoot(string rootKey, string root)
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(RootMapRegistry + rootKey))
+                {
+                    if (key == null) return;
+                    key.SetValue("Root", Path.GetFullPath(root), RegistryValueKind.String);
+                    key.SetValue("Executable", Path.GetFullPath(Application.ExecutablePath), RegistryValueKind.String);
+                }
+            }
+            catch { }
+        }
+
+        private static bool TryResolveTrustedRoot(string rootKey, out string root, out string executable)
+        {
+            root = String.Empty;
+            executable = String.Empty;
+            if (!Regex.IsMatch(rootKey ?? String.Empty, "^[0-9a-f]{32}$", RegexOptions.CultureInvariant)) return false;
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RootMapRegistry + rootKey))
+                {
+                    if (key == null) return false;
+                    root = Path.GetFullPath(Convert.ToString(key.GetValue("Root"), CultureInfo.InvariantCulture));
+                    executable = Path.GetFullPath(Convert.ToString(key.GetValue("Executable"), CultureInfo.InvariantCulture));
+                }
+                return String.Equals(LauncherWindow.ResolveEnvironmentInstanceKey(root, "notification-root"), rootKey, StringComparison.Ordinal)
+                    && String.Equals(Path.GetDirectoryName(executable), root, StringComparison.OrdinalIgnoreCase)
+                    && File.Exists(executable);
+            }
+            catch { root = String.Empty; executable = String.Empty; return false; }
+        }
 
         internal static bool Register()
         {
             if (registered) return true;
             try
             {
-                ToastNotificationManagerCompat.OnActivated += HandleActivated;
-                if (!processExitHooked)
-                {
-                    AppDomain.CurrentDomain.ProcessExit += HandleProcessExit;
-                    processExitHooked = true;
-                }
+                DesktopNotificationManagerCompat.RegisterAumidAndComServer<DshNotificationActivator>(AppUserModelId);
+                DesktopNotificationManagerCompat.RegisterActivator<DshNotificationActivator>();
                 registered = true;
                 return true;
             }
@@ -85,33 +172,14 @@ namespace DshPortable
 
         internal static void Unregister()
         {
-            try
-            {
-                if (registered) ToastNotificationManagerCompat.OnActivated -= HandleActivated;
-            }
-            catch { }
-            finally
-            {
-                registered = false;
-                CleanupRegistration();
-            }
+            registered = false;
         }
 
-        private static void HandleProcessExit(object sender, EventArgs eventArgs)
-        {
-            CleanupRegistration();
-        }
-
-        // ToastNotificationManagerCompat owns the unpackaged AUMID, COM
-        // activator, and notification assets. Its official Uninstall entry
-        // point must run from this EXE before we remove our own fixed identity.
+        // Clear only our stale display identity before startup. The COM
+        // activator registration is updated in-place for the current portable
+        // path and must remain available while notifications sit in Action Center.
         internal static void CleanupRegistration()
         {
-            try
-            {
-                ToastNotificationManagerCompat.Uninstall();
-            }
-            catch { }
             CleanupFixedIdentity();
         }
 
@@ -146,11 +214,13 @@ namespace DshPortable
             IEnumerable<KeyValuePair<string, object>> userInput,
             out string action,
             out string sessionId,
-            out string reply)
+            out string interactionKey,
+            out string response)
         {
             action = String.Empty;
             sessionId = String.Empty;
-            reply = String.Empty;
+            interactionKey = String.Empty;
+            response = String.Empty;
             try
             {
                 ToastArguments arguments = ToastArguments.Parse(argument ?? String.Empty);
@@ -159,7 +229,8 @@ namespace DshPortable
                 if (!arguments.TryGetValue("action", out parsedAction)
                     || !arguments.TryGetValue("sessionId", out parsedSessionId)
                     || (String.Equals(parsedAction, "reply", StringComparison.Ordinal) == false
-                        && String.Equals(parsedAction, "open", StringComparison.Ordinal) == false)
+                        && String.Equals(parsedAction, "open", StringComparison.Ordinal) == false
+                        && String.Equals(parsedAction, "resolve-interaction", StringComparison.Ordinal) == false)
                     || String.IsNullOrWhiteSpace(parsedSessionId)) return false;
                 action = parsedAction;
                 sessionId = parsedSessionId;
@@ -172,10 +243,21 @@ namespace DshPortable
                         if (!String.Equals(input.Key, "reply", StringComparison.Ordinal)) continue;
                         found = true;
                         if (input.Value == null) return false;
-                        reply = input.Value.ToString().Trim();
+                        response = input.Value.ToString().Trim();
                         break;
                     }
-                    if (!found || reply.Length == 0 || reply.Length > 8000 || reply.IndexOf('\0') >= 0) return false;
+                    if (!found || response.Length == 0 || response.Length > 8000 || response.IndexOf('\0') >= 0) return false;
+                }
+                else if (String.Equals(action, "resolve-interaction", StringComparison.Ordinal))
+                {
+                    string parsedKey;
+                    string parsedResponse;
+                    if (!arguments.TryGetValue("interactionKey", out parsedKey)
+                        || !arguments.TryGetValue("response", out parsedResponse)) return false;
+                    interactionKey = (parsedKey ?? String.Empty).Trim();
+                    response = (parsedResponse ?? String.Empty).Trim();
+                    if (interactionKey.Length == 0 || interactionKey.Length > 256 || interactionKey.IndexOf('\0') >= 0
+                        || response.Length == 0 || response.Length > 80 || response.IndexOf('\0') >= 0) return false;
                 }
                 return true;
             }
@@ -183,30 +265,254 @@ namespace DshPortable
             {
                 action = String.Empty;
                 sessionId = String.Empty;
-                reply = String.Empty;
+                interactionKey = String.Empty;
+                response = String.Empty;
                 return false;
             }
         }
 
-        private static void HandleActivated(ToastNotificationActivatedEventArgsCompat eventArgs)
+        internal static void DispatchActivation(string argument, IEnumerable<KeyValuePair<string, object>> userInput)
         {
             try
             {
-                PropertyInfo userInputProperty = eventArgs == null ? null : eventArgs.GetType().GetProperty("UserInput");
-                object valueSet = userInputProperty == null ? null : userInputProperty.GetValue(eventArgs, null);
-                IEnumerable<KeyValuePair<string, object>> userInput = valueSet as IEnumerable<KeyValuePair<string, object>>;
                 string action;
                 string sessionId;
-                string reply;
-                if (!TryParseActivation(eventArgs == null ? String.Empty : eventArgs.Argument, userInput,
-                    out action, out sessionId, out reply)) return;
-                Action<string, string, string> requested = ActionRequested;
-                if (requested != null) requested(action, sessionId, reply);
+                string interactionKey;
+                string response;
+                if (!TryParseActivation(argument, userInput,
+                    out action, out sessionId, out interactionKey, out response)) return;
+                ToastArguments arguments = ToastArguments.Parse(argument ?? String.Empty);
+                string environmentId;
+                string instanceKey;
+                string rootKey;
+                string activationId;
+                string createdAtText;
+                long createdAt;
+                if (!arguments.TryGetValue("environmentId", out environmentId)
+                    || !arguments.TryGetValue("instanceKey", out instanceKey)
+                    || !arguments.TryGetValue("rootKey", out rootKey)
+                    || !arguments.TryGetValue("activationId", out activationId)
+                    || !arguments.TryGetValue("createdAt", out createdAtText)
+                    || !Regex.IsMatch(environmentId ?? String.Empty, "^[a-z0-9](?:[a-z0-9._-]{0,30}[a-z0-9])?$", RegexOptions.CultureInvariant)
+                    || !Regex.IsMatch(activationId ?? String.Empty, "^[0-9a-f]{32}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                    || !Int64.TryParse(createdAtText, NumberStyles.None, CultureInfo.InvariantCulture, out createdAt)) return;
+                RouteActivation(new ActivationEnvelope {
+                    activationId = activationId.ToLowerInvariant(), createdAt = createdAt,
+                    environmentId = environmentId, instanceKey = instanceKey,
+                    rootKey = rootKey,
+                    action = action, sessionId = sessionId, interactionKey = interactionKey, response = response,
+                });
             }
             catch { }
         }
 
-        internal static bool Show(TrayBridgeSession session, bool chinese)
+        private static void RouteActivation(ActivationEnvelope envelope)
+        {
+            if (envelope == null || String.IsNullOrWhiteSpace(executableRoot)) return;
+            long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            if (envelope.createdAt > now + 300 || envelope.createdAt < now - 604800) return;
+            string targetRoot;
+            string targetExecutable;
+            if (!TryResolveTrustedRoot(envelope.rootKey, out targetRoot, out targetExecutable)) return;
+            string expectedKey = LauncherWindow.ResolveEnvironmentInstanceKey(targetRoot, envelope.environmentId);
+            if (!String.Equals(expectedKey, envelope.instanceKey, StringComparison.Ordinal)) return;
+            if (!StoreActivation(envelope)) return;
+            if (String.Equals(ownerRootKey, envelope.rootKey, StringComparison.Ordinal)
+                && String.Equals(ownerEnvironmentId, envelope.environmentId, StringComparison.Ordinal)
+                && String.Equals(ownerInstanceKey, envelope.instanceKey, StringComparison.Ordinal))
+                DrainOwnerActivations();
+            else
+                Process.Start(new ProcessStartInfo(targetExecutable,
+                    "start --environment " + envelope.environmentId + " --dsh-notification-dispatch") { UseShellExecute = true });
+        }
+
+        private static string ActivationDirectory(string instanceKey)
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "DSH-Portable", "notification-activations", instanceKey);
+        }
+
+        private static bool StoreActivation(ActivationEnvelope envelope)
+        {
+            string temporary = null;
+            try
+            {
+                lock (activationSync)
+                {
+                    string directory = ActivationDirectory(envelope.instanceKey);
+                    Directory.CreateDirectory(directory);
+                    CleanupActivationDirectory(directory);
+                    if (Directory.GetFiles(directory).Count(value => !value.EndsWith(".done", StringComparison.OrdinalIgnoreCase)) >= 64) return false;
+                    string pending = Path.Combine(directory, envelope.activationId + ".json");
+                    string done = Path.Combine(directory, envelope.activationId + ".done");
+                    if (File.Exists(pending) || File.Exists(done)) return false;
+                    temporary = Path.Combine(directory, envelope.activationId + ".tmp-" + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture));
+                    File.WriteAllText(temporary, new JavaScriptSerializer().Serialize(envelope), new UTF8Encoding(false));
+                    File.Move(temporary, pending);
+                    return true;
+                }
+            }
+            catch { return false; }
+            finally { if (!String.IsNullOrWhiteSpace(temporary)) try { File.Delete(temporary); } catch { } }
+        }
+
+        private static void CleanupActivationDirectory(string directory)
+        {
+            DateTime cutoff = DateTime.UtcNow.AddDays(-7);
+            foreach (string file in Directory.GetFiles(directory))
+            {
+                try { if (File.GetLastWriteTimeUtc(file) < cutoff) File.Delete(file); } catch { }
+            }
+            foreach (string file in Directory.GetFiles(directory, "*.done")
+                .OrderByDescending(File.GetLastWriteTimeUtc).Skip(256))
+                try { File.Delete(file); } catch { }
+        }
+
+        internal static void DrainOwnerActivations()
+        {
+            if (!ownerReady || String.IsNullOrWhiteSpace(ownerInstanceKey)) return;
+            lock (activationSync)
+            {
+                string directory = ActivationDirectory(ownerInstanceKey);
+                if (!Directory.Exists(directory)) return;
+                foreach (string file in Directory.GetFiles(directory, "*.json").OrderBy(value => value, StringComparer.Ordinal).Take(64))
+                {
+                    try
+                    {
+                        if (File.Exists(Path.ChangeExtension(file, ".done"))) { File.Delete(file); continue; }
+                        ActivationEnvelope envelope = new JavaScriptSerializer().Deserialize<ActivationEnvelope>(File.ReadAllText(file, Encoding.UTF8));
+                        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                        if (envelope == null || envelope.createdAt > now + 300 || envelope.createdAt < now - 604800
+                            || !String.Equals(envelope.environmentId, ownerEnvironmentId, StringComparison.Ordinal)
+                            || !String.Equals(envelope.instanceKey, ownerInstanceKey, StringComparison.Ordinal)) { File.Delete(file); continue; }
+                        if (inflightActivations.Contains(envelope.activationId)) continue;
+                        Action<string, string, string, string, string> requested = ActionRequested;
+                        if (requested == null) return;
+                        inflightActivations.Add(envelope.activationId);
+                        requested(envelope.activationId, envelope.action, envelope.sessionId, envelope.interactionKey, envelope.response);
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        internal static void CompleteActivation(string activationId, bool terminal)
+        {
+            if (!Regex.IsMatch(activationId ?? String.Empty, "^[0-9a-f]{32}$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)
+                || String.IsNullOrWhiteSpace(ownerInstanceKey)) return;
+            lock (activationSync)
+            {
+                inflightActivations.Remove(activationId);
+                if (!terminal) return;
+                string directory = ActivationDirectory(ownerInstanceKey);
+                string pending = Path.Combine(directory, activationId.ToLowerInvariant() + ".json");
+                string done = Path.Combine(directory, activationId.ToLowerInvariant() + ".done");
+                try
+                {
+                    File.WriteAllText(done, String.Empty, new UTF8Encoding(false));
+                    File.Delete(pending);
+                }
+                catch { }
+            }
+        }
+
+        internal static void SetOwnerReady(bool value)
+        {
+            bool becameReady = value && !ownerReady;
+            ownerReady = value;
+            if (value)
+            {
+                if (becameReady) lock (activationSync) inflightActivations.Clear();
+                DrainOwnerActivations();
+            }
+        }
+
+        private static void AddActivationIdentity(ToastContentBuilder builder, string activationId, long createdAt)
+        {
+            builder.AddArgument("environmentId", ownerEnvironmentId)
+                .AddArgument("instanceKey", ownerInstanceKey)
+                .AddArgument("rootKey", ownerRootKey)
+                .AddArgument("activationId", activationId)
+                .AddArgument("createdAt", createdAt.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static ToastButton AddActivationIdentity(ToastButton button, string activationId, long createdAt)
+        {
+            return button.AddArgument("environmentId", ownerEnvironmentId)
+                .AddArgument("instanceKey", ownerInstanceKey)
+                .AddArgument("rootKey", ownerRootKey)
+                .AddArgument("activationId", activationId)
+                .AddArgument("createdAt", createdAt.ToString(CultureInfo.InvariantCulture));
+        }
+
+        internal static bool ShowAttention(TrayBridgeSession session, bool chinese)
+        {
+            if (session == null || String.IsNullOrWhiteSpace(session.id) || !Register()) return false;
+            try
+            {
+                string interaction = session.pendingInteraction == null
+                    ? String.Empty
+                    : session.pendingInteraction.Trim();
+                string heading = String.Equals(interaction, "question", StringComparison.OrdinalIgnoreCase)
+                    ? (chinese ? "任务有问题需要回答" : "Task has a question")
+                    : String.Equals(interaction, "approval", StringComparison.OrdinalIgnoreCase)
+                        ? (chinese ? "任务等待批准" : "Task needs approval")
+                        : (chinese ? "任务需要你处理" : "Task needs your attention");
+                string prompt = String.IsNullOrWhiteSpace(session.pendingInteractionPrompt)
+                    ? (chinese ? "打开任务查看并处理" : "Open the task to review and respond")
+                    : session.pendingInteractionPrompt.Trim();
+                if (prompt.Length > 512) prompt = prompt.Substring(0, 512);
+                List<string> choices = (session.pendingInteractionOptions ?? new List<string>())
+                    .Where(value => !String.IsNullOrWhiteSpace(value) && value.Trim().Length <= 80 && value.IndexOf('\0') < 0)
+                    .Select(value => value.Trim())
+                    .Distinct(StringComparer.Ordinal)
+                    .Take(4)
+                    .ToList();
+                string activationId = Guid.NewGuid().ToString("N");
+                long createdAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                ToastContentBuilder builder = new ToastContentBuilder()
+                    .AddArgument("action", "open")
+                    .AddArgument("sessionId", session.id)
+                    .AddText(heading)
+                    .AddText(String.IsNullOrWhiteSpace(session.title) ? session.id : session.title.Trim())
+                    .AddText(prompt);
+                AddActivationIdentity(builder, activationId, createdAt);
+                if (!String.IsNullOrWhiteSpace(session.pendingInteractionKey))
+                {
+                    foreach (string choice in choices)
+                    {
+                        string label = choice;
+                        if (String.Equals(interaction, "approval", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (String.Equals(choice, "rejected", StringComparison.Ordinal)) label = chinese ? "拒绝" : "Reject";
+                            else if (String.Equals(choice, "allowed-once", StringComparison.Ordinal)) label = chinese ? "允许一次" : "Allow once";
+                            else continue;
+                        }
+                        builder.AddButton(AddActivationIdentity(new ToastButton()
+                            .SetContent(label)
+                            .AddArgument("action", "resolve-interaction")
+                            .AddArgument("sessionId", session.id)
+                            .AddArgument("interactionKey", session.pendingInteractionKey)
+                            .AddArgument("response", choice), activationId, createdAt));
+                    }
+                }
+                ToastContent content = builder
+                    .AddButton(AddActivationIdentity(new ToastButton()
+                        .SetContent(chinese ? "打开" : "Open")
+                        .AddArgument("action", "open")
+                        .AddArgument("sessionId", session.id), activationId, createdAt))
+                    .SetToastScenario(ToastScenario.Reminder)
+                    .GetToastContent();
+                DesktopNotificationManagerCompat.CreateToastNotifier().Show(new ToastNotification(content.GetXml()));
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        internal static bool ShowCompletion(TrayBridgeSession session, bool chinese)
         {
             if (session == null || String.IsNullOrWhiteSpace(session.id) || !Register()) return false;
             try
@@ -214,23 +520,28 @@ namespace DshPortable
                 string finalReply = String.IsNullOrWhiteSpace(session.finalReply)
                     ? (chinese ? "打开任务查看结果" : "Open the task to view its result")
                     : session.finalReply.Trim();
-                new ToastContentBuilder()
+                string activationId = Guid.NewGuid().ToString("N");
+                long createdAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+                ToastContentBuilder builder = new ToastContentBuilder()
                     .AddArgument("action", "open")
                     .AddArgument("sessionId", session.id)
                     .AddText(chinese ? "任务已完成" : "Task completed")
                     .AddText(String.IsNullOrWhiteSpace(session.title) ? session.id : session.title.Trim())
                     .AddText(finalReply)
-                    .AddInputTextBox("reply", chinese ? "回复此任务" : "Reply to this task", String.Empty)
-                    .AddButton(new ToastButton()
+                    .AddInputTextBox("reply", chinese ? "回复此任务" : "Reply to this task", String.Empty);
+                AddActivationIdentity(builder, activationId, createdAt);
+                ToastContent content = builder
+                    .AddButton(AddActivationIdentity(new ToastButton()
                         .SetContent(chinese ? "回复" : "Reply")
                         .AddArgument("action", "reply")
                         .AddArgument("sessionId", session.id)
-                        .SetTextBoxId("reply"))
-                    .AddButton(new ToastButton()
+                        .SetTextBoxId("reply"), activationId, createdAt))
+                    .AddButton(AddActivationIdentity(new ToastButton()
                         .SetContent(chinese ? "打开" : "Open")
                         .AddArgument("action", "open")
-                        .AddArgument("sessionId", session.id))
-                    .Show();
+                        .AddArgument("sessionId", session.id), activationId, createdAt))
+                    .GetToastContent();
+                DesktopNotificationManagerCompat.CreateToastNotifier().Show(new ToastNotification(content.GetXml()));
                 return true;
             }
             catch
@@ -632,8 +943,9 @@ namespace DshPortable
         private readonly ToolStripMenuItem taskNotificationsItem;
         private readonly JavaScriptSerializer json = new JavaScriptSerializer();
         private readonly Dictionary<string, bool> taskCompletionState = new Dictionary<string, bool>(StringComparer.Ordinal);
+        private readonly Dictionary<string, string> taskInteractionState = new Dictionary<string, string>(StringComparer.Ordinal);
         private readonly HashSet<string> unreadCompletedSessions = new HashSet<string>(StringComparer.Ordinal);
-        private readonly Queue<Tuple<string, string, string>> pendingNotificationActions = new Queue<Tuple<string, string, string>>();
+        private readonly Queue<Tuple<string, string, string, string, string>> pendingNotificationActions = new Queue<Tuple<string, string, string, string, string>>();
         private readonly string root;
         private readonly string environmentId;
         private readonly string stateRoot;
@@ -641,6 +953,7 @@ namespace DshPortable
         private readonly long startupStartedAt;
         private readonly int restoreMessage;
         private readonly int exitMessage;
+        private readonly int notificationActivationMessage;
         private readonly string[] launcherArgs;
         private readonly bool nonInteractive;
         private readonly bool desktopStart;
@@ -682,13 +995,14 @@ namespace DshPortable
         private bool webViewUnresponsivePromptVisible;
         private int webViewUnresponsiveCount;
 
-        internal LauncherWindow(string[] args, string selectedEnvironmentId, string selectedStateRoot, int environmentRestoreMessage, int environmentExitMessage)
+        internal LauncherWindow(string[] args, string selectedEnvironmentId, string selectedStateRoot, int environmentRestoreMessage, int environmentExitMessage, int environmentActivationMessage)
         {
             root = Path.GetDirectoryName(Application.ExecutablePath);
             environmentId = selectedEnvironmentId;
             stateRoot = selectedStateRoot;
             restoreMessage = environmentRestoreMessage;
             exitMessage = environmentExitMessage;
+            notificationActivationMessage = environmentActivationMessage;
             launcherArgs = ResolveArguments(args);
             nonInteractive = Array.Exists(launcherArgs, item =>
                 string.Equals(item, "--json", StringComparison.OrdinalIgnoreCase)
@@ -701,6 +1015,8 @@ namespace DshPortable
             desktopStart = !nonInteractive && IsStartCommand(launcherArgs);
             if (desktopStart)
             {
+                NativeTaskNotification.ConfigureOwner(root, environmentId,
+                    ResolveEnvironmentInstanceKey(root, environmentId));
                 NativeTaskNotification.ActionRequested += HandleNativeNotificationAction;
                 NativeTaskNotification.Register();
             }
@@ -858,7 +1174,7 @@ namespace DshPortable
                 RefreshAutomaticUpdateCheckItem();
                 SaveLauncherSettings();
             };
-            taskNotificationsItem = new ToolStripMenuItem(L("任务完成通知", "Task completion notifications"))
+            taskNotificationsItem = new ToolStripMenuItem(L("任务通知", "Task notifications"))
             {
                 Checked = taskNotificationsEnabled,
                 CheckOnClick = false,
@@ -959,6 +1275,11 @@ namespace DshPortable
             if (message.Msg == restoreMessage)
             {
                 RestoreFromTray();
+                return;
+            }
+            if (message.Msg == notificationActivationMessage)
+            {
+                NativeTaskNotification.DrainOwnerActivations();
                 return;
             }
             base.WndProc(ref message);
@@ -1258,7 +1579,7 @@ namespace DshPortable
 
         private void RefreshTaskNotificationsItem()
         {
-            taskNotificationsItem.Text = L("任务完成通知", "Task completion notifications");
+            taskNotificationsItem.Text = L("任务通知", "Task notifications");
             taskNotificationsItem.Checked = false;
             taskNotificationsItem.ShowShortcutKeys = true;
             taskNotificationsItem.ShortcutKeyDisplayString = taskNotificationsEnabled
@@ -1334,7 +1655,7 @@ namespace DshPortable
             dropDown.Size = new Size(width, preferredHeight);
         }
 
-        private void PostBridgeAction(string action, string sessionId)
+        private void PostBridgeAction(string action, string sessionId, string activationId = null)
         {
             if (!trayBridgeReady || webView.CoreWebView2 == null) return;
             Dictionary<string, object> message = new Dictionary<string, object>
@@ -1343,11 +1664,12 @@ namespace DshPortable
                 { "action", action },
             };
             if (!String.IsNullOrEmpty(sessionId)) message["sessionId"] = sessionId;
+            if (!String.IsNullOrEmpty(activationId)) message["activationId"] = activationId;
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
-            catch { trayBridgeReady = false; RebuildTrayMenu(); }
+            catch { trayBridgeReady = false; NativeTaskNotification.SetOwnerReady(false); RebuildTrayMenu(); }
         }
 
-        private void PostBridgeReply(string sessionId, string reply)
+        private void PostBridgeReply(string activationId, string sessionId, string reply)
         {
             if (!trayBridgeReady || webView.CoreWebView2 == null || String.IsNullOrWhiteSpace(sessionId)) return;
             string text = (reply ?? String.Empty).Trim();
@@ -1355,63 +1677,95 @@ namespace DshPortable
             Dictionary<string, object> message = new Dictionary<string, object>
             {
                 { "type", "dsh-portable/action" },
+                { "activationId", activationId },
                 { "action", "reply-session" },
                 { "sessionId", sessionId },
                 { "reply", text },
             };
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
-            catch { trayBridgeReady = false; RebuildTrayMenu(); }
+            catch { trayBridgeReady = false; NativeTaskNotification.SetOwnerReady(false); RebuildTrayMenu(); }
         }
 
-        private void HandleNativeNotificationAction(string action, string sessionId, string reply)
+        private void PostBridgeInteractionAnswer(string activationId, string sessionId, string interactionKey, string response)
+        {
+            if (!trayBridgeReady || webView.CoreWebView2 == null || String.IsNullOrWhiteSpace(sessionId)) return;
+            string key = (interactionKey ?? String.Empty).Trim();
+            string value = (response ?? String.Empty).Trim();
+            if (key.Length == 0 || key.Length > 256 || key.IndexOf('\0') >= 0
+                || value.Length == 0 || value.Length > 80 || value.IndexOf('\0') >= 0) return;
+            Dictionary<string, object> message = new Dictionary<string, object>
+            {
+                { "type", "dsh-portable/action" },
+                { "activationId", activationId },
+                { "action", "resolve-interaction" },
+                { "sessionId", sessionId },
+                { "interactionKey", key },
+                { "response", value },
+            };
+            try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
+            catch { trayBridgeReady = false; NativeTaskNotification.SetOwnerReady(false); RebuildTrayMenu(); }
+        }
+
+        private void HandleNativeNotificationAction(string activationId, string action, string sessionId, string interactionKey, string response)
         {
             if (IsDisposed) return;
             if (InvokeRequired)
             {
                 try
                 {
-                    BeginInvoke((MethodInvoker)delegate { QueueNotificationAction(action, sessionId, reply); });
+                    BeginInvoke((MethodInvoker)delegate { QueueNotificationAction(activationId, action, sessionId, interactionKey, response); });
                     return;
                 }
                 catch (InvalidOperationException) { }
             }
-            QueueNotificationAction(action, sessionId, reply);
+            QueueNotificationAction(activationId, action, sessionId, interactionKey, response);
         }
 
-        private void QueueNotificationAction(string action, string sessionId, string reply)
+        private void QueueNotificationAction(string activationId, string action, string sessionId, string interactionKey, string response)
         {
-            if ((!String.Equals(action, "open", StringComparison.Ordinal) && !String.Equals(action, "reply", StringComparison.Ordinal))
+            if ((!String.Equals(action, "open", StringComparison.Ordinal)
+                    && !String.Equals(action, "reply", StringComparison.Ordinal)
+                    && !String.Equals(action, "resolve-interaction", StringComparison.Ordinal))
                 || String.IsNullOrWhiteSpace(sessionId)) return;
-            string text = (reply ?? String.Empty).Trim();
+            string key = (interactionKey ?? String.Empty).Trim();
+            string value = (response ?? String.Empty).Trim();
             if (String.Equals(action, "reply", StringComparison.Ordinal)
-                && (text.Length == 0 || text.Length > 8000 || text.IndexOf('\0') >= 0)) return;
+                && (value.Length == 0 || value.Length > 8000 || value.IndexOf('\0') >= 0)) return;
+            if (String.Equals(action, "resolve-interaction", StringComparison.Ordinal)
+                && (key.Length == 0 || key.Length > 256 || key.IndexOf('\0') >= 0
+                    || value.Length == 0 || value.Length > 80 || value.IndexOf('\0') >= 0)) return;
             if (!trayBridgeReady || webView == null || webView.CoreWebView2 == null)
             {
                 while (pendingNotificationActions.Count >= 16) pendingNotificationActions.Dequeue();
-                pendingNotificationActions.Enqueue(Tuple.Create(action, sessionId, text));
+                pendingNotificationActions.Enqueue(Tuple.Create(activationId, action, sessionId, key, value));
                 return;
             }
-            DispatchNotificationAction(action, sessionId, text);
+            DispatchNotificationAction(activationId, action, sessionId, key, value);
         }
 
-        private void DispatchNotificationAction(string action, string sessionId, string reply)
+        private void DispatchNotificationAction(string activationId, string action, string sessionId, string interactionKey, string response)
         {
             MarkTaskCompletionHandled(sessionId);
             if (String.Equals(action, "reply", StringComparison.Ordinal))
             {
-                PostBridgeReply(sessionId, reply);
+                PostBridgeReply(activationId, sessionId, response);
+                return;
+            }
+            if (String.Equals(action, "resolve-interaction", StringComparison.Ordinal))
+            {
+                PostBridgeInteractionAnswer(activationId, sessionId, interactionKey, response);
                 return;
             }
             RestoreFromTray();
-            PostBridgeAction("open-session", sessionId);
+            PostBridgeAction("open-session", sessionId, activationId);
         }
 
         private void FlushNotificationActions()
         {
             while (trayBridgeReady && webView != null && webView.CoreWebView2 != null && pendingNotificationActions.Count > 0)
             {
-                Tuple<string, string, string> pending = pendingNotificationActions.Dequeue();
-                DispatchNotificationAction(pending.Item1, pending.Item2, pending.Item3);
+                Tuple<string, string, string, string, string> pending = pendingNotificationActions.Dequeue();
+                DispatchNotificationAction(pending.Item1, pending.Item2, pending.Item3, pending.Item4, pending.Item5);
             }
         }
 
@@ -1430,15 +1784,18 @@ namespace DshPortable
         {
             List<TrayBridgeSession> sessions = state.sessions ?? new List<TrayBridgeSession>();
             List<TrayBridgeSession> completedThisFrame = new List<TrayBridgeSession>();
+            List<TrayBridgeSession> attentionThisFrame = new List<TrayBridgeSession>();
             if (!taskCompletionBaselineReady)
             {
                 taskCompletionState.Clear();
+                taskInteractionState.Clear();
                 unreadCompletedSessions.Clear();
                 foreach (TrayBridgeSession session in sessions)
                 {
                     if (session != null && !String.IsNullOrWhiteSpace(session.id))
                     {
                         taskCompletionState[session.id] = session.completed;
+                        taskInteractionState[session.id] = TaskInteractionIdentity(session);
                         if (session.completed && !String.Equals(state.currentSessionId, session.id, StringComparison.Ordinal))
                             unreadCompletedSessions.Add(session.id);
                     }
@@ -1451,26 +1808,63 @@ namespace DshPortable
             foreach (TrayBridgeSession session in sessions)
             {
                 if (session == null || String.IsNullOrWhiteSpace(session.id)) continue;
-                if (!session.completed || String.Equals(state.currentSessionId, session.id, StringComparison.Ordinal))
+                bool currentTaskVisible = IsCurrentTaskVisibleAndFocused(state, session);
+                if (!session.completed || currentTaskVisible)
                     unreadCompletedSessions.Remove(session.id);
                 bool previouslyCompleted;
                 bool wasCompleted = taskCompletionState.TryGetValue(session.id, out previouslyCompleted) && previouslyCompleted;
-                if (session.completed && !wasCompleted)
+                if (session.completed && !wasCompleted && !currentTaskVisible)
                 {
                     unreadCompletedSessions.Add(session.id);
                     if (taskNotificationsEnabled) completedThisFrame.Add(session);
                 }
+                string pendingInteraction = String.IsNullOrWhiteSpace(session.pendingInteraction)
+                    ? String.Empty
+                    : session.pendingInteraction.Trim();
+                string interactionIdentity = TaskInteractionIdentity(session);
+                string previousInteraction;
+                taskInteractionState.TryGetValue(session.id, out previousInteraction);
+                if (taskNotificationsEnabled
+                    && !currentTaskVisible
+                    && pendingInteraction.Length > 0
+                    && !String.Equals(interactionIdentity, previousInteraction, StringComparison.Ordinal))
+                    attentionThisFrame.Add(session);
             }
 
             if (completedThisFrame.Count > 0) ShowTaskCompletionNotifications(completedThisFrame);
+            if (attentionThisFrame.Count > 0) ShowTaskAttentionNotifications(attentionThisFrame);
             UpdateTaskbarBadge();
 
             taskCompletionState.Clear();
+            taskInteractionState.Clear();
             foreach (TrayBridgeSession session in sessions)
             {
                 if (session != null && !String.IsNullOrWhiteSpace(session.id))
+                {
                     taskCompletionState[session.id] = session.completed;
+                    taskInteractionState[session.id] = TaskInteractionIdentity(session);
+                }
             }
+        }
+
+        private static string TaskInteractionIdentity(TrayBridgeSession session)
+        {
+            if (session == null || String.IsNullOrWhiteSpace(session.pendingInteraction)) return String.Empty;
+            string kind = session.pendingInteraction.Trim();
+            string key = String.IsNullOrWhiteSpace(session.pendingInteractionKey)
+                ? kind
+                : session.pendingInteractionKey.Trim();
+            return kind + "\n" + key;
+        }
+
+        private bool IsCurrentTaskVisibleAndFocused(TrayBridgeState state, TrayBridgeSession session)
+        {
+            return state != null
+                && session != null
+                && String.Equals(state.currentSessionId, session.id, StringComparison.Ordinal)
+                && Visible
+                && WindowState != FormWindowState.Minimized
+                && ContainsFocus;
         }
 
         private void ShowTaskCompletionNotifications(List<TrayBridgeSession> sessions)
@@ -1480,7 +1874,18 @@ namespace DshPortable
             foreach (TrayBridgeSession session in sessions.Take(3))
             {
                 notificationSessionId = session.id;
-                NativeTaskNotification.Show(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
+                NativeTaskNotification.ShowCompletion(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
+            }
+        }
+
+        private void ShowTaskAttentionNotifications(List<TrayBridgeSession> sessions)
+        {
+            if (sessions == null || sessions.Count == 0) return;
+            trayIcon.Visible = true;
+            foreach (TrayBridgeSession session in sessions.Take(3))
+            {
+                notificationSessionId = session.id;
+                NativeTaskNotification.ShowAttention(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
             }
         }
 
@@ -1511,6 +1916,17 @@ namespace DshPortable
             {
                 Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
                 object messageType;
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/notification-action-result", StringComparison.Ordinal))
+                {
+                    object activationValue;
+                    object terminalValue;
+                    string activationId = message.TryGetValue("activationId", out activationValue)
+                        ? Convert.ToString(activationValue) : String.Empty;
+                    bool terminal = message.TryGetValue("terminal", out terminalValue) && terminalValue is bool && (bool)terminalValue;
+                    NativeTaskNotification.CompleteActivation(activationId, terminal);
+                    return;
+                }
                 if (message != null && message.TryGetValue("type", out messageType)
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/boot-visible", StringComparison.Ordinal))
                 {
@@ -1666,6 +2082,7 @@ namespace DshPortable
                     HandleTaskCompletionNotifications(state);
                     trayState = state;
                     trayBridgeReady = true;
+                    NativeTaskNotification.SetOwnerReady(true);
                     FlushNotificationActions();
                     RebuildTrayMenu();
                 });
@@ -2226,6 +2643,7 @@ namespace DshPortable
             SaveDesktopWindowState();
             UnregisterDesktopHostProcess();
             NativeTaskNotification.ActionRequested -= HandleNativeNotificationAction;
+            NativeTaskNotification.SetOwnerReady(false);
             NativeTaskNotification.Unregister();
             TaskbarBadge.SetOverlayIcon(Handle, 0);
             DisposeTrayIcon();
@@ -2715,6 +3133,13 @@ namespace DshPortable
             return unchecked((int)message);
         }
 
+        internal static int RegisterEnvironmentActivationMessage(string instanceKey)
+        {
+            uint message = RegisterWindowMessage("DSHPortable.NotificationActivation." + instanceKey);
+            if (message == 0) throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not register the Portable notification activation message.");
+            return unchecked((int)message);
+        }
+
         internal static bool IsStartInvocation(string[] args)
         {
             return String.Equals(ResolveCommand(args), "start", StringComparison.OrdinalIgnoreCase);
@@ -3175,6 +3600,7 @@ namespace DshPortable
                 ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
                 : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
             trayBridgeReady = false;
+            NativeTaskNotification.SetOwnerReady(false);
             string[] updateArguments = String.IsNullOrEmpty(manifestUrl)
                 ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }
                 : new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--update-manifest", manifestUrl };
@@ -3360,6 +3786,12 @@ namespace DshPortable
 
         private void OnWebViewProcessFailed(object sender, CoreWebView2ProcessFailedEventArgs eventArgs)
         {
+            if (eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited
+                || eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
+            {
+                trayBridgeReady = false;
+                NativeTaskNotification.SetOwnerReady(false);
+            }
             string failure = eventArgs.ProcessFailedKind + "/" + eventArgs.Reason
                 + " exit=" + eventArgs.ExitCode
                 + (String.IsNullOrWhiteSpace(eventArgs.ProcessDescription) ? "" : " " + eventArgs.ProcessDescription);
@@ -4069,7 +4501,12 @@ namespace DshPortable
         {
             Uri target;
             if (!Uri.TryCreate(eventArgs.Uri, UriKind.Absolute, out target)) { eventArgs.Cancel = true; return; }
-            if (applicationUri != null && target.IsLoopback && target.Port == applicationUri.Port) return;
+            if (applicationUri != null && target.IsLoopback && target.Port == applicationUri.Port)
+            {
+                trayBridgeReady = false;
+                NativeTaskNotification.SetOwnerReady(false);
+                return;
+            }
             eventArgs.Cancel = true;
             OpenExternalUrl(eventArgs.Uri);
         }
@@ -4804,16 +5241,45 @@ namespace DshPortable
             return args.Skip(2).ToArray();
         }
 
+        private static bool IsNotificationActivationInvocation(string[] args)
+        {
+            return (args ?? new string[0]).Any(value =>
+                String.Equals(value, "-ToastActivated", StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void RunNotificationActivationBroker(string executableRoot)
+        {
+            NativeTaskNotification.ConfigureBroker(executableRoot);
+            SetCurrentProcessExplicitAppUserModelID(AppUserModelId);
+            Application.EnableVisualStyles();
+            Application.SetCompatibleTextRenderingDefault(false);
+            if (!NativeTaskNotification.Register()) return;
+            ApplicationContext context = new ApplicationContext();
+            System.Windows.Forms.Timer timeout = new System.Windows.Forms.Timer { Interval = 15000 };
+            timeout.Tick += delegate { timeout.Stop(); context.ExitThread(); };
+            timeout.Start();
+            try { Application.Run(context); }
+            finally { timeout.Dispose(); NativeTaskNotification.Unregister(); }
+        }
+
         [STAThread]
         private static void Main(string[] args)
         {
             args = WaitForRestartHandoff(args);
             string executableRoot = Path.GetDirectoryName(Application.ExecutablePath);
+            if (IsNotificationActivationInvocation(args))
+            {
+                RunNotificationActivationBroker(executableRoot);
+                return;
+            }
             string environmentId = LauncherWindow.ResolveEnvironmentId(args);
             string stateRoot = LauncherWindow.ResolveStateRoot(executableRoot, environmentId);
             string instanceKey = LauncherWindow.ResolveEnvironmentInstanceKey(executableRoot, environmentId);
             int restoreMessage = LauncherWindow.RegisterEnvironmentRestoreMessage(instanceKey);
             int exitMessage = LauncherWindow.RegisterEnvironmentExitMessage(instanceKey);
+            int activationMessage = LauncherWindow.RegisterEnvironmentActivationMessage(instanceKey);
+            bool notificationDispatch = args.Any(value =>
+                String.Equals(value, "--dsh-notification-dispatch", StringComparison.OrdinalIgnoreCase));
             Mutex environmentMutex = null;
             bool ownsEnvironmentMutex = false;
             if (LauncherWindow.IsStartInvocation(args))
@@ -4821,7 +5287,7 @@ namespace DshPortable
                 environmentMutex = new Mutex(true, @"Local\DSHPortable." + instanceKey, out ownsEnvironmentMutex);
                 if (!ownsEnvironmentMutex)
                 {
-                    LauncherWindow.SignalExistingDesktopHost(restoreMessage);
+                    LauncherWindow.SignalExistingDesktopHost(notificationDispatch ? activationMessage : restoreMessage);
                     environmentMutex.Dispose();
                     return;
                 }
@@ -4837,7 +5303,7 @@ namespace DshPortable
             Application.SetCompatibleTextRenderingDefault(false);
             try
             {
-                Application.Run(new LauncherWindow(args, environmentId, stateRoot, restoreMessage, exitMessage));
+                Application.Run(new LauncherWindow(args, environmentId, stateRoot, restoreMessage, exitMessage, activationMessage));
             }
             finally
             {
