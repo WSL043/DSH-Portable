@@ -25,9 +25,6 @@ UPDATE_CHANNEL_TAG="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "updateCh
 if [[ "$RELEASE_CHANNEL" == "candidate" ]]; then
   [[ -n "$PREVIEW_APP_SOURCE" ]] || { echo "Candidate builds require PREVIEW_APP_SOURCE" >&2; exit 1; }
   COMPONENT_LOCK_FILE="$PROJECT_ROOT/upstream.preview.lock.json"
-elif [[ -n "$PREVIEW_APP_SOURCE" ]]; then
-  echo "Stable builds must not consume PREVIEW_APP_SOURCE" >&2
-  exit 1
 fi
 
 lock_value() {
@@ -131,7 +128,7 @@ if [[ -n "$PREVIEW_APP_SOURCE" ]]; then
   [[ -f "$PREVIEW_APP_SOURCE/preview-runtime.json" && -f "$PREVIEW_APP_SOURCE/node_modules/@deepseek-ai/dsh/package.json" ]] || {
     echo "Preview app source is incomplete: $PREVIEW_APP_SOURCE" >&2; exit 1;
   }
-  "$BUILD_NODE" -e 'const fs=require("fs"); const receipt=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const lock=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); if(receipt.dshVersion!==lock.dsh.version||receipt.dshCommit!==lock.dsh.reviewedCommit) throw new Error("Preview app receipt does not match upstream.preview.lock.json")' "$PREVIEW_APP_SOURCE/preview-runtime.json" "$COMPONENT_LOCK_FILE"
+  "$BUILD_NODE" -e 'const fs=require("fs"); const receipt=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const lock=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); if(receipt.dshVersion!==lock.dsh.version||receipt.dshCommit!==lock.dsh.reviewedCommit) throw new Error("Source-pack receipt does not match selected upstream lock")' "$PREVIEW_APP_SOURCE/preview-runtime.json" "$COMPONENT_LOCK_FILE"
   rm -rf "$STAGE/app"
   cp -R "$PREVIEW_APP_SOURCE" "$STAGE/app"
   rm -rf "$STAGE/app/node_modules/@wsl043/dsh-portable-desktop-bridge" "$STAGE/app/node_modules/@wsl043/dsh-portable-plugin-market"
@@ -163,7 +160,7 @@ fi
 printf '%s  %s\n' "$DSH_NOTICES_SHA256" "$NOTICES" | shasum -a 256 -c -
 cp "$NOTICES" "$STAGE/licenses/DeepSeek-Harness-THIRD_PARTY_NOTICES.md"
 
-DSH_CHANNEL="$(if [[ -n "$PREVIEW_APP_SOURCE" ]]; then printf preview; else printf stable; fi)"
+DSH_CHANNEL="$(if [[ "$RELEASE_CHANNEL" == candidate ]]; then printf preview; else printf stable; fi)"
 DSH_PACKAGE_SET_SHA256="$(if [[ -n "$PREVIEW_APP_SOURCE" ]]; then "$BUILD_NODE" -p 'require(process.argv[1]).packageSetSha256' "$PREVIEW_APP_SOURCE/preview-runtime.json"; else printf ''; fi)"
 DEFAULT_PLUGINS_JSON="$("$BUILD_NODE" -e 'const fs=require("fs"); const lock=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); process.stdout.write(JSON.stringify(Object.values(lock.defaultPlugins||{}).map(({package:p,version,sha256,integrity})=>({package:p,version,sha256,integrity}))))' "$COMPONENT_LOCK_FILE")"
 cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
@@ -293,7 +290,7 @@ HASH="$(shasum -a 256 "$ZIP" | awk '{print $1}')"
 printf '%s  %s\n' "$HASH" "$(basename "$ZIP")" > "$ZIP.sha256"
 FOOTPRINT="$OUTPUT_DIR/footprint-macos-$ARCH.json"
 FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets.json"
-[[ -z "$PREVIEW_APP_SOURCE" ]] || FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets-preview.json"
+[[ "$RELEASE_CHANNEL" != candidate ]] || FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets-preview.json"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/report-footprint.mjs" "$STAGE" \
   --platform "macos-$ARCH" --archive "$ZIP" \
   --budget "$FOOTPRINT_BUDGET" --output "$FOOTPRINT"

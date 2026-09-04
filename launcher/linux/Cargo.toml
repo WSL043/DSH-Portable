@@ -1,6 +1,6 @@
 [package]
 name = "deepseek-herness-linux"
-version = "0.6.0-alpha.1"
+version = "0.6.0"
 description = "Native Linux shell for DSH-Portable"
 authors = ["DSH-Portable contributors"]
 edition = "2021"

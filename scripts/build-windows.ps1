@@ -183,7 +183,11 @@ try {
         throw 'Candidate builds require -PreviewAppSource; refusing to publish a stable DSH runtime behind a beta shell version.'
     }
     if ($ReleaseChannel -eq 'stable' -and $PreviewAppSource) {
-        throw 'Stable builds must not consume -PreviewAppSource.'
+        if ($PreviewReceipt.dshVersion -ne $Lock.dsh.version -or $PreviewReceipt.dshCommit -ne $Lock.dsh.reviewedCommit) {
+            throw 'Stable source-pack receipt does not match upstream.lock.json.'
+        }
+        $DshLock = $Lock.dsh
+        $DefaultPluginsLock = $Lock.defaultPlugins
     }
     $ShellFingerprint = (& $NodeExe (Join-Path $ProjectRoot 'scripts\shell-fingerprint.mjs') windows).Trim()
     if ($LASTEXITCODE -ne 0 -or $ShellFingerprint -notmatch '^[a-f0-9]{64}$') { throw 'Windows shell fingerprint generation failed.' }
@@ -281,7 +285,7 @@ try {
         dshPackage = $DshLock.package
         dshVersion = $DshLock.version
         dshCommit = $DshLock.reviewedCommit
-        dshChannel = if ($PreviewAppSource) { 'preview' } else { 'stable' }
+        dshChannel = if ($ReleaseChannel -eq 'candidate') { 'preview' } else { 'stable' }
         dshPackageSetSha256 = if ($PreviewReceipt) { $PreviewReceipt.packageSetSha256 } else { $null }
         pluginMarketPackage = '@wsl043/dsh-portable-plugin-market'
         pluginMarketVersion = $Lock.pluginMarket.version
@@ -465,7 +469,7 @@ try {
     if (Test-Path -LiteralPath $ShaBackup) { Remove-Item -LiteralPath $ShaBackup -Force }
 
     $FootprintReport = Join-Path $OutputDir 'footprint-windows-x64.json'
-    $FootprintBudget = if ($PreviewAppSource) {
+    $FootprintBudget = if ($ReleaseChannel -eq 'candidate') {
         Join-Path $ProjectRoot 'config\footprint-budgets-preview.json'
     } else {
         Join-Path $ProjectRoot 'config\footprint-budgets.json'

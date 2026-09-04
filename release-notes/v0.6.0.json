@@ -1,0 +1,25 @@
+{
+  "version": "0.6.0",
+  "zh": {
+    "summary": "0.6.0 完成桌面集成与更新体验，正式提供可靠的任务通知、内核版本选择和默认插件维护。",
+    "highlights": [
+      "Windows 任务完成后会进入系统通知中心，并支持查看完整结果、回复原任务和任务栏未读提示。",
+      "选择工作区使用置顶的原生目录窗口；桌面窗口与任务栏稳定显示 DSH-Portable 自有图标。",
+      "设置中可以从经过验证且与当前 Portable 兼容的版本目录选择 DeepSeek Harness 内核，并保留独立的产品更新入口。",
+      "已安装的默认插件会随 Portable 自动升级到本版本已审查的基线；主动删除的插件不会重装，较新版本不会降级。",
+      "主界面会显示可用更新和当前隔离环境；插件市场同步了 dsh-market 1.41 中适合 Portable 的代理、搜索和分页兼容修复。",
+      "本版本默认采用已完成 Alpha 成品验收的 DeepSeek Harness 0.1.2-rc.1。"
+    ]
+  },
+  "en": {
+    "summary": "0.6.0 completes the desktop integration and update experience with dependable task alerts, engine selection, and maintained default plugins.",
+    "highlights": [
+      "Windows task completion now reaches Action Center with the full result, originating-task Reply, and an unread taskbar indicator.",
+      "Workspace selection uses a topmost native folder dialog, while the desktop window and taskbar retain the DSH-Portable application icon.",
+      "Settings can select DeepSeek Harness from a verified, Portable-compatible version catalog while keeping product updates separate.",
+      "Installed default plugins automatically advance to this release's reviewed baseline; removed defaults stay removed and newer versions are never downgraded.",
+      "The main shell shows available updates and the active isolated environment, and the market includes the applicable proxy, search, and pager compatibility fixes from dsh-market 1.41.",
+      "This release defaults to DeepSeek Harness 0.1.2-rc.1 after finished-product Alpha acceptance."
+    ]
+  }
+}
