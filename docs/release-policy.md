@@ -11,6 +11,16 @@ GitHub Release 只表示用户可以下载这个构建，不表示一次开发�
 
 ## 核心、Market 与 Portable 的独立策略
 
+### 维护范围
+
+Portable 维护桌面壳和集成边界：启动与退出、窗口与托盘、私有运行环境、目录移动、数据迁移与恢复、更新、诊断和打包。聊天工作台、模型配置、通用设置和官方插件页面的整体交互由官方 DSH 演进，Portable 不另建一套体验分支。
+
+采纳上游修复时，先确认它是否影响 Portable 的启动、安装、数据或宿主兼容性，再移植最小必要改动。Portable 自己的更新、迁移和修复入口可以改进；对官方页面的观察不自动转化为 Portable 的开发任务。社区市场的功能扩展也不因上游已提供就自动纳入。
+
+Portable owns its desktop shell and integration: startup and exit, windows and tray, private runtime, directory moves, data transfer and recovery, updates, diagnostics, and packaging. Official DSH owns the chat workspace, model setup, general settings, and official plugin-page interactions. Adopt the smallest upstream fix required for Portable compatibility; improve Portable-owned controls without maintaining a separate upstream UI or automatically importing market features.
+
+### 发布安排
+
 官方 DSH 核心、dsh-market 和 DSH-Portable 是三个独立的发布对象：
 
 - **核心（官方 DSH）**：定期检查只验证官方可安装包、完整性和对应提交。通过 Windows、macOS、Linux 的成品验收后，核心可以独立进入自己的更新通道；核心上游有新版本不会触发 Portable 发布。

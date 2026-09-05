@@ -112,6 +112,21 @@ function Get-LauncherLogSinceStart {
     }
 }
 
+function Get-NativeExitFailureDetails {
+    # Preserve bounded evidence in the CI failure before finally cleans up
+    # the test processes. A timeout alone cannot identify which stage failed.
+    try {
+        $ExitLog = Get-LauncherLogSinceStart
+        if ($ExitLog.Length -gt 12000) { $ExitLog = $ExitLog.Substring($ExitLog.Length - 12000) }
+    } catch { $ExitLog = "Launcher log unavailable: $($_.Exception.Message)" }
+    $RecordedHost = '(missing)'
+    $HostPidFile = Join-Path $Root 'data\runtime\desktop-host.pid'
+    try {
+        if (Test-Path -LiteralPath $HostPidFile) { $RecordedHost = ([IO.File]::ReadAllText($HostPidFile)).Trim() }
+    } catch { $RecordedHost = '(unreadable)' }
+    return "nativeHostPid=$($Process.Id); stopHelperPid=$($StopProcess.Id); recordedHostPid=$RecordedHost`n$ExitLog"
+}
+
 function Get-ProductStatus {
     param([int]$TimeoutSeconds = 15)
 
@@ -303,8 +318,15 @@ try {
     $StopStartInfo.UseShellExecute = $false
     $ExplicitExitClock = [System.Diagnostics.Stopwatch]::StartNew()
     $StopProcess = [System.Diagnostics.Process]::Start($StopStartInfo)
-    if (-not $StopProcess.WaitForExit(60000)) { throw 'Explicit exit command did not finish within 60 seconds.' }
-    if (-not $Process.WaitForExit(45000)) { throw 'Explicit exit left the native desktop host running.' }
+    if (-not $StopProcess.WaitForExit(60000)) {
+        throw "Explicit exit command did not finish within 60 seconds.`n$(Get-NativeExitFailureDetails)"
+    }
+    if ($StopProcess.ExitCode -ne 0) {
+        throw "Explicit exit command failed with exit code $($StopProcess.ExitCode).`n$(Get-NativeExitFailureDetails)"
+    }
+    if (-not $Process.WaitForExit(45000)) {
+        throw "Explicit exit left the native desktop host running; stop helper exited with code $($StopProcess.ExitCode).`n$(Get-NativeExitFailureDetails)"
+    }
     $StoppedByLauncher = (Get-ProductStatus).Status
     if ($StoppedByLauncher -ne 'stopped') { throw 'Explicit exit left the DSH backend running.' }
     $ExplicitExitClock.Stop()

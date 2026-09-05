@@ -62,6 +62,8 @@ The 0.5 series Windows offline package is about **58 MB** and expands into about
 
 DSH-Portable maintains the desktop shell, portable layout, update, repair, and migration flows. The official DSH is the upstream core pinned and verified for each package. They use separate versions and release cadences: a Portable feature version does not equal an official-core version, and each new version should be judged by its own Release notes.
 
+The chat workspace, model configuration, and general settings follow official DSH. Portable focuses on windows and the tray, its runtime, updates, migration, and recovery; upstream pages receive only the adaptations needed for Portable compatibility.
+
 The Plugin Market and the two default plugins are Portable integration components. The market catalog mainly lists community plugins; a listing is not official endorsement or a security audit. Only the defaults are pinned and covered by Portable finished-product acceptance. Evaluate other plugins yourself and install them as needed. Compatibility not listed in the relevant Release notes or verification scope is not a Portable promise.
 
 ## Start in 3 steps
