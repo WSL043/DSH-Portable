@@ -36,6 +36,8 @@ jobs:
           fi
 
           PR_DATA=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json number,title,headRefName,headRefOid,url)
+          # Backticks below are literal Markdown code spans, not shell commands.
+          # shellcheck disable=SC2016
           printf '%s\n' \
             '### Verified dependency acceptance summary' \
             '' "$(printf '%s' "$PR_DATA" | jq -r '"pull request: [#\(.number)](\(.url))"')" \
