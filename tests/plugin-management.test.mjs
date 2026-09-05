@@ -312,10 +312,10 @@ test('the product locks and packages the official pnpm required by arbitrary DSH
     readFile(path.join(repositoryRoot, 'scripts', 'verify-runtime.mjs'), 'utf8'),
   ])
 
-  assert.equal(manifest.dependencies.pnpm, '11.7.0')
-  assert.equal(lockfile.packages['node_modules/pnpm'].version, '11.7.0')
+  assert.equal(manifest.dependencies.pnpm, '11.11.0')
+  assert.equal(lockfile.packages['node_modules/pnpm'].version, '11.11.0')
   assert.equal(lockfile.packages['node_modules/pnpm'].integrity, upstream.pnpm.integrity)
-  assert.equal(upstream.pnpm.version, '11.7.0')
+  assert.equal(upstream.pnpm.version, '11.11.0')
   assert.match(build, /dsh-cli\.mjs/)
   assert.match(build, /DSH-Command\.cs/)
   assert.match(build, /dsh\.exe/)

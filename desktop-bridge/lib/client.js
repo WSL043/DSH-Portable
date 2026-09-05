@@ -9,8 +9,8 @@ window.__ModuleLoader__.load({
       zh: {
         title: '便携版',
         updates: '更新',
-        updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: 'Beta 测试版',
-        updateChannelHint: '稳定版适合日常使用；Beta 可提前体验正在验证的新版本。切换不会自动降级当前版本。',
+        updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: '候选版（Alpha / Beta / RC）',
+        updateChannelHint: '稳定版适合日常使用；候选版按成熟度提供 Alpha、Beta 或 RC，可能不完整或不稳定。切换不会自动降级当前版本。',
         updateRecovery: '新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。',
         updateRolledBack: '上次更新未通过启动验证，已自动恢复到 {0}。',
         previousVersion: '上一版本',
@@ -46,8 +46,8 @@ window.__ModuleLoader__.load({
       en: {
         title: 'Portable',
         updates: 'Updates',
-        updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Beta',
-        updateChannelHint: 'Stable is recommended for daily use. Beta offers versions still under validation. Switching never downgrades the installed version.',
+        updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Candidate (Alpha / Beta / RC)',
+        updateChannelHint: 'Stable is recommended for daily use. Candidates may be Alpha, Beta, or RC builds and may be incomplete or unstable. Switching never downgrades the installed version.',
         updateRecovery: 'If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact.',
         updateRolledBack: 'The last update failed startup verification and automatically restored {0}.',
         previousVersion: 'the previous version',

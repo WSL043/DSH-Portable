@@ -16,7 +16,7 @@ const ok = (stdout = '') => ({
   stderr: '',
 })
 
-async function writeInstalledPlugin(profile, version) {
+async function writeInstalledPlugin(profile, version, extra = {}) {
   const plugin = path.join(profile, 'node_modules', 'fixture-plugin')
   await mkdir(path.join(plugin, 'lib'), { recursive: true })
   await writeFile(path.join(plugin, 'package.json'), JSON.stringify({
@@ -24,12 +24,26 @@ async function writeInstalledPlugin(profile, version) {
     version,
     main: 'lib/index.js',
     dsh: { bundle: { patch: 'cordis.patch.yml' } },
+    ...extra,
   }))
   await writeFile(path.join(plugin, 'lib', 'index.js'), `export const version = '${version}'\n`)
   await writeFile(path.join(plugin, 'cordis.patch.yml'), '- insert: []\n')
 }
 
-async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd, installed = true }) {
+async function writePeerHost(profile, version = '1.0.0') {
+  const host = path.join(profile, 'node_modules', 'fixture-host')
+  await mkdir(host, { recursive: true })
+  await writeFile(path.join(host, 'package.json'), JSON.stringify({ name: 'fixture-host', version }))
+}
+
+async function updateTestbed(t, {
+  spec = '^1.0.0',
+  lockfile = '',
+  onAdd,
+  installed = true,
+  installedVersion = '1.0.0',
+  loaderEntries = [],
+}) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
   t.after(() => rm(profile, { recursive: true, force: true }))
   const manifestFile = path.join(profile, 'package.json')
@@ -39,7 +53,7 @@ async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd, install
     dsh: { profile: { bundles: installed ? ['fixture-plugin'] : [] } },
   }, null, 2))
   if (lockfile !== '') await writeFile(path.join(profile, 'pnpm-lock.yaml'), lockfile)
-  if (installed) await writeInstalledPlugin(profile, '1.0.0')
+  if (installed) await writeInstalledPlugin(profile, installedVersion)
 
   const calls = []
   const commandRuntime = {
@@ -62,7 +76,7 @@ async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd, install
         return () => routes.delete(route.path)
       },
     },
-    loader: { entries: () => [] },
+    loader: { entries: () => loaderEntries },
     plugin: () => ({ await: async () => undefined, dispose: async () => undefined }),
     on: () => () => undefined,
     logger: { warn: () => undefined },
@@ -143,11 +157,23 @@ async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd, install
       })
       return { response, body: await response.json() }
     },
+    async installed() {
+      const response = await originalFetch(`${origin}/dsh-market/installed`)
+      return { response, body: await response.json() }
+    },
     async install(url = 'https://github.com/owner/fixture-plugin') {
       const response = await originalFetch(`${origin}/dsh-market/install`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', origin },
         body: JSON.stringify({ url }),
+      })
+      return { response, body: await response.json() }
+    },
+    async rollback(rollbackId) {
+      const response = await originalFetch(`${origin}/dsh-market/rollback`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin },
+        body: JSON.stringify({ rollbackId }),
       })
       return { response, body: await response.json() }
     },
@@ -157,8 +183,8 @@ async function updateTestbed(t, { spec = '^1.0.0', lockfile = '', onAdd, install
 test('an explicit npm update applies a fresh latest release in one request', async (t) => {
   const bed = await updateTestbed(t, {
     async onAdd({ args, target, manifestFile, profile }) {
-      assert.deepEqual(args.slice(0, 3), ['add', '--config.minimumReleaseAge=0', 'fixture-plugin@latest'])
-      assert.equal(target, 'fixture-plugin@latest')
+      assert.deepEqual(args.slice(0, 3), ['add', '--config.minimumReleaseAge=0', 'fixture-plugin@1.2.0'])
+      assert.equal(target, 'fixture-plugin@1.2.0')
       const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
       manifest.dependencies['fixture-plugin'] = '^1.2.0'
       await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
@@ -199,7 +225,7 @@ test('a hard-failed npm update restores and verifies the previous package bytes'
   const bed = await updateTestbed(t, {
     async onAdd({ target, manifestFile, profile }) {
       const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
-      if (target === 'fixture-plugin@latest') {
+      if (target === 'fixture-plugin@1.2.0') {
         manifest.dependencies['fixture-plugin'] = '^1.2.0'
         await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
         await writeInstalledPlugin(profile, '1.2.0')
@@ -226,13 +252,13 @@ test('a failed npm recovery preserves the original dependency spelling and repor
     spec: '~1.0.0',
     async onAdd({ target, manifestFile, profile }) {
       const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
-      manifest.dependencies['fixture-plugin'] = target === 'fixture-plugin@latest' ? '^1.2.0' : '1.0.0'
+      manifest.dependencies['fixture-plugin'] = target === 'fixture-plugin@1.2.0' ? '^1.2.0' : '1.0.0'
       await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
-      await writeInstalledPlugin(profile, target === 'fixture-plugin@latest' ? '1.2.0' : '1.0.0')
+      await writeInstalledPlugin(profile, target === 'fixture-plugin@1.2.0' ? '1.2.0' : '1.0.0')
       return {
         ...ok(),
         exitCode: 1,
-        stderr: target === 'fixture-plugin@latest' ? 'update failed after write' : 'rollback failed after write',
+        stderr: target === 'fixture-plugin@1.2.0' ? 'update failed after write' : 'rollback failed after write',
       }
     },
   })
@@ -241,6 +267,83 @@ test('a failed npm recovery preserves the original dependency spelling and repor
   assert.equal(response.status, 502)
   assert.match(String(body.error), /未能验证|could not be verified/)
   assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '~1.0.0')
+})
+
+test('an already-current npm update is an explicit skip without running pnpm', async (t) => {
+  const bed = await updateTestbed(t, {
+    installedVersion: '1.2.0',
+    async onAdd() {
+      throw new Error('current update must not invoke pnpm')
+    },
+  })
+
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 200, JSON.stringify(body))
+  assert.deepEqual(body, {
+    ok: true,
+    skipped: 'current',
+    name: 'fixture-plugin',
+    version: '1.2.0',
+  })
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 0)
+})
+
+test('a live npm update keeps the restart verdict after installed is read again', async (t) => {
+  const loaderEntries = [{ options: { name: 'fixture-plugin' }, fiber: {} }]
+  const bed = await updateTestbed(t, {
+    loaderEntries,
+    async onAdd({ args, target, manifestFile, profile }) {
+      assert.deepEqual(args.slice(0, 3), ['add', '--config.minimumReleaseAge=0', 'fixture-plugin@1.2.0'])
+      assert.equal(target, 'fixture-plugin@1.2.0')
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
+      await writeInstalledPlugin(profile, '1.2.0')
+      return ok()
+    },
+  })
+
+  const updated = await bed.update()
+  assert.equal(updated.response.status, 200, JSON.stringify(updated.body))
+  assert.equal(updated.body.activation['fixture-plugin'].state, 'restart')
+
+  const { response: installedResponse, body: installedBody } = await bed.installed()
+  assert.equal(installedResponse.status, 200, JSON.stringify(installedBody))
+  assert.equal(installedBody.activation['fixture-plugin'].state, 'restart')
+})
+
+test('manual disk rollback conservatively retains the live replacement restart verdict', async (t) => {
+  const bed = await updateTestbed(t, {
+    loaderEntries: [{ options: { name: 'fixture-plugin' }, fiber: {} }],
+    async onAdd({ target, manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      if (target === 'fixture-plugin@1.2.0') {
+        manifest.dependencies['fixture-plugin'] = '^1.2.0'
+        await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
+        await writeInstalledPlugin(profile, '1.2.0', {
+          peerDependencies: { 'fixture-host': '^2.0.0' },
+        })
+        return ok()
+      }
+      assert.equal(target, 'fixture-plugin@1.0.0')
+      manifest.dependencies['fixture-plugin'] = '^1.0.0'
+      await writeFile(manifestFile, JSON.stringify(manifest, null, 2))
+      await writeInstalledPlugin(profile, '1.0.0')
+      return ok()
+    },
+  })
+  await writePeerHost(bed.profile)
+
+  const updated = await bed.update()
+  assert.equal(updated.response.status, 200, JSON.stringify(updated.body))
+  assert.equal(updated.body.compatibility.code, 'soft-incompatible')
+
+  const rolledBack = await bed.rollback(updated.body.compatibility.rollbackId)
+  assert.equal(rolledBack.response.status, 200, JSON.stringify(rolledBack.body))
+  assert.equal(rolledBack.body.ok, true)
+
+  const { body } = await bed.installed()
+  assert.equal(body.activation['fixture-plugin'].state, 'restart')
 })
 
 test('a hard-failed GitHub update restores the captured commit and floating source spelling', async (t) => {

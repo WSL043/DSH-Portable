@@ -65,6 +65,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/check-market-upstream.mjs
+      - id: proposal
+        name: Skip an identical dependency proposal awaiting review
+        if: steps.upstream.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH=automation/verified-dependencies
+          PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            git fetch --no-tags origin "$BRANCH:refs/remotes/origin/$BRANCH"
+            if git diff --quiet "origin/$BRANCH" -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json; then
+              echo 'changed=false' >> "$GITHUB_OUTPUT"
+              echo 'An identical dependency proposal is awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
       - name: Create or refresh the plugin-market review issue
         if: steps.market.outputs.changed == 'true'
         env:
@@ -73,27 +91,59 @@ jobs:
           LATEST: ${{ steps.market.outputs.latest }}
           RELEASE_URL: ${{ steps.market.outputs.url }}
         run: |
+          set -euo pipefail
           TITLE="Dependency intake: dsh-market"
+          MACHINE=$(mktemp)
           BODY=$(mktemp)
+          STATE=$(mktemp)
           printf '%s\n' \
-            'Rolling review inbox for dsh-market changes that may apply to Portable.' \
-            '' "- reviewed baseline: \`${PINNED}\`" "- latest release: [\`${LATEST}\`](${RELEASE_URL})" \
-            '' 'Use .github/PLUGIN-MARKET-UPSTREAM.md as the decision matrix. Port only applicable behavior with a failing test first; do not merge the upstream working tree or auto-release.' \
-            '' 'Accepted fixes accumulate on main and ship with the next planned Portable release unless they close a blocking security, installation, or data-safety defect.' > "$BODY"
-          ISSUE=$(gh issue list --state open --search "dsh-market in:title" --json number,title --jq '.[] | select(.title == "Dependency intake: dsh-market" or (.title | startswith("Review dsh-market"))) | .number' | head -n 1)
+            '<!-- dsh-market-monitor:start -->' \
+            "- reviewed upstream baseline: \`${PINNED}\`" \
+            "- observed latest release: [\`${LATEST}\`](${RELEASE_URL})" \
+            '- review: manual review and merge are required by a human; this workflow never merges or releases.' \
+            '- release cadence: accepted fixes follow the next planned DSH-Portable release.' \
+            '<!-- dsh-market-monitor:end -->' > "$MACHINE"
+          ISSUE=$(gh issue list --state open --search "dsh-market in:title" --json number,title --jq '[.[] | select(.title == "Dependency intake: dsh-market" or (.title | startswith("Review dsh-market")))][0].number // empty')
           if [ -n "$ISSUE" ]; then
-            gh issue edit "$ISSUE" --title "$TITLE" --body-file "$BODY" --add-assignee WSL043
+            ISSUE_DATA=$(mktemp)
+            gh issue view "$ISSUE" --json title,body,assignees > "$ISSUE_DATA"
+            TARGET_TITLE="$TITLE" TARGET_ASSIGNEE="WSL043" node --input-type=module - "$ISSUE_DATA" "$MACHINE" "$BODY" "$STATE" <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs'
+
+          const [issuePath, machinePath, bodyPath, statePath] = process.argv.slice(2)
+          const issue = JSON.parse(readFileSync(issuePath, 'utf8'))
+          const existing = String(issue.body ?? '')
+          const machine = readFileSync(machinePath, 'utf8').trimEnd()
+          const startMarker = '<!-- dsh-market-monitor:start -->'
+          const endMarker = '<!-- dsh-market-monitor:end -->'
+          const start = existing.indexOf(startMarker)
+          const end = existing.indexOf(endMarker, start >= 0 ? start + startMarker.length : 0)
+          const body = start >= 0 && end >= start
+            ? `${existing.slice(0, start)}${machine}${existing.slice(end + endMarker.length)}`
+            : (existing.trimEnd() ? `${existing.trimEnd()}\n\n${machine}\n` : `${machine}\n`)
+
+          writeFileSync(bodyPath, body)
+          writeFileSync(statePath, JSON.stringify({
+            bodyChanged: body !== existing,
+            titleChanged: issue.title !== process.env.TARGET_TITLE,
+            assigned: Array.isArray(issue.assignees)
+              && issue.assignees.some(({ login }) => login === process.env.TARGET_ASSIGNEE),
+          }))
+          NODE
+            EDIT_ARGS=()
+            if [ "$(jq -r '.bodyChanged' "$STATE")" = true ]; then EDIT_ARGS+=(--body-file "$BODY"); fi
+            if [ "$(jq -r '.titleChanged' "$STATE")" = true ]; then EDIT_ARGS+=(--title "$TITLE"); fi
+            if [ "${#EDIT_ARGS[@]}" -gt 0 ]; then gh issue edit "$ISSUE" "${EDIT_ARGS[@]}"; fi
+            if [ "$(jq -r '.assigned' "$STATE")" != true ]; then gh issue edit "$ISSUE" --add-assignee WSL043; fi
           else
+            printf '%s\n' \
+              'Rolling review inbox for dsh-market changes that may apply to Portable.' \
+              '' 'Manual review and merge are required by a human; the upstream working tree is never merged automatically.' \
+              'An accepted fix follows the DSH-Portable release cadence; an upstream release never triggers a Portable release.' \
+              '' 'Use .github/PLUGIN-MARKET-UPSTREAM.md as the decision matrix. Port only applicable behavior with a failing test first.' \
+              '' 'Accepted fixes accumulate on main and ship with the next planned Portable release unless they close a blocking security, installation, or data-safety defect.' > "$BODY"
+            cat "$MACHINE" >> "$BODY"
             gh issue create --title "$TITLE" --body-file "$BODY" --assignee WSL043
-          fi
-      - name: Close the resolved plugin-market review issue
-        if: steps.market.outputs.changed != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          ISSUE=$(gh issue list --state open --search "dsh-market in:title" --json number,title --jq '.[] | select(.title == "Dependency intake: dsh-market" or (.title | startswith("Review dsh-market"))) | .number' | head -n 1)
-          if [ -n "$ISSUE" ]; then
-            gh issue close "$ISSUE" --comment "The current upstream release is covered by the reviewed compatibility matrix."
           fi
       - name: Summarize source-only upstream activity
         if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.source_changed == 'true'
@@ -107,12 +157,12 @@ jobs:
             "- official master is now: \`${COMMIT}\`" \
             '' 'No candidate issue was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
-        if: steps.upstream.outputs.changed == 'true'
+        if: steps.proposal.outputs.changed == 'true'
         run: |
           npm ci --prefix app --ignore-scripts
           npm test
       - name: Open or refresh the short-lived verified dependency pull request
-        if: steps.upstream.outputs.changed == 'true'
+        if: steps.proposal.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           DSH_VERSION: ${{ steps.upstream.outputs.version }}
@@ -132,7 +182,9 @@ jobs:
 
           - DeepSeek Harness: ${DSH_VERSION} (changed: ${DSH_CHANGED})
 
-          This pull request is merged only after the full Windows, macOS, and Linux product gate succeeds. Its branch is deleted after merge.
+          Manual review and merge are required by a human after the full Windows, macOS, and Linux product gate succeeds. This workflow never merges or publishes automatically.
+
+          An approved dependency fix follows the DSH-Portable release cadence; upstream availability does not trigger a Portable release. Its branch may be deleted after a human merge.
           EOF
           PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$PR" ]; then

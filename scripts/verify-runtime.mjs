@@ -119,7 +119,7 @@ const permissionSettingsClientPath = requireFromApp.resolve('@deepseek-ai/dsh-cl
 const conversationClientPath = requireFromApp.resolve('@deepseek-ai/dsh-client-ui-conversation/client')
 assert.equal(dshManifest.name, '@deepseek-ai/dsh')
 assert.equal(existsSync(dshBin), true, `official DSH CLI is missing: ${dshBin}`)
-assert.equal(pnpmManifest.version, '11.7.0', 'bundled pnpm version')
+assert.equal(pnpmManifest.version, '11.11.0', 'bundled pnpm version')
 assert.equal(existsSync(pnpmBin), true, `bundled pnpm command is missing: ${pnpmBin}`)
 assert.equal(existsSync(piAiProviderData), true, `pi-ai provider data is missing: ${piAiProviderData}`)
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'client.js')), true, 'desktop bridge client is missing')

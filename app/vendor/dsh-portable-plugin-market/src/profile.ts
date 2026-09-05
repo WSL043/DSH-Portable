@@ -87,6 +87,27 @@ export function readInstalledManifest(profile: string, name: string, explicitDir
 
 const PACKAGE_NAME_RE = /^(@[a-z0-9-~][a-z0-9-._~]*\/)?[a-z0-9-~][a-z0-9-._~]*$/i
 
+/** Conservative native-addon restart hint, adapted from dsh-market #510.
+ * Node cannot unload a loaded .node library by unmounting its plugin.
+ * Inspect conventional layouts only; do not recursively scan user trees.
+ */
+export function holdsNativeAddon(profile: string, name: string, explicitDir?: string): boolean {
+  if (!PACKAGE_NAME_RE.test(name)) return false
+  const modules = join(profileDir(profile, explicitDir), 'node_modules')
+  const shipsAddon = (packageName: string): boolean => {
+    const dir = join(modules, packageName)
+    return existsSync(join(dir, 'build', 'Release'))
+      || existsSync(join(dir, 'prebuilds'))
+      || existsSync(join(dir, 'binding.gyp'))
+  }
+  if (shipsAddon(name)) return true
+  const manifest = readInstalledManifest(profile, name, explicitDir)
+  if (manifest === null || typeof manifest !== 'object') return false
+  const dependencies = (manifest as { dependencies?: unknown }).dependencies
+  if (dependencies === null || typeof dependencies !== 'object') return false
+  return Object.keys(dependencies).filter(dependency => PACKAGE_NAME_RE.test(dependency)).some(shipsAddon)
+}
+
 function localSpecDirectory(root: string, spec: string): string | null {
   const match = /^(?:link|file):(.+)$/i.exec(spec)
   if (match === null) return null

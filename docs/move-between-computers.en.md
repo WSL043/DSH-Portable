@@ -2,15 +2,17 @@
 
 [简体中文](move-between-computers.md)
 
-DSH-Portable keeps sessions, settings, plugins, and the default workspace inside its portable directory. Exit fully, copy the directory, and continue from another drive, USB device, or computer.
+DSH-Portable keeps sessions, settings, plugins, and the default workspace inside its portable directory. Exit fully, copy the directory, and continue from another drive, USB device, or a computer with the same OS and architecture.
 
 ## Move the complete workspace
 
 1. Choose **Exit DeepSeek Harness** from the tray menu.
 2. Wait for the window and tray icon to disappear. On Windows, also wait until the folder can be renamed normally; do not force-copy or delete it while the app is still running.
-3. Copy the entire `DSH-Portable` folder to the new location.
+3. Copy the entire `DSH-Portable` folder to a new location with the same OS and architecture.
 4. Run `DeepSeek-Herness.exe` from that location. On macOS, open the app bundle. Linux AppImage users should copy the adjacent `DSH-Portable-data` directory as well.
 5. Open an existing session, then check a familiar plugin and the default workspace. Portable repairs paths it owns; projects you opened elsewhere stay in their original locations.
+
+Copying the complete folder is supported only between the same operating system and CPU architecture. When changing OS or architecture, download the target platform package and use a data archive to migrate sessions, settings, and plugin configuration. Rebuild native plugin dependencies on the target and move or reconnect external workspaces yourself; cross-OS restore has not yet passed finished-product qualification.
 
 Do not run the same synchronized directory on two computers at once. A cloud or sync tool merging session data while it is being written can create conflicts.
 
@@ -23,7 +25,7 @@ If you do not want to copy the runtime, open **Settings → General → Portable
 
 Both packages contain sessions, settings, plugin configuration, and API credentials. Neither includes the runtime, caches, logs, or workspace files. An unencrypted migration package is sensitive and should never be shared publicly. It is still a compressed, integrity-checked container rather than a text file; use the import review screen or `dsh portable inspect` for a summary.
 
-Importing into an existing environment fills missing data by default. Before an explicit overwrite, Portable creates a rollback copy under `data/backups/`. An import commits only after plugin dependencies are restored and every profile composes; dependency download or validation failure restores the previous data automatically. Registry plugins may need network access the first time they are restored on a new computer.
+When importing through Settings, the confirmation screen explains that package files will replace conflicts. Review the contents before choosing “Restart and import”; Portable creates a rollback copy under `data/backups/`. Command-line restore fills missing data by default and requires an explicit option to replace conflicts. An import commits only after plugin dependencies are restored and every profile composes; dependency download or validation failure restores the previous data automatically. Registry plugins may need network access the first time they are restored on a new computer.
 
 ## Verify portability without a second computer
 

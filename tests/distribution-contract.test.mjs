@@ -21,7 +21,7 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
     '@deepseek-ai/dsh-settings': upstream.dsh.version,
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
-    pnpm: '11.7.0',
+    pnpm: '11.11.0',
   })
   const serialized = JSON.stringify(runtime)
   for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
@@ -50,8 +50,8 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   assert.match(lock.dsh.noticesSha256, /^[0-9a-f]{64}$/)
   assert.deepEqual(lock.pnpm, {
     package: 'pnpm',
-    version: '11.7.0',
-    integrity: 'sha512-GcyFLBIMcSV2DyRD7mvgyltA+fUFmN4aCaHxd1A+AQ5Xwjx3ZG4B52HeWb+HT7IqM5jDOrlpH8E+uUa28PTWIA==',
+    version: '11.11.0',
+    integrity: 'sha512-RGP2X9gO2A1pvB1L8WPulPYFxzgPwxi7Wy6+FfjNEtScUaTVnpUbQB52TTtsp1HL9RvFDtcAGmvLSTXmhMNIgg==',
   })
   assert.deepEqual(lock.pluginMarket, {
     package: '@wsl043/dsh-portable-plugin-market',
@@ -59,8 +59,8 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
     catalog: 'https://awesome-dsh-plugin.com/plugins.json',
     catalogRepository: 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin',
     implementationBasis: 'https://github.com/dsh-market/dsh-market',
-    reviewedBasisTag: 'v1.39.0',
-    reviewedBasisCommit: 'ee95b359c818ab9b8c3cf86a46e20757d72fdc63',
+    reviewedBasisTag: 'v1.43.0',
+    reviewedBasisCommit: '7133ed336e07ca0542b1958d774f6836e81193a2',
   })
   for (const [key, runtime] of Object.entries(lock.node.runtimes)) {
     assert.match(runtime.sha256, /^[0-9a-f]{64}$/, key)

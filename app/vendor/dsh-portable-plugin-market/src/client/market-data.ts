@@ -41,6 +41,7 @@ export interface RegistryPlugin {
 
 /** The catalog payload under `registry` in /dsh-market/registry. */
 export interface Registry {
+  updated?: string
   count: number
   categories: Record<string, LocalizedText>
   plugins: RegistryPlugin[]
@@ -599,10 +600,18 @@ export function extractReadmeImages(markdown: string, owner: string, repo: strin
 }
 
 const readmeShotsCache = new Map<string, Promise<string[]>>()
+let screenshotsGeneration: string | undefined
+
+export function syncScreenshotsGeneration(generation: string | undefined): void {
+  if (generation === screenshotsGeneration) return
+  screenshotsGeneration = generation
+  readmeShotsCache.clear()
+}
 
 /** Test hook: the cache is module-level and outlives component unmounts. */
 export function resetScreenshotsCache(): void {
   readmeShotsCache.clear()
+  screenshotsGeneration = undefined
 }
 
 /**

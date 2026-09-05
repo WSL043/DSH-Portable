@@ -7,7 +7,7 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import type { InstallResult, PluginRunner } from './dsh-cli.ts'
+import { pnpmNeverStarted, type InstallResult, type PluginRunner } from './dsh-cli.ts'
 import { classifyPnpmFailure, HOST_NAMESPACE_RE, isTransientPnpmFailure } from './pnpm-compat.ts'
 import { conflictingEntryIds, dropFromManifest, hasDshManifest, hasLoadableEntry, pluginSubdirs, profileDir, readInstalled, readManifestDeps, readProfileBundles } from './profile.ts'
 import { logEvent } from './log.ts'
@@ -59,23 +59,32 @@ export async function withHoistRecovery(
   pluginArgs: string[],
   profileDirectory?: string,
 ): Promise<InstallResult> {
-  let result = await run(profile, pluginArgs)
+  // Keep this fact across recovery attempts. A later launcher failure must
+  // not make an operation that already ran pnpm look untouched to rollback.
+  let pnpmStarted = false
+  const recordLaunchFact = (candidate: InstallResult): InstallResult => {
+    const launchFailure = classifyPnpmFailure(`${candidate.stderr}\n${candidate.stdout}`, candidate.exitCode)?.code === 'pnpm-unusable'
+    if (launchFailure) return { ...candidate, pnpmNeverStarted: !pnpmStarted }
+    pnpmStarted = true
+    return candidate
+  }
+  let result = recordLaunchFact(await run(profile, pluginArgs))
   const ok = (r: InstallResult): boolean => r.exitCode === 0 && !r.timedOut && !r.cancelled
   if (!ok(result) && !result.cancelled) {
-    const failure = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`)
+    const failure = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`, result.exitCode)
     if (failure?.code === 'hoist-pattern-diff') {
       logEvent('warn', 'install', `modules dir was built by a different pnpm major — rebuilding (pnpm install) and retrying once`)
       // --no-frozen-lockfile: the market runs pnpm with CI=true (TTY hangs),
       // where a lockfile written by the old major would otherwise be refused.
-      const rebuild = await run(profile, ['install', '--no-frozen-lockfile'])
-      if (ok(rebuild)) result = await run(profile, pluginArgs)
+      const rebuild = recordLaunchFact(await run(profile, ['install', '--no-frozen-lockfile']))
+      if (ok(rebuild)) result = recordLaunchFact(await run(profile, pluginArgs))
     } else if (
       failure?.code === 'release-age-violation'
       && (pluginArgs[0] === 'add' || pluginArgs[0] === 'remove')
       && !pluginArgs.includes(RELEASE_AGE_OVERRIDE)
     ) {
       logEvent('warn', 'install', `a too-young release blocks pnpm's lockfile verification (#39) — retrying once with ${RELEASE_AGE_OVERRIDE}`)
-      result = await run(profile, [pluginArgs[0], RELEASE_AGE_OVERRIDE, ...pluginArgs.slice(1)])
+      result = recordLaunchFact(await run(profile, [pluginArgs[0], RELEASE_AGE_OVERRIDE, ...pluginArgs.slice(1)]))
     } else if (
       failure?.code === 'fetch-404'
       && isUnpublishedHostPeer(failure.pkg, profile, profileDirectory)
@@ -83,7 +92,7 @@ export async function withHoistRecovery(
       && !pluginArgs.includes(AUTO_INSTALL_PEERS_OFF)
     ) {
       logEvent('warn', 'install', `${failure.pkg ?? 'a DSH host package'} is supplied by the runtime — retrying once without pnpm peer auto-install`)
-      result = await run(profile, [pluginArgs[0], AUTO_INSTALL_PEERS_OFF, ...pluginArgs.slice(1)])
+      result = recordLaunchFact(await run(profile, [pluginArgs[0], AUTO_INSTALL_PEERS_OFF, ...pluginArgs.slice(1)]))
     } else if (
       failure?.code === 'transient-network'
       && (pluginArgs[0] === 'add' || pluginArgs[0] === 'remove')
@@ -92,7 +101,7 @@ export async function withHoistRecovery(
       // momentary network hiccup fails the run — and a plain retry succeeds.
       // Do that retry ourselves instead of reporting a false failure.
       logEvent('warn', 'install', `transient network failure while pnpm replayed the dependency tree (#83) — retrying once`)
-      result = await run(profile, pluginArgs)
+      result = recordLaunchFact(await run(profile, pluginArgs))
     } else if (
       failure?.code === 'fetch-timeout'
       && (pluginArgs[0] === 'add' || pluginArgs[0] === 'remove')
@@ -102,7 +111,7 @@ export async function withHoistRecovery(
       // aborted the download. A plain retry fails again at the same limit,
       // so retry once with a longer fetchTimeout.
       logEvent('warn', 'install', `pnpm's per-request fetch timeout aborted a large download — retrying once with ${FETCH_TIMEOUT_OVERRIDE}`)
-      result = await run(profile, [pluginArgs[0], FETCH_TIMEOUT_OVERRIDE, ...pluginArgs.slice(1)])
+      result = recordLaunchFact(await run(profile, [pluginArgs[0], FETCH_TIMEOUT_OVERRIDE, ...pluginArgs.slice(1)]))
     }
   }
   if (!ok(result) && !result.cancelled) {
@@ -111,10 +120,17 @@ export async function withHoistRecovery(
     // orphaned — reclaim them now that no pnpm is running. Safe by
     // construction: directories are only removed when their owning pid is
     // gone (the name carries it), so a live download is never touched.
-    await cleanOrphanedStore(run, profile)
-    const failure = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`)
+    if (!pnpmNeverStarted(result)) await cleanOrphanedStore(run, profile)
+    const failure = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`, result.exitCode)
     if (failure !== null) {
-      result = { ...result, stderr: `${result.stderr}\n\n${failure.message}` }
+      const message = failure.code === 'pnpm-unusable' && pnpmStarted
+        ? failure.message
+          .replace('Portable 私有 pnpm 没能启动，插件没有任何改动。', '此前的 pnpm 步骤已经启动，本次操作可能已经改动 profile；后续 Portable 私有 pnpm 没能启动。')
+          .replace("Portable's private pnpm could not be started, and nothing was changed.", 'An earlier pnpm step started during this operation, so the profile may have changed; a later Portable private pnpm launch failed.')
+        : failure.message
+      result = failure.replaceOutput === true && !pnpmStarted
+        ? { ...result, stdout: '', stderr: message }
+        : { ...result, stderr: `${result.stderr}\n\n${message}` }
     } else if (result.pnpmError !== undefined && result.pnpmError !== '') {
       const code = result.pnpmErrorCode === undefined ? '' : `${result.pnpmErrorCode}: `
       result = { ...result, stderr: `${result.stderr}\n\n${code}${result.pnpmError}` }

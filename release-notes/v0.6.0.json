@@ -1,25 +1,37 @@
 {
   "version": "0.6.0",
   "zh": {
-    "summary": "0.6.0 完成桌面集成与更新体验，正式提供可靠的任务通知、内核版本选择和默认插件维护。",
+    "summary": "0.6.0 新增 Windows 任务通知和内核版本选择，并改进插件更新与工作区打开体验。",
     "highlights": [
       "Windows 后台任务完成或需要回答、批准时会进入系统通知中心，支持回复原任务、处理简单选项和任务栏未读提示。",
       "选择工作区使用置顶的原生目录窗口；桌面窗口与任务栏稳定显示 DSH-Portable 自有图标。",
       "设置中可以从经过验证且与当前 Portable 兼容的版本目录选择 DeepSeek Harness 内核，并保留独立的产品更新入口。",
       "插件市场一次安装或更新即可获取目标最新版本；已安装的默认插件随 Portable 升级到已审查基线，主动删除的插件不重装，较新版本不降级。",
-      "主界面会显示可用更新和当前隔离环境；插件市场同步了 dsh-market 1.41 中适合 Portable 的代理、搜索和分页兼容修复。",
-      "内置 DeepSeek Harness 0.1.2-rc.1；Clash/Mihomo Fake-IP DNS 下 web_fetch 可能被上游公网地址检查拒绝，详见 README 已知限制。"
+      "主界面会显示可用更新和当前隔离环境；插件市场同步了 dsh-market 1.41 中适合 Portable 的代理、搜索和分页兼容修复。"
+    ],
+    "knownIssues": [
+      "内置 DeepSeek Harness 0.1.2-rc.1；Clash/Mihomo Fake-IP DNS 下 web_fetch 可能返回 WEB_BLOCKED_URL，见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)。",
+      "Windows 下载尚未签名；macOS 使用临时签名，尚未经过 Apple 公证。首次打开方式见 README。"
+    ],
+    "upgradeNotes": [
+      "已有用户可在便携版设置中手动检查产品更新；安装前结束正在运行的任务。更新保留用户数据，建议事先备份整个便携目录。"
     ]
   },
   "en": {
-    "summary": "0.6.0 completes the desktop integration and update experience with dependable task alerts, engine selection, and maintained default plugins.",
+    "summary": "0.6.0 adds Windows task notifications and engine selection, with improvements to plugin updates and workspace opening.",
     "highlights": [
       "Windows background completion and requests for answers or approval reach Action Center, with originating-task Reply, simple choices, and an unread taskbar indicator.",
       "Workspace selection uses a topmost native folder dialog, while the desktop window and taskbar retain the DSH-Portable application icon.",
       "Settings can select DeepSeek Harness from a verified, Portable-compatible version catalog while keeping product updates separate.",
       "Market installs and updates obtain the intended current version in one operation. Installed defaults advance to the reviewed baseline; removed defaults stay removed and newer versions are never downgraded.",
-      "The main shell shows available updates and the active isolated environment, and the market includes the applicable proxy, search, and pager compatibility fixes from dsh-market 1.41.",
-      "Bundles DeepSeek Harness 0.1.2-rc.1; its public-address check can reject web_fetch under Clash/Mihomo Fake-IP DNS. See the README for this known limitation."
+      "The main shell shows available updates and the active isolated environment, and the market includes the applicable proxy, search, and pager compatibility fixes from dsh-market 1.41."
+    ],
+    "knownIssues": [
+      "Bundled DeepSeek Harness 0.1.2-rc.1 may return WEB_BLOCKED_URL for web_fetch under Clash/Mihomo Fake-IP DNS. See the [upstream discussion](https://github.com/deepseek-ai/deepseek-harness/discussions/5202).",
+      "Windows downloads are unsigned; macOS builds are ad-hoc signed and not notarized. See the README for first-launch instructions."
+    ],
+    "upgradeNotes": [
+      "Existing users can manually check for product updates in Portable settings. Finish active tasks before installing; updates preserve user data, and backing up the entire portable folder first is recommended."
     ]
   }
 }

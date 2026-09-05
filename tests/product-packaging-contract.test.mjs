@@ -388,7 +388,7 @@ test('every desktop platform verifies the live visual plugin marketplace', async
 })
 
 test('installable official updates use a short-lived PR, full product gates, and an independent core channel', async () => {
-  const [workflow, autoMerge, updateCore, updater, upstreamState] = await Promise.all([
+  const [workflow, acceptanceSummary, updateCore, updater, upstreamState] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     read('.github/workflows/merge-verified-dependencies.yml'),
     read('launcher/update-core.mjs'),
@@ -407,11 +407,14 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.match(workflow, /npm test/)
   assert.match(workflow, /automation\/verified-dependencies/)
   assert.match(workflow, /gh pr (?:create|edit)/)
-  assert.match(autoMerge, /workflow_run:/)
-  assert.match(autoMerge, /conclusion == 'success'/)
-  assert.match(autoMerge, /gh pr merge[\s\S]+--delete-branch/)
-  assert.match(autoMerge, /actions:\s*write/)
-  assert.match(autoMerge, /gh workflow run ci\.yml[^\n]+--ref main/)
+  assert.match(acceptanceSummary, /workflow_run:/)
+  assert.match(acceptanceSummary, /conclusion == 'success'/)
+  assert.match(acceptanceSummary, /read-only acceptance summary/i)
+  assert.match(acceptanceSummary, /actions:\s*read/)
+  assert.match(acceptanceSummary, /contents:\s*read/)
+  assert.match(acceptanceSummary, /pull-requests:\s*read/)
+  assert.match(acceptanceSummary, /manual review and merge are required/i)
+  assert.doesNotMatch(acceptanceSummary, /gh pr merge|gh workflow run|git push|actions:\s*write|contents:\s*write|pull-requests:\s*write/)
   assert.match(updateCore, /WSL043\/DSH-Portable-Updates\/releases\/download\/update-channel-core-/)
   assert.doesNotMatch(updateCore, /WSL043\/DSH-Portable\/releases\/download\/update-channel-core-/)
   assert.doesNotMatch(workflow, /continue-on-error:\s*true/)
