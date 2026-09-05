@@ -40,7 +40,7 @@ import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
   avatarColor, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
-  formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, TIME_RANGE_DAYS, visiblePlugins,
+  formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
 ActivationInfo, ActivationState, GistExportResult, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
@@ -312,6 +312,8 @@ function marketPortalHost(): HTMLElement {
   if (portalHost === null) {
     portalHost = document.createElement('div')
     portalHost.setAttribute('data-dsh-market-portal', '')
+    portalHost.setAttribute('translate', 'no')
+    portalHost.classList.add('notranslate')
   }
   return portalHost
 }
@@ -742,6 +744,7 @@ export function MarketSection(props: MarketSectionProps) {
   }
 
   const applyCatalog = useCallback((registry: Registry) => {
+    syncScreenshotsGeneration(registry.updated)
     cachedRegistry = registry
     catalogAvailable.current = true
     setData(registry)
@@ -1319,6 +1322,11 @@ export function MarketSection(props: MarketSectionProps) {
     })
       .then(res => res.json().then(body => ({ status: res.status, body })))
       .then(({ status, body }) => {
+        if (status === 200 && body.ok && body.skipped === 'current') {
+          setRecords(list => drop(list, updateRecordId))
+          refreshInstalled()
+          return
+        }
         if (body.cancelled === true) {
           setRecords(list => drop(list, updateRecordId))
           refreshInstalled()
@@ -2079,7 +2087,7 @@ export function MarketSection(props: MarketSectionProps) {
   }, [data, installed, repoIdentities, repoHints])
 
   return (
-    <div className={css.root}>
+    <div className={`${css.root} notranslate`} translate="no">
       {records.length > 0 && (
         <div className={css.operationBar}>
           <span className={css.grow} />

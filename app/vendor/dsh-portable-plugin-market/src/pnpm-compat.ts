@@ -40,10 +40,13 @@ export interface PnpmFailure {
   code: 'adding-to-root' | 'not-a-workspace' | 'hoist-pattern-diff' | 'pnpm-missing' | 'release-age-violation'
     | 'ignored-builds' | 'git-prepare-not-allowed' | 'fetch-404' | 'transient-network' | 'fetch-timeout'
     | 'unexpected-store' | 'patch-failed' | 'missing-tarball-integrity' | 'windows-file-locked'
+    | 'pnpm-unusable' | 'missing-local-dependency'
   /** Bilingual, actionable message shown to the user instead of the raw wall of text. */
   message: string
   /** True when re-running `pnpm install` in the profile is the documented recovery. */
   recoverable: boolean
+  /** Replace undecodable launcher output instead of appending this message to it. */
+  replaceOutput?: boolean
   /** Package named by a registry 404, when pnpm supplied one. */
   pkg?: string
 }
@@ -91,9 +94,11 @@ function withDecodedPnpmDiagnostics(output: string): string {
  * dsh's own wrapper line ("dsh: pnpm failed in profile directory …") names no
  * cause, so the market must recognize pnpm's real diagnostics itself (#20).
  * @param output - stdout+stderr of the failed run.
+ * @param exitCode - the run's exit status, when the caller has it. 9009 is
+ *   cmd.exe's language-independent "command not found" status.
  * @returns the classified failure, or null when unrecognized (raw output is then shown as-is).
  */
-export function classifyPnpmFailure(output: string): PnpmFailure | null {
+export function classifyPnpmFailure(output: string, exitCode?: number | null): PnpmFailure | null {
   const decoded = withDecodedPnpmDiagnostics(output)
   if (output.includes('ERR_PNPM_PUBLIC_HOIST_PATTERN_DIFF')) {
     return {
@@ -238,6 +243,49 @@ export function classifyPnpmFailure(output: string): PnpmFailure | null {
       code: 'pnpm-missing',
       recoverable: false,
       message: '找不到 pnpm，请先在市场页顶部一键安装组件 / pnpm is not on PATH — use the one-click setup at the top of the market page',
+    }
+  }
+  // A local `file:`/`.tgz` dependency can disappear after it was added. pnpm
+  // re-resolves every direct dependency before any mutation, so that one
+  // missing path blocks installs and uninstalls for the whole profile. Keep
+  // the scope guard: an ENOENT from a build script is a different failure.
+  const localMiss = /ENOENT: no such file or directory, open ['"]([^'"]+)['"]/i.exec(decoded)
+  if (localMiss !== null && /while installing a direct dependency/i.test(decoded)) {
+    const missingPath = localMiss[1]
+    return {
+      code: 'missing-local-dependency',
+      recoverable: false,
+      message: `profile 里有一个从本地文件安装的插件，但文件已经不在了（${missingPath}）。pnpm 在做任何改动前都会重新解析全部直接依赖，所以这一条会挡住这个 profile 里的所有安装和卸载——包括卸载别的插件。请先把这个文件恢复到原路径；如果无法恢复，请先备份 profile，再检查 package.json 里的对应本地来源和 dsh bundle 配置，修复后重试。 / a plugin in this profile was installed from a local file that no longer exists (${missingPath}). pnpm re-resolves every direct dependency before making any change, so this one entry blocks every install and uninstall in the profile — including uninstalling other plugins. First restore the file at its original path; if that is not possible, back up the profile, then inspect the matching local source in package.json and its dsh bundle configuration, repair them, and retry.`,
+    }
+  }
+  // Portable's pnpm launcher can fail before pnpm runs. Windows cmd.exe
+  // reports the missing launcher/environment case as 9009; a direct spawn
+  // can report EACCES or ENOENT. These failures happen before pnpm can touch
+  // the profile, so retrying or restoring a previous build is not useful.
+  const spawnRefused = /(?:spawn(?:Sync)?\s+pnpm[^\r\n]*\b(EACCES|ENOENT)\b|\b(EACCES|ENOENT)\b[^\r\n]*spawn(?:Sync)?\s+pnpm)/i.exec(output)
+  const spawnCause = spawnRefused === null ? null : (spawnRefused[1] ?? spawnRefused[2])
+  const cmdNotFound = exitCode === 9009
+    || /is not recognized as an internal or external command|不是内部或外部命令|不是內部或外部命令/i.test(output)
+  if (cmdNotFound || spawnCause !== null) {
+    const why = spawnCause === 'EACCES'
+      ? {
+          zh: '系统拒绝执行 Portable 私有 pnpm（EACCES，权限不足）。多半是私有文件没有执行权限，或者它所在的分区以 noexec 挂载；请打开 Portable 专用 DSH 终端检查私有 pnpm，并使用设置里的“检查并修复”，必要时重新解压完整安装包。',
+          en: 'the system refused to execute Portable’s private pnpm (EACCES, permission denied). Usually the private file lacks execute permission, or it is on a noexec partition; open the Portable DSH terminal, check its private pnpm, use Settings > Check and repair, or re-extract the complete package.',
+        }
+      : spawnCause === 'ENOENT'
+        ? {
+            zh: 'Portable 私有 pnpm 的目标文件已经不在了（ENOENT），可能被删除或改名；请打开 Portable 专用 DSH 终端使用设置里的“检查并修复”，必要时重新解压完整安装包。',
+            en: 'Portable’s private pnpm target is gone (ENOENT), possibly deleted or renamed; open the Portable DSH terminal, use Settings > Check and repair, or re-extract the complete package.',
+          }
+        : {
+            zh: 'Portable 子进程没能启动 pnpm（退出码 9009）。可能是私有组件不完整，或市场启动环境没有带上 Portable 需要的变量；请打开 Portable 专用 DSH 终端运行检查，并使用设置里的“检查并修复”，必要时重新解压完整安装包。',
+            en: "the Portable child process could not launch pnpm (exit code 9009). The private component may be incomplete, or the market was started without Portable's required environment; open the Portable DSH terminal, run the checks, use Settings > Check and repair, or re-extract the complete package.",
+          }
+    return {
+      code: 'pnpm-unusable',
+      recoverable: false,
+      replaceOutput: true,
+      message: `Portable 私有 pnpm 没能启动，插件没有任何改动。${why.zh}\n请只使用 Portable 专用 DSH 终端和设置里的检查/修复流程，不要绕过 Portable 的私有组件路径或环境。 / Portable's private pnpm could not be started, and nothing was changed. ${why.en}\nUse only the Portable DSH terminal and its Settings check/repair flow; do not bypass Portable's private component path or environment.`,
     }
   }
   return null

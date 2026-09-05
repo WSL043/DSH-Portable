@@ -28,13 +28,31 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/update-preview-upstream.mjs
-      - name: Run repository contracts before opening the review
+      - id: proposal
+        name: Skip an identical official candidate awaiting review
         if: steps.preview.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          BRANCH=automation/official-preview
+          PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
+          if [ -n "$PR" ]; then
+            git fetch --no-tags origin "$BRANCH:refs/remotes/origin/$BRANCH"
+            if git diff --quiet "origin/$BRANCH" -- upstream.preview.lock.json; then
+              echo 'changed=false' >> "$GITHUB_OUTPUT"
+              echo 'This official candidate is already awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          fi
+          echo 'changed=true' >> "$GITHUB_OUTPUT"
+      - name: Run repository contracts before opening the review
+        if: steps.proposal.outputs.changed == 'true'
         run: |
           npm ci --prefix app --ignore-scripts
           npm test
       - name: Open or refresh the official candidate review pull request
-        if: steps.preview.outputs.changed == 'true'
+        if: steps.proposal.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           NPM_TAG: ${{ steps.preview.outputs.selectedTag }}

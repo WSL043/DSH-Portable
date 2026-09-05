@@ -10,7 +10,15 @@ function releaseLocale(value, label) {
     || value.highlights.some(item => typeof item !== 'string' || item.trim().length < 12)) {
     throw new Error(`${label} release highlights must contain 1-6 useful items.`)
   }
-  return { summary: value.summary.trim(), highlights: value.highlights.map(item => item.trim()) }
+  const optional = {}
+  for (const key of ['knownIssues', 'upgradeNotes']) {
+    if (value[key] === undefined) continue
+    if (!Array.isArray(value[key]) || value[key].some(item => typeof item !== 'string' || item.trim().length < 12)) {
+      throw new Error(`${label} ${key} must contain useful text items.`)
+    }
+    optional[key] = value[key].map(item => item.trim())
+  }
+  return { summary: value.summary.trim(), highlights: value.highlights.map(item => item.trim()), ...optional }
 }
 
 export function validateReleaseDescriptor(value, tag) {
@@ -23,6 +31,10 @@ export function validateReleaseDescriptor(value, tag) {
 
 function highlights(items) {
   return items.map(item => `- ${item}`).join('\n')
+}
+
+function optionalSection(title, items = []) {
+  return items.length ? `### ${title}\n\n${highlights(items)}` : ''
 }
 
 export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
@@ -67,6 +79,10 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
     '{{RELEASE_SUMMARY_EN}}': release.en.summary,
     '{{RELEASE_HIGHLIGHTS_ZH}}': highlights(release.zh.highlights),
     '{{RELEASE_HIGHLIGHTS_EN}}': highlights(release.en.highlights),
+    '{{RELEASE_KNOWN_ISSUES_ZH}}': optionalSection('已知限制', release.zh.knownIssues),
+    '{{RELEASE_KNOWN_ISSUES_EN}}': optionalSection('Known limitations', release.en.knownIssues),
+    '{{RELEASE_UPGRADE_NOTES_ZH}}': optionalSection('升级说明', release.zh.upgradeNotes),
+    '{{RELEASE_UPGRADE_NOTES_EN}}': optionalSection('Upgrade notes', release.en.upgradeNotes),
     '{{VERIFICATION_SCOPE_ZH}}': candidate
       ? '候选成品会经过 Windows、macOS、Linux x64 与 ARM64 验收。'
       : '正式成品已通过 Windows、macOS、Linux x64 与 ARM64 验收。',
@@ -74,10 +90,10 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
       ? 'Candidate artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.'
       : 'Stable artifacts are verified on Windows, macOS, Linux x64, and Linux ARM64.',
     '{{CHANNEL_UPGRADE_NOTICE_ZH}}': candidate
-      ? stage === 'alpha' ? alphaMigrationNotice.zh : '如果你正在使用仍指向稳定更新通道的较早候选版，请从本页手动下载一次与你的系统匹配的完整包；从此版本开始，后续候选版只检查候选更新通道，正式版发布后会正常升级到正式版。'
+      ? tag === 'v0.6.0-alpha.1' ? alphaMigrationNotice.zh : '候选版用于测试；请从本页下载与你的系统匹配的完整包，或在便携版设置中主动选择候选更新通道。'
       : '',
     '{{CHANNEL_UPGRADE_NOTICE_EN}}': candidate
-      ? stage === 'alpha' ? alphaMigrationNotice.en : 'If an earlier candidate still checks the stable update channel, manually download the complete package for your system from this release once. From this version onward, candidates check only the candidate channel and will advance to the final stable release when it is published.'
+      ? tag === 'v0.6.0-alpha.1' ? alphaMigrationNotice.en : 'For testing, download the complete package for your system from this release, or explicitly select the candidate channel in Portable settings.'
       : '',
     '{{WINDOWS_PRIMARY_FILENAME}}': candidate
       ? 'DSH-Portable-windows-x64-offline.zip'

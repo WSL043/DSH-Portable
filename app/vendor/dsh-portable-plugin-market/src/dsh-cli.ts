@@ -14,7 +14,7 @@ import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { logEvent } from './log.ts'
 import { createProgressTracker, type ProgressPhase } from './ndjson.ts'
-import { pluginArgsFor } from './pnpm-compat.ts'
+import { classifyPnpmFailure, pluginArgsFor } from './pnpm-compat.ts'
 import { profileDir } from './profile.ts'
 
 // 15 min default (slow networks + git installs), overridable for CI/tests.
@@ -171,6 +171,22 @@ export interface InstallResult {
   /** Structured pnpm failure carried on stdout by the ndjson reporter. */
   pnpmError?: string
   pnpmErrorCode?: string
+  /** Set by install orchestration when pnpm's launcher never ran. */
+  pnpmNeverStarted?: boolean
+}
+
+/**
+ * Whether pnpm never started, so the profile cannot have been touched.
+ *
+ * The update route must not attempt a source rollback for a launcher failure:
+ * unlike a pnpm command that starts and then fails, a command that returns
+ * 9009 or whose spawn is refused cannot have rewritten package.json or
+ * node_modules. Kept beside InstallResult so both the normal child runner
+ * and the Desktop runner share the same testable boundary.
+ */
+export function pnpmNeverStarted(result: InstallResult): boolean {
+  if (result.pnpmNeverStarted !== undefined) return result.pnpmNeverStarted
+  return classifyPnpmFailure(`${result.stderr}\n${result.stdout}`, result.exitCode)?.code === 'pnpm-unusable'
 }
 
 /** The shape every orchestration function takes to run plugin commands (injectable in tests). */

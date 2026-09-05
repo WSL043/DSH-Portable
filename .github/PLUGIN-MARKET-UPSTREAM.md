@@ -4,8 +4,12 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.41.0`
-(`f064d182d05559c8d55edc0230bf0411427e2f97`).
+Reviewed upstream baseline: `dsh-market` `v1.43.0`
+(`7133ed336e07ca0542b1958d774f6836e81193a2`).
+
+Reviewed means every relevant change has a disposition below, not that the
+upstream feature set is copied or that these changes are already released.
+The lock and this document advance together. Release preparation is manual.
 
 ## Compatibility matrix
 
@@ -50,6 +54,18 @@ Reviewed upstream baseline: `dsh-market` `v1.41.0`
 | Reset scrolling when catalog state changes and disable browser scroll anchoring | Adopted |
 | Prompt for a page refresh after hot-removing a client-part plugin | Adopted |
 | Restore and verify the exact previous npm version or GitHub commit after a failed update command | Adopted; the original dependency spelling is preserved even when recovery fails |
+| Resolve an npm update once and install the exact resolved version (#498) | Adopted; a moving dist-tag cannot change the requested install target |
+| Treat an already-current update as a successful no-op (#503) | Adopted; the client removes the pending operation instead of showing a failure or a fictitious update |
+| Preserve the restart verdict for a live replaced module across page reloads (#505) | Adopted; host-lifetime state remains authoritative when Installed is refreshed |
+| Diagnose an unusable pnpm launcher without attempting a rollback that cannot run (#504, #512) | Adopted; launcher failures are distinguished from package mutations |
+| Explain missing local file/tarball dependencies (#507) | Adopted; identify the blocking path and keep recovery explicit |
+| Follow WebDAV download redirects (#501) | Adopted for the existing backup route; bounded HTTPS redirects recheck public targets and permanently drop credentials after crossing origins |
+| Require a host restart after removing a package with a conventional native-addon layout (#510) | Adopted conservatively for the package and direct dependencies; this heuristic is not a complete loaded-library inventory |
+| Refresh README screenshot caches when the catalog generation changes (#481) | Adopted; unchanged catalog generations retain the cache |
+| Protect React-owned market and screenshot-portal text from browser translation (#513) | Adopted; Portable's own Chinese/English localization remains available |
+| Make the existing Update now action more prominent (#508) | Existing functionality retained; styling-only expansion deferred |
+| Non-local comment login and name-only local restore warnings (#484, #506) | Deferred with their respective discussion/local-development surfaces |
+| Split upstream pnpm test timeouts (#500) | Not applicable; Portable owns its test runners and budgets |
 | Unicode profiles and Git subpath installs | Independently implemented and tested |
 | Catalog, images, filters, direct author links, list/card views | Portable-native implementation |
 | Avoid runtime named imports from DSH settings helpers removed by Alpha 2 | Independently implemented with stable/Alpha capability checks and verified by both product lanes |
@@ -64,7 +80,7 @@ Reviewed upstream baseline: `dsh-market` `v1.41.0`
 | Persistent market server logs and full-profile export | Excluded; Portable support reports and migration own those product-level surfaces |
 | Browser-side self-check facts in exported diagnostics | Deferred to the Portable support report so one privacy-bounded product report owns both host and WebView evidence |
 | Resolve a bundled Electron DSH host and normalize an implicit `DSH_HOME` | Not applicable; Portable supplies an explicit profile directory and a non-empty product-owned `DSH_HOME` |
-| Name pnpm 11.21+ missing-integrity entries | Deferred until the pinned private pnpm advances from 11.7; retain the current fail-closed checksum policy |
+| Name pnpm 11.21+ missing-integrity entries | Deferred while the pinned private pnpm remains 11.11; retain the current fail-closed checksum policy |
 | Offer online updates for local `file:` installs and settings deep links | Deferred; useful expansion, not an installation-safety fix for the beginner path |
 | Restore local development links to catalog sources | Deferred; useful for plugin authors but outside the beginner install path |
 | Personal notes, update-note previews, plugin discussions, and public update APIs | Deferred; these are product expansion rather than Portable safety fixes |
@@ -78,3 +94,11 @@ Reviewed upstream baseline: `dsh-market` `v1.41.0`
 When `dsh-market` publishes a newer release, review its user-visible fixes
 against this matrix. Port the smallest applicable behavior with a failing test
 first; do not merge an upstream working tree or silently expand the product.
+
+## Next intake: v1.44.0
+
+The next observed release is a separate review batch. Its error boundary (#514),
+release-declared DSH minimum-version guard (#522), and git-prepare/tarball URL
+diagnostics (#455) need their own Portable tests and compatibility review.
+They are not included in the v1.43.0 reviewed baseline and do not trigger a
+Portable release or widen the scope of an already prepared maintenance batch.

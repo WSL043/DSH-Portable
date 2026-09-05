@@ -20,10 +20,10 @@ import { createGroup, deleteGroup, removeFromGroups, renameGroup, setGroupMember
 import { logEvent } from './log.ts'
 import { diagnosePackageManifests } from './diagnostics.ts'
 import {
-  BOOT_ID, cancelActive, probePnpm, progress, provisionPnpm, runDshPlugin,
+  BOOT_ID, cancelActive, pnpmNeverStarted, probePnpm, progress, provisionPnpm, runDshPlugin,
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
-import { addProfileBundle, dropFromManifest, hasLoadableEntry, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
+import { addProfileBundle, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
@@ -49,6 +49,10 @@ import {
 import {
   createGist, fitsGistLimit, GistError, gistErrorCode, parseGistId, readGist, resolveGistTokenSource, updateGist, verifyGistToken,
 } from './gist.ts'
+
+type UpdateRollbackSource =
+  | { kind: 'npm'; beforeVersion: string | null }
+  | { kind: 'github'; target: string; beforeCommit: string | null }
 
 export type { LoaderEntry } from './themes.ts'
 export type { UpdateStatus } from './updates.ts'
@@ -243,6 +247,13 @@ export function mountMarketRoutes(
   // group, install and uninstall mutates this shared state and persists it.
   const marketState = readMarketState(activeProfileDir)
   const disabled = marketState.disabled
+  /**
+   * Packages whose host module was already running when its files were
+   * replaced. This is process state: a real restart clears the stale module.
+   */
+  // Remounts and disk rollbacks do not prove that the host's module cache
+  // and transitive dependencies now match disk. Retain this until restart.
+  const replacedWhileLive = new Set<string>()
   const groups = marketState.groups
   const groupOrder = marketState.groupOrder
   // A choice made in a previous session outranks whatever the entry layer
@@ -473,10 +484,6 @@ export function mountMarketRoutes(
     return { ok: true, detail: null }
   }
 
-  type UpdateRollbackSource =
-    | { kind: 'npm'; beforeVersion: string | null }
-    | { kind: 'github'; target: string; beforeCommit: string | null }
-
   interface PendingRollback {
     id: string
     kind: 'update' | 'install'
@@ -541,13 +548,16 @@ export function mountMarketRoutes(
   }
 
   async function removeInstalledPackage(name: string): Promise<{ ok: boolean; hot: boolean; detail: string | null }> {
+    // Native addons stay loaded in Node after their package is removed. Keep
+    // the result as a restart until the host process actually exits.
+    const heldNativeAddon = holdsNativeAddon(config.profile, name, activeProfileDir)
     const result = await runPlugin(config.profile, ['remove', name])
     if (result.exitCode !== 0 || result.timedOut || result.cancelled) {
       return { ok: false, hot: false, detail: (result.stderr || result.stdout).slice(-300) }
     }
     const unmounted = await hotUnmount(name)
     const entryDisabled = await themes.setEntryDisabled(name, true)
-    const hot = unmounted || entryDisabled
+    const hot = (unmounted || entryDisabled) && !heldNativeAddon
     removeRowBlocks(userPatchPath, rowIdsForPackage(host, activeProfileDir, name))
     disabled.delete(name)
     removeFromGroups({ groups, groupOrder }, name)
@@ -852,8 +862,11 @@ export function mountMarketRoutes(
         const activation: Record<string, ReturnType<typeof verifyActivation>> = {}
         const live = liveNames()
         for (const name of Object.keys(installed)) {
-          activation[name] = verifyActivation(config.profile, name, live, activeProfileDir,
-            disabled.has(name) || patchFlags.disabled.includes(name))
+          activation[name] = activationAfterReplace(
+            verifyActivation(config.profile, name, live, activeProfileDir,
+              disabled.has(name) || patchFlags.disabled.includes(name)),
+            replacedWhileLive.has(name),
+          )
         }
         const diagnostics = diagnosePackageManifests(Object.keys(installed).map(packageName => ({
           packageName,
@@ -1359,7 +1372,6 @@ export function mountMarketRoutes(
             // The market follows its channel; everything else is `latest`.
             const selfChannel = SELF_NAMES.has(name) ? activeChannel() : null
             const tag = selfChannel === null ? 'latest' : DIST_TAG[selfChannel]
-            const target = isGit ? githubUpdateTarget(spec) : `${name}@${tag}`
             let expectedNpmVersion: string | null = null
             // Never let `@latest` walk a profile BACKWARDS (#64 by @ZeroOrigin64):
             // a package whose latest dist-tag was left on an older release turns
@@ -1382,14 +1394,26 @@ export function mountMarketRoutes(
               const refuse = selfChannel === null
                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
                 : installedVersion !== null && registryLatest !== null && installedVersion === registryLatest
+              if (refuse && installedVersion === registryLatest) {
+                logEvent('info', 'update', `${name} already current at ${installedVersion}; nothing to do`)
+                invalidateUpdates()
+                sendJson(response, 200, { ok: true, skipped: 'current', name, version: installedVersion })
+                return
+              }
               if (refuse) {
                 logEvent('info', 'update', `${name} refused: latest=${registryLatest} is not newer than installed=${installedVersion}`)
                 sendJson(response, 400, {
-                  error: `已是最新：registry 的 latest 是 ${registryLatest}，不高于已装的 ${installedVersion}，更新会造成降级。 / Already current: the registry's latest (${registryLatest}) is not newer than the installed ${installedVersion}, so updating would downgrade it.`,
+                  error: `更新会降级：registry 上的最新版是 ${registryLatest}，比已装的 ${installedVersion} 还旧，已停止，插件保持不变。 / Updating would downgrade this plugin: the registry's latest (${registryLatest}) is older than the installed ${installedVersion}, so nothing was changed.`,
                 })
                 return
               }
             }
+            // Use the exact version resolved above for npm updates. This keeps
+            // the package-manager boundary from resolving a moving dist-tag a
+            // second time between the guard and the actual replacement.
+            const target = isGit
+              ? githubUpdateTarget(spec)
+              : expectedNpmVersion !== null ? `${name}@${expectedNpmVersion}` : `${name}@${tag}`
             const repoKey = isGit ? spec.slice('github:'.length).replace(/#.*$/, '').toLowerCase() : null
             // Captured BEFORE pnpm replaces the files: afterwards the loader
             // inventory reads exactly the same, because replacing a package
@@ -1428,7 +1452,7 @@ export function mountMarketRoutes(
             // or timing out. Restore the exact prior build, not only its
             // manifest spelling; busy and user-cancelled runs do not own an
             // automatic recovery mutation.
-            if ((result.exitCode !== 0 || result.timedOut) && !cancelled && result.busy !== true) {
+            if ((result.exitCode !== 0 || result.timedOut) && !cancelled && result.busy !== true && !pnpmNeverStarted(result)) {
               const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
               rollbackOk = rollback.ok
               rollbackDetail = rollback.detail
@@ -1535,6 +1559,7 @@ export function mountMarketRoutes(
             let compatibility: { code: 'soft-incompatible'; risks: CompatibilityRisk[]; shadowedNames?: DuplicateName[]; brokenBundles?: Array<{ name: string; reason: string }>; rollbackId: string } | undefined
             if (ok) {
               invalidateUpdates()
+              if (wasLive) replacedWhileLive.add(name)
               activation = {
                 [name]: activationAfterReplace(
                   verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)),
@@ -2038,6 +2063,10 @@ export function mountMarketRoutes(
             const activation = {
               [name]: verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)),
             }
+            // Native addon libraries cannot be unloaded from this Node
+            // process once required. Capture the evidence before removal so a
+            // successful package delete still requires a host restart.
+            const heldNativeAddon = holdsNativeAddon(config.profile, name, activeProfileDir)
             const result = await runPlugin(config.profile, ['remove', name])
             const cancelled = result.cancelled
             const ok = result.exitCode === 0 && !result.timedOut && !cancelled
@@ -2060,7 +2089,7 @@ export function mountMarketRoutes(
               // @1123762794). Live-disable the entry so the refresh composes
               // without it; after a real restart the entry is gone anyway.
               const entryDisabled = await themes.setEntryDisabled(name, true)
-              hot = unmounted || entryDisabled
+              hot = (unmounted || entryDisabled) && !heldNativeAddon
               // Patch-layer rows must not survive the remove either: a
               // `- id: X` + `disabled: true` row for a package that no longer
               // mounts is a boot-time orphan (port of dsh-plugin-hub).

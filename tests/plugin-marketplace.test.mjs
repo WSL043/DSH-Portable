@@ -283,7 +283,7 @@ test('the Plugins page owns the title and each market surface starts at its cont
   assert.doesNotMatch(section, /className=\{css\.head\}|className=\{css\.titleRow\}|t\('subtitle'\)|t\('submitPlugin'\)/)
   assert.doesNotMatch(styles, /^\.(head|title|sub|submitLink)\b/m)
   assert.doesNotMatch(locales, /^\s*(subtitle|submitPlugin):/m)
-  assert.match(section, /<div className=\{css\.root\}>\s*\{records\.length > 0/)
+  assert.match(section, /<div className=\{`\$\{css\.root\} notranslate`\} translate="no">\s*\{records\.length > 0/)
   assert.doesNotMatch(section, /marketViewSwitch|tabDiscover|tabInstalled/)
 })
 
