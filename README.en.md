@@ -41,22 +41,28 @@
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
-| Sessions, settings, plugins, desktop data, and the default workspace stay together. | Exit, copy to another drive, USB device, or computer, and open it again. | Updates replace reproducible app components while keeping sessions, credentials, plugins, and workspace. |
+| Sessions, settings, plugins, desktop data, and the default workspace stay together. | Exit, copy to another drive, USB device, or a computer with the same OS and architecture, and open it again. | Updates replace reproducible app components while keeping sessions, credentials, plugins, and workspace. |
 
-This is not a renamed browser shortcut sold as a “no-install build.” Its runtime and plugin tools live inside the product folder, so the destination computer does not need Node.js or pnpm and DSH-Portable never modifies the system `PATH`. The dedicated window, tray, recent sessions, task notifications, remembered placement, and update experience remain intact.
+The runtime and plugin tools live inside the product folder, so the destination computer does not need Node.js or pnpm and DSH-Portable never modifies the system `PATH`. Portable still provides a dedicated window, tray, recent sessions, task notifications, remembered placement, and its update flow.
 
-On Windows, enabling **Task notifications** shows a system notification when a background task finishes or needs an answer or approval. Completion notifications let you reply to the originating task. Approval notifications offer Reject and Allow once; simple single-choice questions offer their answers, while complex questions open the corresponding task. Windows controls notification expansion. The taskbar icon counts completed tasks you have not opened or replied to yet.
+On Windows, enabling **Task notifications** shows a system notification when a background task finishes or needs an answer or approval. Completion notifications let you reply to the originating task. Approval notifications offer Reject and Allow once; simple single-choice questions can be answered directly, while complex questions open the corresponding task. Windows controls notification expansion; the taskbar icon counts completed tasks you have not opened or replied to yet and clears them after you open or reply.
 
 | Where you start | What Portable handles |
 | --- | --- |
 | **Online** | Download the roughly 60 KB launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
 | **Offline** | The complete ZIP includes official DSH, its runtime, the Plugin Market, and plugin management tools. |
-| **Another PC or USB drive** | Copy the folder; Portable repairs the paths it owns on the next launch. |
+| **Another PC or USB drive (same OS/architecture)** | Copy the folder; Portable repairs the paths it owns on the next launch. |
 | **Personal data only** | Export the same migration contents as either a plain package or a password-encrypted private package. |
 | **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
 | **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
 
-The 0.5 series Windows offline package is about **58 MB** and expands into about **44 outer files**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This preserves the complete plugin runtime while minimizing the small-file work needed to download, extract, copy, and update the product. Release gates cover archive size, extracted size, file count, and startup performance so later versions cannot quietly regress.
+The 0.5 series Windows offline package is about **58 MB** and expands into about **44 outer files**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This keeps the complete plugin runtime while reducing the small-file work needed to copy and update it. Release gates check archive size, extracted size, file count, and startup performance.
+
+### Component boundaries and release cadence
+
+DSH-Portable maintains the desktop shell, portable layout, update, repair, and migration flows. The official DSH is the upstream core pinned and verified for each package. They use separate versions and release cadences: a Portable feature version does not equal an official-core version, and each new version should be judged by its own Release notes.
+
+The Plugin Market and the two default plugins are Portable integration components. The market catalog mainly lists community plugins; a listing is not official endorsement or a security audit. Only the defaults are pinned and covered by Portable finished-product acceptance. Evaluate other plugins yourself and install them as needed. Compatibility not listed in the relevant Release notes or verification scope is not a Portable promise.
 
 ## Start in 3 steps
 
@@ -79,7 +85,7 @@ The close button sends the app to the system tray by default, so an active task 
 
 | Mac | Portable ZIP |
 | --- | --- |
-| Apple Silicon (M1–M4) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
+| Apple Silicon (arm64) | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-arm64.zip) |
 | Intel | [Download](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-macos-x64.zip) |
 
 macOS packages are ad-hoc signed and not notarized by Apple. If first launch is blocked, Control-click the app and choose **Open**.
@@ -103,10 +109,12 @@ The AppImage keeps sessions, settings, plugins, and workspace in the sibling `DS
 See the [computer-to-computer migration guide](docs/move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
 
 1. Choose **Exit DeepSeek Harness** from the tray and wait for the window and tray icon to disappear.
-2. Copy the entire `DSH-Portable` folder.
-3. Run `DeepSeek-Herness.exe` on Windows or the corresponding entry point on the new platform.
+2. Copy the entire `DSH-Portable` folder to a new location with the same OS and architecture.
+3. Run `DeepSeek-Herness.exe` from that location.
 
 Managed paths repair themselves after a move; external projects remain where you placed them. Exit on both computers before synchronizing the same folder to avoid concurrent session writes.
+
+Copying the complete folder is supported only between the same operating system and CPU architecture. When changing OS or architecture, download the target platform package and use a data archive to migrate sessions, settings, and plugin configuration. Rebuild native plugin dependencies on the target and move or reconnect external workspaces yourself; cross-OS restore has not yet passed finished-product qualification.
 
 ## Plugins
 
@@ -114,9 +122,9 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
-Fresh installs include only two reviewed, removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) displays images produced by tasks, while the existing [Chat Manager](https://github.com/WSL043/dsh-chat-manager) is now limited to the archived-session restore entry point that the official UI does not yet expose. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
+Fresh installs include only two reviewed, removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) displays images produced by tasks; the existing [Chat Manager](https://github.com/WSL043/dsh-chat-manager) is currently limited to the archived-session restore entry point that the official UI does not yet expose. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
 
-On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Official commands published by third-party plugins can be pasted unchanged in this terminal:
+On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Standard DSH commands documented by a plugin can be pasted unchanged in this terminal:
 
 ```powershell
 dsh plugin --profile web add <plugin>
@@ -126,22 +134,24 @@ dsh plugin --profile web remove <package-name>
 dsh --profile web --dump-config
 ```
 
-The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
+The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder within the same OS and architecture, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
 ## Updates and repair
 
-- DSH-Portable opens the local workspace first, then checks in the background. Product updates and official DeepSeek Harness core updates are independent, and **Check for updates at startup** is off by default for both; enable or run either one from **Settings → General → Portable**.
+- DSH-Portable opens the local workspace first, then checks in the background only when the corresponding startup setting is enabled. Product updates and official DeepSeek Harness core updates are independent, and both **Check for updates at startup** settings are off by default; enable or run either one from **Settings → General → Portable**.
 - Choose the **Stable** or **Candidate** update channel. Stable is intended for daily use; Candidate carries Alpha, Beta, or RC builds according to their actual maturity, after the matching Portable finished-product gates pass. Switching channels never downgrades the installed version. See the [release-stage policy](docs/release-policy.md).
 - The tray also exposes both manual checks. Network checking, waiting for a decision, and applying an update are separate states, so the menu does not remain stuck on “Checking”.
 - Every prompt names the target—DSH-Portable or DeepSeek Harness—and shows that target's current and next version.
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.
 - When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
-- Choose Later or **Skip this version**; installation waits for active tasks. Before replacing the core, the new core composes every existing profile and its plugins; an incompatible update leaves the installed version unchanged. A new version commits only after its workspace becomes ready; a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
+- Choose Later or **Skip this version**; installation waits for active tasks. Before replacing the core, the new core composes every existing profile and its plugins; an incompatible update leaves the installed version unchanged. A new version commits only after its workspace becomes ready, and a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
 - **Settings → General → Portable** provides checks, repair, and a redacted support report. The report includes complete phase-by-phase traces for the two latest launches, from native process creation to an interactive workspace. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
 
-An official DSH update does not need to wait for a DSH-Portable feature release, but it never replaces a working environment directly. Finished-product tests on Windows, macOS, Linux x64, and Linux ARM64 must all pass before the independent core channel is published.
+An official DSH update does not need to wait for a DSH-Portable feature release, but it never replaces a working environment directly. Finished-product tests on Windows, macOS, Linux x64, and Linux ARM64 must all pass before the independent core channel is published. The two release lines can use different versions and dates.
+
+The [release-writing guide](docs/release-writing.md) documents the evidence required for release notes.
 
 ## Portable data
 

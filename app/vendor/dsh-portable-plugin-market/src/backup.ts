@@ -221,7 +221,17 @@ interface PublicAddress {
 interface WebdavResponse {
   status: number
   body: Buffer
+  /** The Location header, for the GET redirect loop in downloadWebdav. */
+  location?: string
 }
+
+type WebdavRequester = (
+  url: string,
+  username: string,
+  password: string,
+  method: 'GET' | 'PUT' | 'MKCOL',
+  body?: string,
+) => Promise<WebdavResponse>
 
 async function webdavRequest(
   url: string,
@@ -281,7 +291,11 @@ async function webdavRequest(
         }
         chunks.push(value)
       })
-      response.once('end', () => resolveRequest({ status: response.statusCode ?? 0, body: Buffer.concat(chunks) }))
+      response.once('end', () => resolveRequest({
+        status: response.statusCode ?? 0,
+        body: Buffer.concat(chunks),
+        ...(typeof response.headers.location === 'string' ? { location: response.headers.location } : {}),
+      }))
     })
     request.once('error', reject)
     request.end(body)
@@ -396,8 +410,47 @@ export async function resolvePublicAddress(hostname: string): Promise<PublicAddr
   return { address: selected.address, family: selected.family }
 }
 
-export async function downloadWebdav(url: string, username: string, password: string): Promise<unknown> {
-  const response = await webdavRequest(url, username, password, 'GET')
+/** How many redirects a download follows before returning the final status. */
+const MAX_REDIRECTS = 5
+
+/** Validate redirect syntax and the synchronous part of the SSRF gate. */
+function validateRedirectTarget(target: URL): void {
+  if (target.protocol !== 'https:' || target.username !== '' || target.password !== '' || !isPublicTarget(target.hostname)) {
+    throw new Error('invalid WebDAV URL')
+  }
+}
+
+export async function downloadWebdav(
+  url: string,
+  username: string,
+  password: string,
+  request: WebdavRequester = webdavRequest,
+): Promise<unknown> {
+  // Some providers answer a WebDAV GET with 302 to a signed CDN link while
+  // accepting PUT directly. Only GET follows; uploads remain direct.
+  let currentUrl = url
+  let response = await request(currentUrl, username, password, 'GET')
+  for (let hop = 0; hop < MAX_REDIRECTS; hop += 1) {
+    if (response.status !== 301 && response.status !== 302 && response.status !== 303
+      && response.status !== 307 && response.status !== 308) break
+    if (response.location === undefined) break
+    let next: URL
+    try { next = new URL(response.location, currentUrl) } catch { throw new Error('invalid WebDAV URL') }
+    // Every real hop calls webdavRequest again, which repeats the full
+    // resolvePublicAddress check and pins the checked address before connect.
+    // This synchronous guard also protects the test seam and rejects obvious
+    // private/link-local targets before any follow-up request is made.
+    validateRedirectTarget(next)
+      const sameOrigin = next.origin === new URL(currentUrl).origin
+      // Once redirected away, never reattach the original credentials on
+      // subsequent same-origin hops within the destination service.
+      if (!sameOrigin) {
+        username = ''
+        password = ''
+      }
+      currentUrl = next.toString()
+      response = await request(currentUrl, username, password, 'GET')
+  }
   if (response.status < 200 || response.status >= 300) {
     throw new Error(response.status === 404
       ? 'WebDAV download failed: HTTP 404 — no backup at that path yet. Upload one first, and check the URL points at the backup FILE (…/dsh/backup.json), not its folder / 该路径下还没有备份文件。请先执行一次上传，并确认地址指向备份文件本身（…/dsh/backup.json）而不是目录'

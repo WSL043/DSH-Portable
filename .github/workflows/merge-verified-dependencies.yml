@@ -1,4 +1,4 @@
-name: Merge verified dependencies
+name: Verified dependency review summary
 
 on:
   workflow_run:
@@ -6,12 +6,12 @@ on:
     types: [completed]
 
 permissions:
-  actions: write
-  contents: write
-  pull-requests: write
+  actions: read
+  contents: read
+  pull-requests: read
 
 jobs:
-  merge:
+  summarize:
     if: >-
       github.event.workflow_run.name == 'Build and smoke test' &&
       github.event.workflow_run.event == 'workflow_dispatch' &&
@@ -20,13 +20,30 @@ jobs:
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-latest
     steps:
-      - name: Merge the fully verified dependency update and remove its branch
+      - name: Record a read-only acceptance summary for manual review
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head automation/verified-dependencies --json number,headRefOid --jq ".[] | select(.headRefOid == \"$HEAD_SHA\") | .number" | head -n 1)
-          test -n "$PR" || { echo "No matching open dependency PR for $HEAD_SHA"; exit 0; }
-          gh pr merge "$PR" --repo "$GITHUB_REPOSITORY" --squash --delete-branch
-          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref main
+          PR=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head automation/verified-dependencies --json number,headRefOid --jq "[.[] | select(.headRefOid == \"$HEAD_SHA\")][0].number // empty")
+          if [ -z "$PR" ]; then
+            printf '%s\n' \
+              '### Verified dependency acceptance summary' \
+              '' "No matching open dependency PR was found for commit \`$HEAD_SHA\`." \
+              '' 'No merge, branch deletion, release, or workflow dispatch was performed.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          PR_DATA=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json number,title,headRefName,headRefOid,url)
+          printf '%s\n' \
+            '### Verified dependency acceptance summary' \
+            '' "$(printf '%s' "$PR_DATA" | jq -r '"pull request: [#\(.number)](\(.url))"')" \
+            "$(printf '%s' "$PR_DATA" | jq -r '"head: \(.headRefName) @ \(.headRefOid)"')" \
+            '' 'The Build and smoke test workflow passed for this dependency proposal.' \
+            'Manual review and merge are required by a human. This workflow is read-only and never merges, deletes branches, publishes a release, or dispatches another workflow.' \
+            '' 'Verified dependency files:' \
+            '- `app/package.json`' \
+            '- `app/package-lock.json`' \
+            '- `app/vendor/dsh-portable-plugin-market/package.json`' \
+            '- `upstream.lock.json`' >> "$GITHUB_STEP_SUMMARY"

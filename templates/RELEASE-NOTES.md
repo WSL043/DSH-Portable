@@ -2,13 +2,23 @@
 
 {{RELEASE_INTRO_ZH}}
 
+## 本次变化
+
 {{RELEASE_SUMMARY_ZH}}
 
+### 修复与改进
+
 {{RELEASE_HIGHLIGHTS_ZH}}
+
+## 升级与验证
+
+{{RELEASE_UPGRADE_NOTES_ZH}}
 
 {{VERIFICATION_SCOPE_ZH}}升级会保留会话、设置、凭据、插件和工作区。
 
 {{CHANNEL_UPGRADE_NOTICE_ZH}}
+
+{{RELEASE_KNOWN_ISSUES_ZH}}
 
 ## 下载
 
@@ -37,13 +47,23 @@
 
 {{RELEASE_INTRO_EN}}
 
+## Changes
+
 {{RELEASE_SUMMARY_EN}}
 
+### Fixes and improvements
+
 {{RELEASE_HIGHLIGHTS_EN}}
+
+## Upgrade and verification
+
+{{RELEASE_UPGRADE_NOTES_EN}}
 
 {{VERIFICATION_SCOPE_EN}} Upgrading preserves sessions, settings, credentials, plugins, and the workspace.
 
 {{CHANNEL_UPGRADE_NOTICE_EN}}
+
+{{RELEASE_KNOWN_ISSUES_EN}}
 
 ### Downloads
 
