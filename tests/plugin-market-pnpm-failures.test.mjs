@@ -1,7 +1,15 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
 import { classifyPnpmFailure } from '../app/vendor/dsh-portable-plugin-market/src/pnpm-compat.ts'
+
+test('the shipped market bundle includes the new install failure diagnostics', async () => {
+  const bundle = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/lib/index.js', import.meta.url), 'utf8')
+  for (const code of ['ERR_PNPM_PREPARE_PACKAGE', 'ERR_PNPM_TARBALL_URL_MISMATCH', 'git-prepare-failed', 'tarball-url-mismatch']) {
+    assert.ok(bundle.includes(code), `packaged market is missing ${code}; rebuild its server bundle`)
+  }
+})
 
 test('git prepare failures preserve the named package without guessing an inner cause', () => {
   const message = 'ERR_PNPM_PREPARE_PACKAGE: Failed to prepare git-hosted package fetched from "https://codeload.github.com/o/r/tar.gz/abc": @scope/plugin@1.0.0 pnpm-install: pnpm install Exit status 1'
