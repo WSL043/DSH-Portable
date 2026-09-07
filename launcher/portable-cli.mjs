@@ -553,6 +553,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     startedAt: new Date().toISOString(),
   }
   await writeJsonAtomic(layout.processState, state)
+  let portConflict = false
   try {
     const url = await waitForHost(
       state,
@@ -564,24 +565,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     portReservation.release()
     if (hostUnavailable) {
       const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
-      const portConflict = /EADDRINUSE|address already in use/i.test(details)
-      if (child.pid && ownedState(state)) {
-        try {
-          if (process.platform === 'win32') {
-            execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })
-          } else {
-            process.kill(-child.pid, 'SIGKILL')
-          }
-        } catch {
-          // The process may already have exited; the state file is still removed below.
-        }
-      }
-      rmSync(layout.processState, { force: true })
-      if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
-      if (portConflict && portRetry < PORT_RANGE.last - PORT_RANGE.first) {
-        startupLog(startedAt, 'port-conflict-retry', { port })
-        return start(noBrowser, portRetry + 1)
-      }
+      portConflict = /EADDRINUSE|address already in use/i.test(details)
       throw new Error(`DeepSeek Harness failed to start.\n${details}`)
     }
 
@@ -593,11 +577,21 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   } catch (error) {
     portReservation.release()
     let cleanupError = null
+    startupLog(startedAt, 'host-cleanup-begin', { pid: state.pid, port })
     if (ownedState(state)) {
       try { await stop() } catch (failedCleanup) { cleanupError = failedCleanup }
+    } else {
+      rmSync(layout.processState, { force: true })
+      if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
     }
     if (cleanupError) {
+      startupLog(startedAt, 'host-cleanup-failed', { pid: state.pid, port, code: cleanupError?.code || 'none' })
       throw new Error(`${error?.message ?? error}\nStartup cleanup failed: ${cleanupError?.message ?? cleanupError}`, { cause: error })
+    }
+    startupLog(startedAt, 'host-cleanup-complete', { pid: state.pid, port })
+    if (portConflict && portRetry < PORT_RANGE.last - PORT_RANGE.first) {
+      startupLog(startedAt, 'port-conflict-retry', { port })
+      return start(noBrowser, portRetry + 1)
     }
     throw error
   }

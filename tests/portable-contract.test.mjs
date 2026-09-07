@@ -30,7 +30,7 @@ import {
 test('Windows task cleanup suppresses localized taskkill output', async () => {
   const cli = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
   const taskkillCalls = [...cli.matchAll(/execFileSync\('taskkill\.exe',[\s\S]*?\}\)/g)].map((match) => match[0])
-  assert.ok(taskkillCalls.length >= 3)
+  assert.ok(taskkillCalls.length >= 2)
   for (const call of taskkillCalls) {
     assert.match(call, /stdio:\s*'ignore'/)
     assert.doesNotMatch(call, /encoding:\s*'utf8'/)

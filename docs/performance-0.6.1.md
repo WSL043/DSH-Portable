@@ -1,5 +1,19 @@
 # 0.6.1 性能修复验收 / Performance repair evidence
 
+## 发布撤回 / Release withdrawn
+
+2026-09-07，0.6.1 已撤回为草稿，公开最新正式版恢复为 0.6.0。此前 main `211b45f` 的 34 项流水线和本机冒烟通过，仍不足以证明 #89 的启动超时、运行后卡顿及无法关闭已解决。发布判断有误；本文件中的测试结果保留为各项改动的证据，不作为该 issue 已修复或可重新发布的结论。
+
+Release 0.6.1 was withdrawn to draft on 2026-09-07; the public latest stable release is 0.6.0. Passing the 34-job main run at `211b45f` and local smoke checks did not establish a fix for issue #89. The release decision was premature. The results below remain evidence for individual changes, not proof that the reported symptoms are resolved or that republication is approved.
+
+附件中的后续成功记录是新的启动（`portRetry=0`），没有 `port-conflict-retry` 记录。当前代码仅对明确的端口占用错误换端口重试，因此不能把这些记录描述为超时后自动恢复。后续验收需分别对齐启动超时、长时间运行卡顿和关闭操作的实机日志与行为，保留未复现状态，不用故障注入代替原症状的复现。
+
+The successful starts following the timeouts are separate launches (`portRetry=0`), with no `port-conflict-retry` entry. They do not establish automatic timeout recovery. Further qualification must correlate real startup, sustained operation and close behavior with their logs; fault injection does not replace reproduction of the reported symptoms.
+
+撤回后新增的清理修复：启动失败路径曾忽略强制终止错误并删除进程记录，可能在后台仍存活时换端口重试。现统一使用核验所有权的停止流程；失败保留记录与原始错误，只有清理成功后才允许端口冲突重试，并记录清理开始、失败和完成。相同回归 fixture 在 `211b45f` 上确认“终止失败仍重试”，在修复后通过。本轮 Windows 11 `10.0.26200` 全量测试为 467/467；反馈系统是 Windows 10 `10.0.19045`，尚未完成原环境复测。
+
+The follow-up fixes a failed-start path that swallowed forced-termination errors and deleted process state, allowing a port-conflict retry while a backend might remain alive. Cleanup now uses the ownership-checked stop path, retains state and both errors on failure, and only retries a port conflict after cleanup succeeds. The same fixture reproduces retry-after-failed-termination at `211b45f` and passes after the fix. The follow-up suite passes 467/467 on Windows 11 `10.0.26200`; the reported Windows 10 `10.0.19045` environment remains unverified.
+
 ## 范围与结论 / Scope and conclusion
 
 2026-09-07，基于 main `30be1e6286b6bea91cfd9b374c10e2c66b934bc4` 处理 [issue #89](https://github.com/WSL043/DSH-Portable/issues/89)。本批修复 Portable 桌面桥、托盘资源、启动等待、路径别名迁移和 capsule 维护入口，并增加实机可验证的健康日志。下面记录本机结果及基础修复的跨平台结果；最终发布必须由成功的 main 成品流水线提供准确提交和下载校验值，不能把测试通过解释为反馈者环境中的全部卡顿或超时已解决。
