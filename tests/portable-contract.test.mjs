@@ -577,7 +577,7 @@ test('bounded lock waiting lets uninstall continue only after the active launche
   )
 })
 
-test('path aliases retain both workspace spellings for a later physical move', async (t) => {
+test('Windows path aliases retain both workspace spellings for a later physical move', { skip: process.platform !== 'win32' }, async (t) => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'dsh-alias-move-'))
   t.after(() => rm(parent, { recursive: true, force: true }))
   const firstRoot = path.join(parent, 'original')
