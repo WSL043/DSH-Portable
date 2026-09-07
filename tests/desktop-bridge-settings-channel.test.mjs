@@ -203,6 +203,27 @@ function settings(updateChannel = 'stable', overrides = {}) {
   }
 }
 
+test('core update feedback names the DSH version instead of the Portable version', async () => {
+  const client = await loadSettingsComponent(async url => {
+    if (url === '/dsh-portable/settings') return jsonResponse({ settings: settings('candidate'), versions: { portable: '0.6.4', engine: '0.1.2-rc.1' } })
+    if (url === '/dsh-portable/engine-versions') return jsonResponse({ schemaVersion: 1, releaseChannel: 'candidate', versions: [] })
+    if (url === '/dsh-portable/check-update') return jsonResponse({ status: 'available', latest: '0.6.4', engineLatest: '0.1.3-alpha.2' })
+    throw Error(`unexpected request: ${url}`)
+  })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const row = findNode(mounted.tree, node => node.type === 'div' && node.children?.length === 2 && textContent(node.children[0]).startsWith('DeepSeek Harness'))
+    assert.ok(row)
+    const button = findNode(row.children[1], node => typeof node.props?.onClick === 'function')
+    button.props.onClick()
+    await settle()
+    const feedback = findNode(mounted.tree, node => node.props?.role === 'status' && textContent(node).includes('available'))
+    assert.match(textContent(feedback), /0\.1\.3-alpha\.2/)
+    assert.doesNotMatch(textContent(feedback), /0\.6\.4/)
+  } finally { mounted.unmount() }
+})
+
 test('channel catalog state follows the final confirmed save and localizes unavailable versions', async () => {
   const calls = []
   const settingsGet = deferred()
