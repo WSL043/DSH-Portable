@@ -183,14 +183,28 @@ try {
         '--result', resultPath,
       ]
       if (!runningHostUpgrade) updaterArguments.push('--no-launch')
-      await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
-        timeout: 10 * 60 * 1000,
+      // A relaunched desktop can inherit redirected pipes from the old updater.
+      // Await the updater's exit, not pipe EOF from the long-lived new desktop.
+      const updater = spawn(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
         windowsHide: true,
+        stdio: 'ignore',
         env: runningHostUpgrade ? {
           ...process.env,
           DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
           DSH_PORTABLE_TEST_HIDDEN: '1',
         } : process.env,
+      })
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          updater.kill()
+          reject(new Error('The full updater exceeded its 10-minute limit.'))
+        }, 10 * 60 * 1000)
+        updater.once('error', error => { clearTimeout(timer); reject(error) })
+        updater.once('exit', code => {
+          clearTimeout(timer)
+          if (code === 0) resolve()
+          else reject(new Error(`The full updater exited with status ${code}.`))
+        })
       })
     } catch (error) {
       const diagnostic = await readFile(resultPath, 'utf8').catch(() => 'no updater result was written')
