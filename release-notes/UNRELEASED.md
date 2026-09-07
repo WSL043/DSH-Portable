@@ -1,6 +1,6 @@
 # 待发布 / Unreleased
 
-以下累积改动归入 0.6.2（0.6.1 已撤回），双语版本说明见 [v0.6.2.json](v0.6.2.json)，本机与基础修复验收见 [性能修复证据](../docs/performance-0.6.1.md)。最终发布状态、提交和成品校验值以 GitHub Release 的发布证据为准。
+以下累积改动归入 0.6.2（0.6.1 已撤回），双语版本说明见 [v0.6.2.json](v0.6.2.json)，本机与基础修复验收见 [性能修复证据](../docs/performance-0.6.2.md)。最终发布状态、提交和成品校验值以 GitHub Release 的发布证据为准。
 
 ## 用户变化候选
 
@@ -24,7 +24,7 @@
 
 ## English
 
-These accumulated changes belong to 0.6.2 (0.6.1 was withdrawn). See its [bilingual descriptor](v0.6.2.json) and [local and baseline performance evidence](../docs/performance-0.6.1.md). The GitHub Release qualification records the authoritative publication state, commit and download checksums.
+These accumulated changes belong to 0.6.2 (0.6.1 was withdrawn). See its [bilingual descriptor](v0.6.2.json) and [local and baseline performance evidence](../docs/performance-0.6.2.md). The GitHub Release qualification records the authoritative publication state, commit and download checksums.
 
 - Coalesce streamed session events, suppress duplicate tray projections, and dispose retired native menu resources.
 - Reduce Windows startup process inspection, bound log reads, and resolve capsule runtime paths for maintenance commands.
