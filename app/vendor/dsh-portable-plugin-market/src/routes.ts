@@ -30,7 +30,7 @@ import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
 import { trialValidate } from './trial.ts'
-import { findInstalledAlias, gitAllowBuildsKey, githubPinnedTarget, githubUpdateTarget, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
+import { externalUpdateSource, findInstalledAlias, gitAllowBuildsKey, githubPinnedTarget, githubUpdateTarget, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
 import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
@@ -1372,6 +1372,13 @@ export function mountMarketRoutes(
             const spec = readInstalled(config.profile, activeProfileDir)[name]
             if (spec === undefined) {
               sendJson(response, 400, { error: 'plugin is not installed' })
+              return
+            }
+            if (externalUpdateSource(spec)) {
+              sendJson(response, 409, {
+                code: 'external-source-update',
+                error: '此插件来自外部来源，请按原来源的说明手动更新；市场尚不支持该来源的精确更新与回滚，未更改插件。 / Update this plugin using its original source instructions. Source-exact update and rollback are not supported for this source; nothing was changed.',
+              })
               return
             }
             if (spec.startsWith('link:') || spec.startsWith('file:')) {

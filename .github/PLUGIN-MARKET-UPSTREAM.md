@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.44.0`
-(`3828a34c36ad083d6b33b640666a07e8cd348baa`).
+Reviewed upstream baseline: `dsh-market` `v1.45.0`
+(`ecbd26957130bb43c37d05e3ae9b2bc94cb5ecf1`).
 
 Reviewed means every relevant change has a disposition below, not that the
 upstream feature set is copied or that these changes are already released.
@@ -15,6 +15,11 @@ The lock and this document advance together. Release preparation is manual.
 
 | Upstream behavior | Portable decision |
 | --- | --- |
+| Never replace a private/self-hosted Git install with a same-name npm package (#525, #529) | Adopted as source preservation: external Git/URL/alias sources bypass npm checks and the update route refuses mutation with a visible manual-update explanation. Full external Git authentication and exact-commit rollback remain deferred; existing `github:` updates retain their tested branch and rollback behavior. |
+| Hide background Windows plugin-operation consoles (#536) | Already implemented for ordinary/piped spawn and both taskkill paths; native-host subprocess visibility is qualified separately. |
+| Document pnpm release-hold behavior (#531, #535) | Already covered by exact resolved-version installs and explicit release-age recovery; no runtime change needed. |
+| Remove the committed client source map (#533, #539) | Already absent from the Portable client build and distributed files. |
+| Discover back-to-top, tag wrapping and page-size menu polish (#511) | Deferred; Portable owns a separate discovery layout and compact pager. |
 | Clean carrier disable patches on removal | Adopted |
 | Run every activation cleanup on removal | Adopted |
 | Exclude backup files from exports | Adopted |

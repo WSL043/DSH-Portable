@@ -7,6 +7,32 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { mountMarketRoutes } from '../app/vendor/dsh-portable-plugin-market/src/routes.ts'
+import { checkUpdates } from '../app/vendor/dsh-portable-plugin-market/src/updates.ts'
+
+test('external plugin sources never fall through to a same-name registry update', async t => {
+  for (const spec of ['git+https://gitea.example/team/plugin.git#release', 'https://gitlab.example/team/plugin', 'git@example.com:team/plugin.git', 'https://example.com/plugin.tgz', 'npm:other-plugin@1.0.0']) {
+    await t.test(spec, async t => {
+      const fixture = await updateTestbed(t, { spec, onAdd: async () => { throw Error('must not replace external source') } })
+      const before = await readFile(fixture.manifestFile, 'utf8')
+      const networkCalls = []
+      const savedFetch = globalThis.fetch
+      globalThis.fetch = async url => { networkCalls.push(String(url)); return new Response(JSON.stringify({ version: '9.0.0' })) }
+      try {
+        const updates = await checkUpdates('web', true, fixture.profile)
+        assert.equal(updates['fixture-plugin'].kind, 'external')
+        assert.equal(updates['fixture-plugin'].updateAvailable, false)
+        const { response, body } = await fixture.update()
+        assert.equal(response.status, 409)
+        assert.equal(body.code, 'external-source-update')
+        assert.deepEqual(networkCalls, [])
+        assert.deepEqual(fixture.calls, [])
+        assert.equal(await readFile(fixture.manifestFile, 'utf8'), before)
+      } finally {
+        globalThis.fetch = savedFetch
+      }
+    })
+  }
+})
 
 const ok = (stdout = '') => ({
   exitCode: 0,

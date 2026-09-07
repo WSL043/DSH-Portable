@@ -2922,6 +2922,8 @@ export function MarketSection(props: MarketSectionProps) {
                                           )
                                         : status && status.kind === 'linked'
                                           ? <span className={css.metaTag}>{t('linkedDev')}</span>
+                                          : status && status.kind === 'external'
+                                            ? <span className={css.metaTag} title={t('externalUpdateHelp')}>{t('externalUpdate')}</span>
                                           : <span className={css.metaTag}>{t('upToDate')}</span>}
                                 {!missing && name !== 'dsh-market' && name !== 'dshmarket' && (
                                   removingName === name

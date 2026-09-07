@@ -2,6 +2,8 @@
 
 ## Confirmed defects and changes
 
+- Upstream market `v1.45.0` intake (#102) exposed the same external-source fallback in Portable. Five regression cases reproduced Git/URL/npm-alias installs being classified as same-name npm dependencies. They now skip registry checks and reject update mutation with a visible original-source instruction; existing npm and `github:` update/rollback paths remain supported. Full external Git update/rollback support is deferred rather than silently substituting code from the registry.
+
 - Alpha `0.1.3-alpha.2` moved subprocess helpers into `runner-launch-*.js` and already hides the ordinary spawn/taskkill paths. The adapter now validates that exact upstream shape and still patches both shared Win32 native process paths. Its exported `runCli()` also requires an explicit call when imported by Portable; otherwise the control process stayed alive without starting HTTP, causing a real 60-second timeout and successful rollback. Portable now calls the official exported entry when present, retaining the self-executing stable entry. The entry mode is recorded in startup logs.
 - Windows C# and manifest checkout line endings caused different fingerprints for the same source. Compatibility hashing now canonicalizes those text files while continuing to reject actual code changes and verifying archive hashes independently.
 
