@@ -80,7 +80,12 @@ healthPhase('official-dsh-import')
 const importStartedAt = performance.now()
 const importCpu = process.cpuUsage()
 try {
-  await import(pathToFileURL(path.resolve(dshBin)).href)
+  const entry = await import(pathToFileURL(path.resolve(dshBin)).href)
+  const explicitCli = typeof entry.runCli === 'function'
+  appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-entry-ready', {
+    mode: explicitCli ? 'exported-cli' : 'self-executing',
+  })
+  if (explicitCli) await entry.runCli()
   healthPhase('official-dsh-import-complete')
   const cpu = process.cpuUsage(importCpu)
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-complete', {

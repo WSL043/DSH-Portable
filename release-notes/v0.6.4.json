@@ -7,7 +7,7 @@
       "更新通道保存成功后再加载对应内核目录，避免旧请求和快速切换造成错误列表；获取失败会显示原因，网络查询不再占用启动和停止的锁。",
       "不兼容的内核版本提供明确说明，不再无声消失；候选内核可针对当前稳定版 Portable 独立构建和验证。",
       "修复同版本内核重新构建仍引用旧包的目录问题；发布前验证精确外壳、更新启动、默认插件保留及失败回滚。",
-      "稳定版内核保持 0.1.2-rc.1，官方 0.1.3-alpha.2 进入独立候选内核验证；上游跟进同时核对源代码构建工具和真实包清单。",
+      "稳定版内核保持 0.1.2-rc.1；适配官方 0.1.3-alpha.2 的显式启动入口和共享子进程模块，并修复源码换行导致的兼容性误判。候选内核仍须单独通过验证才会提供。",
       "默认插件安装失败日志保留经过脱敏的具体输出，便于定位依赖冲突；继续保留多轮启动历史。"
     ],
     "upgradeNotes": ["本版包含原生启动器修复，请使用内置完整包更新或下载完整包，保留原 data 目录。候选内核只对主动选择候选通道的用户提供，切换通道不会自动安装或降级。"],
@@ -20,7 +20,7 @@
       "Load catalogs after saving the channel, reject stale responses and explain failures. Network update queries no longer hold the startup and shutdown lock.",
       "Explain incompatible core versions instead of silently hiding them. Candidate cores can be built and qualified independently against the current stable Portable shell.",
       "Replace stale same-version catalog records after a core rebuild. Qualify exact-shell compatibility, update startup, default-plugin preservation and failure rollback before core publication.",
-      "Keep the stable core at 0.1.2-rc.1 and intake official 0.1.3-alpha.2 for independent candidate qualification. Upstream intake also verifies source build tools and package inventories.",
+      "Keep the stable core at 0.1.2-rc.1. Adapt official 0.1.3-alpha.2's explicit CLI entry and shared subprocess module, and prevent source line endings from rejecting compatible builds. Candidate cores remain gated by independent qualification.",
       "Retain redacted installer output when a default plugin fails, making dependency conflicts diagnosable while preserving multi-launch startup history."
     ],
     "upgradeNotes": ["This release changes the native launcher. Use the built-in full-package update or download the complete package, preserving the original data directory. Candidate cores require an explicit candidate-channel selection; changing channels never installs or downgrades automatically."],

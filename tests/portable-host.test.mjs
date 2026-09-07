@@ -40,15 +40,18 @@ async function waitForPipe(pipe) {
   throw new Error('portable host control pipe did not open')
 }
 
-test('portable host authenticates shutdown and invokes the official signal path', { skip: process.platform !== 'win32' }, async (t) => {
+for (const entryMode of ['legacy', 'exported']) test(`portable host starts the ${entryMode} CLI once and authenticates graceful shutdown`, { skip: process.platform !== 'win32' }, async (t) => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'dsh-host-'))
   const marker = path.join(temp, 'disposed.txt')
+  const bootMarker = path.join(temp, 'started.txt')
   const fakeDsh = path.join(temp, 'fake-dsh.mjs')
-  await writeFile(fakeDsh, [
-    "import { writeFileSync } from 'node:fs'",
+  const body = [
+    "writeFileSync(process.env.DSH_TEST_BOOT, 'started', { flag: 'wx' })",
     "process.on('SIGTERM', () => { writeFileSync(process.env.DSH_TEST_MARKER, 'graceful'); process.exit(0) })",
     'setInterval(() => {}, 1000)',
-  ].join('\n'))
+  ].join('\n')
+  await writeFile(fakeDsh, "import { writeFileSync } from 'node:fs'\n" +
+    (entryMode === 'exported' ? `export async function runCli() {\n${body}\n}` : body))
 
   const pipe = `\\\\.\\pipe\\dsh-portable-test-${process.pid}-${randomUUID()}`
   const token = randomUUID()
@@ -58,6 +61,7 @@ test('portable host authenticates shutdown and invokes the official signal path'
       DSH_PORTABLE_CONTROL_PIPE: pipe,
       DSH_PORTABLE_CONTROL_TOKEN: token,
       DSH_TEST_MARKER: marker,
+      DSH_TEST_BOOT: bootMarker,
       DSH_PORTABLE_STATE_ROOT: temp,
       DSH_PORTABLE_STARTUP_ID: 'b'.repeat(32),
       DSH_PORTABLE_STARTUP_STARTED_AT: String(Date.now()),
@@ -75,6 +79,7 @@ test('portable host authenticates shutdown and invokes the official signal path'
     await new Promise(resolve => setTimeout(resolve, 25))
   }
   assert.match(await readFile(traceFile, 'utf8'), /official-dsh-import-complete/)
+  assert.equal(await readFile(bootMarker, 'utf8'), 'started')
 
   assert.equal(await request(pipe, 'wrong-token'), 401)
   assert.equal(child.exitCode, null)

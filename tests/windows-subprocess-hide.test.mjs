@@ -6,6 +6,7 @@ import {
   patchWindowsAclHide,
   patchWindowsSubprocessHide,
   patchWindowsWin32ProcessHide,
+  subprocessHideModule,
 } from '../scripts/patch-windows-subprocess-hide.mjs'
 
 const fixture = `function taskkillTree(pid, force) {
@@ -36,6 +37,18 @@ test('official DSH subprocess patch hides every Windows child and taskkill helpe
   assert.match(output, /dsh-portable-windows-subprocess-hide-v1/)
   assert.equal(output.match(/windowsHide: true/g)?.length, 3)
   assert.equal(patchWindowsSubprocessHide(output), output)
+})
+
+test('Alpha shared runner keeps upstream-hidden helpers and rejects an unsafe changed helper', () => {
+  const alpha = fixture
+    .replaceAll('{ stdio: "ignore" });', '{\n\t\tstdio: "ignore",\n\t\twindowsHide: true\n\t});')
+    .replace('detached: platform !== "win32"', 'detached: platform !== "win32",\n\t\twindowsHide: platform === "win32"')
+  const patched = patchWindowsSubprocessHide(alpha)
+  assert.equal(patched.match(/windowsHide:/g)?.length, 3)
+  assert.equal(patchWindowsSubprocessHide(patched), patched)
+  assert.equal(subprocessHideModule('import { E as spawnSubprocess } from "./runner-launch-COYGu0Dl.js";'), 'runner-launch-COYGu0Dl.js')
+  assert.equal(subprocessHideModule(fixture), 'index.js')
+  assert.throws(() => patchWindowsSubprocessHide(alpha.replace('windowsHide: true', 'windowsHide: false')), /seam changed upstream/)
 })
 
 const aclFixture = `function spawnSandboxed() {

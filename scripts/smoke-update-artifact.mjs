@@ -184,6 +184,21 @@ async function main() {
       for (const plugin of installed.defaultPlugins ?? []) {
         assert.ok(JSON.stringify(plugins.installed).includes(plugin.package), `${plugin.package} remains installed`)
       }
+      const commandProbe = await execFileAsync(node, ['--input-type=module', '-e', `
+        import path from 'node:path';
+        import { pathToFileURL } from 'node:url';
+        const root = process.argv[1];
+        const { ensureRuntimeCapsule } = await import(pathToFileURL(path.join(root, 'launcher/runtime-capsule.mjs')));
+        const prepared = await ensureRuntimeCapsule(root);
+        const { default: Runtime } = await import(pathToFileURL(path.join(prepared.runtimeRoot, 'app/node_modules/@deepseek-ai/dsh-subprocess-local/lib/index.js')));
+        const runtime = new Runtime({ reflect: { provide: () => {} }, effect: () => () => {} });
+        const handle = runtime.spawn({ argv: [process.execPath, '-e', 'process.stdout.write("portable-core-command-ok")'], cwd: root,
+          stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: { maxBytes: 1024 } }, graceMs: 1000 });
+        const outcome = await handle.done;
+        if (outcome.exitCode !== 0 || handle.collected.stdout.finalize().text !== 'portable-core-command-ok') throw new Error('Core subprocess execution failed');
+        console.log('portable-core-command-ok');
+      `, root], { encoding: 'utf8', timeout: 30000, windowsHide: true })
+      assert.equal(commandProbe.stdout.trim(), 'portable-core-command-ok', 'updated core executes a real command')
     }
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
 
