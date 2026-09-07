@@ -577,6 +577,39 @@ test('bounded lock waiting lets uninstall continue only after the active launche
   )
 })
 
+test('path aliases retain both workspace spellings for a later physical move', async (t) => {
+  const parent = await mkdtemp(path.join(os.tmpdir(), 'dsh-alias-move-'))
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  const firstRoot = path.join(parent, 'original')
+  const aliasRoot = path.join(parent, 'alias')
+  const movedRoot = path.join(parent, 'moved')
+  const first = layoutForRoot(firstRoot)
+  await migratePortableRoot(first)
+  await symlink(firstRoot, aliasRoot, process.platform === 'win32' ? 'junction' : 'dir')
+  const alias = layoutForRoot(aliasRoot)
+  assert.equal((await migratePortableRoot(alias)).moved, false)
+  assert.deepEqual(JSON.parse(await readFile(alias.portableMeta, 'utf8')).workspaceAliases, [first.workspace])
+  // Both an existing backend and a subsequent start can persist their spelling.
+  await mkdir(path.join(first.dshHome, 'storages'), { recursive: true })
+  await writeFile(path.join(first.dshHome, 'storages', 'workspace.json'), JSON.stringify([first.workspace, alias.workspace, '/external']))
+  for (const [index, workspace] of [first.workspace, alias.workspace].entries()) {
+    const directory = path.join(first.dshHome, 'sessions', projectKey(workspace), `session-${index}`)
+    await mkdir(directory, { recursive: true })
+    await writeFile(path.join(directory, 'session.jsonl'), `${JSON.stringify({ cwd: workspace })}\n`)
+  }
+  await rename(firstRoot, movedRoot)
+  const moved = layoutForRoot(movedRoot)
+  const result = await migratePortableRoot(moved)
+  assert.equal(result.moved, true)
+  assert.equal(result.sessionCount, 2)
+  assert.deepEqual(JSON.parse(await readFile(path.join(moved.dshHome, 'storages', 'workspace.json'), 'utf8')), [moved.workspace, moved.workspace, '/external'])
+  for (const index of [0, 1]) {
+    const filename = path.join(moved.dshHome, 'sessions', projectKey(moved.workspace), `session-${index}`, 'session.jsonl')
+    assert.equal(JSON.parse(await readFile(filename, 'utf8')).cwd, moved.workspace)
+  }
+  assert.equal(JSON.parse(await readFile(moved.portableMeta, 'utf8')).workspaceAliases, undefined)
+})
+
 test('moving the whole folder migrates only its owned workspace references', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'dsh portable 移动 '))
   const firstRoot = path.join(parent, 'first location')

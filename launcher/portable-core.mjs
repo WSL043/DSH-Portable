@@ -1061,14 +1061,24 @@ export async function migratePortableRoot(layout) {
   await ensurePortableDirectories(layout)
   const previous = await readJson(layout.portableMeta, null)
   const current = { schemaVersion: 1, lastRoot: layout.root, workspace: layout.workspace }
+  const oldWorkspaces = previous?.lastRoot
+    ? [...new Set([previous.workspace || path.join(previous.lastRoot, 'workspace'), ...(previous.workspaceAliases || [])])]
+    : []
   if (!previous?.lastRoot || sameComparablePath(previous.lastRoot, layout.root, layout.platform)) {
+    // A running backend can still write the previous path spelling. Remember it
+    // without moving its sessions; a later physical move must migrate both.
+    const aliases = oldWorkspaces.filter((workspace) => workspace !== layout.workspace)
+    if (aliases.length) current.workspaceAliases = aliases
     await writeJsonAtomic(layout.portableMeta, current)
     return { moved: false, sessionCount: 0, storageCount: 0 }
   }
 
-  const oldWorkspace = previous.workspace || path.join(previous.lastRoot, 'workspace')
-  const storageCount = await migrateStorageJson(layout.dshHome, oldWorkspace, layout.workspace)
-  const sessionCount = await migrateSessionDirectory(layout.dshHome, oldWorkspace, layout.workspace)
+  let storageCount = 0
+  let sessionCount = 0
+  for (const oldWorkspace of oldWorkspaces) {
+    storageCount += await migrateStorageJson(layout.dshHome, oldWorkspace, layout.workspace)
+    sessionCount += await migrateSessionDirectory(layout.dshHome, oldWorkspace, layout.workspace)
+  }
   await writeJsonAtomic(layout.portableMeta, current)
   return { moved: true, sessionCount, storageCount }
 }
