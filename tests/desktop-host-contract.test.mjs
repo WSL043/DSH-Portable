@@ -621,13 +621,15 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
 })
 
 test('candidate builders overlay current Portable-owned integrations after importing the official preview runtime', async () => {
-  const [windows, macos, linux] = await Promise.all([
+  const [windows, macos, linux, staging] = await Promise.all([
     read('scripts/build-windows.ps1'), read('scripts/build-macos.sh'), read('scripts/build-linux.sh'),
+    read('scripts/stage-local-integrations.mjs'),
   ])
   for (const source of [windows, macos, linux]) {
-    assert.match(source, /dsh-portable-desktop-bridge/)
-    assert.match(source, /dsh-portable-plugin-market/)
+    assert.match(source, /stage-local-integrations\.mjs/)
   }
+  assert.match(staging, /dsh-portable-desktop-bridge/)
+  assert.match(staging, /dsh-portable-plugin-market/)
 })
 
 test('Windows startup audit accepts log-backed loader evidence and persists failures', async () => {
