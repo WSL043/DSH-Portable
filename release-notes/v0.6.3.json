@@ -1,0 +1,27 @@
+{
+  "version": "0.6.3",
+  "zh": {
+    "summary": "改善启动等待体验，保持亮暗主题一致，并保留多次启动的诊断记录，便于定位偶发卡顿。",
+    "highlights": [
+      "后台尚未就绪时显示加载进度；从启动窗口、加载页到工作台遵守保存的亮色、暗色或跟随系统设置，避免初始化时闪白。",
+      "修复旧加载页面取消事件误判工作台启动失败的问题，即使存在未完成的资源请求也能正确识别界面就绪。",
+      "启动和健康日志按启动 ID 保留 14 天内最近 30 次记录，总量上限 32 MiB；支持报告保留多轮记录、执行脱敏并明确标记截断。",
+      "减少客户端包换行扫描和模块链接父目录的重复处理；健康记录增加采样间隔及系统内存，便于对齐卡顿时的状态。",
+      "启动体验、诊断与性能改进见 PR #95：https://github.com/WSL043/DSH-Portable/pull/95。"
+    ],
+    "upgradeNotes": ["从 0.6.2 或更早版本使用内置更新，或下载完整便携包按现有升级流程操作；请保留原 data 目录。"],
+    "knownIssues": ["此前实机曾出现 18–24 秒的后台导入；后续启动和系统跟踪未复现相同长延迟，尚未确认其唯一根因。本版不宣称已根治该偶发问题，若再次发生请导出支持报告。"]
+  },
+  "en": {
+    "summary": "Improve startup feedback and theme continuity, and retain diagnostics across launches to investigate intermittent stalls.",
+    "highlights": [
+      "Show loading progress before the backend is ready. The native window, loading page and workspace respect the saved light, dark or system preference without flashing the default white background.",
+      "Prevent cancellation of an old loading page from failing the workspace navigation; unfinished resource requests no longer confuse workspace readiness.",
+      "Retain the latest 30 startup and health histories within 14 days, capped at 32 MiB. Support reports include multiple launches, redact sensitive values and identify truncated streams.",
+      "Reduce client bundle newline scanning and duplicate parent-directory creation during module-link repair. Health samples now include sampling intervals and system memory.",
+      "Startup, diagnostic and performance changes: PR #95, https://github.com/WSL043/DSH-Portable/pull/95."
+    ],
+    "upgradeNotes": ["Use the built-in updater from 0.6.2 or earlier, or follow the existing full-package upgrade procedure; preserve the original data directory."],
+    "knownIssues": ["Earlier local runs recorded 18–24-second backend imports. Later launches and system traces did not reproduce that delay, and its unique cause remains unconfirmed. This release does not claim to eliminate the intermittent stall; export a support report if it recurs."]
+  }
+}
