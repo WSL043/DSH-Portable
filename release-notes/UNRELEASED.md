@@ -1,6 +1,6 @@
 # 待发布 / Unreleased
 
-这些改动尚未包含在 v0.6.0 已发布的下载文件中。下一版本目标为 0.6.1，双语描述已准备，正式发布仍需完成成品验收。
+这些改动尚未包含在 v0.6.0 已发布的下载文件中。下一版本目标为 0.6.1，双语描述与跨平台成品验收已完成，正式发布和反馈环境复测仍待完成。验收记录见 [性能修复证据](../docs/performance-0.6.1.md)。
 
 ## 用户变化候选
 
@@ -23,7 +23,7 @@
 
 ## English
 
-These changes are not included in the published v0.6.0 downloads. The next version targets 0.6.1; its bilingual descriptor is prepared, with publication pending product qualification.
+These changes are not included in the published v0.6.0 downloads. The next version targets 0.6.1; its bilingual descriptor and cross-platform product qualification are complete, with publication and affected-machine retesting pending. See the [performance repair evidence](../docs/performance-0.6.1.md).
 
 - Coalesce streamed session events, suppress duplicate tray projections, and dispose retired native menu resources.
 - Reduce Windows startup process inspection, bound log reads, and resolve capsule runtime paths for maintenance commands.

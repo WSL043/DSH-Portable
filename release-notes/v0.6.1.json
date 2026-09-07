@@ -12,7 +12,7 @@
     ],
     "knownIssues": [
       "Issue #89 的用户环境曾在 DSH 导入阶段发生 60 秒超时；本次修复减少已确认的桌面与启动开销，但尚未证明该环境的超时和全部卡顿均已消除。",
-      "此描述为待发布候选，跨平台成品验收和正式发布尚未完成。"
+      "跨平台成品验收已通过；此描述仍为待发布候选，正式发布尚未完成。"
     ],
     "upgradeNotes": ["安装更新前结束运行中的任务并备份数据。保持产品发布与上游内核发布独立。"]
   },
@@ -28,7 +28,7 @@
     ],
     "knownIssues": [
       "Issue #89 includes a 60-second timeout during DSH import. These changes reduce confirmed desktop and startup overhead; resolution of that environment's timeout and all reported lag remains unverified.",
-      "This is a pending release candidate description. Cross-platform product qualification and publication are not complete."
+      "Cross-platform product qualification has passed. This remains a pending release candidate description; publication is not complete."
     ],
     "upgradeNotes": ["Finish active tasks and back up data before updating. Portable publishing remains independent of upstream engine releases."]
   }
