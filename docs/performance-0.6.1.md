@@ -14,6 +14,17 @@ The successful starts following the timeouts are separate launches (`portRetry=0
 
 The follow-up fixes a failed-start path that swallowed forced-termination errors and deleted process state, allowing a port-conflict retry while a backend might remain alive. Cleanup now uses the ownership-checked stop path, retains state and both errors on failure, and only retries a port conflict after cleanup succeeds. The same fixture reproduces retry-after-failed-termination at `211b45f` and passes after the fix. The follow-up suite passes 467/467 on Windows 11 `10.0.26200`; the reported Windows 10 `10.0.19045` environment remains unverified.
 
+### 撤回后成品 CI / Follow-up product CI
+
+[Run 34093566326](https://github.com/WSL043/DSH-Portable/actions/runs/34093566326) built product source `2a68ab98453e1d7434c745a4f91f7882f04b060d`, including the regenerated market server bundle. Both Windows native jobs passed startup, move, close, path-alias reuse and correlated UI-stall diagnostics. This run failed overall: macOS x64's native window did not become ready, and its qualification job consequently failed. The failure remains under investigation; there is no new release.
+
+| CI runner | First / moved startup (s) | Explicit stop (s) | Close to exit (s) |
+| --- | --- | --- | --- |
+| windows-2025 | 6.617 / 6.602 | 5.127 / 5.099 | 0.584 / 0.582 |
+| windows-2022 | 6.537 / 6.423 | 4.551 / 4.478 | 0.500 / 0.490 |
+
+These are measurements of the CI's extracted product, not a comparison with the reporter's Windows 10 machine. Both jobs captured injected UI delay and recovery, correlated their support reports and exited cleanly; their unauthenticated backend probe returned 401. The macOS follow-up captures a screenshot, native thread sample and redacted support report before cleanup, preserving the original failure status.
+
 ## 范围与结论 / Scope and conclusion
 
 2026-09-07，基于 main `30be1e6286b6bea91cfd9b374c10e2c66b934bc4` 处理 [issue #89](https://github.com/WSL043/DSH-Portable/issues/89)。本批修复 Portable 桌面桥、托盘资源、启动等待、路径别名迁移和 capsule 维护入口，并增加实机可验证的健康日志。下面记录本机结果及基础修复的跨平台结果；最终发布必须由成功的 main 成品流水线提供准确提交和下载校验值，不能把测试通过解释为反馈者环境中的全部卡顿或超时已解决。
