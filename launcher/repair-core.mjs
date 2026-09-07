@@ -91,7 +91,12 @@ async function runtimeChecks(layout) {
 }
 
 async function generatedChecks(layout) {
-  const profileResolver = await inspectManagedProfileModuleFallback(layout)
+  // Normal shutdown removes these move-sensitive links; startup recreates them.
+  const pendingStartup = !existsSync(path.join(layout.dshHome, 'profiles', 'node_modules'))
+    && !existsSync(layout.processState)
+  const profileResolver = pendingStartup
+    ? { ok: true, repairable: true, detail: 'created-on-start' }
+    : await inspectManagedProfileModuleFallback(layout)
   return [
     {
       id: 'generated.dshProfileResolver',

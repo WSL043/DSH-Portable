@@ -64,6 +64,21 @@ test('doctor reports a missing Windows desktop dependency as a complete-package 
   assert.equal(broken.checks.some((check) => check.id === 'shell.webView2Loader' && check.status === 'error'), true)
 })
 
+test('doctor accepts shutdown-cleaned links but detects their loss while a host is recorded', async t => {
+  const layout = await fixture(t)
+  const resolverRoot = path.join(layout.dshHome, 'profiles', 'node_modules')
+  await rm(resolverRoot, { recursive: true })
+  const stopped = await diagnosePortable(layout)
+  assert.equal(stopped.ok, true)
+  assert.equal(stopped.checks.find(check => check.id === 'generated.dshProfileResolver').detail, 'created-on-start')
+  await assert.rejects(realpath(resolverRoot), { code: 'ENOENT' }, 'diagnosis must not create links')
+  await mkdir(path.dirname(layout.processState), { recursive: true })
+  await writeFile(layout.processState, JSON.stringify({ pid: process.pid }))
+  const running = await diagnosePortable(layout)
+  assert.equal(running.ok, false)
+  assert.equal(running.checks.find(check => check.id === 'generated.dshProfileResolver').status, 'error')
+})
+
 test('doctor detects a missing transitive DSH package before the profile fails to boot', async (t) => {
   const layout = await fixture(t)
   await writeFile(path.join(layout.appDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), JSON.stringify({
