@@ -40,7 +40,7 @@ export interface PnpmFailure {
   code: 'adding-to-root' | 'not-a-workspace' | 'hoist-pattern-diff' | 'pnpm-missing' | 'release-age-violation'
     | 'ignored-builds' | 'git-prepare-not-allowed' | 'fetch-404' | 'transient-network' | 'fetch-timeout'
     | 'unexpected-store' | 'patch-failed' | 'missing-tarball-integrity' | 'windows-file-locked'
-    | 'pnpm-unusable' | 'missing-local-dependency'
+    | 'pnpm-unusable' | 'missing-local-dependency' | 'git-prepare-failed' | 'tarball-url-mismatch'
   /** Bilingual, actionable message shown to the user instead of the raw wall of text. */
   message: string
   /** True when re-running `pnpm install` in the profile is the documented recovery. */
@@ -187,6 +187,25 @@ export function classifyPnpmFailure(output: string, exitCode?: number | null): P
       recoverable: false,
       ...(pkg === undefined ? {} : { pkg }),
       message: `这个 tarball 依赖没有声明完整性校验${pkg === undefined ? '' : `（${pkg}）`}，为避免下载内容被替换，市场不会猜测或自动补写校验值。请让插件作者发布带 integrity 的锁定来源 / this tarball dependency has no integrity metadata${pkg === undefined ? '' : ` (${pkg})`}; the market will not guess or write a checksum automatically — ask the plugin author to publish a source pinned with integrity`,
+    }
+  }
+  // dsh-market #455: prefer an explicit inner failure over its prepare wrapper.
+  if (output.includes('ERR_PNPM_TARBALL_URL_MISMATCH')) {
+    const named = [...new Set([...decoded.matchAll(/(?<![\w./:@-])((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)@[A-Za-z0-9._+-]+ has a tarball URL/gi)].map(match => match[1]))]
+    const detail = named.length ? ` (${named.join(', ')})` : ''
+    return {
+      code: 'tarball-url-mismatch', recoverable: false,
+      ...(named.length === 1 ? { pkg: named[0] } : {}),
+      message: `锁定文件中的 tarball 地址与当前 registry 元数据不一致${detail}。请核对错误中列出的来源与 registry 配置；若错误来自 git 插件的构建，请让插件作者修正其锁定文件。完整错误保留在下方 / locked tarball URLs do not match the current registry metadata${detail}. Check the reported sources and registry configuration; if this occurred inside a git plugin build, ask its author to correct that lockfile. The full error is retained below`,
+    }
+  }
+  if (output.includes('ERR_PNPM_PREPARE_PACKAGE')) {
+    const pkg = /Failed to prepare git-hosted package fetched from "https:\/\/codeload\.github\.com\/[^\"]+":\s*((?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*)@[A-Za-z0-9._+-]+/i.exec(decoded)?.[1]
+    const detail = pkg ? ` (${pkg})` : ''
+    return {
+      code: 'git-prepare-failed', recoverable: false,
+      ...(pkg ? { pkg } : {}),
+      message: `git 插件的安装构建失败${detail}，此错误本身没有说明内部原因。请根据下方完整输出检查该插件的构建错误；内部日志缺失时，请向插件作者提供此错误，不要仅凭这一行改写 registry 或锁定文件 / a git plugin's install build failed${detail}; this wrapper error does not identify the inner cause. Check the full output below for its build error; if inner logs are absent, provide this error to the plugin author before changing registry settings or lockfiles`,
     }
   }
   // #65: a dependency that no longer resolves — an unpublished package left

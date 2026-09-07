@@ -95,10 +95,18 @@ When `dsh-market` publishes a newer release, review its user-visible fixes
 against this matrix. Port the smallest applicable behavior with a failing test
 first; do not merge an upstream working tree or silently expand the product.
 
-## Next intake: v1.44.0
+## Intake in progress: v1.44.0
 
-The next observed release is a separate review batch. Its error boundary (#514),
-release-declared DSH minimum-version guard (#522), and git-prepare/tarball URL
-diagnostics (#455) need their own Portable tests and compatibility review.
-They are not included in the v1.43.0 reviewed baseline and do not trigger a
-Portable release or widen the scope of an already prepared maintenance batch.
+Issue [#88](https://github.com/WSL043/DSH-Portable/issues/88) remains the review
+inbox. This batch is not yet a completed new baseline and does not trigger a
+Portable release.
+
+| Upstream change | Portable decision and evidence |
+| --- | --- |
+| Git prepare and tarball URL mismatch diagnostics ([#455](https://github.com/dsh-market/dsh-market/pull/455)) | Adopted in source with failing-before/passing-after classifier tests, including escaped NDJSON and an inner mismatch wrapped by a prepare failure. Keep raw output; do not infer a registry cause from the prepare wrapper or recommend rewriting an unverified lockfile. |
+| Market render error boundary ([#514](https://github.com/dsh-market/dsh-market/pull/514)) | Applicable, implementation pending. Portable registers separate Discover and Installed roots directly. Recovery must isolate their render failures and preserve the Portable support-report flow; upstream's `/dsh-market/logs` export endpoint does not exist here and must not be copied as a dead action. |
+| Pre-update DSH compatibility check ([#522](https://github.com/dsh-market/dsh-market/pull/522)) | Applicable, implementation pending. Portable currently checks resolved peers after installation. A pre-update verdict must use the exact resolved target and the selected capsule host version; an unavailable version is not a confirmed incompatibility. The upstream global/Homebrew locator and force-update UI cannot be copied into this different runtime contract. |
+
+The two pending behaviors require their own implementation and verification.
+This table records their concrete integration gaps, not a completed intake or
+an assertion that the corresponding user-facing failures have been fixed.

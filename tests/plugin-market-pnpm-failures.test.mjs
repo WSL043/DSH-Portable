@@ -2,6 +2,32 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import { classifyPnpmFailure } from '../app/vendor/dsh-portable-plugin-market/src/pnpm-compat.ts'
+
+test('git prepare failures preserve the named package without guessing an inner cause', () => {
+  const message = 'ERR_PNPM_PREPARE_PACKAGE: Failed to prepare git-hosted package fetched from "https://codeload.github.com/o/r/tar.gz/abc": @scope/plugin@1.0.0 pnpm-install: pnpm install Exit status 1'
+  for (const output of [message, JSON.stringify({ err: { code: 'ERR_PNPM_PREPARE_PACKAGE', message } })]) {
+    const failure = classifyPnpmFailure(output)
+    assert.equal(failure?.code, 'git-prepare-failed')
+    assert.equal(failure.recoverable, false)
+    assert.equal(failure.pkg, '@scope/plugin')
+  }
+  assert.equal(classifyPnpmFailure('ERR_PNPM_PREPARE_PACKAGE: unknown format')?.pkg, undefined)
+})
+
+test('explicit tarball mismatch takes precedence over its prepare wrapper and decodes package names', () => {
+  const one = '@scope/plugin@1.0.0 has a tarball URL (https://registry.example/a.tgz) that does not match the registry metadata'
+  const message = `ERR_PNPM_PREPARE_PACKAGE ERR_PNPM_TARBALL_URL_MISMATCH\n${one}`
+  for (const output of [message, JSON.stringify({ err: { code: 'ERR_PNPM_TARBALL_URL_MISMATCH', message } })]) {
+    const failure = classifyPnpmFailure(output)
+    assert.equal(failure?.code, 'tarball-url-mismatch')
+    assert.equal(failure.recoverable, false)
+    assert.equal(failure.pkg, '@scope/plugin')
+  }
+  const multiple = classifyPnpmFailure(`${message}\nother@2.0.0 has a tarball URL (https://registry.example/b.tgz)`)
+  assert.equal(multiple.pkg, undefined)
+  assert.match(multiple.message, /@scope\/plugin/)
+  assert.match(multiple.message, /other/)
+})
 import { pnpmNeverStarted } from '../app/vendor/dsh-portable-plugin-market/src/dsh-cli.ts'
 
 const failed = (overrides = {}) => ({
