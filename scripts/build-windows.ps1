@@ -202,12 +202,8 @@ try {
     if ($PreviewAppSource) {
         [System.IO.Directory]::Delete((Join-Path $Stage 'app'), $true)
         Copy-Item -Recurse -LiteralPath $PreviewAppSource -Destination (Join-Path $Stage 'app')
-        $BridgeTarget = Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-desktop-bridge'
-        $MarketTarget = Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-plugin-market'
-        if (Test-Path -LiteralPath $BridgeTarget) { [System.IO.Directory]::Delete($BridgeTarget, $true) }
-        if (Test-Path -LiteralPath $MarketTarget) { [System.IO.Directory]::Delete($MarketTarget, $true) }
-        Copy-Item -Recurse -LiteralPath (Join-Path $ProjectRoot 'desktop-bridge') -Destination $BridgeTarget
-        Copy-Item -Recurse -LiteralPath (Join-Path $ProjectRoot 'app\vendor\dsh-portable-plugin-market') -Destination $MarketTarget
+        & $NodeExe (Join-Path $ProjectRoot 'scripts\stage-local-integrations.mjs') (Join-Path $Stage 'app')
+        if ($LASTEXITCODE -ne 0) { throw 'Local integration staging failed.' }
     }
     foreach ($DefaultPlugin in $DefaultPlugins) {
         $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
