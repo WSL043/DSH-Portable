@@ -6,6 +6,7 @@ import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
+import { classifyProductVersion } from './version-policy.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -99,9 +100,11 @@ export function productionPackageClosure(packages, entryName) {
   return [...selected.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export async function stagePreviewRuntime({ packedRoot, output, npmCli }) {
+export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile }) {
+  const product = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+  lockFile ||= classifyProductVersion(product.version).channel === 'candidate' ? 'upstream.preview.lock.json' : 'upstream.lock.json'
   const [lock, stableLock] = await Promise.all([
-    readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
+    readFile(path.resolve(root, lockFile), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
   ])
   const packages = await inventoryPackedRuntime({ packedRoot, lock })
@@ -182,6 +185,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       'packed-root': { type: 'string' },
       output: { type: 'string' },
       'npm-cli': { type: 'string' },
+      'lock-file': { type: 'string' },
     },
   })
   if (!values['packed-root'] || !values.output) {
@@ -191,6 +195,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     packedRoot: path.resolve(values['packed-root']),
     output: path.resolve(values.output),
     npmCli: values['npm-cli'],
+    lockFile: values['lock-file'],
   })
   console.log(JSON.stringify(receipt, null, 2))
 }

@@ -35,8 +35,8 @@ async function buildRollbackProbe(archive, manifest) {
     await execFileAsync('unzip', ['-q', archive, '-d', source])
   }
 
-  const portableVersion = '9999.0.0-rollback.1'
-  const dshVersion = `${manifest.component.dshVersion}-rollback-probe`
+  const portableVersion = manifest.updateKind === 'engine' ? manifest.portableVersion : '9999.0.0-rollback.1'
+  const dshVersion = manifest.updateKind === 'engine' ? '9999.0.0-alpha.1' : `${manifest.component.dshVersion}-rollback-probe`
   const componentFile = path.join(source, 'component.json')
   const componentsFile = path.join(source, 'licenses', 'COMPONENTS.json')
   const component = JSON.parse(await readFile(componentFile, 'utf8'))
@@ -78,10 +78,17 @@ async function main() {
   const installedFile = path.join(root, 'licenses', 'COMPONENTS.json')
   const installed = JSON.parse(await readFile(installedFile, 'utf8'))
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+  const engine = manifest.updateKind === 'engine'
+  const scopeArgs = engine ? ['--scope', 'engine', '--channel', manifest.releaseChannel] : []
   assert.equal(installed.platform, manifest.platform)
   assert.equal(installed.nodeVersion, manifest.component.requiredNodeVersion)
 
-  installed.portableVersion = '0.0.0'
+  if (engine) {
+    assert.equal(installed.portableVersion, manifest.portableVersion, 'core must target this exact product')
+    assert.equal(installed.shellFingerprint, manifest.requiredShellFingerprint, 'core must target this exact shell')
+    // A same-version stable build exercises reinstallation; candidate builds keep the real prior core version.
+    if (installed.dshVersion === manifest.component.dshVersion) installed.dshVersion = '0.0.0'
+  } else installed.portableVersion = '0.0.0'
   await writeFile(installedFile, `${JSON.stringify(installed, null, 2)}\n`)
 
   const sentinels = [
@@ -130,9 +137,22 @@ async function main() {
   rollbackProbe.manifest.component.urls = [`${origin}/rollback-component.zip`]
 
   try {
+    let originalDependencies
+    const profileManifestFile = path.join(root, 'data', 'dsh-home', 'profiles', 'web', 'package.json')
+    if (engine) {
+      const baseline = JSON.parse((await execFileAsync(node, [...cliPrefix, 'start', '--json', '--no-browser'], {
+        encoding: 'utf8', timeout: 180000, windowsHide: true, maxBuffer: 4 * 1024 * 1024,
+      })).stdout.trim())
+      assert.equal(baseline.status, 'running', 'start the previous core before upgrading')
+      originalDependencies = JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies
+      for (const plugin of installed.defaultPlugins ?? []) {
+        assert.equal(originalDependencies?.[plugin.package], plugin.version, 'baseline includes the reviewed default plugins')
+      }
+    }
     const updated = await execFileAsync(node, [
       ...cliPrefix,
       'update',
+      ...scopeArgs,
       '--json',
       '--no-browser',
       '--force',
@@ -151,6 +171,16 @@ async function main() {
     assert.equal(status.status, 'running')
     const after = JSON.parse(await readFile(installedFile, 'utf8'))
     assert.equal(after.portableVersion, manifest.portableVersion)
+    if (engine) {
+      assert.deepEqual(JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies, originalDependencies,
+        'core upgrade preserves the installed plugin dependencies')
+      const response = await fetch(new URL('/dsh-market/installed', status.url), { signal: AbortSignal.timeout(15000) })
+      assert.equal(response.ok, true, 'plugin management remains available after core upgrade')
+      const plugins = await response.json()
+      for (const plugin of installed.defaultPlugins ?? []) {
+        assert.ok(JSON.stringify(plugins.installed).includes(plugin.package), `${plugin.package} remains installed`)
+      }
+    }
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
 
     let rollbackDiagnostic = ''
@@ -158,6 +188,7 @@ async function main() {
       await execFileAsync(node, [
         ...cliPrefix,
         'update',
+        ...scopeArgs,
         '--json',
         '--no-browser',
         '--force',
@@ -180,10 +211,12 @@ async function main() {
     const afterRollback = JSON.parse(await readFile(installedFile, 'utf8'))
     assert.equal(afterRollback.portableVersion, manifest.portableVersion)
     assert.equal(afterRollback.dshVersion, manifest.component.dshVersion)
+    if (engine) assert.deepEqual(JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies, originalDependencies)
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
     const deferred = JSON.parse((await execFileAsync(node, [
       ...cliPrefix,
       'check-update',
+      ...scopeArgs,
       '--json',
       '--allow-http',
       '--update-manifest',

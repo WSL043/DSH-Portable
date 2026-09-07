@@ -6,6 +6,12 @@ import path from 'node:path'
 
 import { buildDshEnv } from './portable-core.mjs'
 import { comparePortableVersions } from './update-core.mjs'
+import { redactDiagnosticText } from './diagnostic-policy.mjs'
+
+function pluginInstallError(result) {
+  const detail = redactDiagnosticText(`${result?.stdout ?? ''}\n${result?.stderr ?? ''}`).trim().slice(-8192)
+  return new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.${detail ? `\n${detail}` : ''}`)
+}
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-image-viewer',
@@ -129,7 +135,7 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
       windowsHide: true,
     })
     if (result?.error) throw result.error
-    if (result?.status !== 0) throw new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.`)
+    if (result?.status !== 0) throw pluginInstallError(result)
     await promoteBundledPluginsToRegistryLifecycle(profileRoot, candidates, adapters)
     return { status: 'updated', profile, plugins: candidates.map(plugin => plugin.name) }
   } catch (error) {
@@ -191,7 +197,7 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
       windowsHide: true,
     })
     if (result?.error) throw result.error
-    if (result?.status !== 0) throw new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.`)
+    if (result?.status !== 0) throw pluginInstallError(result)
     await promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters)
     await remove(seedMarker, { force: true })
     return { status: 'seeded', profile, plugins: plugins.map(plugin => plugin.name) }

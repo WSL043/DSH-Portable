@@ -18,7 +18,13 @@ window.__ModuleLoader__.load({
         engine: 'DeepSeek Harness', engineHint: '官方内核。仅推送通过 Portable 兼容验证的版本；启动检查默认关闭。',
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用；可从系统托盘选择安装。',
-        incompatible: '此内核需要先更新 DSH-Portable。', engineFollowsProduct: '预览版内核随 DSH-Portable 更新。', channelUnpublished: '此预览版尚未发布更新通道。', updateUnavailable: '暂时无法连接更新服务。',
+        incompatible: '此内核需要先更新 DSH-Portable。', engineFollowsProduct: '所选通道尚未提供内核更新包，请稍后重试。', channelUnpublished: '所选通道尚未提供更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
+        engineUnavailableCoreIncompatible: '版本 {0}：该内核不适用于当前 Portable，需要 {1}。',
+        engineUnavailableFullPackage: '版本 {0}：需要匹配的完整 Portable 安装包。',
+        engineUnavailableChannelMismatch: '版本 {0}：需要切换候选通道。',
+        engineUnavailableWrongPlatform: '版本 {0}：不适用于此系统。',
+        engineUnavailableUnknown: '版本 {0}：尚未通过此版本兼容验证。', unknown: '未知',
+        engineCatalogInvalid: '内核目录响应无效。', engineCatalogChannelMismatch: '内核目录通道与已确认的更新通道不一致。',
         notifications: '任务通知', notificationsHint: '任务在后台完成，或等待回答和批准时显示系统通知。', notificationsSystemDisabled: 'Windows 通知已关闭；开启后，后台任务完成和待处理提醒才会显示。',
         updateReady: '有可用更新', environmentActive: '当前独立环境：{0}',
         desktop: '桌面行为',
@@ -55,7 +61,13 @@ window.__ModuleLoader__.load({
         engine: 'DeepSeek Harness', engineHint: 'Official core. Only Portable-verified builds are offered; startup checks are off by default.',
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available; install it from the system tray.',
-        incompatible: 'Update DSH-Portable before installing this core.', engineFollowsProduct: 'Preview core updates are delivered with DSH-Portable.', channelUnpublished: 'No update channel has been published for this preview yet.', updateUnavailable: 'The update service is unavailable right now.',
+        incompatible: 'Update DSH-Portable before installing this core.', engineFollowsProduct: 'The selected channel has no engine update package yet. Please try again later.', channelUnpublished: 'The selected channel has no update package yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
+        engineUnavailableCoreIncompatible: 'Version {0}: This core is incompatible with the current Portable; requires {1}.',
+        engineUnavailableFullPackage: 'Version {0}: A matching full Portable package is required.',
+        engineUnavailableChannelMismatch: 'Version {0}: Switch to the candidate channel.',
+        engineUnavailableWrongPlatform: 'Version {0}: Not available for this system.',
+        engineUnavailableUnknown: 'Version {0}: Compatibility with this version has not been verified.', unknown: 'Unknown',
+        engineCatalogInvalid: 'The engine catalog response is invalid.', engineCatalogChannelMismatch: 'The engine catalog channel does not match the confirmed update channel.',
         notifications: 'Task notifications', notificationsHint: 'Show a system notification when a background task finishes or needs an answer or approval.', notificationsSystemDisabled: 'Windows notifications are turned off. Enable them to receive background completion and attention alerts.',
         updateReady: 'Update available', environmentActive: 'Current isolated environment: {0}',
         desktop: 'Desktop behavior',
@@ -82,7 +94,9 @@ window.__ModuleLoader__.load({
       },
     }
 
-    function format(template, value) { return String(template).replace('{0}', String(value)) }
+    function format(template, ...values) {
+      return String(template).replace(/\{(\d+)\}/g, (_match, index) => String(values[index] ?? ''))
+    }
 
     let dataExportRequestSequence = 0
     const pendingDataExportRequests = new Map()
@@ -300,6 +314,10 @@ window.__ModuleLoader__.load({
       const [engineVersions, setEngineVersions] = useState([])
       const [engineVersion, setEngineVersion] = useState('')
       const [engineVersionManifestUrls, setEngineVersionManifestUrls] = useState({})
+      const [engineUnavailable, setEngineUnavailable] = useState([])
+      const [persistedChannel, setPersistedChannel] = useState('')
+      const [selectedChannel, setSelectedChannel] = useState('')
+      const [catalogRevision, setCatalogRevision] = useState(0)
       const [environments, setEnvironments] = useState({ current: 'default', items: [{ id: 'default', name: '' }] })
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
@@ -311,8 +329,16 @@ window.__ModuleLoader__.load({
       const [dataDialog, setDataDialog] = useState('')
       const [environmentDialog, setEnvironmentDialog] = useState(false)
       const [environmentName, setEnvironmentName] = useState('')
+      const [settingsSaving, setSettingsSaving] = useState(false)
       const environmentsSupported = nativeHostTransport()?.capabilities.openEnvironment === true
       const statusRefs = React.useRef({})
+      const confirmedSettingsRef = React.useRef(null)
+      const persistedChannelRef = React.useRef('')
+      const settingsSavingRef = React.useRef(false)
+      const catalogInvalidatedRef = React.useRef(false)
+      const settingsSaveQueueRef = React.useRef(Promise.resolve())
+      const settingsSaveSequenceRef = React.useRef(0)
+      const engineVersionsRequestSequenceRef = React.useRef(0)
       const setStatus = (key, value) => {
         setMessages(current => ({ ...current, [key]: value }))
         if (value) requestAnimationFrame(() => statusRefs.current[key]?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' }))
@@ -320,9 +346,19 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         let active = true
         fetch('/dsh-portable/settings', { cache: 'no-store' })
-          .then(res => res.json()).then(body => {
+          .then(async response => {
+            const body = await response.json()
+            if (!response.ok || body?.error || !body?.settings) throw new Error(body?.error || `Invalid settings response (HTTP ${response.status})`)
+            return body
+          }).then(body => {
             if (!active) return
-            setSettings(body.settings)
+            const confirmedSettings = body.settings && { ...body.settings }
+            confirmedSettingsRef.current = confirmedSettings
+            setSettings(confirmedSettings)
+            const channel = confirmedSettings?.updateChannel || ''
+            persistedChannelRef.current = channel
+            setPersistedChannel(channel)
+            setSelectedChannel(channel)
             setVersions(body.versions || { portable: '', engine: '' })
             setLastUpdate(body.lastUpdate || null)
             setNotificationAvailability(body.notificationAvailability?.status || 'unknown')
@@ -335,25 +371,111 @@ window.__ModuleLoader__.load({
       }, [])
       useEffect(() => {
         let active = true
-        fetch('/dsh-portable/engine-versions', { cache: 'no-store' }).then(res => res.json()).then(body => {
-          if (!active || body.error) return
+        const requestSequence = ++engineVersionsRequestSequenceRef.current
+        const current = () => active && requestSequence === engineVersionsRequestSequenceRef.current
+        setEngineVersions([])
+        setEngineVersion('')
+        setEngineVersionManifestUrls({})
+        setEngineUnavailable([])
+        setStatus('update-engine', '')
+        if (!settings || !persistedChannel) return () => { active = false }
+        fetch('/dsh-portable/engine-versions', { cache: 'no-store' }).then(async response => {
+          let body
+          try { body = await response.json() }
+          catch (cause) { throw new Error(response.ok ? `Invalid engine version response: ${cause?.message || cause}` : `HTTP ${response.status}`) }
+          if (!response.ok || body?.error) throw new Error(body?.error || `HTTP ${response.status}`)
+          if (body?.schemaVersion !== 1 || !Array.isArray(body?.versions)) throw new Error(t('engineCatalogInvalid'))
+          if (typeof body.releaseChannel !== 'string') throw new Error(t('engineCatalogInvalid'))
+          if (body.releaseChannel !== persistedChannel) throw new Error(t('engineCatalogChannelMismatch'))
+          return body
+        }).then(body => {
+          if (!current()) return
           const items = Array.isArray(body.versions) ? body.versions : []
+          const unavailable = Array.isArray(body.unavailable) ? body.unavailable
+            .filter(item => item && item.version)
+            .map(item => ({
+              version: String(item.version),
+              status: String(item.status || ''),
+              reason: String(item.reason || ''),
+              requiredPortableVersion: String(item.requiredPortableVersion || ''),
+            })) : []
           setEngineVersions(items)
           setEngineVersion(body.current || '')
           setEngineVersionManifestUrls(Object.fromEntries(items.map(item => [item.version, item.manifestUrl])))
-        }).catch(() => {})
+          setEngineUnavailable(unavailable)
+        }).catch(error => {
+          if (current()) setStatus('update-engine', format(t('failed'), error.message || error))
+        })
         return () => { active = false }
-      }, [settings?.updateChannel])
+      }, [persistedChannel, catalogRevision])
 
       const update = patch => {
-        setSettings(current => ({ ...current, ...patch }))
-        fetch('/dsh-portable/settings', {
-          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
-        }).then(res => res.json()).then(body => {
-          if (body.error) throw new Error(body.error)
-          setSettings(body.settings)
-          postToNativeHost({ type: 'dsh-portable/preferences', schemaVersion: 1, ...body.settings }, 'preferences')
-        }).catch(error => setStatus('portable', format(t('failed'), error.message || error)))
+        const hasChannel = Object.hasOwn(patch, 'updateChannel')
+        const sequence = ++settingsSaveSequenceRef.current
+        settingsSavingRef.current = true
+        setSettingsSaving(true)
+        if (hasChannel) setSelectedChannel(patch.updateChannel)
+        else setSettings(current => ({ ...current, ...patch }))
+        const request = settingsSaveQueueRef.current.then(async () => {
+          try {
+            const response = await fetch('/dsh-portable/settings', {
+              method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch),
+            })
+            let body
+            try { body = await response.json() }
+            catch (cause) { throw new Error(response.ok ? `Invalid settings response: ${cause?.message || cause}` : `HTTP ${response.status}`) }
+            if (!response.ok || body?.error) throw new Error(body?.error || `HTTP ${response.status}`)
+            if (!body?.settings || typeof body.settings !== 'object') throw new Error('Settings response is missing saved settings.')
+            const previousConfirmed = confirmedSettingsRef.current || {}
+            const confirmedSettings = { ...previousConfirmed, ...body.settings }
+            const returnedChannel = Object.hasOwn(body.settings, 'updateChannel') ? body.settings.updateChannel : ''
+            const confirmedChannel = returnedChannel || (hasChannel ? patch.updateChannel : previousConfirmed.updateChannel || persistedChannelRef.current || '')
+            if (confirmedChannel) confirmedSettings.updateChannel = confirmedChannel
+            confirmedSettingsRef.current = confirmedSettings
+            if (sequence !== settingsSaveSequenceRef.current) return
+            const renderedChannel = persistedChannelRef.current
+            const channelNeedsRefresh = catalogInvalidatedRef.current || hasChannel || confirmedChannel !== renderedChannel
+            persistedChannelRef.current = confirmedChannel
+            setPersistedChannel(confirmedChannel)
+            setSelectedChannel(confirmedChannel)
+            setSettings(confirmedSettings)
+            if (channelNeedsRefresh) setCatalogRevision(current => current + 1)
+            catalogInvalidatedRef.current = false
+            postToNativeHost({ type: 'dsh-portable/preferences', schemaVersion: 1, ...confirmedSettings }, 'preferences')
+            settingsSavingRef.current = false
+            setSettingsSaving(false)
+          } catch (error) {
+            if (sequence !== settingsSaveSequenceRef.current) return
+            const confirmedSettings = confirmedSettingsRef.current
+            const confirmedChannel = confirmedSettings?.updateChannel || persistedChannelRef.current || ''
+            const renderedChannel = persistedChannelRef.current
+            if (confirmedSettings) {
+              persistedChannelRef.current = confirmedChannel
+              setPersistedChannel(confirmedChannel)
+              setSelectedChannel(confirmedChannel)
+              setSettings({ ...confirmedSettings, updateChannel: confirmedChannel })
+              if (catalogInvalidatedRef.current || hasChannel || confirmedChannel !== renderedChannel) setCatalogRevision(current => current + 1)
+              catalogInvalidatedRef.current = false
+            } else if (hasChannel) {
+              setSelectedChannel(persistedChannelRef.current)
+              setCatalogRevision(current => current + 1)
+              catalogInvalidatedRef.current = false
+            }
+            setStatus('portable', format(t('failed'), error.message || error))
+            settingsSavingRef.current = false
+            setSettingsSaving(false)
+          }
+        })
+        settingsSaveQueueRef.current = request.catch(() => {})
+      }
+      const unavailableMessage = item => {
+        const version = item.version || t('unknown')
+        const status = item.status || item.reason
+        if (status === 'core-incompatible') return format(t('engineUnavailableCoreIncompatible'), version, item.requiredPortableVersion || t('unknown'))
+        if (status === 'full-package-required') return format(t('engineUnavailableFullPackage'), version)
+        if (status === 'channel-mismatch') return format(t('engineUnavailableChannelMismatch'), version)
+        if (status === 'wrong-platform') return format(t('engineUnavailableWrongPlatform'), version)
+        return format(t('engineUnavailableUnknown'), version)
       }
       const openEnvironment = async id => {
         if (id === environments.current) return
@@ -407,6 +529,7 @@ window.__ModuleLoader__.load({
         finally { setBusy('') }
       }
       const checkUpdate = scope => {
+        if (settingsSavingRef.current || settingsSaving) return
         if (scope === 'engine' && engineVersion && engineVersion !== versions.engine && engineVersionManifestUrls[engineVersion]) {
           postToNativeHost({
             type: 'dsh-portable/open-update', schemaVersion: 1, scope: 'engine',
@@ -532,7 +655,8 @@ window.__ModuleLoader__.load({
       const inlineStatus = key => messages[key]
         ? h('div', { ref: node => { statusRefs.current[key] = node }, style: styles.status, role: 'status', 'aria-live': 'polite' }, messages[key])
         : null
-      if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t('title')), h('div', { style: styles.hint }, t('checking')))
+      if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t('title')),
+        h('div', { style: styles.hint, role: 'status' }, messages.portable || t('checking')))
       const booleanRow = (key, title, hint) => h('div', { style: styles.item },
         h('div', { style: styles.text }, h('div', { style: styles.label }, title), h('div', { style: styles.hint }, hint)),
         h(PortableSelector, {
@@ -540,11 +664,11 @@ window.__ModuleLoader__.load({
           items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
           onSelect: value => update({ [key]: value === 'on' }),
         }))
-      const updateRow = (scope, key, title, version, hint) => h('div', { style: styles.item },
+      const updateRow = (scope, key, title, version, hint, details = null) => h('div', { style: styles.item },
         h('div', { style: styles.text }, h('div', { style: styles.label }, title),
           h('div', { style: styles.hint }, hint),
           version && h('div', { style: styles.version }, format(t('currentVersion'), version)),
-          inlineStatus(`update-${scope}`)),
+          inlineStatus(`update-${scope}`), details),
         h('div', { style: styles.rowActions },
           scope === 'engine' && engineVersions.length > 0 && h(PortableSelector, {
             primitives, value: engineVersion || version, label: t('versionChoice'),
@@ -556,7 +680,7 @@ window.__ModuleLoader__.load({
             items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
             onSelect: value => update({ [key]: value === 'on' }),
           }),
-          h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => checkUpdate(scope) },
+          h(primitives.Button, { size: 'sm', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
             busy === `update-${scope}` ? t('checking') : scope === 'engine' && engineVersion && engineVersion !== version ? t('installVersion') : t('checkUpdate'))))
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
         h('div', { style: styles.sectionHeading }, t('updates')),
@@ -568,15 +692,26 @@ window.__ModuleLoader__.load({
             lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
               format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion')))),
           h(PortableSelector, {
-            primitives, value: settings.updateChannel || 'stable', label: t('updateChannel'),
+            primitives, value: selectedChannel || persistedChannel || settings.updateChannel || 'stable', label: t('updateChannel'),
             items: [{ id: 'stable', label: t('stableChannel') }, { id: 'candidate', label: t('betaChannel') }],
             onSelect: updateChannel => {
+              if (updateChannel === (selectedChannel || persistedChannel || settings.updateChannel || 'stable')) return
+              setSelectedChannel(updateChannel)
+              catalogInvalidatedRef.current = true
               setMessages(current => ({ ...current, 'update-product': '', 'update-engine': '' }))
+              ++engineVersionsRequestSequenceRef.current
+              setEngineVersions([])
+              setEngineVersion('')
+              setEngineVersionManifestUrls({})
+              setEngineUnavailable([])
               update({ updateChannel })
             },
           })),
         updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
-        updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint')))
+        updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint'),
+          engineUnavailable.map((item, index) => h('div', {
+            key: `${item.version}-${index}`, style: styles.status, role: 'status',
+          }, unavailableMessage(item)))))
       const environmentItems = environments.items.map(item => ({
         id: item.id,
         label: item.id === 'default' ? t('defaultEnvironment') : item.name || item.id,

@@ -90,12 +90,14 @@ test('a failed reviewed-default refresh restores the original profile manifest',
 
   const result = await seedDefaultPlugins(layout, {
     verifyArchive: async () => true,
-    spawnSync() { return { status: 1, stderr: 'install failed' } },
+    spawnSync() { return { status: 1, stderr: 'install failed: peer dependency conflict\ntoken=private-test-value' } },
   })
 
   assert.equal(result.status, 'warning')
   assert.equal(result.profile, 'web')
   assert.match(result.message, /exited with status 1/)
+  assert.match(result.message, /peer dependency conflict/)
+  assert.doesNotMatch(result.message, /private-test-value/)
   assert.equal(await readFile(path.join(profileRoot, 'package.json'), 'utf8'), packageJson)
 })
 

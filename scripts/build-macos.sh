@@ -21,6 +21,10 @@ PORTABLE_VERSION="$("$BUILD_NODE" -p 'require(process.argv[1]).version' "$PROJEC
 VERSION_POLICY="$("$BUILD_NODE" "$PROJECT_ROOT/scripts/version-policy.mjs" "$PORTABLE_VERSION")"
 RELEASE_CHANNEL="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "channel" { print $2 }')"
 UPDATE_CHANNEL_TAG="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "updateChannelTag" { print $2 }')"
+if [[ -n "${DSH_PORTABLE_CORE_CHANNEL:-}" ]]; then
+  [[ "${DSH_PORTABLE_CORE_ONLY:-0}" == 1 ]] || { echo 'Core channel override requires a core-only build' >&2; exit 1; }
+  case "$DSH_PORTABLE_CORE_CHANNEL" in stable|candidate) RELEASE_CHANNEL="$DSH_PORTABLE_CORE_CHANNEL" ;; *) echo 'Invalid core channel' >&2; exit 1 ;; esac
+fi
 [[ -n "$RELEASE_CHANNEL" && -n "$UPDATE_CHANNEL_TAG" ]] || { echo "Product version policy returned no release channel" >&2; exit 1; }
 if [[ "$RELEASE_CHANNEL" == "candidate" ]]; then
   [[ -n "$PREVIEW_APP_SOURCE" ]] || { echo "Candidate builds require PREVIEW_APP_SOURCE" >&2; exit 1; }

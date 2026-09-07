@@ -18,6 +18,10 @@ function fixture(command, snapshot) {
     environmentStateRoot: () => '/portable', layoutForRoot: () => ({ root: '/portable' }),
     activeOptions: null, startupProgressJson: false, layout: null,
     status: async () => { calls.push('read-status'); return snapshot },
+    checkUpdate: async () => { calls.push('check-update'); return snapshot },
+    listUpdates: async () => { calls.push('list-updates'); return snapshot },
+    deferUpdate: async () => { calls.push('defer-update'); return snapshot },
+    ignoreUpdate: async () => { calls.push('ignore-update'); return snapshot },
     print: (result, json) => { calls.push({ result, json }) },
     acquireLaunchLock: async () => { calls.push('lock'); throw new Error('Another portable launcher is already starting or stopping DSH.') },
     ensurePortableDirectories: async () => { throw new Error('Status must not create or mutate directories') },
@@ -39,3 +43,12 @@ test('start still requires the exclusive launch lock', async () => {
   await assert.rejects(probe.run(), /Another portable launcher/)
   assert.deepEqual(probe.calls, ['lock'])
 })
+
+for (const command of ['check-update', 'list-updates', 'defer-update', 'ignore-update']) {
+  test(`${command} does not acquire the start/stop mutation lock`, async () => {
+    const snapshot = { status: 'available' }
+    const probe = fixture(command, snapshot)
+    await probe.run()
+    assert.deepEqual(probe.calls, [command, { result: snapshot, json: true }])
+  })
+}

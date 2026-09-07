@@ -3,7 +3,8 @@ param(
     [string]$OutputDir,
     [string]$CacheDir,
     [string]$PreviewAppSource,
-    [switch]$CoreOnly
+    [switch]$CoreOnly,
+    [ValidateSet('stable', 'candidate')][string]$CoreChannel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,11 +18,14 @@ $CacheDir = [System.IO.Path]::GetFullPath($CacheDir)
 $Lock = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.lock.json') | ConvertFrom-Json
 $DshLock = $Lock.dsh
 $DefaultPluginsLock = $Lock.defaultPlugins
+$PortableVersion = (Get-Content -Raw (Join-Path $ProjectRoot 'package.json') | ConvertFrom-Json).version
+if ($CoreChannel -and -not $CoreOnly) { throw 'CoreChannel requires CoreOnly; product release channels are determined by the product version.' }
+$UsePreviewLock = if ($CoreChannel) { $CoreChannel -eq 'candidate' } else { $PortableVersion -match '-' }
 $PreviewReceipt = $null
 if ($PreviewAppSource) {
     $PreviewAppSource = [System.IO.Path]::GetFullPath($PreviewAppSource)
     $PreviewReceiptPath = Join-Path $PreviewAppSource 'preview-runtime.json'
-    $PreviewLock = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.preview.lock.json') | ConvertFrom-Json
+    $PreviewLock = if ($UsePreviewLock) { Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.preview.lock.json') | ConvertFrom-Json } else { $Lock }
     if (-not (Test-Path -LiteralPath (Join-Path $PreviewAppSource 'node_modules\@deepseek-ai\dsh\package.json'))) {
         throw "Preview app source is incomplete: $PreviewAppSource"
     }
@@ -30,7 +34,7 @@ if ($PreviewAppSource) {
     }
     $PreviewReceipt = Get-Content -Raw -LiteralPath $PreviewReceiptPath | ConvertFrom-Json
     if ($PreviewReceipt.dshVersion -ne $PreviewLock.dsh.version -or $PreviewReceipt.dshCommit -ne $PreviewLock.dsh.reviewedCommit) {
-        throw 'Preview app receipt does not match upstream.preview.lock.json.'
+        throw 'Source-pack receipt does not match selected upstream lock.'
     }
     $DshLock = $PreviewLock.dsh
     $DefaultPluginsLock = $PreviewLock.defaultPlugins
@@ -178,6 +182,7 @@ try {
     }
     if ($LASTEXITCODE -ne 0) { throw "product version policy failed with exit code $LASTEXITCODE" }
     $ReleaseChannel = $ReleasePolicy.channel
+    if ($CoreChannel) { $ReleaseChannel = $CoreChannel }
     $UpdateChannelTag = $ReleasePolicy.updateChannelTag
     if (-not $ReleaseChannel -or -not $UpdateChannelTag) { throw 'Product version policy returned no release channel.' }
     if ($ReleaseChannel -eq 'candidate' -and -not $PreviewAppSource) {

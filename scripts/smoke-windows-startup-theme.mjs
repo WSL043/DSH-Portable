@@ -62,6 +62,8 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
       return result.result?.value
     }
+    const reducedMotion = results.length % 2 === 0
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: reducedMotion ? 'reduce' : 'no-preference' }] })
     let loading
     const loadingDeadline = Date.now() + 10000
     while (Date.now() < loadingDeadline) {
@@ -73,6 +75,10 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     assert.equal(loading.background, expectedTheme === 'dark' ? 'rgb(24, 24, 26)' : 'rgb(248, 248, 248)')
     assert.equal(loading.dark, expectedTheme === 'dark')
     assert.match(loading.text, /DeepSeek Harness/)
+    const spinnerBefore = await evaluate(`getComputedStyle(document.querySelector('.ring')).transform`)
+    await delay(650)
+    const spinnerAfter = await evaluate(`getComputedStyle(document.querySelector('.ring')).transform`)
+    assert.notEqual(spinnerAfter, spinnerBefore, `loading indicator must advance with reduced motion ${reducedMotion}`)
     await send('Page.enable')
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__startupColors=[];const sample=()=>{if(document.body){const color=getComputedStyle(document.body).backgroundColor;if(!window.__startupColors.includes(color))window.__startupColors.push(color)}};document.addEventListener('DOMContentLoaded',sample);const timer=setInterval(sample,16);setTimeout(()=>clearInterval(timer),15000)` })
     const screenshot = await send('Page.captureScreenshot', { format: 'png' })
@@ -97,7 +103,7 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     }
     const history = await readFile(path.join(root, 'data/logs/history', trace[0].startupId, 'startup.jsonl'), 'utf8')
     assert.match(history, /loading-document-ready/)
-    results.push({ theme, loading, final, colors, startupId: trace[0].startupId,
+    results.push({ theme, reducedMotion, spinnerBefore, spinnerAfter, loading, final, colors, startupId: trace[0].startupId,
       loadingMs: trace.find(entry => entry.phase === 'loading-document-ready')?.elapsedMs,
       interactiveMs: trace.find(entry => entry.phase === 'interactive-ready')?.elapsedMs })
   } finally {
