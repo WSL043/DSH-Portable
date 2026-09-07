@@ -544,7 +544,7 @@ window.__ModuleLoader__.load({
         }).then(res => res.json()).then(body => {
           if (body.error) throw new Error(body.error)
           if (body.status === 'current') setStatus(name, t('current'))
-          else if (body.status === 'available' || body.status === 'full-package-required') setStatus(name, format(t('available'), body.latest || ''))
+          else if (body.status === 'available' || body.status === 'full-package-required') setStatus(name, format(t('available'), (scope === 'engine' ? body.engineLatest : body.latest) || ''))
           else if (body.status === 'core-incompatible') setStatus(name, t('incompatible'))
           else if (body.status === 'engine-follows-product') setStatus(name, t('engineFollowsProduct'))
           else if (body.status === 'channel-unpublished') setStatus(name, t('channelUnpublished'))
