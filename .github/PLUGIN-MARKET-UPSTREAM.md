@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.43.0`
-(`7133ed336e07ca0542b1958d774f6836e81193a2`).
+Reviewed upstream baseline: `dsh-market` `v1.44.0`
+(`3828a34c36ad083d6b33b640666a07e8cd348baa`).
 
 Reviewed means every relevant change has a disposition below, not that the
 upstream feature set is copied or that these changes are already released.
@@ -95,11 +95,11 @@ When `dsh-market` publishes a newer release, review its user-visible fixes
 against this matrix. Port the smallest applicable behavior with a failing test
 first; do not merge an upstream working tree or silently expand the product.
 
-## Intake in progress: v1.44.0
+## Reviewed intake: v1.44.0
 
-Issue [#88](https://github.com/WSL043/DSH-Portable/issues/88) remains the review
-inbox. This batch is not yet a completed new baseline and does not trigger a
-Portable release.
+Issue [#88](https://github.com/WSL043/DSH-Portable/issues/88) tracks this batch.
+All three upstream changes have a Portable disposition below. The baseline
+advance does not trigger a Portable release.
 
 | Upstream change | Portable decision and evidence |
 | --- | --- |
@@ -107,6 +107,6 @@ Portable release.
 | Market render error boundary ([#514](https://github.com/dsh-market/dsh-market/pull/514)) | Adopted for both Discover and Installed roots. A manual retry stays within the affected tab. Bounded, sanitized error events reach the existing host stdout and Portable JSON support report; no upstream-only export endpoint is exposed. |
 | Pre-update DSH compatibility check ([#522](https://github.com/dsh-market/dsh-market/pull/522)) | Adopted for exact npm update targets: compare engines.dsh and required DSH component peers with the running capsule's actual versions before package mutation. Confirmed incompatibility returns the target and requirements without changing the profile. Unreadable metadata/versions remain unknown and retain post-install checks. Git targets retain post-install verification; the global/Homebrew locator and force-update UI are not copied into Portable. |
 
-The two pending behaviors require their own implementation and verification.
-This table records their concrete integration gaps, not a completed intake or
-an assertion that the corresponding user-facing failures have been fixed.
+The applicable changes are integrated by PR #91, with source tests, rebuilt
+client/server bundles and a Windows finished-product diagnostic export check.
+Release qualification remains separate from completing the upstream review.
