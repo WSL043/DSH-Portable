@@ -47,7 +47,7 @@ import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from '
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 import { preflightStagedDshProfiles } from './update-preflight.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
-import { portablePublicError, recordPortableDiagnostic } from './diagnostic-policy.mjs'
+import { portablePublicError, recordPortableDiagnostic, readLogTail } from './diagnostic-policy.mjs'
 import { appendOperationTrace, beginOperationTrace } from './operation-trace.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -167,10 +167,15 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
   const identityGraceDeadline = Date.now() + 3000
   let attempts = 0
   let urlReported = false
+  let identityVerified = false
   if (onPhase) onPhase('host-wait-begin', { pid: state.pid, port: state.port })
   while (Date.now() < deadline) {
     attempts += 1
-    if (!ownedState(state)) {
+    if (!processExists(Number(state.pid))) {
+      if (onPhase) onPhase('host-process-exited', { attempts })
+      return null
+    }
+    if (!identityVerified && !ownedState(state)) {
       // WMI/CIM can briefly lag a just-spawned process on Windows. A live PID
       // gets a short identity grace period; mismatched or exited processes do
       // not get treated as owned and are never terminated here.
@@ -181,6 +186,7 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
       await new Promise((resolve) => setTimeout(resolve, 100))
       continue
     }
+    identityVerified = true
     const loggedUrl = launchOutput
       ? officialWorkspaceUrl(tailSince(launchOutput.filename, launchOutput.offset, 16000), state.port)
       : null
@@ -194,6 +200,9 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
       continue
     }
     if (await httpReady(url, 1200, { preserveAccessToken: true })) {
+      // Revalidate before returning the URL; polling liveness alone never grants
+      // ownership for reuse or termination of a process.
+      if (!ownedState(state)) return null
       if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
       return url
     }
@@ -405,9 +414,7 @@ function logSize(filename) {
 
 function tailSince(filename, offset, maxBytes = 8000) {
   try {
-    const bytes = readFileSync(filename)
-    const start = Math.max(Math.min(Number(offset) || 0, bytes.length), bytes.length - maxBytes)
-    return bytes.subarray(start).toString('utf8').trim()
+    return readLogTail(filename, maxBytes, offset).trim()
   } catch {
     return ''
   }

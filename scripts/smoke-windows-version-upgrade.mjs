@@ -93,6 +93,18 @@ try {
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
   assert.notEqual(oldComponents.portableVersion, fullManifestSource.version, 'the prior package must differ from the target release')
+  if (runningHostUpgrade) {
+    // Initialize a real old-version profile before inserting preservation markers.
+    // A marker-only directory is not an already-running user's profile.
+    const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
+    const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(
+      () => [path.join(destination, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs'],
+      () => [path.join(destination, 'launcher', 'portable-cli.mjs')],
+    )
+    await execFileAsync(oldNode, [...oldEntry, 'start', '--no-browser', '--json'], {
+      timeout: 120_000, windowsHide: true,
+    })
+  }
   const markers = new Map([
     [path.join(destination, 'data', 'dsh-home', 'settings.yaml'), 'locale:\n  preference: zh\n'],
     [path.join(destination, 'data', 'dsh-home', 'portable-upgrade-session.marker'), 'keep-session\n'],
@@ -157,8 +169,8 @@ try {
         stdio: 'ignore',
       })
       await waitFor(
-        async () => (await launcherLog()).includes('environment-ready:'),
-        'the old native desktop host did not initialize WebView2 before the update',
+        async () => (await launcherLog()).includes('dsh-first-paint-ready'),
+        'the old native desktop host did not become usable before the update',
       )
       launcherLogOffset = (await launcherLog()).length
     }

@@ -460,7 +460,32 @@ try {
         }
     }
 
-    Write-Host 'Windows native tray smoke passed: compact menu, native Action Center delivery path, exact-session reply queue, locale, theme, and command fallback.'
+    # Repeated streamed session updates must release generated dropdown handles.
+    $Rebuild = $WindowType.GetMethod('RebuildTrayMenu', $InstanceMembers)
+    $Menu = $WindowType.GetField('trayMenu', $AllFields).GetValue($Window)
+    $Menu.Close()
+    [Windows.Forms.Application]::DoEvents()
+    $DisposedCommands = New-Object 'System.Collections.Generic.HashSet[object]'
+    foreach ($Name in @('checkUpdateItem', 'checkEngineUpdateItem', 'automaticUpdateCheckItem', 'taskNotificationsItem', 'closeBehaviorItem')) {
+        $Persistent = $WindowType.GetField($Name, $AllFields).GetValue($Window)
+        $Persistent.add_Disposed({ param($Sender, $EventArgs) $DisposedCommands.Add($Sender) | Out-Null })
+    }
+    for ($Iteration = 0; $Iteration -lt 1000; $Iteration++) {
+        $Retired = @($Menu.Items)
+        $DisposedItems = New-Object 'System.Collections.Generic.HashSet[object]'
+        foreach ($Item in $Retired) {
+            $Item.add_Disposed({ param($Sender, $EventArgs) $DisposedItems.Add($Sender) | Out-Null })
+        }
+        $Rebuild.Invoke($Window, [object[]]::new(0)) | Out-Null
+        foreach ($Item in $Retired) {
+            if (-not $DisposedItems.Contains($Item)) { throw "Rebuilt tray menu retained generated item '$($Item.Text)'." }
+        }
+        foreach ($Name in @('checkUpdateItem', 'checkEngineUpdateItem', 'automaticUpdateCheckItem', 'taskNotificationsItem', 'closeBehaviorItem')) {
+            $Persistent = $WindowType.GetField($Name, $AllFields).GetValue($Window)
+            if ($DisposedCommands.Contains($Persistent) -or $null -eq $Persistent.Owner) { throw "Tray rebuild lost persistent command $Name" }
+        }
+    }
+    Write-Host 'Windows native tray smoke passed: compact menu, notifications, locale, theme, command fallback, and 1000 resource-releasing rebuilds.'
 }
 finally {
     $NativeNotificationType = $Assembly.GetType('DshPortable.NativeTaskNotification', $false)

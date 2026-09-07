@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.0.65534")]
-[assembly: AssemblyFileVersion("0.6.0.65534")]
+[assembly: AssemblyVersion("0.6.1.65534")]
+[assembly: AssemblyFileVersion("0.6.1.65534")]
 
 namespace DshPortable
 {
@@ -1511,7 +1511,17 @@ namespace DshPortable
             closeBehaviorItem.ShortcutKeyDisplayString = closeBehavior == WindowCloseBehavior.Tray
                 ? L("最小化到托盘", "Minimize to tray")
                 : L("退出程序", "Exit application");
+            // Detach persistent commands before disposing generated menus.
+            // Items.Clear() alone leaves dropdowns and their native resources alive.
+            foreach (ToolStripItem persistent in new ToolStripItem[] {
+                checkUpdateItem, checkEngineUpdateItem, automaticUpdateCheckItem,
+                taskNotificationsItem, closeBehaviorItem })
+            {
+                if (persistent.Owner != null) persistent.Owner.Items.Remove(persistent);
+            }
+            ToolStripItem[] retired = trayMenu.Items.Cast<ToolStripItem>().ToArray();
             trayMenu.Items.Clear();
+            foreach (ToolStripItem item in retired) item.Dispose();
 
             List<TrayBridgeSession> sessions = trayBridgeReady && trayState != null && trayState.sessions != null
                 ? trayState.sessions.Where(item => item != null && !String.IsNullOrWhiteSpace(item.id)).Take(10).ToList()
@@ -2076,9 +2086,13 @@ namespace DshPortable
                 if (state.sessions.Count > 10) state.sessions = state.sessions.Take(10).ToList();
                 BeginInvoke((MethodInvoker)delegate
                 {
-                    uiLanguage = String.Equals(state.locale, "zh", StringComparison.OrdinalIgnoreCase) ? "zh" : "en";
-                    trayTheme = String.Equals(state.theme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light";
-                    ApplyDesktopChrome();
+                    if (shutdownRunning || allowClose || IsDisposed) return;
+                    string nextLanguage = String.Equals(state.locale, "zh", StringComparison.OrdinalIgnoreCase) ? "zh" : "en";
+                    string nextTheme = String.Equals(state.theme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light";
+                    bool chromeChanged = uiLanguage != nextLanguage || trayTheme != nextTheme;
+                    uiLanguage = nextLanguage;
+                    trayTheme = nextTheme;
+                    if (chromeChanged) ApplyDesktopChrome();
                     HandleTaskCompletionNotifications(state);
                     trayState = state;
                     trayBridgeReady = true;

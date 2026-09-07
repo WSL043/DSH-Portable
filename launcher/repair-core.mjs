@@ -12,7 +12,7 @@ import {
   inspectPackagedDshRuntime,
   repairManagedProfileModuleFallback,
 } from './portable-core.mjs'
-import { redactDiagnosticText } from './diagnostic-policy.mjs'
+import { redactDiagnosticText, readLogTail } from './diagnostic-policy.mjs'
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
@@ -140,8 +140,7 @@ export async function repairPortable(layout, { running = false } = {}) {
 
 async function logTail(filename) {
   try {
-    const source = await readFile(filename)
-    return redactDiagnosticText(source.subarray(Math.max(0, source.length - LOG_TAIL_BYTES)).toString('utf8'))
+    return redactDiagnosticText(readLogTail(filename, LOG_TAIL_BYTES))
   } catch (error) {
     if (error?.code === 'ENOENT') return ''
     return `unreadable: ${error?.code || error?.message || 'unknown'}`

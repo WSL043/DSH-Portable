@@ -1,8 +1,12 @@
 # 待发布 / Unreleased
 
-这些改动尚未包含在 v0.6.0 已发布的下载文件中。维护者决定下一版本号与发布时间，成品验收通过后再写入对应版本的双语 JSON。
+这些改动尚未包含在 v0.6.0 已发布的下载文件中。下一版本目标为 0.6.1，双语描述已准备，正式发布仍需完成成品验收。
 
 ## 用户变化候选
+
+- 合并密集会话事件并去除相同托盘状态的重复发送；释放重建后的旧菜单资源，减少流式任务期间的桌面开销。
+- 减少启动等待的 Windows 进程查询，限制日志读取字节数，修正 capsule 维护命令的运行时解析。
+- Issue #89 的用户环境导入超时与长期卡顿仍需复测；当前本机结果不构成该环境已修复的证明。
 
 - 将随附 pnpm 从 11.7.0 更新到 11.11.0，修复该依赖已公开的安装路径与环境处理漏洞。
 - 改善插件更新目标锁定、已是当前版本的处理，以及页面刷新后的待重启状态。
@@ -19,7 +23,11 @@
 
 ## English
 
-These changes are not included in the published v0.6.0 downloads. The maintainer chooses the next version and release date; a versioned bilingual JSON descriptor is prepared after product qualification.
+These changes are not included in the published v0.6.0 downloads. The next version targets 0.6.1; its bilingual descriptor is prepared, with publication pending product qualification.
+
+- Coalesce streamed session events, suppress duplicate tray projections, and dispose retired native menu resources.
+- Reduce Windows startup process inspection, bound log reads, and resolve capsule runtime paths for maintenance commands.
+- The import timeout and long-running lag in issue #89 still require verification in the affected environment; local acceptance does not prove that environment is fixed.
 
 - Update bundled pnpm from 11.7.0 to 11.11.0 for its published installation-path and environment-handling security fixes.
 - Improve exact plugin-update targeting, already-current results, and restart notices after a page refresh.

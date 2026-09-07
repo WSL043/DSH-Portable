@@ -298,6 +298,8 @@ jobs:
             -FirstColdStartLimit ${{ matrix.firstColdStartSeconds }}
           ./scripts/smoke-windows-dom-ready.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-native-tray.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          node scripts/smoke-capsule-maintenance.mjs (Join-Path $Root 'DSH-Portable')
+          if ($LASTEXITCODE -ne 0) { throw 'Capsule maintenance smoke failed.' }
           node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw "Windows native restart smoke failed with exit code $LASTEXITCODE" }
           node scripts/smoke-windows-subprocess-hide.mjs (Join-Path $Root 'DSH-Portable')

@@ -561,6 +561,7 @@ export function buildDshEnv(layout, source = process.env) {
     DSH_PORTABLE_BASE_STATE_ROOT: layout.baseStateRoot,
     DSH_PORTABLE_ROOT: layout.root,
     DSH_PORTABLE_STATE_ROOT: layout.stateRoot,
+    DSH_PORTABLE_RUNTIME_ROOT: layout.immutableRoot,
     DSH_TELEMETRY_MODE: 'DISABLED',
     PATH: [paths.dirname(layout.nodeExe), paths.dirname(layout.packageManagerBin), source.PATH ?? ''].filter(Boolean).join(separator),
   }
