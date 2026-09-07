@@ -307,6 +307,8 @@ jobs:
           node scripts/smoke-windows-path-alias.mjs (Join-Path $AliasRoot 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw 'Windows path-alias smoke failed.' }
           node scripts/smoke-windows-runtime-health.mjs (Join-Path $AliasRoot 'DSH-Portable')
+          $HealthEvidence = Join-Path $AliasRoot 'DSH-Portable\data\health-evidence.json'
+          if (Test-Path -LiteralPath $HealthEvidence) { Copy-Item -LiteralPath $HealthEvidence -Destination (Join-Path $Root 'DSH-Portable\data\health-evidence.json') -ErrorAction Stop }
           if ($LASTEXITCODE -ne 0) { throw 'Windows runtime-health smoke failed.' }
           node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw "Windows native restart smoke failed with exit code $LASTEXITCODE" }
@@ -352,7 +354,7 @@ jobs:
           name: windows-native-support-${{ matrix.label }}
           path: |
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
-            ${{ runner.temp }}/dsh-path-alias-*/DSH-Portable/data/health-evidence.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
           if-no-files-found: warn
       - name: Upload startup transition evidence
         if: always()
