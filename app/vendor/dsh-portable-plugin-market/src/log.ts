@@ -1,6 +1,6 @@
 /**
  * Bounded in-memory event log used for runtime safety and diagnostics.
- * Entries are never persisted or exposed through a market-specific export.
+ * Sanitized entries also reach the host stdout log and Portable support report.
  */
 
 import { homedir } from 'node:os'
@@ -41,12 +41,14 @@ function sanitize(text: string): string {
  * @param detail - free-form context; credentials and home paths are masked.
  */
 export function logEvent(level: LogLevel, event: string, detail: string): void {
-  entries.push({
+  const entry: LogEntry = {
     at: new Date().toISOString(),
     level,
     event,
     detail: sanitize(detail).slice(0, DETAIL_MAX),
-  })
+  }
+  entries.push(entry)
   if (entries.length > MAX_ENTRIES) entries.splice(0, entries.length - MAX_ENTRIES)
+  console.info('[dsh-market] ' + JSON.stringify(entry))
 }
 

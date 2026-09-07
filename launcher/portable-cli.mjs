@@ -578,12 +578,14 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     portReservation.release()
     let cleanupError = null
     startupLog(startedAt, 'host-cleanup-begin', { pid: state.pid, port })
-    if (ownedState(state)) {
-      try { await stop() } catch (failedCleanup) { cleanupError = failedCleanup }
-    } else {
-      rmSync(layout.processState, { force: true })
-      if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
-    }
+    try {
+      if (ownedState(state)) {
+        await stop()
+      } else {
+        rmSync(layout.processState, { force: true })
+        if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
+      }
+    } catch (failedCleanup) { cleanupError = failedCleanup }
     if (cleanupError) {
       startupLog(startedAt, 'host-cleanup-failed', { pid: state.pid, port, code: cleanupError?.code || 'none' })
       throw new Error(`${error?.message ?? error}\nStartup cleanup failed: ${cleanupError?.message ?? cleanupError}`, { cause: error })

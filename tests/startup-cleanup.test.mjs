@@ -11,7 +11,7 @@ const cli = sourceSelector?.startsWith('git:')
   : await readFile(sourceSelector || new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
 const startSource = cli.slice(cli.indexOf('async function startAttempt('), cli.indexOf('\nasync function stop()'))
 
-function fixture({ owned = true, details = 'host failed', cleanupError = null } = {}) {
+function fixture({ owned = true, details = 'host failed', cleanupError = null, queryError = null } = {}) {
   const calls = []
   const phases = []
   const removed = []
@@ -26,7 +26,7 @@ function fixture({ owned = true, details = 'host failed', cleanupError = null } 
     existsSync: () => false, ensureDesktopBridgeFallback: async () => false,
     ensureManagedProfileModuleFallback: async () => ({}), migratePortableRoot: async () => ({}),
     readProcessState: () => null,
-    ownedState: state => Boolean(state?.pid === 123 && owned),
+    ownedState: state => { if (state?.pid === 123 && queryError) throw queryError; return Boolean(state?.pid === 123 && owned) },
     seedDefaultPlugins: async () => ({ status: 'unchanged' }),
     repairIncompleteProfileDependencies: async () => ({ profiles: [] }),
     reservePort: async () => ({ port: 3080, release() {} }), logSize: () => 0,
@@ -80,6 +80,17 @@ test('EADDRINUSE retries only after successful stop cleanup', async () => {
   assert.ok(probe.phases.includes('host-cleanup-complete'))
   assert.ok(probe.phases.includes('port-conflict-retry'))
   assert.equal(probe.phases.includes('host-cleanup-failed'), false)
+})
+
+test('unavailable process query preserves startup state and records failed cleanup', async () => {
+  const probe = fixture({ details: 'EADDRINUSE', queryError: new Error('process query unavailable') })
+  const error = await rejected(probe.startAttempt(true, 0, 0))
+  assert.match(error.message, /DeepSeek Harness failed to start/)
+  assert.match(error.message, /process query unavailable/)
+  assert.deepEqual(probe.removed, [])
+  assert.deepEqual(probe.calls, [])
+  assert.ok(probe.phases.includes('host-cleanup-failed'))
+  assert.equal(probe.phases.includes('host-cleanup-complete'), false)
 })
 
 test('ordinary startup timeout reports failure after cleanup without retry', async () => {

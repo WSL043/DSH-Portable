@@ -9,6 +9,7 @@ import { createElement as h } from 'react'
 import * as primitives from '@deepseek-ai/dsh-client-ui-primitives'
 import { en, zh } from './locales.ts'
 import { InstallToast } from './InstallToast.tsx'
+import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
 import type { Translate } from './market-data.ts'
 
@@ -75,11 +76,11 @@ export function apply(ctx: MarketClientContext): void {
       label: () => t('nav'),
       locale: NS,
       inject: () => ({ t }),
-    }, () => h(MarketSection, {
+    }, () => h(MarketErrorBoundary, { view: 'discover' }, h(MarketSection, {
       t,
       locale: ctx.locale,
       view: 'discover',
-    })))
+    }))))
 
   // Installed plugins are a sibling of the market in DSH's native Plugins
   // navigation. Keeping it out of the market surface removes one unnecessary
@@ -91,11 +92,11 @@ export function apply(ctx: MarketClientContext): void {
       label: () => t('tabInstalled'),
       locale: NS,
       inject: () => ({ t }),
-    }, () => h(MarketSection, {
+    }, () => h(MarketErrorBoundary, { view: 'installed' }, h(MarketSection, {
       t,
       locale: ctx.locale,
       view: 'installed',
-    })))
+    }))))
 
   const Toast = () => h(InstallToast, { t })
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({
