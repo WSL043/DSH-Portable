@@ -143,7 +143,11 @@ async function main() {
       const baseline = JSON.parse((await execFileAsync(node, [...cliPrefix, 'start', '--json', '--no-browser'], {
         encoding: 'utf8', timeout: 180000, windowsHide: true, maxBuffer: 4 * 1024 * 1024,
       })).stdout.trim())
-      assert.equal(baseline.status, 'running', 'start the previous core before upgrading')
+      assert.equal(baseline.status, 'started', 'start the previous core before upgrading')
+      const baselineStatus = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
+        encoding: 'utf8', timeout: 30000, windowsHide: true,
+      })).stdout.trim())
+      assert.equal(baselineStatus.status, 'running', 'the previous core must be healthy before upgrading')
       originalDependencies = JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies
       for (const plugin of installed.defaultPlugins ?? []) {
         assert.equal(originalDependencies?.[plugin.package], plugin.version, 'baseline includes the reviewed default plugins')
