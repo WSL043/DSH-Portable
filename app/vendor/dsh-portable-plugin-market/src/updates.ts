@@ -7,10 +7,10 @@
 import { DIST_TAG, type Channel } from './channels.ts'
 import { marketFetch } from './net.ts'
 import { profileDir, readInstalled, readInstalledVersion, readLockCommits } from './profile.ts'
-import { githubRefOfTarget } from './sources.ts'
+import { externalUpdateSource, githubRefOfTarget } from './sources.ts'
 
 export interface UpdateStatus {
-  kind: 'github' | 'npm' | 'linked'
+  kind: 'github' | 'npm' | 'linked' | 'external'
   version: string | null
   current: string | null
   latest: string | null
@@ -280,6 +280,10 @@ export async function checkUpdates(
   const result: Record<string, UpdateStatus> = {}
   await Promise.all(Object.entries(installed).map(async ([name, spec]) => {
     const version = readInstalledVersion(profile, name, activeProfileDir)
+    if (externalUpdateSource(spec)) {
+      result[name] = { kind: 'external', version, current: null, latest: null, updateAvailable: false }
+      return
+    }
     if (spec.startsWith('link:') || spec.startsWith('file:')) {
       result[name] = { kind: 'linked', version, current: null, latest: null, updateAvailable: false }
       return

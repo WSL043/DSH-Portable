@@ -5,6 +5,14 @@
 
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
+/** Only registry specs may be updated by package name. External sources need
+ * source-exact update and rollback support; never substitute a registry package. */
+export function externalUpdateSource(spec: string): boolean {
+  if (/^github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:#.*)?$/.test(spec)) return false
+  if (spec.startsWith('file:') || spec.startsWith('link:')) return false
+  return /[:/\\]/.test(spec)
+}
+
 function validSubpath(subpath: string): boolean {
   if (!/^[A-Za-z0-9_./-]+$/.test(subpath)) return false
   return !subpath.split('/').some(seg => seg === '' || seg === '.' || seg === '..')
