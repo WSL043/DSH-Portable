@@ -25,18 +25,31 @@ const desktop = spawn(executable, ['--desktop'], {
   env: { ...process.env, DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_UI_STALL: '1' },
 })
 let desktopExit
+let backendProbeCompletedAt = 0
 desktop.once('exit', code => { desktopExit = code })
 try {
   const deadline = Date.now() + 120000
   let native = []
   while (Date.now() < deadline) {
     native = (await entries('desktop-health.jsonl')).filter(entry => entry.pid === desktop.pid)
+    if (!backendProbeCompletedAt && native.some(entry => entry.observation === 'ui-heartbeat-delayed')) {
+      const state = JSON.parse(await readFile(path.join(root, 'data', 'runtime', 'process.json'), 'utf8'))
+      // The desktop already consumed the one-time login URL. Probe the server's
+      // unauthenticated handler without replaying that credential.
+      const response = await fetch(new URL(state.url).origin, { signal: AbortSignal.timeout(2000), redirect: 'manual' })
+      assert.equal(response.status, 401, 'DSH must answer the unauthenticated request while the native UI is stalled')
+      await response.arrayBuffer()
+      backendProbeCompletedAt = Date.now()
+    }
     if (native.some(entry => entry.observation === 'ui-heartbeat-recovered')) break
     assert.equal(desktopExit, undefined, 'desktop exited before recording stall recovery')
     await new Promise(resolve => setTimeout(resolve, 250))
   }
   assert.ok(native.some(entry => entry.observation === 'ui-heartbeat-delayed' && entry.uiHeartbeatAgeMs >= 5000))
   assert.ok(native.some(entry => entry.observation === 'ui-heartbeat-recovered'))
+  const launcherLog = await readFile(path.join(logDirectory, 'launcher.log'), 'utf8')
+  const ended = launcherLog.split(/\r?\n/).find(line => line.includes('[health-test] ui-stall-end') && line.includes(native[0].startupId))
+  assert.ok(backendProbeCompletedAt > 0 && backendProbeCompletedAt <= Date.parse(ended?.split(' ')[0]), 'the HTTP probe must complete before the native stall ends')
   const running = await cli('status')
   assert.equal(running.status, 'running')
   const backend = (await entries('runtime-health.jsonl')).filter(entry => entry.pid === running.pid)
@@ -55,7 +68,7 @@ try {
   assert.equal(desktopExit, 0)
   assert.equal((await cli('status')).status, 'stopped')
   assert.throws(() => process.kill(running.pid, 0), { code: 'ESRCH' })
-  console.log(JSON.stringify({ status: 'passed', nativeStallCaptured: true, recoveryCaptured: true, backendResponsive: true, reportCorrelated: true, cleanExit: true }))
+  console.log(JSON.stringify({ status: 'passed', nativeStallCaptured: true, recoveryCaptured: true, backendResponsive: true, backendHttpStatus: 401, reportCorrelated: true, cleanExit: true }))
 } finally {
   await execute(executable, ['stop', '--no-browser', '--json'], { windowsHide: true, timeout: 60000 }).catch(() => {})
 }

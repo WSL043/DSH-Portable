@@ -5,8 +5,7 @@
     "highlights": [
       "合并密集会话事件，相同状态不再反复刷新原生托盘；菜单重建释放旧资源，减少长时间运行的重复开销。",
       "启动期间减少 Windows 进程查询，保留就绪前的身份核验；启动与支持报告只读取所需日志尾部。",
-      "修正维护命令的 capsule 运行时入口，避免把已提取的运行时误报为缺少安装文件。",
-      "已有配置目录缺少插件清单时不再因默认插件刷新中断启动或升级检查，并保留该目录中的用户文件。",
+      "修正维护命令的 capsule 运行时入口；已有配置目录缺少插件清单时不再中断启动或升级检查，并保留该目录中的用户文件。",
       "修正 Windows 长短路径双向进程识别，避免切换路径写法后重复启动后台、遗留进程和占用便携目录。",
       "新增可关联启动 ID 和进程 ID 的后台与原生窗口健康日志，捕获心跳延迟、恢复、CPU 和内存变化，并补齐导入完成与退出阶段；支持报告在日志较大时仍可导出。",
       "随附 pnpm 升级至 11.11.0，并改进插件更新目标锁定、待重启状态、原生模块卸载提示、截图刷新和 WebDAV 下载重定向。"
@@ -21,8 +20,7 @@
     "highlights": [
       "Coalesce session bursts and skip unchanged native tray projections. Dispose retired menu resources to reduce repeated work during long sessions.",
       "Reduce Windows process inspection during startup while retaining identity verification before readiness. Read only the required log tails during startup and support export.",
-      "Route maintenance commands through the capsule runtime entry to avoid reporting extracted runtime files as missing from the installation.",
-      "An existing profile without a plugin manifest no longer interrupts startup or upgrade preflight during default-plugin refresh; existing files are preserved.",
+      "Route maintenance commands through the capsule runtime entry. An existing profile without a plugin manifest no longer interrupts startup or upgrade preflight; existing files are preserved.",
       "Recognize Windows short and long paths in both directions to prevent duplicate backends and orphaned processes holding the portable directory.",
       "Correlate backend and native-window health logs by startup and process IDs, including heartbeat delay/recovery, CPU, memory, import completion and shutdown. Large logs no longer prevent support-report export.",
       "Bundle pnpm 11.11.0 and improve plugin update targeting, restart state, native-addon removal guidance, screenshot refresh and WebDAV download redirects."
