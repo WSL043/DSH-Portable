@@ -21,6 +21,10 @@ PORTABLE_VERSION="$("$BUILD_NODE" -p 'require(process.argv[1]).version' "$PROJEC
 VERSION_POLICY="$("$BUILD_NODE" "$PROJECT_ROOT/scripts/version-policy.mjs" "$PORTABLE_VERSION")"
 RELEASE_CHANNEL="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "channel" { print $2 }')"
 UPDATE_CHANNEL_TAG="$(printf '%s\n' "$VERSION_POLICY" | awk -F= '$1 == "updateChannelTag" { print $2 }')"
+if [[ -n "${DSH_PORTABLE_CORE_CHANNEL:-}" ]]; then
+  [[ "${DSH_PORTABLE_CORE_ONLY:-0}" == 1 ]] || { echo 'Core channel override requires a core-only build' >&2; exit 1; }
+  case "$DSH_PORTABLE_CORE_CHANNEL" in stable|candidate) RELEASE_CHANNEL="$DSH_PORTABLE_CORE_CHANNEL" ;; *) echo 'Invalid core channel' >&2; exit 1 ;; esac
+fi
 [[ -n "$RELEASE_CHANNEL" && -n "$UPDATE_CHANNEL_TAG" ]] || { echo "Product version policy returned no release channel" >&2; exit 1; }
 if [[ "$RELEASE_CHANNEL" == "candidate" ]]; then
   [[ -n "$PREVIEW_APP_SOURCE" ]] || { echo "Candidate builds require PREVIEW_APP_SOURCE" >&2; exit 1; }
@@ -126,9 +130,7 @@ if [[ -n "$PREVIEW_APP_SOURCE" ]]; then
   "$BUILD_NODE" -e 'const fs=require("fs"); const receipt=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const lock=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); if(receipt.dshVersion!==lock.dsh.version||receipt.dshCommit!==lock.dsh.reviewedCommit) throw new Error("Source-pack receipt does not match selected upstream lock")' "$PREVIEW_APP_SOURCE/preview-runtime.json" "$COMPONENT_LOCK_FILE"
   rm -rf "$STAGE/app"
   cp -R "$PREVIEW_APP_SOURCE" "$STAGE/app"
-  rm -rf "$STAGE/app/node_modules/@wsl043/dsh-portable-desktop-bridge" "$STAGE/app/node_modules/@wsl043/dsh-portable-plugin-market"
-  cp -R "$PROJECT_ROOT/desktop-bridge" "$STAGE/app/node_modules/@wsl043/dsh-portable-desktop-bridge"
-  cp -R "$PROJECT_ROOT/app/vendor/dsh-portable-plugin-market" "$STAGE/app/node_modules/@wsl043/dsh-portable-plugin-market"
+  "$NODE_EXE" "$PROJECT_ROOT/scripts/stage-local-integrations.mjs" "$STAGE/app"
 else
   "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-lock.mjs" "$PROJECT_ROOT/app/package-lock.json" "$LOCK_FILE"
   (
@@ -139,6 +141,7 @@ else
 fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-session-export-ui.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
+"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-theme-bootstrap.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-boot-handoff.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-portable-hero-context.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-client-module-startup.mjs" "$STAGE/app"

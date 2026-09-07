@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.3.65534")]
-[assembly: AssemblyFileVersion("0.6.3.65534")]
+[assembly: AssemblyVersion("0.6.4.65534")]
+[assembly: AssemblyFileVersion("0.6.4.65534")]
 
 namespace DshPortable
 {
@@ -2165,12 +2165,13 @@ namespace DshPortable
                     uiLanguage = nextLanguage;
                     trayTheme = nextTheme;
                     string nextPreference = state.themePreference;
+                    bool preferenceChanged = !String.IsNullOrEmpty(nextPreference) && themePreference != nextPreference;
                     if (!String.IsNullOrEmpty(nextPreference) && (themePreference != nextPreference || chromeChanged))
                     {
                         themePreference = nextPreference;
                         SaveWindowTheme();
                     }
-                    if (chromeChanged) ApplyDesktopChrome();
+                    if (chromeChanged || preferenceChanged) ApplyDesktopChrome();
                     webView.CoreWebView2.ExecuteScriptAsync("document.getElementById('portable-startup-theme')?.remove()");
                     HandleTaskCompletionNotifications(state);
                     trayState = state;
@@ -3687,7 +3688,7 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("此预览版尚未发布更新通道。", "No update channel has been published for this preview yet."),
+                        L("所选通道尚未提供更新包，请稍后重试。", "No update package is available on the selected channel yet. Try again later."),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -3695,7 +3696,7 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("预览版内核随 DSH-Portable 更新。", "Preview core updates are delivered with DSH-Portable."),
+                        L("所选通道尚未提供内核更新包，请稍后重试。", "No core update package is available on the selected channel yet. Try again later."),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -4613,7 +4614,7 @@ namespace DshPortable
                     + "'><head><meta charset='utf-8'><style>html,body{margin:0;height:100%;background:" + background
                     + ";color:" + foreground + ";font:14px system-ui}body{display:grid;place-items:center}main{text-align:center}"
                     + "h1{font-size:22px;font-weight:600}.ring{margin:24px auto;width:24px;height:24px;border:3px solid #8884;border-top-color:currentColor;border-radius:50%;animation:spin 1s linear infinite}"
-                    + "p{opacity:.75}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ring{animation:none}}</style></head>"
+                    + "p{opacity:.75}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ring{animation:spin 2s steps(4,end) infinite}}</style></head>"
                     + "<body><main id='portable-startup-loading'><h1>DeepSeek Harness</h1><div class='ring'></div><p id='portable-startup-status'>"
                     + message + "</p><p id='elapsed'></p></main><script>const start=Date.now();setInterval(()=>{document.getElementById('elapsed').textContent=Math.floor((Date.now()-start)/1000)+' s'},1000)</script></body></html>");
             }

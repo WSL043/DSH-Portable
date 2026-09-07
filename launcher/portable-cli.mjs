@@ -487,7 +487,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   startupLog(startedAt, 'pending-extension-ready')
 
   const defaultPlugins = await seedDefaultPlugins(layout)
-  startupLog(startedAt, 'default-plugins-ready', { status: defaultPlugins.status })
+  startupLog(startedAt, 'default-plugins-ready', defaultPlugins)
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
@@ -709,9 +709,6 @@ async function restoreData(options) {
 }
 
 async function checkUpdate(options) {
-  requireRuntime()
-  await ensurePortableDirectories(layout)
-  await migratePortableRoot(layout)
   return checkForUpdate({
     layout,
     scope: options.updateScope,
@@ -723,9 +720,6 @@ async function checkUpdate(options) {
 }
 
 async function listUpdates(options) {
-  requireRuntime()
-  await ensurePortableDirectories(layout)
-  await migratePortableRoot(layout)
   if (options.updateScope !== 'engine') throw new Error('Version selection is currently supported for the DeepSeek Harness engine only.')
   return listEngineVersions({
     layout,
@@ -869,6 +863,11 @@ async function main() {
     print(await status(), options.json)
     return
   }
+  // Network reads and feed-cache choices must not block native start or close.
+  if (options.command === 'check-update') { print(await checkUpdate(options), options.json); return }
+  if (options.command === 'list-updates') { print(await listUpdates(options), options.json); return }
+  if (options.command === 'defer-update') { print(await deferUpdate(layout, { scope: options.updateScope }), options.json); return }
+  if (options.command === 'ignore-update') { print(await ignoreUpdate(layout, '', { scope: options.updateScope }), options.json); return }
   const release = options.waitForLockMs > 0
     ? await acquireLaunchLockWithWait(layout, options.waitForLockMs)
     : await acquireLaunchLock(layout)
@@ -915,10 +914,6 @@ async function main() {
       await assertSharedComponentsIdle()
       result = await cleanUnusedRuntimeCaches(root)
     }
-    else if (options.command === 'check-update') result = await checkUpdate(options)
-    else if (options.command === 'list-updates') result = await listUpdates(options)
-    else if (options.command === 'defer-update') result = await deferUpdate(layout, { scope: options.updateScope })
-    else if (options.command === 'ignore-update') result = await ignoreUpdate(layout, '', { scope: options.updateScope })
     else if (options.command === 'update') result = await update(options)
     else throw new Error(`Unsupported command: ${options.command}`)
     print(result, options.json)

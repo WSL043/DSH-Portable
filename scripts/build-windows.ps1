@@ -3,7 +3,8 @@ param(
     [string]$OutputDir,
     [string]$CacheDir,
     [string]$PreviewAppSource,
-    [switch]$CoreOnly
+    [switch]$CoreOnly,
+    [ValidateSet('stable', 'candidate')][string]$CoreChannel
 )
 
 $ErrorActionPreference = 'Stop'
@@ -17,11 +18,14 @@ $CacheDir = [System.IO.Path]::GetFullPath($CacheDir)
 $Lock = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.lock.json') | ConvertFrom-Json
 $DshLock = $Lock.dsh
 $DefaultPluginsLock = $Lock.defaultPlugins
+$PortableVersion = (Get-Content -Raw (Join-Path $ProjectRoot 'package.json') | ConvertFrom-Json).version
+if ($CoreChannel -and -not $CoreOnly) { throw 'CoreChannel requires CoreOnly; product release channels are determined by the product version.' }
+$UsePreviewLock = if ($CoreChannel) { $CoreChannel -eq 'candidate' } else { $PortableVersion -match '-' }
 $PreviewReceipt = $null
 if ($PreviewAppSource) {
     $PreviewAppSource = [System.IO.Path]::GetFullPath($PreviewAppSource)
     $PreviewReceiptPath = Join-Path $PreviewAppSource 'preview-runtime.json'
-    $PreviewLock = Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.preview.lock.json') | ConvertFrom-Json
+    $PreviewLock = if ($UsePreviewLock) { Get-Content -Raw -LiteralPath (Join-Path $ProjectRoot 'upstream.preview.lock.json') | ConvertFrom-Json } else { $Lock }
     if (-not (Test-Path -LiteralPath (Join-Path $PreviewAppSource 'node_modules\@deepseek-ai\dsh\package.json'))) {
         throw "Preview app source is incomplete: $PreviewAppSource"
     }
@@ -30,7 +34,7 @@ if ($PreviewAppSource) {
     }
     $PreviewReceipt = Get-Content -Raw -LiteralPath $PreviewReceiptPath | ConvertFrom-Json
     if ($PreviewReceipt.dshVersion -ne $PreviewLock.dsh.version -or $PreviewReceipt.dshCommit -ne $PreviewLock.dsh.reviewedCommit) {
-        throw 'Preview app receipt does not match upstream.preview.lock.json.'
+        throw 'Source-pack receipt does not match selected upstream lock.'
     }
     $DshLock = $PreviewLock.dsh
     $DefaultPluginsLock = $PreviewLock.defaultPlugins
@@ -178,6 +182,7 @@ try {
     }
     if ($LASTEXITCODE -ne 0) { throw "product version policy failed with exit code $LASTEXITCODE" }
     $ReleaseChannel = $ReleasePolicy.channel
+    if ($CoreChannel) { $ReleaseChannel = $CoreChannel }
     $UpdateChannelTag = $ReleasePolicy.updateChannelTag
     if (-not $ReleaseChannel -or -not $UpdateChannelTag) { throw 'Product version policy returned no release channel.' }
     if ($ReleaseChannel -eq 'candidate' -and -not $PreviewAppSource) {
@@ -197,12 +202,8 @@ try {
     if ($PreviewAppSource) {
         [System.IO.Directory]::Delete((Join-Path $Stage 'app'), $true)
         Copy-Item -Recurse -LiteralPath $PreviewAppSource -Destination (Join-Path $Stage 'app')
-        $BridgeTarget = Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-desktop-bridge'
-        $MarketTarget = Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-plugin-market'
-        if (Test-Path -LiteralPath $BridgeTarget) { [System.IO.Directory]::Delete($BridgeTarget, $true) }
-        if (Test-Path -LiteralPath $MarketTarget) { [System.IO.Directory]::Delete($MarketTarget, $true) }
-        Copy-Item -Recurse -LiteralPath (Join-Path $ProjectRoot 'desktop-bridge') -Destination $BridgeTarget
-        Copy-Item -Recurse -LiteralPath (Join-Path $ProjectRoot 'app\vendor\dsh-portable-plugin-market') -Destination $MarketTarget
+        & $NodeExe (Join-Path $ProjectRoot 'scripts\stage-local-integrations.mjs') (Join-Path $Stage 'app')
+        if ($LASTEXITCODE -ne 0) { throw 'Local integration staging failed.' }
     }
     foreach ($DefaultPlugin in $DefaultPlugins) {
         $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
@@ -231,6 +232,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Session export UI adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-permission-localization.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Permission localization adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-theme-bootstrap.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Theme bootstrap patch failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-native-boot-handoff.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Native boot handoff adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')

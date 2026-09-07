@@ -3,6 +3,7 @@ import { appendFile, readFile, rename, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { evaluatePreviewUpstream } from './upstream-state.mjs'
+import { readOfficialSourceMetadata } from './upstream-source-metadata.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const headers = {
@@ -19,6 +20,12 @@ async function json(url) {
   })
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
   return response.json()
+}
+
+async function text(url) {
+  const response = await fetch(url, { headers })
+  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
+  return response.text()
 }
 
 async function officialTagCommit(version) {
@@ -50,6 +57,7 @@ const packageCommit = provisional.changed
 const state = evaluatePreviewUpstream({ lock, registry, packageCommit })
 
 if (state.changed) {
+  const sourceMetadata = await readOfficialSourceMetadata(state.commit, { json, text })
   const noticesResponse = await fetch(
     `https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/${state.commit}/THIRD_PARTY_NOTICES.md`,
     { headers },
@@ -64,6 +72,8 @@ if (state.changed) {
   lock.dsh.npmIntegrity = state.integrity
   lock.dsh.reviewedCommit = state.commit
   lock.dsh.noticesSha256 = noticesSha256
+  lock.dsh.packageManager = sourceMetadata.packageManager
+  lock.dsh.packedFamilies = sourceMetadata.packedFamilies
   const temporary = `${lockPath}.tmp`
   await writeFile(temporary, `${JSON.stringify(lock, null, 2)}\n`, 'utf8')
   await rename(temporary, lockPath)

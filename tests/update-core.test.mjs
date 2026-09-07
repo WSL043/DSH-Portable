@@ -8,7 +8,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { promisify } from 'node:util'
 
-import { layoutForRoot } from '../launcher/portable-core.mjs'
+import { acquireLaunchLock, layoutForRoot } from '../launcher/portable-core.mjs'
 import {
   applyStagedAppUpdate,
   applyStagedCapsuleUpdate,
@@ -260,6 +260,9 @@ test('engine version catalog exposes only verified compatible manifests and pres
   assert.equal(result.current, '0.1.1-rc.2')
   assert.deepEqual(result.versions.map(item => item.version), ['0.1.1-rc.3', '0.1.1-rc.1'])
   assert.equal(result.versions[0].manifestUrl, 'https://updates.invalid/0.1.1-rc.3.json')
+  assert.deepEqual(result.unavailable, [{ version: '0.1.1-rc.4', status: 'full-package-required',
+    reason: 'full-package-required', requiredPortableVersion: '0.4.10' }])
+  assert.equal(result.unavailable[0].manifestUrl, undefined, 'incompatible entries expose no install target')
 
   const selectedOlder = await checkForUpdate({
     layout,
@@ -429,6 +432,36 @@ test('runtime layout changes require a verified complete-package update', () => 
   assert.equal(result.delivery, 'full-package')
 })
 
+test('a slow feed leaves the launch lock free and serializes a pending defer choice', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-feed-lock-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({
+    portableVersion: '0.3.0', releaseChannel: 'candidate', dshVersion: '0.1.0-rc.7',
+    updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0',
+  }))
+  const manifest = updateManifest({ portableVersion: '0.4.0-rc.1', platform: platformUpdateKey(process.platform, process.arch) })
+  let entered, finish
+  const requested = new Promise(resolve => { entered = resolve })
+  const network = new Promise(resolve => { finish = resolve })
+  const checking = checkForUpdate({ layout, fetchImpl: async () => {
+    entered()
+    await network
+    return new Response(JSON.stringify(manifest))
+  } })
+  await requested
+  let deferring
+  try {
+    const release = await acquireLaunchLock(layout)
+    await release()
+    deferring = deferUpdate(layout)
+  } finally { finish() }
+  assert.equal((await checking).status, 'available')
+  assert.equal((await deferring).status, 'deferred')
+  assert.equal((await checkForUpdate({ layout, fetchImpl: () => assert.fail('use the saved feed') })).status, 'deferred')
+})
+
 test('update checks read installed metadata and cache a successful result', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-check-'))
   const layout = layoutForRoot(root)
@@ -554,7 +587,7 @@ test('a temporary update outage is cached briefly instead of delaying every laun
   }
 })
 
-test('a candidate engine follows its Portable product instead of reporting a network outage', async () => {
+test('a missing candidate core feed is reported explicitly instead of claiming product-coupled updates', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-unpublished-'))
   const layout = layoutForRoot(root)
   let requests = 0
@@ -569,9 +602,9 @@ test('a candidate engine follows its Portable product instead of reporting a net
     })}\n`)
     const first = await checkForUpdate({ layout, scope: 'engine', fetchImpl, now: 1000 })
     const cached = await checkForUpdate({ layout, scope: 'engine', fetchImpl, now: 2000 })
-    assert.equal(first.status, 'engine-follows-product')
+    assert.equal(first.status, 'channel-unpublished')
     assert.equal(first.message, 'HTTP 404')
-    assert.equal(cached.status, 'engine-follows-product')
+    assert.equal(cached.status, 'channel-unpublished')
     assert.equal(cached.cached, true)
     assert.equal(requests, 1)
   } finally {

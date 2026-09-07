@@ -7,22 +7,22 @@ import { npmCliCandidates, productionPackageClosure } from '../scripts/stage-pre
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
-test('the stable release explicitly promotes the reviewed candidate without mutating its lock format', async () => {
+test('stable and candidate cores have independently pinned official source locks', async () => {
   const [stable, preview] = await Promise.all([
     readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
   ])
   assert.equal(stable.dsh.version, '0.1.2-rc.1')
-  assert.equal(stable.dsh.version, preview.dsh.version)
-  assert.equal(stable.dsh.integrity, preview.dsh.npmIntegrity)
-  assert.equal(stable.dsh.reviewedCommit, preview.dsh.reviewedCommit)
+  assert.match(stable.dsh.integrity, /^sha512-/)
+  assert.match(stable.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
+  assert.deepEqual(stable.dsh.packedFamilies, { dsh: 242, vendor: 9, landlock: 1 })
   assert.equal(preview.channel, 'beta')
   assert.match(preview.dsh.version, /^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.[1-9]\d*$/)
   assert.equal(preview.dsh.tag, `dsh-v${preview.dsh.version}`)
   assert.match(preview.dsh.npmIntegrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
   assert.match(preview.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
   assert.equal(preview.dsh.buildProfile, 'official')
-  assert.deepEqual(preview.dsh.packedFamilies, { dsh: 242, vendor: 9, landlock: 1 })
+  for (const count of Object.values(preview.dsh.packedFamilies)) assert.ok(Number.isSafeInteger(count) && count > 0)
   assert.deepEqual(preview.defaultPlugins, stable.defaultPlugins)
 })
 
@@ -61,7 +61,7 @@ test('Windows packaging consumes preview runtime only through an explicit receip
   assert.match(build, /\[string\]\$PreviewAppSource/)
   assert.match(build, /preview-runtime\.json/)
   assert.match(build, /upstream\.preview\.lock\.json/)
-  assert.match(build, /Preview app receipt does not match/)
+  assert.match(build, /Source-pack receipt does not match selected upstream lock/)
   assert.match(build, /if \(-not \$PreviewAppSource\) \{[\s\S]+verify-lock\.mjs[\s\S]+npm ci failed/)
   assert.match(build, /dshChannel = if \(\$ReleaseChannel -eq 'candidate'\) \{ 'preview' \} else \{ 'stable' \}/)
   assert.match(build, /footprint-budgets-preview\.json/)
@@ -116,15 +116,17 @@ test('preview footprint has a separate reviewed budget without weakening stable 
   }
 })
 
-test('promoted stable source packs retain realistic headroom from candidate qualification', async () => {
+test('promoted stable source packs retain realistic headroom from candidate qualification', async (t) => {
   const [stableLock, previewLock, stable, preview] = await Promise.all([
     readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'config', 'footprint-budgets.json'), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'config', 'footprint-budgets-preview.json'), 'utf8').then(JSON.parse),
   ])
-  assert.equal(stableLock.dsh.version, previewLock.dsh.version)
-  assert.equal(stableLock.dsh.reviewedCommit, previewLock.dsh.reviewedCommit)
+  if (stableLock.dsh.reviewedCommit !== previewLock.dsh.reviewedCommit) {
+    t.skip('Stable and candidate target different commits; this promotion-only comparison does not apply.')
+    return
+  }
   for (const platform of Object.keys(preview.platforms)) {
     for (const metric of ['archiveBytes', 'extractedBytes', 'files', 'directories', 'items']) {
       assert.ok(

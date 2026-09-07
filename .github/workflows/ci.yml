@@ -40,7 +40,7 @@ jobs:
         id: preview
         run: |
           node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-          node -e "const lock=require('./upstream.preview.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager); for (const [family,count] of Object.entries(lock.dsh.packedFamilies)) console.log(family+'Count='+count)" >> "$GITHUB_OUTPUT"
+          node -e "const lock=require(require('./package.json').version.includes('-') ? './upstream.preview.lock.json' : './upstream.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager); for (const [family,count] of Object.entries(lock.dsh.packedFamilies)) console.log(family+'Count='+count)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v7
         with:
           repository: deepseek-ai/deepseek-harness

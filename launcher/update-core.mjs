@@ -7,7 +7,7 @@ import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 
-import { writeJsonAtomic } from './portable-core.mjs'
+import { acquireLaunchLockWithWait, writeJsonAtomic } from './portable-core.mjs'
 
 export const UPDATE_SCHEMA_VERSION = 1
 export const UPDATE_CHECK_TTL_MS = 12 * 60 * 60 * 1000
@@ -374,6 +374,7 @@ export async function listEngineVersions({
   }
   const platform = platformUpdateKey(layout.platform, process.arch)
   const versions = []
+  const unavailable = []
   const seen = new Set()
   for (const entry of index.versions) {
     const version = String(entry?.version || '')
@@ -383,15 +384,37 @@ export async function listEngineVersions({
     validateRemoteUrl(manifestUrl, allowHttp)
     if (seen.has(version) || manifest?.updateKind !== 'engine' || manifest?.component?.dshVersion !== version) continue
     const evaluated = evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange: true })
-    if (!['available', 'current'].includes(evaluated.status)) continue
     seen.add(version)
+    if (!['available', 'current'].includes(evaluated.status)) {
+      unavailable.push({ version, status: evaluated.status, reason: evaluated.status,
+        requiredPortableVersion: manifest.portableVersion })
+      continue
+    }
     versions.push({ version, manifestUrl, status: evaluated.status })
   }
   versions.sort((left, right) => comparePortableVersions(right.version, left.version))
-  return { schemaVersion: 1, current: installed.dshVersion, releaseChannel: installed.releaseChannel, versions }
+  unavailable.sort((left, right) => comparePortableVersions(right.version, left.version))
+  return { schemaVersion: 1, current: installed.dshVersion, releaseChannel: installed.releaseChannel, versions, unavailable }
 }
 
-export async function checkForUpdate({
+async function withUpdateCacheLock(layout, scope, action) {
+  // Feed requests and notification choices share a cache, not the start/stop lock.
+  const cacheLayout = { ...layout, launchLock: `${updateCacheForScope(layout, scope)}.lock` }
+  let release
+  try {
+    release = await acquireLaunchLockWithWait(cacheLayout, 15000, { processQuery: () => null })
+  } catch (error) {
+    if (!String(error?.message).includes('Another portable launcher is already starting or stopping DSH.')) throw error
+    throw new Error('Another update check is still running. Try again shortly.', { cause: error })
+  }
+  try { return await action() } finally { await release() }
+}
+
+export async function checkForUpdate(options) {
+  return withUpdateCacheLock(options.layout, options.scope || 'product', () => checkForUpdateUnlocked(options))
+}
+
+async function checkForUpdateUnlocked({
   layout,
   manifestUrl,
   scope = 'product',
@@ -453,8 +476,8 @@ export async function checkForUpdate({
     return { ...result, cached: false, checkedAt: now }
   } catch (error) {
     const message = error?.message ?? String(error)
-    const errorStatus = installed.releaseChannel === 'candidate' && message === 'HTTP 404'
-      ? (scope === 'engine' ? 'engine-follows-product' : 'channel-unpublished')
+    const errorStatus = !explicitManifest && message === 'HTTP 404'
+      ? 'channel-unpublished'
       : 'unavailable'
     await writeJsonAtomic(updateCheckCache, {
       schemaVersion: 2,
@@ -475,7 +498,11 @@ export async function checkForUpdate({
   }
 }
 
-export async function deferUpdate(layout, { now = Date.now(), durationMs = 24 * 60 * 60 * 1000, scope = 'product' } = {}) {
+export async function deferUpdate(layout, options = {}) {
+  return withUpdateCacheLock(layout, options.scope || 'product', () => deferUpdateUnlocked(layout, options))
+}
+
+async function deferUpdateUnlocked(layout, { now = Date.now(), durationMs = 24 * 60 * 60 * 1000, scope = 'product' } = {}) {
   const updateCheckCache = updateCacheForScope(layout, scope)
   const cached = await readJson(updateCheckCache, null)
   if (!cached?.manifest) return { status: 'none' }
@@ -485,7 +512,11 @@ export async function deferUpdate(layout, { now = Date.now(), durationMs = 24 * 
   return { status: 'deferred', updateKind: scope, latest, deferredUntil }
 }
 
-export async function ignoreUpdate(layout, version = '', { scope = 'product' } = {}) {
+export async function ignoreUpdate(layout, version = '', options = {}) {
+  return withUpdateCacheLock(layout, options.scope || 'product', () => ignoreUpdateUnlocked(layout, version, options))
+}
+
+async function ignoreUpdateUnlocked(layout, version = '', { scope = 'product' } = {}) {
   const updateCheckCache = updateCacheForScope(layout, scope)
   const cached = await readJson(updateCheckCache, null)
   const latest = String(version || (scope === 'engine' ? cached?.manifest?.component?.dshVersion : cached?.manifest?.portableVersion) || '')
