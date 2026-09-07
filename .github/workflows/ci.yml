@@ -302,12 +302,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Capsule maintenance smoke failed.' }
           $AliasRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-path-alias-' + [guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Force -Path $AliasRoot | Out-Null
-          "DSH_PORTABLE_HEALTH_EVIDENCE=$(Join-Path $AliasRoot 'DSH-Portable\data\health-evidence.json')" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $AliasRoot
           if ($LASTEXITCODE -ne 0) { throw 'Path-alias fixture extraction failed.' }
           node scripts/smoke-windows-path-alias.mjs (Join-Path $AliasRoot 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw 'Windows path-alias smoke failed.' }
           node scripts/smoke-windows-runtime-health.mjs (Join-Path $AliasRoot 'DSH-Portable')
+          $HealthEvidence = Join-Path $AliasRoot 'DSH-Portable\data\health-evidence.json'
+          if (Test-Path -LiteralPath $HealthEvidence) { Copy-Item -LiteralPath $HealthEvidence -Destination (Join-Path $Root 'DSH-Portable\data\health-evidence.json') -ErrorAction Stop }
           if ($LASTEXITCODE -ne 0) { throw 'Windows runtime-health smoke failed.' }
           node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw "Windows native restart smoke failed with exit code $LASTEXITCODE" }
@@ -353,7 +354,7 @@ jobs:
           name: windows-native-support-${{ matrix.label }}
           path: |
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
-            ${{ env.DSH_PORTABLE_HEALTH_EVIDENCE }}
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
           if-no-files-found: warn
       - name: Upload startup transition evidence
         if: always()
