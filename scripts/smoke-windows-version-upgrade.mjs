@@ -6,6 +6,7 @@ import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
@@ -55,14 +56,34 @@ async function launcherLog() {
   return readFile(path.join(destination, 'data', 'logs', 'launcher.log'), 'utf8').catch(() => '')
 }
 
-async function stopFinishedProduct() {
+async function stopFinishedProduct({ bestEffort = false } = {}) {
   const executable = path.join(destination, 'DeepSeek-Herness.exe')
   if (!await stat(executable).then(() => true, () => false)) return
-  await execFileAsync(executable, ['stop', '--no-browser', '--json'], {
-    cwd: destination,
-    timeout: 90_000,
-    windowsHide: true,
-  }).catch(() => null)
+  try {
+    await execFileAsync(executable, ['stop', '--no-browser', '--json'], {
+      cwd: destination,
+      timeout: 90_000,
+      windowsHide: true,
+    })
+  } catch (error) {
+    if (!bestEffort) throw error
+  }
+}
+
+async function failureDiagnostics() {
+  const diagnostics = {}
+  for (const relative of ['data/logs/launcher.log', 'data/logs/portable-errors.jsonl', 'data/runtime/process.json', 'data/runtime/desktop-host.pid']) {
+    try { diagnostics[relative] = readLogTail(path.join(destination, relative), 16000) } catch {}
+  }
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:DSH_UPGRADE_DIAGNOSTIC_SCOPE) } | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress'], {
+      env: { ...process.env, DSH_UPGRADE_DIAGNOSTIC_SCOPE: path.basename(root) },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    })
+    diagnostics.processes = stdout
+  } catch (error) { diagnostics.processes = String(error.message) }
+  return redactDiagnosticText(JSON.stringify(diagnostics))
 }
 const server = createServer((request, response) => {
   if (request.url === '/portable-manifest.json') {
@@ -291,8 +312,11 @@ try {
     preserved: markers.size,
     delivery: decision.delivery,
   }))
+} catch (error) {
+  console.error(await failureDiagnostics())
+  throw error
 } finally {
-  await stopFinishedProduct()
+  await stopFinishedProduct({ bestEffort: true })
   if (oldHost && oldHost.exitCode === null) oldHost.kill()
   if (server.listening) await new Promise((resolve) => server.close(resolve))
   if (!process.env.CI) await rm(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 100 })
