@@ -2,6 +2,9 @@
 
 ## Confirmed defects and changes
 
+- Alpha `0.1.3-alpha.2` moved subprocess helpers into `runner-launch-*.js` and already hides the ordinary spawn/taskkill paths. The adapter now validates that exact upstream shape and still patches both shared Win32 native process paths. Its exported `runCli()` also requires an explicit call when imported by Portable; otherwise the control process stayed alive without starting HTTP, causing a real 60-second timeout and successful rollback. Portable now calls the official exported entry when present, retaining the self-executing stable entry. The entry mode is recorded in startup logs.
+- Windows C# and manifest checkout line endings caused different fingerprints for the same source. Compatibility hashing now canonicalizes those text files while continuing to reject actual code changes and verifying archive hashes independently.
+
 - Exact local package acceptance caught a transient theme mismatch after a previous light launch. The official client initialized its preference to `system` before asynchronous durable settings arrived. The bootstrap now carries the host's accepted preference into the client's initial snapshot. Native chrome also reapplies the WebView preference when only the preference changes, even if the resolved color stays the same. Theme acceptance samples through two seconds after interactive readiness.
 - Local rebuilding exposed development `node_modules` being copied into the bundled bridge and market. All three builders now share staging that excludes development dependencies. The unchanged package footprint limit caught the defect and passes with the filtered build.
 
@@ -22,6 +25,8 @@ The isolated loading-theme run `edbec745d2eb455d838a25eaf89ae8ec` also recorded 
 A subsequent no-backend launch with system tracing, `c7178d99195942b185ec9d5a070446cb`, recorded a 2,178 ms import and 3,464 ms interactive time. This normal run does not explain or disprove the earlier long waits. The installed user's process was not stopped or replaced for these checks.
 
 ## Release qualification boundary
+
+Main runs `34161602880` and `34162454110` each passed all 34 product gates without skips. Subsequent Alpha-entry and fingerprint changes require qualification at their final head. Core run `34162478625` passed stable on all five targets but correctly rejected Alpha at the changed subprocess adapter. The repaired Alpha development installation then passed update, real command execution, default-plugin retention, forced rollback, native startup, settings-channel confirmation/failure handling and Windows ordinary/restricted subprocess visibility. Its no-backend native start `c080219ca8a841d78e1b207953a847da` reached the loading page at 359 ms and the workspace at 2,241 ms. Those development checks used a locally corrected host and are not a substitute for the final CI-built artifact.
 
 Local Win11 rebuild SHA-256 `6710b6f74c1c020ce296e3e4b17fdbe0b44ef20b2a31213b88e6bdb5687c42ad` passed an empty-cache, no-backend start: loading 401 ms, capsule extraction 4,699 ms, official import 1,257 ms and interactive readiness 8,748 ms (`6f5fe0765ce54cbe8e0ae35537bd3234`). Four subsequent theme checks passed, including reduced motion and two seconds of sampling after readiness. Their five-second observation hold is excluded from performance conclusions. The same build passed real stable-core reinstallation, default-plugin preservation and injected-failure rollback. The baseline start assertion was corrected to require the CLI's `started` result followed by a separate healthy `running` status, rather than confusing the two command contracts.
 

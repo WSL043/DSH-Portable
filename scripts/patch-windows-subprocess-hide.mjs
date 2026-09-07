@@ -15,6 +15,16 @@ function replaceRequired(source, needle, replacement, label) {
 
 export function patchWindowsSubprocessHide(source) {
   if (source.includes(SUBPROCESS_MARKER)) return source
+  const upstreamHidden = [
+    `\t\t...force ? ["/F"] : []\n\t], {\n\t\tstdio: "ignore",\n\t\twindowsHide: true\n\t});`,
+    `\t\t"/F"\n\t], {\n\t\tstdio: "ignore",\n\t\twindowsHide: true\n\t});`,
+    `\t\tdetached: platform !== "win32",\n\t\twindowsHide: platform === "win32"\n\t});`,
+  ]
+  // Alpha owns these helpers in a shared runner chunk and already hides them.
+  // Keep the exact three verified seams; an unknown shape still fails below.
+  if (upstreamHidden.every(needle => source.split(needle).length === 2)) {
+    return `/* ${SUBPROCESS_MARKER} */\n${source}`
+  }
   let output = replaceRequired(
     source,
     `\t\t...force ? ["/F"] : []\n\t], { stdio: "ignore" });`,
@@ -34,6 +44,12 @@ export function patchWindowsSubprocessHide(source) {
     'subprocess spawn seam changed upstream',
   )
   return `/* ${SUBPROCESS_MARKER} */\n${output}`
+}
+
+export function subprocessHideModule(indexSource) {
+  const chunks = [...indexSource.matchAll(/from "\.\/(runner-launch-[A-Za-z0-9_-]+\.js)";/g)]
+  if (chunks.length > 1) throw new Error('Ambiguous Windows subprocess runner module')
+  return chunks[0]?.[1] || 'index.js'
 }
 
 export function patchWindowsAclHide(source) {
@@ -76,7 +92,8 @@ export function patchWindowsWin32ProcessHide(source) {
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-windows-subprocess-hide.mjs <app-root>')
   const appRoot = path.resolve(process.argv[2])
-  const subprocessFilename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib', 'index.js')
+  const subprocessLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib')
+  const subprocessFilename = path.join(subprocessLib, subprocessHideModule(await readFile(path.join(subprocessLib, 'index.js'), 'utf8')))
   const aclLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib')
   const aclCandidates = (await readdir(aclLib)).filter(name => /^types-[A-Za-z0-9_-]+\.js$/.test(name))
   if (aclCandidates.length !== 1) {

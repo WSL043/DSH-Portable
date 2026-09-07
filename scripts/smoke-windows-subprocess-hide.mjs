@@ -6,6 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { subprocessHideModule } from './patch-windows-subprocess-hide.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -79,7 +80,8 @@ async function runChild() {
 }
 
 async function runParent() {
-  const subprocessSource = await readFile(path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib', 'index.js'), 'utf8')
+  const subprocessLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib')
+  const subprocessSource = await readFile(path.join(subprocessLib, subprocessHideModule(await readFile(path.join(subprocessLib, 'index.js'), 'utf8'))), 'utf8')
   const aclLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib')
   assert.match(subprocessSource, /dsh-portable-windows-subprocess-hide-v1/)
   const { readdir } = await import('node:fs/promises')
