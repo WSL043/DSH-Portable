@@ -8,11 +8,11 @@ export function patchThemeBootstrap(source, kind) {
   if (source.includes(marker)) return source
   const needle = kind === 'host'
     ? "  const systemDark = preference === 'system'"
-    : 'this.preference = DEFAULT_PREFERENCE;'
+    : 'this.host = host;\n\t\t\t\tthis.preference = DEFAULT_PREFERENCE;'
   if (source.split(needle).length !== 2) throw new Error(`theme ${kind} bootstrap seam changed upstream`)
   const replacement = kind === 'host'
     ? `  /* ${marker} */\n  document.body.setAttribute('data-dsh-theme-preference', preference)\n${needle}`
-    : `/* ${marker} */\n\t\t\t\tconst bootPreference = typeof document === "undefined" ? null : document.body?.getAttribute("data-dsh-theme-preference");\n\t\t\t\tthis.preference = ["light", "dark", "system"].includes(bootPreference) ? bootPreference : DEFAULT_PREFERENCE;`
+    : `this.host = host;\n\t\t\t\t/* ${marker} */\n\t\t\t\tconst bootPreference = typeof document === "undefined" ? null : document.body?.getAttribute("data-dsh-theme-preference");\n\t\t\t\tthis.preference = ["light", "dark", "system"].includes(bootPreference) ? bootPreference : DEFAULT_PREFERENCE;`
   return source.replace(needle, replacement)
 }
 

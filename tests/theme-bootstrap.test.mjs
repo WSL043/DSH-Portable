@@ -5,7 +5,7 @@ import vm from 'node:vm'
 import { patchThemeBootstrap } from '../scripts/patch-theme-bootstrap.mjs'
 
 const host = "const preference = selected;\n  const systemDark = preference === 'system' && systemDarkMode;\nconst dark = preference === 'dark' || systemDark;"
-const client = 'const DEFAULT_PREFERENCE = "system"; class Theme { constructor() { this.preference = DEFAULT_PREFERENCE; } } new Theme().preference;'
+const client = 'const DEFAULT_PREFERENCE = "system"; class Theme { constructor(host) { this.host = host;\n\t\t\t\tthis.preference = DEFAULT_PREFERENCE; } reset() { this.preference = DEFAULT_PREFERENCE; } } new Theme().preference;'
 
 test('the client inherits the durable boot preference before asynchronous settings arrive', () => {
   for (const selected of ['dark', 'light', 'system']) {
