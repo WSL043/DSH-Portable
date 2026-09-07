@@ -77,10 +77,16 @@ appendStartupTrace(startupTrace, 'portable-host', 'control-ready')
 process.argv = [process.execPath, path.resolve(dshBin), ...dshArgs]
 appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-begin')
 healthPhase('official-dsh-import')
+const importStartedAt = performance.now()
+const importCpu = process.cpuUsage()
 try {
   await import(pathToFileURL(path.resolve(dshBin)).href)
   healthPhase('official-dsh-import-complete')
-  appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-complete', { pid: process.pid })
+  const cpu = process.cpuUsage(importCpu)
+  appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-complete', {
+    pid: process.pid, durationMs: Math.round(performance.now() - importStartedAt),
+    cpuUserMs: Math.round(cpu.user / 1000), cpuSystemMs: Math.round(cpu.system / 1000),
+  })
 } catch (error) {
   healthPhase('official-dsh-import-failed')
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-failed', {

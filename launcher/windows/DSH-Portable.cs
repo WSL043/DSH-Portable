@@ -54,6 +54,7 @@ namespace DshPortable
         public int schemaVersion { get; set; }
         public string locale { get; set; }
         public string theme { get; set; }
+        public string themePreference { get; set; }
         public string currentSessionId { get; set; }
         public bool hasRunningSession { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
@@ -980,6 +981,8 @@ namespace DshPortable
         private FormWindowState windowStateBeforeHide = FormWindowState.Normal;
         private TrayBridgeState trayState;
         private string trayTheme = "light";
+        private string themePreference = "system";
+        private bool loadingDocumentNavigation;
         private string notificationSessionId;
         private Uri applicationUri;
         private readonly List<string> webViewStartupTrace = new List<string>();
@@ -1009,6 +1012,7 @@ namespace DshPortable
             root = Path.GetDirectoryName(Application.ExecutablePath);
             environmentId = selectedEnvironmentId;
             stateRoot = selectedStateRoot;
+            LoadStartupTheme();
             restoreMessage = environmentRestoreMessage;
             exitMessage = environmentExitMessage;
             notificationActivationMessage = environmentActivationMessage;
@@ -1056,10 +1060,10 @@ namespace DshPortable
             else if (testHidden) Opacity = 1;
             ClientSize = desktopStart ? new Size(1280, 820) : new Size(440, 160);
             MinimumSize = desktopStart ? new Size(900, 620) : Size.Empty;
-            BackColor = SystemColors.Window;
+            BackColor = trayTheme == "dark" ? Color.FromArgb(24, 24, 26) : Color.FromArgb(248, 248, 248);
             Font = new Font("Segoe UI", 10F, FontStyle.Regular, GraphicsUnit.Point);
 
-            launchPanel = new Panel { Dock = DockStyle.Fill, BackColor = SystemColors.Window };
+            launchPanel = new Panel { Dock = DockStyle.Fill, BackColor = BackColor };
             launchContent = new Panel
             {
                 Size = desktopStart ? new Size(360, 112) : new Size(504, 144),
@@ -1151,7 +1155,7 @@ namespace DshPortable
             launchContent.Controls.Add(closeButton);
             launchPanel.Controls.Add(launchContent);
             if (desktopStart)
-                ConfigureDesktopLoadingSurface("Loading plugins…", false);
+                ConfigureDesktopLoadingSurface(L("正在加载插件…", "Loading plugins…"), false);
 
             closeBehavior = LoadCloseBehavior();
             updateCheckEnabled = LoadUpdateCheckEnabled("productUpdateCheckEnabled");
@@ -1229,6 +1233,7 @@ namespace DshPortable
             };
 
             webView = CreateDesktopWebView();
+            statusLabel.TextChanged += UpdateLoadingDocumentStatus;
             Controls.Add(webView);
             Controls.Add(launchPanel);
             launchPanel.Visible = true;
@@ -1294,6 +1299,60 @@ namespace DshPortable
             base.WndProc(ref message);
         }
 
+        private void LoadStartupTheme()
+        {
+            // Read the standard settings provider before creating any visible controls.
+            // The bridge snapshot also covers custom settings providers and custom themes.
+            try
+            {
+                string cached = Path.Combine(stateRoot, "data", "window-theme.json");
+                if (File.Exists(cached))
+                {
+                    var value = new JavaScriptSerializer().Deserialize<Dictionary<string, string>>(File.ReadAllText(cached));
+                    if (value.ContainsKey("preference")) themePreference = value["preference"];
+                    if (value.ContainsKey("resolved") && value["resolved"] == "dark") trayTheme = "dark";
+                }
+                string settings = Path.Combine(stateRoot, "data", "dsh-home", "settings.yaml");
+                if (File.Exists(settings) && new FileInfo(settings).Length <= 1024 * 1024)
+                {
+                    bool inTheme = false;
+                    foreach (string line in File.ReadLines(settings))
+                    {
+                        if (String.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith("#")) continue;
+                        if (!Char.IsWhiteSpace(line[0]))
+                            inTheme = Regex.IsMatch(line, "^[\"']?ui-theme[\"']?\\s*:\\s*(?:#.*)?$");
+                        else if (inTheme)
+                        {
+                            Match match = Regex.Match(line, "^\\s+preference\\s*:\\s*[\"']?(light|dark|system)[\"']?\\s*(?:#.*)?$");
+                            if (match.Success) { themePreference = match.Groups[1].Value; break; }
+                        }
+                    }
+                }
+            }
+            catch { }
+            if (themePreference == "light" || themePreference == "dark") trayTheme = themePreference;
+            else if (themePreference == "system")
+            {
+                try
+                {
+                    object setting = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1);
+                    trayTheme = Convert.ToInt32(setting, CultureInfo.InvariantCulture) == 0 ? "dark" : "light";
+                }
+                catch { trayTheme = "light"; }
+            }
+        }
+
+        private void SaveWindowTheme()
+        {
+            try
+            {
+                string filename = Path.Combine(stateRoot, "data", "window-theme.json");
+                Directory.CreateDirectory(Path.GetDirectoryName(filename));
+                File.WriteAllText(filename, json.Serialize(new { preference = themePreference, resolved = trayTheme }), new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
         private void ApplyDesktopChrome()
         {
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
@@ -1311,6 +1370,10 @@ namespace DshPortable
             activityRing.TrackColor = dark ? Color.FromArgb(53, 53, 57) : Color.FromArgb(226, 228, 232);
             activityRing.IndicatorColor = dark ? Color.FromArgb(242, 242, 244) : Color.FromArgb(27, 28, 30);
             if (webView != null && !webView.IsDisposed) webView.DefaultBackgroundColor = background;
+            if (webView != null && webView.CoreWebView2 != null)
+                webView.CoreWebView2.Profile.PreferredColorScheme = themePreference == "system"
+                    ? CoreWebView2PreferredColorScheme.Auto
+                    : dark ? CoreWebView2PreferredColorScheme.Dark : CoreWebView2PreferredColorScheme.Light;
             if (desktopStart && IsHandleCreated)
             {
                 int darkMode = dark ? 1 : 0;
@@ -2101,7 +2164,14 @@ namespace DshPortable
                     bool chromeChanged = uiLanguage != nextLanguage || trayTheme != nextTheme;
                     uiLanguage = nextLanguage;
                     trayTheme = nextTheme;
+                    string nextPreference = state.themePreference;
+                    if (!String.IsNullOrEmpty(nextPreference) && (themePreference != nextPreference || chromeChanged))
+                    {
+                        themePreference = nextPreference;
+                        SaveWindowTheme();
+                    }
                     if (chromeChanged) ApplyDesktopChrome();
+                    webView.CoreWebView2.ExecuteScriptAsync("document.getElementById('portable-startup-theme')?.remove()");
                     HandleTaskCompletionNotifications(state);
                     trayState = state;
                     trayBridgeReady = true;
@@ -3030,7 +3100,9 @@ namespace DshPortable
                             { "workingSetBytes", current.WorkingSet64 }, { "privateBytes", current.PrivateMemorySize64 },
                             { "handleCount", current.HandleCount }
                         };
-                        File.AppendAllText(filename, new JavaScriptSerializer().Serialize(entry) + Environment.NewLine, new UTF8Encoding(false));
+                        string line = new JavaScriptSerializer().Serialize(entry);
+                        File.AppendAllText(filename, line + Environment.NewLine, new UTF8Encoding(false));
+                        AppendHistoryLog("desktop-health.jsonl", line);
                         desktopHealthWasDelayed = delayed;
                         desktopHealthLastWrite = now;
                     }
@@ -3080,6 +3152,27 @@ namespace DshPortable
             catch { }
         }
 
+        private void AppendHistoryLog(string name, string line)
+        {
+            try
+            {
+                string history = Path.Combine(ResolveLauncherLogDirectory(), "history");
+                string directory = Path.Combine(history, startupId);
+                Directory.CreateDirectory(directory);
+                if ((File.GetAttributes(history) & FileAttributes.ReparsePoint) != 0
+                    || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return;
+                string filename = Path.Combine(directory, name);
+                if (File.Exists(filename) && (File.GetAttributes(filename) & FileAttributes.ReparsePoint) != 0) return;
+                if (File.Exists(filename) && new FileInfo(filename).Length + Encoding.UTF8.GetByteCount(line) + 2 > 128 * 1024)
+                {
+                    File.Delete(filename + ".previous");
+                    File.Move(filename, filename + ".previous");
+                }
+                File.AppendAllText(filename, line + Environment.NewLine, new UTF8Encoding(false));
+            }
+            catch { }
+        }
+
         private void AppendStartupTrace(string component, string phase, IDictionary<string, object> fields)
         {
             if (!startupTraceActive) return;
@@ -3108,6 +3201,7 @@ namespace DshPortable
                     Path.Combine(directory, "startup-latest.jsonl"),
                     json.Serialize(entry) + Environment.NewLine,
                     new UTF8Encoding(false));
+                AppendHistoryLog("startup.jsonl", json.Serialize(entry));
             }
             catch { }
         }
@@ -4379,6 +4473,17 @@ namespace DshPortable
             webView.BringToFront();
         }
 
+        private async void UpdateLoadingDocumentStatus(object sender, EventArgs args)
+        {
+            if (applicationUri != null || webView == null || webView.CoreWebView2 == null) return;
+            try
+            {
+                await webView.CoreWebView2.ExecuteScriptAsync("(()=>{const label=document.getElementById('portable-startup-status');if(label)label.textContent="
+                    + json.Serialize(statusLabel.Text) + ";})()");
+            }
+            catch { }
+        }
+
         private async Task InitializeWebViewAsync()
         {
             webViewStartupClock = Stopwatch.StartNew();
@@ -4427,6 +4532,14 @@ namespace DshPortable
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            // Official UI styles initially use their default palette before the
+            // settings plugin publishes. Keep that interval in the selected scheme.
+            await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "(()=>{const install=()=>{if(!document.documentElement)return false;"
+                + "const style=document.createElement('style');style.id='portable-startup-theme';"
+                + "style.textContent='html,body,#root{background-color:#f8f8f8!important;color-scheme:light}@media(prefers-color-scheme:dark){html,body,#root{background-color:#18181a!important;color-scheme:dark}}';"
+                + "document.documentElement.appendChild(style);return true;};"
+                + "if(!install()){const observer=new MutationObserver(()=>{if(install())observer.disconnect()});observer.observe(document,{childList:true,subtree:true})}})()");
             string testStalledResource = Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_STALLED_RESOURCE_URL");
             Uri stalledResourceUri;
             if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_HIDDEN"), "1", StringComparison.Ordinal)
@@ -4461,6 +4574,31 @@ namespace DshPortable
                 RecordWebViewPhase("content-loading:" + eventArgs.NavigationId);
             };
             webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
+            ApplyDesktopChrome();
+            if (desktopStart && !desktopReady && applicationUri == null)
+            {
+                bool dark = trayTheme == "dark";
+                string background = dark ? "#18181a" : "#f8f8f8";
+                string foreground = dark ? "#ebebeb" : "#232323";
+                string message = WebUtility.HtmlEncode(L("正在启动工作区，请稍候…", "Starting your workspace…"));
+                webView.CoreWebView2.DOMContentLoaded += delegate
+                {
+                    if (webView.CoreWebView2.Source == "about:blank")
+                    {
+                        AppendStartupTrace("webview", "loading-document-ready", new Dictionary<string, object> { { "theme", trayTheme } });
+                        UpdateLoadingDocumentStatus(null, EventArgs.Empty);
+                    }
+                };
+                AppendStartupTrace("webview", "loading-document-requested", new Dictionary<string, object> { { "theme", trayTheme } });
+                loadingDocumentNavigation = true;
+                webView.CoreWebView2.NavigateToString("<!doctype html><html style='color-scheme:" + trayTheme
+                    + "'><head><meta charset='utf-8'><style>html,body{margin:0;height:100%;background:" + background
+                    + ";color:" + foreground + ";font:14px system-ui}body{display:grid;place-items:center}main{text-align:center}"
+                    + "h1{font-size:22px;font-weight:600}.ring{margin:24px auto;width:24px;height:24px;border:3px solid #8884;border-top-color:currentColor;border-radius:50%;animation:spin 1s linear infinite}"
+                    + "p{opacity:.75}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ring{animation:none}}</style></head>"
+                    + "<body><main id='portable-startup-loading'><h1>DeepSeek Harness</h1><div class='ring'></div><p id='portable-startup-status'>"
+                    + message + "</p><p id='elapsed'></p></main><script>const start=Date.now();setInterval(()=>{document.getElementById('elapsed').textContent=Math.floor((Date.now()-start)/1000)+' s'},1000)</script></body></html>");
+            }
         }
 
         private async Task InitializeWebViewAttemptAsync(string userData, CoreWebView2EnvironmentOptions options)
@@ -4606,6 +4744,21 @@ namespace DshPortable
 
         private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs eventArgs)
         {
+            if (applicationUri == null)
+                AppendStartupTrace("webview", "initial-navigation", new Dictionary<string, object> {
+                    { "targetKind", eventArgs.Uri.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ? "inline-html" : eventArgs.Uri == "about:blank" ? "blank" : "other" },
+                    { "desktopStart", desktopStart }, { "desktopReady", desktopReady }
+                });
+            if (loadingDocumentNavigation && applicationUri == null && !eventArgs.IsUserInitiated
+                && eventArgs.Uri.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase))
+            {
+                loadingDocumentNavigation = false;
+                return;
+            }
+            if (desktopStart && !desktopReady && applicationUri == null && eventArgs.Uri == "about:blank")
+            {
+                return;
+            }
             Uri target;
             if (!Uri.TryCreate(eventArgs.Uri, UriKind.Absolute, out target)) { eventArgs.Cancel = true; return; }
             if (applicationUri != null && target.IsLoopback && target.Port == applicationUri.Port)

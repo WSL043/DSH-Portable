@@ -3,6 +3,8 @@ import { appendFileSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
 
+import { appendHistoryLog } from './log-history.mjs'
+
 // A separate thread can record a missing main-thread heartbeat while DSH is
 // synchronously blocked. It does not inspect user messages or process arguments.
 export function startRuntimeHealth(logDirectory, startupId = '') {
@@ -16,11 +18,13 @@ export function startRuntimeHealth(logDirectory, startupId = '') {
     worker.on('error', error => {
       stop()
       try {
-        appendFileSync(path.join(logDirectory, 'runtime-health.jsonl'), `${JSON.stringify({
+        const line = JSON.stringify({
           timestamp: new Date().toISOString(), startupId, pid: process.pid,
           component: 'portable-host', observation: 'monitor-failed',
           type: error.name, code: error.code || 'none',
-        })}\n`)
+        })
+        appendFileSync(path.join(logDirectory, 'runtime-health.jsonl'), `${line}\n`)
+        appendHistoryLog(logDirectory, startupId, 'runtime-health.jsonl', line)
       } catch {}
     })
     worker.on('exit', stop)
@@ -67,16 +71,18 @@ if (!isMainThread && workerData?.logDirectory) {
     const cpuPercent = Math.round((cpu.user - previousCpu.user + cpu.system - previousCpu.system) / ((now - previousSample) * 10))
     previousCpu = cpu
     previousSample = now
-    if (!stalled && stalled === wasStalled && now - lastWritten < 30000) return
+    if (!stalled && phase === 'official-dsh-import-complete' && stalled === wasStalled && now - lastWritten < 30000) return
     try {
       try { if (statSync(filename).size >= 128 * 1024) rotate() } catch {}
-      appendFileSync(filename, `${JSON.stringify({
+      const line = JSON.stringify({
         timestamp: new Date().toISOString(), startupId: workerData.startupId,
         pid: process.pid, component: 'portable-host', phase,
         observation: stalled ? 'main-heartbeat-delayed' : wasStalled ? 'main-heartbeat-recovered' : 'sample',
         mainHeartbeatAgeMs: age, cpuPercent, rssBytes: process.memoryUsage.rss(),
         lastMainHeapUsedBytes: heapUsedBytes,
-      })}\n`)
+      })
+      appendFileSync(filename, `${line}\n`)
+      appendHistoryLog(workerData.logDirectory, workerData.startupId, 'runtime-health.jsonl', line)
     } catch {}
     wasStalled = stalled
     lastWritten = now

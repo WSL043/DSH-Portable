@@ -789,6 +789,7 @@ window.__ModuleLoader__.load({
         schemaVersion: 1,
         locale: localeOf(ctx),
         theme: themeOf(ctx),
+        themePreference: ctx.theme?.getTheme?.()?.preference || 'system',
         currentSessionId: source.current == null ? '' : String(source.current),
         hasRunningSession,
         sessions,
