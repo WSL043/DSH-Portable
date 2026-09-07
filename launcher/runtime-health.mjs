@@ -2,6 +2,7 @@ import { Worker, isMainThread, parentPort, workerData } from 'node:worker_thread
 import { appendFileSync, mkdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
+import { freemem, totalmem } from 'node:os'
 
 import { appendHistoryLog } from './log-history.mjs'
 
@@ -51,6 +52,7 @@ if (!isMainThread && workerData?.logDirectory) {
   let heapUsedBytes = null
   let previousCpu = process.cpuUsage()
   let previousSample = performance.now()
+  const systemTotalMemoryBytes = totalmem()
   let lastWritten = -Infinity
   let wasStalled = false
   const rotate = () => {
@@ -68,7 +70,8 @@ if (!isMainThread && workerData?.logDirectory) {
     const age = Math.round(now - heartbeatAt)
     const stalled = age >= 5000
     const cpu = process.cpuUsage()
-    const cpuPercent = Math.round((cpu.user - previousCpu.user + cpu.system - previousCpu.system) / ((now - previousSample) * 10))
+    const sampleIntervalMs = now - previousSample
+    const cpuPercent = Math.round((cpu.user - previousCpu.user + cpu.system - previousCpu.system) / (sampleIntervalMs * 10))
     previousCpu = cpu
     previousSample = now
     if (!stalled && phase === 'official-dsh-import-complete' && stalled === wasStalled && now - lastWritten < 30000) return
@@ -79,6 +82,8 @@ if (!isMainThread && workerData?.logDirectory) {
         pid: process.pid, component: 'portable-host', phase,
         observation: stalled ? 'main-heartbeat-delayed' : wasStalled ? 'main-heartbeat-recovered' : 'sample',
         mainHeartbeatAgeMs: age, cpuPercent, rssBytes: process.memoryUsage.rss(),
+        sampleIntervalMs: Math.round(sampleIntervalMs),
+        systemFreeMemoryBytes: freemem(), systemTotalMemoryBytes,
         lastMainHeapUsedBytes: heapUsedBytes,
       })
       appendFileSync(filename, `${line}\n`)
