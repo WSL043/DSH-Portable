@@ -43,10 +43,14 @@ test('full diagnostics are stored redacted and bounded outside the user-facing e
   t.after(() => rm(logsDir, { recursive: true, force: true }))
   await recordPortableDiagnostic(logsDir, {
     operation: 'update',
-    error: new Error('failed http://127.0.0.1:3080/?token=private-token'),
+    error: new Error('failed http://127.0.0.1:3080/?token=private-token', {
+      cause: new Error('CIM_QUERY_FAILED token=cause-secret'),
+    }),
   })
   const source = await readFile(path.join(logsDir, 'portable-errors.jsonl'), 'utf8')
   assert.match(source, /UPDATE_FAILED|update/)
   assert.doesNotMatch(source, /private-token/)
+  assert.match(source, /CIM_QUERY_FAILED/)
+  assert.doesNotMatch(source, /cause-secret/)
   assert.ok(Buffer.byteLength(source) < 256 * 1024)
 })
