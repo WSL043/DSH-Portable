@@ -103,6 +103,12 @@ node scripts/smoke-windows-version-upgrade.mjs <published-0.6.0-zip> <artifacts>
 
 ## 仍需验收 / Remaining qualification
 
+2026-09-07 Windows 11 实机补验（未完成）：使用 run `34093566326` 的 Windows x64 成品，代码提交 `2a68ab98453e1d7434c745a4f91f7882f04b060d`。首次原生启动在 8912 ms 记录 interactive-ready；实际观察到首次提示、主界面、Portable 设置加载及默认关闭到托盘。通过 `runtime-entry.mjs portable-cli.mjs` 启动的独立后端随后在 3270 ms 优雅停止，未强制终止，PID 和状态文件均已清除。此后端结果不替代原生窗口退出验收。
+
+界面工具间歇报 `GetCursorPos` access denied，重建工具会话后仍发生；原生完整退出和重启保持未验收。早先直接调用内部 `portable-cli.mjs`、遗漏运行时入口的补测无效，已排除并记录。原始日志、轮转日志、界面控件记录及 JSON 诊断报告保留在本地验收证据目录，不公开包含访问令牌的原始日志。当前结果不能作为重新发布依据。
+
+Windows 11 follow-up remains incomplete. The exact CI product rendered its first-run notice, workspace and Portable settings, and closed to the tray. Its independent CLI backend stopped gracefully in 3270 ms through the required runtime entry. Intermittent desktop input-tool access errors prevented complete native exit/restart acceptance. An invalid direct internal-CLI invocation is excluded; raw and rotated logs and a redacted JSON report are retained locally. These observations do not authorize publication.
+
 - 反馈附件只证明曾在 `official-dsh-import-begin` 后等待 60 秒超时，另一次约 12 秒完成。未包含当时的 CPU、事件循环或线程栈，因此不能证明“冷启动竞争”，也不能证明该超时已根治。
 - 本次托盘压力测试证明重复事件与资源释放缺陷已修正，不等于长期真实工作负载内存稳定性证明。
 - 最终发布由 main 全套成品流水线和发布校验控制；反馈者环境中的特定超时仍需复测。
