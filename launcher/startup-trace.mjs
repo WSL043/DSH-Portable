@@ -35,6 +35,7 @@ export function appendStartupTrace(trace, component, phase, fields = {}) {
     appendFileSync(trace.filename, `${JSON.stringify({
       ...safeFields(fields),
       timestamp: new Date().toISOString(),
+      pid: process.pid,
       startupId: trace.startupId,
       elapsedMs: Math.max(0, Date.now() - Number(trace.startedAt)),
       component: String(component).slice(0, 80),

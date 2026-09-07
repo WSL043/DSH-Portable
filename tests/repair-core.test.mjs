@@ -161,6 +161,45 @@ test('support report is bounded, useful, and removes credentials and conversatio
   assert.match(source, /\[REDACTED\]/)
 })
 
+test('support report bounds all fourteen log tails while retaining health markers', async (t) => {
+  const layout = await fixture(t)
+  await mkdir(layout.logsDir, { recursive: true })
+  const logNames = [
+    'startup-latest.jsonl',
+    'startup-previous.jsonl',
+    'launcher.log',
+    'launcher.log.previous',
+    'dsh.stdout.log',
+    'dsh.stderr.log',
+    'portable-errors.jsonl',
+    'portable-errors.jsonl.previous',
+    'data-import-latest.jsonl',
+    'data-import-previous.jsonl',
+    'runtime-health.jsonl',
+    'runtime-health.jsonl.previous',
+    'desktop-health.jsonl',
+    'desktop-health.jsonl.previous',
+  ]
+  const escapedLine = JSON.stringify({ quote: '"', slash: '\\', newline: '\n', unicode: '界' }) + '\n'
+  for (const name of logNames) {
+    const marker = `support-marker-${name}`
+    await writeFile(path.join(layout.logsDir, name), `${escapedLine.repeat(4096)}token=secret\n${marker}\n`)
+  }
+  const output = path.join(layout.root, 'support-health.json')
+
+  const result = await exportPortableSupportReport(layout, output)
+  assert.ok(result.bytes < 512 * 1024)
+  const source = await readFile(output, 'utf8')
+  const report = JSON.parse(source)
+  for (const name of logNames.slice(-4)) {
+    assert.ok(report.files.logNames.includes(name))
+    assert.ok(Object.hasOwn(report.logs, name))
+    assert.ok(report.logs[name].includes(`support-marker-${name}`))
+  }
+  assert.doesNotMatch(source, /token=secret|secret/)
+  assert.equal(Object.values(report.logs).some(value => value.includes('[earlier log omitted]\n')), true)
+})
+
 test('Windows support diagnostics summarize terminal-storm process counts without command lines', () => {
   const counts = summarizeWindowsTasklist([
     '"OpenConsole.exe","100","Console","1","10,000 K"',

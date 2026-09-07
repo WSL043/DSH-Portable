@@ -306,6 +306,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Path-alias fixture extraction failed.' }
           node scripts/smoke-windows-path-alias.mjs (Join-Path $AliasRoot 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw 'Windows path-alias smoke failed.' }
+          node scripts/smoke-windows-runtime-health.mjs (Join-Path $AliasRoot 'DSH-Portable')
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime-health smoke failed.' }
           node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw "Windows native restart smoke failed with exit code $LASTEXITCODE" }
           node scripts/smoke-windows-subprocess-hide.mjs (Join-Path $Root 'DSH-Portable')

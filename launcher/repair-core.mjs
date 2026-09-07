@@ -16,6 +16,8 @@ import { redactDiagnosticText, readLogTail } from './diagnostic-policy.mjs'
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
+const LOG_ENTRY_MAX_BYTES = 24 * 1024
+const LOG_OMISSION_MARKER = '[earlier log omitted]\n'
 const LOG_NAMES = Object.freeze([
   'startup-latest.jsonl',
   'startup-previous.jsonl',
@@ -27,6 +29,10 @@ const LOG_NAMES = Object.freeze([
   'portable-errors.jsonl.previous',
   'data-import-latest.jsonl',
   'data-import-previous.jsonl',
+  'runtime-health.jsonl',
+  'runtime-health.jsonl.previous',
+  'desktop-health.jsonl',
+  'desktop-health.jsonl.previous',
 ])
 const execFileAsync = promisify(execFile)
 const WINDOWS_DIAGNOSTIC_PROCESSES = Object.freeze([
@@ -140,7 +146,11 @@ export async function repairPortable(layout, { running = false } = {}) {
 
 async function logTail(filename) {
   try {
-    return redactDiagnosticText(readLogTail(filename, LOG_TAIL_BYTES))
+    let value = redactDiagnosticText(readLogTail(filename, LOG_TAIL_BYTES))
+    while (Buffer.byteLength(JSON.stringify(value), 'utf8') > LOG_ENTRY_MAX_BYTES) {
+      value = `${LOG_OMISSION_MARKER}${value.slice(Math.floor(value.length / 2))}`
+    }
+    return value
   } catch (error) {
     if (error?.code === 'ENOENT') return ''
     return `unreadable: ${error?.code || error?.message || 'unknown'}`

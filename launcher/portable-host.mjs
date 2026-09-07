@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireRuntimeLease } from './runtime-capsule.mjs'
 import { appendStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
+import { startRuntimeHealth } from './runtime-health.mjs'
 
 const [dshBin, ...dshArgs] = process.argv.slice(2)
 const controlPipe = process.env.DSH_PORTABLE_CONTROL_PIPE
@@ -17,6 +18,7 @@ const logDirectory = stateRoot
   : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'logs')
 const startupTrace = traceFromEnvironment(logDirectory)
 appendStartupTrace(startupTrace, 'portable-host', 'module-begin')
+const healthPhase = startRuntimeHealth(logDirectory, startupTrace?.startupId || '')
 
 if (!dshBin) throw new Error('portable host requires the official DSH bin path')
 if (!controlPipe || !controlToken) throw new Error('portable host control channel is not configured')
@@ -46,6 +48,8 @@ const control = http.createServer((request, response) => {
   response.writeHead(202).end()
   if (shutdownAccepted) return
   shutdownAccepted = true
+  healthPhase('shutdown-accepted')
+  appendStartupTrace(startupTrace, 'portable-host', 'shutdown-accepted', { pid: process.pid })
   control.close()
   setImmediate(() => {
     if (!process.emit('SIGTERM')) process.exit(0)
@@ -54,7 +58,8 @@ const control = http.createServer((request, response) => {
 control.on('clientError', (_error, socket) => socket.destroy())
 control.on('close', cleanupControlSocket)
 process.on('beforeExit', releaseRuntimeLease)
-process.on('exit', () => {
+process.on('exit', code => {
+  appendStartupTrace(startupTrace, 'portable-host', 'process-exit', { pid: process.pid, exitCode: code })
   cleanupControlSocket()
   if (releaseRuntimeLease.filename) rmSync(releaseRuntimeLease.filename, { force: true })
 })
@@ -71,9 +76,13 @@ appendStartupTrace(startupTrace, 'portable-host', 'control-ready')
 
 process.argv = [process.execPath, path.resolve(dshBin), ...dshArgs]
 appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-begin')
+healthPhase('official-dsh-import')
 try {
   await import(pathToFileURL(path.resolve(dshBin)).href)
+  healthPhase('official-dsh-import-complete')
+  appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-complete', { pid: process.pid })
 } catch (error) {
+  healthPhase('official-dsh-import-failed')
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-failed', {
     type: error?.constructor?.name || 'Error',
     code: error?.code || 'none',

@@ -994,6 +994,15 @@ namespace DshPortable
         private bool webViewRecoveryRunning;
         private bool webViewUnresponsivePromptVisible;
         private int webViewUnresponsiveCount;
+        private System.Threading.Timer desktopHealthTimer;
+        private readonly object desktopHealthGate = new object();
+        private long desktopHealthAck;
+        private int desktopHealthPending;
+        private volatile bool desktopHealthStopped;
+        private long desktopHealthLastWrite;
+        private long desktopHealthLastSample;
+        private double desktopHealthCpu;
+        private bool desktopHealthWasDelayed;
 
         internal LauncherWindow(string[] args, string selectedEnvironmentId, string selectedStateRoot, int environmentRestoreMessage, int environmentExitMessage, int environmentActivationMessage)
         {
@@ -2650,10 +2659,14 @@ namespace DshPortable
             base.OnHandleCreated(eventArgs);
             TaskbarIdentity.Apply(Handle, "io.github.wsl043.dsh-portable");
             UpdateTaskbarBadge();
+            if (desktopStart && desktopHealthTimer == null) StartDesktopHealth();
         }
 
         protected override void OnFormClosed(FormClosedEventArgs eventArgs)
         {
+            WriteLauncherLog("shutdown", "form-closed");
+            desktopHealthStopped = true;
+            if (desktopHealthTimer != null) desktopHealthTimer.Dispose();
             SaveDesktopWindowState();
             UnregisterDesktopHostProcess();
             NativeTaskNotification.ActionRequested -= HandleNativeNotificationAction;
@@ -2678,6 +2691,7 @@ namespace DshPortable
             webView.Enabled = false;
             Text = L("DeepSeek-Herness · 正在关闭", "DeepSeek-Herness · Closing");
             Tuple<int, string> result;
+            Stopwatch stopClock = Stopwatch.StartNew();
             try
             {
                 result = await Task.Run(() => InvokePortableCli(new[] { "stop", "--no-browser", "--json" }));
@@ -2686,6 +2700,8 @@ namespace DshPortable
             {
                 result = Tuple.Create(1, error.GetBaseException().Message);
             }
+            WriteLauncherLog("shutdown", "stop-cli-complete exitCode=" + result.Item1.ToString(CultureInfo.InvariantCulture)
+                + " elapsedMs=" + stopClock.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture));
             if (result.Item1 != 0)
             {
                 shutdownRunning = false;
@@ -2961,6 +2977,75 @@ namespace DshPortable
             return depth;
         }
 
+        private void StartDesktopHealth()
+        {
+            desktopHealthAck = Stopwatch.GetTimestamp();
+            desktopHealthLastSample = desktopHealthAck;
+            try
+            {
+                using (Process current = Process.GetCurrentProcess()) desktopHealthCpu = current.TotalProcessorTime.TotalMilliseconds;
+                string filename = Path.Combine(ResolveLauncherLogDirectory(), "desktop-health.jsonl");
+                Directory.CreateDirectory(Path.GetDirectoryName(filename));
+                File.Delete(filename + ".previous");
+                if (File.Exists(filename)) File.Move(filename, filename + ".previous");
+            }
+            catch { }
+            desktopHealthTimer = new System.Threading.Timer(SampleDesktopHealth, null, 2000, 2000);
+            Disposed += delegate {
+                desktopHealthStopped = true;
+                if (desktopHealthTimer != null) desktopHealthTimer.Dispose();
+            };
+        }
+
+        private void SampleDesktopHealth(object ignored)
+        {
+            if (desktopHealthStopped || !Monitor.TryEnter(desktopHealthGate)) return;
+            try
+            {
+                long now = Stopwatch.GetTimestamp();
+                double age = (now - Interlocked.Read(ref desktopHealthAck)) * 1000.0 / Stopwatch.Frequency;
+                bool delayed = age >= 5000;
+                using (Process current = Process.GetCurrentProcess())
+                {
+                    double cpu = current.TotalProcessorTime.TotalMilliseconds;
+                    double interval = (now - desktopHealthLastSample) * 1000.0 / Stopwatch.Frequency;
+                    double cpuPercent = interval > 0 ? Math.Round((cpu - desktopHealthCpu) * 100.0 / interval) : 0;
+                    desktopHealthCpu = cpu;
+                    desktopHealthLastSample = now;
+                    if (delayed || delayed != desktopHealthWasDelayed || desktopHealthLastWrite == 0
+                        || (now - desktopHealthLastWrite) * 1000.0 / Stopwatch.Frequency >= 30000)
+                    {
+                        string filename = Path.Combine(ResolveLauncherLogDirectory(), "desktop-health.jsonl");
+                        if (File.Exists(filename) && new FileInfo(filename).Length >= 128 * 1024)
+                        {
+                            File.Delete(filename + ".previous");
+                            File.Move(filename, filename + ".previous");
+                        }
+                        var entry = new Dictionary<string, object> {
+                            { "timestamp", DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) },
+                            { "startupId", startupId }, { "pid", current.Id }, { "component", "native-host" },
+                            { "phase", shutdownRunning ? "shutdown" : desktopReady ? "running" : "starting" },
+                            { "observation", delayed ? "ui-heartbeat-delayed" : desktopHealthWasDelayed ? "ui-heartbeat-recovered" : "sample" },
+                            { "uiHeartbeatAgeMs", Math.Round(age) }, { "cpuPercent", cpuPercent },
+                            { "workingSetBytes", current.WorkingSet64 }, { "privateBytes", current.PrivateMemorySize64 },
+                            { "handleCount", current.HandleCount }
+                        };
+                        File.AppendAllText(filename, new JavaScriptSerializer().Serialize(entry) + Environment.NewLine, new UTF8Encoding(false));
+                        desktopHealthWasDelayed = delayed;
+                        desktopHealthLastWrite = now;
+                    }
+                }
+                // Keep at most one UI callback queued, even when the UI is stuck.
+                if (!desktopHealthStopped && Interlocked.CompareExchange(ref desktopHealthPending, 1, 0) == 0)
+                    BeginInvoke((MethodInvoker)delegate {
+                        Interlocked.Exchange(ref desktopHealthAck, Stopwatch.GetTimestamp());
+                        Interlocked.Exchange(ref desktopHealthPending, 0);
+                    });
+            }
+            catch { }
+            finally { Monitor.Exit(desktopHealthGate); }
+        }
+
         private void WriteLauncherLog(string category, string message)
         {
             try
@@ -2974,7 +3059,8 @@ namespace DshPortable
                     File.Move(filename, filename + ".previous");
                 }
                 File.AppendAllText(filename,
-                    DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + " [" + category + "] " + message + Environment.NewLine,
+                    DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + " [" + category + "] " + message
+                    + " startupId=" + startupId + Environment.NewLine,
                     new UTF8Encoding(false));
             }
             catch { }
@@ -3002,6 +3088,7 @@ namespace DshPortable
                 Dictionary<string, object> entry = new Dictionary<string, object>();
                 entry["timestamp"] = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture);
                 entry["startupId"] = startupId;
+                using (Process current = Process.GetCurrentProcess()) entry["pid"] = current.Id;
                 entry["elapsedMs"] = Math.Max(0, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - startupStartedAt);
                 string safeComponent = (component ?? String.Empty).Replace("\r", " ").Replace("\n", " ");
                 string safePhase = (phase ?? String.Empty).Replace("\r", " ").Replace("\n", " ");
@@ -3378,6 +3465,12 @@ namespace DshPortable
                     if (engineUpdateCheckEnabled) await CheckForDesktopUpdateAsync(false, "engine");
                     AppendStartupTrace("native-host", "startup-complete", null);
                     startupTraceActive = false;
+                    if (Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_UI_STALL") == "1")
+                    {
+                        WriteLauncherLog("health-test", "ui-stall-begin");
+                        Thread.Sleep(8000);
+                        WriteLauncherLog("health-test", "ui-stall-end");
+                    }
                     return;
                 }
 
