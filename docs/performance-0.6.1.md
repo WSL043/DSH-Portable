@@ -103,6 +103,10 @@ node scripts/smoke-windows-version-upgrade.mjs <published-0.6.0-zip> <artifacts>
 
 ## 仍需验收 / Remaining qualification
 
+2026-09-07 后续更新：按用户要求改为后台验收，以下 Win11 检查已通过，不再由桌面输入工具阻塞。隐藏原生宿主的两轮正常启动分别在 3212 / 3060 ms 记录 interactive-ready；两轮原生退出码均为 0，后台 PID 消失。现有 native-restart 冒烟通过真实宿主桥接接口发起重启，确认旧宿主退出、新页面连接、后台 boot ID 改变及重启接受/回复/调度日志。runtime-health 冒烟同时通过原生卡顿注入、恢复、后台 HTTP 响应、报告关联和完整退出检查。每轮原始及轮转日志、脱敏 JSON 报告均已归档。以上是当前成品的后台实机检查，不证明 #89 原始超时已根治，也不解除 macOS x64 的未决验收项。
+
+Follow-up: the Windows 11 background checklist passed without desktop input: two normal hidden native start/exit cycles, the actual host restart bridge with a changed backend boot ID, and injected native stall/recovery diagnostics with a responsive backend and correlated report. Per-run logs and reports are retained. The earlier desktop-tool failures below are historical evidence; the original issue #89 timeout and macOS x64 qualification remain unresolved.
+
 2026-09-07 Windows 11 实机补验（未完成）：使用 run `34093566326` 的 Windows x64 成品，代码提交 `2a68ab98453e1d7434c745a4f91f7882f04b060d`。首次原生启动在 8912 ms 记录 interactive-ready；实际观察到首次提示、主界面、Portable 设置加载及默认关闭到托盘。通过 `runtime-entry.mjs portable-cli.mjs` 启动的独立后端随后在 3270 ms 优雅停止，未强制终止，PID 和状态文件均已清除。此后端结果不替代原生窗口退出验收。
 
 界面工具间歇报 `GetCursorPos` access denied，重建工具会话后仍发生；原生完整退出和重启保持未验收。早先直接调用内部 `portable-cli.mjs`、遗漏运行时入口的补测无效，已排除并记录。原始日志、轮转日志、界面控件记录及 JSON 诊断报告保留在本地验收证据目录，不公开包含访问令牌的原始日志。当前结果不能作为重新发布依据。
