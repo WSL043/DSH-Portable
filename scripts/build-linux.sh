@@ -83,7 +83,7 @@ SHELL_FINGERPRINT="$("$NODE_EXE" "$PROJECT_ROOT/scripts/shell-fingerprint.mjs" l
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
 cp -R "$PROJECT_ROOT/app/vendor" "$STAGE/app/vendor"
-for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs update-preflight.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs repair-core.mjs diagnostic-policy.mjs data-transfer.mjs data-import-preflight.mjs operation-trace.mjs runtime-capsule.mjs startup-trace.mjs runtime-health.mjs; do
+for file in portable-core.mjs portable-cli.mjs portable-host.mjs update-core.mjs update-preflight.mjs dsh-cli.mjs http-readiness.mjs default-plugins.mjs repair-core.mjs diagnostic-policy.mjs data-transfer.mjs data-import-preflight.mjs operation-trace.mjs runtime-capsule.mjs startup-trace.mjs runtime-health.mjs log-history.mjs; do
   cp "$PROJECT_ROOT/launcher/$file" "$STAGE/launcher/$file"
 done
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"
@@ -141,6 +141,7 @@ fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-native-boot-handoff.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-portable-hero-context.mjs" "$STAGE/app"
+"$NODE_EXE" "$PROJECT_ROOT/scripts/patch-client-module-startup.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-windows-subprocess-hide.mjs" "$STAGE/app"
 rm -rf "$STAGE/desktop-bridge"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" linux "$ARCH"

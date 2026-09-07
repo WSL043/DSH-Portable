@@ -68,4 +68,11 @@ await delay(4000)
   assert.ok(events.every(event => Number.isInteger(event.pid) && event.pid > 0), 'process ID must be a positive integer')
   assert.ok(events.every(event => Number.isFinite(event.cpuPercent)), 'cpuPercent must be finite')
   assert.ok(events.every(event => Number.isFinite(event.rssBytes) && event.rssBytes > 0), 'rssBytes must be a positive finite number')
+  assert.ok(events.every(event => Number.isInteger(event.sampleIntervalMs) && event.sampleIntervalMs > 0), 'worker sampling delay must be recorded independently of the main heartbeat')
+  assert.ok(events.every(event => Number.isFinite(event.systemFreeMemoryBytes) && event.systemFreeMemoryBytes >= 0
+    && event.systemFreeMemoryBytes <= event.systemTotalMemoryBytes), 'system memory must be recorded during the actual sample')
+
+  const historyEvents = (await readFile(path.join(logDirectory, 'history', 'a'.repeat(32), 'runtime-health.jsonl'), 'utf8'))
+    .trim().split('\n').filter(Boolean).map(JSON.parse)
+  assert.deepEqual(historyEvents, events, 'runtime health history must mirror the current log')
 })

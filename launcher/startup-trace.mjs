@@ -1,6 +1,8 @@
 import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import path from 'node:path'
 
+import { appendHistoryLog } from './log-history.mjs'
+
 const STARTUP_ID = /^[0-9a-f]{32}$/i
 const BLOCKED_FIELD = /token|password|secret|authorization|cookie/i
 
@@ -32,7 +34,7 @@ export function appendStartupTrace(trace, component, phase, fields = {}) {
   if (!validContext(trace) || !component || !phase) return false
   try {
     mkdirSync(path.dirname(trace.filename), { recursive: true })
-    appendFileSync(trace.filename, `${JSON.stringify({
+    const line = JSON.stringify({
       ...safeFields(fields),
       timestamp: new Date().toISOString(),
       pid: process.pid,
@@ -40,7 +42,9 @@ export function appendStartupTrace(trace, component, phase, fields = {}) {
       elapsedMs: Math.max(0, Date.now() - Number(trace.startedAt)),
       component: String(component).slice(0, 80),
       phase: String(phase).slice(0, 160),
-    })}\n`, 'utf8')
+    })
+    appendFileSync(trace.filename, `${line}\n`, 'utf8')
+    appendHistoryLog(path.dirname(trace.filename), trace.startupId, 'startup.jsonl', line)
     return true
   } catch {
     return false

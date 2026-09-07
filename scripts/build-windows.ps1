@@ -75,7 +75,7 @@ function Copy-PortableSources([string]$Target) {
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
     Copy-Item -Recurse (Join-Path $ProjectRoot 'app\vendor') (Join-Path $Target 'app\vendor')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'data-import-preflight.mjs', 'operation-trace.mjs', 'runtime-capsule.mjs', 'runtime-entry.mjs', 'startup-trace.mjs', 'runtime-health.mjs')) {
+    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'data-import-preflight.mjs', 'operation-trace.mjs', 'runtime-capsule.mjs', 'runtime-entry.mjs', 'startup-trace.mjs', 'runtime-health.mjs', 'log-history.mjs')) {
         Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.zh-CN.txt') (Join-Path $Target 'DATA-MIGRATION.zh-CN.txt')
@@ -235,6 +235,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Native boot handoff adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Portable Hero context adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-client-module-startup.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Client module startup patch failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-windows-subprocess-hide.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)

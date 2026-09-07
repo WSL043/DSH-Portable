@@ -347,6 +347,15 @@ jobs:
           name: windows-native-migration-${{ matrix.label }}
           path: ${{ runner.temp }}/dsh-native-migration-evidence-${{ matrix.label }}
           if-no-files-found: warn
+      - name: Verify startup loading, saved themes, and multi-run history
+        shell: powershell
+        run: |
+          $ThemeRoot = Join-Path $env:RUNNER_TEMP 'dsh-startup-theme'
+          New-Item -ItemType Directory -Force -Path $ThemeRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $ThemeRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Theme fixture extraction failed.' }
+          node scripts/smoke-windows-startup-theme.mjs (Join-Path $ThemeRoot 'DSH-Portable') --disposable
+          if ($LASTEXITCODE -ne 0) { throw 'Startup theme and history acceptance failed.' }
       - name: Upload native lifecycle support reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -355,6 +364,9 @@ jobs:
           path: |
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
+            ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/acceptance/
+            ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/data/logs/history/
           if-no-files-found: warn
       - name: Upload startup transition evidence
         if: always()

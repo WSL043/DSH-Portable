@@ -416,10 +416,15 @@ async function repairManagedProfileModuleFallbackWithLinks(layout, links) {
   }
 
   const entries = [...links]
+  // Many packages share a scope directory. Create each parent once instead
+  // of issuing the same recursive mkdir for every package on every launch.
+  const parents = [...new Set(entries.map(([packageName]) => paths.dirname(paths.join(fallbackRoot, packageName))))]
+  for (let index = 0; index < parents.length; index += 32) {
+    await Promise.all(parents.slice(index, index + 32).map(parent => mkdir(parent, { recursive: true })))
+  }
   for (let index = 0; index < entries.length; index += 32) {
     const results = await Promise.all(entries.slice(index, index + 32).map(async ([packageName, target]) => {
       const fallback = paths.join(fallbackRoot, packageName)
-      await mkdir(paths.dirname(fallback), { recursive: true })
       let current = null
       try {
         current = await lstat(fallback)

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
+import { pruneLogHistory } from './log-history.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { environmentStateRoot, parseCli } from './portable-core.mjs'
 
@@ -32,6 +33,9 @@ if (!startupTrace && isStart) {
   startupTrace = beginStartupTrace(logDirectory, { startupId, startedAt, phase: 'runtime-entry-begin' })
 } else {
   appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-entry-begin')
+}
+if (isStart) {
+  pruneLogHistory(logDirectory, { currentStartupId: startupTrace?.startupId || process.env.DSH_PORTABLE_STARTUP_ID })
 }
 reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()

@@ -36,6 +36,18 @@ test('one startup trace is complete, correlated, and rotates as one bounded unit
   assert.match(previous, new RegExp('"startupId":"' + 'a'.repeat(32) + '"'))
   assert.match(latest, new RegExp('"startupId":"' + 'b'.repeat(32) + '"'))
   assert.doesNotMatch(latest, new RegExp('"startupId":"' + 'a'.repeat(32) + '"'))
+
+  const third = beginStartupTrace(root, {
+    startupId: 'c'.repeat(32),
+    startedAt: Date.now(),
+    component: 'runtime-entry',
+    phase: 'process-start',
+  })
+  assert.ok(third)
+  const firstHistory = (await readFile(path.join(root, 'history', 'a'.repeat(32), 'startup.jsonl'), 'utf8'))
+    .trim().split('\n').map(JSON.parse)
+  assert.ok(firstHistory.some(event => event.phase === 'process-start'))
+  assert.ok(firstHistory.every(event => event.startupId === 'a'.repeat(32)))
 })
 
 test('invalid trace context never prevents startup diagnostics callers from continuing', () => {

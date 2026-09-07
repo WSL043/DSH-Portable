@@ -10,6 +10,7 @@ import {
   repairPortable,
   summarizeWindowsTasklist,
 } from '../launcher/repair-core.mjs'
+import { appendHistoryLog } from '../launcher/log-history.mjs'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 
 async function fixture(t) {
@@ -198,6 +199,43 @@ test('support report bounds all fourteen log tails while retaining health marker
   }
   assert.doesNotMatch(source, /token=secret|secret/)
   assert.equal(Object.values(report.logs).some(value => value.includes('[earlier log omitted]\n')), true)
+})
+
+test('support report exports bounded, redacted startup history with explicit truncation metadata', async (t) => {
+  const layout = await fixture(t)
+  const ids = Array.from({ length: 31 }, (_, index) => index.toString(16).padStart(32, '0'))
+  const largeLine = `${'h'.repeat(15 * 1024)} token=history-secret`
+  for (const startupId of ids) {
+    assert.equal(appendHistoryLog(layout.logsDir, startupId, 'startup.jsonl', `startup-phase ${startupId} ${largeLine}`), true)
+    assert.equal(appendHistoryLog(layout.logsDir, startupId, 'startup.jsonl', `startup-tail ${startupId} ${largeLine}`), true)
+    assert.equal(appendHistoryLog(layout.logsDir, startupId, 'runtime-health.jsonl', `health-tail ${startupId} ${largeLine}`), true)
+    assert.equal(appendHistoryLog(layout.logsDir, startupId, 'desktop-health.jsonl', `desktop-tail ${startupId} ${largeLine}`), true)
+  }
+  const output = path.join(layout.root, 'support-history.json')
+  const result = await exportPortableSupportReport(layout, output)
+  const source = await readFile(output, 'utf8')
+  const report = JSON.parse(source)
+  const history = report.startupHistory
+  assert.ok(Array.isArray(history.runs))
+  assert.ok(history.runs.length <= 30)
+  assert.equal(history.truncated, true)
+  assert.ok(history.truncation.omittedRuns + history.truncation.omittedLogs > 0)
+  assert.ok(history.truncation.fileTails > 0)
+  assert.ok(Buffer.byteLength(JSON.stringify(history), 'utf8') <= 100 * 1024)
+  assert.ok(result.bytes < 512 * 1024)
+  assert.equal(history.runs.length, 30)
+  assert.notEqual(history.runs[0].logs['startup.jsonl'], '')
+  assert.notEqual(history.runs.at(-1).logs['startup.jsonl'], '')
+  assert.ok(history.runs.every(run => Array.isArray(run.truncatedLogs)))
+  assert.ok(history.runs.every(run => Object.hasOwn(run.logs, 'startup.jsonl.previous')
+    && Object.hasOwn(run.logs, 'runtime-health.jsonl')
+    && Object.hasOwn(run.logs, 'runtime-health.jsonl.previous')
+    && Object.hasOwn(run.logs, 'desktop-health.jsonl')
+    && Object.hasOwn(run.logs, 'desktop-health.jsonl.previous')))
+  assert.ok(history.runs.every((run, index) => index === 0 || run.lastActivityAt >= history.runs[index - 1].lastActivityAt))
+  assert.equal(history.runs[0].startupId, ids[1])
+  assert.equal(history.runs.at(-1).startupId, ids.at(-1))
+  assert.doesNotMatch(source, /history-secret/)
 })
 
 test('Windows support diagnostics summarize terminal-storm process counts without command lines', () => {
