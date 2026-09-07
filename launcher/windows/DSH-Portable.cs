@@ -3158,9 +3158,10 @@ namespace DshPortable
             {
                 string history = Path.Combine(ResolveLauncherLogDirectory(), "history");
                 string directory = Path.Combine(history, startupId);
+                Directory.CreateDirectory(history);
+                if ((File.GetAttributes(history) & FileAttributes.ReparsePoint) != 0) return;
                 Directory.CreateDirectory(directory);
-                if ((File.GetAttributes(history) & FileAttributes.ReparsePoint) != 0
-                    || (File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return;
+                if ((File.GetAttributes(directory) & FileAttributes.ReparsePoint) != 0) return;
                 string filename = Path.Combine(directory, name);
                 if (File.Exists(filename) && (File.GetAttributes(filename) & FileAttributes.ReparsePoint) != 0) return;
                 if (File.Exists(filename) && new FileInfo(filename).Length + Encoding.UTF8.GetByteCount(line) + 2 > 128 * 1024)
@@ -4106,15 +4107,29 @@ namespace DshPortable
             TaskCompletionSource<bool> workspaceUsable = new TaskCompletionSource<bool>();
             workspaceSurfaceReady = new TaskCompletionSource<string>();
             webViewProcessFailure = new TaskCompletionSource<string>();
+            ulong? workspaceNavigationId = null;
+            EventHandler<CoreWebView2NavigationStartingEventArgs> starting = delegate(object sender, CoreWebView2NavigationStartingEventArgs eventArgs)
+            {
+                Uri target;
+                if (Uri.TryCreate(eventArgs.Uri, UriKind.Absolute, out target) && target.IsLoopback
+                    && applicationUri != null && target.Port == applicationUri.Port)
+                    workspaceNavigationId = eventArgs.NavigationId;
+            };
             EventHandler<CoreWebView2NavigationCompletedEventArgs> completed = null;
             EventHandler<CoreWebView2DOMContentLoadedEventArgs> domLoaded = null;
             completed = delegate(object sender, CoreWebView2NavigationCompletedEventArgs eventArgs)
             {
+                if (workspaceNavigationId != eventArgs.NavigationId)
+                {
+                    RecordWebViewPhase("prior-navigation-completed:" + eventArgs.NavigationId);
+                    return;
+                }
                 RecordWebViewPhase("navigation-completed:" + eventArgs.IsSuccess + "/" + eventArgs.WebErrorStatus);
                 navigation.TrySetResult(eventArgs);
             };
             domLoaded = async delegate(object sender, CoreWebView2DOMContentLoadedEventArgs eventArgs)
             {
+                if (workspaceNavigationId != eventArgs.NavigationId) return;
                 RecordWebViewPhase("dom-content-loaded:" + eventArgs.NavigationId);
                 bool usable = await ProbeWorkspaceDomAsync(url);
                 RecordWebViewPhase("dom-probe:" + usable);
@@ -4126,6 +4141,7 @@ namespace DshPortable
                     workspaceUsable.TrySetResult(true);
                 }
             };
+            webView.CoreWebView2.NavigationStarting += starting;
             webView.CoreWebView2.NavigationCompleted += completed;
             webView.CoreWebView2.DOMContentLoaded += domLoaded;
             webView.Visible = true;
@@ -4153,6 +4169,7 @@ namespace DshPortable
                 CoreWebView2NavigationCompletedEventArgs navigationResult = await navigation.Task;
                 if (!navigationResult.IsSuccess)
                 {
+                    webView.CoreWebView2.NavigationStarting -= starting;
                     webView.CoreWebView2.NavigationCompleted -= completed;
                     webView.CoreWebView2.DOMContentLoaded -= domLoaded;
                     string webViewSnapshot = WebViewEnvironmentSnapshot();
@@ -4164,6 +4181,7 @@ namespace DshPortable
                 }
                 winner = await Task.WhenAny(workspaceUsable.Task, webViewProcessFailure.Task, timeout);
             }
+            webView.CoreWebView2.NavigationStarting -= starting;
             webView.CoreWebView2.NavigationCompleted -= completed;
             webView.CoreWebView2.DOMContentLoaded -= domLoaded;
             if (winner == webViewProcessFailure.Task)

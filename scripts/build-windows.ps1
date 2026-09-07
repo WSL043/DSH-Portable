@@ -235,6 +235,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Native boot handoff adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Portable Hero context adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-client-module-startup.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Client module startup patch failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-windows-subprocess-hide.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)

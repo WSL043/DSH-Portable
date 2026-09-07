@@ -364,6 +364,7 @@ jobs:
           path: |
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
             ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/acceptance/
             ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/data/logs/history/
           if-no-files-found: warn

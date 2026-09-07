@@ -17,3 +17,9 @@ Startup and health records share a startup ID and are retained in `data/logs/his
 The first run in the final four-mode check reproduced an 18,791 ms official import, independently of the five-second UI test hold. CPU usage during import was 1,922 ms user and 2,875 ms system; the separate health worker recorded main-thread heartbeat delay rising to 15,701 ms. Startup ID: `a29df81d4cba4823a865b4bcbc299c82`.
 
 Earlier isolated CPU profiles took 2.5–2.8 seconds and did not reproduce the original long delay. They showed module loading and synchronous filesystem work. A compile-cache comparison showed no measurable improvement and was not shipped. These observations do not yet establish the cause of the intermittent long import. Loading feedback and retention fixes must not be described as a proven backend speedup or a resolution of that remaining delay.
+
+## Follow-up fixes and measurements
+
+- The stalled-resource CI test exposed a navigation ownership bug: cancellation of the old loading document could fail the new workspace navigation. Completion and DOM events now require the active workspace navigation ID. The unchanged Windows 11 fault-injection test passed in 5.329 seconds after correction.
+- Startup profiles identified `dsh-client-modules` newline counting as a CPU hotspot. A narrowly checked build patch replaces Unicode character iteration with native `indexOf` scanning; LF counts and source-map offsets remain identical, including Unicode and CRLF cases. Self time in the same profiling fixture changed from 268.570 to 21.573 ms. Overall profiled import remained 2.6–2.7 seconds because filesystem timings varied; this is a measured reduction in one operation, not a claim that the intermittent long import is fixed.
+- Sequential capsule writes saved only about 4% in a four-run experiment and were not adopted. The existing concurrent extraction behavior remains.
