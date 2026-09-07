@@ -300,7 +300,7 @@ jobs:
           ./scripts/smoke-windows-native-tray.ps1 -Root (Join-Path $Root 'DSH-Portable')
           node scripts/smoke-capsule-maintenance.mjs (Join-Path $Root 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw 'Capsule maintenance smoke failed.' }
-          $AliasRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-path-alias-' + [guid]::NewGuid().ToString('N'))
+          $AliasRoot = Join-Path $env:RUNNER_TEMP ('dsh-path-alias-' + [guid]::NewGuid().ToString('N'))
           New-Item -ItemType Directory -Force -Path $AliasRoot | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $AliasRoot
           if ($LASTEXITCODE -ne 0) { throw 'Path-alias fixture extraction failed.' }
