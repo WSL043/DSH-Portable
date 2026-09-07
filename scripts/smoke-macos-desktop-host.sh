@@ -38,10 +38,31 @@ SWIFT
 xcrun swiftc "$WINDOW_PROBE_SOURCE" -framework CoreGraphics -o "$WINDOW_PROBE"
 
 cleanup() {
+  local result=$?
+  trap - EXIT
+  set +e
+  local diagnostics="$ROOT/data/logs/native-smoke-diagnostics"
+  mkdir -p "$diagnostics"
+  printf '{"exitCode":%s}\n' "$result" > "$diagnostics/result.json"
+  if [[ "$result" -ne 0 ]]; then
+    ps -axo pid,ppid,state,pcpu,rss,comm > "$diagnostics/processes.txt" || true
+    /usr/sbin/screencapture -x "$diagnostics/desktop.png" 2>/dev/null || true
+    if [[ -n "${HOST_PID:-}" ]]; then
+      /usr/bin/sample "$HOST_PID" 3 -file "$diagnostics/native-sample.txt" >/dev/null 2>&1 || true
+    fi
+  fi
+  "$NODE" --input-type=module - "$ROOT" "$diagnostics/support-report.json" <<'NODE' || true
+import { pathToFileURL } from 'node:url'
+const root = process.argv[2]
+const { layoutForRoot } = await import(pathToFileURL(`${root}/launcher/portable-core.mjs`))
+const { exportPortableSupportReport } = await import(pathToFileURL(`${root}/launcher/repair-core.mjs`))
+await exportPortableSupportReport(layoutForRoot(root), process.argv[3])
+NODE
   "$NODE" "$CLI" stop --no-browser --json >/dev/null 2>&1 || true
   [[ -n "${HOST_PID:-}" ]] && kill -TERM "$HOST_PID" 2>/dev/null || true
   [[ -n "${LAUNCH_PID:-}" ]] && kill -TERM "$LAUNCH_PID" 2>/dev/null || true
   rm -f "$WINDOW_PROBE_SOURCE" "$WINDOW_PROBE"
+  exit "$result"
 }
 trap cleanup EXIT
 

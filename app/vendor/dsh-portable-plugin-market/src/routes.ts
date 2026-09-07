@@ -25,6 +25,7 @@ import {
 } from './dsh-cli.ts'
 import { addProfileBundle, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
+import { preflightNpmUpdate } from './update-preflight.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
@@ -646,6 +647,36 @@ export function mountMarketRoutes(
   }
 
   const disposers = [
+    host.webServer.register({
+      kind: 'exact',
+      path: '/dsh-market/client-error',
+      handler: async (request, response) => {
+        if (request.method !== 'POST') {
+          response.writeHead(405, { allow: 'POST' })
+          response.end()
+          return
+        }
+        if (!sameOrigin(request)) {
+          sendJson(response, 403, { error: 'untrusted origin' })
+          return
+        }
+        try {
+          const body = await readJsonBody(request) as { view?: unknown; message?: unknown } | null
+          const view = body?.view
+          const message = body?.message
+          if ((view !== 'discover' && view !== 'installed')
+            || typeof message !== 'string' || message.length < 1 || message.length > 600) {
+            sendJson(response, 400, { error: 'invalid client error payload' })
+            return
+          }
+          logEvent('error', 'client-render', `${view}: ${message}`)
+          sendJson(response, 200, { ok: true })
+        } catch {
+          sendJson(response, 400, { error: 'invalid client error payload' })
+        }
+      },
+    }),
+
     host.webServer.register({
       kind: 'exact',
       path: '/dsh-market/backup',
@@ -1411,6 +1442,19 @@ export function mountMarketRoutes(
             // Use the exact version resolved above for npm updates. This keeps
             // the package-manager boundary from resolving a moving dist-tag a
             // second time between the guard and the actual replacement.
+            if (!isGit && expectedNpmVersion !== null) {
+              const preflight = await preflightNpmUpdate(name, expectedNpmVersion)
+              if (preflight.status === 'incompatible') {
+                const detail = preflight.mismatches.map(item => `${item.name} ${item.resolved} requires ${item.range}`).join('; ')
+                logEvent('warn', 'update-host-incompatible', `${name}@${expectedNpmVersion}: ${detail}`)
+                sendJson(response, 409, {
+                  error: `目标插件声明不兼容当前 DSH，未更改插件。请保留当前版本或先更新 DSH。 / The target plugin declares an incompatible host requirement; nothing was changed. Keep the current version or update DSH first. ${detail}`,
+                  code: 'host-incompatible', targetVersion: expectedNpmVersion, requirements: preflight.mismatches,
+                })
+                return
+              }
+              if (preflight.status === 'unknown') logEvent('warn', 'update-host-check-unavailable', `${name}@${expectedNpmVersion}: continuing with post-install checks`)
+            }
             const target = isGit
               ? githubUpdateTarget(spec)
               : expectedNpmVersion !== null ? `${name}@${expectedNpmVersion}` : `${name}@${tag}`

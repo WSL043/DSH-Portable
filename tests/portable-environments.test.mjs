@@ -89,6 +89,9 @@ test('shared product mutation sees every live environment and uses one exclusive
     },
   })
   assert.deepEqual(running.map((item) => item.environmentId), ['default', 'research'])
+  await assert.rejects(findRunningPortableEnvironments(current, {
+    processQuery() { throw new Error('process inspection unavailable') },
+  }), /process inspection unavailable/)
 
   const release = await acquireProductMutationLock(current, {
     processQuery: () => null,

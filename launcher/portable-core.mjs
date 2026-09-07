@@ -813,26 +813,40 @@ export function isOwnedLauncherProcess(processInfo, layout) {
     && commandIncludesComparablePath(commandLine, layout.portableCli, platform)
 }
 
-export function queryWindowsProcess(pid) {
-  if (!Number.isSafeInteger(Number(pid)) || Number(pid) <= 0) return null
+export function queryWindowsProcess(pid, adapters = {}) {
+  let processId
+  try {
+    processId = Number(pid)
+  } catch {
+    return null
+  }
+  if (!Number.isSafeInteger(processId) || processId <= 0) return null
   const script = [
+    "$ErrorActionPreference = 'Stop'",
     '$utf8 = New-Object System.Text.UTF8Encoding($false)',
     '[Console]::OutputEncoding = $utf8',
     '$OutputEncoding = $utf8',
-    `$p = Get-CimInstance Win32_Process -Filter \"ProcessId = ${Number(pid)}\" -ErrorAction SilentlyContinue`,
+    `$p = Get-CimInstance Win32_Process -Filter \"ProcessId = ${processId}\" -ErrorAction Stop`,
     'if ($null -ne $p) {',
     '  [pscustomobject]@{ executablePath=$p.ExecutablePath; commandLine=$p.CommandLine } | ConvertTo-Json -Compress',
     '}',
   ].join('; ')
   try {
+    const execute = adapters.execute ?? execFileSync
     const powershell = path.win32.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-    const output = execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+    const output = String(execute(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
       encoding: 'utf8',
       windowsHide: true,
-    }).trim()
-    return output ? JSON.parse(output) : null
-  } catch {
-    return null
+      timeout: 10000,
+    }) ?? '').trim()
+    if (!output) return null
+    const parsed = JSON.parse(output)
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || typeof parsed.commandLine !== 'string' || !parsed.commandLine.trim()) {
+      throw new Error('Windows process query returned invalid process data.')
+    }
+    return parsed
+  } catch (error) {
+    throw new Error(`Could not inspect process ${processId} on Windows.`, { cause: error })
   }
 }
 
@@ -1133,8 +1147,7 @@ export async function findRunningPortableEnvironments(layout, adapters = {}) {
     } catch { state = null }
     let backend = null
     if (state?.pid && state?.port) {
-      let processInfo = null
-      try { processInfo = processQuery(Number(state.pid), candidate, 'backend') } catch { /* an unreadable process is not accepted as owned */ }
+      const processInfo = processQuery(Number(state.pid), candidate, 'backend')
       if (isOwnedDshProcess(processInfo, candidate, Number(state.port))) {
         backend = { pid: Number(state.pid), port: Number(state.port) }
       }
@@ -1145,8 +1158,7 @@ export async function findRunningPortableEnvironments(layout, adapters = {}) {
       const desktopState = path.join(candidate.stateDir, 'desktop-host.pid')
       try { desktopPid = Number.parseInt((await readFile(desktopState, 'utf8')).trim(), 10) || 0 } catch { /* no native host */ }
       if (desktopPid > 0) {
-        let desktopInfo = null
-        try { desktopInfo = processQuery(desktopPid, candidate, 'desktop') } catch { /* an unreadable process is not accepted as owned */ }
+        const desktopInfo = processQuery(desktopPid, candidate, 'desktop')
         if (!desktopInfo?.executablePath || !sameComparablePath(desktopInfo.executablePath, candidate.desktopExe, candidate.platform)) desktopPid = 0
       }
     }

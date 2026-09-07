@@ -95,10 +95,18 @@ When `dsh-market` publishes a newer release, review its user-visible fixes
 against this matrix. Port the smallest applicable behavior with a failing test
 first; do not merge an upstream working tree or silently expand the product.
 
-## Next intake: v1.44.0
+## Intake in progress: v1.44.0
 
-The next observed release is a separate review batch. Its error boundary (#514),
-release-declared DSH minimum-version guard (#522), and git-prepare/tarball URL
-diagnostics (#455) need their own Portable tests and compatibility review.
-They are not included in the v1.43.0 reviewed baseline and do not trigger a
-Portable release or widen the scope of an already prepared maintenance batch.
+Issue [#88](https://github.com/WSL043/DSH-Portable/issues/88) remains the review
+inbox. This batch is not yet a completed new baseline and does not trigger a
+Portable release.
+
+| Upstream change | Portable decision and evidence |
+| --- | --- |
+| Git prepare and tarball URL mismatch diagnostics ([#455](https://github.com/dsh-market/dsh-market/pull/455)) | Adopted in source with failing-before/passing-after classifier tests, including escaped NDJSON and an inner mismatch wrapped by a prepare failure. Keep raw output; do not infer a registry cause from the prepare wrapper or recommend rewriting an unverified lockfile. |
+| Market render error boundary ([#514](https://github.com/dsh-market/dsh-market/pull/514)) | Adopted for both Discover and Installed roots. A manual retry stays within the affected tab. Bounded, sanitized error events reach the existing host stdout and Portable JSON support report; no upstream-only export endpoint is exposed. |
+| Pre-update DSH compatibility check ([#522](https://github.com/dsh-market/dsh-market/pull/522)) | Adopted for exact npm update targets: compare engines.dsh and required DSH component peers with the running capsule's actual versions before package mutation. Confirmed incompatibility returns the target and requirements without changing the profile. Unreadable metadata/versions remain unknown and retain post-install checks. Git targets retain post-install verification; the global/Homebrew locator and force-update UI are not copied into Portable. |
+
+The two pending behaviors require their own implementation and verification.
+This table records their concrete integration gaps, not a completed intake or
+an assertion that the corresponding user-facing failures have been fixed.

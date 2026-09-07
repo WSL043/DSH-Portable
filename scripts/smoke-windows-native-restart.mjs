@@ -143,6 +143,16 @@ try {
     value => typeof value === 'string' && value.length > 0,
     'native restart bridge',
   )
+  const errorCapture = await evaluate(firstClient, `fetch('/dsh-market/client-error', {
+    method: 'POST', headers: {'content-type':'application/json'},
+    body: JSON.stringify({view:'discover', message:'portable-render-smoke apiKey=fixture-secret-value'})
+  }).then(r => r.status)`)
+  assert.equal(errorCapture, 200, 'packaged market must accept authenticated render diagnostics')
+  const supportPath = path.join(root, 'data', 'native-restart-support.json')
+  await execFileAsync(portableNode, [runtimeEntry, 'portable-cli.mjs', 'support-report', '--output', supportPath, '--json'], { windowsHide: true, timeout: 60000 })
+  const support = JSON.parse(await readFile(supportPath, 'utf8'))
+  assert.match(support.logs['dsh.stdout.log'], /portable-render-smoke/)
+  assert.doesNotMatch(JSON.stringify(support), /fixture-secret-value/)
   assert.equal(await evaluate(firstClient, `(() => { window.__DSH_RESTART_SMOKE__ = 'requested'; window.__DSH_PORTABLE_HOST__.restart().catch(() => {}); return true })()`), true)
 
   await new Promise((resolve, reject) => {
@@ -167,7 +177,7 @@ try {
   assert.match(log, /\[restart-host\] request-accepted/)
   assert.match(log, /\[restart-host\] reply-posted[^\n]+ok=true/)
   assert.match(log, /\[restart-host\] relaunch-scheduled/)
-  console.log(JSON.stringify({ status: 'passed', firstBoot, secondBoot }))
+  console.log(JSON.stringify({ status: 'passed', firstBoot, secondBoot, renderDiagnosticExported: true }))
 } finally {
   firstClient?.close()
   secondClient?.close()

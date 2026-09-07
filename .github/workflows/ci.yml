@@ -345,6 +345,15 @@ jobs:
           name: windows-native-migration-${{ matrix.label }}
           path: ${{ runner.temp }}/dsh-native-migration-evidence-${{ matrix.label }}
           if-no-files-found: warn
+      - name: Upload native lifecycle support reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-native-support-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
+            ${{ runner.temp }}/dsh-path-alias-*/DSH-Portable/data/health-evidence.json
+          if-no-files-found: warn
       - name: Upload startup transition evidence
         if: always()
         uses: actions/upload-artifact@v7
@@ -550,6 +559,13 @@ jobs:
           mkdir -p "$ROOT"
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
           bash scripts/smoke-macos-desktop-host.sh "$ROOT/DSH-Portable"
+      - name: Upload macOS native diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-native-diagnostics-${{ matrix.arch }}
+          path: ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/native-smoke-diagnostics
+          if-no-files-found: ignore
 
   macos-plugin-smoke:
     name: macOS plugin portability (${{ matrix.arch }})

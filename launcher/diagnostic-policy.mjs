@@ -73,7 +73,13 @@ export async function recordPortableDiagnostic(logsDir, { operation = 'unknown',
     try { existing = await readFile(filename) } catch (readError) {
       if (readError?.code !== 'ENOENT') throw readError
     }
-    const detail = redactDiagnosticText(error?.stack ?? error?.message ?? error ?? '').slice(0, MAX_ERROR_DETAIL_CHARS)
+    const details = []
+    let current = error
+    for (let depth = 0; depth < 3 && current != null; depth += 1) {
+      details.push(redactDiagnosticText(current?.stack ?? current?.message ?? current).slice(0, MAX_ERROR_DETAIL_CHARS / 3))
+      current = current?.cause
+    }
+    const detail = details.join('\nCaused by: ').slice(0, MAX_ERROR_DETAIL_CHARS)
     const entry = Buffer.from(`${JSON.stringify({
       timestamp: new Date().toISOString(),
       operation,

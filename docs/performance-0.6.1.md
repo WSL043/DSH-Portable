@@ -1,5 +1,30 @@
 # 0.6.1 性能修复验收 / Performance repair evidence
 
+## 发布撤回 / Release withdrawn
+
+2026-09-07，0.6.1 已撤回为草稿，公开最新正式版恢复为 0.6.0。此前 main `211b45f` 的 34 项流水线和本机冒烟通过，仍不足以证明 #89 的启动超时、运行后卡顿及无法关闭已解决。发布判断有误；本文件中的测试结果保留为各项改动的证据，不作为该 issue 已修复或可重新发布的结论。
+
+Release 0.6.1 was withdrawn to draft on 2026-09-07; the public latest stable release is 0.6.0. Passing the 34-job main run at `211b45f` and local smoke checks did not establish a fix for issue #89. The release decision was premature. The results below remain evidence for individual changes, not proof that the reported symptoms are resolved or that republication is approved.
+
+附件中的后续成功记录是新的启动（`portRetry=0`），没有 `port-conflict-retry` 记录。当前代码仅对明确的端口占用错误换端口重试，因此不能把这些记录描述为超时后自动恢复。后续验收需分别对齐启动超时、长时间运行卡顿和关闭操作的实机日志与行为，保留未复现状态，不用故障注入代替原症状的复现。
+
+The successful starts following the timeouts are separate launches (`portRetry=0`), with no `port-conflict-retry` entry. They do not establish automatic timeout recovery. Further qualification must correlate real startup, sustained operation and close behavior with their logs; fault injection does not replace reproduction of the reported symptoms.
+
+撤回后新增的清理修复：启动失败路径曾忽略强制终止错误并删除进程记录，可能在后台仍存活时换端口重试。现统一使用核验所有权的停止流程；失败保留记录与原始错误，只有清理成功后才允许端口冲突重试，并记录清理开始、失败和完成。相同回归 fixture 在 `211b45f` 上确认“终止失败仍重试”，在修复后通过。本轮 Windows 11 `10.0.26200` 全量测试为 467/467；反馈系统是 Windows 10 `10.0.19045`，尚未完成原环境复测。
+
+The follow-up fixes a failed-start path that swallowed forced-termination errors and deleted process state, allowing a port-conflict retry while a backend might remain alive. Cleanup now uses the ownership-checked stop path, retains state and both errors on failure, and only retries a port conflict after cleanup succeeds. The same fixture reproduces retry-after-failed-termination at `211b45f` and passes after the fix. The follow-up suite passes 467/467 on Windows 11 `10.0.26200`; the reported Windows 10 `10.0.19045` environment remains unverified.
+
+### 撤回后成品 CI / Follow-up product CI
+
+[Run 34093566326](https://github.com/WSL043/DSH-Portable/actions/runs/34093566326) built product source `2a68ab98453e1d7434c745a4f91f7882f04b060d`, including the regenerated market server bundle. Both Windows native jobs passed startup, move, close, path-alias reuse and correlated UI-stall diagnostics. This run failed overall: macOS x64's native window did not become ready, and its qualification job consequently failed. The failure remains under investigation; there is no new release.
+
+| CI runner | First / moved startup (s) | Explicit stop (s) | Close to exit (s) |
+| --- | --- | --- | --- |
+| windows-2025 | 6.617 / 6.602 | 5.127 / 5.099 | 0.584 / 0.582 |
+| windows-2022 | 6.537 / 6.423 | 4.551 / 4.478 | 0.500 / 0.490 |
+
+These are measurements of the CI's extracted product, not a comparison with the reporter's Windows 10 machine. Both jobs captured injected UI delay and recovery, correlated their support reports and exited cleanly; their unauthenticated backend probe returned 401. The macOS follow-up captures a screenshot, native thread sample and redacted support report before cleanup, preserving the original failure status.
+
 ## 范围与结论 / Scope and conclusion
 
 2026-09-07，基于 main `30be1e6286b6bea91cfd9b374c10e2c66b934bc4` 处理 [issue #89](https://github.com/WSL043/DSH-Portable/issues/89)。本批修复 Portable 桌面桥、托盘资源、启动等待、路径别名迁移和 capsule 维护入口，并增加实机可验证的健康日志。下面记录本机结果及基础修复的跨平台结果；最终发布必须由成功的 main 成品流水线提供准确提交和下载校验值，不能把测试通过解释为反馈者环境中的全部卡顿或超时已解决。
@@ -77,6 +102,16 @@ node scripts/smoke-windows-version-upgrade.mjs <published-0.6.0-zip> <artifacts>
 ```
 
 ## 仍需验收 / Remaining qualification
+
+2026-09-07 后续更新：按用户要求改为后台验收，以下 Win11 检查已通过，不再由桌面输入工具阻塞。隐藏原生宿主的两轮正常启动分别在 3212 / 3060 ms 记录 interactive-ready；两轮原生退出码均为 0，后台 PID 消失。现有 native-restart 冒烟通过真实宿主桥接接口发起重启，确认旧宿主退出、新页面连接、后台 boot ID 改变及重启接受/回复/调度日志。runtime-health 冒烟同时通过原生卡顿注入、恢复、后台 HTTP 响应、报告关联和完整退出检查。每轮原始及轮转日志、脱敏 JSON 报告均已归档。以上是当前成品的后台实机检查，不证明 #89 原始超时已根治，也不解除 macOS x64 的未决验收项。
+
+Follow-up: the Windows 11 background checklist passed without desktop input: two normal hidden native start/exit cycles, the actual host restart bridge with a changed backend boot ID, and injected native stall/recovery diagnostics with a responsive backend and correlated report. Per-run logs and reports are retained. The earlier desktop-tool failures below are historical evidence; the original issue #89 timeout and macOS x64 qualification remain unresolved.
+
+2026-09-07 Windows 11 实机补验（未完成）：使用 run `34093566326` 的 Windows x64 成品，代码提交 `2a68ab98453e1d7434c745a4f91f7882f04b060d`。首次原生启动在 8912 ms 记录 interactive-ready；实际观察到首次提示、主界面、Portable 设置加载及默认关闭到托盘。通过 `runtime-entry.mjs portable-cli.mjs` 启动的独立后端随后在 3270 ms 优雅停止，未强制终止，PID 和状态文件均已清除。此后端结果不替代原生窗口退出验收。
+
+界面工具间歇报 `GetCursorPos` access denied，重建工具会话后仍发生；原生完整退出和重启保持未验收。早先直接调用内部 `portable-cli.mjs`、遗漏运行时入口的补测无效，已排除并记录。原始日志、轮转日志、界面控件记录及 JSON 诊断报告保留在本地验收证据目录，不公开包含访问令牌的原始日志。当前结果不能作为重新发布依据。
+
+Windows 11 follow-up remains incomplete. The exact CI product rendered its first-run notice, workspace and Portable settings, and closed to the tray. Its independent CLI backend stopped gracefully in 3270 ms through the required runtime entry. Intermittent desktop input-tool access errors prevented complete native exit/restart acceptance. An invalid direct internal-CLI invocation is excluded; raw and rotated logs and a redacted JSON report are retained locally. These observations do not authorize publication.
 
 - 反馈附件只证明曾在 `official-dsh-import-begin` 后等待 60 秒超时，另一次约 12 秒完成。未包含当时的 CPU、事件循环或线程栈，因此不能证明“冷启动竞争”，也不能证明该超时已根治。
 - 本次托盘压力测试证明重复事件与资源释放缺陷已修正，不等于长期真实工作负载内存稳定性证明。
