@@ -899,6 +899,8 @@ window.__ModuleLoader__.load({
       ctx.effect(() => {
         let active = true
         const sessionEventStops = new Map()
+        let publishTimer = null
+        let lastProjection = ''
         let workspaceRequestSequence = 0
         const pendingWorkspaceRequests = new Map()
         const originalPickDirectory = ctx.workspaces?.pickDirectory
@@ -932,12 +934,27 @@ window.__ModuleLoader__.load({
             if (sessionEventStops.has(id)) continue
             const eventSource = ctx.sessions.binding?.(id)?.eventSource
             if (typeof eventSource?.subscribe !== 'function') continue
-            sessionEventStops.set(id, eventSource.subscribe(() => queueMicrotask(publish)))
+            sessionEventStops.set(id, eventSource.subscribe(schedulePublish))
           }
         }
         const publish = () => {
+          if (!active) return
           syncSessionEventSubscriptions()
-          if (active && host.capabilities.sessionProjection === true) webview.postMessage(sessionState(ctx))
+          if (host.capabilities.sessionProjection !== true) return
+          const state = sessionState(ctx)
+          const projection = JSON.stringify(state)
+          if (projection === lastProjection) return
+          lastProjection = projection
+          webview.postMessage(state)
+        }
+        // Stream events can arrive much faster than the native menu can paint.
+        // Keep one trailing snapshot, including completion and interaction state.
+        const schedulePublish = () => {
+          if (!active || publishTimer !== null) return
+          publishTimer = setTimeout(() => {
+            publishTimer = null
+            publish()
+          }, 100)
         }
         const receive = event => {
           const message = event?.data
@@ -1068,7 +1085,7 @@ window.__ModuleLoader__.load({
         }
 
         webview.addEventListener('message', receive)
-        const stopSessions = ctx.sessions.list.subscribe(publish)
+        const stopSessions = ctx.sessions.list.subscribe(schedulePublish)
         const stopLocale = ctx.on('locale/change', publish)
         const stopTheme = ctx.on('theme/change', publish)
         publish()
@@ -1082,6 +1099,8 @@ window.__ModuleLoader__.load({
 
         return () => {
           active = false
+          if (publishTimer !== null) clearTimeout(publishTimer)
+          publishTimer = null
           if (ctx.workspaces?.pickDirectory === nativePickDirectory && typeof originalPickDirectory === 'function') {
             ctx.workspaces.pickDirectory = originalPickDirectory
           }

@@ -561,6 +561,7 @@ export function buildDshEnv(layout, source = process.env) {
     DSH_PORTABLE_BASE_STATE_ROOT: layout.baseStateRoot,
     DSH_PORTABLE_ROOT: layout.root,
     DSH_PORTABLE_STATE_ROOT: layout.stateRoot,
+    DSH_PORTABLE_RUNTIME_ROOT: layout.immutableRoot,
     DSH_TELEMETRY_MODE: 'DISABLED',
     PATH: [paths.dirname(layout.nodeExe), paths.dirname(layout.packageManagerBin), source.PATH ?? ''].filter(Boolean).join(separator),
   }
@@ -721,6 +722,16 @@ function sameComparablePath(left, right, platform = process.platform) {
 
 function commandIncludesComparablePath(commandLine, expected, platform = process.platform) {
   if (!expected) return false
+  if (platform === 'win32') {
+    // Canonicalize the paths reported by CIM too. Expanding only the expected
+    // path recognizes long commands from short layouts, but misses the reverse
+    // and can orphan a backend launched through an 8.3 path.
+    const argumentsInCommand = String(commandLine ?? '').match(/"[^"]*"|[^\s"]+/g) ?? []
+    return argumentsInCommand.some((argument) => {
+      const value = argument.replace(/^"|"$/g, '')
+      return path.win32.isAbsolute(value) && sameComparablePath(value, expected, platform)
+    })
+  }
   return [...comparableAliases(expected, platform)].some((alias) => commandLine.includes(alias))
 }
 
@@ -1050,14 +1061,24 @@ export async function migratePortableRoot(layout) {
   await ensurePortableDirectories(layout)
   const previous = await readJson(layout.portableMeta, null)
   const current = { schemaVersion: 1, lastRoot: layout.root, workspace: layout.workspace }
-  if (!previous?.lastRoot || comparable(previous.lastRoot) === comparable(layout.root)) {
+  const oldWorkspaces = previous?.lastRoot
+    ? [...new Set([previous.workspace || path.join(previous.lastRoot, 'workspace'), ...(previous.workspaceAliases || [])])]
+    : []
+  if (!previous?.lastRoot || sameComparablePath(previous.lastRoot, layout.root, layout.platform)) {
+    // A running backend can still write the previous path spelling. Remember it
+    // without moving its sessions; a later physical move must migrate both.
+    const aliases = oldWorkspaces.filter((workspace) => workspace !== layout.workspace)
+    if (aliases.length) current.workspaceAliases = aliases
     await writeJsonAtomic(layout.portableMeta, current)
     return { moved: false, sessionCount: 0, storageCount: 0 }
   }
 
-  const oldWorkspace = previous.workspace || path.join(previous.lastRoot, 'workspace')
-  const storageCount = await migrateStorageJson(layout.dshHome, oldWorkspace, layout.workspace)
-  const sessionCount = await migrateSessionDirectory(layout.dshHome, oldWorkspace, layout.workspace)
+  let storageCount = 0
+  let sessionCount = 0
+  for (const oldWorkspace of oldWorkspaces) {
+    storageCount += await migrateStorageJson(layout.dshHome, oldWorkspace, layout.workspace)
+    sessionCount += await migrateSessionDirectory(layout.dshHome, oldWorkspace, layout.workspace)
+  }
   await writeJsonAtomic(layout.portableMeta, current)
   return { moved: true, sessionCount, storageCount }
 }

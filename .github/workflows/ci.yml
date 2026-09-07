@@ -298,6 +298,16 @@ jobs:
             -FirstColdStartLimit ${{ matrix.firstColdStartSeconds }}
           ./scripts/smoke-windows-dom-ready.ps1 -Root (Join-Path $Root 'DSH-Portable')
           ./scripts/smoke-windows-native-tray.ps1 -Root (Join-Path $Root 'DSH-Portable')
+          node scripts/smoke-capsule-maintenance.mjs (Join-Path $Root 'DSH-Portable')
+          if ($LASTEXITCODE -ne 0) { throw 'Capsule maintenance smoke failed.' }
+          $AliasRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('dsh-path-alias-' + [guid]::NewGuid().ToString('N'))
+          New-Item -ItemType Directory -Force -Path $AliasRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $AliasRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Path-alias fixture extraction failed.' }
+          node scripts/smoke-windows-path-alias.mjs (Join-Path $AliasRoot 'DSH-Portable')
+          if ($LASTEXITCODE -ne 0) { throw 'Windows path-alias smoke failed.' }
+          node scripts/smoke-windows-runtime-health.mjs (Join-Path $AliasRoot 'DSH-Portable')
+          if ($LASTEXITCODE -ne 0) { throw 'Windows runtime-health smoke failed.' }
           node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw "Windows native restart smoke failed with exit code $LASTEXITCODE" }
           node scripts/smoke-windows-subprocess-hide.mjs (Join-Path $Root 'DSH-Portable')

@@ -441,6 +441,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const idle = sessionList(2)
   for (const item of Object.values(idle.byId)) item.running = false
   runtime.setSessions(idle)
+  await new Promise(resolve => setTimeout(resolve, 150))
   assert.equal(client.posted.at(-1).hasRunningSession, false)
 
   const beforeDispose = client.posted.length
@@ -595,12 +596,37 @@ test('task completion projection follows session events even when the list store
   }]
   runtime.replaceSessionsSilently(completed)
   runtime.emitSessionEvent('session-0')
-  await new Promise(resolve => setImmediate(resolve))
+  await new Promise(resolve => setTimeout(resolve, 150))
 
   const projected = client.posted.at(-1)
   assert.equal(projected.sessions[0].completed, true)
   assert.equal(projected.sessions[0].finalReply, '后台完成')
   runtime.dispose()
+})
+
+test('stream bursts coalesce, unchanged projections stay quiet, and disposal cancels pending work', async () => {
+  const client = await loadBridgeClient()
+  const initial = sessionList(1)
+  const runtime = fakeContext(initial)
+  client.exports.apply(runtime.ctx)
+  const before = client.posted.length
+  for (let index = 0; index < 2000; index += 1) {
+    runtime.emitSessionEvent('session-0')
+    runtime.setSessions(initial)
+  }
+  await new Promise(resolve => setTimeout(resolve, 150))
+  assert.equal(client.posted.length, before, 'unchanged streams must not rebuild native menus')
+  const finished = structuredClone(initial)
+  finished.byId['session-0'].completed = true
+  finished.byId['session-0'].running = false
+  for (let index = 0; index < 2000; index += 1) runtime.setSessions(finished)
+  await new Promise(resolve => setTimeout(resolve, 150))
+  assert.equal(client.posted.length, before + 1)
+  assert.equal(client.posted.at(-1).sessions[0].completed, true)
+  runtime.setSessions(initial)
+  runtime.dispose()
+  await new Promise(resolve => setTimeout(resolve, 150))
+  assert.equal(client.posted.length, before + 1, 'disposed bridges must not publish queued snapshots')
 })
 
 test('portable launch and packages compose the bridge as a private official DSH overlay', async () => {

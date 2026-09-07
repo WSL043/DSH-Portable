@@ -91,6 +91,7 @@ cp "$PROJECT_ROOT/launcher/data-import-preflight.mjs" "$STAGE/launcher/data-impo
 cp "$PROJECT_ROOT/launcher/operation-trace.mjs" "$STAGE/launcher/operation-trace.mjs"
 cp "$PROJECT_ROOT/launcher/runtime-capsule.mjs" "$STAGE/launcher/runtime-capsule.mjs"
 cp "$PROJECT_ROOT/launcher/startup-trace.mjs" "$STAGE/launcher/startup-trace.mjs"
+cp "$PROJECT_ROOT/launcher/runtime-health.mjs" "$STAGE/launcher/runtime-health.mjs"
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"
 cp "$PROJECT_ROOT/templates/DATA-MIGRATION.en.txt" "$STAGE/DATA-MIGRATION.en.txt"
 cp "$PROJECT_ROOT/launcher/http-readiness.mjs" "$STAGE/launcher/http-readiness.mjs"

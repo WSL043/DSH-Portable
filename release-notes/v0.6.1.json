@@ -1,0 +1,33 @@
+{
+  "version": "0.6.1",
+  "zh": {
+    "summary": "0.6.1 改进流式任务期间的桌面响应、托盘资源释放、启动等待与诊断，并包含此前积累的插件修复。",
+    "highlights": [
+      "合并密集会话事件，相同状态不再反复刷新原生托盘；菜单重建释放旧资源，减少长时间运行的重复开销。",
+      "启动期间减少 Windows 进程查询，保留就绪前的身份核验；启动与支持报告只读取所需日志尾部。",
+      "修正维护命令的 capsule 运行时入口；已有配置目录缺少插件清单时不再中断启动或升级检查，并保留该目录中的用户文件。",
+      "修正 Windows 长短路径双向进程识别，避免切换路径写法后重复启动后台、遗留进程和占用便携目录。",
+      "新增可关联启动 ID 和进程 ID 的后台与原生窗口健康日志，捕获心跳延迟、恢复、CPU 和内存变化，并补齐导入完成与退出阶段；支持报告在日志较大时仍可导出。",
+      "随附 pnpm 升级至 11.11.0，并改进插件更新目标锁定、待重启状态、原生模块卸载提示、截图刷新和 WebDAV 下载重定向。"
+    ],
+    "knownIssues": [
+      "Issue #89 的用户环境曾在 DSH 导入阶段发生 60 秒超时；本次修复减少已确认的桌面与启动开销，但尚未单独复现该环境的超时。若仍发生，请在故障后导出支持报告，新日志可区分后台与原生窗口的心跳延迟。"
+    ],
+    "upgradeNotes": ["安装更新前结束运行中的任务并备份数据。保持产品发布与上游内核发布独立。"]
+  },
+  "en": {
+    "summary": "0.6.1 improves desktop responsiveness during streaming, tray resource disposal, startup polling and diagnostics, and includes accumulated plugin fixes.",
+    "highlights": [
+      "Coalesce session bursts and skip unchanged native tray projections. Dispose retired menu resources to reduce repeated work during long sessions.",
+      "Reduce Windows process inspection during startup while retaining identity verification before readiness. Read only the required log tails during startup and support export.",
+      "Route maintenance commands through the capsule runtime entry. An existing profile without a plugin manifest no longer interrupts startup or upgrade preflight; existing files are preserved.",
+      "Recognize Windows short and long paths in both directions to prevent duplicate backends and orphaned processes holding the portable directory.",
+      "Correlate backend and native-window health logs by startup and process IDs, including heartbeat delay/recovery, CPU, memory, import completion and shutdown. Large logs no longer prevent support-report export.",
+      "Bundle pnpm 11.11.0 and improve plugin update targeting, restart state, native-addon removal guidance, screenshot refresh and WebDAV download redirects."
+    ],
+    "knownIssues": [
+      "Issue #89 includes a 60-second timeout during DSH import. These changes reduce confirmed overhead, but that environment's timeout has not been independently reproduced. If it recurs, export a support report; the new logs distinguish backend and native-window heartbeat delays."
+    ],
+    "upgradeNotes": ["Finish active tasks and back up data before updating. Portable publishing remains independent of upstream engine releases."]
+  }
+}

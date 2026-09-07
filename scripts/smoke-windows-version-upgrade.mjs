@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
-import { readFile, mkdir, mkdtemp, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, mkdir, mkdtemp, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
@@ -34,7 +35,10 @@ assert.equal(componentManifestSource.releaseChannel, fullManifestSource.releaseC
 assert.equal(newArchiveBytes.length, payload?.bytes, 'new full archive size does not match its manifest')
 assert.equal(createHash('sha256').update(newArchiveBytes).digest('hex'), payload?.sha256, 'new full archive digest does not match its manifest')
 
-const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-release-upgrade-'))
+// Published predecessors do not all recognize short-path command lines from a
+// long-path desktop. Initialize the predecessor consistently; the candidate's
+// bidirectional alias behavior is tested separately.
+const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dsh-release-upgrade-')))
 const extracted = path.join(root, 'DSH-Portable')
 const destination = path.join(root, 'DSH Portable 旧版迁移 ü')
 const resultPath = path.join(root, 'upgrade-result.json')
@@ -55,14 +59,34 @@ async function launcherLog() {
   return readFile(path.join(destination, 'data', 'logs', 'launcher.log'), 'utf8').catch(() => '')
 }
 
-async function stopFinishedProduct() {
+async function stopFinishedProduct({ bestEffort = false } = {}) {
   const executable = path.join(destination, 'DeepSeek-Herness.exe')
   if (!await stat(executable).then(() => true, () => false)) return
-  await execFileAsync(executable, ['stop', '--no-browser', '--json'], {
-    cwd: destination,
-    timeout: 90_000,
-    windowsHide: true,
-  }).catch(() => null)
+  try {
+    await execFileAsync(executable, ['stop', '--no-browser', '--json'], {
+      cwd: destination,
+      timeout: 90_000,
+      windowsHide: true,
+    })
+  } catch (error) {
+    if (!bestEffort) throw error
+  }
+}
+
+async function failureDiagnostics() {
+  const diagnostics = {}
+  for (const relative of ['data/logs/launcher.log', 'data/logs/portable-errors.jsonl', 'data/runtime/process.json', 'data/runtime/desktop-host.pid']) {
+    try { diagnostics[relative] = readLogTail(path.join(destination, relative), 16000) } catch {}
+  }
+  try {
+    const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      '[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false); Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($env:DSH_UPGRADE_DIAGNOSTIC_SCOPE) } | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Compress'], {
+      env: { ...process.env, DSH_UPGRADE_DIAGNOSTIC_SCOPE: path.basename(root) },
+      encoding: 'utf8', timeout: 10000, windowsHide: true,
+    })
+    diagnostics.processes = stdout
+  } catch (error) { diagnostics.processes = String(error.message) }
+  return redactDiagnosticText(JSON.stringify(diagnostics))
 }
 const server = createServer((request, response) => {
   if (request.url === '/portable-manifest.json') {
@@ -93,6 +117,18 @@ try {
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
   assert.notEqual(oldComponents.portableVersion, fullManifestSource.version, 'the prior package must differ from the target release')
+  if (runningHostUpgrade) {
+    // Initialize a real old-version profile before inserting preservation markers.
+    // A marker-only directory is not an already-running user's profile.
+    const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
+    const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(
+      () => [path.join(destination, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs'],
+      () => [path.join(destination, 'launcher', 'portable-cli.mjs')],
+    )
+    await execFileAsync(oldNode, [...oldEntry, 'start', '--no-browser', '--json'], {
+      timeout: 120_000, windowsHide: true,
+    })
+  }
   const markers = new Map([
     [path.join(destination, 'data', 'dsh-home', 'settings.yaml'), 'locale:\n  preference: zh\n'],
     [path.join(destination, 'data', 'dsh-home', 'portable-upgrade-session.marker'), 'keep-session\n'],
@@ -157,8 +193,8 @@ try {
         stdio: 'ignore',
       })
       await waitFor(
-        async () => (await launcherLog()).includes('environment-ready:'),
-        'the old native desktop host did not initialize WebView2 before the update',
+        async () => (await launcherLog()).includes('dsh-first-paint-ready'),
+        'the old native desktop host did not become usable before the update',
       )
       launcherLogOffset = (await launcherLog()).length
     }
@@ -171,14 +207,28 @@ try {
         '--result', resultPath,
       ]
       if (!runningHostUpgrade) updaterArguments.push('--no-launch')
-      await execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
-        timeout: 10 * 60 * 1000,
+      // A relaunched desktop can inherit redirected pipes from the old updater.
+      // Await the updater's exit, not pipe EOF from the long-lived new desktop.
+      const updater = spawn(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
         windowsHide: true,
+        stdio: 'ignore',
         env: runningHostUpgrade ? {
           ...process.env,
           DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
           DSH_PORTABLE_TEST_HIDDEN: '1',
         } : process.env,
+      })
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          updater.kill()
+          reject(new Error('The full updater exceeded its 10-minute limit.'))
+        }, 10 * 60 * 1000)
+        updater.once('error', error => { clearTimeout(timer); reject(error) })
+        updater.once('exit', code => {
+          clearTimeout(timer)
+          if (code === 0) resolve()
+          else reject(new Error(`The full updater exited with status ${code}.`))
+        })
       })
     } catch (error) {
       const diagnostic = await readFile(resultPath, 'utf8').catch(() => 'no updater result was written')
@@ -265,8 +315,11 @@ try {
     preserved: markers.size,
     delivery: decision.delivery,
   }))
+} catch (error) {
+  console.error(await failureDiagnostics())
+  throw error
 } finally {
-  await stopFinishedProduct()
+  await stopFinishedProduct({ bestEffort: true })
   if (oldHost && oldHost.exitCode === null) oldHost.kill()
   if (server.listening) await new Promise((resolve) => server.close(resolve))
   if (!process.env.CI) await rm(root, { recursive: true, force: true, maxRetries: 40, retryDelay: 100 })

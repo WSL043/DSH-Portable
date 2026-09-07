@@ -1,6 +1,21 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs'
+
+// Read only the requested tail, even after a long-running host grows its log.
+export function readLogTail(filename, maxBytes = 64 * 1024, offset = 0) {
+  const descriptor = openSync(filename, 'r')
+  try {
+    const size = fstatSync(descriptor).size
+    const start = Math.max(Math.min(Math.max(0, Number(offset) || 0), size), size - maxBytes)
+    const buffer = Buffer.alloc(Math.min(maxBytes, size - start))
+    const count = readSync(descriptor, buffer, 0, buffer.length, start)
+    return buffer.subarray(0, count).toString('utf8')
+  } finally {
+    closeSync(descriptor)
+  }
+}
 
 const MAX_DIAGNOSTIC_BYTES = 256 * 1024
 const MAX_ERROR_DETAIL_CHARS = 32 * 1024

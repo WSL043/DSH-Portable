@@ -58,12 +58,23 @@ test('portable host authenticates shutdown and invokes the official signal path'
       DSH_PORTABLE_CONTROL_PIPE: pipe,
       DSH_PORTABLE_CONTROL_TOKEN: token,
       DSH_TEST_MARKER: marker,
+      DSH_PORTABLE_STATE_ROOT: temp,
+      DSH_PORTABLE_STARTUP_ID: 'b'.repeat(32),
+      DSH_PORTABLE_STARTUP_STARTED_AT: String(Date.now()),
     },
     stdio: 'ignore',
     windowsHide: true,
   })
   t.after(() => child.kill())
   await waitForPipe(pipe)
+  const traceFile = path.join(temp, 'data', 'logs', 'startup-latest.jsonl')
+  const importDeadline = Date.now() + 5000
+  while (Date.now() < importDeadline) {
+    const source = await readFile(traceFile, 'utf8').catch(() => '')
+    if (source.includes('official-dsh-import-complete')) break
+    await new Promise(resolve => setTimeout(resolve, 25))
+  }
+  assert.match(await readFile(traceFile, 'utf8'), /official-dsh-import-complete/)
 
   assert.equal(await request(pipe, 'wrong-token'), 401)
   assert.equal(child.exitCode, null)
@@ -73,4 +84,8 @@ test('portable host authenticates shutdown and invokes the official signal path'
     child.once('exit', () => { clearTimeout(timer); resolve() })
   })
   assert.equal(await readFile(marker, 'utf8'), 'graceful')
+  const events = (await readFile(traceFile, 'utf8')).trim().split('\n').map(JSON.parse)
+  assert.ok(events.every(event => event.startupId === 'b'.repeat(32) && event.pid === child.pid))
+  assert.ok(events.some(event => event.phase === 'shutdown-accepted'))
+  assert.ok(events.some(event => event.phase === 'process-exit' && event.exitCode === 0))
 })

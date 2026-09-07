@@ -72,7 +72,16 @@ function exactVersionFromSpec(value) {
 function installedDefaultVersion(profileRoot, plugin, adapters = {}) {
   const exists = adapters.existsSync ?? existsSync
   const load = adapters.readFileSync ?? readFileSync
-  const manifest = JSON.parse(load(path.join(profileRoot, 'package.json'), 'utf8'))
+  let manifest
+  try {
+    manifest = JSON.parse(load(path.join(profileRoot, 'package.json'), 'utf8'))
+  } catch (error) {
+    // Existing profiles may contain settings or migration markers before DSH
+    // creates a package manifest. No dependency declaration means no default
+    // plugin is installed; preserve that directory and let DSH initialize it.
+    if (error?.code === 'ENOENT') return null
+    throw error
+  }
   const spec = manifest.dependencies?.[plugin.name]
   if (spec === undefined) return null
   const installedManifest = path.join(profileRoot, 'node_modules', plugin.name, 'package.json')

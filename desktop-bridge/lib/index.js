@@ -75,7 +75,7 @@ function writeSettings(filename, settings) {
 
 async function defaultRunCli(root, baseStateRoot, environmentId, args) {
   const forwarded = environmentId === 'default' ? args : [...args, '--environment', environmentId]
-  const { stdout = '' } = await execFileAsync(process.execPath, [path.join(root, 'launcher', 'portable-cli.mjs'), ...forwarded], {
+  const { stdout = '' } = await execFileAsync(process.execPath, [path.join(root, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs', ...forwarded], {
     cwd: root,
     env: { ...process.env, DSH_PORTABLE_STATE_ROOT: baseStateRoot },
     encoding: 'utf8',

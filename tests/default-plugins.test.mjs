@@ -116,6 +116,18 @@ test('a newer installed default is never downgraded to the packaged review basel
   assert.equal(await readFile(path.join(profileRoot, 'package.json'), 'utf8'), packageJson)
 })
 
+test('an existing profile without a plugin manifest does not block startup or overwrite user files', async (t) => {
+  const layout = await fixture(t)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  await mkdir(profileRoot, { recursive: true })
+  const marker = path.join(profileRoot, 'user-settings.yml')
+  await writeFile(marker, 'keep: true\n')
+  const result = await seedDefaultPlugins(layout, { spawnSync() { assert.fail('must not install into an existing profile') } })
+  assert.equal(result.status, 'skipped')
+  assert.equal(await readFile(marker, 'utf8'), 'keep: true\n')
+  await assert.rejects(readFile(path.join(profileRoot, 'package.json')), { code: 'ENOENT' })
+})
+
 test('removing a default plugin is durable because every existing profile skips seeding', async (t) => {
   const layout = await fixture(t)
   const profileRoot = path.join(layout.dshHome, 'profiles', 'web')

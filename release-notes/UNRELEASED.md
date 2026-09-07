@@ -1,8 +1,13 @@
 # 待发布 / Unreleased
 
-这些改动尚未包含在 v0.6.0 已发布的下载文件中。维护者决定下一版本号与发布时间，成品验收通过后再写入对应版本的双语 JSON。
+以下累积改动归入 0.6.1，双语版本说明见 [v0.6.1.json](v0.6.1.json)，本机与基础修复验收见 [性能修复证据](../docs/performance-0.6.1.md)。最终发布状态、提交和成品校验值以 GitHub Release 的发布证据为准。
 
 ## 用户变化候选
+
+- 合并密集会话事件并去除相同托盘状态的重复发送；释放重建后的旧菜单资源，减少流式任务期间的桌面开销。
+- 减少启动等待的 Windows 进程查询，限制日志读取字节数，修正 capsule 维护命令的运行时解析。
+- 增加关联启动 ID/PID 的后台与原生窗口健康日志；实机阻塞注入验证延迟、恢复、后台响应和支持报告，修正大日志导致导出失败的问题。
+- Issue #89 的用户环境导入超时与长期卡顿仍需复测；当前本机结果不构成该环境已修复的证明。
 
 - 将随附 pnpm 从 11.7.0 更新到 11.11.0，修复该依赖已公开的安装路径与环境处理漏洞。
 - 改善插件更新目标锁定、已是当前版本的处理，以及页面刷新后的待重启状态。
@@ -19,7 +24,12 @@
 
 ## English
 
-These changes are not included in the published v0.6.0 downloads. The maintainer chooses the next version and release date; a versioned bilingual JSON descriptor is prepared after product qualification.
+These accumulated changes belong to 0.6.1. See its [bilingual descriptor](v0.6.1.json) and [local and baseline performance evidence](../docs/performance-0.6.1.md). The GitHub Release qualification records the authoritative publication state, commit and download checksums.
+
+- Coalesce streamed session events, suppress duplicate tray projections, and dispose retired native menu resources.
+- Reduce Windows startup process inspection, bound log reads, and resolve capsule runtime paths for maintenance commands.
+- Correlate backend and native-window health logs by startup/PID; verify delay, recovery, backend responses and exported reports with real-product stall injection, and prevent large logs from breaking export.
+- The import timeout and long-running lag in issue #89 still require verification in the affected environment; local acceptance does not prove that environment is fixed.
 
 - Update bundled pnpm from 11.7.0 to 11.11.0 for its published installation-path and environment-handling security fixes.
 - Improve exact plugin-update targeting, already-current results, and restart notices after a page refresh.
