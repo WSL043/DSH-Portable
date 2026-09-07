@@ -565,7 +565,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     if (hostUnavailable) {
       const details = tailSince(stderrLog, stderrOffset) || tailSince(stdoutLog, stdoutOffset) || 'The DSH process exited before the Web UI became ready.'
       const portConflict = /EADDRINUSE|address already in use/i.test(details)
-      if (child.pid) {
+      if (child.pid && ownedState(state)) {
         try {
           if (process.platform === 'win32') {
             execFileSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true })

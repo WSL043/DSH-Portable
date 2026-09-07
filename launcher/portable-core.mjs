@@ -722,6 +722,16 @@ function sameComparablePath(left, right, platform = process.platform) {
 
 function commandIncludesComparablePath(commandLine, expected, platform = process.platform) {
   if (!expected) return false
+  if (platform === 'win32') {
+    // Canonicalize the paths reported by CIM too. Expanding only the expected
+    // path recognizes long commands from short layouts, but misses the reverse
+    // and can orphan a backend launched through an 8.3 path.
+    const argumentsInCommand = String(commandLine ?? '').match(/"[^"]*"|[^\s"]+/g) ?? []
+    return argumentsInCommand.some((argument) => {
+      const value = argument.replace(/^"|"$/g, '')
+      return path.win32.isAbsolute(value) && sameComparablePath(value, expected, platform)
+    })
+  }
   return [...comparableAliases(expected, platform)].some((alias) => commandLine.includes(alias))
 }
 
@@ -1051,7 +1061,7 @@ export async function migratePortableRoot(layout) {
   await ensurePortableDirectories(layout)
   const previous = await readJson(layout.portableMeta, null)
   const current = { schemaVersion: 1, lastRoot: layout.root, workspace: layout.workspace }
-  if (!previous?.lastRoot || comparable(previous.lastRoot) === comparable(layout.root)) {
+  if (!previous?.lastRoot || sameComparablePath(previous.lastRoot, layout.root, layout.platform)) {
     await writeJsonAtomic(layout.portableMeta, current)
     return { moved: false, sessionCount: 0, storageCount: 0 }
   }

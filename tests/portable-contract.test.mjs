@@ -514,6 +514,14 @@ test('Windows process ownership treats short and long path aliases as the same f
     executablePath: longPaths.nodeExe,
     commandLine: `"${longPaths.nodeExe}" "${longPaths.portableCli}" start`,
   }, { ...layout, portableCli: '' }), false)
+  assert.equal(isOwnedDshProcess({
+    executablePath: layout.nodeExe,
+    commandLine: `"${layout.nodeExe}" "${layout.hostBin}" "${layout.dshBin}" web --port 31234`,
+  }, { platform: 'win32', ...longPaths }, 31234), true)
+  assert.equal(isOwnedLauncherProcess({
+    executablePath: layout.nodeExe,
+    commandLine: `"${layout.nodeExe}" "${layout.portableCli}" start`,
+  }, { platform: 'win32', ...longPaths }), true)
 })
 
 test('launcher reclaims a dead lock but never bypasses a live owned launcher', async () => {

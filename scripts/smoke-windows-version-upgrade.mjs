@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile, spawn } from 'node:child_process'
-import { readFile, mkdir, mkdtemp, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { readFile, mkdir, mkdtemp, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -35,7 +35,10 @@ assert.equal(componentManifestSource.releaseChannel, fullManifestSource.releaseC
 assert.equal(newArchiveBytes.length, payload?.bytes, 'new full archive size does not match its manifest')
 assert.equal(createHash('sha256').update(newArchiveBytes).digest('hex'), payload?.sha256, 'new full archive digest does not match its manifest')
 
-const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-release-upgrade-'))
+// Published predecessors do not all recognize short-path command lines from a
+// long-path desktop. Initialize the predecessor consistently; the candidate's
+// bidirectional alias behavior is tested separately.
+const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dsh-release-upgrade-')))
 const extracted = path.join(root, 'DSH-Portable')
 const destination = path.join(root, 'DSH Portable 旧版迁移 ü')
 const resultPath = path.join(root, 'upgrade-result.json')
