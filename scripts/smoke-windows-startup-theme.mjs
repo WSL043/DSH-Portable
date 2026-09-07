@@ -90,7 +90,9 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       await delay(200)
     }
     assert.ok(trace.some(entry => entry.phase === 'interactive-ready'), 'workspace becomes interactive')
+    await delay(2000)
     const final = await evaluate(`({dark:matchMedia('(prefers-color-scheme:dark)').matches,background:getComputedStyle(document.body).backgroundColor,url:location.origin})`)
+    await writeFile(path.join(root, 'acceptance', `theme-probe-${results.length}.json`), JSON.stringify({ theme, expectedTheme, loading, final, colors: await evaluate('window.__startupColors') }, null, 2))
     assert.equal(final.dark, expectedTheme === 'dark')
     assert.match(final.url, /^http:\/\/127\.0\.0\.1:/)
     const colors = await evaluate('window.__startupColors')

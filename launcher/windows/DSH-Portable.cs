@@ -2165,12 +2165,13 @@ namespace DshPortable
                     uiLanguage = nextLanguage;
                     trayTheme = nextTheme;
                     string nextPreference = state.themePreference;
+                    bool preferenceChanged = !String.IsNullOrEmpty(nextPreference) && themePreference != nextPreference;
                     if (!String.IsNullOrEmpty(nextPreference) && (themePreference != nextPreference || chromeChanged))
                     {
                         themePreference = nextPreference;
                         SaveWindowTheme();
                     }
-                    if (chromeChanged) ApplyDesktopChrome();
+                    if (chromeChanged || preferenceChanged) ApplyDesktopChrome();
                     webView.CoreWebView2.ExecuteScriptAsync("document.getElementById('portable-startup-theme')?.remove()");
                     HandleTaskCompletionNotifications(state);
                     trayState = state;

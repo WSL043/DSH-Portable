@@ -2,6 +2,9 @@
 
 ## Confirmed defects and changes
 
+- Exact local package acceptance caught a transient theme mismatch after a previous light launch. The official client initialized its preference to `system` before asynchronous durable settings arrived. The bootstrap now carries the host's accepted preference into the client's initial snapshot. Native chrome also reapplies the WebView preference when only the preference changes, even if the resolved color stays the same. Theme acceptance samples through two seconds after interactive readiness.
+- Local rebuilding exposed development `node_modules` being copied into the bundled bridge and market. All three builders now share staging that excludes development dependencies. The unchanged package footprint limit caught the defect and passes with the filtered build.
+
 - Windows `UISettings.AnimationsEnabled` returned `False` on the affected Win11 host. The loading page used `animation:none` for reduced motion. The old executable failed the real WebView transform-change assertion. The new native candidate passed dark/light/dark/system checks with reduced motion alternately enabled and disabled. Reduced motion uses discrete, slower progress; the other mode retains continuous rotation.
 - The settings UI could request a core catalog before the channel POST finished. Settings writes now need ordered confirmation, stale-response rejection and visible request failures. Incompatible catalog entries retain explanatory metadata but expose no installation URL.
 - Update checks, catalogs and notification choices no longer take the start/stop lock or migrate user state. Feed checks and defer/ignore choices use a separate per-feed cache lock. Four old-CLI regressions failed on the launch lock; the revised dispatch passes. A delayed-feed test also verifies that the launch lock stays free and a concurrent defer choice survives.
