@@ -5,6 +5,7 @@
     "highlights": [
       "后台尚未就绪时显示加载进度；从启动窗口、加载页到工作台遵守保存的亮色、暗色或跟随系统设置，避免初始化时闪白。",
       "修复旧加载页面取消事件误判工作台启动失败的问题，即使存在未完成的资源请求也能正确识别界面就绪。",
+      "修复状态轮询与原生启动争抢同一把锁的问题，避免启动时误报已有启动操作。",
       "启动和健康日志按启动 ID 保留 14 天内最近 30 次记录，总量上限 32 MiB；支持报告保留多轮记录、执行脱敏并明确标记截断。",
       "减少客户端包换行扫描和模块链接父目录的重复处理；健康记录增加采样间隔及系统内存，便于对齐卡顿时的状态。",
       "启动体验、诊断与性能改进见 PR #95：https://github.com/WSL043/DSH-Portable/pull/95。"
@@ -17,6 +18,7 @@
     "highlights": [
       "Show loading progress before the backend is ready. The native window, loading page and workspace respect the saved light, dark or system preference without flashing the default white background.",
       "Prevent cancellation of an old loading page from failing the workspace navigation; unfinished resource requests no longer confuse workspace readiness.",
+      "Prevent status polling from taking the startup lock and rejecting a concurrent native launch as an existing startup operation.",
       "Retain the latest 30 startup and health histories within 14 days, capped at 32 MiB. Support reports include multiple launches, redact sensitive values and identify truncated streams.",
       "Reduce client bundle newline scanning and duplicate parent-directory creation during module-link repair. Health samples now include sampling intervals and system memory.",
       "Startup, diagnostic and performance changes: PR #95, https://github.com/WSL043/DSH-Portable/pull/95."

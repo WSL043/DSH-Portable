@@ -863,6 +863,12 @@ async function main() {
     process.env.DSH_PORTABLE_RUNTIME_ROOT || root,
     environmentId,
   )
+  // Polling must never take a writer's lock or create state: otherwise a
+  // status probe can make a concurrent native startup fail with lock contention.
+  if (options.command === 'status') {
+    print(await status(), options.json)
+    return
+  }
   const release = options.waitForLockMs > 0
     ? await acquireLaunchLockWithWait(layout, options.waitForLockMs)
     : await acquireLaunchLock(layout)
@@ -897,7 +903,6 @@ async function main() {
     }
     else if (options.command === 'start') result = await start(options.noBrowser)
     else if (options.command === 'stop') result = await stop()
-    else if (options.command === 'status') result = await status()
     else if (options.command === 'open') result = await openExisting()
     else if (options.command === 'doctor') result = await doctor()
     else if (options.command === 'repair') result = await repair()
