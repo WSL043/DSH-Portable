@@ -140,6 +140,21 @@ The Portable DSH Terminal recognizes `dsh` only inside that window and never cha
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
+## Windows desktop controls
+
+Startup uses one native logo, loading indicator, and phase description until the workspace is ready. The loading surface and menus follow your saved light/dark theme. The top-left File, View, and Help menus expose common desktop actions.
+
+| Action | Shortcut |
+| --- | --- |
+| New session / Settings | `Ctrl+N` / `Ctrl+,` |
+| Reload the interface while backend tasks continue | `Ctrl+R` or `F5` |
+| Zoom in / out / actual size | `Ctrl++` / `Ctrl+-` / `Ctrl+0` |
+| Toggle / leave full screen | `F11` / `Esc` |
+| Close window / quit | `Ctrl+W` / `Ctrl+Q` |
+| Open File / View / Help | `Alt+F` / `Alt+V` / `Alt+H` |
+
+Leaving full screen restores the previous window bounds and maximized state. Outside full screen, `Esc` remains available to page dialogs. Closing follows your tray/exit preference. Help provides product and core update checks, the logs folder, and issue reporting.
+
 ## Updates and repair
 
 - DSH-Portable opens the local workspace first, then checks in the background only when the corresponding startup setting is enabled. Product updates and official DeepSeek Harness core updates are independent, and both **Check for updates at startup** settings are off by default; enable or run either one from **Settings → General → Portable**.

@@ -1149,6 +1149,10 @@ window.__ModuleLoader__.load({
             return
           }
           if (message.type !== 'dsh-portable/action') return
+          if (message.action === 'open-settings') {
+            window.dispatchEvent(new Event('dsh-portable/open-settings'))
+            return
+          }
           if (message.action === 'new-session') {
             ctx.sessions.clear()
             return

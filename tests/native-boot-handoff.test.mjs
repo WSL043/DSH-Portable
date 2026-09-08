@@ -16,9 +16,9 @@ const upstream = `\t\tfunction BootHandoff(props) {
 \t\t\t});
 \t\t}`
 
-test('the DSH renderer explicitly hands a settled surface to the native desktop host', () => {
+test('the DSH renderer hands a settled app surface to the native desktop host', () => {
   const output = patchNativeBootHandoff(upstream)
-  assert.match(output, /dsh-portable-native-boot-handoff-v4/)
+  assert.match(output, /dsh-portable-native-boot-handoff-v5/)
   assert.match(output, /globalThis\.chrome\?\.webview/)
   assert.match(output, /readyFrames >= 3/)
   assert.match(output, /visibleControls >= 2/)
@@ -29,8 +29,10 @@ test('the DSH renderer explicitly hands a settled surface to the native desktop 
   assert.match(output, /useLayoutEffect\)\(\(\) => \{[\s\S]+surfaceReady[\s\S]+nativeHost\.postMessage[\s\S]+\}, \[nativeHost, surfaceReady\]\)/)
   assert.match(output, /dsh-portable\/boot-visible/)
   assert.match(output, /nativeHost\.postMessage/)
-  assert.doesNotMatch(output, /cloneNode|append\(overlay\)/)
-  assert.match(output, /surfaceReady \? null : boot/)
+  assert.match(output, /if \(nativeHost !== void 0\) return ready \? props\.app\(\) : null;/)
+  assert.match(output, /if \(ready\) return props\.app\(\);/)
+  assert.doesNotMatch(output, /cloneNode|append\(overlay\)|react\.Fragment|surfaceReady \? null : boot/)
+  assert.doesNotMatch(output, /style: nativeHost === void 0/)
   assert.match(output, /dangerouslySetInnerHTML: \{ __html: props\.boot\.html \}/)
   assert.match(output, /setReady\(true\);\s+requestAnimationFrame\(finish\);/)
   assert.equal(patchNativeBootHandoff(output), output)
@@ -52,16 +54,17 @@ test('every platform build applies the same native surface handoff', async () =>
   }
 })
 
-test('Windows shows a native loading surface immediately and replaces it with the real DSH surface', async () => {
+test('Windows keeps one native loading panel until the real DSH surface is ready', async () => {
   const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   assert.match(source, /ShowInTaskbar = !nonInteractive && !testHidden/)
   assert.doesNotMatch(source, /else if \(desktopStart\) Opacity = 0/)
   assert.match(source, /launchPanel\.Visible = true/)
-  const bootReveal = source.slice(source.indexOf('private void RevealDesktopBootSurface'), source.indexOf('private async Task<string> WaitForWorkspaceHandoffAsync'))
-  assert.match(bootReveal, /dsh-boot-surface-visible/)
-  assert.match(bootReveal, /ShowInTaskbar\s*=\s*true/)
-  assert.match(bootReveal, /Opacity\s*=\s*1/)
   const bootMessage = source.slice(source.indexOf('dsh-portable/boot-visible'), source.indexOf('dsh-portable/surface-ready'))
-  assert.match(bootMessage, /RevealDesktopBootSurface\(\);/)
-  assert.doesNotMatch(bootMessage, /BeginInvoke\([^\n]+RevealDesktopBootSurface/)
+  assert.match(bootMessage, /RecordWebViewPhase\("boot-visible-message"\)/)
+  assert.doesNotMatch(source, /RevealDesktopBootSurface|NavigateToString/)
+  const surfaceReveal = source.slice(source.indexOf('private void RevealDesktopSurface'), source.indexOf('private void InjectTestWebViewCrashAfterReady'))
+  assert.match(surfaceReveal, /webView\.Visible\s*=\s*true/)
+  assert.match(surfaceReveal, /launchPanel\.Visible\s*=\s*false/)
+  assert.match(surfaceReveal, /ShowInTaskbar\s*=\s*true/)
+  assert.match(surfaceReveal, /Opacity\s*=\s*1/)
 })

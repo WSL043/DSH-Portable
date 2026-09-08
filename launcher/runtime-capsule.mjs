@@ -266,6 +266,24 @@ async function directoryFootprint(root) {
   return { bytes, files }
 }
 
+export async function commitRuntimeDirectory(temporary, target, options = {}) {
+  const renameImpl = options.renameImpl ?? rename
+  const sleepImpl = options.sleepImpl ?? ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)))
+  const platform = options.platform ?? process.platform
+  const retryDelays = [100, 250, 500, 1000]
+  const retryableCodes = new Set(['EPERM', 'EBUSY', 'EACCES'])
+
+  for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+    try {
+      return await renameImpl(temporary, target)
+    } catch (error) {
+      if (platform !== 'win32' || !retryableCodes.has(error?.code) || attempt >= retryDelays.length) throw error
+      options.onRetry?.({ attempt: attempt + 1, delayMs: retryDelays[attempt], code: error.code })
+      await sleepImpl(retryDelays[attempt])
+    }
+  }
+}
+
 export async function runtimeCacheStatus(root, options = {}) {
   const paths = capsulePaths(root, options.env)
   if (paths.mode === 'expanded') return { mode: 'expanded', caches: [], bytes: 0, files: 0 }
@@ -377,7 +395,7 @@ export async function ensureRuntimeCapsule(root, options = {}) {
     }
     await writeFile(path.join(temporary, READY_FILE), `${JSON.stringify({ schemaVersion: 1, sha256: manifest.sha256 })}\n`, 'utf8')
     if (existsSync(target)) await rm(target, { recursive: true, force: true })
-    await rename(temporary, target)
+    await commitRuntimeDirectory(temporary, target, options)
     return { mode: 'capsule', runtimeRoot: target, reused: false, manifest }
   } finally {
     await rm(temporary, { recursive: true, force: true }).catch(() => {})
