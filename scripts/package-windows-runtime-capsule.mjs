@@ -64,7 +64,7 @@ export async function packageWindowsRuntimeCapsule(sourceStage, outputZip, optio
       path.join(source, 'app'),
       capsuleFile,
       manifestFile,
-      { platform: 'win32', arch: 'x64', level: options.level ?? 10 },
+      { platform: 'win32', arch: 'x64', level: options.level },
     )
     await mkdir(path.dirname(output), { recursive: true })
     const tar = spawnSync('tar.exe', ['-a', '-c', '-f', output, '-C', temporaryParent, 'DSH-Portable'], {

@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireRuntimeLease } from './runtime-capsule.mjs'
 import { appendStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
-import { startRuntimeHealth } from './runtime-health.mjs'
+import { startRuntimeHealth, startStartupProfile } from './runtime-health.mjs'
 
 const [dshBin, ...dshArgs] = process.argv.slice(2)
 const controlPipe = process.env.DSH_PORTABLE_CONTROL_PIPE
@@ -75,17 +75,24 @@ await new Promise((resolve, reject) => {
 appendStartupTrace(startupTrace, 'portable-host', 'control-ready')
 
 process.argv = [process.execPath, path.resolve(dshBin), ...dshArgs]
+const finishStartupProfile = await startStartupProfile(logDirectory, startupTrace?.startupId || '')
 appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-begin')
 healthPhase('official-dsh-import')
 const importStartedAt = performance.now()
 const importCpu = process.cpuUsage()
+let startupOutcome = 'startup-complete'
 try {
   const entry = await import(pathToFileURL(path.resolve(dshBin)).href)
   const explicitCli = typeof entry.runCli === 'function'
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-entry-ready', {
     mode: explicitCli ? 'exported-cli' : 'self-executing',
+    durationMs: Math.round(performance.now() - importStartedAt),
   })
-  if (explicitCli) await entry.runCli()
+  if (explicitCli) {
+    healthPhase('official-dsh-cli-start')
+    appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-cli-start')
+    await entry.runCli()
+  }
   healthPhase('official-dsh-import-complete')
   const cpu = process.cpuUsage(importCpu)
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-complete', {
@@ -93,6 +100,7 @@ try {
     cpuUserMs: Math.round(cpu.user / 1000), cpuSystemMs: Math.round(cpu.system / 1000),
   })
 } catch (error) {
+  startupOutcome = 'startup-failed'
   healthPhase('official-dsh-import-failed')
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-failed', {
     type: error?.constructor?.name || 'Error',
@@ -100,4 +108,6 @@ try {
   })
   control.close()
   throw error
+} finally {
+  await finishStartupProfile(startupOutcome)
 }

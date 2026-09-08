@@ -75,6 +75,8 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     assert.equal(loading.background, expectedTheme === 'dark' ? 'rgb(24, 24, 26)' : 'rgb(248, 248, 248)')
     assert.equal(loading.dark, expectedTheme === 'dark')
     assert.match(loading.text, /DeepSeek Harness/)
+    assert.equal(await evaluate(`document.getElementById('elapsed') === null`), true, 'loading document has no elapsed counter')
+    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ring')).animationTimingFunction`), 'linear', 'spinner must not jump in reduced-motion mode')
     const spinnerBefore = await evaluate(`getComputedStyle(document.querySelector('.ring')).transform`)
     await delay(650)
     const spinnerAfter = await evaluate(`getComputedStyle(document.querySelector('.ring')).transform`)

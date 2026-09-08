@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/p
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { zstdDecompressSync } from 'node:zlib'
 
 import { createRuntimeCapsule } from '../scripts/create-runtime-capsule.mjs'
 import { copyCapsuleShell } from '../scripts/package-windows-runtime-capsule.mjs'
@@ -35,6 +36,22 @@ async function fixture() {
   }
   return { parent, root, app }
 }
+
+test('default capsule compression preserves every payload byte and failed output removes its spool', async () => {
+  const { parent, root, app } = await fixture()
+  try {
+    const before = path.join(root, 'before.dshpack')
+    const after = path.join(root, 'after.dshpack')
+    await createRuntimeCapsule(app, before, path.join(root, 'before.json'), { level: 10 })
+    await createRuntimeCapsule(app, after, path.join(root, 'after.json'))
+    assert.deepEqual(zstdDecompressSync(await readFile(before)), zstdDecompressSync(await readFile(after)))
+    const blocked = path.join(root, 'blocked.dshpack')
+    await mkdir(blocked)
+    await assert.rejects(createRuntimeCapsule(app, blocked, path.join(root, 'blocked.json')))
+    await assert.rejects(stat(`${blocked}.${process.pid}.raw`), { code: 'ENOENT' })
+    await assert.rejects(stat(path.join(root, 'blocked.json')), { code: 'ENOENT' })
+  } finally { await rm(parent, { recursive: true, force: true }) }
+})
 
 test('runtime capsule extracts once, verifies its content, and follows a moved portable source', async () => {
   const { parent, root, app } = await fixture()
