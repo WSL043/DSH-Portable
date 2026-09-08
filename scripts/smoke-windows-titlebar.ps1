@@ -1,5 +1,5 @@
 param([Parameter(Mandatory=$true)][string]$Root, [Parameter(Mandatory=$true)][string]$Evidence,
-      [switch]$HeaderOnly, [switch]$HighlightMenu, [string]$Language)
+      [switch]$HeaderOnly, [switch]$HighlightMenu, [switch]$NavigationPreview, [string]$Language)
 $ErrorActionPreference='Stop'
 $env:DSH_PORTABLE_TEST_HIDDEN='1'
 $env:DSH_PORTABLE_TEST_AUTOMATION='1'
@@ -57,12 +57,23 @@ try {
  if($window.WindowState -ne 'Minimized'){throw 'Minimize command failed'}
  $window.WindowState='Normal'
  $window.Location=[Drawing.Point]::new(-32000,-32000)
+ if($NavigationPreview){
+   $state=[Activator]::CreateInstance($assembly.GetType('DshPortable.TrayBridgeState'),$true)
+   $state.canGoBack=$true
+   $state.canGoForward=$false
+   $type.GetField('trayState',$flags).SetValue($window,$state)
+   $type.GetField('desktopReady',$flags).SetValue($window,$true)
+   $type.GetField('trayBridgeReady',$flags).SetValue($window,$true)
+   $type.GetField('operationRunning',$flags).SetValue($window,$false)
+   $type.GetMethod('RefreshDesktopCommands',$flags).Invoke($window,@()) | Out-Null
+   if(-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-back'].Enabled -or $menu.Items['nav-forward'].Enabled){throw 'Navigation availability does not follow host state'}
+ }
  foreach($theme in @('dark','light')){
    $type.GetField('trayTheme',$flags).SetValue($window,$theme)
    $type.GetMethod('ApplyDesktopChrome',$flags).Invoke($window,@()) | Out-Null
    [TitlebarProbe]::ShowWindow($handle,4) | Out-Null
    [Windows.Forms.Application]::DoEvents()
-   if($HighlightMenu){$menu.Items[0].Select()}
+   if($HighlightMenu){$menu.Items['menu-file'].Select()}
    $captureHeight=if($HeaderOnly){72}else{$window.Height}
    $bitmap=[Drawing.Bitmap]::new($window.Width,$captureHeight)
    $graphics=[Drawing.Graphics]::FromImage($bitmap)

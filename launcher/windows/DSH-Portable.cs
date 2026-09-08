@@ -57,6 +57,8 @@ namespace DshPortable
         public string themePreference { get; set; }
         public string currentSessionId { get; set; }
         public bool hasRunningSession { get; set; }
+        public bool canGoBack { get; set; }
+        public bool canGoForward { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
     }
 
@@ -937,6 +939,31 @@ namespace DshPortable
         }
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
+            if (e.ToolStrip is DesktopTitleStrip && e.Item.Name.StartsWith("nav-"))
+            {
+                Color color = !e.Item.Enabled ? (dark ? Color.FromArgb(76, 76, 80) : Color.FromArgb(186, 186, 190))
+                    : dark ? Color.FromArgb(174, 174, 178) : Color.FromArgb(87, 87, 92);
+                float x = e.Item.Width / 2F, y = e.Item.Height / 2F;
+                using (Pen pen = new Pen(color, 1.1F))
+                {
+                    SmoothingMode previous = e.Graphics.SmoothingMode;
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    if (e.Item.Name == "nav-sidebar")
+                    {
+                        e.Graphics.DrawRectangle(pen, x - 6, y - 5, 12, 10);
+                        e.Graphics.DrawLine(pen, x - 2, y - 5, x - 2, y + 5);
+                    }
+                    else
+                    {
+                        float direction = e.Item.Name == "nav-back" ? -1 : 1;
+                        e.Graphics.DrawLine(pen, x - 5, y, x + 5, y);
+                        e.Graphics.DrawLine(pen, x + direction * 5, y, x, y - 4);
+                        e.Graphics.DrawLine(pen, x + direction * 5, y, x, y + 4);
+                    }
+                    e.Graphics.SmoothingMode = previous;
+                }
+                return;
+            }
             if (e.ToolStrip is DesktopTitleStrip)
                 e.TextColor = e.Item.Name == "caption-close" && e.Item.Selected ? Color.White
                     : e.Item.Selected ? (dark ? Color.White : Color.FromArgb(30, 30, 32))
@@ -1425,6 +1452,7 @@ namespace DshPortable
             ToolStripMenuItem file = new ToolStripMenuItem(L("文件", "&File"));
             ToolStripMenuItem view = new ToolStripMenuItem(L("视图", "&View"));
             ToolStripMenuItem help = new ToolStripMenuItem(L("帮助", "&Help"));
+            file.Name = "menu-file"; view.Name = "menu-view"; help.Name = "menu-help";
             desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
             {
@@ -1433,6 +1461,10 @@ namespace DshPortable
                 menu.Margin = new Padding(0, 4, 2, 4);
                 menu.Padding = new Padding(8, 0, 8, 0);
             }
+            AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("折叠/展开侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
+            AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
+            AddNavigationCommand(2, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
+            desktopMenu.ShowItemToolTips = true;
             AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { Close(); });
             AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate {
                 WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
@@ -1480,6 +1512,16 @@ namespace DshPortable
             });
         }
 
+        private void AddNavigationCommand(int index, string name, string action, string label, Keys shortcut)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(" ", null, delegate { PostBridgeAction(action, null); }) {
+                Name = name, AutoSize = false, Size = new Size(32, 28), Margin = new Padding(0, 4, 0, 4),
+                AccessibleName = label, ToolTipText = label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
+            };
+            desktopMenu.Items.Insert(index, item);
+            desktopShortcuts.Add(shortcut, item);
+        }
+
         protected override void OnSizeChanged(EventArgs eventArgs)
         {
             base.OnSizeChanged(eventArgs);
@@ -1505,6 +1547,10 @@ namespace DshPortable
         private void RefreshDesktopCommands()
         {
             if (desktopMenu == null) return;
+            bool navigationReady = desktopReady && trayBridgeReady && !shutdownRunning && !operationRunning;
+            desktopMenu.Items["nav-sidebar"].Enabled = navigationReady;
+            desktopMenu.Items["nav-back"].Enabled = navigationReady && trayState != null && trayState.canGoBack;
+            desktopMenu.Items["nav-forward"].Enabled = navigationReady && trayState != null && trayState.canGoForward;
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
                 foreach (ToolStripItem item in menu.DropDownItems)
                 {
@@ -1525,11 +1571,11 @@ namespace DshPortable
             if (!desktopStart) return false;
             if (!fullscreen && (key == Keys.F10 || key == (Keys.Alt | Keys.F) || key == (Keys.Alt | Keys.V) || key == (Keys.Alt | Keys.H)))
             {
-                int index = key == (Keys.Alt | Keys.V) ? 1 : key == (Keys.Alt | Keys.H) ? 2 : 0;
+                string name = key == (Keys.Alt | Keys.V) ? "menu-view" : key == (Keys.Alt | Keys.H) ? "menu-help" : "menu-file";
                 BeginInvoke(new Action(delegate {
                     if (fullscreen || IsDisposed) return;
                     RefreshDesktopCommands();
-                    ((ToolStripMenuItem)desktopMenu.Items[index]).ShowDropDown();
+                    ((ToolStripMenuItem)desktopMenu.Items[name]).ShowDropDown();
                 }));
                 return true;
             }
@@ -1888,6 +1934,7 @@ namespace DshPortable
 
         private void RebuildTrayMenu()
         {
+            RefreshDesktopCommands();
             if (trayMenuOpen)
             {
                 trayMenuRefreshPending = true;
@@ -5040,6 +5087,7 @@ namespace DshPortable
             BeginInvoke(new Action(FitWebViewToClient));
             operationRunning = false;
             desktopReady = true;
+            RefreshDesktopCommands();
             trayIcon.Visible = true;
         }
 
