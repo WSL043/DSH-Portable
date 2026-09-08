@@ -15,24 +15,24 @@ function pluginInstallError(result) {
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-image-viewer',
-  version: '0.1.0-beta.10',
-  spec: '0.1.0-beta.10',
+  version: '0.1.0-beta.11',
+  spec: '0.1.0-beta.11',
   filename: 'dsh-image-viewer.tgz',
-  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.10.tgz',
-  sha256: '0730b9c7e997e232a37d41225079e82bd34e5de24e51c6ed509f7b0f452af2b6',
-  integrity: 'sha512-xMbDhY2BfWFWBJ6ljiL2s6qhYA2I6szcfyRG2mnBhujqJ1qjSpIIGsDTe4SoFm7SSW7sMQL6jCrPAdQ2wqn9cg==',
+  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.11.tgz',
+  sha256: '4c10d6e21a6a000528429b9b91ac946c472f9d08a669cdec78886e19fffb0d58',
+  integrity: 'sha512-Ea0u5MKSNYvyazirUM8i+o8B4fz9Uv6B+Cl4o39QJFXVe/FT/Dphv1kwzNr6u5mp8Do2GviV0isKuTQ17Z2WiQ==',
   license: 'MIT',
-  reviewedCommit: 'c679dbe79fdea85107fc1dce3a1097e5652f4518',
+  reviewedCommit: '7943a70539586739f617d9430dff43ff9a3dae99',
 }), Object.freeze({
   name: 'dsh-chat-manager',
-  version: '1.3.2',
-  spec: '1.3.2',
+  version: '1.3.3',
+  spec: '1.3.3',
   filename: 'dsh-chat-manager.tgz',
-  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.3.2.tgz',
-  sha256: '663103fe37b087d0199d6422a5c7cb1d210cc4baceeed28b844f2cb416f5eb35',
-  integrity: 'sha512-wYBqYb0FnClP63/+PNwNqfcwLh8MsfDyKQ0fXAqDPi4YAZsJLBomr5nx6B4tNs2ZiHddbZRVxuxdNT/rZ9S7/g==',
+  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.3.3.tgz',
+  sha256: '45ad6fa9da1743de9b7edcf9689bb358a80e5f7657e57433713372232ddaf575',
+  integrity: 'sha512-PoOxC/avg+Av4XxMvLVyJIqfdHec2qI24HOdb1K5R6nQrVio5odrtDjLXkJTzfuGsru0qZsmxdEU0VVGA2O4XQ==',
   license: 'MIT',
-  reviewedCommit: 'edfb8d14499e57ec60cb807e79ae38adbd2a6714',
+  reviewedCommit: 'b44a31c40f6033cb8307894edb7817f55a9e89df',
 })])
 
 function defaultsForProduct(layout, adapters = {}) {
