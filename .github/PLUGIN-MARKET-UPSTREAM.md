@@ -4,8 +4,8 @@ The Portable market is maintained here as a small, product-specific component.
 It is not a drop-in copy of `dsh-market` and does not automatically inherit its
 release, process-supervision, sponsorship, or theme-gallery surfaces.
 
-Reviewed upstream baseline: `dsh-market` `v1.45.0`
-(`ecbd26957130bb43c37d05e3ae9b2bc94cb5ecf1`).
+Reviewed upstream baseline: `dsh-market` `v1.45.1`
+(`1664caec99219b4902f1686e2e34614815d38346`).
 
 Reviewed means every relevant change has a disposition below, not that the
 upstream feature set is copied or that these changes are already released.
@@ -15,6 +15,7 @@ The lock and this document advance together. Release preparation is manual.
 
 | Upstream behavior | Portable decision |
 | --- | --- |
+| Remove unused connection/runtime client requirements (#554, v1.45.1) | Adopted. Portable also removes its unused theme requirement; its entry only accesses locale and slots. A source-derived dependency contract prevents unused loading gates from returning. |
 | Never replace a private/self-hosted Git install with a same-name npm package (#525, #529) | Adopted as source preservation: external Git/URL/alias sources bypass npm checks and the update route refuses mutation with a visible manual-update explanation. Full external Git authentication and exact-commit rollback remain deferred; existing `github:` updates retain their tested branch and rollback behavior. |
 | Hide background Windows plugin-operation consoles (#536) | Already implemented for ordinary/piped spawn and both taskkill paths; native-host subprocess visibility is qualified separately. |
 | Document pnpm release-hold behavior (#531, #535) | Already covered by exact resolved-version installs and explicit release-age recovery; no runtime change needed. |

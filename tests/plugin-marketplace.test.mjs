@@ -1025,3 +1025,24 @@ test('release candidates never replace the stable automatic-update channel', asy
   assert.match(workflow, /UPDATE_CHANNEL_TAG:\s*\$\{\{ steps\.version\.outputs\.updateChannelTag \}\}/)
   assert.match(workflow, /if \[ "\$RELEASE_CHANNEL" = stable \]; then[\s\S]+update-channel-candidate/)
 })
+
+
+test('market loading requirements match the services its client entry uses', async () => {
+  const base = 'app/vendor/dsh-portable-plugin-market/'
+  const manifest = JSON.parse(await read(base + 'package.json'))
+  const source = await read(base + 'src/client/index.ts')
+  const providers = {
+    '@deepseek-ai/dsh-client-locale': 'locale',
+    '@deepseek-ai/dsh-client-ui-settings': 'slots',
+    '@deepseek-ai/dsh-client-ui-theme': 'theme',
+    '@deepseek-ai/dsh-client-connection': 'connection',
+    '@deepseek-ai/dsh-client-runtime': 'runtime',
+  }
+  const used = [...new Set([...source.matchAll(/\bctx\.([A-Za-z][A-Za-z0-9]*)/g)].map(match => match[1]))]
+    .filter(service => service !== 'effect').sort()
+  const declared = manifest.dsh.client.inject.map(seam => {
+    assert.ok(providers[seam], `Declare the service supplied by ${seam}`)
+    return providers[seam]
+  }).sort()
+  assert.deepEqual(declared, used, 'unused requirements can block the whole client entry')
+})

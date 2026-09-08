@@ -106,6 +106,8 @@ chmod +x DeepSeek-Herness-linux-x64.AppImage
 
 AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable-data` 文件夹；移动或备份时把两者一起复制。
 
+完整便携目录中的 `DeepSeek-Herness` 是可直接运行的 Linux ELF；部分文件管理器会显示通用可执行文件图标。需要桌面图标和应用菜单集成时，请使用上面的 AppImage。
+
 ## 移动与备份
 
 完整步骤、数据包迁移和无需第二台电脑的验证方法见[跨电脑迁移指南](docs/move-between-computers.md)。

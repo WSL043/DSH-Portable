@@ -25,8 +25,8 @@
     "catalog": "https://awesome-dsh-plugin.com/plugins.json",
     "catalogRepository": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin",
     "implementationBasis": "https://github.com/dsh-market/dsh-market",
-    "reviewedBasisTag": "v1.45.0",
-    "reviewedBasisCommit": "ecbd26957130bb43c37d05e3ae9b2bc94cb5ecf1"
+    "reviewedBasisTag": "v1.45.1",
+    "reviewedBasisCommit": "1664caec99219b4902f1686e2e34614815d38346"
   },
   "defaultPlugins": {
     "imageViewer": {
