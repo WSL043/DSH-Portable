@@ -637,15 +637,17 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
     read('scripts/audit-windows-startup-transition.mjs'),
     read('.github/workflows/ci.yml'),
   ])
-  assert.match(audit, /const bootLogSample = samples\.find\(sample => sample\.log\.includes\('dsh-boot-surface-visible'\)\)/)
-  assert.match(audit, /assert\.ok\(bootSample \|\| bootLogSample/)
+  assert.match(audit, /capture-windows-native-window\.ps1/)
+  assert.match(audit, /entry\.phase === 'native-loading-ready'/)
+  assert.match(audit, /assert\.ok\(capturedBoot && nativeLoading/)
+  assert.doesNotMatch(audit, /dsh-boot-surface-visible/)
   assert.match(audit, /const revealSample = samples\.find\(sample => sample\.log\.includes\('dsh-first-paint-ready'\)\s*&& !sample\.bootVisible\s*&& sample\.bodyText\.length > 0\)/)
   assert.match(audit, /startupTimeoutSeconds/)
   assert.match(audit, /url: String\(location\.origin \|\| ''\) \+ String\(location\.pathname \|\| ''\)/)
   assert.doesNotMatch(audit, /url: location\.href/)
   assert.match(workflow, /audit-windows-startup-transition\.mjs[^\r\n]+\$\{\{ matrix\.firstColdStartSeconds \}\}/)
   assert.ok(
-    audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(bootSample || bootLogSample"),
+    audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(capturedBoot && nativeLoading"),
     'startup samples must be uploaded even when the transition assertion fails',
   )
 })

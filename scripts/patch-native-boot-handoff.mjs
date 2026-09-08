@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const MARKER = 'dsh-portable-native-boot-handoff-v5'
+const MARKER = 'dsh-portable-native-boot-handoff-v6'
 const CSS_MARKER = 'dsh-portable-native-boot-logo-v1'
 
 function replaceRequired(source, needle, replacement, label) {
@@ -56,7 +56,7 @@ export function patchNativeBootHandoff(source) {
 \t\t\t\t\tfor (const control of root?.querySelectorAll("button,input,textarea,[contenteditable=true],[role=button]") || []) {
 \t\t\t\t\t\tconst rect = control.getBoundingClientRect();
 \t\t\t\t\t\tconst style = getComputedStyle(control);
-\t\t\t\t\t\tif (rect.width >= 20 && rect.height >= 20 && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") visibleControls += 1;
+\t\t\t\t\t\tif (rect.width >= 20 && rect.height >= 20 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth && style.display !== "none" && style.visibility !== "hidden" && style.opacity !== "0") visibleControls += 1;
 \t\t\t\t\t}
 \t\t\t\t\tif (fontsReady && rootVisible && text.length > 0 && visibleControls >= 2) readyFrames += 1;
 \t\t\t\t\telse readyFrames = 0;
@@ -78,7 +78,6 @@ export function patchNativeBootHandoff(source) {
 \t\t\t(0, react.useLayoutEffect)(() => {
 \t\t\t\tif (nativeHost !== void 0 && surfaceReady) nativeHost.postMessage({ type: "dsh-portable/surface-ready", schemaVersion: 1 });
 \t\t\t}, [nativeHost, surfaceReady]);
-\t\t\tif (nativeHost !== void 0) return ready ? props.app() : null;
 \t\t\tif (ready) return props.app();
 \t\t\treturn (0, react.createElement)("div", {
 \t\t\t\tclassName: props.boot.className,

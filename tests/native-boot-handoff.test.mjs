@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+import vm from 'node:vm'
 import { patchNativeBootCss, patchNativeBootHandoff } from '../scripts/patch-native-boot-handoff.mjs'
 
 const upstream = `\t\tfunction BootHandoff(props) {
@@ -18,7 +19,7 @@ const upstream = `\t\tfunction BootHandoff(props) {
 
 test('the DSH renderer hands a settled app surface to the native desktop host', () => {
   const output = patchNativeBootHandoff(upstream)
-  assert.match(output, /dsh-portable-native-boot-handoff-v5/)
+  assert.match(output, /dsh-portable-native-boot-handoff-v6/)
   assert.match(output, /globalThis\.chrome\?\.webview/)
   assert.match(output, /readyFrames >= 3/)
   assert.match(output, /visibleControls >= 2/)
@@ -29,13 +30,37 @@ test('the DSH renderer hands a settled app surface to the native desktop host', 
   assert.match(output, /useLayoutEffect\)\(\(\) => \{[\s\S]+surfaceReady[\s\S]+nativeHost\.postMessage[\s\S]+\}, \[nativeHost, surfaceReady\]\)/)
   assert.match(output, /dsh-portable\/boot-visible/)
   assert.match(output, /nativeHost\.postMessage/)
-  assert.match(output, /if \(nativeHost !== void 0\) return ready \? props\.app\(\) : null;/)
+  assert.doesNotMatch(output, /return ready \? props\.app\(\) : null/)
+  assert.match(output, /rect\.bottom > 0 && rect\.top < innerHeight/)
   assert.match(output, /if \(ready\) return props\.app\(\);/)
   assert.doesNotMatch(output, /cloneNode|append\(overlay\)|react\.Fragment|surfaceReady \? null : boot/)
   assert.doesNotMatch(output, /style: nativeHost === void 0/)
   assert.match(output, /dangerouslySetInnerHTML: \{ __html: props\.boot\.html \}/)
   assert.match(output, /setReady\(true\);\s+requestAnimationFrame\(finish\);/)
   assert.equal(patchNativeBootHandoff(output), output)
+})
+
+test('native hydration claims the server loading node before replacing it with the app', () => {
+  let ready = false
+  let stateIndex = 0
+  const context = vm.createContext({
+    chrome: { webview: {} },
+    react: {
+      useState: initial => [stateIndex++ === 0 ? ready : initial, () => {}],
+      useLayoutEffect() {},
+      createElement: (tag, props) => ({ tag, props }),
+    },
+  })
+  vm.runInContext(patchNativeBootHandoff(upstream), context)
+  const app = { workspace: true }
+  const props = { boot: { className: 'boot', html: '<p>Loading</p>' }, app: () => app }
+  const first = context.BootHandoff(props)
+  assert.equal(first.tag, 'div')
+  assert.equal(first.props['data-dsh-boot'], '')
+  assert.equal(first.props.dangerouslySetInnerHTML.__html, props.boot.html)
+  ready = true
+  stateIndex = 0
+  assert.equal(context.BootHandoff(props), app)
 })
 
 test('the official DSH loader carries the product whale without changing its hydrated DOM', () => {

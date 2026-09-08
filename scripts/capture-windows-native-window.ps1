@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory = $true)][int]$TargetProcessId,
     [Parameter(Mandatory = $true)][string]$OutputDirectory
 )
@@ -28,7 +28,12 @@ public static class NativeWindowCapture {
     }
 }
 '@
-$window = [NativeWindowCapture]::Find($TargetProcessId)
+$window = [IntPtr]::Zero
+$deadline = [DateTime]::UtcNow.AddSeconds(10)
+while ($window -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
+    $window = [NativeWindowCapture]::Find($TargetProcessId)
+    if ($window -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
+}
 if ($window -eq [IntPtr]::Zero) { throw 'Native test window was not found' }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 # WM_PRINT captures only the target HWND; it never activates or moves a window.

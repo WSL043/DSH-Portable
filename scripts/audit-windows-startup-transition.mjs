@@ -114,7 +114,7 @@ async function waitForValue(client, expression, predicate, description, timeoutM
 async function logTail(offset) {
   if (!existsSync(launcherLog)) return ''
   const value = await readFile(launcherLog, 'utf8')
-  return value.slice(offset)
+  return value.slice(value.length >= offset ? offset : 0)
 }
 
 async function capture(client, filename) {
@@ -185,7 +185,7 @@ async function createExistingSession(client) {
 
 let launcher = null
 let client = null
-const logOffset = existsSync(launcherLog) ? (await readFile(launcherLog)).length : 0
+const logOffset = existsSync(launcherLog) ? (await readFile(launcherLog, 'utf8')).length : 0
 try {
   await execFileAsync(portableNode, [portableCli, ...stopArgs], {
     cwd: root,
@@ -207,6 +207,15 @@ try {
     windowsHide: true,
   })
 
+  // Capture the native HWND in parallel with WebView startup. The off-screen
+  // compositor does not generate normal paints, and no intermediate HTML page
+  // is supposed to be visible in the native host anymore.
+  const nativeCapture = requireLoading ? execFileAsync('powershell.exe', [
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    path.join(import.meta.dirname, 'capture-windows-native-window.ps1'),
+    '-TargetProcessId', String(launcher.pid), '-OutputDirectory', path.join(output, '01-native-loader'),
+  ], { windowsHide: true, timeout: 20000 }) : Promise.resolve()
+  nativeCapture.catch(() => {}) // Keep errors for the awaited capture below.
   const page = await waitForTarget(debugPort, launcher)
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
@@ -214,7 +223,8 @@ try {
   await client.send('Page.enable')
 
   const samples = []
-  let capturedBoot = false
+  await nativeCapture
+  const capturedBoot = requireLoading
   let capturedReveal = false
   let capturedWorkspace = false
   let workspaceStableSamples = 0
@@ -225,7 +235,7 @@ try {
         if (!(node instanceof Element)) return false
         const rect = node.getBoundingClientRect()
         const style = getComputedStyle(node)
-        return rect.width > 0 && rect.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0
+        return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight && rect.right > 0 && rect.left < innerWidth && style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity) > 0
       }
       const boot = document.querySelector('[data-dsh-boot]')
       const visibleControls = [...document.querySelectorAll('button,input,textarea,[contenteditable=true],[role=button]')].filter(visible).length
@@ -256,10 +266,6 @@ try {
     })()`)
     state.log = await logTail(logOffset)
     samples.push(state)
-    if (state.bootVisible && !capturedBoot) {
-      capturedBoot = true
-      await capture(client, '01-native-dsh-loader.png')
-    }
     if (state.log.includes('dsh-first-paint-ready') && !state.bootVisible && state.bodyText.length > 0 && !capturedReveal) {
       capturedReveal = true
       await capture(client, '02-reveal-frame.png')
@@ -277,8 +283,10 @@ try {
     await new Promise(resolve => setTimeout(resolve, 20))
   }
 
-  const bootSample = samples.find(sample => sample.bootVisible)
-  const bootLogSample = samples.find(sample => sample.log.includes('dsh-boot-surface-visible'))
+  const startupTrace = (await readFile(path.join(path.dirname(launcherLog), 'startup-latest.jsonl'), 'utf8'))
+    .trim().split(/\r?\n/).map(line => JSON.parse(line))
+  const nativeLoading = startupTrace.find(entry => entry.phase === 'native-loading-ready' && entry.pid === launcher.pid)
+  const nativeReady = startupTrace.find(entry => entry.phase === 'interactive-ready' && entry.pid === launcher.pid)
   const revealSample = samples.find(sample => sample.log.includes('dsh-first-paint-ready')
     && !sample.bootVisible
     && sample.bodyText.length > 0)
@@ -287,11 +295,11 @@ try {
     && !sample.bootVisible
     && sample.bodyText.length > 0)
   await writeFile(path.join(output, 'samples.json'), JSON.stringify(samples, null, 2))
+  await writeFile(path.join(output, 'native-startup-trace.json'), JSON.stringify(startupTrace, null, 2))
   if (requireLoading) {
-    assert.ok(bootSample || bootLogSample, 'the official DSH loading state was never observed')
-    assert.ok(bootLogSample, 'the native window never revealed the official DSH loading surface')
-    assert.ok(bootLogSample.log.indexOf('dsh-boot-surface-visible') < bootLogSample.log.indexOf('dsh-first-paint-ready')
-      || !bootLogSample.log.includes('dsh-first-paint-ready'), 'the workspace was revealed before the DSH loading surface')
+    assert.ok(capturedBoot && nativeLoading, 'the native loading surface was not captured and painted')
+    assert.ok(nativeReady && nativeLoading.elapsedMs < nativeReady.elapsedMs,
+      'native loading must precede the usable workspace handoff')
   }
   assert.ok(revealSample, 'the native loading surface never handed off to the settled workspace')
   assert.match(revealSample.log, /surface-ready-message/)
