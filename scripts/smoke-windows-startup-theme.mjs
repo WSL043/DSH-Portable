@@ -92,9 +92,10 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     }
     assert.ok(trace.some(entry => entry.phase === 'interactive-ready'), 'workspace becomes interactive')
     await delay(2000)
-    const final = await evaluate(`({dark:matchMedia('(prefers-color-scheme:dark)').matches,background:getComputedStyle(document.body).backgroundColor,url:location.origin})`)
+    const final = await evaluate(`({dark:matchMedia('(prefers-color-scheme:dark)').matches,background:getComputedStyle(document.body).backgroundColor,url:location.origin,loadingNodes:document.querySelectorAll('[data-dsh-boot]').length})`)
     await writeFile(path.join(root, 'acceptance', `theme-probe-${results.length}.json`), JSON.stringify({ theme, expectedTheme, loading, final, colors: await evaluate('window.__startupColors') }, null, 2))
     assert.equal(final.dark, expectedTheme === 'dark')
+    assert.equal(final.loadingNodes, 0, 'server loading DOM must be removed before handoff')
     assert.match(final.url, /^http:\/\/127\.0\.0\.1:/)
     const colors = await evaluate('window.__startupColors')
     assert.ok(Array.isArray(colors) && colors.length, 'transition colors captured')
@@ -121,13 +122,24 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     assert.equal(normal.nativeLoadingVisible, false)
     assert.equal(normal.menuVisible, true)
     assert.ok(normal.contentTop >= normal.menuBottom, 'menu never overlaps the workspace')
+    const sendWebViewKey = async (key, expectedFullscreen) => {
+      await exec('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+        path.join(import.meta.dirname, 'send-windows-webview-key.ps1'),
+        '-TargetProcessId', String(child.pid), '-KeyCode', String(key)], { windowsHide: true, timeout: 20000 })
+      for (let attempt=0; attempt<50; attempt++) {
+        const state = await native()
+        if (state.fullscreen === expectedFullscreen) return state
+        await delay(100)
+      }
+      throw new Error('Real WebView keyboard command did not change fullscreen state')
+    }
     for (let cycle=0; cycle<2; cycle++) {
-      const full = await native(122) // F11, the same dispatcher used by native/WebView key input
+      const full = cycle === 0 ? await sendWebViewKey(122, true) : await native(122) // F11, the same dispatcher used by native/WebView key input
       assert.equal(full.fullscreen, true)
       assert.equal(full.chrome, 'None')
       assert.equal(full.menuVisible, false)
       assert.equal(full.contentTop, 0)
-      const restored = await native(27) // Escape
+      const restored = cycle === 0 ? await sendWebViewKey(27, false) : await native(27) // Escape
       assert.equal(restored.fullscreen, false)
       assert.equal(restored.chrome, 'Sizable')
       assert.deepEqual(restored.bounds, normal.bounds)
