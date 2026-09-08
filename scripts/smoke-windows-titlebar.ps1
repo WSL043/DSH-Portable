@@ -1,4 +1,5 @@
-param([Parameter(Mandatory=$true)][string]$Root, [Parameter(Mandatory=$true)][string]$Evidence)
+param([Parameter(Mandatory=$true)][string]$Root, [Parameter(Mandatory=$true)][string]$Evidence,
+      [switch]$HeaderOnly, [switch]$HighlightMenu, [string]$Language)
 $ErrorActionPreference='Stop'
 $env:DSH_PORTABLE_TEST_HIDDEN='1'
 $env:DSH_PORTABLE_TEST_AUTOMATION='1'
@@ -25,6 +26,10 @@ try {
  $events=[ComponentModel.Component].GetProperty('Events',$flags).GetValue($window)
  $shown=[Windows.Forms.Form].GetField('EVENT_SHOWN',[Reflection.BindingFlags]'Static,NonPublic').GetValue($null)
  $window.remove_Shown($events[$shown])
+ if($Language){
+   $type.GetField('uiLanguage',[Reflection.BindingFlags]'Static,NonPublic').SetValue($null,$Language)
+   $type.GetMethod('InitializeDesktopMenu',$flags).Invoke($window,@()) | Out-Null
+ }
  $window.Location=[Drawing.Point]::new(-32000,-32000)
  $handle=$window.Handle
  $menu=$type.GetField('desktopMenu',$flags).GetValue($window)
@@ -57,7 +62,9 @@ try {
    $type.GetMethod('ApplyDesktopChrome',$flags).Invoke($window,@()) | Out-Null
    [TitlebarProbe]::ShowWindow($handle,4) | Out-Null
    [Windows.Forms.Application]::DoEvents()
-   $bitmap=[Drawing.Bitmap]::new($window.Width,$window.Height)
+   if($HighlightMenu){$menu.Items[0].Select()}
+   $captureHeight=if($HeaderOnly){72}else{$window.Height}
+   $bitmap=[Drawing.Bitmap]::new($window.Width,$captureHeight)
    $graphics=[Drawing.Graphics]::FromImage($bitmap)
    $dc=$graphics.GetHdc()
    try { if(-not [TitlebarProbe]::PrintWindow($handle,$dc,2)){throw 'Native titlebar capture failed'} }

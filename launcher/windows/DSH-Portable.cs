@@ -900,13 +900,60 @@ namespace DshPortable
         }
     }
 
+    internal sealed class DesktopTitleRenderer : ToolStripProfessionalRenderer
+    {
+        private readonly bool dark;
+        internal DesktopTitleRenderer(bool isDark) : base(new DshMenuColorTable(isDark)) { dark = isDark; }
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            if (!(e.ToolStrip is DesktopTitleStrip)) base.OnRenderToolStripBorder(e);
+        }
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (!(e.ToolStrip is DesktopTitleStrip)) { base.OnRenderMenuItemBackground(e); return; }
+            if (!e.Item.Selected && !e.Item.Pressed) return;
+            bool close = e.Item.Name == "caption-close";
+            Rectangle bounds = new Rectangle(0, 0, e.Item.Width, e.Item.Height);
+            Color color = close ? Color.FromArgb(196, 43, 28)
+                : dark ? Color.FromArgb(53, 53, 55) : Color.FromArgb(230, 230, 232);
+            using (SolidBrush brush = new SolidBrush(color))
+            {
+                if (e.Item.Name.StartsWith("caption-")) { e.Graphics.FillRectangle(brush, bounds); return; }
+                bounds.Inflate(-1, -2);
+                using (GraphicsPath shape = new GraphicsPath())
+                {
+                    const int diameter = 8;
+                    shape.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+                    shape.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+                    shape.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+                    shape.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+                    shape.CloseFigure();
+                    SmoothingMode previous = e.Graphics.SmoothingMode;
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    e.Graphics.FillPath(brush, shape);
+                    e.Graphics.SmoothingMode = previous;
+                }
+            }
+        }
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            if (e.ToolStrip is DesktopTitleStrip)
+                e.TextColor = e.Item.Name == "caption-close" && e.Item.Selected ? Color.White
+                    : e.Item.Selected ? (dark ? Color.White : Color.FromArgb(30, 30, 32))
+                    : dark ? Color.FromArgb(174, 174, 178) : Color.FromArgb(87, 87, 92);
+            base.OnRenderItemText(e);
+        }
+    }
+
     internal sealed class DesktopTitleStrip : MenuStrip
     {
-        internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 10F);
+        internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
+        internal readonly Font MenuFont = new Font("Segoe UI", 9.5F);
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
             if (disposing) CaptionFont.Dispose();
+            if (disposing) MenuFont.Dispose();
         }
         protected override void WndProc(ref Message message)
         {
@@ -1370,7 +1417,8 @@ namespace DshPortable
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 36, Padding = new Padding(8, 0, 0, 0), Font = Font, Visible = !fullscreen };
+                AutoSize = false, Height = 36, Padding = new Padding(12, 0, 0, 0), Visible = !fullscreen };
+            desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
             desktopContent.BringToFront();
@@ -1378,6 +1426,13 @@ namespace DshPortable
             ToolStripMenuItem view = new ToolStripMenuItem(L("视图", "&View"));
             ToolStripMenuItem help = new ToolStripMenuItem(L("帮助", "&Help"));
             desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
+            foreach (ToolStripMenuItem menu in desktopMenu.Items)
+            {
+                menu.AutoSize = false;
+                menu.Size = new Size(56, 28);
+                menu.Margin = new Padding(0, 4, 2, 4);
+                menu.Padding = new Padding(8, 0, 8, 0);
+            }
             AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { Close(); });
             AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate {
                 WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
@@ -1630,9 +1685,9 @@ namespace DshPortable
             if (desktopMenu != null && desktopMenuLanguage != uiLanguage) InitializeDesktopMenu();
             if (desktopMenu != null)
             {
-                desktopMenu.BackColor = background;
+                desktopMenu.BackColor = dark ? Color.FromArgb(30, 30, 32) : Color.FromArgb(250, 250, 251);
                 desktopMenu.ForeColor = foreground;
-                desktopMenu.Renderer = new ToolStripProfessionalRenderer(new DshMenuColorTable(dark));
+                desktopMenu.Renderer = new DesktopTitleRenderer(dark);
                 foreach (ToolStripMenuItem menu in desktopMenu.Items)
                 {
                     menu.ForeColor = foreground;
