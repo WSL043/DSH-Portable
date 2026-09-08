@@ -30,6 +30,16 @@ publish an unqualified release.
   pins. It verifies pinned integrity, ignores deprecated tagged releases and
   never downgrades to an older `latest` tag. A newer candidate requests
   compatibility review. The existing six-hour intake workflow saves its report.
+- Default-plugin qualification now includes actual stable and Alpha operations.
+  Chat Manager supports the Alpha JSONL handle API and retains the writer lease
+  through removal; tests cover archive, restore, cancellation and deletion of
+  an opened synthetic session. Image Viewer collects all composer images and
+  excludes interactive controls from pointer capture. Its browser acceptance
+  covers gallery navigation, zoom, pan, notes, download and focus restoration.
+  Both plugin release workflows gate publication on these runtime checks.
+- General settings no longer draws borders on the Portable outer group or its
+  final data row. Native browser acceptance checks both computed borders are
+  zero and that internal separators remain visible.
 - Package footprint snapshots are uploaded separately on all five targets and
   compared with a retained successful main build. Existing size budgets remain
   blocking. Missing initial/expired baselines are reported explicitly; growth

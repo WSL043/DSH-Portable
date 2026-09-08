@@ -16,7 +16,7 @@
 - The core candidate publisher selected old Portable prerelease shells instead of the current qualified stable shell. Its dependency fingerprint omitted shell source changes. Both channels now target a qualified main build, with independently selected stable/candidate source locks and exact base artifacts for acceptance.
 - Same-version core catalog deduplication previously preferred the historical manifest over the newly built one. Current manifests now win, and retained history must match all required Portable, shell, runtime and Node compatibility fields.
 - Official `0.1.3-alpha.2` resolves to `82a5fd61a7cf5c293cec4bdff68f455398d685e9`. Its official source uses `pnpm@11.7.0` and selects 251 DSH packages, 9 vendor packages and 1 landlock entry. The old 242-package candidate count was stale. Source intake now derives these inputs from the pinned commit.
-- Default plugins remain `dsh-image-viewer@0.1.0-beta.9` and `dsh-chat-manager@1.3.1`, the newest respective published versions checked on 2026-09-08. Their compatibility with the new core requires runtime qualification, not just version comparison. Failed bundled-plugin installs now retain bounded, redacted installer output.
+- Default plugins are pinned to `dsh-image-viewer@0.1.0-beta.10` and `dsh-chat-manager@1.3.2`, with published archive integrity verified on 2026-09-08. Stable and Alpha runtime acceptance covers actual image operations and session archive/restore/deletion. This fixes the Alpha JSONL-backend false rejection, incomplete composer galleries and gallery-button pointer capture. Failed bundled-plugin installs retain bounded, redacted installer output.
 
 ## Slow startup remains unresolved
 

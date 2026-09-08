@@ -36,8 +36,8 @@ test('a stable latest behind a beta pin never causes a downgrade', () => {
 
   assert.deepEqual(result, {
     name: 'dsh-image-viewer',
-    pinned: '0.1.0-beta.9',
-    selected: '0.1.0-beta.9',
+    pinned: '0.1.0-beta.10',
+    selected: '0.1.0-beta.10',
     channel: 'prerelease',
     tag: 'beta',
     changed: false,
@@ -50,14 +50,14 @@ test('the highest newer candidate is selected and marked for compatibility revie
     pinned,
     registry: registry({
       latest: '0.1.0-beta.7',
-      beta: '0.1.0-beta.10',
+      beta: '0.1.0-beta.11',
       next: '0.1.0-beta.8',
     }),
   })
 
   assert.equal(result.name, pinned.name)
   assert.equal(result.pinned, pinned.version)
-  assert.equal(result.selected, '0.1.0-beta.10')
+  assert.equal(result.selected, '0.1.0-beta.11')
   assert.equal(result.channel, 'prerelease')
   assert.equal(result.tag, 'beta')
   assert.equal(result.changed, true)
@@ -82,15 +82,15 @@ test('deprecated tagged versions are ignored when selecting the upstream candida
   const result = evaluateDefaultPluginUpstream({
     pinned,
     registry: registry({
-      beta: '0.1.0-beta.10',
+      beta: '0.1.0-beta.11',
       next: '0.1.0-beta.8',
       versions: {
-        '0.1.0-beta.10': { deprecated: 'broken package', dist: { integrity: 'sha512-deprecated' } },
+        '0.1.0-beta.11': { deprecated: 'broken package', dist: { integrity: 'sha512-deprecated' } },
       },
     }),
   })
 
-  assert.equal(result.selected, '0.1.0-beta.9')
+  assert.equal(result.selected, '0.1.0-beta.10')
   assert.equal(result.tag, null)
   assert.equal(result.changed, false)
   assert.equal(result.requiresCompatibilityReview, false)
