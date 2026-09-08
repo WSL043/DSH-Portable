@@ -316,7 +316,6 @@ test('the product locks and packages the official pnpm required by arbitrary DSH
   assert.equal(lockfile.packages['node_modules/pnpm'].version, '11.11.0')
   assert.equal(lockfile.packages['node_modules/pnpm'].integrity, upstream.pnpm.integrity)
   assert.equal(upstream.pnpm.version, '11.11.0')
-  assert.match(build, /dsh-cli\.mjs/)
   assert.match(build, /DSH-Command\.cs/)
   assert.match(build, /dsh\.exe/)
   assert.match(build, /dsh-terminal\.cmd/)

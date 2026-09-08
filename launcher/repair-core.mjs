@@ -13,6 +13,7 @@ import {
   repairManagedProfileModuleFallback,
 } from './portable-core.mjs'
 import { redactDiagnosticText, readLogTail } from './diagnostic-policy.mjs'
+import { summarizeStartupRun } from './startup-summary.mjs'
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
@@ -329,7 +330,23 @@ async function collectStartupHistory(layout) {
       lastActivityAt: new Date(run.lastActivityAt).toISOString(),
       logs: Object.fromEntries(HISTORY_LOG_NAMES.map(name => [name, ''])),
       truncatedLogs: [],
-    }))
+      summary: null,
+  }))
+
+  // Read each bounded tail and summarize it before assigning any export
+  // payload budget. The summary must see the largest safeLogTail evidence,
+  // while its own metadata still counts against the 100 KiB history cap.
+  const collected = []
+  for (let index = 0; index < selected.length; index += 1) {
+    const run = selected[index]
+    const record = history.runs[index]
+    const tails = Object.fromEntries(await Promise.all(HISTORY_LOG_NAMES.map(async name => [
+      name,
+      await safeLogTail(path.join(run.directory, name)),
+    ])))
+    record.summary = summarizeStartupRun(run.startupId, tails)
+    collected.push({ run, record, tails })
+  }
 
   const metadataBytes = historySize(history)
   const metadataReserveBytes = Math.max(HISTORY_METADATA_RESERVE_BYTES, metadataBytes + 1024)
@@ -339,13 +356,7 @@ async function collectStartupHistory(layout) {
   history.truncation.metadataReserveBytes = metadataReserveBytes
   history.truncation.perRunBytes = perRunBytes
 
-  for (let index = 0; index < selected.length; index += 1) {
-    const run = selected[index]
-    const record = history.runs[index]
-    const tails = Object.fromEntries(await Promise.all(HISTORY_LOG_NAMES.map(async name => [
-      name,
-      await safeLogTail(path.join(run.directory, name)),
-    ])))
+  for (const { record, tails } of collected) {
     const baselineBytes = historyLogSize(record.logs)
     const payloadBytes = Math.max(0, perRunBytes - baselineBytes)
     const startupNames = ['startup.jsonl', 'startup.jsonl.previous']
@@ -355,6 +366,10 @@ async function collectStartupHistory(layout) {
       : 0
     const startupUsed = fillHistoryLogGroup(history, record, tails, startupNames, startupBudget, perRunBytes)
     fillHistoryLogGroup(history, record, tails, healthNames, Math.max(0, payloadBytes - startupUsed), perRunBytes)
+    // A history-budget omission happens after summary collection. Preserve
+    // the explicit uncertainty marker so consumers never mistake the bounded
+    // tail for complete evidence.
+    if (record.truncatedLogs.length > 0 && record.summary) record.summary.incompleteEvidence = true
   }
   return history
 }

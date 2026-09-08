@@ -3,7 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 function parseArgs(argv) {
-  const result = { root: '', archive: '', platform: '', budget: '', output: '' }
+  const result = { root: '', archive: '', platform: '', budget: '', baseline: '', output: '' }
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
     if (!value.startsWith('--') && result.root === '') {
@@ -18,7 +18,7 @@ function parseArgs(argv) {
     index += 1
   }
   if (result.root === '') {
-    throw new Error('usage: node report-footprint.mjs <product-root> --platform <id> [--archive <file>] [--budget <file>] [--output <file>]')
+    throw new Error('usage: node report-footprint.mjs <product-root> --platform <id> [--archive <file>] [--budget <file>] [--baseline <file>] [--output <file>]')
   }
   return result
 }
@@ -102,6 +102,118 @@ async function verifyBudget(report, filename, platform) {
   if (failures.length > 0) throw new Error(`footprint budget failed: ${failures.join('; ')}`)
 }
 
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function validateNonNegativeInteger(value, label, kind = 'footprint baseline') {
+  if (!Number.isSafeInteger(value) || value < 0) throw new Error(`invalid ${kind}: ${label} must be a non-negative safe integer`)
+}
+
+function validateBreakdown(document, key, kind = 'footprint baseline') {
+  if (!Array.isArray(document[key])) throw new Error(`invalid ${kind}: ${key} must be an array`)
+  const names = new Set()
+  for (const [index, row] of document[key].entries()) {
+    if (!isRecord(row) || typeof row.name !== 'string' || row.name.length === 0) {
+      throw new Error(`invalid ${kind}: ${key}[${index}] must have a non-empty name`)
+    }
+    if (names.has(row.name)) throw new Error(`invalid ${kind}: ${key} contains duplicate name ${row.name}`)
+    names.add(row.name)
+    validateNonNegativeInteger(row.bytes, `${key}[${index}].bytes`, kind)
+    validateNonNegativeInteger(row.files, `${key}[${index}].files`, kind)
+    for (const metric of ['directories', 'links']) {
+      if (Object.hasOwn(row, metric)) validateNonNegativeInteger(row[metric], `${key}[${index}].${metric}`, kind)
+    }
+  }
+}
+
+function validateReport(document, platform, kind) {
+  if (!isRecord(document)) throw new Error(`invalid ${kind}: expected a JSON object`)
+  if (document.schemaVersion !== 1) {
+    throw new Error(`${kind} schema mismatch: expected 1, got ${String(document.schemaVersion)}`)
+  }
+  if (typeof document.platform !== 'string' || document.platform.length === 0) throw new Error(`invalid ${kind}: platform must be a non-empty string`)
+  if (document.platform !== platform) {
+    throw new Error(`${kind} platform mismatch: expected ${platform}, got ${String(document.platform)}`)
+  }
+  if (!isRecord(document.total)) throw new Error(`invalid ${kind}: total must be an object`)
+  validateNonNegativeInteger(document.total.bytes, 'total.bytes', kind)
+  validateNonNegativeInteger(document.total.files, 'total.files', kind)
+  for (const metric of ['directories', 'links']) {
+    if (Object.hasOwn(document.total, metric)) validateNonNegativeInteger(document.total[metric], `total.${metric}`, kind)
+  }
+  if (!Object.hasOwn(document, 'archiveBytes')) throw new Error(`invalid ${kind}: archiveBytes is required`)
+  if (document.archiveBytes !== null) validateNonNegativeInteger(document.archiveBytes, 'archiveBytes', kind)
+  validateBreakdown(document, 'sections', kind)
+  validateBreakdown(document, 'packages', kind)
+}
+
+async function readBaseline(filename, platform) {
+  let document
+  try {
+    document = JSON.parse(await readFile(filename, 'utf8'))
+  } catch (error) {
+    throw new Error(`invalid footprint baseline ${filename}: ${error.message}`, { cause: error })
+  }
+  validateReport(document, platform, 'footprint baseline')
+  return document
+}
+
+function sortDeltaRows(rows) {
+  return rows.sort((left, right) => {
+    const byteDelta = Math.abs(right.bytes) - Math.abs(left.bytes)
+    if (byteDelta !== 0) return byteDelta
+    return left.name < right.name ? -1 : left.name > right.name ? 1 : 0
+  })
+}
+
+function compareBreakdown(current, baseline) {
+  const baselineByName = new Map(baseline.map((row) => [row.name, row]))
+  const currentByName = new Map(current.map((row) => [row.name, row]))
+  const added = []
+  const removed = []
+  const changed = []
+  for (const row of current) {
+    const previous = baselineByName.get(row.name)
+    if (!previous) {
+      added.push({ name: row.name, bytes: row.bytes, files: row.files })
+      continue
+    }
+    const bytes = row.bytes - previous.bytes
+    const files = row.files - previous.files
+    if (bytes !== 0 || files !== 0) changed.push({ name: row.name, bytes, files })
+  }
+  for (const row of baseline) {
+    if (!currentByName.has(row.name)) removed.push({ name: row.name, bytes: 0 - row.bytes, files: 0 - row.files })
+  }
+  return {
+    added: sortDeltaRows(added),
+    removed: sortDeltaRows(removed),
+    changed: sortDeltaRows(changed),
+  }
+}
+
+function compareReports(current, baseline) {
+  return {
+    total: {
+      bytes: current.total.bytes - baseline.total.bytes,
+      files: current.total.files - baseline.total.files,
+    },
+    archiveBytes: current.archiveBytes !== null && baseline.archiveBytes !== null
+      ? current.archiveBytes - baseline.archiveBytes
+      : null,
+    sections: compareBreakdown(current.sections, baseline.sections),
+    packages: compareBreakdown(current.packages, baseline.packages),
+  }
+}
+
+export function compareFootprintReports(current, baseline) {
+  if (!isRecord(current)) throw new Error('invalid footprint report: expected a JSON object')
+  validateReport(current, current.platform, 'footprint report')
+  validateReport(baseline, current.platform, 'footprint baseline')
+  return compareReports(current, baseline)
+}
+
 export async function createFootprintReport(options) {
   const root = path.resolve(options.root)
   const report = {
@@ -113,6 +225,10 @@ export async function createFootprintReport(options) {
     packages: await packageBreakdown(path.join(root, 'app', 'node_modules')),
   }
   if (options.budget) await verifyBudget(report, path.resolve(options.budget), report.platform)
+  if (options.baseline) {
+    const baseline = await readBaseline(path.resolve(options.baseline), report.platform)
+    report.comparison = compareFootprintReports(report, baseline)
+  }
   return report
 }
 

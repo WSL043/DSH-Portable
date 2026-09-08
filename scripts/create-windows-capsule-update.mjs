@@ -42,7 +42,7 @@ export async function createWindowsCapsuleUpdate(sourceStage, outputZip, options
       path.join(source, 'app'),
       path.join(temporary, 'runtime', 'DSH-App.dshpack'),
       path.join(temporary, 'runtime-capsule.json'),
-      { platform: 'win32', arch: 'x64', level: options.level ?? 10 },
+      { platform: 'win32', arch: 'x64', level: options.level },
     )
     await writeFile(path.join(temporary, 'component.json'), `${JSON.stringify({
       schemaVersion: 1,

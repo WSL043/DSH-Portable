@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -85,6 +86,15 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app --ignore-scripts
       - run: npm test
+        env:
+          DSH_TEST_EVIDENCE_DIR: ${{ runner.temp }}/startup-contract-evidence
+      - name: Retain startup sampling evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: startup-contract-evidence-${{ matrix.label }}
+          path: ${{ runner.temp }}/startup-contract-evidence
+          if-no-files-found: warn
 
   windows-build:
     name: Build Windows base artifacts
@@ -107,6 +117,15 @@ jobs:
       - name: Build Windows portable base
         shell: powershell
         run: ./scripts/build-windows.ps1 -PreviewAppSource preview-app
+      - name: Compare package size with the previous qualified main build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/compare-ci-footprint.mjs artifacts/footprint-windows-x64.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: footprint-windows-x64
+          path: artifacts/footprint-windows-x64*.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: windows-x64-build
@@ -356,6 +375,20 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Theme fixture extraction failed.' }
           node scripts/smoke-windows-startup-theme.mjs (Join-Path $ThemeRoot 'DSH-Portable') --disposable
           if ($LASTEXITCODE -ne 0) { throw 'Startup theme and history acceptance failed.' }
+      - name: Verify market category expansion after window resizing
+        shell: powershell
+        run: |
+          $MarketRoot = Join-Path $env:RUNNER_TEMP 'dsh-market-layout'
+          New-Item -ItemType Directory -Force -Path $MarketRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $MarketRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Market fixture extraction failed.' }
+          node scripts/smoke-windows-market-categories.mjs (Join-Path $MarketRoot 'DSH-Portable') (Join-Path $MarketRoot 'evidence') --disposable
+          if ($LASTEXITCODE -ne 0) { throw 'Market category layout acceptance failed.' }
+          $MarketProduct = Join-Path $MarketRoot 'DSH-Portable'
+          & (Join-Path $MarketProduct 'runtime/node/node.exe') (Join-Path $MarketProduct 'launcher/runtime-entry.mjs') portable-cli.mjs support-report --output (Join-Path $MarketRoot 'evidence/support.json') --json
+          if ($LASTEXITCODE -ne 0) { throw 'Market startup support export failed.' }
+          node scripts/report-startup-performance.mjs (Join-Path $MarketRoot 'evidence/support.json') --output (Join-Path $MarketRoot 'evidence/startup-performance.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Startup performance summary failed.' }
       - name: Upload native lifecycle support reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -367,6 +400,8 @@ jobs:
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
             ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/acceptance/
             ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/data/logs/history/
+            ${{ runner.temp }}/dsh-market-layout/evidence/
+            ${{ runner.temp }}/dsh-market-layout/DSH-Portable/data/logs/history/
           if-no-files-found: warn
       - name: Upload startup transition evidence
         if: always()
@@ -504,6 +539,15 @@ jobs:
         run: |
           node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
           PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-macos.sh "${{ matrix.arch }}"
+      - name: Compare package size with the previous qualified main build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/compare-ci-footprint.mjs artifacts/footprint-macos-${{ matrix.arch }}.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: footprint-macos-${{ matrix.arch }}
+          path: artifacts/footprint-macos-${{ matrix.arch }}*.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-build
@@ -650,6 +694,15 @@ jobs:
         run: |
           node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
           PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-linux.sh "${{ matrix.arch }}"
+      - name: Compare package size with the previous qualified main build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/compare-ci-footprint.mjs artifacts/footprint-linux-${{ matrix.arch }}.json
+      - uses: actions/upload-artifact@v7
+        with:
+          name: footprint-linux-${{ matrix.arch }}
+          path: artifacts/footprint-linux-${{ matrix.arch }}*.json
+          if-no-files-found: error
       - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}-build

@@ -11,6 +11,28 @@ import { fileURLToPath } from 'node:url'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const host = path.join(root, 'launcher', 'portable-host.mjs')
 
+test('a failed official import retains a failed startup profile', { skip: process.platform !== 'win32' }, async () => {
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'dsh-host-failed-'))
+  const entry = path.join(temp, 'failed-entry.mjs')
+  await writeFile(entry, 'throw new Error("injected import failure")\n')
+  const child = spawn(process.execPath, [host, entry], {
+    env: { ...process.env, DSH_PORTABLE_CONTROL_PIPE: `\\\\.\\pipe\\dsh-failed-${randomUUID()}`,
+      DSH_PORTABLE_CONTROL_TOKEN: randomUUID(), DSH_PORTABLE_STATE_ROOT: temp,
+      DSH_PORTABLE_STARTUP_ID: 'd'.repeat(32), DSH_PORTABLE_STARTUP_STARTED_AT: String(Date.now()) },
+    stdio: 'ignore', windowsHide: true,
+  })
+  const code = await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => { child.kill(); reject(new Error('failed host did not exit')) }, 10000)
+    child.once('error', error => { clearTimeout(timeout); reject(error) })
+    child.once('exit', code => { clearTimeout(timeout); resolve(code) })
+  })
+  assert.notEqual(code, 0)
+  const history = path.join(temp, 'data/logs/history', 'd'.repeat(32))
+  const health = (await readFile(path.join(history, 'runtime-health.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
+  assert.ok(health.some(row => row.observation === 'startup-profile' && row.reason === 'startup-failed'))
+  assert.match(await readFile(path.join(history, 'startup.jsonl'), 'utf8'), /official-dsh-import-failed/)
+})
+
 function request(pipe, token) {
   return new Promise((resolve, reject) => {
     const req = http.request({

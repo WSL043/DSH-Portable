@@ -43,6 +43,15 @@ $ConstructorArgs[3] = 0
 $ConstructorArgs[4] = 0
 $ConstructorArgs[5] = 0
 $Window = $Constructor.Invoke($ConstructorArgs)
+# This reflection fixture supplies its own bridge state. Restoring the window
+# must not also start a real backend whose navigation overwrites that state.
+# The separate desktop lifecycle smoke exercises the real Shown handler.
+$ShownKey = [Windows.Forms.Form].GetField('EVENT_SHOWN', [Reflection.BindingFlags]'Static,NonPublic').GetValue($null)
+$WindowEvents = [ComponentModel.Component].GetProperty('Events', $InstanceMembers).GetValue($Window)
+$ShownHandler = $WindowEvents[$ShownKey]
+if ($null -eq $ShownHandler) { throw 'The native startup Shown handler was not found for fixture isolation' }
+$Window.remove_Shown($ShownHandler)
+if ($null -ne $WindowEvents[$ShownKey]) { throw 'The tray fixture still has a native startup handler' }
 $WindowType.GetField('root', $AllFields).SetValue($Window, $ResolvedRoot)
 $LoadUpdateCheckEnabled = $WindowType.GetMethod('LoadUpdateCheckEnabled', $InstanceMembers)
 $InitialProductUpdateEnabled = $LoadUpdateCheckEnabled.Invoke(

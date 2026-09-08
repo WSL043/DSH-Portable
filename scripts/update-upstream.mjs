@@ -6,26 +6,20 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { evaluateUpstream } from './upstream-state.mjs'
 import { readOfficialSourceMetadata } from './upstream-source-metadata.mjs'
+import { upstreamRequestHeaders } from './upstream-request-headers.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const tag = process.argv.includes('--latest') ? 'latest' : 'next'
-const headers = {
-  accept: 'application/vnd.github+json',
-  'user-agent': 'DSH-Portable-upstream-candidate',
-  ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
-}
 
 async function json(url) {
-  const requestHeaders = url.startsWith('https://registry.npmjs.org/')
-    ? { ...headers, accept: 'application/json' }
-    : headers
+  const requestHeaders = upstreamRequestHeaders(url)
   const response = await fetch(url, { headers: requestHeaders })
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
   return response.json()
 }
 
 async function text(url) {
-  const response = await fetch(url, { headers })
+  const response = await fetch(url, { headers: upstreamRequestHeaders(url) })
   if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
   return response.text()
 }
@@ -81,10 +75,7 @@ if (changed) {
   const noticesResponse = await fetch(
     `https://raw.githubusercontent.com/deepseek-ai/deepseek-harness/${state.commit}/THIRD_PARTY_NOTICES.md`,
     {
-      headers: {
-        'user-agent': 'DSH-Portable-upstream-candidate',
-        ...(process.env.GITHUB_TOKEN ? { authorization: `Bearer ${process.env.GITHUB_TOKEN}` } : {}),
-      },
+      headers: upstreamRequestHeaders('https://raw.githubusercontent.com/'),
     },
   )
   if (!noticesResponse.ok) {

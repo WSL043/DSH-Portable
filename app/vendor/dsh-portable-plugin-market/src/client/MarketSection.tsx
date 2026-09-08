@@ -1994,9 +1994,22 @@ export function MarketSection(props: MarketSectionProps) {
 
   useLayoutEffect(() => { setVisibleCats(null); setVisibleCatsOneRow(null) }, [lang, categories.length])
   useLayoutEffect(() => {
+    const el = catsWrapRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    let width = el.clientWidth
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth === width) return
+      width = el.clientWidth
+      setVisibleCats(null)
+      setVisibleCatsOneRow(null)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [data !== null])
+  useLayoutEffect(() => {
     if (catsOpen || visibleCats !== null) return
     const el = catsWrapRef.current
-    if (el === null) return
+    if (el === null || el.clientWidth === 0) return
     const chips = [...el.children].filter((c): c is HTMLElement => (c as HTMLElement).dataset?.chip === '1')
     if (chips.length === 0) return
     const first = chips[0]!
@@ -2415,7 +2428,7 @@ export function MarketSection(props: MarketSectionProps) {
                           revealed two rows out of six and read as "nothing
                           happened". Collapsed after measuring needs no cap: the list
                           is already sliced to what fits. */}
-                      <div ref={catsWrapRef} className={visibleCats === null ? `${css.catsWrap} ${css.catsCollapsed}` : css.catsWrap}>
+                      <div ref={catsWrapRef} className={!catsOpen && visibleCats === null ? `${css.catsWrap} ${css.catsCollapsed}` : css.catsWrap}>
                         {(() => {
                           // Collapsed, the selected category is pulled to the front so it never hides.
                           // Whenever collapsed (default, or auto-collapsed by the sticky

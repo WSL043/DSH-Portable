@@ -3,10 +3,12 @@ import { createReadStream, createWriteStream } from 'node:fs'
 import { mkdir, open, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
+import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import { constants, createZstdCompress } from 'node:zlib'
 
 const MAGIC = Buffer.from('DSHPACK1', 'ascii')
+export const DEFAULT_CAPSULE_COMPRESSION_LEVEL = 19
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
@@ -27,32 +29,34 @@ export async function createRuntimeCapsule(appDir, capsuleFile, manifestFile, op
   const files = await listFiles(appDir)
   const entries = []
   let rawBytes = 0
-  for (const relative of files) {
-    const bytes = await readFile(path.join(appDir, ...relative.split('/')))
-    rawBytes += bytes.length
-    entries.push({ path: `app/${relative}`, size: bytes.length, sha256: sha256(bytes) })
-  }
-  const header = Buffer.from(JSON.stringify({ schemaVersion: 1, files: entries }), 'utf8')
-  const prefix = Buffer.alloc(MAGIC.length + 4)
-  MAGIC.copy(prefix)
-  prefix.writeUInt32LE(header.length, MAGIC.length)
-
   await mkdir(path.dirname(capsuleFile), { recursive: true })
   const rawFile = `${capsuleFile}.${process.pid}.raw`
-  const handle = await open(rawFile, 'w')
   try {
-    await handle.write(prefix)
-    await handle.write(header)
-    for (const relative of files) {
-      await handle.write(await readFile(path.join(appDir, ...relative.split('/'))))
+    const handle = await open(rawFile, 'w')
+    try {
+      // Hash and spool the same bytes once: a second source read could race
+      // a build output change and produce a capsule that fails its own hash.
+      for (const relative of files) {
+        const bytes = await readFile(path.join(appDir, ...relative.split('/')))
+        rawBytes += bytes.length
+        entries.push({ path: `app/${relative}`, size: bytes.length, sha256: sha256(bytes) })
+        await handle.writeFile(bytes)
+      }
+    } finally {
+      await handle.close()
     }
-  } finally {
-    await handle.close()
-  }
-  try {
+    const header = Buffer.from(JSON.stringify({ schemaVersion: 1, files: entries }), 'utf8')
+    const prefix = Buffer.alloc(MAGIC.length + 4)
+    MAGIC.copy(prefix)
+    prefix.writeUInt32LE(header.length, MAGIC.length)
+    async function* contents() {
+      yield prefix
+      yield header
+      yield* createReadStream(rawFile)
+    }
     await pipeline(
-      createReadStream(rawFile),
-      createZstdCompress({ params: { [constants.ZSTD_c_compressionLevel]: options.level ?? 10 } }),
+      Readable.from(contents()),
+      createZstdCompress({ params: { [constants.ZSTD_c_compressionLevel]: options.level ?? DEFAULT_CAPSULE_COMPRESSION_LEVEL } }),
       createWriteStream(capsuleFile),
     )
   } finally {

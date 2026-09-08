@@ -9,6 +9,8 @@ if (process.platform !== 'win32' || !process.argv[2]) throw new Error('usage: no
 const root = path.resolve(process.argv[2])
 const executable = path.join(root, 'DeepSeek-Herness.exe')
 const logDirectory = path.join(root, 'data', 'logs')
+const output = path.join(root, 'data', 'health-evidence.json')
+let evidenceWritten = false
 async function cli(...args) {
   const { stdout } = await execute(path.join(root, 'runtime', 'node', 'node.exe'), [
     path.join(root, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs', ...args, '--json',
@@ -55,9 +57,12 @@ try {
   const backend = (await entries('runtime-health.jsonl')).filter(entry => entry.pid === running.pid)
   assert.ok(backend.length > 0)
   assert.ok(backend.every(entry => entry.startupId === native[0].startupId))
-  assert.ok(backend.every(entry => entry.mainHeartbeatAgeMs < 5000), 'native UI injection must not freeze the DSH event loop')
-  const output = path.join(root, 'data', 'health-evidence.json')
+  const heartbeats = backend.filter(entry => ['sample', 'main-heartbeat-delayed', 'main-heartbeat-recovered'].includes(entry.observation))
+  assert.ok(heartbeats.length > 0, 'the health worker must produce actual heartbeat samples')
+  assert.ok(heartbeats.every(entry => Number.isFinite(entry.mainHeartbeatAgeMs) && entry.mainHeartbeatAgeMs >= 0 && entry.mainHeartbeatAgeMs < 5000),
+    'native UI injection must not freeze the DSH event loop')
   await cli('support-report', '--output', output)
+  evidenceWritten = true
   const report = JSON.parse(await readFile(output, 'utf8'))
   assert.match(report.logs['desktop-health.jsonl'], /ui-heartbeat-delayed/)
   assert.match(report.logs['desktop-health.jsonl'], /ui-heartbeat-recovered/)
@@ -68,7 +73,11 @@ try {
   assert.equal(desktopExit, 0)
   assert.equal((await cli('status')).status, 'stopped')
   assert.throws(() => process.kill(running.pid, 0), { code: 'ESRCH' })
-  console.log(JSON.stringify({ status: 'passed', nativeStallCaptured: true, recoveryCaptured: true, backendResponsive: true, backendHttpStatus: 401, reportCorrelated: true, cleanExit: true }))
+  console.log(JSON.stringify({ status: 'passed', nativeStallCaptured: true, recoveryCaptured: true, backendResponsive: true, backendHttpStatus: 401, reportCorrelated: true, cleanExit: true,
+    backendHeartbeatSamples: heartbeats.length, maxBackendHeartbeatAgeMs: Math.max(...heartbeats.map(entry => entry.mainHeartbeatAgeMs)) }))
 } finally {
+  if (!evidenceWritten) await cli('support-report', '--output', output).catch(error => {
+    console.error(`Health evidence export failed: ${error.code || error.name}`)
+  })
   await execute(executable, ['stop', '--no-browser', '--json'], { windowsHide: true, timeout: 60000 }).catch(() => {})
 }

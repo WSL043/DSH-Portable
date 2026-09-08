@@ -4614,9 +4614,9 @@ namespace DshPortable
                     + "'><head><meta charset='utf-8'><style>html,body{margin:0;height:100%;background:" + background
                     + ";color:" + foreground + ";font:14px system-ui}body{display:grid;place-items:center}main{text-align:center}"
                     + "h1{font-size:22px;font-weight:600}.ring{margin:24px auto;width:24px;height:24px;border:3px solid #8884;border-top-color:currentColor;border-radius:50%;animation:spin 1s linear infinite}"
-                    + "p{opacity:.75}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ring{animation:spin 2s steps(4,end) infinite}}</style></head>"
+                    + "p{opacity:.75}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ring{animation:spin 2s linear infinite}}</style></head>"
                     + "<body><main id='portable-startup-loading'><h1>DeepSeek Harness</h1><div class='ring'></div><p id='portable-startup-status'>"
-                    + message + "</p><p id='elapsed'></p></main><script>const start=Date.now();setInterval(()=>{document.getElementById('elapsed').textContent=Math.floor((Date.now()-start)/1000)+' s'},1000)</script></body></html>");
+                    + message + "</p></main></body></html>");
             }
         }
 
