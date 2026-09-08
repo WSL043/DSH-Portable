@@ -11,6 +11,7 @@ import {
   acquireRuntimeLease,
   capsulePaths,
   cleanUnusedRuntimeCaches,
+  commitRuntimeDirectory,
   ensureRuntimeCapsule,
   runtimeCacheStatus,
   runtimePreparationDiagnostic,
@@ -36,6 +37,67 @@ async function fixture() {
   }
   return { parent, root, app }
 }
+
+test('Windows runtime directory commit retries transient rename failures with bounded delays', async () => {
+  const calls = []
+  const sleeps = []
+  let attempt = 0
+  const result = await commitRuntimeDirectory('temporary', 'target', {
+    platform: 'win32',
+    renameImpl: async (temporary, target) => {
+      calls.push([temporary, target])
+      attempt += 1
+      if (attempt === 1) throw Object.assign(new Error('rename denied'), { code: 'EPERM' })
+      if (attempt === 2) throw Object.assign(new Error('rename busy'), { code: 'EBUSY' })
+      return 'committed'
+    },
+    sleepImpl: async milliseconds => { sleeps.push(milliseconds) },
+  })
+  assert.equal(result, 'committed')
+  assert.equal(calls.length, 3)
+  assert.deepEqual(sleeps, [100, 250])
+  assert.deepEqual(calls, [['temporary', 'target'], ['temporary', 'target'], ['temporary', 'target']])
+})
+
+test('Windows runtime directory commit makes exactly five attempts before rethrowing the original error', async () => {
+  const failure = Object.assign(new Error('still locked'), { code: 'EACCES' })
+  let calls = 0
+  const sleeps = []
+  await assert.rejects(
+    commitRuntimeDirectory('temporary', 'target', {
+      platform: 'win32',
+      renameImpl: async () => {
+        calls += 1
+        throw failure
+      },
+      sleepImpl: async milliseconds => { sleeps.push(milliseconds) },
+    }),
+    error => error === failure,
+  )
+  assert.equal(calls, 5)
+  assert.deepEqual(sleeps, [100, 250, 500, 1000])
+})
+
+test('runtime directory commit does not retry on non-Windows or for non-transient errors', async () => {
+  for (const [platform, code] of [['linux', 'EPERM'], ['win32', 'ENOENT']]) {
+    const failure = Object.assign(new Error(code), { code })
+    let calls = 0
+    const sleeps = []
+    await assert.rejects(
+      commitRuntimeDirectory('temporary', 'target', {
+        platform,
+        renameImpl: async () => {
+          calls += 1
+          throw failure
+        },
+        sleepImpl: async milliseconds => { sleeps.push(milliseconds) },
+      }),
+      error => error === failure,
+    )
+    assert.equal(calls, 1)
+    assert.deepEqual(sleeps, [])
+  }
+})
 
 test('default capsule compression preserves every payload byte and failed output removes its spool', async () => {
   const { parent, root, app } = await fixture()

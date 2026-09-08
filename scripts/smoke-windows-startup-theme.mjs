@@ -62,29 +62,28 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
       return result.result?.value
     }
-    const reducedMotion = results.length % 2 === 0
-    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: reducedMotion ? 'reduce' : 'no-preference' }] })
+    await exec('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+      path.join(import.meta.dirname, 'capture-windows-native-window.ps1'), '-TargetProcessId', String(child.pid),
+      '-OutputDirectory', path.join(root, 'acceptance', `native-${results.length}-${theme}`)],
+      { windowsHide: true, timeout: 20000 })
     let loading
+    let animation
     const loadingDeadline = Date.now() + 10000
     while (Date.now() < loadingDeadline) {
-      loading = await evaluate(`document.querySelector('#portable-startup-loading') ? ({background:getComputedStyle(document.body).backgroundColor,text:document.body.innerText,dark:matchMedia('(prefers-color-scheme:dark)').matches}) : null`)
-      if (loading) break
+      const entries = (await readFile(path.join(root, 'data/logs/startup-latest.jsonl'), 'utf8')).trim().split(/\r?\n/).map(line => JSON.parse(line))
+      loading = entries.find(entry => entry.phase === 'native-loading-ready')
+      animation = entries.find(entry => entry.phase === 'native-loading-animation')
+      if (loading && animation) break
       await delay(100)
     }
-    assert.ok(loading, 'visible loading document exists before workspace navigation')
-    assert.equal(loading.background, expectedTheme === 'dark' ? 'rgb(24, 24, 26)' : 'rgb(248, 248, 248)')
-    assert.equal(loading.dark, expectedTheme === 'dark')
-    assert.match(loading.text, /DeepSeek Harness/)
-    assert.equal(await evaluate(`document.getElementById('elapsed') === null`), true, 'loading document has no elapsed counter')
-    assert.equal(await evaluate(`getComputedStyle(document.querySelector('.ring')).animationTimingFunction`), 'linear', 'spinner must not jump in reduced-motion mode')
-    const spinnerBefore = await evaluate(`getComputedStyle(document.querySelector('.ring')).transform`)
-    await delay(650)
-    const spinnerAfter = await evaluate(`getComputedStyle(document.querySelector('.ring')).transform`)
-    assert.notEqual(spinnerAfter, spinnerBefore, `loading indicator must advance with reduced motion ${reducedMotion}`)
+    assert.ok(loading && animation, 'native loading surface paints and animates before handoff')
+    assert.equal(loading.theme, expectedTheme)
+    assert.equal(loading.background, expectedTheme === 'dark' ? -15198182 : -460552)
+    assert.ok(animation.paintedFrames >= 10)
+    assert.notEqual(animation.rotation, loading.rotation, 'native spinner advances')
+    assert.equal(await evaluate(`document.querySelector('#portable-startup-loading') === null`), true, 'no second HTML loader')
     await send('Page.enable')
     await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__startupColors=[];const sample=()=>{if(document.body){const color=getComputedStyle(document.body).backgroundColor;if(!window.__startupColors.includes(color))window.__startupColors.push(color)}};document.addEventListener('DOMContentLoaded',sample);const timer=setInterval(sample,16);setTimeout(()=>clearInterval(timer),15000)` })
-    const screenshot = await send('Page.captureScreenshot', { format: 'png' })
-    await writeFile(path.join(root, 'acceptance', `loading-${results.length}-${theme}.png`), Buffer.from(screenshot.data, 'base64'))
     let trace = []
     while (Date.now() < deadline) {
       trace = (await readFile(path.join(root, 'data/logs/startup-latest.jsonl'), 'utf8')).trim().split(/\r?\n/).map(line => JSON.parse(line))
@@ -105,10 +104,42 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       const brightness = (channels[0] + channels[1] + channels[2]) / 3
       assert.ok(expectedTheme === 'dark' ? brightness < 128 : brightness >= 128, `unexpected ${theme} startup background: ${color}`)
     }
+    await evaluate(`window.__desktopReplies=[];chrome.webview.addEventListener('message',e=>{if(e.data.type==='dsh-portable/test-desktop-result')window.__desktopReplies.push(e.data)})`)
+    const nativeStates = []
+    const native = async key => {
+      const count = await evaluate('window.__desktopReplies.length')
+      await evaluate(`chrome.webview.postMessage(${JSON.stringify({ type: 'dsh-portable/test-desktop', ...(key === undefined ? {} : { key }) })})`)
+      for (let attempt=0; attempt<100; attempt++) {
+        const reply = await evaluate(`window.__desktopReplies[${count}]`)
+        if (reply) { nativeStates.push({ key, ...reply }); return reply }
+        await delay(50)
+      }
+      throw new Error('Native desktop command timed out')
+    }
+    const normal = await native()
+    await writeFile(path.join(root, 'acceptance', `native-state-${results.length}.json`), JSON.stringify(normal, null, 2))
+    assert.equal(normal.nativeLoadingVisible, false)
+    assert.equal(normal.menuVisible, true)
+    assert.ok(normal.contentTop >= normal.menuBottom, 'menu never overlaps the workspace')
+    for (let cycle=0; cycle<2; cycle++) {
+      const full = await native(122) // F11, the same dispatcher used by native/WebView key input
+      assert.equal(full.fullscreen, true)
+      assert.equal(full.chrome, 'None')
+      assert.equal(full.menuVisible, false)
+      assert.equal(full.contentTop, 0)
+      const restored = await native(27) // Escape
+      assert.equal(restored.fullscreen, false)
+      assert.equal(restored.chrome, 'Sizable')
+      assert.deepEqual(restored.bounds, normal.bounds)
+      assert.equal(restored.windowState, normal.windowState)
+    }
+    assert.equal((await native(27)).fullscreen, false, 'ordinary Escape does not close the application')
+    assert.ok((await native(131259)).zoom > normal.zoom) // Ctrl + plus
+    assert.equal((await native(131120)).zoom, 1) // Ctrl + 0
     const history = await readFile(path.join(root, 'data/logs/history', trace[0].startupId, 'startup.jsonl'), 'utf8')
-    assert.match(history, /loading-document-ready/)
-    results.push({ theme, reducedMotion, spinnerBefore, spinnerAfter, loading, final, colors, startupId: trace[0].startupId,
-      loadingMs: trace.find(entry => entry.phase === 'loading-document-ready')?.elapsedMs,
+    assert.match(history, /native-loading-ready/)
+    results.push({ theme, nativeStates, animation, loading, final, colors, startupId: trace[0].startupId,
+      loadingMs: trace.find(entry => entry.phase === 'native-loading-ready')?.elapsedMs,
       interactiveMs: trace.find(entry => entry.phase === 'interactive-ready')?.elapsedMs })
   } finally {
     socket?.close()

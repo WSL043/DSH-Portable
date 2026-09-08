@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -834,6 +834,10 @@ namespace DshPortable
             };
         }
 
+        internal event EventHandler FramePainted;
+        internal int PaintedFrames { get; private set; }
+        internal int Rotation { get { return rotation; } }
+
         internal Color TrackColor { get; set; }
         internal Color IndicatorColor { get; set; }
 
@@ -857,6 +861,7 @@ namespace DshPortable
         protected override void OnPaint(PaintEventArgs eventArgs)
         {
             base.OnPaint(eventArgs);
+            PaintedFrames++;
             eventArgs.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
             float stroke = 2F;
             float diameter = Math.Max(2F, Math.Min(Width, Height) - stroke - 1F);
@@ -879,6 +884,7 @@ namespace DshPortable
                     eventArgs.Graphics.DrawArc(indicator, bounds, indeterminate ? rotation - 90F : -90F, sweep);
                 }
             }
+            if (FramePainted != null && (PaintedFrames == 1 || PaintedFrames == 10)) FramePainted(this, EventArgs.Empty);
         }
 
         protected override void OnVisibleChanged(EventArgs eventArgs)
@@ -982,8 +988,16 @@ namespace DshPortable
         private TrayBridgeState trayState;
         private string trayTheme = "light";
         private string themePreference = "system";
-        private bool loadingDocumentNavigation;
         private string notificationSessionId;
+        private readonly Panel desktopContent = new Panel { Dock = DockStyle.Fill };
+        private bool logoDark;
+        private string desktopMenuLanguage;
+        private MenuStrip desktopMenu;
+        private bool fullscreen;
+        private Rectangle boundsBeforeFullscreen;
+        private FormWindowState stateBeforeFullscreen;
+        private readonly Dictionary<Keys, ToolStripMenuItem> desktopShortcuts = new Dictionary<Keys, ToolStripMenuItem>();
+
         private Uri applicationUri;
         private readonly List<string> webViewStartupTrace = new List<string>();
         private Stopwatch webViewStartupClock;
@@ -1233,9 +1247,17 @@ namespace DshPortable
             };
 
             webView = CreateDesktopWebView();
-            statusLabel.TextChanged += UpdateLoadingDocumentStatus;
-            Controls.Add(webView);
-            Controls.Add(launchPanel);
+            Controls.Add(desktopContent);
+            desktopContent.Controls.Add(webView);
+            desktopContent.Controls.Add(launchPanel);
+            if (desktopStart) InitializeDesktopMenu();
+            activityRing.FramePainted += delegate
+            {
+                if (!desktopStart || desktopReady) return;
+                AppendStartupTrace("native-host", activityRing.PaintedFrames == 1 ? "native-loading-ready" : "native-loading-animation",
+                    new Dictionary<string, object> { { "theme", trayTheme }, { "background", BackColor.ToArgb() },
+                        { "paintedFrames", activityRing.PaintedFrames }, { "rotation", activityRing.Rotation } });
+            };
             launchPanel.Visible = true;
             if (launchPanel.Visible) launchPanel.BringToFront();
             if (desktopStart)
@@ -1297,6 +1319,158 @@ namespace DshPortable
                 return;
             }
             base.WndProc(ref message);
+        }
+
+        private void InitializeDesktopMenu()
+        {
+            if (desktopMenu != null) { Controls.Remove(desktopMenu); desktopMenu.Dispose(); }
+            desktopShortcuts.Clear();
+            desktopMenuLanguage = uiLanguage;
+            desktopMenu = new MenuStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, Visible = !fullscreen };
+            MainMenuStrip = desktopMenu;
+            Controls.Add(desktopMenu);
+            desktopContent.BringToFront();
+            ToolStripMenuItem file = new ToolStripMenuItem(L("文件(&F)", "&File"));
+            ToolStripMenuItem view = new ToolStripMenuItem(L("视图(&V)", "&View"));
+            ToolStripMenuItem help = new ToolStripMenuItem(L("帮助(&H)", "&Help"));
+            desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
+            AddDesktopCommand(file, "new-session", L("新会话", "New session"), Keys.Control | Keys.N,
+                delegate { PostBridgeAction("new-session", null); });
+            AddDesktopCommand(file, "settings", L("设置", "Settings"), Keys.Control | Keys.Oemcomma,
+                delegate { PostBridgeAction("open-settings", null); });
+            file.DropDownItems.Add(CreateTerminalItem());
+            file.DropDownItems.Add(new ToolStripSeparator());
+            AddDesktopCommand(file, "close", L("关闭窗口", "Close window"), Keys.Control | Keys.W, delegate { Close(); });
+            AddDesktopCommand(file, "exit", L("退出 DeepSeek Harness", "Exit DeepSeek Harness"), Keys.Control | Keys.Q,
+                delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
+            AddDesktopCommand(view, "reload", L("重新加载界面", "Reload interface"), Keys.Control | Keys.R,
+                delegate { ScheduleWebViewRecovery(false, "desktop-menu"); });
+            view.DropDownItems.Add(new ToolStripSeparator());
+            AddDesktopCommand(view, "zoom-in", L("放大", "Zoom in"), Keys.Control | Keys.Oemplus,
+                delegate { SetDesktopZoom(webView.ZoomFactor + 0.1); });
+            AddDesktopCommand(view, "zoom-out", L("缩小", "Zoom out"), Keys.Control | Keys.OemMinus,
+                delegate { SetDesktopZoom(webView.ZoomFactor - 0.1); });
+            AddDesktopCommand(view, "zoom-reset", L("实际大小", "Actual size"), Keys.Control | Keys.D0,
+                delegate { SetDesktopZoom(1); });
+            view.DropDownItems.Add(new ToolStripSeparator());
+            AddDesktopCommand(view, "fullscreen", L("全屏（Esc 退出）", "Full screen (Esc to exit)"), Keys.F11,
+                delegate { SetDesktopFullscreen(!fullscreen); });
+            AddDesktopCommand(help, "product-update", L("检查 Portable 更新", "Check Portable updates"), Keys.None,
+                async delegate { await CheckForDesktopUpdateAsync(true, "product"); });
+            AddDesktopCommand(help, "engine-update", L("检查内核更新", "Check core updates"), Keys.None,
+                async delegate { await CheckForDesktopUpdateAsync(true, "engine"); });
+            AddDesktopCommand(help, "logs", L("打开日志文件夹", "Open logs folder"), Keys.None,
+                delegate { string directory = ResolveLauncherLogDirectory(); Directory.CreateDirectory(directory);
+                    Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
+            help.DropDownItems.Add(CreateReportProblemItem());
+            foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
+            RefreshDesktopCommands();
+        }
+
+        private void AddDesktopCommand(ToolStripMenuItem parent, string id, string title, Keys shortcut, EventHandler action)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(title, null, action) { Name = id, Tag = id };
+            // One dispatcher owns both native and WebView accelerator input.
+            if (shortcut != Keys.None)
+            {
+                item.ShortcutKeyDisplayString = shortcut == (Keys.Control | Keys.Oemcomma) ? "Ctrl+,"
+                    : shortcut == (Keys.Control | Keys.Oemplus) ? "Ctrl++"
+                    : shortcut == (Keys.Control | Keys.OemMinus) ? "Ctrl+-"
+                    : new KeysConverter().ConvertToString(shortcut);
+                desktopShortcuts.Add(shortcut, item);
+            }
+            parent.DropDownItems.Add(item);
+        }
+
+        private void RefreshDesktopCommands()
+        {
+            if (desktopMenu == null) return;
+            foreach (ToolStripMenuItem menu in desktopMenu.Items)
+                foreach (ToolStripItem item in menu.DropDownItems)
+                {
+                    string id = item.Tag as string;
+                    if (id == null) continue;
+                    item.Enabled = !shutdownRunning;
+                    if (id == "new-session" || id == "settings") item.Enabled &= desktopReady && trayBridgeReady && !operationRunning;
+                    if (id == "reload" || id.StartsWith("zoom-")) item.Enabled &= desktopReady && !operationRunning && !webViewRecoveryRunning;
+                    if (id == "close") item.Enabled &= desktopReady;
+                    if (id == "exit") item.Enabled &= desktopReady && !operationRunning;
+                    if (id.EndsWith("-update")) item.Enabled &= desktopReady && !operationRunning && !updateCheckRunning && !updateInteractionRunning;
+                    if (id == "fullscreen") ((ToolStripMenuItem)item).Checked = fullscreen;
+                }
+        }
+
+        private bool QueueDesktopShortcut(Keys key)
+        {
+            if (!desktopStart) return false;
+            if (!fullscreen && (key == Keys.F10 || key == (Keys.Alt | Keys.F) || key == (Keys.Alt | Keys.V) || key == (Keys.Alt | Keys.H)))
+            {
+                int index = key == (Keys.Alt | Keys.V) ? 1 : key == (Keys.Alt | Keys.H) ? 2 : 0;
+                BeginInvoke(new Action(delegate {
+                    if (fullscreen || IsDisposed) return;
+                    RefreshDesktopCommands();
+                    ((ToolStripMenuItem)desktopMenu.Items[index]).ShowDropDown();
+                }));
+                return true;
+            }
+            if (key == Keys.Escape)
+            {
+                if (!fullscreen) return false;
+                BeginInvoke(new Action(delegate { SetDesktopFullscreen(false); }));
+                return true;
+            }
+            if (key == Keys.F5) key = Keys.Control | Keys.R;
+            if (key == (Keys.Control | Keys.Add) || key == (Keys.Control | Keys.Shift | Keys.Oemplus)) key = Keys.Control | Keys.Oemplus;
+            if (key == (Keys.Control | Keys.Subtract)) key = Keys.Control | Keys.OemMinus;
+            ToolStripMenuItem item;
+            if (!desktopShortcuts.TryGetValue(key, out item)) return false;
+            // WebView blocks its browser during KeyDown; defer all COM/UI actions.
+            BeginInvoke(new Action(delegate { RefreshDesktopCommands(); if (item.Enabled) item.PerformClick(); }));
+            return true;
+        }
+
+        protected override bool ProcessCmdKey(ref Message message, Keys keyData)
+        {
+            return QueueDesktopShortcut(keyData) || base.ProcessCmdKey(ref message, keyData);
+        }
+
+        private void SetDesktopZoom(double value)
+        {
+            if (webView == null || webView.CoreWebView2 == null) return;
+            webView.ZoomFactor = Math.Max(0.5, Math.Min(2.0, Math.Round(value, 2)));
+        }
+
+        private void SetDesktopFullscreen(bool enabled)
+        {
+            if (!desktopStart || fullscreen == enabled) return;
+            foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.HideDropDown();
+            SuspendLayout();
+            if (enabled)
+            {
+                SaveDesktopWindowState();
+                stateBeforeFullscreen = WindowState == FormWindowState.Maximized ? FormWindowState.Maximized : FormWindowState.Normal;
+                boundsBeforeFullscreen = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
+                Rectangle screen = Screen.FromControl(this).Bounds;
+                fullscreen = true;
+                WindowState = FormWindowState.Normal;
+                FormBorderStyle = FormBorderStyle.None;
+                desktopMenu.Visible = false;
+                Bounds = hiddenForAutomation ? new Rectangle(Location, screen.Size) : screen;
+            }
+            else
+            {
+                WindowState = FormWindowState.Normal;
+                FormBorderStyle = FormBorderStyle.Sizable;
+                desktopMenu.Visible = true;
+                Bounds = boundsBeforeFullscreen;
+                WindowState = stateBeforeFullscreen;
+                fullscreen = false;
+                ApplyDesktopChrome();
+            }
+            ResumeLayout(true);
+            FitWebViewToClient();
+            RefreshDesktopCommands();
+            WriteLauncherLog("desktop-window", "fullscreen=" + fullscreen);
         }
 
         private void LoadStartupTheme()
@@ -1361,6 +1535,25 @@ namespace DshPortable
             BackColor = background;
             launchPanel.BackColor = background;
             launchContent.BackColor = background;
+            if (logoDark != dark && productIcon.Image != null)
+            {
+                using (Bitmap original = Icon.ToBitmap())
+                {
+                    Bitmap themed = new Bitmap(original.Width, original.Height);
+                    using (Graphics graphics = Graphics.FromImage(themed))
+                    using (System.Drawing.Imaging.ImageAttributes attributes = new System.Drawing.Imaging.ImageAttributes())
+                    {
+                        if (dark) attributes.SetColorMatrix(new System.Drawing.Imaging.ColorMatrix(new float[][] {
+                            new float[] { -1, 0, 0, 0, 0 }, new float[] { 0, -1, 0, 0, 0 },
+                            new float[] { 0, 0, -1, 0, 0 }, new float[] { 0, 0, 0, 1, 0 }, new float[] { 1, 1, 1, 0, 1 } }));
+                        graphics.DrawImage(original, new Rectangle(Point.Empty, themed.Size), 0, 0, original.Width, original.Height, GraphicsUnit.Pixel, attributes);
+                    }
+                    Image retired = productIcon.Image;
+                    productIcon.Image = themed;
+                    retired.Dispose();
+                }
+                logoDark = dark;
+            }
             productLabel.BackColor = background;
             productLabel.ForeColor = foreground;
             statusLabel.BackColor = background;
@@ -1369,6 +1562,20 @@ namespace DshPortable
             progressDetail.ForeColor = statusLabel.ForeColor;
             activityRing.TrackColor = dark ? Color.FromArgb(53, 53, 57) : Color.FromArgb(226, 228, 232);
             activityRing.IndicatorColor = dark ? Color.FromArgb(242, 242, 244) : Color.FromArgb(27, 28, 30);
+            if (desktopMenu != null && desktopMenuLanguage != uiLanguage) InitializeDesktopMenu();
+            if (desktopMenu != null)
+            {
+                desktopMenu.BackColor = background;
+                desktopMenu.ForeColor = foreground;
+                desktopMenu.Renderer = new ToolStripProfessionalRenderer(new DshMenuColorTable(dark));
+                foreach (ToolStripMenuItem menu in desktopMenu.Items)
+                {
+                    menu.ForeColor = foreground;
+                    menu.DropDown.BackColor = background;
+                    menu.DropDown.ForeColor = foreground;
+                    foreach (ToolStripItem item in menu.DropDownItems) item.ForeColor = foreground;
+                }
+            }
             if (webView != null && !webView.IsDisposed) webView.DefaultBackgroundColor = background;
             if (webView != null && webView.CoreWebView2 != null)
                 webView.CoreWebView2.Profile.PreferredColorScheme = themePreference == "system"
@@ -1487,7 +1694,7 @@ namespace DshPortable
             productIcon.Location = new Point(162, 0);
             productIcon.Size = new Size(36, 36);
             productIcon.Visible = true;
-            productLabel.Text = "HARNESS";
+            productLabel.Text = "DeepSeek Harness";
             productLabel.Location = new Point(0, 44);
             productLabel.Size = new Size(360, 24);
             productLabel.TextAlign = ContentAlignment.MiddleCenter;
@@ -1999,6 +2206,28 @@ namespace DshPortable
                 Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
                 object messageType;
                 if (message != null && message.TryGetValue("type", out messageType)
+                    && Convert.ToString(messageType) == "dsh-portable/test-desktop"
+                    && hiddenForAutomation
+                    && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION") == "1")
+                {
+                    object key;
+                    if (message.TryGetValue("key", out key)) QueueDesktopShortcut((Keys)Convert.ToInt32(key));
+                    BeginInvoke(new Action(delegate
+                    {
+                        RefreshDesktopCommands();
+                        webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(new {
+                            type = "dsh-portable/test-desktop-result", fullscreen = fullscreen,
+                            menuVisible = desktopMenu.Visible, nativeLoadingVisible = launchPanel.Visible,
+                            paintedFrames = activityRing.PaintedFrames, rotation = activityRing.Rotation,
+                            bounds = new { x = Bounds.X, y = Bounds.Y, width = Bounds.Width, height = Bounds.Height },
+                            windowState = WindowState.ToString(), chrome = FormBorderStyle.ToString(),
+                            menuBottom = desktopMenu.Bottom, contentTop = desktopContent.Top + webView.Top,
+                            zoom = webView.ZoomFactor, theme = trayTheme
+                        }));
+                    }));
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/notification-action-result", StringComparison.Ordinal))
                 {
                     object activationValue;
@@ -2013,7 +2242,7 @@ namespace DshPortable
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/boot-visible", StringComparison.Ordinal))
                 {
                     RecordWebViewPhase("boot-visible-message");
-                    RevealDesktopBootSurface();
+                    statusLabel.Text = L("正在加载工作台…", "Loading the workspace…");
                     return;
                 }
                 if (message != null && message.TryGetValue("type", out messageType)
@@ -2599,7 +2828,7 @@ namespace DshPortable
 
         private void SaveDesktopWindowState()
         {
-            if (!desktopReady) return;
+            if (!desktopReady || fullscreen) return;
             try { SaveDesktopWindowStateCore(); }
             catch
             {
@@ -2847,7 +3076,7 @@ namespace DshPortable
                     WriteLauncherLog("shutdown-webview", "controller-close-requested runtime="
                         + closingEnvironment.BrowserVersionString
                         + " browserPid=" + ownedWebViewBrowserProcessId.ToString(CultureInfo.InvariantCulture));
-                    Controls.Remove(closingWebView);
+                    desktopContent.Controls.Remove(closingWebView);
                     closingWebView.Dispose();
                 }
                 catch (Exception error)
@@ -4148,8 +4377,7 @@ namespace DshPortable
             webView.Visible = true;
             if (desktopStart)
             {
-                // Native operations such as an update may already own this
-                // surface. Normal startup reveals the official DSH boot overlay.
+                // Keep the one native loading surface until the workspace is usable.
                 if (launchPanel.Visible) launchPanel.BringToFront();
             }
             else launchPanel.BringToFront();
@@ -4224,6 +4452,7 @@ namespace DshPortable
             if (!desktopStart) return;
             webView.Visible = true;
             webView.BringToFront();
+            if (desktopMenu != null) desktopContent.BringToFront();
             webView.Update();
             try { DwmFlush(); }
             catch (DllNotFoundException) { }
@@ -4302,24 +4531,6 @@ namespace DshPortable
             }
         }
 
-        private void RevealDesktopBootSurface()
-        {
-            if (!desktopStart || webView == null || webView.IsDisposed) return;
-            webView.Visible = true;
-            webView.BringToFront();
-            webView.Update();
-            try { DwmFlush(); }
-            catch (DllNotFoundException) { }
-            catch (EntryPointNotFoundException) { }
-            launchPanel.Visible = false;
-            WriteLauncherLog("startup", "dsh-boot-surface-visible");
-            if (!hiddenForAutomation)
-            {
-                ShowInTaskbar = true;
-                if (Opacity < 1) Opacity = 1;
-            }
-        }
-
         private async Task<string> WaitForWorkspaceHandoffAsync(string expectedUrl, Task<string> nativeHandoff)
         {
             string expected = json.Serialize(WorkspaceOriginPath(expectedUrl));
@@ -4343,9 +4554,8 @@ namespace DshPortable
                 + "return gate.readyPolls>=3?2:0;"
                 + "}catch(_){return 0;}})()";
             await Task.Delay(50);
-            // The official DSH boot overlay remains in the WebView while the
-            // workspace mounts behind it. The native host waits for that same
-            // surface to report readiness instead of introducing another page.
+            // Mount the workspace behind the native panel and hand off only after
+            // readiness is confirmed. No intermediate web loading page is shown.
             for (int attempt = 0; attempt < 560; attempt++)
             {
                 if (nativeHandoff.IsCompleted) return await nativeHandoff;
@@ -4490,17 +4700,7 @@ namespace DshPortable
             webView.Enabled = true;
             webView.Visible = true;
             webView.BringToFront();
-        }
-
-        private async void UpdateLoadingDocumentStatus(object sender, EventArgs args)
-        {
-            if (applicationUri != null || webView == null || webView.CoreWebView2 == null) return;
-            try
-            {
-                await webView.CoreWebView2.ExecuteScriptAsync("(()=>{const label=document.getElementById('portable-startup-status');if(label)label.textContent="
-                    + json.Serialize(statusLabel.Text) + ";})()");
-            }
-            catch { }
+            if (desktopMenu != null) desktopContent.BringToFront();
         }
 
         private async Task InitializeWebViewAsync()
@@ -4594,30 +4794,6 @@ namespace DshPortable
             };
             webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
             ApplyDesktopChrome();
-            if (desktopStart && !desktopReady && applicationUri == null)
-            {
-                bool dark = trayTheme == "dark";
-                string background = dark ? "#18181a" : "#f8f8f8";
-                string foreground = dark ? "#ebebeb" : "#232323";
-                string message = WebUtility.HtmlEncode(L("正在启动工作区，请稍候…", "Starting your workspace…"));
-                webView.CoreWebView2.DOMContentLoaded += delegate
-                {
-                    if (webView.CoreWebView2.Source == "about:blank")
-                    {
-                        AppendStartupTrace("webview", "loading-document-ready", new Dictionary<string, object> { { "theme", trayTheme } });
-                        UpdateLoadingDocumentStatus(null, EventArgs.Empty);
-                    }
-                };
-                AppendStartupTrace("webview", "loading-document-requested", new Dictionary<string, object> { { "theme", trayTheme } });
-                loadingDocumentNavigation = true;
-                webView.CoreWebView2.NavigateToString("<!doctype html><html style='color-scheme:" + trayTheme
-                    + "'><head><meta charset='utf-8'><style>html,body{margin:0;height:100%;background:" + background
-                    + ";color:" + foreground + ";font:14px system-ui}body{display:grid;place-items:center}main{text-align:center}"
-                    + "h1{font-size:22px;font-weight:600}.ring{margin:24px auto;width:24px;height:24px;border:3px solid #8884;border-top-color:currentColor;border-radius:50%;animation:spin 1s linear infinite}"
-                    + "p{opacity:.75}@keyframes spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.ring{animation:spin 2s linear infinite}}</style></head>"
-                    + "<body><main id='portable-startup-loading'><h1>DeepSeek Harness</h1><div class='ring'></div><p id='portable-startup-status'>"
-                    + message + "</p></main></body></html>");
-            }
         }
 
         private async Task InitializeWebViewAttemptAsync(string userData, CoreWebView2EnvironmentOptions options)
@@ -4650,13 +4826,20 @@ namespace DshPortable
 
         private WebView2 CreateDesktopWebView()
         {
-            return new WebView2
+            WebView2 view = new WebView2
             {
                 Dock = DockStyle.Fill,
                 Location = Point.Empty,
                 DefaultBackgroundColor = BackColor,
                 Visible = true,
             };
+            view.KeyDown += delegate(object sender, KeyEventArgs args)
+            {
+                if (!QueueDesktopShortcut(args.KeyData)) return;
+                args.Handled = true;
+                args.SuppressKeyPress = true;
+            };
+            return view;
         }
 
         private void ResetWebViewAfterInitializationFailure()
@@ -4670,7 +4853,7 @@ namespace DshPortable
             WebView2 failedWebView = webView;
             if (failedWebView != null)
             {
-                try { Controls.Remove(failedWebView); }
+                try { desktopContent.Controls.Remove(failedWebView); }
                 catch { }
                 try { failedWebView.Dispose(); }
                 catch { }
@@ -4679,7 +4862,7 @@ namespace DshPortable
             webViewBrowserExited = null;
             ownedWebViewBrowserProcessId = 0;
             webView = CreateDesktopWebView();
-            Controls.Add(webView);
+            desktopContent.Controls.Add(webView);
             webView.SendToBack();
             FitWebViewToClient();
         }
@@ -4721,13 +4904,14 @@ namespace DshPortable
             await NavigateWorkspaceAsync(url, false);
 
             SuspendLayout();
-            FormBorderStyle = FormBorderStyle.Sizable;
+            FormBorderStyle = fullscreen ? FormBorderStyle.None : FormBorderStyle.Sizable;
             MaximizeBox = true;
             MinimizeBox = true;
             MinimumSize = new Size(900, 620);
             FitWebViewToClient();
             webView.Visible = true;
             webView.BringToFront();
+            if (desktopMenu != null) desktopContent.BringToFront();
             ApplyDesktopWindowCorners();
             ApplyDesktopChrome();
             launchPanel.Visible = false;
@@ -4742,6 +4926,7 @@ namespace DshPortable
         private void FitWebViewToClient()
         {
             if (webView == null || webView.IsDisposed) return;
+            if (desktopMenu != null) desktopContent.BringToFront();
             if (webView.Dock != DockStyle.Fill) webView.Dock = DockStyle.Fill;
             PerformLayout();
         }
@@ -4768,12 +4953,6 @@ namespace DshPortable
                     { "targetKind", eventArgs.Uri.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase) ? "inline-html" : eventArgs.Uri == "about:blank" ? "blank" : "other" },
                     { "desktopStart", desktopStart }, { "desktopReady", desktopReady }
                 });
-            if (loadingDocumentNavigation && applicationUri == null && !eventArgs.IsUserInitiated
-                && eventArgs.Uri.StartsWith("data:text/html", StringComparison.OrdinalIgnoreCase))
-            {
-                loadingDocumentNavigation = false;
-                return;
-            }
             if (desktopStart && !desktopReady && applicationUri == null && eventArgs.Uri == "about:blank")
             {
                 return;

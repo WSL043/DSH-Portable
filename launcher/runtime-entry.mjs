@@ -39,7 +39,9 @@ if (isStart) {
 }
 reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()
-const prepared = await ensureRuntimeCapsule(root)
+const prepared = await ensureRuntimeCapsule(root, {
+  onRetry: fields => appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-commit-retry', fields),
+})
 const preparationElapsed = performance.now() - preparationStarted
 reportStartupProgress('runtime-ready', { reused: prepared.reused === true })
 appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-capsule-ready', {

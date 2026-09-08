@@ -52,7 +52,10 @@ try {
     button?.click()
     return false
   })()`, Boolean, 'isolated onboarding dismissed')
-  await until(click(['Settings', '设置']), Boolean, 'settings button')
+  // Exercise the same native command dispatcher used by Ctrl+, and the File menu.
+  await until(`(() => {const button=[...document.querySelectorAll('button')].find(item => ['Settings','设置'].includes((item.textContent||'').trim())); return Boolean(button && !button.closest('[inert]'))})()`, Boolean, 'settings trigger ready')
+  await evaluate(`chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})`)
+
   const generalBorders = await until(`(() => {
     const textOf = node => (node?.textContent || '').replace(/\\s+/g, ' ').trim()
     const portableLabels = new Set(['Portable', '便携版'])

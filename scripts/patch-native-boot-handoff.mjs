@@ -2,7 +2,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const MARKER = 'dsh-portable-native-boot-handoff-v4'
+const MARKER = 'dsh-portable-native-boot-handoff-v5'
 const CSS_MARKER = 'dsh-portable-native-boot-logo-v1'
 
 function replaceRequired(source, needle, replacement, label) {
@@ -78,19 +78,13 @@ export function patchNativeBootHandoff(source) {
 \t\t\t(0, react.useLayoutEffect)(() => {
 \t\t\t\tif (nativeHost !== void 0 && surfaceReady) nativeHost.postMessage({ type: "dsh-portable/surface-ready", schemaVersion: 1 });
 \t\t\t}, [nativeHost, surfaceReady]);
-\t\t\tif (nativeHost === void 0 && ready) return props.app();
-\t\t\tconst boot = (0, react.createElement)("div", {
-\t\t\t\tkey: "dsh-boot",
+\t\t\tif (nativeHost !== void 0) return ready ? props.app() : null;
+\t\t\tif (ready) return props.app();
+\t\t\treturn (0, react.createElement)("div", {
 \t\t\t\tclassName: props.boot.className,
 \t\t\t\t"data-dsh-boot": "",
-\t\t\t\tstyle: nativeHost === void 0 ? void 0 : { position: "fixed", inset: 0, zIndex: 2147483647 },
 \t\t\t\tdangerouslySetInnerHTML: { __html: props.boot.html }
 \t\t\t});
-\t\t\tif (nativeHost === void 0) return boot;
-\t\t\treturn (0, react.createElement)(react.Fragment, null,
-\t\t\t\tready ? (0, react.createElement)(react.Fragment, { key: "dsh-app" }, props.app()) : null,
-\t\t\t\tsurfaceReady ? null : boot
-\t\t\t);
 \t\t}`
 
   return replaceRequired(source, original, replacement, 'native boot handoff seam changed upstream')
