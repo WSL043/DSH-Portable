@@ -31,7 +31,6 @@ test('Linux requires a compatible native shell before installing the app compone
   const source = await read('scripts/build-linux.sh')
   assert.match(source, /"shellSchema": 12/)
   assert.match(source, /"requiredShellSchema": 12/)
-  assert.match(source, /update-preflight\.mjs/)
   assert.match(source, /"shellFingerprint": "\$SHELL_FINGERPRINT"/)
   assert.match(source, /"requiredShellFingerprint": "\$SHELL_FINGERPRINT"/)
 })

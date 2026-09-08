@@ -75,7 +75,8 @@ await new Promise((resolve, reject) => {
 appendStartupTrace(startupTrace, 'portable-host', 'control-ready')
 
 process.argv = [process.execPath, path.resolve(dshBin), ...dshArgs]
-const finishStartupProfile = await startStartupProfile(logDirectory, startupTrace?.startupId || '')
+const finishStartupProfile = await startStartupProfile(logDirectory, startupTrace?.startupId || '',
+  progress => healthPhase(null, progress))
 appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-begin')
 healthPhase('official-dsh-import')
 const importStartedAt = performance.now()

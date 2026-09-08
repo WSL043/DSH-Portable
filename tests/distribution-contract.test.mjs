@@ -169,13 +169,17 @@ test('build executes a native runtime smoke check', async () => {
   assert.match(verifier, /bin\.js/)
 })
 
-test('every desktop package ships the portable repair runtime used by the CLI', async () => {
-  const [windows, macos, linux] = await Promise.all([
+test('every desktop package ships the shared launcher modules used by the CLI', async () => {
+  const [windows, macos, linux, repairCore, startupSummary] = await Promise.all([
     read('scripts/build-windows.ps1'),
     read('scripts/build-macos.sh'),
     read('scripts/build-linux.sh'),
+    read('launcher/repair-core.mjs'),
+    read('launcher/startup-summary.mjs'),
   ])
-  for (const build of [windows, macos, linux]) assert.match(build, /repair-core\.mjs/)
+  for (const build of [windows, macos, linux]) assert.match(build, /\*\.mjs/)
+  assert.ok(repairCore.length > 0)
+  assert.ok(startupSummary.length > 0)
 })
 
 test('every desktop package ships the versioned data migration runtime and separated localized guides', async () => {
@@ -187,7 +191,6 @@ test('every desktop package ships the versioned data migration runtime and separ
     read('templates/DATA-MIGRATION.en.txt'),
   ])
   for (const builder of [windows, macos, linux]) {
-    assert.match(builder, /data-transfer\.mjs/)
     assert.match(builder, /DATA-MIGRATION\.zh-CN\.txt/)
     assert.match(builder, /DATA-MIGRATION\.en\.txt/)
     assert.match(builder, /README\.zh-CN\.txt/)
@@ -219,10 +222,8 @@ test('the release surface is Portable-only and does not publish traditional inst
 })
 
 test('stop path preserves the official DSH graceful shutdown before escalation', async () => {
-  const build = await read('scripts/build-windows.ps1')
   const launcher = await read('launcher/portable-cli.mjs')
   const host = await read('launcher/portable-host.mjs')
-  assert.match(build, /portable-host\.mjs/)
   assert.match(host, /process\.emit\('SIGTERM'\)/)
   assert.match(host, /timingSafeEqual/)
   const signalIndex = launcher.indexOf('requestGracefulShutdown')

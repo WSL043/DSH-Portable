@@ -152,9 +152,11 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     return describe('channel-mismatch', 'none')
   }
   const productComparison = comparePortableVersions(installed.portableVersion, manifest.portableVersion)
+  let engineAlreadyCurrent = false
   if (updateKind === 'engine') {
     const engineComparison = engineCurrent ? comparePortableVersions(engineCurrent, engineLatest) : -1
-    if (engineComparison === 0 || (!allowEngineVersionChange && engineComparison > 0)) return describe('current', 'none')
+    engineAlreadyCurrent = engineComparison === 0
+    if (!allowEngineVersionChange && engineComparison >= 0) return describe('current', 'none')
     if (productComparison !== 0) return describe('core-incompatible', 'none')
   } else if (productComparison >= 0) {
     return describe('current', 'none')
@@ -177,6 +179,9 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
   if (!component.dshVersion || !Array.isArray(component.urls) || component.urls.length === 0) throw new Error('Update component is incomplete.')
   if (!Number.isSafeInteger(Number(component.bytes)) || Number(component.bytes) <= 0) throw new Error('Update component size is invalid.')
   if (!/^[a-f0-9]{64}$/i.test(String(component.sha256 ?? ''))) throw new Error('Update component digest is invalid.')
+  // Explicit catalogs still validate same-version packages: a matching DSH
+  // version does not imply that the package targets this Portable shell.
+  if (engineAlreadyCurrent) return describe('current', 'none')
   return {
     ...describe('available', 'component'),
     platform: manifest.platform,

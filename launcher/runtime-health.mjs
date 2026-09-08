@@ -8,7 +8,7 @@ import { appendHistoryLog } from './log-history.mjs'
 
 // Sample only startup, without opening a debug port or recording arguments/source.
 // A synchronous stall is sampled by V8, but its summary is flushed on recovery.
-export async function startStartupProfile(logDirectory, startupId = '') {
+export async function startStartupProfile(logDirectory, startupId = '', onProgress = () => {}) {
   let session
   let timer
   let stopped = false
@@ -22,6 +22,19 @@ export async function startStartupProfile(logDirectory, startupId = '') {
     return String(marker >= 0 ? url.slice(marker + 14) : url.startsWith('node:') ? url : url.split('/').pop()).slice(-180)
   }
   let segmentStarted = performance.now()
+  let lastProgressAt = -Infinity
+  const progress = (operation, value, state) => {
+    const now = performance.now()
+    if (now - lastProgressAt < 250) return
+    lastProgressAt = now
+    // Send bounded checkpoints to the independent health worker. These survive
+    // a later blocked/killed main thread even when the final V8 profile cannot.
+    try { onProgress({ operation, file: safeFile(value), state,
+      elapsedMs: Math.round(now - segmentStarted), moduleCalls,
+      resolveCalls: moduleTimings.resolve.calls, loadCalls: moduleTimings.load.calls,
+      resolveMs: Math.round(moduleTimings.resolve.durationMs),
+      loadMs: Math.round(moduleTimings.load.durationMs) }) } catch {}
+  }
   const write = fields => {
     const line = JSON.stringify({ timestamp: new Date().toISOString(), startupId,
       pid: process.pid, component: 'portable-host', ...fields })
@@ -41,11 +54,13 @@ export async function startStartupProfile(logDirectory, startupId = '') {
     const { registerHooks } = await import('node:module')
     const measure = (operation, value, context, next) => {
       const begin = performance.now()
+      progress(operation, value, 'begin')
       try { return next(value, context) } finally {
         moduleCalls++
         const elapsed = performance.now() - begin
         moduleTimings[operation].calls++
         moduleTimings[operation].durationMs += elapsed
+        progress(operation, value, 'complete')
         const durationMs = Math.round(elapsed)
         if (durationMs >= 20) {
           slowModules.push({ operation, file: safeFile(value), durationMs })
@@ -137,15 +152,15 @@ export function startRuntimeHealth(logDirectory, startupId = '') {
       } catch {}
     })
     worker.on('exit', stop)
-    const heartbeat = () => {
+    const heartbeat = startupProgress => {
       const memory = process.memoryUsage()
-      worker.postMessage({ phase, heapUsedBytes: memory.heapUsed })
+      worker.postMessage({ phase, heapUsedBytes: memory.heapUsed, startupProgress })
     }
     worker.once('online', heartbeat)
     timer = setInterval(heartbeat, 1000)
     timer.unref()
     worker.unref()
-    return nextPhase => { phase = nextPhase; heartbeat() }
+    return (nextPhase, startupProgress) => { if (nextPhase) phase = nextPhase; heartbeat(startupProgress) }
   } catch {
     clearInterval(timer)
     worker?.unref()
@@ -158,6 +173,7 @@ if (!isMainThread && workerData?.logDirectory) {
   let heartbeatAt = performance.now()
   let phase = 'awaiting-main-heartbeat'
   let heapUsedBytes = null
+  let startupProgress = null
   let previousCpu = process.cpuUsage()
   let previousSample = performance.now()
   const systemTotalMemoryBytes = totalmem()
@@ -172,6 +188,7 @@ if (!isMainThread && workerData?.logDirectory) {
     heartbeatAt = performance.now()
     phase = heartbeat.phase
     heapUsedBytes = heartbeat.heapUsedBytes
+    if (heartbeat.startupProgress) startupProgress = heartbeat.startupProgress
   })
   setInterval(() => {
     const now = performance.now()
@@ -193,6 +210,7 @@ if (!isMainThread && workerData?.logDirectory) {
         sampleIntervalMs: Math.round(sampleIntervalMs),
         systemFreeMemoryBytes: freemem(), systemTotalMemoryBytes,
         lastMainHeapUsedBytes: heapUsedBytes,
+        ...(startupProgress ? { startupProgress } : {}),
       })
       appendFileSync(filename, `${line}\n`)
       appendHistoryLog(workerData.logDirectory, workerData.startupId, 'runtime-health.jsonl', line)

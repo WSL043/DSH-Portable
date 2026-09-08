@@ -241,6 +241,10 @@ test('support report exports bounded, redacted startup history with explicit tru
   assert.equal(history.runs.length, 30)
   assert.notEqual(history.runs[0].logs['startup.jsonl'], '')
   assert.notEqual(history.runs.at(-1).logs['startup.jsonl'], '')
+  assert.ok(history.runs.every(run => run.summary
+    && typeof run.summary.readinessObserved === 'boolean'
+    && typeof run.summary.failureObserved === 'boolean'
+    && run.summary.incompleteEvidence === true))
   assert.ok(history.runs.every(run => Array.isArray(run.truncatedLogs)))
   assert.ok(history.runs.every(run => Object.hasOwn(run.logs, 'startup.jsonl.previous')
     && Object.hasOwn(run.logs, 'runtime-health.jsonl')

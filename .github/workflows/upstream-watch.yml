@@ -61,6 +61,15 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/update-upstream.mjs
+      - name: Inspect default plugin releases without replacing reviewed pins
+        run: node scripts/check-default-plugin-upstream.mjs --output default-plugin-intake.json
+      - name: Retain default plugin intake evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: default-plugin-intake
+          path: default-plugin-intake.json
+          if-no-files-found: warn
       - id: market
         env:
           GITHUB_TOKEN: ${{ github.token }}

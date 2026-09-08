@@ -79,6 +79,19 @@ function engineUpdateManifest(overrides = {}) {
   })
 }
 
+test('explicit engine catalogs check compatibility even when the DSH version matches', () => {
+  const manifest = engineUpdateManifest()
+  const installed = { portableVersion: manifest.portableVersion, dshVersion: manifest.component.dshVersion,
+    releaseChannel: 'stable', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
+  const options = { allowEngineVersionChange: true }
+  assert.equal(evaluateUpdate(manifest, installed, 'windows-x64', options).status, 'current')
+  assert.equal(evaluateUpdate({ ...manifest, portableVersion: '0.4.11' }, installed, 'windows-x64', options).status, 'core-incompatible')
+  assert.equal(evaluateUpdate({ ...manifest, requiredShellFingerprint: 'a'.repeat(64) }, installed, 'windows-x64', options).status, 'full-package-required')
+  assert.equal(evaluateUpdate({ ...manifest, component: { ...manifest.component, requiredNodeVersion: '25.0.0' } }, installed, 'windows-x64', options).status, 'full-package-required')
+  assert.equal(evaluateUpdate({ ...manifest, portableVersion: '0.4.11' }, installed, 'windows-x64').status, 'current',
+    'automatic checks do not advertise a same-version engine update')
+})
+
 test('portable preview versions compare monotonically without lexical mistakes', () => {
   assert.equal(comparePortableVersions('0.1.0-rc.6-portable.5', '0.1.0-rc.6-portable.5'), 0)
   assert.equal(comparePortableVersions('0.1.0-rc.6-portable.5', '0.1.0-rc.6-portable.10'), -1)
@@ -254,6 +267,8 @@ test('engine version catalog exposes only verified compatible manifests and pres
         { version: '0.1.1-rc.3', manifestUrl: 'https://updates.invalid/0.1.1-rc.3.json', manifest: compatible },
         { version: '0.1.1-rc.1', manifestUrl: 'https://updates.invalid/0.1.1-rc.1.json', manifest: compatibleOlder },
         { version: '0.1.1-rc.4', manifestUrl: 'https://updates.invalid/0.1.1-rc.4.json', manifest: wrongShell },
+        { version: '0.1.1-rc.2', manifestUrl: 'https://updates.invalid/0.1.1-rc.2.json',
+          manifest: { ...wrongShell, component: { ...wrongShell.component, dshVersion: '0.1.1-rc.2' } } },
       ],
     }), { status: 200 }),
   })
@@ -261,6 +276,7 @@ test('engine version catalog exposes only verified compatible manifests and pres
   assert.deepEqual(result.versions.map(item => item.version), ['0.1.1-rc.3', '0.1.1-rc.1'])
   assert.equal(result.versions[0].manifestUrl, 'https://updates.invalid/0.1.1-rc.3.json')
   assert.deepEqual(result.unavailable, [{ version: '0.1.1-rc.4', status: 'full-package-required',
+    reason: 'full-package-required', requiredPortableVersion: '0.4.10' }, { version: '0.1.1-rc.2', status: 'full-package-required',
     reason: 'full-package-required', requiredPortableVersion: '0.4.10' }])
   assert.equal(result.unavailable[0].manifestUrl, undefined, 'incompatible entries expose no install target')
 

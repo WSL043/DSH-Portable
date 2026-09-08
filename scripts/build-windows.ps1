@@ -79,8 +79,8 @@ function Copy-PortableSources([string]$Target) {
     Copy-Item (Join-Path $ProjectRoot 'app\package.json') (Join-Path $Target 'app\package.json')
     Copy-Item (Join-Path $ProjectRoot 'app\package-lock.json') (Join-Path $Target 'app\package-lock.json')
     Copy-Item -Recurse (Join-Path $ProjectRoot 'app\vendor') (Join-Path $Target 'app\vendor')
-    foreach ($File in @('portable-core.mjs', 'portable-cli.mjs', 'portable-host.mjs', 'update-core.mjs', 'update-preflight.mjs', 'dsh-cli.mjs', 'http-readiness.mjs', 'default-plugins.mjs', 'repair-core.mjs', 'diagnostic-policy.mjs', 'data-transfer.mjs', 'data-import-preflight.mjs', 'operation-trace.mjs', 'runtime-capsule.mjs', 'runtime-entry.mjs', 'startup-trace.mjs', 'runtime-health.mjs', 'log-history.mjs')) {
-        Copy-Item (Join-Path $ProjectRoot "launcher\$File") (Join-Path $Target "launcher\$File")
+    foreach ($File in Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'launcher') -File -Filter '*.mjs') {
+        Copy-Item -LiteralPath $File.FullName -Destination (Join-Path $Target "launcher\$($File.Name)")
     }
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.zh-CN.txt') (Join-Path $Target 'DATA-MIGRATION.zh-CN.txt')
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.en.txt') (Join-Path $Target 'DATA-MIGRATION.en.txt')

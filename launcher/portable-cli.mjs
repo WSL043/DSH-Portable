@@ -37,10 +37,11 @@ import {
   ignoreUpdate,
   installAvailableAppUpdate,
   listEngineVersions,
+  readInstalledUpdateState,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
 import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
-import { seedDefaultPlugins } from './default-plugins.mjs'
+import { DEFAULT_PLUGINS, seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
@@ -488,6 +489,19 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
 
   const defaultPlugins = await seedDefaultPlugins(layout)
   startupLog(startedAt, 'default-plugins-ready', defaultPlugins)
+  try {
+    const installed = await readInstalledUpdateState(layout)
+    startupLog(startedAt, 'component-versions', {
+      portableVersion: installed.portableVersion, dshVersion: installed.dshVersion,
+      nodeVersion: installed.nodeVersion, releaseChannel: installed.releaseChannel,
+    })
+    for (const plugin of DEFAULT_PLUGINS) {
+      const manifest = JSON.parse(await readFile(path.join(layout.dshHome, 'profiles', 'web', 'node_modules', plugin.name, 'package.json'), 'utf8'))
+      startupLog(startedAt, 'default-plugin-version', { name: plugin.name, version: String(manifest.version || 'unknown') })
+    }
+  } catch (error) {
+    startupLog(startedAt, 'component-version-snapshot-incomplete', { code: error.code || error.name })
+  }
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }

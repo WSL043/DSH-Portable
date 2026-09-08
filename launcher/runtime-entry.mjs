@@ -44,6 +44,7 @@ const preparationElapsed = performance.now() - preparationStarted
 reportStartupProgress('runtime-ready', { reused: prepared.reused === true })
 appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-capsule-ready', {
   mode: prepared.mode,
+  reused: prepared.reused === true,
   elapsedMsRuntime: Math.round(preparationElapsed),
 })
 try {
