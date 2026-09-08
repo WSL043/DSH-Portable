@@ -900,6 +900,26 @@ namespace DshPortable
         }
     }
 
+    internal sealed class DesktopTitleStrip : MenuStrip
+    {
+        internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 10F);
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing) CaptionFont.Dispose();
+        }
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == 0x0084)
+            {
+                long position = message.LParam.ToInt64();
+                Point point = PointToClient(new Point((short)position, (short)(position >> 16)));
+                if (GetItemAt(point) == null) { message.Result = new IntPtr(-1); return; }
+            }
+            base.WndProc(ref message);
+        }
+    }
+
     internal sealed class LauncherWindow : Form
     {
         private const int WmClose = 0x0010;
@@ -1301,8 +1321,31 @@ namespace DshPortable
             base.OnFormClosing(eventArgs);
         }
 
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams parameters = base.CreateParams;
+                // Preserve native sizing/system-menu styles, without a second caption.
+                if (desktopStart) parameters.Style &= ~0x00C00000; // WS_CAPTION
+                return parameters;
+            }
+        }
+
         protected override void WndProc(ref Message message)
         {
+            if (desktopStart && !fullscreen && desktopMenu != null && message.Msg == 0x0084)
+            {
+                long position = message.LParam.ToInt64();
+                Point point = desktopMenu.PointToClient(new Point((short)position, (short)(position >> 16)));
+                if (desktopMenu.ClientRectangle.Contains(point) && desktopMenu.GetItemAt(point) == null)
+                {
+                    message.Result = new IntPtr(2); // Native caption drag/double-click/system menu.
+                    return;
+                }
+                base.WndProc(ref message);
+                return;
+            }
             if (message.Msg == exitMessage)
             {
                 if (!shutdownRunning) BeginDesktopShutdown();
@@ -1326,14 +1369,20 @@ namespace DshPortable
             if (desktopMenu != null) { Controls.Remove(desktopMenu); desktopMenu.Dispose(); }
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
-            desktopMenu = new MenuStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, Visible = !fullscreen };
+            desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
+                AutoSize = false, Height = 36, Padding = new Padding(8, 0, 0, 0), Font = Font, Visible = !fullscreen };
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
             desktopContent.BringToFront();
-            ToolStripMenuItem file = new ToolStripMenuItem(L("文件(&F)", "&File"));
-            ToolStripMenuItem view = new ToolStripMenuItem(L("视图(&V)", "&View"));
-            ToolStripMenuItem help = new ToolStripMenuItem(L("帮助(&H)", "&Help"));
+            ToolStripMenuItem file = new ToolStripMenuItem(L("文件", "&File"));
+            ToolStripMenuItem view = new ToolStripMenuItem(L("视图", "&View"));
+            ToolStripMenuItem help = new ToolStripMenuItem(L("帮助", "&Help"));
             desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
+            AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { Close(); });
+            AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate {
+                WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+            });
+            AddCaptionCommand("caption-minimize", "\uE921", L("最小化", "Minimize"), delegate { WindowState = FormWindowState.Minimized; });
             AddDesktopCommand(file, "new-session", L("新会话", "New session"), Keys.Control | Keys.N,
                 delegate { PostBridgeAction("new-session", null); });
             AddDesktopCommand(file, "settings", L("设置", "Settings"), Keys.Control | Keys.Oemcomma,
@@ -1365,6 +1414,22 @@ namespace DshPortable
             help.DropDownItems.Add(CreateReportProblemItem());
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
             RefreshDesktopCommands();
+        }
+
+        private void AddCaptionCommand(string name, string glyph, string label, EventHandler action)
+        {
+            desktopMenu.Items.Add(new ToolStripMenuItem(glyph, null, action) {
+                Name = name, Alignment = ToolStripItemAlignment.Right, AutoSize = false,
+                Size = new Size(46, 36), Margin = Padding.Empty, Padding = Padding.Empty,
+                Font = ((DesktopTitleStrip)desktopMenu).CaptionFont, AccessibleName = label, ToolTipText = label,
+            });
+        }
+
+        protected override void OnSizeChanged(EventArgs eventArgs)
+        {
+            base.OnSizeChanged(eventArgs);
+            if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
+                desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
         }
 
         private void AddDesktopCommand(ToolStripMenuItem parent, string id, string title, Keys shortcut, EventHandler action)
