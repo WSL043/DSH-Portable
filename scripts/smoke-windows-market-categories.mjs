@@ -43,7 +43,51 @@ try {
   await send('Page.enable')
 
   await delay(1000)
+  await until(`(() => {
+    const notice = [...document.querySelectorAll('[role="dialog"]')].find(item =>
+      /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥/.test(item.textContent || '') && item.getBoundingClientRect().width > 0)
+    if (!notice) return true
+    const button = [...notice.querySelectorAll('button')].find(item =>
+      ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
+    button?.click()
+    return false
+  })()`, Boolean, 'isolated onboarding dismissed')
   await until(click(['Settings', '设置']), Boolean, 'settings button')
+  const generalBorders = await until(`(() => {
+    const textOf = node => (node?.textContent || '').replace(/\\s+/g, ' ').trim()
+    const portableLabels = new Set(['Portable', '便携版'])
+    const dataLabels = new Set(['Data', '数据'])
+    const portableGroup = [...document.querySelectorAll('div')].find(node => {
+      const heading = [...node.children].find(child => portableLabels.has(textOf(child)))
+      const dataSections = [...node.children].filter(child => child.matches?.('section[aria-label]') && dataLabels.has(child.getAttribute('aria-label') || ''))
+      return heading && dataSections.length > 0
+    })
+    if (!portableGroup) return null
+    const sections = [...portableGroup.children].filter(child => child.matches?.('section[aria-label]'))
+    const dataSection = sections.filter(section => dataLabels.has(section.getAttribute('aria-label') || '')).at(-1)
+    const dataRow = dataSection?.lastElementChild
+    if (!dataSection || !dataRow) return null
+    dataSection.scrollIntoView({ block: 'end' })
+    const borderOf = node => {
+      const value = getComputedStyle(node).borderBottomWidth
+      return { value, px: Number.parseFloat(value) }
+    }
+    const internalRows = sections.flatMap(section => [...section.children].slice(1).map(row => ({
+      section: section.getAttribute('aria-label') || '', text: textOf(row).slice(0, 200), borderBottom: borderOf(row),
+    })))
+    return {
+      portableGroup: { heading: textOf([...portableGroup.children].find(child => portableLabels.has(textOf(child)))), borderBottom: borderOf(portableGroup) },
+      dataSection: { label: dataSection.getAttribute('aria-label') || '', lastRow: { text: textOf(dataRow).slice(0, 200), borderBottom: borderOf(dataRow) } },
+      internalRows,
+    }
+  })()`, value => value !== null && value !== undefined, 'Portable general borders')
+  await writeFile(path.join(output, 'general-borders.json'), JSON.stringify(generalBorders, null, 2))
+  await evaluate(`new Promise(resolve => requestAnimationFrame(() => resolve(true)))`)
+  const generalScreenshot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+  await writeFile(path.join(output, 'general-borders.png'), Buffer.from(generalScreenshot.data, 'base64'))
+  assert.equal(generalBorders.portableGroup.borderBottom.px, 0, 'Portable group bottom border must be zero')
+  assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
+  assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
   await until(click(['Plugins','插件']), Boolean, 'plugins');
   await until(click(['Plugin Market','插件市场']), Boolean, 'market');
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');

@@ -631,7 +631,7 @@ window.__ModuleLoader__.load({
         }
       }
       const styles = {
-        group: { borderBottom: '1px solid var(--dsw-alias-border-l2)', display: 'flex', flexDirection: 'column', padding: '20px 0 8px' },
+        group: { display: 'flex', flexDirection: 'column', padding: '20px 0 8px' },
         heading: { color: 'var(--dsw-alias-label-primary)', fontSize: 14, fontWeight: 500, lineHeight: '22px', marginBottom: 0 },
         section: { display: 'flex', flexDirection: 'column', gap: 0, marginTop: 18 },
         sectionHeading: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, fontWeight: 500, lineHeight: '18px', padding: 0 },
@@ -819,7 +819,7 @@ window.__ModuleLoader__.load({
           hiddenImportFileCount > 0 && h('div', { style: styles.importFile }, format(t('dataImportMoreFiles'), hiddenImportFileCount))))) : null
       const dataSection = h('section', { style: styles.section, 'aria-label': t('data') },
         h('div', { style: styles.sectionHeading }, t('data')),
-        h('div', { style: styles.item },
+        h('div', { style: { ...styles.item, borderBottom: 'none' } },
           h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataTitle')), h('div', { style: styles.hint }, t('dataHint')), inlineStatus('data')),
           h('div', { style: styles.rowActions },
             h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataImportHint'), disabled: Boolean(busy), onClick: beginImport }, t('dataImport')),
