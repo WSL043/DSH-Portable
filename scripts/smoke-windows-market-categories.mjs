@@ -42,19 +42,27 @@ try {
   await send('Runtime.enable')
   await send('Page.enable')
 
-  await delay(1000)
+  // Onboarding is asynchronous: keep handling it until the settings dialog
+  // actually opens, rather than declaring success before the first notice mounts.
   await until(`(() => {
-    const notice = [...document.querySelectorAll('[role="dialog"]')].find(item =>
-      /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥/.test(item.textContent || '') && item.getBoundingClientRect().width > 0)
-    if (!notice) return true
-    const button = [...notice.querySelectorAll('button')].find(item =>
-      ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
-    button?.click()
+    const dialogs = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
+      .filter(item => item.getBoundingClientRect().width > 0)
+    const notice = dialogs.find(item =>
+      /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
+    if (notice) {
+      const button = [...notice.querySelectorAll('button')].find(item =>
+        ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
+      button?.click()
+      return false
+    }
+    if (dialogs.length) return true
+    const settings = [...document.querySelectorAll('button')].find(item =>
+      ['Settings', '设置'].includes((item.textContent || '').trim()))
+    if (settings && settings.getBoundingClientRect().width > 0 && !settings.closest('[inert]')) {
+      chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})
+    }
     return false
-  })()`, Boolean, 'isolated onboarding dismissed')
-  // Exercise the same native command dispatcher used by Ctrl+, and the File menu.
-  await until(`(() => {const button=[...document.querySelectorAll('button')].find(item => ['Settings','设置'].includes((item.textContent||'').trim())); return Boolean(button && !button.closest('[inert]'))})()`, Boolean, 'settings trigger ready')
-  await evaluate(`chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})`)
+  })()`, Boolean, 'native settings command opens after onboarding')
 
   const generalBorders = await until(`(() => {
     const textOf = node => (node?.textContent || '').replace(/\\s+/g, ' ').trim()
@@ -112,7 +120,10 @@ try {
   passed=true;
 } finally {
   try {
-    if (evaluate) await writeFile(path.join(output, 'page.txt'), await evaluate('document.body.innerText').catch(String))
+    if (evaluate) {
+      await writeFile(path.join(output, 'page.txt'), await evaluate('document.body.innerText').catch(String))
+      await writeFile(path.join(output, 'page.html'), await evaluate('document.documentElement.outerHTML').catch(String))
+    }
   } finally {
     socket?.close()
     try {

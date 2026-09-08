@@ -194,6 +194,7 @@ try {
   }).catch(() => {})
   await mkdir(output, { recursive: true })
   const debugPort = await reservePort()
+  const startupDeadline = Date.now() + startupTimeoutSeconds * 1000
   launcher = spawn(executable, environmentId ? ['--environment', environmentId] : [], {
     cwd: root,
     env: {
@@ -216,7 +217,7 @@ try {
     '-TargetProcessId', String(launcher.pid), '-OutputDirectory', path.join(output, '01-native-loader'),
   ], { windowsHide: true, timeout: 20000 }) : Promise.resolve()
   nativeCapture.catch(() => {}) // Keep errors for the awaited capture below.
-  const page = await waitForTarget(debugPort, launcher)
+  const page = await waitForTarget(debugPort, launcher, Math.max(1, startupDeadline - Date.now()))
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
   await client.send('Runtime.enable')
@@ -228,8 +229,7 @@ try {
   let capturedReveal = false
   let capturedWorkspace = false
   let workspaceStableSamples = 0
-  const deadline = Date.now() + startupTimeoutSeconds * 1000
-  while (Date.now() < deadline) {
+  while (Date.now() < startupDeadline) {
     const state = await evaluate(client, `(() => {
       const visible = node => {
         if (!(node instanceof Element)) return false
