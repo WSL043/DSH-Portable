@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, writeFile } from 'node:fs/promises'
 import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import os from 'node:os'
@@ -9,13 +9,24 @@ import { spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { startStartupProfile } from '../launcher/runtime-health.mjs'
 
+async function evidenceRoot(prefix) {
+  const base = process.env.DSH_TEST_EVIDENCE_DIR || os.tmpdir()
+  await mkdir(base, { recursive: true })
+  // macOS /var is an alias of /private/var; module hooks receive real URLs.
+  return realpath(await mkdtemp(path.join(base, prefix)))
+}
+
 test('startup profiling captures a recovered synchronous wait and persists its call site in history', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-startup-profile-'))
+  const root = await evidenceRoot('dsh-startup-profile-')
   const id = 'c'.repeat(32)
   const fixture = pathToFileURL(path.join(root, 'slow-module.mjs')).href
   await writeFile(new URL(fixture), 'export const ready = true\n')
+  let delayInjected = false
   const delayHook = registerHooks({ load(url, context, next) {
-    if (url === fixture) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250)
+    if (url === fixture) {
+      delayInjected = true
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250)
+    }
     return next(url, context)
   } })
   const finish = await startStartupProfile(root, id)
@@ -30,6 +41,8 @@ test('startup profiling captures a recovered synchronous wait and persists its c
     delayHook.deregister()
   }
   await finish()
+  console.log(`Startup diagnostic evidence: ${root}`)
+  assert.ok(delayInjected, 'the fixture must actually inject its loader delay before assessing the profiler')
   const rows = (await readFile(path.join(root, 'history', id, 'runtime-health.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse)
   const profiles = rows.filter(row => row.observation === 'startup-profile')
   assert.equal(profiles.length, 1)
@@ -39,11 +52,10 @@ test('startup profiling captures a recovered synchronous wait and persists its c
   assert.ok(profiles[0].slowModules.some(item => item.operation === 'load' && item.file === 'slow-module.mjs' && item.durationMs >= 200))
   assert.ok(!JSON.stringify(profiles[0]).includes(os.homedir().replaceAll('\\', '/')))
   assert.ok(Buffer.byteLength(JSON.stringify(profiles[0])) < 16 * 1024)
-  console.log(`Startup diagnostic evidence: ${root}`)
 })
 
 test('independent health checkpoints survive a permanently blocked startup without a final profile', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-startup-killed-'))
+  const root = await evidenceRoot('dsh-startup-killed-')
   const id = 'd'.repeat(32)
   const module = path.join(root, 'blocked.mjs')
   const fixture = path.join(root, 'host.mjs')

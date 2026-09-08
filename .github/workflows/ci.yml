@@ -86,6 +86,15 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app --ignore-scripts
       - run: npm test
+        env:
+          DSH_TEST_EVIDENCE_DIR: ${{ runner.temp }}/startup-contract-evidence
+      - name: Retain startup sampling evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: startup-contract-evidence-${{ matrix.label }}
+          path: ${{ runner.temp }}/startup-contract-evidence
+          if-no-files-found: warn
 
   windows-build:
     name: Build Windows base artifacts
