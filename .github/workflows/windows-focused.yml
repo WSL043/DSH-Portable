@@ -11,7 +11,7 @@ on:
       scope:
         description: Isolated tray bridge or the original native check sequence
         type: choice
-        options: [tray, native]
+        options: [tray, native, migration]
         default: tray
       node_version:
         description: Harness Node version for controlled environment comparison
@@ -68,9 +68,20 @@ jobs:
         shell: powershell
         run: |
           Get-FileHash artifacts/DSH-Portable-windows-x64-offline.zip | Format-List | Out-File evidence/artifact-sha256.txt
-          ./scripts/verify-windows-native-artifact.ps1 -RunnerLabel focused *>&1 | Tee-Object evidence/native-sequence.log
+          Start-Transcript -Path evidence/native-sequence.log
+          try { ./scripts/verify-windows-native-artifact.ps1 -RunnerLabel focused } finally { Stop-Transcript }
+      - name: Verify migration independently
+        if: inputs.scope == 'migration'
+        shell: pwsh
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-native-migration-host'
+          New-Item -ItemType Directory -Force $Root | Out-Null
+          tar.exe -xf artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
+          node scripts/smoke-windows-data-export.mjs (Join-Path $Root 'DSH-Portable') (Join-Path $env:RUNNER_TEMP 'dsh-native-migration-evidence-focused') 2>&1 | Tee-Object evidence/migration.log
+          if ($LASTEXITCODE -ne 0) { throw 'Migration check failed' }
       - name: Retain native structured failure evidence
-        if: always() && inputs.scope == 'native'
+        if: always() && inputs.scope != 'tray'
         uses: actions/upload-artifact@v7
         with:
           name: focused-native-${{ matrix.runner }}
