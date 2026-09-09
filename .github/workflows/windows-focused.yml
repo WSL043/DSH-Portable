@@ -33,6 +33,8 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-test-chrome
+        if: inputs.scope != 'migration'
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node_version }}
