@@ -1,6 +1,6 @@
 {
   "name": "@wsl043/dsh-portable-desktop-bridge",
-  "version": "0.6.4",
+  "version": "0.6.5-rc.1",
   "private": true,
   "type": "module",
   "main": "lib/index.js",

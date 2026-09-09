@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.4.65534")]
-[assembly: AssemblyFileVersion("0.6.4.65534")]
+[assembly: AssemblyVersion("0.6.5.50001")]
+[assembly: AssemblyFileVersion("0.6.5.50001")]
 
 namespace DshPortable
 {
@@ -2791,7 +2791,7 @@ namespace DshPortable
                     if (!String.Equals(requestedScope, "product", StringComparison.Ordinal)
                         && !String.Equals(requestedScope, "engine", StringComparison.Ordinal)) return;
                     if (!String.IsNullOrEmpty(requestedManifest)
-                        && (!String.Equals(requestedScope, "engine", StringComparison.Ordinal) || !IsTrustedEngineManifestUrl(requestedManifest))) return;
+                        && (String.Equals(requestedScope, "engine", StringComparison.Ordinal) ? !IsTrustedEngineManifestUrl(requestedManifest) : !IsTrustedProductManifestUrl(requestedManifest))) return;
                     BeginInvoke((MethodInvoker)(async delegate { await CheckForDesktopUpdateAsync(true, requestedScope, requestedManifest); }));
                     return;
                 }
@@ -4586,6 +4586,16 @@ namespace DshPortable
                 "正在交给独立更新器，当前窗口将安全关闭…",
                 "Handing off to the updater; this window will close safely…"));
             BeginDesktopShutdown();
+        }
+
+        private static bool IsTrustedProductManifestUrl(string manifestUrl)
+        {
+            Uri manifest;
+            return Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
+                && manifest.Scheme == Uri.UriSchemeHttps
+                && String.Equals(manifest.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+                && String.IsNullOrEmpty(manifest.Query) && String.IsNullOrEmpty(manifest.Fragment)
+                && Regex.IsMatch(manifest.AbsolutePath, @"^/WSL043/DSH-Portable/releases/download/update-channel-(stable|candidate)/portable-update-windows-x64-\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?\.json$");
         }
 
         private static bool IsTrustedEngineManifestUrl(string manifestUrl)

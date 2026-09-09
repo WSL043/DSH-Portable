@@ -400,23 +400,24 @@ try {
     const text = document.body?.innerText || ''
     return {
       title: /(?:^|\\n)(?:Portable|便携版)(?:\\n|$)/.test(text),
-      updates: /(?:^|\\n)(?:Updates|更新)(?:\\n|$)/.test(text),
-      product: /DSH-Portable/.test(text),
-      engine: /DeepSeek Harness/.test(text),
       notifications: /Task notifications|任务通知/.test(text),
       maintenance: /Check and repair|检查与修复/.test(text),
     }
-  })()`, value => value?.title && value.updates && value.product && value.engine && value.notifications && value.maintenance, 'Portable settings controls')
-  assert.deepEqual(portableSettings, { title: true, updates: true, product: true, engine: true, notifications: true, maintenance: true })
+  })()`, value => value?.title && value.notifications && value.maintenance, 'Portable settings controls')
+  assert.deepEqual(portableSettings, { title: true, notifications: true, maintenance: true })
+  await waitForValue(client, clickButton(['Updates', '更新']), value => value?.clicked, 'Updates settings navigation')
   const readPortableSettings = `fetch('/dsh-portable/settings', { cache: 'no-store' }).then(response => response.json()).then(body => body.settings)`
   const originalSettings = await evaluate(client, readPortableSettings)
   const updatePreference = async (title, key) => {
     const selectorLabel = `${title} · ${targetLocale === 'zh' ? '启动时检查' : 'Check at startup'}`
     const original = Boolean(originalSettings[key])
-    const toggle = `(() => { const input = [...document.querySelectorAll('input[type="checkbox"]')].find(node => node.getAttribute('aria-label') === ${JSON.stringify(selectorLabel)}); if (!input || input.disabled) return false; input.click(); return true })()`
-    await waitForValue(client, toggle, Boolean, `${title} startup checkbox`)
+    const toggle = async enabled => {
+      await waitForValue(client, clickButton([selectorLabel]), value => value?.clicked, `${title} startup selector`)
+      await waitForValue(client, clickChoice(enabled ? ['On', '开启'] : ['Off', '关闭']), value => value?.clicked, `${title} startup choice`)
+    }
+    await toggle(!original)
     const changed = await waitForValue(client, readPortableSettings, value => value?.[key] === !original, `saved ${title} startup preference`)
-    await waitForValue(client, toggle, Boolean, `${title} startup checkbox restore`)
+    await toggle(original)
     const restored = await waitForValue(client, readPortableSettings, value => value?.[key] === original, `restored ${title} startup preference`)
     assert.equal(changed[key], !restored[key])
     return restored
@@ -440,6 +441,7 @@ try {
     await mkdir(path.dirname(generalScreenshotPath), { recursive: true })
     await writeFile(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
+  await waitForValue(client, clickButton(['Portable']), value => value?.clicked, 'Portable settings navigation after updates')
   if (generalBottomScreenshotPath) {
     await evaluate(client, `(() => {
       const marker = [...document.querySelectorAll('*')].find(item => ['Portable', '便携版'].includes((item.textContent || '').trim()))

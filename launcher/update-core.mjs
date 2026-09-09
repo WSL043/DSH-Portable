@@ -53,6 +53,11 @@ export function defaultEngineUpdateIndexUrl(releaseChannel = 'stable', platform 
   return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-${releaseChannel}/dsh-core-index-${platformUpdateKey(platform, arch)}.json`
 }
 
+export function defaultProductUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
+  normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${releaseChannel}/portable-index-${platformUpdateKey(platform, arch)}.json`
+}
+
 function parseSemanticVersion(value) {
   const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(String(value ?? ''))
   if (!match) throw new Error(`${value} is not a valid semantic version.`)
@@ -110,7 +115,7 @@ function assertManifestShape(manifest) {
   }
 }
 
-export function evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange = false } = {}) {
+export function evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange = false, allowProductVersionChange = false } = {}) {
   assertManifestShape(manifest)
   const updateKind = manifest.updateKind || 'product'
   const installedReleaseChannel = normalizeReleaseChannel(installed.releaseChannel, installed.portableVersion)
@@ -158,7 +163,7 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     engineAlreadyCurrent = engineComparison === 0
     if (!allowEngineVersionChange && engineComparison >= 0) return describe('current', 'none')
     if (productComparison !== 0) return describe('core-incompatible', 'none')
-  } else if (productComparison >= 0) {
+  } else if (productComparison === 0 || (productComparison > 0 && !allowProductVersionChange)) {
     return describe('current', 'none')
   }
   if (Number(manifest.minimumUpdaterSchema) > Number(installed.updaterSchema ?? 0)
@@ -402,6 +407,31 @@ export async function listEngineVersions({
   return { schemaVersion: 1, current: installed.dshVersion, releaseChannel: installed.releaseChannel, versions, unavailable }
 }
 
+export async function listProductVersions({ layout, indexUrl, releaseChannel, allowHttp = false, fetchImpl = fetch, timeoutMs = 5000 }) {
+  const installed = await readInstalledUpdateState(layout)
+  if (releaseChannel) installed.releaseChannel = normalizeReleaseChannel(releaseChannel, installed.portableVersion)
+  indexUrl ||= defaultProductUpdateIndexUrl(installed.releaseChannel, layout.platform, process.arch)
+  let index
+  try { index = await fetchJson(indexUrl, { allowHttp, fetchImpl, timeoutMs }) }
+  catch (error) { if (error.message !== 'HTTP 404') throw error; index = { schemaVersion: 1, releaseChannel: installed.releaseChannel, versions: [] } }
+  if (index?.schemaVersion !== 1 || index.releaseChannel !== installed.releaseChannel || !Array.isArray(index.versions) || index.versions.length > 20) throw new Error('Invalid Portable version catalog.')
+  const platform = platformUpdateKey(layout.platform, process.arch)
+  const versions = [], seen = new Set()
+  for (const entry of index.versions) {
+    const version = String(entry?.version || ''), manifest = entry?.manifest
+    parseSemanticVersion(version)
+    const url = new URL(String(entry?.manifestUrl || ''))
+    if (url.origin !== 'https://github.com' || !['stable', 'candidate'].some(channel => url.pathname === `/WSL043/DSH-Portable/releases/download/update-channel-${channel}/portable-update-${platform}-${version}.json`) || url.search || url.hash) throw new Error('Untrusted Portable version manifest.')
+    if (manifest?.portableVersion !== version || (manifest.updateKind || 'product') !== 'product') throw new Error('Portable catalog version mismatch.')
+    if (seen.has(version)) continue
+    seen.add(version)
+    const result = evaluateUpdate(manifest, installed, platform, { allowProductVersionChange: true })
+    if (['available', 'current', 'full-package-required'].includes(result.status)) versions.push({ version, manifestUrl: url.href, status: result.status })
+  }
+  versions.sort((a, b) => comparePortableVersions(b.version, a.version))
+  return { schemaVersion: 1, current: installed.portableVersion, releaseChannel: installed.releaseChannel, versions }
+}
+
 async function withUpdateCacheLock(layout, scope, action) {
   // Feed requests and notification choices share a cache, not the start/stop lock.
   const cacheLayout = { ...layout, launchLock: `${updateCacheForScope(layout, scope)}.lock` }
@@ -422,6 +452,8 @@ export async function checkForUpdate(options) {
 async function checkForUpdateUnlocked({
   layout,
   manifestUrl,
+  allowProductVersionChange = false,
+  expectedProductVersion,
   scope = 'product',
   releaseChannel,
   allowHttp = false,
@@ -450,6 +482,7 @@ async function checkForUpdateUnlocked({
   if (!force && cachedKind === scope && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
     const evaluated = evaluateUpdate(cached.manifest, installed, platform, {
       allowEngineVersionChange: scope === 'engine' && explicitManifest,
+      allowProductVersionChange: scope === 'product' && explicitManifest && allowProductVersionChange,
     })
     const ignoredIdentity = cached.ignoredIdentity || (cached.ignoredVersion ? `product:${cached.ignoredVersion}` : '')
     if (evaluated.updateIdentity && ignoredIdentity === evaluated.updateIdentity) {
@@ -462,9 +495,10 @@ async function checkForUpdateUnlocked({
   }
   try {
     const manifest = await fetchJson(manifestUrl, { allowHttp, fetchImpl, timeoutMs })
+    if (expectedProductVersion && manifest.portableVersion !== expectedProductVersion) throw new Error('Selected Portable version does not match the downloaded manifest.')
     const manifestKind = manifest.updateKind || 'product'
     if (manifestKind !== scope) throw new Error(`Update kind mismatch: expected ${scope}, received ${manifestKind}.`)
-    const evaluationOptions = { allowEngineVersionChange: scope === 'engine' && explicitManifest }
+    const evaluationOptions = { allowEngineVersionChange: scope === 'engine' && explicitManifest, allowProductVersionChange: scope === 'product' && explicitManifest && allowProductVersionChange }
     const result = evaluateUpdate(manifest, installed, platform, evaluationOptions)
     const cachedResult = cached?.manifest ? evaluateUpdate(cached.manifest, installed, platform, evaluationOptions) : null
     const deferredUntil = cachedResult?.updateIdentity === result.updateIdentity ? Number(cached.deferredUntil ?? 0) : 0

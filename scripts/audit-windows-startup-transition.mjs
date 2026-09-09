@@ -462,7 +462,7 @@ try {
       assert.equal(settingsOpened, true, 'Settings button was unavailable for the update implementation audit')
       await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(node => /Settings|设置/.test(node.textContent || '')))`, Boolean, 'Settings dialog')
       await evaluate(client, `(() => {
-        const button = [...document.querySelectorAll('button')].find(node => /^Portable$/.test(String(node.textContent || '').trim()))
+        const button = [...document.querySelectorAll('button')].find(node => /^(Updates|更新)$/.test(String(node.textContent || '').trim()))
         button?.click()
         return Boolean(button)
       })()`)

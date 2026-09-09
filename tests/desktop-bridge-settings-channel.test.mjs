@@ -133,7 +133,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -142,6 +142,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null } = {}) 
     'IconChevronDownOutline14', 'IconDownloadOutline16', 'IconFolderOpenOutline16',
   ].map(name => [name, function Primitive() {}]))
   let definition
+  let productChannel = 'stable'
   const document = {
     documentElement: { lang: 'en' },
     head: { appendChild() {} },
@@ -158,7 +159,15 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null } = {}) 
   vm.runInNewContext(source, {
     console,
     document,
-    fetch: fetchImpl,
+    fetch: async (url, options) => {
+      if (url === '/dsh-portable/product-versions') return productFetch ? productFetch(url, options) : jsonResponse({ schemaVersion: 1, current: '', releaseChannel: productChannel, versions: [] })
+      const response = await fetchImpl(url, options)
+      if (url === '/dsh-portable/settings') {
+        const read = response.json.bind(response)
+        response.json = async () => { const body = await read(); productChannel = body.settings?.updateChannel || productChannel; return body }
+      }
+      return response
+    },
     queueMicrotask,
     requestAnimationFrame(callback) { callback(); return 0 },
     setTimeout,
@@ -185,7 +194,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null } = {}) 
     },
   }
   exports.apply(ctx)
-  const registration = registered.find(entry => entry.options.id === 'portable')
+  const registration = registered.find(entry => entry.options.id === page)
   assert.ok(registration, 'Portable settings registration is present')
   assert.equal(registration.options.name, 'settings.section', 'Portable owns a settings navigation entry')
   return { harness, mount: () => harness.mount(registration.component) }
@@ -360,7 +369,7 @@ test('channel catalog state follows the final confirmed save and localizes unava
   mounted.unmount()
 })
 
-test('channel and non-channel saves stay ordered through a final theme change', async () => {
+test('channel and non-channel saves stay ordered through startup preference changes', async () => {
   const calls = []
   const saves = []
   const catalogs = []
@@ -368,7 +377,7 @@ test('channel and non-channel saves stay ordered through a final theme change', 
   const fetchImpl = (url, options = {}) => {
     calls.push({ url, options })
     if (url === '/dsh-portable/settings' && !options.method) {
-      return Promise.resolve(jsonResponse({ settings: settings(), versions: { portable: '0.6.3', engine: '0.1.2' } }))
+      return Promise.resolve(jsonResponse({ settings: settings('stable', { productUpdateCheckEnabled: true }), versions: { portable: '0.6.3', engine: '0.1.2' } }))
     }
     if (url === '/dsh-portable/settings' && options.method === 'POST') {
       const patch = JSON.parse(options.body)
@@ -390,11 +399,11 @@ test('channel and non-channel saves stay ordered through a final theme change', 
   catalogs[0].response.resolve(jsonResponse({ schemaVersion: 1, current: '0.1.2', releaseChannel: 'stable', versions: [], unavailable: [] }))
   await settle()
 
-  let notifications = findNode(mounted.tree, node => node.props?.label === 'Task notifications')
+  let notifications = findNode(mounted.tree, node => node.props?.label === 'DSH-Portable · Check at startup')
   notifications.props.onSelect('off')
   await settle()
   assert.equal(saves.length, 1)
-  assert.deepEqual(saves[0].patch, { taskNotificationsEnabled: false })
+  assert.deepEqual(saves[0].patch, { productUpdateCheckEnabled: false })
 
   let channel = findNode(mounted.tree, node => node.props?.label === 'Update channel')
   channel.props.onSelect('candidate')
@@ -412,49 +421,49 @@ test('channel and non-channel saves stay ordered through a final theme change', 
   await settle()
   assert.equal(saves.length, 1, 'a quick switch back to stable stays in the same queue')
 
-  saves[0].response.resolve(jsonResponse({ settings: settings('candidate', { taskNotificationsEnabled: true }) }))
+  saves[0].response.resolve(jsonResponse({ settings: settings('candidate', { productUpdateCheckEnabled: true }) }))
   await settle()
   assert.equal(saves.length, 2)
   assert.deepEqual(saves[1].patch, { updateChannel: 'candidate' })
-  notifications = findNode(mounted.tree, node => node.props?.label === 'Task notifications')
+  notifications = findNode(mounted.tree, node => node.props?.label === 'DSH-Portable · Check at startup')
   assert.equal(notifications.props.value, 'off', 'a stale response does not overwrite the local preference preview')
   assert.equal(nativeMessages.length, 0, 'stale responses do not publish to the native host')
 
-  saves[1].response.resolve(jsonResponse({ settings: settings('candidate', { taskNotificationsEnabled: true }) }))
+  saves[1].response.resolve(jsonResponse({ settings: settings('candidate', { productUpdateCheckEnabled: true }) }))
   await settle()
   assert.equal(saves.length, 3)
   assert.deepEqual(saves[2].patch, { updateChannel: 'stable' })
 
-  const close = findNode(mounted.tree, node => node.props?.label === 'When closing the window')
-  close.props.onSelect('exit')
+  const close = findNode(mounted.tree, node => node.props?.label === 'DeepSeek Harness · Check at startup')
+  close.props.onSelect('on')
   await settle()
   assert.equal(saves.length, 3, 'a non-channel save waits behind the return to stable')
 
-  saves[2].response.resolve(jsonResponse({ settings: settings('stable', { taskNotificationsEnabled: false, closeBehavior: 'tray' }) }))
+  saves[2].response.resolve(jsonResponse({ settings: settings('stable', { productUpdateCheckEnabled: false, engineUpdateCheckEnabled: false }) }))
   await settle()
   assert.equal(saves.length, 4)
-  assert.deepEqual(saves[3].patch, { closeBehavior: 'exit' })
+  assert.deepEqual(saves[3].patch, { engineUpdateCheckEnabled: true })
   assert.equal(nativeMessages.length, 0, 'intermediate channel responses do not publish to the native host')
 
-  saves[3].response.resolve(jsonResponse({ settings: settings('stable', { taskNotificationsEnabled: false, closeBehavior: 'exit' }) }))
+  saves[3].response.resolve(jsonResponse({ settings: settings('stable', { productUpdateCheckEnabled: false, engineUpdateCheckEnabled: true }) }))
   await settle()
   channel = findNode(mounted.tree, node => node.props?.label === 'Update channel')
-  notifications = findNode(mounted.tree, node => node.props?.label === 'Task notifications')
+  notifications = findNode(mounted.tree, node => node.props?.label === 'DSH-Portable · Check at startup')
   assert.equal(channel.props.value, 'stable')
   assert.equal(notifications.props.value, 'off')
   assert.equal(catalogs.length, 2, 'the final non-channel response reloads a catalog invalidated by channel switches')
   assert.equal(nativeMessages.length, 1, 'only the final confirmed response is published to the native host')
   assert.equal(nativeMessages[0].updateChannel, 'stable')
-  assert.equal(nativeMessages[0].taskNotificationsEnabled, false)
-  assert.equal(nativeMessages[0].closeBehavior, 'exit')
+  assert.equal(nativeMessages[0].productUpdateCheckEnabled, false)
+  assert.equal(nativeMessages[0].engineUpdateCheckEnabled, true)
   catalogs[1].response.resolve(jsonResponse({ schemaVersion: 1, current: '0.1.2', releaseChannel: 'stable', versions: [], unavailable: [] }))
   await settle()
 
-  const closeAgain = findNode(mounted.tree, node => node.props?.label === 'When closing the window')
-  closeAgain.props.onSelect('tray')
+  const closeAgain = findNode(mounted.tree, node => node.props?.label === 'DeepSeek Harness · Check at startup')
+  closeAgain.props.onSelect('off')
   await settle()
   assert.equal(saves.length, 5)
-  saves[4].response.resolve(jsonResponse({ settings: settings('stable', { taskNotificationsEnabled: false, closeBehavior: 'tray' }) }))
+  saves[4].response.resolve(jsonResponse({ settings: settings('stable', { productUpdateCheckEnabled: false, engineUpdateCheckEnabled: false }) }))
   await settle()
   assert.equal(catalogs.length, 2, 'a pure non-channel preference save does not reload the catalog')
   assert.equal(nativeMessages.length, 2)
@@ -505,5 +514,56 @@ test('initial settings failures show an error instead of checking forever', asyn
   const mounted = client.mount()
   await settle()
   assert.match(textContent(mounted.tree), /settings unavailable/)
+  mounted.unmount()
+})
+
+
+test('Portable maintenance stays separate from Updates and does not fetch the core catalog', async () => {
+  const requests = []
+  const client = await loadSettingsComponent(async url => {
+    requests.push(url)
+    assert.equal(url, '/dsh-portable/settings')
+    return jsonResponse({ settings: settings(), versions: { portable: '0.6.4', engine: '0.1.2-rc.1' } })
+  }, { page: 'portable' })
+  const mounted = client.mount()
+  await settle()
+  assert.match(textContent(mounted.tree), /Check and repair/)
+  assert.equal(findNode(mounted.tree, node => node.props?.label === 'Update channel'), null)
+  assert.deepEqual(requests, ['/dsh-portable/settings'])
+  mounted.unmount()
+})
+
+
+test('installed core is not shown as an unavailable install target', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings(), versions: { portable: '0.6.4', engine: '0.1.2-rc.1' } }
+    : { schemaVersion: 1, releaseChannel: 'stable', current: '0.1.2-rc.1', versions: [], unavailable: [
+        { version: '0.1.2-rc.1', status: 'requires-full-package' },
+        { version: '0.1.3', status: 'requires-full-package' },
+      ] }))
+  const mounted = client.mount()
+  await settle()
+  assert.doesNotMatch(textContent(mounted.tree), /Version 0\.1\.2-rc\.1:/)
+  assert.match(textContent(mounted.tree), /Version 0\.1\.3:/)
+  mounted.unmount()
+})
+
+
+test('Portable version selection sends the exact approved manifest to the desktop host', async () => {
+  const messages = []
+  const manifestUrl = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-candidate/portable-update-windows-x64-0.6.5-rc.1.json'
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings('candidate'), versions: { portable: '0.6.4', engine: '0.1.3-alpha.2' } }
+    : { schemaVersion: 1, releaseChannel: 'candidate', current: '0.1.3-alpha.2', versions: [], unavailable: [] }), {
+    nativeMessages: messages,
+    productFetch: async () => jsonResponse({ schemaVersion: 1, releaseChannel: 'candidate', current: '0.6.4', versions: [{ version: '0.6.5-rc.1', manifestUrl }] }),
+  })
+  const mounted = client.mount()
+  await settle()
+  const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
+  assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.5-rc.1'])
+  findNode(mounted.tree, node => textContent(node) === 'Install selected version' && typeof node.props?.onClick === 'function').props.onClick()
+  assert.equal(messages.at(-1).scope, 'product')
+  assert.equal(messages.at(-1).manifestUrl, manifestUrl)
   mounted.unmount()
 })
