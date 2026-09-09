@@ -118,8 +118,7 @@ try {
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => window.sceneDraws), offscreenDraws, 'Offscreen scene must stop rendering');
   await page.locator('.theme-toggle').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
-  assert.ok(await page.evaluate(() => window.sceneDraws) > offscreenDraws, 'Visible scene must resume');
+  await page.waitForFunction(count => window.sceneDraws > count, offscreenDraws);
   results.push('Offscreen rendering stops and resumes on return');
   // Verify actual choices and their release filenames, including keyboard navigation.
   await page.locator("#tab-windows").click();
