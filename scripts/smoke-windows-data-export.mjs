@@ -222,7 +222,6 @@ try {
   const fixtureMarker = path.join(fixtureLayout.dshHome, '.agent-presets', 'import-smoke', 'agent.cordis.yml')
   const fixtureSession = path.join(fixtureLayout.dshHome, 'sessions', projectKey(fixtureLayout.workspace), fixtureSessionId, 'session.jsonl.zstd')
   const fixtureWorkspaceStorage = path.join(fixtureLayout.dshHome, 'storages', 'workspace.json')
-  const fixtureSessionProjectionCache = path.join(fixtureLayout.dshHome, 'storages', 'session_projcache.json')
   const fixtureProfile = path.join(fixtureLayout.dshHome, 'profiles', 'web')
   await mkdir(fixtureLayout.workspace, { recursive: true })
   await mkdir(path.dirname(fixtureMarker), { recursive: true })
@@ -246,35 +245,14 @@ try {
       },
     },
   }, null, 2)}\n`)
-  await writeFile(fixtureSessionProjectionCache, `${JSON.stringify({
-    unit: { name: 'session_projcache', version: 3 },
-    global: null,
-    tables: {
-      sessions: {
-        [fixtureSessionId]: {
-          identity: {
-            createdAt: fixtureTimestamp,
-            cwd: fixtureLayout.workspace,
-          },
-          rows: {
-            title: { ver: 1, seq: 6, val: 'Portable migration proof' },
-            sessionListMetadata: {
-              ver: 1,
-              seq: 6,
-              val: { blank: false, lastPromptAt: fixtureTimestamp + 3 },
-            },
-          },
-        },
-      },
-    },
-  }, null, 2)}\n`)
+  // Released v0 stores optional seedLength, not the logical isSeeded flag.
+  // An unseeded physical header omits both fields.
   const sessionHeader = Buffer.from(`${JSON.stringify({
     type: 'session',
     version: 0,
     id: fixtureSessionId,
     createdAt: fixtureTimestamp,
     cwd: fixtureLayout.workspace,
-    isSeeded: false,
     delegationDepth: 0,
     agentPreset: 'standard',
   })}\n`)
@@ -523,6 +501,12 @@ try {
   await client.send('Page.enable')
   await waitForValue(client, 'document.readyState', value => value === 'complete', 'restarted DSH document readiness', 60000)
 
+  // Import restores settings from the fixture, including first-run onboarding.
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    const dismissed = await evaluate(client, clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later']))
+    await new Promise(resolve => setTimeout(resolve, dismissed?.clicked ? 250 : 150))
+  }
+
   try {
     await waitForValue(
       client,
@@ -563,11 +547,22 @@ try {
       client,
       `(() => {
         const title = 'Portable migration proof'
-        const item = [...document.querySelectorAll('*')].find(candidate => {
+        let item = [...document.querySelectorAll('*')].find(candidate => {
           if ((candidate.textContent || '').trim() !== title) return false
           const rect = candidate.getBoundingClientRect()
           return rect.width > 0 && rect.height > 0
         })?.closest('[role="treeitem"]')
+        // The imported fixture has exactly one session. Before its first open,
+        // upstream may show a path-derived label rather than a cached title.
+        if (!item) {
+          const workspace = [...document.querySelectorAll('[role="treeitem"][aria-expanded]')]
+            .find(row => (row.textContent || '').trim() === 'Portable migration smoke')
+          for (let group = workspace?.parentElement; group; group = group.parentElement) {
+            if (group.querySelectorAll('[role="treeitem"][aria-expanded]').length !== 1) break
+            const sessions = group.querySelectorAll('[role="treeitem"][aria-selected]')
+            if (sessions.length === 1) { item = sessions[0]; break }
+          }
+        }
         if (!item) return {
           clicked: false,
           treeitems: [...document.querySelectorAll('[role="treeitem"]')]
@@ -631,6 +626,9 @@ try {
     imported: true,
     screenshots: ['03-general-settings.png', '04-private-export-modal.png', '05-import-password-modal.png', '06-import-confirm-modal.png'],
   })}\n`)
+} catch (error) {
+  await writeFile(path.join(outputDirectory, 'failure.json'), JSON.stringify({ message: error.message, stack: error.stack }, null, 2))
+  throw error
 } finally {
   client?.close()
   await portable(['stop', '--no-browser', '--json']).catch(() => {})

@@ -1,3 +1,4 @@
+import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -1007,7 +1008,7 @@ test('Windows launcher compiles the stable interactive notification identity aga
 test('Windows CI verifies the real tray bridge in a background browser without desktop input', async () => {
   const [smoke, workflow] = await Promise.all([
     readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8'),
-    readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8'),
+    readNativeWorkflow(),
   ])
   assert.match(smoke, /--headless=new/)
   assert.match(smoke, /--remote-debugging-port=\$\{debugPort\}/)

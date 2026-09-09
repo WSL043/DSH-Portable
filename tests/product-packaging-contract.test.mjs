@@ -1,3 +1,4 @@
+import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { access, readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
@@ -376,7 +377,7 @@ test('publishing separates beginner downloads from machine update assets', async
 })
 
 test('every desktop platform verifies the live visual plugin marketplace', async () => {
-  const workflow = await read('.github/workflows/ci.yml')
+  const workflow = await readNativeWorkflow()
   const smoke = await read('scripts/smoke-plugin-marketplace.mjs')
 
   assert.match(smoke, /\/dsh-market\/registry/)
@@ -442,7 +443,7 @@ test('installable official updates use a short-lived PR, full product gates, and
 test('plugins beyond the two reviewed defaults remain market-discovered', async () => {
   const [workflow, ci, publish, chinese, english] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
-    read('.github/workflows/ci.yml'),
+    readNativeWorkflow(),
     read('.github/workflows/publish.yml'),
     read('README.md'),
     read('README.en.md'),
@@ -610,7 +611,7 @@ test('plugin management is a generic finished-product capability and release gat
     read('README.en.md'),
     read('templates/USER-README.zh-CN.txt'),
     read('templates/RELEASE-NOTES.md'),
-    read('.github/workflows/ci.yml'),
+    readNativeWorkflow(),
     read('scripts/smoke-windows-plugins.ps1'),
   ])
   const docs = `${chinese}\n${english}\n${userReadme}\n${releaseNotes}`
@@ -653,7 +654,7 @@ test('plugin management is a generic finished-product capability and release gat
 test('macOS and Linux finished products verify official bare dsh syntax in an isolated terminal', async () => {
   const [smoke, workflow, macSmoke, linuxSmoke, chinese, english] = await Promise.all([
     read('scripts/smoke-unix-dsh-terminal.sh'),
-    read('.github/workflows/ci.yml'),
+    readNativeWorkflow(),
     read('scripts/smoke-macos-desktop-host.sh'),
     read('scripts/smoke-linux-plugins.sh'),
     read('README.md'),
@@ -730,7 +731,7 @@ test('Windows portable self-extractor stays offline, movable, and registration-f
   const extractor = await read('installer/windows/DSH-Portable.iss')
   const innoBuild = await read('scripts/build-windows-inno.ps1')
   const smoke = await read('scripts/smoke-windows-portable-extractor.ps1')
-  const workflow = await read('.github/workflows/ci.yml')
+  const workflow = await readNativeWorkflow()
 
   assert.match(extractor, /AppName=DSH-Portable/)
   assert.match(extractor, /OutputBaseFilename=DSH-Portable-windows-x64-offline/)
@@ -881,7 +882,7 @@ test('the bundled plugin market declares every runtime import at the app root', 
 })
 
 test('CI executes contracts and real package smoke tests on Windows and both Mac architectures', async () => {
-  const workflow = await read('.github/workflows/ci.yml')
+  const workflow = await readNativeWorkflow()
   const upstreamWorkflow = await read('.github/workflows/upstream-watch.yml')
   const desktopHostSmoke = await read('scripts/smoke-windows-desktop-host.ps1')
   const desktopMoveSmoke = await read('scripts/smoke-windows-desktop-move.ps1')
@@ -981,7 +982,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
 
 test('CI upgrades the immediate prior Windows release through the declared component or full-package path', async () => {
   const [workflow, smoke] = await Promise.all([
-    read('.github/workflows/ci.yml'),
+    readNativeWorkflow(),
     read('scripts/smoke-windows-version-upgrade.mjs'),
   ])
   assert.match(workflow, /^  windows-version-upgrade-smoke:/m)
