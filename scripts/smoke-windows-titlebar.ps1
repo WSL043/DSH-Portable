@@ -36,6 +36,10 @@ try {
  $menu=$type.GetField('desktopMenu',$flags).GetValue($window)
  $content=$type.GetField('desktopContent',$flags).GetValue($window)
  if($null -eq $menu){throw 'Title menu missing'}
+ # Establish the child HWND coordinates before native hit testing. The window
+ # remains off-screen and SW_SHOWNOACTIVATE never takes foreground focus.
+ [TitlebarProbe]::ShowWindow($handle,4) | Out-Null
+ [Windows.Forms.Application]::DoEvents()
  $window.PerformLayout()
  $origin=$window.PointToScreen([Drawing.Point]::Empty)
  $inset=$origin.Y-$window.Top
@@ -52,7 +56,7 @@ try {
  $resizePoint=$menu.PointToScreen([Drawing.Point]::new([int]($menu.Width/2),2))
  $resizePacked=([long]($resizePoint.Y -band 65535) -shl 16) -bor ($resizePoint.X -band 65535)
  $resizeHit=[TitlebarProbe]::SendMessage($handle,0x84,[IntPtr]::Zero,[IntPtr]$resizePacked).ToInt32()
- if($resizeHit -ne 12){throw "Top resize edge is unavailable: $resizeHit"}
+ if($resizeHit -ne 12){throw "Top resize edge is unavailable: $resizeHit; state=$($window.WindowState); menuTop=$($menu.Top); clientPoint=$($window.PointToClient($resizePoint)); client=$($window.ClientRectangle)"}
  # Hidden controls exercise the same caption handlers without moving a visible window.
  $menu.Items['caption-maximize'].PerformClick()
  if($window.WindowState -ne 'Maximized'){throw 'Maximize command failed'}
