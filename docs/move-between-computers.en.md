@@ -18,7 +18,7 @@ Do not run the same synchronized directory on two computers at once. A cloud or 
 
 ## Move personal data only
 
-If you do not want to copy the runtime, open **Settings → General → Portable → Data and migration**:
+If you do not want to copy the runtime, open **Settings → Portable → Data and migration**:
 
 - **Export migration package** is convenient between devices you trust.
 - **Export encrypted private package** contains the same data but requires a password, making it the safer choice for cloud storage or removable media.
@@ -40,5 +40,5 @@ This checks Portable-managed data only. Code repositories, images, and documents
 
 - Prefer NTFS for removable Windows drives to avoid permission, long-path, and single-file-size limitations.
 - Do not move the directory during an update or repair.
-- If Windows still reports files in use, reopen DSH-Portable, run **Settings → General → Portable → Run check**, then exit fully from the tray.
+- If Windows still reports files in use, reopen DSH-Portable, run **Settings → Portable → Run check**, then exit fully from the tray.
 - If the problem remains, export the redacted support report from the same page and [file a bug](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml). Do not attach API keys, unencrypted migration packages, or private conversations.
