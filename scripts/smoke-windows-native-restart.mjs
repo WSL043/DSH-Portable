@@ -8,6 +8,7 @@ import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
+const forceJobClose = process.argv.includes('--force-job-close')
 if (!process.argv[2] || process.platform !== 'win32') {
   throw new Error('usage: node smoke-windows-native-restart.mjs <DSH-Portable root> (Windows only)')
 }
@@ -127,6 +128,7 @@ try {
       DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
       DSH_PORTABLE_TEST_AUTOMATION: '1',
       DSH_PORTABLE_TEST_HIDDEN: '1',
+      DSH_PORTABLE_TEST_FORCE_JOB_CLOSE: forceJobClose ? '1' : '0',
       DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
     },
     stdio: 'ignore',
@@ -177,7 +179,8 @@ try {
   assert.match(log, /\[restart-host\] request-accepted/)
   assert.match(log, /\[restart-host\] reply-posted[^\n]+ok=true/)
   assert.match(log, /\[restart-host\] relaunch-scheduled/)
-  console.log(JSON.stringify({ status: 'passed', firstBoot, secondBoot, renderDiagnosticExported: true }))
+  if (forceJobClose) assert.match(log, /job-close-test-requested/)
+  console.log(JSON.stringify({ status: 'passed', firstBoot, secondBoot, forcedJobClose: forceJobClose, renderDiagnosticExported: true }))
 } finally {
   firstClient?.close()
   secondClient?.close()

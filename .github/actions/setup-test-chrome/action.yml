@@ -1,0 +1,20 @@
+name: Install pinned Chrome for Testing
+description: Use an isolated automation browser instead of the runner's auto-updating desktop Chrome
+runs:
+  using: composite
+  steps:
+    - shell: pwsh
+      run: |
+        $Version = '153.0.8010.36'
+        $Destination = Join-Path $env:RUNNER_TEMP "chrome-for-testing-$Version"
+        $Archive = "$Destination.zip"
+        Invoke-WebRequest "https://storage.googleapis.com/chrome-for-testing-public/$Version/win64/chrome-win64.zip" -OutFile $Archive
+        New-Item -ItemType Directory -Force $Destination | Out-Null
+        tar.exe -xf $Archive -C $Destination
+        if ($LASTEXITCODE -ne 0) { throw 'Chrome for Testing extraction failed' }
+        $Executable = Join-Path $Destination 'chrome-win64/chrome.exe'
+        if (-not (Test-Path -LiteralPath $Executable)) { throw 'Chrome for Testing executable is missing' }
+        $ActualVersion = (Get-Item -LiteralPath $Executable).VersionInfo.ProductVersion
+        if ($ActualVersion -ne $Version) { throw "Unexpected browser version: $ActualVersion" }
+        "CHROME_PATH=$Executable" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+        Write-Host "Chrome for Testing $ActualVersion; archive SHA256 $((Get-FileHash -LiteralPath $Archive).Hash)"

@@ -75,6 +75,9 @@ for (const filename of [portableNode, portableCli, runtimeEntry]) {
 }
 
 function chromeExecutable() {
+  if (process.env.CHROME_PATH && !existsSync(process.env.CHROME_PATH)) {
+    throw new Error(`configured Chrome is missing: ${process.env.CHROME_PATH}`)
+  }
   const candidates = [
     process.env.CHROME_PATH,
     path.join(process.env.ProgramFiles || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),

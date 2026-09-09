@@ -346,7 +346,7 @@ test('Portable exposes a native restart contract and returns the host decision',
   assert.match(windowsHost, /dsh-portable\/restart-host/)
   assert.match(windowsHost, /trayState != null && trayState\.hasRunningSession/)
   assert.match(windowsHost, /restart-host[\s\S]*request-accepted[\s\S]*reply-posted/)
-  assert.match(windowsHost, /if \(restartAfterShutdown\)[\s\S]{0,300}RestartArguments\(\)/)
+  assert.match(windowsHost, /if \(!restartAfterShutdown\) return;[\s\S]{0,300}RestartArguments\(\)/)
   assert.match(windowsHost, /private string\[\] RestartArguments\(\)[\s\S]*--dsh-restart-after-pid/)
 
   runtime.dispose()

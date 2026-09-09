@@ -30,6 +30,8 @@ if (Test-Path -LiteralPath $HealthEvidence) { Copy-Item -LiteralPath $HealthEvid
 if ($LASTEXITCODE -ne 0) { throw 'Windows runtime-health smoke failed.' }
 node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable')
 if ($LASTEXITCODE -ne 0) { throw "Windows native restart smoke failed with exit code $LASTEXITCODE" }
+node scripts/smoke-windows-native-restart.mjs (Join-Path $Root 'DSH-Portable') --force-job-close
+if ($LASTEXITCODE -ne 0) { throw "Windows forced-job restart smoke failed with exit code $LASTEXITCODE" }
 node scripts/smoke-windows-subprocess-hide.mjs (Join-Path $Root 'DSH-Portable')
 if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding smoke failed with exit code $LASTEXITCODE" }
 node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable')

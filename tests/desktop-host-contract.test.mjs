@@ -176,6 +176,8 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   )
   assert.match(webViewExit, /PortableProcessJob\.ExitOwnedTree/)
   assert.match(webViewExit, /job-close-requested/)
+  const jobExit = host.slice(host.indexOf('private void ExitOwnedTreeForShutdown()'), host.indexOf('private bool TryForceReleaseOwnedWebViewProcesses'))
+  assert.ok(jobExit.indexOf('ScheduleRequestedRestart();') < jobExit.indexOf('PortableProcessJob.ExitOwnedTree();'), 'a forced job close must schedule the detached restart before killing its host')
   assert.match(host, /日志 \/ Log:/)
 
   const webViewDataRoot = host.slice(host.indexOf('private string ResolveWebViewDataRoot()'), host.indexOf('private static bool IsTrustedLoopbackUrl'))
