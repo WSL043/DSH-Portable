@@ -8,6 +8,17 @@ on:
         required: true
         type: string
 
+      scope:
+        description: Isolated tray bridge or the original native check sequence
+        type: choice
+        options: [tray, native]
+        default: tray
+      node_version:
+        description: Harness Node version for controlled environment comparison
+        type: choice
+        options: [24.19.0, 22.23.2]
+        default: 24.19.0
+
 permissions:
   contents: read
   actions: read
@@ -19,12 +30,12 @@ jobs:
       matrix:
         runner: [windows-2022, windows-2025]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: ${{ inputs.node_version }}
       - name: Record artifact and harness provenance
         shell: pwsh
         env:
@@ -42,6 +53,7 @@ jobs:
           run-id: ${{ inputs.run_id }}
           github-token: ${{ github.token }}
       - name: Verify tray bridge using existing product
+        if: inputs.scope == 'tray'
         shell: pwsh
         run: |
           $Root = Join-Path $env:RUNNER_TEMP 'dsh-focused'
@@ -51,6 +63,21 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
           node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable') 2>&1 | Tee-Object evidence/tray-bridge.log
           if ($LASTEXITCODE -ne 0) { throw 'Tray bridge check failed; see retained evidence' }
+      - name: Verify original native check sequence
+        if: inputs.scope == 'native'
+        shell: powershell
+        run: |
+          Get-FileHash artifacts/DSH-Portable-windows-x64-offline.zip | Format-List | Out-File evidence/artifact-sha256.txt
+          ./scripts/verify-windows-native-artifact.ps1 -RunnerLabel focused *>&1 | Tee-Object evidence/native-sequence.log
+      - name: Retain native structured failure evidence
+        if: always() && inputs.scope == 'native'
+        uses: actions/upload-artifact@v7
+        with:
+          name: focused-native-${{ matrix.runner }}
+          path: |
+            ${{ runner.temp }}/dsh-startup-transition-focused/
+            ${{ runner.temp }}/dsh-native-migration-evidence-focused/
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/
       - uses: actions/upload-artifact@v7
         if: always()
         with:
