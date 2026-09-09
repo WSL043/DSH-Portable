@@ -939,6 +939,11 @@ namespace DshPortable
 
         protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
         {
+            if (e.ToolStrip is DesktopTitleStrip)
+            {
+                e.Graphics.Clear(e.ToolStrip.BackColor);
+                return;
+            }
             if (IsDesktopDropDown(e.ToolStrip))
             {
                 using (SolidBrush brush = new SolidBrush(colors.SurfaceColor))
@@ -969,11 +974,12 @@ namespace DshPortable
                 return;
             }
             if (!(e.ToolStrip is DesktopTitleStrip)) { base.OnRenderMenuItemBackground(e); return; }
-            if (!e.Item.Selected && !e.Item.Pressed) return;
+            if (!e.Item.Enabled || (!e.Item.Selected && !e.Item.Pressed)) return;
             bool close = e.Item.Name == "caption-close";
             Rectangle bounds = new Rectangle(0, 0, e.Item.Width, e.Item.Height);
             Color color = close ? Color.FromArgb(196, 43, 28)
-                : dark ? Color.FromArgb(53, 53, 55) : Color.FromArgb(230, 230, 232);
+                : e.Item.Pressed ? (dark ? Color.FromArgb(62, 62, 62) : Color.FromArgb(220, 220, 220))
+                : dark ? Color.FromArgb(47, 47, 47) : Color.FromArgb(235, 235, 235);
             using (SolidBrush brush = new SolidBrush(color))
             {
                 if (e.Item.Name.StartsWith("caption-")) { e.Graphics.FillRectangle(brush, bounds); return; }
@@ -1039,16 +1045,21 @@ namespace DshPortable
             }
             if (e.ToolStrip is DesktopTitleStrip && e.Item.Name.StartsWith("nav-"))
             {
-                Color color = !e.Item.Enabled ? (dark ? Color.FromArgb(76, 76, 80) : Color.FromArgb(186, 186, 190))
-                    : dark ? Color.FromArgb(174, 174, 178) : Color.FromArgb(87, 87, 92);
+                Color color = !e.Item.Enabled ? (dark ? Color.FromArgb(77, 77, 77) : Color.FromArgb(184, 184, 184))
+                    : e.Item.Selected || e.Item.Pressed ? (dark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(40, 40, 40))
+                    : dark ? Color.FromArgb(151, 151, 151) : Color.FromArgb(103, 103, 103);
                 float x = e.Item.Width / 2F, y = e.Item.Height / 2F;
                 using (Pen pen = new Pen(color, 1.1F))
                 {
+                    pen.StartCap = LineCap.Round;
+                    pen.EndCap = LineCap.Round;
+                    pen.LineJoin = LineJoin.Round;
                     SmoothingMode previous = e.Graphics.SmoothingMode;
                     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
                     if (e.Item.Name == "nav-sidebar")
                     {
-                        e.Graphics.DrawRectangle(pen, x - 6, y - 5, 12, 10);
+                        using (GraphicsPath outline = RoundedRectangle(new Rectangle((int)x - 6, (int)y - 5, 12, 10), 2))
+                            e.Graphics.DrawPath(pen, outline);
                         e.Graphics.DrawLine(pen, x - 2, y - 5, x - 2, y + 5);
                     }
                     else
@@ -1065,7 +1076,7 @@ namespace DshPortable
             if (e.ToolStrip is DesktopTitleStrip)
                 e.TextColor = e.Item.Name == "caption-close" && e.Item.Selected ? Color.White
                     : e.Item.Selected ? (dark ? Color.White : Color.FromArgb(30, 30, 32))
-                    : dark ? Color.FromArgb(174, 174, 178) : Color.FromArgb(87, 87, 92);
+                    : dark ? Color.FromArgb(155, 155, 155) : Color.FromArgb(96, 96, 96);
             base.OnRenderItemText(e);
         }
 
@@ -1093,7 +1104,7 @@ namespace DshPortable
     internal sealed class DesktopTitleStrip : MenuStrip
     {
         internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
-        internal readonly Font MenuFont = new Font("Segoe UI", 9.5F);
+        internal readonly Font MenuFont = new Font("Microsoft YaHei UI", 9F);
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
@@ -1562,7 +1573,7 @@ namespace DshPortable
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 36, Padding = new Padding(12, 0, 0, 0), Visible = !fullscreen };
+                AutoSize = false, Height = 36, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen };
             desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
@@ -1575,7 +1586,8 @@ namespace DshPortable
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
             {
                 menu.AutoSize = false;
-                menu.Size = new Size(56, 28);
+                menu.Size = new Size(TextRenderer.MeasureText(menu.Text, desktopMenu.Font,
+                    Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width + 20, 28);
                 menu.Margin = new Padding(0, 4, 2, 4);
                 menu.Padding = new Padding(8, 0, 8, 0);
             }
@@ -1929,7 +1941,7 @@ namespace DshPortable
             if (desktopMenu != null && desktopMenuLanguage != uiLanguage) InitializeDesktopMenu();
             if (desktopMenu != null)
             {
-                desktopMenu.BackColor = dark ? Color.FromArgb(30, 30, 32) : Color.FromArgb(250, 250, 251);
+                desktopMenu.BackColor = dark ? Color.FromArgb(30, 30, 30) : Color.FromArgb(250, 250, 250);
                 desktopMenu.ForeColor = foreground;
                 DesktopTitleRenderer renderer = new DesktopTitleRenderer(dark);
                 DshMenuColorTable colors = renderer.Colors;

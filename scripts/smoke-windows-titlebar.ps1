@@ -76,12 +76,19 @@ try {
    [TitlebarProbe]::ShowWindow($handle,4) | Out-Null
    [Windows.Forms.Application]::DoEvents()
    if($HighlightMenu){$menu.Items['menu-file'].Select()}
-   $captureHeight=if($HeaderOnly){72}else{$window.Height}
-   $bitmap=[Drawing.Bitmap]::new($window.Width,$captureHeight)
+   $captureHeight=if($HeaderOnly){$menu.Height}else{$window.Height}
+   $captureWidth=if($HeaderOnly){$menu.Width}else{$window.Width}
+   $bitmap=[Drawing.Bitmap]::new($captureWidth,$captureHeight)
+   if($HeaderOnly){
+     # Hidden-window PrintWindow may return an unpainted frame. Render the real
+     # strip directly for deterministic chrome inspection (no DWM border/shadow).
+     $menu.DrawToBitmap($bitmap,[Drawing.Rectangle]::new(0,0,$captureWidth,$captureHeight))
+   } else {
    $graphics=[Drawing.Graphics]::FromImage($bitmap)
    $dc=$graphics.GetHdc()
    try { if(-not [TitlebarProbe]::PrintWindow($handle,$dc,2)){throw 'Native titlebar capture failed'} }
    finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
+   }
    $bitmap.Save((Join-Path $Evidence "$theme.png"))
    $bitmap.Dispose()
    if($PopupMenus){
