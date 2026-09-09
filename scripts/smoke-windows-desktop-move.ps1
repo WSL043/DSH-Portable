@@ -64,6 +64,7 @@ function Assert-BoundedPerformance {
     }
 }
 
+Write-Host "Verifying original desktop lifecycle: $Root"
 $First = & $DesktopSmoke -Root $Root
 if ($LASTEXITCODE -ne 0) { throw "First desktop lifecycle failed with exit code $LASTEXITCODE" }
 Assert-BoundedPerformance -Result $First -Label 'First launch' -ColdStartLimit $EffectiveFirstColdStartLimit
@@ -71,6 +72,7 @@ Assert-BoundedPerformance -Result $First -Label 'First launch' -ColdStartLimit $
 Move-PortableDirectory -Source $Root -Destination $MovedRoot
 if (Test-Path -LiteralPath $Root) { throw 'The original portable folder still exists after the move.' }
 
+Write-Host "Verifying moved desktop lifecycle: $MovedRoot"
 $Second = & $DesktopSmoke -Root $MovedRoot
 if ($LASTEXITCODE -ne 0) { throw "Moved desktop lifecycle failed with exit code $LASTEXITCODE" }
 Assert-BoundedPerformance -Result $Second -Label 'Moved launch' -ColdStartLimit $PerformanceBudget.movedColdStartSeconds

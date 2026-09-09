@@ -254,11 +254,8 @@ function relocatePortableWorkspaceEntry(file, bytes, before, after) {
     const parsed = JSON.parse(bytes.toString('utf8'))
     return { archivePath, bytes: Buffer.from(`${JSON.stringify(replaceExactStrings(parsed, before, after), null, 2)}\n`, 'utf8') }
   }
-  if (file.path.startsWith(sourcePrefix) && file.path.endsWith('/session.jsonl.zstd')) {
-    return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, true) }
-  }
-  if (file.path.startsWith(sourcePrefix) && file.path.endsWith('/session.jsonl')) {
-    return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, false) }
+  if (file.path.startsWith(sourcePrefix) && /\/session(?:\.v2)?\.jsonl(?:\.zstd)?$/.test(file.path)) {
+    return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, file.path.endsWith('.zstd')) }
   }
   return { archivePath, bytes }
 }
