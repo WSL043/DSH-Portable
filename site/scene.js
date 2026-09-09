@@ -269,11 +269,13 @@ function render(now) {
     frame = requestAnimationFrame(render);
 }
 function stop() {
+  canvas.dataset.rendering = "paused";
   cancelAnimationFrame(frame);
   frame = 0;
 }
 function wake() {
   if (!frame && !document.hidden && visible && !lost) {
+    canvas.dataset.rendering = "active";
     last = performance.now();
     frame = requestAnimationFrame(render);
   }

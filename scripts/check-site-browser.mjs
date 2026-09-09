@@ -113,7 +113,7 @@ try {
     "Reduced-motion default, explicit opt-in, moving scene, rapid theme reversal, persisted appearance",
   );
   await page.locator('footer').scrollIntoViewIfNeeded();
-  await page.waitForTimeout(300);
+  await page.waitForSelector('canvas[data-rendering="paused"]');
   const offscreenDraws = await page.evaluate(() => window.sceneDraws);
   await page.waitForTimeout(300);
   assert.equal(await page.evaluate(() => window.sceneDraws), offscreenDraws, 'Offscreen scene must stop rendering');
