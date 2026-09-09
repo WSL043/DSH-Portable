@@ -3512,15 +3512,19 @@ namespace DshPortable
             }
 
             allowClose = true;
-            if (restartAfterShutdown)
-            {
-                WriteLauncherLog("restart-host", "relaunch-scheduled afterPid="
-                    + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture));
-                PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, RestartArguments());
-            }
+            ScheduleRequestedRestart();
             DisposeTrayIcon();
             WriteLauncherLog("shutdown", "complete");
             Close();
+        }
+
+        private void ScheduleRequestedRestart()
+        {
+            if (!restartAfterShutdown) return;
+            PortableProcessJob.StartDetachedUpdater(Application.ExecutablePath, RestartArguments());
+            restartAfterShutdown = false;
+            WriteLauncherLog("restart-host", "relaunch-scheduled afterPid="
+                + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture));
         }
 
         private void OnWebViewBrowserProcessExited(object sender, CoreWebView2BrowserProcessExitedEventArgs eventArgs)
@@ -3573,6 +3577,15 @@ namespace DshPortable
             }
             webViewProcessFailure = null;
 
+            if (PortableProcessJob.IsActive
+                && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION") == "1"
+                && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_FORCE_JOB_CLOSE") == "1")
+            {
+                WriteLauncherLog("shutdown-webview", "job-close-test-requested");
+                ExitOwnedTreeForShutdown();
+                return;
+            }
+
             DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             DateTime gracefulDeadline = DateTime.UtcNow.AddMilliseconds(Math.Min(WebViewGracefulShutdownMs, timeoutMs));
             bool exitEventObserved = exited.IsCompleted;
@@ -3607,8 +3620,7 @@ namespace DshPortable
                     {
                         WriteLauncherLog("shutdown-webview", "job-close-requested remaining="
                             + String.Join(";", remaining));
-                        PortableProcessJob.ExitOwnedTree();
-                        Environment.Exit(0);
+                        ExitOwnedTreeForShutdown();
                         return;
                     }
                 }
@@ -3629,6 +3641,15 @@ namespace DshPortable
                 + "\r\n\r\nOwned WebView2 processes still hold the portable folder:\r\n"
                 + String.Join("\r\n", remaining);
             throw new TimeoutException(details);
+        }
+
+        private void ExitOwnedTreeForShutdown()
+        {
+            // Closing our kill-on-close job also terminates this host. The
+            // detached restart must be outside that job before it is closed.
+            ScheduleRequestedRestart();
+            PortableProcessJob.ExitOwnedTree();
+            Environment.Exit(0);
         }
 
         private bool TryForceReleaseOwnedWebViewProcesses(List<string> remaining)
