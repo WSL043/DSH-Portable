@@ -165,6 +165,8 @@ dsh --profile web --dump-config
 
 ## 更新与修复
 
+> 下图和独立 Portable 设置页说明对应当前开发版；已发布的 0.6.4 请从「设置 → 通用设置 → 便携版」进入。
+
 ![Portable 设置与独立更新入口](assets/portable-settings.png)
 
 - DSH-Portable 会先打开本地工作台；只有对应的“启动时检查更新”已开启时，才会在后台检查更新。产品更新与官方 DeepSeek Harness 内核更新各自独立，两个启动检查默认关闭；**设置 → Portable** 是主要更新入口：可分别检查 DSH-Portable 和官方 DeepSeek Harness 内核，检查后在页面内经桌面宿主确认即可安装更新；两者的检查和安装操作独立，但共享稳定版/候选版偏好。

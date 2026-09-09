@@ -18,6 +18,8 @@ Do not run the same synchronized directory on two computers at once. A cloud or 
 
 ## Move personal data only
 
+> In the published 0.6.4 release, use Settings → General → Portable; the steps below use the development build’s new entry point.
+
 If you do not want to copy the runtime, open **Settings → Portable → Data and migration**:
 
 - **Export migration package** is convenient between devices you trust.

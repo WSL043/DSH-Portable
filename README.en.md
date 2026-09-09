@@ -164,6 +164,8 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 
 ## Updates and repair
 
+> The screenshot and dedicated Portable settings page below describe the current development build. In the published 0.6.4 release, use Settings → General → Portable.
+
 ![Portable settings and independent update controls](assets/portable-settings.png)
 
 - DSH-Portable opens the local workspace first, then checks in the background only when the corresponding startup setting is enabled. Product updates and official DeepSeek Harness core updates are independent, and both **Check for updates at startup** settings are off by default; **Settings → Portable** is the primary update entry: check DSH-Portable or the official DeepSeek Harness core, then install the update in-page after desktop-host confirmation. Their check and install operations are independent but share the Stable/Candidate preference.
