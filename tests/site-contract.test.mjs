@@ -60,7 +60,7 @@ test("website defaults to Chinese and builds an indexable English route", async 
   assert.match(english, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/en\/">/);
   assert.match(english, /<title>DSH-Portable[^<]*Portable DeepSeek Harness/);
   assert.match(english, /class="language-switch" href="\.\.\/" hreflang="zh-CN"/);
-  assert.match(english, /href="\.\.\/styles\.css"/);
+  assert.match(english, /href="\.\.\/styles\.css\?v=[a-f0-9]+"/);
   assert.match(english, /src="\.\.\/assets\/dsh-interface-en\.png"/);
 });
 

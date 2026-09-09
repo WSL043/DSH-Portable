@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { runInNewContext } from "node:vm";
@@ -57,4 +58,14 @@ english = english.replace(/<([a-z][a-z0-9]*)\b([^>]*\bdata-i18n="([^"]+)"[^>]*)>
   (original, tag, attributes, key) => translations[key] === undefined ? original : `<${tag}${attributes}>${translations[key]}</${tag}>`);
 await writeFile(path.join(output, "en", "index.html"), english);
 
+// Version the entry assets together so a cached old script cannot run against new markup.
+const sceneSource = await readFile(path.join(output, "scene.js"), "utf8");
+const styleSource = await readFile(path.join(output, "styles.css"), "utf8");
+const revision = createHash("sha256").update(clientSource).update(sceneSource).update(styleSource).digest("hex").slice(0, 12);
+await writeFile(path.join(output, "app.js"), clientSource.replace('import("./scene.js")', `import("./scene.js?v=${revision}")`));
+for (const route of ["index.html", "en/index.html"]) {
+  const file = path.join(output, route);
+  const source = await readFile(file, "utf8");
+  await writeFile(file, source.replace(/(href="(?:\.\.\/)?styles\.css|src="(?:\.\.\/)?app\.js)"/g, `$1?v=${revision}"`));
+}
 console.log(`Website staged at ${output}`);

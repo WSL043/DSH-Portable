@@ -190,7 +190,7 @@ try {
     viewport: { width: 390, height: 844 },
     colorScheme: "light",
   });
-  await fallback.route("**/scene.js", (route) => route.abort());
+  await fallback.route("**/scene.js*", (route) => route.abort());
   await fallback.goto(base);
   await fallback.waitForSelector(".scene-unavailable");
   assert.equal(await fallback.locator(".fallback-window").isVisible(), true);
