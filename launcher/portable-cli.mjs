@@ -742,7 +742,7 @@ async function checkUpdate(options) {
     allowProductVersionChange: selectedProduct,
     expectedProductVersion: selectedVersion,
     allowHttp: options.allowHttp,
-    force: options.force || selectedProduct,
+    force: options.force,
   })
 }
 

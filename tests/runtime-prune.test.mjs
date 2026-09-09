@@ -68,6 +68,11 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, '@mixmark-io/domino/test/index.js', 'test only')
   await fixtureFile(appDir, '@mixmark-io/domino/.yarn/plugins/plugin-version.cjs', 'packaging only')
   await fixtureFile(appDir, 'openai/package.json', '{"name":"openai","main":"index.js"}')
+  await fixtureFile(appDir, 'fs-ext/package.json', '{"name":"fs-ext","main":"fs-ext.js"}')
+  await fixtureFile(appDir, 'fs-ext/fs-ext.js', "module.exports = require('./build/Release/fs_ext.node')")
+  const fsNative = await fixtureFile(appDir, 'fs-ext/build/Release/fs_ext.node', 'native runtime')
+  const fsDebug = await fixtureFile(appDir, 'fs-ext/build/Release/fs_ext.pdb', 'debug symbols')
+  const fsObject = await fixtureFile(appDir, 'fs-ext/build/Release/obj/fs_ext/fs-ext.obj', 'compiler intermediate')
   await fixtureFile(appDir, 'openai/index.js', 'export default true')
   await fixtureFile(appDir, 'openai/src/internal.ts', 'export type SourceOnly = true')
   await fixtureFile(appDir, 'lexical/package.json', '{"name":"lexical","main":"./dist/Lexical.js","module":"./dist/Lexical.mjs"}')
@@ -102,6 +107,9 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
     encoding: 'utf8',
   })
   assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`)
+  assert.equal(await readFile(fsNative, 'utf8'), 'native runtime')
+  assert.equal(await exists(fsDebug), false)
+  assert.equal(await exists(fsObject), false)
 
   for (const relative of [
     'node-pty/package.json',

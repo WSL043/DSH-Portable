@@ -63,6 +63,13 @@ const sourceOnlyPackages = [
 ]
 const reviewedPackagingOnlyPayloads = [
   {
+    packagePath: ['fs-ext'],
+    runtimeEntry: /^fs-ext\.js$/,
+    // fs-ext.js loads build/Release/fs_ext.node directly. MSVC intermediates
+    // and debug symbols are not needed by that native runtime binary.
+    remove: ['build/Release/obj', 'build/Release/fs_ext.pdb', 'build/Release/fs_ext.iobj', 'build/Release/fs_ext.ipdb'],
+  },
+  {
     packagePath: ['@mistralai', 'mistralai'],
     runtimeEntry: /^\.\/esm\/index\.js$/,
     remove: ['packages', 'examples', 'tests', 'FUNCTIONS.md', 'RUNTIMES.md', 'jsr.json'],
