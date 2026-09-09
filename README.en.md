@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | Bundled runtime | Built-in [dsh-market](https://github.com/dsh-market/dsh-market): search and install | Exit and copy to the same OS and architecture | Product and core updates preserve sessions, settings, and plugins |
 
-[Try the interactive workflow](https://wsl043.github.io/DSH-Portable/en/#tryout) · [Download](#downloads)
+[Explore the website and screenshots](https://wsl043.github.io/DSH-Portable/en/) · [Download](#downloads)
 
 | Separate product and core updates | Included Image Viewer |
 | --- | --- |

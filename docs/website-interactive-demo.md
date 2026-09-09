@@ -1,13 +1,19 @@
-# Website interaction scope
+# Website scene and screenshots
 
-The public website uses a local, in-memory workflow illustration. It demonstrates plugin selection and same-platform folder movement while preserving the selected sample state. It does not run DSH, install packages, call a model, or read local files. Reload resets it. The notice remains visible below the demo in both languages.
+The website uses a monochrome Three.js scene with drifting fog and a screen-space water reflection. The product panel displays actual interface captures. Pointer movement gently tilts it; the water samples the same rendered frame, so the reflection follows the panel without a second animation state.
 
-Product screenshots are separate from the illustration. They retain their original UI pixels and are not proof of a live browser-hosted DSH instance.
+This is a visual presentation, not a running DSH instance. The previous simulated plugin-installation and folder-movement demo has been removed. No model calls, plugin execution, or filesystem access occurs on the site.
 
-## A real embedded DSH environment
+## Rendering and accessibility
 
-An iframe alone cannot provide this on GitHub Pages: DSH needs its host service, and a visitor's localhost is not a public demo backend. Do not embed the maintainer's running instance or ask visitors to paste credentials into the marketing site.
+- Light and dark appearance share a 2.2-second transition. The preference persists, with an option to follow the system.
+- Motion follows the system reduced-motion preference unless the visitor explicitly overrides it. Disabling motion also disables pointer tilt.
+- Rendering pauses when the hero leaves the viewport or the tab is hidden. Static screenshots remain visible if WebGL cannot start or its context is lost.
+- The fog is rendered at reduced resolution; the panel and its reflection use a separate antialiased target. Three.js r186 is vendored under its MIT license in `site/vendor/`.
+- Screenshot sources are `assets/dsh-interface-zh.png`, `assets/dsh-interface-en.png`, and `assets/dsh-workspace-0.6.4.png`. Light and dark captures currently show different upstream versions; they are not recolored or presented as a live product session.
 
-A future real trial should use a separate deployment, disposable per-visitor workspaces, a bounded set of plugins, no host secrets, and explicit resource limits and expiry. If model calls are offered, credentials and cost ownership need a separate product decision. Native window behavior and folder portability would still need the downloaded application.
+## Publishing
 
-For the current site, use the lightweight workflow illustration plus real screenshots. No video generation or Remotion dependency is needed for these interactions. Animation is limited to navigation, screenshot transitions, and existing motion settings; it must not hide essential content.
+`node scripts/build-site.mjs` builds both language routes into `build/site`. The Website workflow runs the site contract and Chromium acceptance checks before deploying that directory to GitHub Pages. A website push does not publish a Portable software release.
+
+Run browser checks with `node scripts/check-site-browser.mjs` after installing Playwright 1.62.1 and its Chromium browser. `PLAYWRIGHT_MODULE` may point to an existing Playwright module for local checks. Evidence is written to `build/site-acceptance`, outside the deployed directory.

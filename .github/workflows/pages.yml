@@ -4,21 +4,19 @@ on:
   pull_request:
     paths:
       - "site/**"
-      - "assets/DSH-Portable.svg"
-      - "assets/DSH-Portable-512.png"
-      - "assets/dsh-interface-zh.png"
-      - "assets/dsh-interface-en.png"
+      - "assets/**"
       - "scripts/build-site.mjs"
+      - "scripts/check-site-browser.mjs"
+      - "tests/site-contract.test.mjs"
       - ".github/workflows/pages.yml"
   push:
     branches: [main]
     paths:
       - "site/**"
-      - "assets/DSH-Portable.svg"
-      - "assets/DSH-Portable-512.png"
-      - "assets/dsh-interface-zh.png"
-      - "assets/dsh-interface-en.png"
+      - "assets/**"
       - "scripts/build-site.mjs"
+      - "scripts/check-site-browser.mjs"
+      - "tests/site-contract.test.mjs"
       - ".github/workflows/pages.yml"
   workflow_dispatch:
 
@@ -39,14 +37,28 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+      - run: node --test tests/site-contract.test.mjs
       - run: node scripts/build-site.mjs
+      - name: Install browser acceptance tools
+        run: |
+          npm install --no-save --package-lock=false playwright@1.62.1
+          npx playwright install --with-deps chromium
+      - name: Verify website interactions and layouts
+        run: node scripts/check-site-browser.mjs
+      - name: Save browser evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: website-acceptance
+          path: build/site-acceptance
+          retention-days: 7
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
         with:
           path: build/site
 
   deploy:
-    if: github.event_name == 'push'
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

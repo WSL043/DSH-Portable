@@ -65,9 +65,9 @@ test("website defaults to Chinese and builds an indexable English route", async 
 });
 
 test("website ships its cinematic product stage with motion safeguards", () => {
-  assert.match(html, /assets\/hero-atmosphere\.png/);
+  assert.match(css, /assets\/hero-atmosphere\.png/);
   assert.match(html, /data-product-stage/);
-  assert.match(app, /IntersectionObserver/);
+  assert.match(app, /import\(["']\.\/scene\.js["']\)/);
   assert.match(app, /prefers-reduced-motion: reduce/);
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/);
   assert.match(css, /hero-atmosphere/);
@@ -82,17 +82,14 @@ test("website lets visitors override motion without discarding the system prefer
   assert.match(css, /html\[data-motion="reduced"\]/);
 });
 
-test("website motion tells the portable story instead of adding decorative noise", () => {
-  assert.match(html, /data-journey-step/);
-  assert.match(html, /class="portable-facts"/);
-  assert.match(html, /data-i18n="factLauncher"/);
-  assert.match(app, /factTargetsValue/);
-  assert.match(css, /\.portable-facts/);
-  assert.match(app, /data-journey-step/);
-  assert.match(app, /--journey-progress/);
-  assert.match(css, /@keyframes atmosphere-drift/);
-  assert.match(css, /@keyframes stage-float/);
-  assert.match(css, /--journey-progress/);
+test("website replaces the workflow simulation with the approved water scene", async () => {
+  const scene = await readFile(new URL("../site/scene.js", import.meta.url), "utf8");
+  assert.doesNotMatch(html, /data-demo-|id="tryout"/);
+  assert.match(html, /id="volume-scene"/);
+  assert.match(scene, /renderer.render\(scene,\s*camera\)/);
+  assert.match(scene, /image:\s*\{\s*value:\s*sceneTarget.texture,?\s*\}/);
+  assert.match(scene, /pointerleave/);
+  assert.match(scene, /webglcontextlost/);
 });
 
 test("common desktop widths keep the product proof in the hero composition", () => {

@@ -43,7 +43,7 @@
 | --- | --- | --- | --- |
 | 运行环境随包提供 | 内置 [dsh-market](https://github.com/dsh-market/dsh-market)，搜索后点击安装 | 完全退出后复制目录，同系统同架构继续 | Portable 与内核分别更新，保留会话、设置和插件 |
 
-[先试交互演示](https://wsl043.github.io/DSH-Portable/#tryout) · [直接下载](#下载)
+[查看官网与界面](https://wsl043.github.io/DSH-Portable/) · [直接下载](#下载)
 
 | 产品与内核分别管理 | 默认图片查看器 |
 | --- | --- |
