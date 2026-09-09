@@ -5,6 +5,7 @@ import path from 'node:path'
 
 import { workspaceDocumentReady } from '../launcher/http-readiness.mjs'
 import { renameWithRetry } from './smoke-helpers.mjs'
+import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
 
 const originalRoot = path.resolve(process.argv[2] ?? '')
 if (!originalRoot) throw new Error('usage: node smoke-portable.mjs <extracted-DSH-Portable-root>')
@@ -124,7 +125,15 @@ async function invokeCli(root, ...args) {
   const commandArgs = capsule
     ? [path.join(root, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs', ...args]
     : [cliFor(root), ...args]
-  return run(nodeFor(root), commandArgs, { cwd: root })
+  const result = await run(nodeFor(root), commandArgs, { cwd: root })
+  if (result.code !== 0) {
+    const diagnostics = ['portable-errors.jsonl', 'dsh.stderr.log', 'startup-latest.jsonl'].map(name => {
+      try { return `${name}:\n${redactDiagnosticText(readLogTail(path.join(root, 'data', 'logs', name), 16000))}` }
+      catch { return '' }
+    }).filter(Boolean).join('\n')
+    result.stderr = `${result.stderr}\n${diagnostics}`
+  }
+  return result
 }
 
 function parseCliJson(stdout) {

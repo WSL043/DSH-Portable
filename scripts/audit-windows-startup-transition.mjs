@@ -283,7 +283,15 @@ try {
     await new Promise(resolve => setTimeout(resolve, 20))
   }
 
-  const startupTrace = (await readFile(path.join(path.dirname(launcherLog), 'startup-latest.jsonl'), 'utf8'))
+  const logsDirectory = path.dirname(launcherLog)
+  const recentTrace = (await Promise.all(['startup-latest.jsonl', 'startup-previous.jsonl']
+    .map(name => readFile(path.join(logsDirectory, name), 'utf8').catch(() => ''))))
+    .join('\n').trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
+  const auditedStartupId = recentTrace.find(entry => entry.pid === launcher.pid)?.startupId
+  assert.match(auditedStartupId ?? '', /^[a-f0-9]{32}$/i, 'missing audited native startup identity')
+  // Another invocation can rotate the latest file while this host is loading.
+  // The per-start history is the authoritative, complete trace for this PID.
+  const startupTrace = (await readFile(path.join(logsDirectory, 'history', auditedStartupId, 'startup.jsonl'), 'utf8'))
     .trim().split(/\r?\n/).map(line => JSON.parse(line))
   const nativeLoading = startupTrace.find(entry => entry.phase === 'native-loading-ready' && entry.pid === launcher.pid)
   const nativeReady = startupTrace.find(entry => entry.phase === 'interactive-ready' && entry.pid === launcher.pid)

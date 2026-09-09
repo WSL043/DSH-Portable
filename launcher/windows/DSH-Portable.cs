@@ -3259,6 +3259,9 @@ namespace DshPortable
                 Rectangle bounds = new Rectangle(state.x, state.y, state.width, state.height);
                 if (state.schemaVersion != 1 || !IsSafeDesktopBounds(bounds)) throw new InvalidDataException();
                 StartPosition = FormStartPosition.Manual;
+                // Saved bounds are native outer bounds. Creating a captionless
+                // Sizable handle after assigning them adds the legacy frame size.
+                if (!IsHandleCreated) CreateHandle();
                 Bounds = bounds;
                 windowStateBeforeHide = state.maximized ? FormWindowState.Maximized : FormWindowState.Normal;
                 WindowState = windowStateBeforeHide;

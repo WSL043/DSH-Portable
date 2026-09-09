@@ -7,6 +7,25 @@ import vm from 'node:vm'
 const cli = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
 const waitSource = cli.slice(cli.indexOf('async function waitForHost('), cli.indexOf('\nfunction portAvailable('))
 
+test('a listening authenticated host stays starting until its workspace URL is committed', async () => {
+  const state = { pid: 123, port: 3080 }
+  let probes = 0
+  const statusSource = cli.slice(cli.indexOf('async function status()'), cli.indexOf('\nasync function openExisting()'))
+  const status = vm.runInNewContext(`(${statusSource})`, {
+    readProcessState: () => state,
+    ownedState: () => true,
+    layout: { environmentId: 'default', root: 'fixture' },
+    httpReady: async () => { probes += 1; return true },
+  })
+  assert.equal((await status()).status, 'starting')
+  assert.equal(probes, 0)
+  state.url = 'http://127.0.0.1:3080/?token=fixture'
+  const ready = await status()
+  assert.equal(ready.status, 'running')
+  assert.equal(ready.url, state.url)
+  assert.equal(probes, 1)
+})
+
 function fixture({ alive = () => true, owned = () => true } = {}) {
   let now = 0
   let identities = 0

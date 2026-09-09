@@ -56,7 +56,7 @@ if pgrep -P "$PID" -af 'firefox|chromium|google-chrome|microsoft-edge' >/dev/nul
   exit 1
 fi
 
-url="$(printf '%s' "$status" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).url))')"
+url="$(printf '%s' "$recovered_status" | "$NODE" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).url))')"
 http_status="$(curl --fail --silent --show-error --location --cookie "$COOKIE_JAR" --cookie-jar "$COOKIE_JAR" --output "$RESPONSE_BODY" --write-out '%{http_code}' "$url")" || {
   cat "$LOG" >&2
   echo 'the authenticated workspace URL did not return successfully' >&2
