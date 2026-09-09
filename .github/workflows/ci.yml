@@ -56,7 +56,9 @@ jobs:
           pnpm --dir upstream run release:pack --family dsh --out dist/npm --concurrency 8
           pnpm --dir upstream run release:pack --family vendor --out dist/npm-vendor --concurrency 8
           mkdir -p upstream/dist/npm-landlock
-          pnpm --dir upstream/native/landlock-run/packages/entry pack --pack-destination "$PWD/upstream/dist/npm-landlock"
+          if [ '${{ steps.preview.outputs.landlockCount }}' = 1 ]; then
+            pnpm --dir upstream/native/landlock-run/packages/entry pack --pack-destination "$PWD/upstream/dist/npm-landlock"
+          fi
           test "$(find upstream/dist/npm -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.dshCount }}"
           test "$(find upstream/dist/npm-vendor -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.vendorCount }}"
           test "$(find upstream/dist/npm-landlock -maxdepth 1 -name '*.tgz' | wc -l)" -eq "${{ steps.preview.outputs.landlockCount }}"

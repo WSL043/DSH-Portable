@@ -70,11 +70,9 @@ function countPackedFamilies(tree) {
   }).length
   const vendor = paths.filter((entry) => VENDOR_PACKAGE.test(entry)).length
   if (!dsh || !vendor) throw new Error('official source tree has an empty release family')
-  if (!paths.includes(LANDLOCK_ENTRY)) {
-    throw new Error(`official source tree is missing ${LANDLOCK_ENTRY}`)
-  }
-
-  return { dsh, vendor, landlock: 1 }
+  // Newer official releases no longer ship this standalone native package.
+  // Record its actual presence; staging still validates the complete closure.
+  return { dsh, vendor, landlock: paths.includes(LANDLOCK_ENTRY) ? 1 : 0 }
 }
 
 /**
@@ -82,7 +80,7 @@ function countPackedFamilies(tree) {
  *
  * @param {string} commit - Full immutable upstream commit SHA.
  * @param {{ json: (url: string) => Promise<unknown>, text: (url: string) => Promise<string> }} callbacks - Authenticated fetch wrappers.
- * @returns {Promise<{ packageManager: string, packedFamilies: { dsh: number, vendor: number, landlock: 1 } }>}
+ * @returns {Promise<{ packageManager: string, packedFamilies: { dsh: number, vendor: number, landlock: number } }>}
  */
 export async function readOfficialSourceMetadata(commit, callbacks) {
   if (!/^[0-9a-f]{40}$/.test(commit ?? '')) {

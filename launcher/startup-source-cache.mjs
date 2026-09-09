@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { readFileSync, realpathSync } from 'node:fs'
 import { registerHooks } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -17,6 +17,9 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env) {
   try {
     const manifest = JSON.parse(readFileSync(path.join(portableRoot, 'runtime-capsule.json'), 'utf8'))
     if (!/^[a-f0-9]{64}$/.test(manifest.sha256) || path.basename(runtimeRoot) !== manifest.sha256) return { result, finish }
+    // Node resolves module URLs through directory aliases (notably /var on
+    // macOS). Resolve the root once, rather than doing filesystem IO per module.
+    const canonicalRoot = realpathSync(runtimeRoot)
     const compressed = readFileSync(path.join(portableRoot, 'runtime', 'DSH-App.dshpack'))
     if (compressed.length !== manifest.bytes || createHash('sha256').update(compressed).digest('hex') !== manifest.sha256)
       throw new Error('capsule-integrity')
@@ -30,7 +33,7 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env) {
       if (!Number.isSafeInteger(entry.size) || entry.size < 0 || end > payload.length) throw new Error('capsule-entry')
       if (entry.path.startsWith('app/node_modules/') && /\.(?:mjs|cjs|js|json)$/.test(entry.path)
         && !entry.path.split('/').some(part => part === '..' || part === '.')) {
-        const filename = path.resolve(runtimeRoot, ...entry.path.split('/'))
+        const filename = path.resolve(canonicalRoot, ...entry.path.split('/'))
         // Index byte ranges, then decode only modules actually requested. Eager
         // decoding also loads unused package-manager/tooling sources into V8.
         sources.set(filename, { offset, end })

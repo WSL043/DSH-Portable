@@ -52,6 +52,14 @@ test('rejects a truncated official source tree', async () => {
   )
 })
 
+test('official releases may remove the standalone landlock package', async () => {
+  const callbacks = fixture()
+  const tree = await callbacks.json('/git/trees/fixture')
+  tree.tree = tree.tree.filter(entry => !entry.path.startsWith('native/landlock-run/'))
+  const metadata = await readOfficialSourceMetadata(commit, fixture({ tree }))
+  assert.deepEqual(metadata.packedFamilies, { dsh: 2, vendor: 1, landlock: 0 })
+})
+
 test('rejects an unknown release family glob instead of guessing its count', async () => {
   const unknownFamilies = familiesSource.replace(
     "readonly patterns = ['vendor/*/package.json'] as const",

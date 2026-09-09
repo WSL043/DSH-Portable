@@ -59,7 +59,10 @@ export async function inventoryPackedRuntime({ packedRoot, lock }) {
   const packages = []
   for (const [family, directoryName] of families) {
     const directory = path.join(packedRoot, directoryName)
-    const filenames = (await readdir(directory)).filter((name) => name.endsWith('.tgz')).sort()
+    const filenames = (await readdir(directory).catch(error => {
+      if (error.code === 'ENOENT' && lock.dsh.packedFamilies[family] === 0) return []
+      throw error
+    })).filter((name) => name.endsWith('.tgz')).sort()
     assert.equal(filenames.length, lock.dsh.packedFamilies[family], `${family} packed package count`)
     for (const filename of filenames) {
       const tarball = path.join(directory, filename)
