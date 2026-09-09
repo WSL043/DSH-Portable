@@ -213,6 +213,8 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
 }
 
 const initScript = String.raw`(() => {
+  // Localhost must remain usable when Windows reports no external network.
+  Object.defineProperty(navigator, 'onLine', { configurable: true, get: () => false });
   const listeners = new Set()
   const posted = []
   const webview = {
@@ -772,6 +774,7 @@ try {
   await evaluate(client, `window.chrome.webview.__emit({ type: 'dsh-portable/action', action: 'new-session' })`)
   const afterClear = await waitForValue(client, stateCountExpression, value => value > beforeClear, 'SessionRuntime.clear state update')
   assert.ok(afterClear > beforeClear)
+  assert.equal(await evaluate(client, 'navigator.onLine'), false)
   assert.deepEqual(exceptions, [])
 
   process.stdout.write(`${JSON.stringify({
@@ -780,6 +783,7 @@ try {
     theme: state.theme,
     sessions: state.sessions.length,
     headless: true,
+    offlineLoopback: true,
   })}\n`)
 } finally {
   client?.close()

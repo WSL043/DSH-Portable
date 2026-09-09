@@ -239,6 +239,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Native boot handoff adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-native-settings-command.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Native settings command adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-loopback-connection.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw "Loopback connection adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Portable Hero context adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-client-module-startup.mjs') (Join-Path $Stage 'app')
