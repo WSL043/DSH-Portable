@@ -25,6 +25,9 @@ use tauri::{
 
 const PRODUCT_NAME: &str = "DeepSeek-Herness";
 const PORTABLE_DATA_NAME: &str = "DSH-Portable-data";
+const AUTH_RECOVERY_SCRIPT: &str = include_str!("../auth-recovery.js");
+const AUTH_RECOVERY_TEST_ENV: &str = "DSH_PORTABLE_TEST_AUTH_RECOVERY";
+const AUTH_RECOVERY_TEST_MARKER: &str = "DSH_AUTH_RECOVERY_TEST_PASSED";
 static LAYOUT: OnceLock<ProductLayout> = OnceLock::new();
 static QUITTING: AtomicBool = AtomicBool::new(false);
 static UPDATE_PROMPT_OPEN: AtomicBool = AtomicBool::new(false);
@@ -53,6 +56,15 @@ const NATIVE_BRIDGE_SCRIPT: &str = r#"
   Object.defineProperty(window, '__DSH_PORTABLE_NATIVE__', { configurable: false, value: Object.freeze(native) });
 })();
 "#;
+
+fn build_initialization_script() -> String {
+    let test_flag = if auth_recovery_test_enabled() {
+        "globalThis.__DSH_PORTABLE_TEST_AUTH_RECOVERY__ = true;"
+    } else {
+        ""
+    };
+    format!("{NATIVE_BRIDGE_SCRIPT}\n{test_flag}\n{AUTH_RECOVERY_SCRIPT}")
+}
 
 #[derive(Clone, Debug, Serialize)]
 struct ProductLayout {
@@ -532,11 +544,65 @@ fn stop_and_exit(app: tauri::AppHandle) {
 }
 
 fn trusted_application_window(window: &tauri::WebviewWindow) -> bool {
-    window.url().ok().is_some_and(|url| {
-        url.scheme() == "http"
-            && matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"))
-            && url.port().is_some_and(|port| (3080..=3180).contains(&port))
-    })
+    window
+        .url()
+        .ok()
+        .is_some_and(|url| trusted_loopback_url(&url))
+}
+
+fn trusted_loopback_url(url: &Url) -> bool {
+    url.scheme() == "http"
+        && matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"))
+        && url.port().is_some_and(|port| (3080..=3180).contains(&port))
+}
+
+fn http_loopback_url(url: &Url) -> bool {
+    url.scheme() == "http"
+        && matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"))
+        && url.port().is_some()
+}
+
+fn same_origin(left: &Url, right: &Url) -> bool {
+    left.scheme() == right.scheme()
+        && left.host_str() == right.host_str()
+        && left.port() == right.port()
+}
+
+fn validated_reconnect_url(window: &tauri::WebviewWindow, value: &Value) -> Result<Url, ()> {
+    let raw = value.get("url").and_then(Value::as_str).ok_or(())?;
+    let target = Url::parse(raw).map_err(|_| ())?;
+    if !http_loopback_url(&target) || target.query().is_none() {
+        return Err(());
+    }
+    let current = window.url().map_err(|_| ())?;
+    if !trusted_loopback_url(&current) || !same_origin(&current, &target) {
+        return Err(());
+    }
+    Ok(target)
+}
+
+fn auth_recovery_test_enabled() -> bool {
+    env::var(AUTH_RECOVERY_TEST_ENV).ok().as_deref() == Some("1")
+}
+
+fn auth_recovery_test_url(mut url: Url) -> Url {
+    if auth_recovery_test_enabled() {
+        url.set_path("/");
+        url.set_query(Some("token=dsh-portable-test-invalid"));
+    }
+    url
+}
+
+fn show_auth_recovery_error(window: &tauri::WebviewWindow, layout: &ProductLayout) {
+    let message = serde_json::to_string(&text(
+        layout,
+        "工作台重新连接失败，请重试。",
+        "Workspace reconnect failed. Please try again.",
+    ))
+    .unwrap_or_else(|_| "\"Workspace reconnect failed. Please try again.\"".to_owned());
+    let _ = window.eval(format!(
+        "globalThis.__DSH_PORTABLE_AUTH_RECOVERY__?.showError?.({message});"
+    ));
 }
 
 fn request_id(message: &Value, prefix: &str) -> Option<String> {
@@ -788,6 +854,36 @@ fn portable_host_message(
                     .unwrap_or(false),
                 Ordering::SeqCst,
             );
+            Ok(None)
+        }
+        "dsh-portable/reconnect-workspace" => {
+            let reconnect_window = window.clone();
+            let reconnect_layout = layout.clone();
+            thread::spawn(move || {
+                let result =
+                    run_portable_cli(&reconnect_layout, &["start", "--no-browser", "--json"])
+                        .map_err(|_| ())
+                        .and_then(|output| output_json(&output).map_err(|_| ()))
+                        .and_then(|value| validated_reconnect_url(&reconnect_window, &value));
+                match result {
+                    Ok(url) => {
+                        if reconnect_window.navigate(url).is_err() {
+                            show_auth_recovery_error(&reconnect_window, &reconnect_layout);
+                        }
+                    }
+                    Err(()) => {
+                        show_auth_recovery_error(&reconnect_window, &reconnect_layout);
+                    }
+                }
+            });
+            Ok(None)
+        }
+        "dsh-portable/auth-recovery-ready" => {
+            if auth_recovery_test_enabled() {
+                let mut stdout = io::stdout().lock();
+                let _ = writeln!(stdout, "{AUTH_RECOVERY_TEST_MARKER}");
+                let _ = stdout.flush();
+            }
             Ok(None)
         }
         "dsh-portable/pick-directory" => {
@@ -1097,7 +1193,7 @@ fn start_dsh(app: tauri::AppHandle) {
                     if let (Some(window), Ok(url)) =
                         (app.get_webview_window("main"), Url::parse(url))
                     {
-                        let _ = window.navigate(url);
+                        let _ = window.navigate(auth_recovery_test_url(url));
                     }
                 }
                 let update_settings = read_shell_settings(&layout);
@@ -1200,8 +1296,9 @@ fn main() {
                 app.handle().exit(0);
                 return Ok(());
             }
+            let initialization_script = build_initialization_script();
             WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-                .initialization_script(NATIVE_BRIDGE_SCRIPT)
+                .initialization_script(initialization_script)
                 .title(PRODUCT_NAME)
                 .inner_size(1280.0, 820.0)
                 .min_inner_size(900.0, 620.0)

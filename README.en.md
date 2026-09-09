@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/dsh-interface-en.png" width="1040" alt="DeepSeek Harness workspace in DSH-Portable">
+  <img src="assets/dsh-workspace-0.6.4.png" width="1040" alt="DeepSeek Harness workspace in DSH-Portable">
 </p>
 
 > [!NOTE]
@@ -56,7 +56,7 @@ On Windows, enabling **Task notifications** shows a system notification when a b
 | **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
 | **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
 
-The 0.5 series Windows offline package is about **58 MB** and expands into about **44 outer files**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This keeps the complete plugin runtime while reducing the small-file work needed to copy and update it. Release gates check archive size, extracted size, file count, and startup performance.
+The 0.6.4 Windows acceptance ZIP is approximately **54 MiB**; see the release asset for the exact published size. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This keeps the complete plugin runtime while reducing the small-file work needed to copy and update it. Release gates check archive size, extracted size, file count, and startup performance.
 
 ### Component boundaries and release cadence
 
@@ -106,6 +106,8 @@ chmod +x DeepSeek-Herness-linux-x64.AppImage
 
 The AppImage keeps sessions, settings, plugins, and workspace in the sibling `DSH-Portable-data` folder. Move or back up both together.
 
+The full-folder `DeepSeek-Herness` launcher is a Linux ELF. Some file managers show a generic executable icon; use the AppImage for desktop icons and application-menu integration.
+
 ## Move and back up
 
 See the [computer-to-computer migration guide](docs/move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
@@ -124,7 +126,7 @@ Open **Settings → Plugins → Plugin Market** to search, filter, visit a proje
 
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
-Fresh installs include only two reviewed, removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) displays images produced by tasks; the existing [Chat Manager](https://github.com/WSL043/dsh-chat-manager) is currently limited to the archived-session restore entry point that the official UI does not yet expose. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
+Fresh installs include only two reviewed, removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) provides galleries, zoom, pan, download and region notes; [Chat Manager](https://github.com/WSL043/dsh-chat-manager) provides archive search, restoration and confirmed session deletion. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Standard DSH commands documented by a plugin can be pasted unchanged in this terminal:
 
@@ -141,6 +143,11 @@ The Portable DSH Terminal recognizes `dsh` only inside that window and never cha
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
 ## Windows desktop controls
+
+![Windows native navigation](assets/windows-navigation-dark.png)
+
+Native navigation follows the selected theme and provides sidebar and history controls.
+
 
 Startup uses one native logo, loading indicator, and phase description until the workspace is ready. The loading surface and menus follow your saved light/dark theme. The top-left File, View, and Help menus expose common desktop actions.
 
@@ -170,11 +177,15 @@ An official DSH update does not need to wait for a DSH-Portable feature release,
 
 The [release-writing guide](docs/release-writing.md) documents the evidence required for release notes.
 
+## Folder layout
+
+Start with `README.txt` at the root. Bilingual guides and migration commands live in `docs/`; licenses and component provenance live in `licenses/`. Open `DeepSeek-Herness.exe` for the workspace or `dsh.exe` for a terminal on Windows. Keep `app/`, `launcher/`, `runtime/` and `default-plugins/` in place.
+
 ## Portable data
 
 Normal updates preserve `data` and `workspace` in place. To move data into a clean Portable environment, choose **Export migration package** or **Export encrypted private package** under **Settings → General → Portable → Data and migration**. Both contain the same sessions, settings, plugin configuration, and API credentials; only the private package requires a password to read. Keep an unencrypted package only on a trusted device; it is still an integrity-checked compressed container rather than a text file. Runtimes, caches, logs, and workspace files are deliberately excluded. Import restores plugin dependencies and validates each profile; any failure restores the previous data automatically.
 
-`DATA-MIGRATION.en.txt` in every finished package documents the English inspect and restore commands; `DATA-MIGRATION.zh-CN.txt` provides a separate Chinese guide. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`.
+`docs/DATA-MIGRATION.en.txt` in every finished package documents the English inspect and restore commands; `docs/DATA-MIGRATION.zh-CN.txt` provides a separate Chinese guide. Restore imports only missing data by default; explicit replacement first creates a rollback copy under `data/backups/`.
 
 | Path | Contents |
 | --- | --- |

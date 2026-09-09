@@ -1,29 +1,37 @@
 {
   "version": "0.6.4",
   "zh": {
-    "summary": "修复启动加载圈停转和更新通道不同步的问题，完善独立内核更新及默认插件诊断。",
+    "summary": "改善 Windows 启动等待与桌面导航，修复工作台登录链接和插件交互，完善更新、诊断及随包说明。",
     "highlights": [
-      "关闭系统动画时，启动加载圈仍提供低动态进度反馈；亮色、暗色和跟随系统设置保持一致。",
-      "更新通道保存成功后再加载对应内核目录，避免旧请求和快速切换造成错误列表；获取失败会显示原因，网络查询不再占用启动和停止的锁。",
-      "不兼容的内核版本提供明确说明，不再无声消失；候选内核可针对当前稳定版 Portable 独立构建和验证。",
-      "修复同版本内核重新构建仍引用旧包的目录问题；发布前验证精确外壳、更新启动、默认插件保留及失败回滚。",
-      "稳定版内核保持 0.1.2-rc.1；适配官方 0.1.3-alpha.2 的显式启动入口和共享子进程模块，并修复源码换行导致的兼容性误判。候选内核仍须单独通过验证才会提供。",
-      "默认插件安装失败日志保留脱敏后的具体输出；外部 Git、下载地址和 npm 别名来源不再被误换成同名 npm 包，尚不支持的自动更新会明确提示按原来源手动更新。"
+      "启动时保持同一层原生 Logo、加载动画和阶段说明，直到工作台就绪；去掉读秒，修复 WebView 初始化遮住加载页和重复重绘造成的空白切换。",
+      "从已校验的紧凑运行包读取内核模块，减少启动期间大量零散文件读取；亮暗主题、原生菜单、侧栏与前进后退按钮保持一致，菜单通过点击打开，支持快捷键和全屏。",
+      "图片查看器更新为 0.1.0，改善缩放、拖动、下载与区域标注，放大图片时标注保持独立清晰；会话管理器使用已发布的 1.3.3，适配已验证的 Alpha 会话接口。",
+      "就绪探测保留完整登录地址；Linux 遇到登录参数缺失或过期时提供重新连接入口，使用当前后台地址恢复页面。完整目录的通用图标行为与 AppImage 桌面集成选择现已写清。",
+      "根目录统一使用 README.txt 作为入口，中英文说明和迁移指南归入 docs/；日志历史保留 14 天内最近 30 次启动，并提供有大小限制提示的脱敏报告。",
+      "完善独立内核更新：切换通道后加载正确目录，不兼容版本明确说明原因；安装前检查现有 Profile 与插件，新版启动失败自动回滚。默认插件安装失败保留脱敏诊断，外部来源插件不会被替换成同名 npm 包。"
     ],
-    "upgradeNotes": ["本版包含原生启动器修复，请使用内置完整包更新或下载完整包，保留原 data 目录。候选内核只对主动选择候选通道的用户提供，切换通道不会自动安装或降级。"],
-    "knownIssues": ["Win11 日志再次捕获到约 12–15 秒的官方内核导入，随后隔离启动约 2 秒完成导入。偶发长等待的根因仍在调查，本版不将加载圈修复视为启动性能问题已根治。"]
+    "upgradeNotes": [
+      "本版包含原生启动器修复，请使用内置完整包更新或下载完整包，保留原 data 目录。候选内核只对主动选择候选通道的用户提供，切换通道不会自动安装或降级。"
+    ],
+    "knownIssues": [
+      "Windows 本地成品验收与用户试用已完成。启动耗时仍取决于存储、缓存和本机扫描负载；受控慢读取对比说明优化有效，但不承诺所有设备固定秒数。官方 DSH 内核仍为预览版本，候选内核仅在独立验收通过后提供。"
+    ]
   },
   "en": {
-    "summary": "Fix a stationary startup indicator and stale update-channel lists, and improve independent core updates and default-plugin diagnostics.",
+    "summary": "Improve Windows startup and desktop navigation, repair workspace authentication handoff and plugin interactions, and refine updates, diagnostics and packaged guides.",
     "highlights": [
-      "Keep discrete, reduced-motion loading feedback when system animations are disabled, while preserving light, dark and system theme continuity.",
-      "Load catalogs after saving the channel, reject stale responses and explain failures. Network update queries no longer hold the startup and shutdown lock.",
-      "Explain incompatible core versions instead of silently hiding them. Candidate cores can be built and qualified independently against the current stable Portable shell.",
-      "Replace stale same-version catalog records after a core rebuild. Qualify exact-shell compatibility, update startup, default-plugin preservation and failure rollback before core publication.",
-      "Keep the stable core at 0.1.2-rc.1. Adapt official 0.1.3-alpha.2's explicit CLI entry and shared subprocess module, and prevent source line endings from rejecting compatible builds. Candidate cores remain gated by independent qualification.",
-      "Retain redacted output for failed default-plugin installs. Keep external Git, archive URL and npm-alias installs from being replaced by same-name registry packages, explaining when an update must follow the original source."
+      "Keep one native logo, loading indicator and status surface until the workspace is ready. Remove the timer and prevent WebView initialization and repeated chrome repaint from revealing an intermediate blank page.",
+      "Serve core modules from the verified compact runtime archive to reduce scattered startup reads. Refine theme continuity, native menus, sidebar and history navigation, click-to-open menus, shortcuts and fullscreen.",
+      "Ship Image Viewer 0.1.0 with improved zoom, pan, downloads and region notes; annotations stay independently rendered when images are magnified. Include the already published Chat Manager 1.3.3 with verified Alpha session support.",
+      "Preserve the complete login URL during readiness probes. On Linux, provide a reconnect action for missing or stale authentication parameters using the current backend URL. Document generic full-folder executable icons and the AppImage desktop-integration option.",
+      "Use one root README.txt entry point and group bilingual guides under docs/. Retain up to 30 startup histories within 14 days and export bounded, redacted support reports.",
+      "Refine independent core updates: load the correct channel catalog and explain incompatible versions; check existing profiles and plugins before installation and roll back a failed launch. Retain redacted plugin-install errors and preserve external package sources."
     ],
-    "upgradeNotes": ["This release changes the native launcher. Use the built-in full-package update or download the complete package, preserving the original data directory. Candidate cores require an explicit candidate-channel selection; changing channels never installs or downgrades automatically."],
-    "knownIssues": ["Win11 logs again captured 12–15-second official core imports, followed by isolated imports taking about 2 seconds. The intermittent long wait remains under investigation; the loading-indicator fix is not presented as a root-cause performance fix."]
+    "upgradeNotes": [
+      "This release changes the native launcher. Use the built-in full-package update or download the complete package, preserving the original data directory. Candidate cores require an explicit candidate-channel selection; changing channels never installs or downgrades automatically."
+    ],
+    "knownIssues": [
+      "Local Windows product acceptance and user trial are complete. Startup timing still depends on storage, cache state and local scanning load; controlled slow-read measurements support the optimization, not a fixed timing guarantee for every device. Official DSH remains a preview core; candidate cores are offered only after independent qualification."
+    ]
   }
 }

@@ -72,7 +72,7 @@ function Assert-Sha256([string]$Filename, [string]$Expected) {
 }
 
 function Copy-PortableSources([string]$Target) {
-    foreach ($Directory in @('app', 'launcher', 'runtime\node', 'licenses', 'default-plugins', 'data', 'workspace')) {
+    foreach ($Directory in @('app', 'launcher', 'runtime\node', 'licenses', 'default-plugins', 'data', 'workspace', 'docs')) {
         New-Item -ItemType Directory -Force -Path (Join-Path $Target $Directory) | Out-Null
     }
     Copy-Item -Recurse (Join-Path $ProjectRoot 'desktop-bridge') (Join-Path $Target 'desktop-bridge')
@@ -82,11 +82,12 @@ function Copy-PortableSources([string]$Target) {
     foreach ($File in Get-ChildItem -LiteralPath (Join-Path $ProjectRoot 'launcher') -File -Filter '*.mjs') {
         Copy-Item -LiteralPath $File.FullName -Destination (Join-Path $Target "launcher\$($File.Name)")
     }
-    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.zh-CN.txt') (Join-Path $Target 'DATA-MIGRATION.zh-CN.txt')
-    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.en.txt') (Join-Path $Target 'DATA-MIGRATION.en.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.zh-CN.txt') (Join-Path $Target 'docs\DATA-MIGRATION.zh-CN.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\DATA-MIGRATION.en.txt') (Join-Path $Target 'docs\DATA-MIGRATION.en.txt')
     Copy-Item (Join-Path $ProjectRoot 'launcher\windows\dsh-terminal.cmd') (Join-Path $Target 'launcher\dsh-terminal.cmd')
-    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.zh-CN.txt') (Join-Path $Target 'README.zh-CN.txt')
-    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.en.txt') (Join-Path $Target 'README.en.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.zh-CN.txt') (Join-Path $Target 'docs\README.zh-CN.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\USER-README.en.txt') (Join-Path $Target 'docs\README.en.txt')
+    Copy-Item (Join-Path $ProjectRoot 'templates\START-HERE.txt') (Join-Path $Target 'README.txt')
     Copy-Item (Join-Path $ProjectRoot 'templates\DATA-README.txt') (Join-Path $Target 'data\README.txt')
     Copy-Item (Join-Path $ProjectRoot 'templates\WORKSPACE-README.txt') (Join-Path $Target 'workspace\README.txt')
     Copy-Item (Join-Path $ProjectRoot 'LICENSE') (Join-Path $Target 'licenses\DSH-Portable-LICENSE.txt')

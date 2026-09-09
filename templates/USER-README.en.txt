@@ -15,6 +15,8 @@ blocked. Run Stop DSH-Portable.command before moving or unplugging the folder.
 Linux: run ./DeepSeek-Herness from the complete portable folder. Make an AppImage
 executable once with chmod +x. Its data lives in the sibling DSH-Portable-data
 folder; move both together.
+The full-folder launcher is a Linux ELF and may show a generic file-manager icon.
+Use the AppImage for desktop icons and application-menu integration.
 
 The launcher asks before installing an update. A normal update downloads only
 the changed DSH application component and keeps sessions, settings, credentials,
@@ -27,7 +29,8 @@ The Windows and Linux trays and the macOS application menu can check manually.
 Automatic checks are off by default. Updates never interrupt a running task.
 
 For a slow or failed launch, export the redacted support report from Settings >
-General > Portable. It includes complete phase traces for the latest two launches;
+General > Portable. It includes multiple startup traces and health samples. Local history retains up to
+30 launches within 14 days (32 MiB total);
 share that report instead of raw logs that may contain login tokens.
 
 On Windows, double-click dsh.exe or open DSH Terminal from the tray's More menu.

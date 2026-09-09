@@ -1,0 +1,19 @@
+DSH-Portable — 开始使用 / Start here
+====================================
+
+Windows: DeepSeek-Herness.exe
+macOS:   DSH-Portable.app
+Linux:   ./DeepSeek-Herness
+
+使用说明 / User guide: docs/README.zh-CN.txt · docs/README.en.txt
+迁移与恢复 / Migration: docs/DATA-MIGRATION.zh-CN.txt · docs/DATA-MIGRATION.en.txt
+
+data/       会话、设置、凭据、插件和日志 / Sessions, settings, credentials, plugins and logs
+workspace/  默认工作区 / Default workspace
+licenses/   开源许可与组件来源 / Licenses and component provenance
+
+其他文件是程序组件，请保持在原位置。移动或备份前完全退出应用，再复制整个文件夹。
+Keep program components in place. Fully exit the app before copying the whole folder.
+
+更新和支持报告 / Updates and support reports: 设置 → 通用设置 → 便携版 / Settings → General → Portable
+https://github.com/WSL043/DSH-Portable
