@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, writeFile, readFile, realpath, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -28,7 +28,7 @@ class Probe {
     start.CreateNoWindow = true;
     start.RedirectStandardOutput = true;
     start.RedirectStandardError = true;
-    start.Arguments = "-NoLogo -NoProfile -Command \\\"Write-Output $env:DSH_PORTABLE_TERMINAL; Write-Output $env:DSH_PORTABLE_ENVIRONMENT; Write-Output (Get-Location).Path; Write-Output ($env:PATH.Split(';')[0])\\\"";
+    start.Arguments = "-NoLogo -NoProfile -Command \\\"Write-Output $env:DSH_PORTABLE_TERMINAL; Write-Output $env:DSH_PORTABLE_ENVIRONMENT; Write-Output (Get-Location).Path; Write-Output $env:PATH\\\"";
     using (var child = Process.Start(start)) {
       var output = child.StandardOutput.ReadToEnd();
       var errors = child.StandardError.ReadToEnd();
@@ -47,7 +47,12 @@ class Probe {
     await writeFile(`${executable}:Zone.Identifier`, origin)
     const { stdout, stderr } = await run(executable, [root], { windowsHide: true, timeout: 30_000 })
     assert.equal(stderr, '')
-    assert.deepEqual(stdout.trim().split(/\r?\n/), ['1', 'test-environment', root, root])
+    const [terminal, environment, directory, searchPath] = stdout.trim().split(/\r?\n/)
+    assert.equal(terminal, '1')
+    assert.equal(environment, 'test-environment')
+    assert.equal(await realpath(directory), await realpath(root))
+    // PowerShell may prepend its own installation directory on first startup.
+    assert.ok(searchPath.split(path.delimiter).includes(root))
     assert.equal(await readFile(`${executable}:Zone.Identifier`, 'utf8'), origin)
   } finally {
     await rm(root, { recursive: true, force: true })
