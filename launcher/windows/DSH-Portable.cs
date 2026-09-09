@@ -57,6 +57,8 @@ namespace DshPortable
         public string themePreference { get; set; }
         public string currentSessionId { get; set; }
         public bool hasRunningSession { get; set; }
+        public bool canGoBack { get; set; }
+        public bool canGoForward { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
     }
 
@@ -644,6 +646,8 @@ namespace DshPortable
         private Color Border { get { return dark ? Color.FromArgb(61, 63, 66) : Color.FromArgb(218, 218, 218); } }
         internal Color TextColor { get { return dark ? Color.FromArgb(238, 239, 241) : Color.FromArgb(15, 17, 21); } }
         internal Color CaptionColor { get { return dark ? Color.FromArgb(173, 178, 184) : Color.FromArgb(97, 102, 107); } }
+        internal Color DisabledColor { get { return dark ? Color.FromArgb(121, 124, 129) : Color.FromArgb(148, 151, 157); } }
+        internal Color DisabledCaptionColor { get { return dark ? Color.FromArgb(112, 116, 121) : Color.FromArgb(157, 160, 166); } }
         internal Color SurfaceColor { get { return Surface; } }
         internal Color SelectedColor { get { return Selected; } }
         internal Color BorderColor { get { return Border; } }
@@ -820,6 +824,7 @@ namespace DshPortable
         private bool indeterminate = true;
         private int progressValue;
         private int rotation;
+        private readonly Stopwatch animationClock = Stopwatch.StartNew();
 
         internal DshActivityRing()
         {
@@ -829,7 +834,7 @@ namespace DshPortable
             animationTimer = new System.Windows.Forms.Timer { Interval = 16, Enabled = true };
             animationTimer.Tick += delegate
             {
-                rotation = (rotation + 7) % 360;
+                rotation = (int)(animationClock.Elapsed.TotalMilliseconds * 0.24) % 360;
                 Invalidate();
             };
         }
@@ -897,6 +902,257 @@ namespace DshPortable
         {
             if (disposing) animationTimer.Dispose();
             base.Dispose(disposing);
+        }
+    }
+
+    internal sealed class DesktopTitleRenderer : ToolStripProfessionalRenderer
+    {
+        private readonly bool dark;
+        private readonly DshMenuColorTable colors;
+
+        internal DesktopTitleRenderer(bool isDark) : this(new DshMenuColorTable(isDark), isDark) { }
+
+        private DesktopTitleRenderer(DshMenuColorTable menuColors, bool isDark) : base(menuColors)
+        {
+            colors = menuColors;
+            dark = isDark;
+            RoundedEdges = false;
+        }
+
+        internal DshMenuColorTable Colors { get { return colors; } }
+
+        private bool IsDesktopDropDown(ToolStrip toolStrip)
+        {
+            return toolStrip is ToolStripDropDown;
+        }
+
+        private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+        {
+            int diameter = radius * 2;
+            GraphicsPath path = new GraphicsPath();
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            if (e.ToolStrip is DesktopTitleStrip)
+            {
+                e.Graphics.Clear(e.ToolStrip.BackColor);
+                return;
+            }
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                using (SolidBrush brush = new SolidBrush(colors.SurfaceColor))
+                    e.Graphics.FillRectangle(brush, new Rectangle(Point.Empty, e.ToolStrip.Size));
+                return;
+            }
+            base.OnRenderToolStripBackground(e);
+        }
+
+        protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+        {
+            if (!(e.ToolStrip is DesktopTitleStrip)) base.OnRenderToolStripBorder(e);
+        }
+
+        protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
+                using (SolidBrush surface = new SolidBrush(colors.SurfaceColor))
+                    e.Graphics.FillRectangle(surface, new Rectangle(Point.Empty, e.Item.Size));
+                if (dropDownItem == null || (!dropDownItem.Selected && !dropDownItem.Pressed)) return;
+                Rectangle selectedBounds = new Rectangle(4, 2, Math.Max(1, e.Item.Width - 8), Math.Max(1, e.Item.Height - 4));
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath path = RoundedRectangle(selectedBounds, 4))
+                using (SolidBrush selected = new SolidBrush(colors.SelectedColor))
+                    e.Graphics.FillPath(selected, path);
+                return;
+            }
+            if (!(e.ToolStrip is DesktopTitleStrip)) { base.OnRenderMenuItemBackground(e); return; }
+            if (!e.Item.Enabled || (!e.Item.Selected && !e.Item.Pressed)) return;
+            bool close = e.Item.Name == "caption-close";
+            Rectangle bounds = new Rectangle(0, 0, e.Item.Width, e.Item.Height);
+            Color color = close ? Color.FromArgb(232, 17, 35)
+                : e.Item.Pressed ? (dark ? Color.FromArgb(62, 62, 62) : Color.FromArgb(220, 220, 220))
+                : dark ? Color.FromArgb(47, 47, 47) : Color.FromArgb(235, 235, 235);
+            using (SolidBrush brush = new SolidBrush(color))
+            {
+                if (e.Item.Name.StartsWith("caption-"))
+                {
+                    if (close && e.ToolStrip.FindForm().WindowState == FormWindowState.Normal)
+                    {
+                        using (GraphicsPath corner = new GraphicsPath())
+                        {
+                            corner.AddLine(0, 0, bounds.Right - 8, 0);
+                            corner.AddArc(bounds.Right - 16, 0, 16, 16, 270, 90);
+                            corner.AddLine(bounds.Right, 8, bounds.Right, bounds.Bottom);
+                            corner.AddLine(bounds.Right, bounds.Bottom, 0, bounds.Bottom);
+                            corner.CloseFigure();
+                            SmoothingMode previous = e.Graphics.SmoothingMode;
+                            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                            e.Graphics.FillPath(brush, corner);
+                            e.Graphics.SmoothingMode = previous;
+                        }
+                    }
+                    else e.Graphics.FillRectangle(brush, bounds);
+                    return;
+                }
+                bounds.Inflate(-1, -2);
+                using (GraphicsPath shape = new GraphicsPath())
+                {
+                    int diameter = e.Item.Name.StartsWith("nav-") ? 14 : 8;
+                    shape.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+                    shape.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+                    shape.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+                    shape.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+                    shape.CloseFigure();
+                    SmoothingMode previous = e.Graphics.SmoothingMode;
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    e.Graphics.FillPath(brush, shape);
+                    e.Graphics.SmoothingMode = previous;
+                }
+            }
+        }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                int y = e.Item.Height / 2;
+                using (Pen pen = new Pen(colors.BorderColor))
+                    e.Graphics.DrawLine(pen, 12, y, Math.Max(12, e.Item.Width - 12), y);
+                return;
+            }
+            base.OnRenderSeparator(e);
+        }
+
+        protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
+                if (dropDownItem == null) { base.OnRenderItemText(e); return; }
+                string shortcut = dropDownItem.ShowShortcutKeys ? dropDownItem.ShortcutKeyDisplayString ?? "" : "";
+                Size shortcutSize = String.IsNullOrEmpty(shortcut)
+                    ? Size.Empty
+                    : TextRenderer.MeasureText(shortcut, e.TextFont, Size.Empty,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                int trailing = dropDownItem.DropDownItems.Count > 0 ? 30 : 12;
+                int shortcutLeft = Math.Max(12, e.Item.Width - trailing - shortcutSize.Width);
+                Color titleColor = dropDownItem.Enabled ? colors.TextColor : colors.DisabledColor;
+                Color shortcutColor = dropDownItem.Enabled ? colors.CaptionColor : colors.DisabledCaptionColor;
+                if (e.Text == dropDownItem.Text)
+                {
+                    int titleRight = String.IsNullOrEmpty(shortcut) ? e.Item.Width - trailing : shortcutLeft - 12;
+                    Rectangle titleBounds = new Rectangle(12, 0, Math.Max(1, titleRight - 12), e.Item.Height);
+                    TextRenderer.DrawText(e.Graphics, dropDownItem.Text, e.TextFont, titleBounds, titleColor,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter);
+                    return;
+                }
+                if (e.Text == shortcut && !String.IsNullOrEmpty(shortcut))
+                {
+                    Rectangle shortcutBounds = new Rectangle(shortcutLeft, 0, shortcutSize.Width, e.Item.Height);
+                    TextRenderer.DrawText(e.Graphics, shortcut, e.TextFont, shortcutBounds, shortcutColor,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+                }
+                return;
+            }
+            if (e.ToolStrip is DesktopTitleStrip && e.Item.Name.StartsWith("nav-"))
+            {
+                Color color = !e.Item.Enabled ? (dark ? Color.FromArgb(77, 77, 77) : Color.FromArgb(184, 184, 184))
+                    : e.Item.Selected || e.Item.Pressed ? (dark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(40, 40, 40))
+                    : dark ? Color.FromArgb(151, 151, 151) : Color.FromArgb(103, 103, 103);
+                float x = e.Item.Width / 2F, y = e.Item.Height / 2F;
+                using (Pen pen = new Pen(color, 1.1F))
+                {
+                    pen.StartCap = LineCap.Round;
+                    pen.EndCap = LineCap.Round;
+                    pen.LineJoin = LineJoin.Round;
+                    SmoothingMode previous = e.Graphics.SmoothingMode;
+                    e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    if (e.Item.Name == "nav-sidebar")
+                    {
+                        using (GraphicsPath outline = RoundedRectangle(new Rectangle((int)x - 6, (int)y - 5, 12, 10), 2))
+                            e.Graphics.DrawPath(pen, outline);
+                        e.Graphics.DrawLine(pen, x - 2, y - 5, x - 2, y + 5);
+                    }
+                    else
+                    {
+                        float direction = e.Item.Name == "nav-back" ? -1 : 1;
+                        e.Graphics.DrawLine(pen, x - 5, y, x + 5, y);
+                        e.Graphics.DrawLine(pen, x + direction * 5, y, x, y - 4);
+                        e.Graphics.DrawLine(pen, x + direction * 5, y, x, y + 4);
+                    }
+                    e.Graphics.SmoothingMode = previous;
+                }
+                return;
+            }
+            if (e.ToolStrip is DesktopTitleStrip)
+                e.TextColor = e.Item.Name == "caption-close" && e.Item.Selected ? Color.White
+                    : e.Item.Selected ? (dark ? Color.White : Color.FromArgb(30, 30, 32))
+                    : dark ? Color.FromArgb(155, 155, 155) : Color.FromArgb(96, 96, 96);
+            base.OnRenderItemText(e);
+        }
+
+        protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.Item.Owner))
+            {
+                ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
+                Color glyph = dropDownItem != null && dropDownItem.Enabled ? colors.TextColor : colors.DisabledColor;
+                Rectangle arrowBounds = new Rectangle(Math.Max(0, e.Item.Width - 24),
+                    Math.Max(0, (e.Item.Height - 12) / 2), 12, 12);
+                ControlPaint.DrawMenuGlyph(e.Graphics, arrowBounds, MenuGlyph.Arrow, glyph,
+                    e.Item.Selected ? colors.SelectedColor : colors.SurfaceColor);
+                return;
+            }
+            base.OnRenderArrow(e);
+        }
+    }
+
+    internal sealed class DesktopDropDown : ToolStripDropDownMenu
+    {
+        protected override Padding DefaultPadding { get { return new Padding(0, 6, 0, 6); } }
+    }
+
+    internal sealed class DesktopMenuItem : ToolStripMenuItem
+    {
+        internal DesktopMenuItem(string text) : base(text) { }
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            // ToolStripMenuItem starts its auto-expand timer here. Selection is
+            // painted by the strip; clicks and keyboard navigation retain native handling.
+            Invalidate();
+        }
+    }
+
+    internal sealed class DesktopTitleStrip : MenuStrip
+    {
+        internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
+        internal readonly Font MenuFont = new Font("Microsoft YaHei UI", 9F);
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing) CaptionFont.Dispose();
+            if (disposing) MenuFont.Dispose();
+        }
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == 0x0084)
+            {
+                long position = message.LParam.ToInt64();
+                Point point = PointToClient(new Point((short)position, (short)(position >> 16)));
+                if (GetItemAt(point) == null || (FindForm().WindowState == FormWindowState.Normal
+                    && (point.Y < 4 || point.X < 4 || point.X >= Width - 4)))
+                { message.Result = new IntPtr(-1); return; }
+            }
+            base.WndProc(ref message);
         }
     }
 
@@ -1301,8 +1557,67 @@ namespace DshPortable
             base.OnFormClosing(eventArgs);
         }
 
+        protected override CreateParams CreateParams
+        {
+            get
+            {
+                CreateParams parameters = base.CreateParams;
+                // Preserve native sizing/system-menu styles, without a second caption.
+                if (desktopStart) parameters.Style &= ~0x00C00000; // WS_CAPTION
+                return parameters;
+            }
+        }
+
         protected override void WndProc(ref Message message)
         {
+            if (desktopStart && !fullscreen && message.Msg == 0x0085)
+            {
+                message.Result = IntPtr.Zero;
+                return;
+            }
+            if (desktopStart && !fullscreen && message.Msg == 0x0086)
+            {
+                // Activate normally without repainting a classic non-client frame
+                // over the client-drawn title row.
+                message.LParam = new IntPtr(-1);
+                base.WndProc(ref message);
+                return;
+            }
+            if (desktopStart && !fullscreen && message.Msg == 0x0083 && message.WParam != IntPtr.Zero)
+            {
+                // Keep native sizing styles but render through the invisible
+                // resize frame; otherwise its inset separates controls from DWM corners.
+                int[] bounds = new int[4];
+                Marshal.Copy(message.LParam, bounds, 0, bounds.Length);
+                base.WndProc(ref message);
+                if (WindowState == FormWindowState.Normal)
+                {
+                    Marshal.Copy(bounds, 0, message.LParam, bounds.Length);
+                    message.Result = IntPtr.Zero;
+                }
+                return;
+            }
+            if (desktopStart && !fullscreen && desktopMenu != null && message.Msg == 0x0084)
+            {
+                long position = message.LParam.ToInt64();
+                Point point = desktopMenu.PointToClient(new Point((short)position, (short)(position >> 16)));
+                Point clientPoint = PointToClient(new Point((short)position, (short)(position >> 16)));
+                if (WindowState == FormWindowState.Normal && ClientRectangle.Contains(clientPoint))
+                {
+                    bool left = clientPoint.X < 4, right = clientPoint.X >= ClientSize.Width - 4;
+                    bool top = clientPoint.Y < 4, bottom = clientPoint.Y >= ClientSize.Height - 4;
+                    int edge = top ? (left ? 13 : right ? 14 : 12)
+                        : bottom ? (left ? 16 : right ? 17 : 15) : left ? 10 : right ? 11 : 0;
+                    if (edge != 0) { message.Result = new IntPtr(edge); return; }
+                }
+                if (desktopMenu.ClientRectangle.Contains(point) && desktopMenu.GetItemAt(point) == null)
+                {
+                    message.Result = new IntPtr(2); // Native caption drag/double-click/system menu.
+                    return;
+                }
+                base.WndProc(ref message);
+                return;
+            }
             if (message.Msg == exitMessage)
             {
                 if (!shutdownRunning) BeginDesktopShutdown();
@@ -1326,14 +1641,34 @@ namespace DshPortable
             if (desktopMenu != null) { Controls.Remove(desktopMenu); desktopMenu.Dispose(); }
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
-            desktopMenu = new MenuStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden, Visible = !fullscreen };
+            desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
+                AutoSize = false, Height = 36, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen };
+            desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
             desktopContent.BringToFront();
-            ToolStripMenuItem file = new ToolStripMenuItem(L("文件(&F)", "&File"));
-            ToolStripMenuItem view = new ToolStripMenuItem(L("视图(&V)", "&View"));
-            ToolStripMenuItem help = new ToolStripMenuItem(L("帮助(&H)", "&Help"));
+            ToolStripMenuItem file = new DesktopMenuItem(L("文件", "&File"));
+            ToolStripMenuItem view = new DesktopMenuItem(L("视图", "&View"));
+            ToolStripMenuItem help = new DesktopMenuItem(L("帮助", "&Help"));
+            file.Name = "menu-file"; view.Name = "menu-view"; help.Name = "menu-help";
             desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
+            foreach (ToolStripMenuItem menu in desktopMenu.Items)
+            {
+                menu.AutoSize = false;
+                menu.Size = new Size(TextRenderer.MeasureText(menu.Text, desktopMenu.Font,
+                    Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width + 20, 28);
+                menu.Margin = new Padding(0, 4, 2, 4);
+                menu.Padding = new Padding(8, 0, 8, 0);
+            }
+            AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("折叠/展开侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
+            AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
+            AddNavigationCommand(2, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
+            desktopMenu.ShowItemToolTips = true;
+            AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { Close(); });
+            AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate {
+                WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+            });
+            AddCaptionCommand("caption-minimize", "\uE921", L("最小化", "Minimize"), delegate { WindowState = FormWindowState.Minimized; });
             AddDesktopCommand(file, "new-session", L("新会话", "New session"), Keys.Control | Keys.N,
                 delegate { PostBridgeAction("new-session", null); });
             AddDesktopCommand(file, "settings", L("设置", "Settings"), Keys.Control | Keys.Oemcomma,
@@ -1364,7 +1699,49 @@ namespace DshPortable
                     Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
             help.DropDownItems.Add(CreateReportProblemItem());
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
+            foreach (ToolStripMenuItem menu in desktopMenu.Items) AttachDesktopDropDownHandlers(menu);
             RefreshDesktopCommands();
+        }
+
+        private void AttachDesktopDropDownHandlers(ToolStripMenuItem menu)
+        {
+            if (menu.DropDownItems.Count == 0) return;
+            ToolStripDropDown previous = menu.DropDown;
+            ToolStripItem[] items = previous.Items.Cast<ToolStripItem>().ToArray();
+            previous.Items.Clear();
+            menu.DropDown = new DesktopDropDown();
+            menu.DropDown.Items.AddRange(items);
+            previous.Dispose();
+            ToolStripDropDown dropDown = menu.DropDown;
+            dropDown.Opened += delegate { ApplyRoundedCorners(dropDown); };
+            foreach (ToolStripMenuItem child in dropDown.Items.OfType<ToolStripMenuItem>())
+                AttachDesktopDropDownHandlers(child);
+        }
+
+        private void AddCaptionCommand(string name, string glyph, string label, EventHandler action)
+        {
+            desktopMenu.Items.Add(new ToolStripMenuItem(glyph, null, action) {
+                Name = name, Alignment = ToolStripItemAlignment.Right, AutoSize = false,
+                Size = new Size(46, 36), Margin = Padding.Empty, Padding = Padding.Empty,
+                Font = ((DesktopTitleStrip)desktopMenu).CaptionFont, AccessibleName = label, ToolTipText = label,
+            });
+        }
+
+        private void AddNavigationCommand(int index, string name, string action, string label, Keys shortcut)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem(" ", null, delegate { PostBridgeAction(action, null); }) {
+                Name = name, AutoSize = false, Size = new Size(32, 28), Margin = new Padding(0, 4, 0, 4),
+                AccessibleName = label, ToolTipText = label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
+            };
+            desktopMenu.Items.Insert(index, item);
+            desktopShortcuts.Add(shortcut, item);
+        }
+
+        protected override void OnSizeChanged(EventArgs eventArgs)
+        {
+            base.OnSizeChanged(eventArgs);
+            if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
+                desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
         }
 
         private void AddDesktopCommand(ToolStripMenuItem parent, string id, string title, Keys shortcut, EventHandler action)
@@ -1385,6 +1762,10 @@ namespace DshPortable
         private void RefreshDesktopCommands()
         {
             if (desktopMenu == null) return;
+            bool navigationReady = desktopReady && trayBridgeReady && !shutdownRunning && !operationRunning;
+            desktopMenu.Items["nav-sidebar"].Enabled = navigationReady;
+            desktopMenu.Items["nav-back"].Enabled = navigationReady && trayState != null && trayState.canGoBack;
+            desktopMenu.Items["nav-forward"].Enabled = navigationReady && trayState != null && trayState.canGoForward;
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
                 foreach (ToolStripItem item in menu.DropDownItems)
                 {
@@ -1405,11 +1786,11 @@ namespace DshPortable
             if (!desktopStart) return false;
             if (!fullscreen && (key == Keys.F10 || key == (Keys.Alt | Keys.F) || key == (Keys.Alt | Keys.V) || key == (Keys.Alt | Keys.H)))
             {
-                int index = key == (Keys.Alt | Keys.V) ? 1 : key == (Keys.Alt | Keys.H) ? 2 : 0;
+                string name = key == (Keys.Alt | Keys.V) ? "menu-view" : key == (Keys.Alt | Keys.H) ? "menu-help" : "menu-file";
                 BeginInvoke(new Action(delegate {
                     if (fullscreen || IsDisposed) return;
                     RefreshDesktopCommands();
-                    ((ToolStripMenuItem)desktopMenu.Items[index]).ShowDropDown();
+                    ((ToolStripMenuItem)desktopMenu.Items[name]).ShowDropDown();
                 }));
                 return true;
             }
@@ -1527,6 +1908,70 @@ namespace DshPortable
             catch { }
         }
 
+        private static int MeasureDesktopDropDownWidth(ToolStripDropDown dropDown)
+        {
+            int desired = 260;
+            foreach (ToolStripItem item in dropDown.Items)
+            {
+                ToolStripMenuItem menuItem = item as ToolStripMenuItem;
+                if (menuItem == null) continue;
+                Font font = menuItem.Font ?? dropDown.Font;
+                Size title = TextRenderer.MeasureText(menuItem.Text ?? "", font, Size.Empty,
+                    TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                string shortcut = menuItem.ShowShortcutKeys ? menuItem.ShortcutKeyDisplayString ?? "" : "";
+                Size shortcutSize = String.IsNullOrEmpty(shortcut)
+                    ? Size.Empty
+                    : TextRenderer.MeasureText(shortcut, font, Size.Empty,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                int trailing = menuItem.DropDownItems.Count > 0 ? 30 : 12;
+                int measured = 12 + title.Width + (shortcutSize.Width > 0 ? 24 + shortcutSize.Width : 0) + trailing + 2;
+                desired = Math.Max(desired, measured);
+            }
+            return desired;
+        }
+
+        private static void ApplyDesktopDropDownTheme(ToolStripDropDown dropDown, DesktopTitleRenderer renderer,
+            DshMenuColorTable colors)
+        {
+            ToolStripDropDownMenu menu = dropDown as ToolStripDropDownMenu;
+            if (menu != null)
+            {
+                menu.ShowImageMargin = false;
+                menu.ShowCheckMargin = false;
+            }
+            dropDown.Renderer = renderer;
+            dropDown.BackColor = colors.SurfaceColor;
+            dropDown.ForeColor = colors.TextColor;
+            dropDown.Padding = new Padding(0, 6, 0, 6);
+            dropDown.AutoSize = false;
+            int width = MeasureDesktopDropDownWidth(dropDown);
+            int itemWidth = Math.Max(1, width - 2);
+            int height = dropDown.Padding.Vertical + 4;
+            foreach (ToolStripItem item in dropDown.Items)
+            {
+                item.BackColor = colors.SurfaceColor;
+                item.ForeColor = colors.TextColor;
+                item.AutoSize = false;
+                item.Margin = Padding.Empty;
+                if (item is ToolStripSeparator)
+                {
+                    item.Padding = Padding.Empty;
+                    item.Size = new Size(itemWidth, 13);
+                    height += item.Height;
+                    continue;
+                }
+                item.Padding = new Padding(12, 0, 12, 0);
+                item.Size = new Size(itemWidth, 30);
+                height += item.Height;
+                ToolStripMenuItem menuItem = item as ToolStripMenuItem;
+                if (menuItem != null && menuItem.DropDownItems.Count > 0)
+                    ApplyDesktopDropDownTheme(menuItem.DropDown, renderer, colors);
+            }
+            dropDown.MinimumSize = new Size(width, height);
+            dropDown.MaximumSize = new Size(width, height);
+            dropDown.Size = new Size(width, height);
+        }
+
         private void ApplyDesktopChrome()
         {
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
@@ -1565,15 +2010,15 @@ namespace DshPortable
             if (desktopMenu != null && desktopMenuLanguage != uiLanguage) InitializeDesktopMenu();
             if (desktopMenu != null)
             {
-                desktopMenu.BackColor = background;
+                desktopMenu.BackColor = dark ? Color.FromArgb(30, 30, 30) : Color.FromArgb(250, 250, 250);
                 desktopMenu.ForeColor = foreground;
-                desktopMenu.Renderer = new ToolStripProfessionalRenderer(new DshMenuColorTable(dark));
+                DesktopTitleRenderer renderer = new DesktopTitleRenderer(dark);
+                DshMenuColorTable colors = renderer.Colors;
+                desktopMenu.Renderer = renderer;
                 foreach (ToolStripMenuItem menu in desktopMenu.Items)
                 {
                     menu.ForeColor = foreground;
-                    menu.DropDown.BackColor = background;
-                    menu.DropDown.ForeColor = foreground;
-                    foreach (ToolStripItem item in menu.DropDownItems) item.ForeColor = foreground;
+                    ApplyDesktopDropDownTheme(menu.DropDown, renderer, colors);
                 }
             }
             if (webView != null && !webView.IsDisposed) webView.DefaultBackgroundColor = background;
@@ -1586,7 +2031,7 @@ namespace DshPortable
                 int darkMode = dark ? 1 : 0;
                 uint caption = ToColorRef(background);
                 uint text = ToColorRef(foreground);
-                uint border = caption;
+                uint border = 0xFFFFFFFE; // DWMWA_COLOR_NONE: DWM still owns corner clipping/shadow.
                 try
                 {
                     DwmSetWindowAttribute(Handle, DwmwaUseImmersiveDarkMode, ref darkMode, sizeof(int));
@@ -1768,6 +2213,7 @@ namespace DshPortable
 
         private void RebuildTrayMenu()
         {
+            RefreshDesktopCommands();
             if (trayMenuOpen)
             {
                 trayMenuRefreshPending = true;
@@ -3342,6 +3788,20 @@ namespace DshPortable
                     BeginInvoke((MethodInvoker)delegate {
                         Interlocked.Exchange(ref desktopHealthAck, Stopwatch.GetTimestamp());
                         Interlocked.Exchange(ref desktopHealthPending, 0);
+                        if (desktopStart && !desktopReady && launchPanel != null && activityRing != null)
+                        {
+                            Point clientOrigin = PointToScreen(Point.Empty);
+                            Rectangle ringBounds = launchPanel.RectangleToClient(activityRing.RectangleToScreen(activityRing.ClientRectangle));
+                            AppendStartupTrace("native-host", "native-loading-observation", new Dictionary<string, object> {
+                                { "windowVisible", Visible }, { "windowState", WindowState.ToString() },
+                                { "topFrameInset", clientOrigin.Y - Top }, { "menuTop", desktopMenu == null ? -1 : desktopMenu.Top },
+                                { "loadingVisible", launchPanel.Visible }, { "ringVisible", activityRing.Visible },
+                                { "loadingFrontmost", desktopContent.Controls.GetChildIndex(launchPanel) == 0 },
+                                { "ringInViewport", launchPanel.ClientRectangle.IntersectsWith(ringBounds) },
+                                { "paintedFrames", activityRing.PaintedFrames }, { "rotation", activityRing.Rotation },
+                                { "loadingWidth", launchPanel.Width }, { "loadingHeight", launchPanel.Height }
+                            });
+                        }
                     });
             }
             catch { }
@@ -4809,6 +5269,10 @@ namespace DshPortable
             webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
             webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
             await webView.EnsureCoreWebView2Async(webViewEnvironment);
+            webView.SendToBack();
+            if (launchPanel.Visible) launchPanel.BringToFront();
+            AppendStartupTrace("native-host", "webview-initialized-behind-loader",
+                new Dictionary<string, object> { { "loadingFrontmost", desktopContent.Controls.GetChildIndex(launchPanel) == 0 } });
             ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
             RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
         }
@@ -4831,7 +5295,7 @@ namespace DshPortable
                 Dock = DockStyle.Fill,
                 Location = Point.Empty,
                 DefaultBackgroundColor = BackColor,
-                Visible = true,
+                Visible = false,
             };
             view.KeyDown += delegate(object sender, KeyEventArgs args)
             {
@@ -4903,23 +5367,11 @@ namespace DshPortable
             applicationUri = new Uri(url);
             await NavigateWorkspaceAsync(url, false);
 
-            SuspendLayout();
-            FormBorderStyle = fullscreen ? FormBorderStyle.None : FormBorderStyle.Sizable;
-            MaximizeBox = true;
-            MinimizeBox = true;
-            MinimumSize = new Size(900, 620);
-            FitWebViewToClient();
-            webView.Visible = true;
-            webView.BringToFront();
-            if (desktopMenu != null) desktopContent.BringToFront();
-            ApplyDesktopWindowCorners();
-            ApplyDesktopChrome();
-            launchPanel.Visible = false;
-            ResumeLayout(true);
-            FitWebViewToClient();
-            BeginInvoke(new Action(FitWebViewToClient));
+            // NavigateWorkspaceAsync performs the single native-to-WebView handoff.
+            // Reapplying chrome/layout here repaints an already visible workspace.
             operationRunning = false;
             desktopReady = true;
+            RefreshDesktopCommands();
             trayIcon.Visible = true;
         }
 

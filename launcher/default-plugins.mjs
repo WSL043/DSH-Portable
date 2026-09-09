@@ -15,14 +15,14 @@ function pluginInstallError(result) {
 
 export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-image-viewer',
-  version: '0.1.0-beta.11',
-  spec: '0.1.0-beta.11',
+  version: '0.1.0',
+  spec: '0.1.0',
   filename: 'dsh-image-viewer.tgz',
-  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0-beta.11.tgz',
-  sha256: '4c10d6e21a6a000528429b9b91ac946c472f9d08a669cdec78886e19fffb0d58',
-  integrity: 'sha512-Ea0u5MKSNYvyazirUM8i+o8B4fz9Uv6B+Cl4o39QJFXVe/FT/Dphv1kwzNr6u5mp8Do2GviV0isKuTQ17Z2WiQ==',
+  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.0.tgz',
+  sha256: 'b5ec2650997bfb2db14854f41c26539ced958c1684b6b4597b4244cea6d25a20',
+  integrity: 'sha512-jU1zjemf4GMdBOoZf8gargbhFldhdGLOX2kDbZIDDVdWcY4GLNAjAG+teRPhGW7HXsjYaGkKy8z+K8hAIEDkdg==',
   license: 'MIT',
-  reviewedCommit: '7943a70539586739f617d9430dff43ff9a3dae99',
+  reviewedCommit: '7f3be2c1788e205ea05bdcb83a69d60bfa71b5fb',
 }), Object.freeze({
   name: 'dsh-chat-manager',
   version: '1.3.3',

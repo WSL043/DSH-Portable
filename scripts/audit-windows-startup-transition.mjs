@@ -333,6 +333,11 @@ try {
     await capture(client, '04-main-workspace.png')
   }
   await dismissBlockingOnboarding(client)
+  await execFileAsync('powershell.exe', [
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
+    path.join(import.meta.dirname, 'capture-windows-native-window.ps1'),
+    '-TargetProcessId', String(launcher.pid), '-OutputDirectory', path.join(output, '04-native-workspace'),
+  ], { windowsHide: true, timeout: 20000 })
   let existingSession = null
   if (existingSessionProof) existingSession = await createExistingSession(client)
   if (openSessionTitle) {

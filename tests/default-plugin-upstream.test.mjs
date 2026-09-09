@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { DEFAULT_PLUGINS } from '../launcher/default-plugins.mjs'
 import {
   evaluateDefaultPluginUpstream,
 } from '../scripts/check-default-plugin-upstream.mjs'
 
-const pinned = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-image-viewer')
+// Exercise a historical prerelease pin independently of the shipped default.
+const pinned = { name: 'dsh-image-viewer', version: '0.1.0-beta.11', integrity: 'sha512-fixture' }
 
 function registry({
   latest = '0.0.9',

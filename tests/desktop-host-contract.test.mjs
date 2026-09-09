@@ -72,7 +72,9 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
   )
   const desktopReveal = host.slice(host.indexOf('private async Task ShowDesktopAsync'), host.indexOf('private void OnNewWindowRequested'))
   assert.doesNotMatch(desktopReveal, /RestoreDesktopWindowState\(\)/)
-  assert.match(desktopReveal, /BeginInvoke\(new Action\(FitWebViewToClient\)\)/)
+  const postNavigation = desktopReveal.slice(0, desktopReveal.indexOf('private void FitWebViewToClient'))
+  assert.doesNotMatch(postNavigation, /FormBorderStyle\s*=|ApplyDesktopChrome\(\)|launchPanel\.Visible\s*=|BeginInvoke\(new Action\(FitWebViewToClient\)\)/,
+    'completed navigation must not reapply chrome or perform a second loading handoff')
   const navigationFlow = host.slice(host.indexOf('private async Task NavigateWorkspaceAsync'), host.indexOf('private async Task<bool> ProbeWorkspaceDomAsync'))
   assert.match(navigationFlow, /WaitForWorkspaceHandoffAsync\(url, workspaceSurfaceReady\.Task\)/)
   assert.match(navigationFlow, /RevealDesktopSurface\(\)/)

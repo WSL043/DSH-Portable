@@ -2,7 +2,7 @@ window.__ModuleLoader__.load({
   id: '@wsl043/dsh-portable-desktop-bridge',
   factory: function (require) {
     const exports = {}
-    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload']
+    const inject = ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload', 'layout']
     const React = require('react')
 
     const copy = {
@@ -1037,6 +1037,29 @@ window.__ModuleLoader__.load({
         const sessionEventStops = new Map()
         let publishTimer = null
         let lastProjection = ''
+        const navigation = []
+        let navigationIndex = -1
+        let observedSession
+        const recordNavigation = () => {
+          const snapshot = ctx.sessions.list.getSnapshot()
+          if (snapshot.phase !== 'ready') return
+          const current = snapshot.current ?? null
+          if (current === observedSession) return
+          observedSession = current
+          if (navigationIndex >= 0 && navigation[navigationIndex] === current) return
+          navigation.splice(navigationIndex + 1)
+          navigation.push(current)
+          if (navigation.length > 100) navigation.shift()
+          navigationIndex = navigation.length - 1
+        }
+        const navigationTarget = direction => {
+          const snapshot = ctx.sessions.list.getSnapshot()
+          for (let index = navigationIndex + direction; index >= 0 && index < navigation.length; index += direction) {
+            const id = navigation[index]
+            if (id === null || snapshot.byId?.[id] && snapshot.byId[id].origin !== 'subagent') return index
+          }
+          return -1
+        }
         let workspaceRequestSequence = 0
         const pendingWorkspaceRequests = new Map()
         const originalPickDirectory = ctx.workspaces?.pickDirectory
@@ -1078,6 +1101,9 @@ window.__ModuleLoader__.load({
           syncSessionEventSubscriptions()
           if (host.capabilities.sessionProjection !== true) return
           const state = sessionState(ctx)
+          recordNavigation()
+          state.canGoBack = navigationTarget(-1) >= 0
+          state.canGoForward = navigationTarget(1) >= 0
           const projection = JSON.stringify(state)
           if (projection === lastProjection) return
           lastProjection = projection
@@ -1149,6 +1175,18 @@ window.__ModuleLoader__.load({
             return
           }
           if (message.type !== 'dsh-portable/action') return
+          if (message.action === 'toggle-sidebar') { ctx.layout.toggleSidebar(); return }
+          if (message.action === 'navigate-back' || message.action === 'navigate-forward') {
+            recordNavigation()
+            const target = navigationTarget(message.action === 'navigate-back' ? -1 : 1)
+            if (target < 0) return
+            navigationIndex = target
+            const id = navigation[target]
+            if (id === null) ctx.sessions.clear()
+            else ctx.sessions.open(id)
+            publish()
+            return
+          }
           if (message.action === 'open-settings') {
             window.dispatchEvent(new Event('dsh-portable/open-settings'))
             return
@@ -1225,7 +1263,7 @@ window.__ModuleLoader__.load({
         }
 
         webview.addEventListener('message', receive)
-        const stopSessions = ctx.sessions.list.subscribe(schedulePublish)
+        const stopSessions = ctx.sessions.list.subscribe(() => { recordNavigation(); schedulePublish() })
         const stopLocale = ctx.on('locale/change', publish)
         const stopTheme = ctx.on('theme/change', publish)
         publish()

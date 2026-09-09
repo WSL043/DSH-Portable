@@ -373,6 +373,8 @@ jobs:
           New-Item -ItemType Directory -Force -Path $ThemeRoot | Out-Null
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $ThemeRoot
           if ($LASTEXITCODE -ne 0) { throw 'Theme fixture extraction failed.' }
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/smoke-windows-titlebar.ps1 -Root (Join-Path $ThemeRoot 'DSH-Portable') -Evidence (Join-Path $ThemeRoot 'DSH-Portable/acceptance/titlebar')
+          if ($LASTEXITCODE -ne 0) { throw 'Integrated titlebar acceptance failed.' }
           node scripts/smoke-windows-startup-theme.mjs (Join-Path $ThemeRoot 'DSH-Portable') --disposable
           if ($LASTEXITCODE -ne 0) { throw 'Startup theme and history acceptance failed.' }
       - name: Verify market category expansion after window resizing

@@ -147,12 +147,12 @@ test('Simplified Chinese is the default GitHub landing page and English is a com
   assert.equal(await exists('README.zh-CN.md'), false)
   assert.match(chinese.slice(0, 1400), /<strong>简体中文<\/strong>.+README\.en\.md/s)
   assert.match(english.slice(0, 1400), /README\.md.+<strong>English<\/strong>/s)
-  assert.equal((english.match(/assets\/dsh-interface-en\.png/g) || []).length, 1)
-  assert.equal((chinese.match(/assets\/dsh-interface-zh\.png/g) || []).length, 1)
+  assert.equal((english.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
+  assert.equal((chinese.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
   assert.equal((english.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
   assert.equal((chinese.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
   assert.doesNotMatch(`${chinese}\n${english}`, /assets\/(?:dsh-interface|dsh-portable-folder)\.png/)
-  for (const asset of ['assets/dsh-interface-zh.png', 'assets/dsh-interface-en.png']) {
+  for (const asset of ['assets/dsh-workspace-0.6.4.png', 'assets/windows-navigation-dark.png']) {
     assert.equal(await exists(asset), true, `${asset} must be shipped with the repository`)
   }
   assert.equal(await exists('assets/dsh-portable-extensions-en.png'), false)

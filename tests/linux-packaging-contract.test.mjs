@@ -36,10 +36,11 @@ test('Linux requires a compatible native shell before installing the app compone
 })
 
 test('Linux shell is a native Tauri window over the official local DSH server', async () => {
-  const [cargo, cargoLock, source, config, build, cli, rootCli, pnpmCli, terminal, terminalShim, attributes, workflow] = await Promise.all([
+  const [cargo, cargoLock, source, authRecovery, config, build, cli, rootCli, pnpmCli, terminal, terminalShim, attributes, workflow] = await Promise.all([
     read('launcher/linux/Cargo.toml'),
     read('launcher/linux/Cargo.lock'),
     read('launcher/linux/src/main.rs'),
+    read('launcher/linux/auth-recovery.js'),
     read('launcher/linux/tauri.conf.json'),
     read('scripts/build-linux.sh'),
     read('launcher/portable-cli.mjs'),
@@ -58,8 +59,20 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
   assert.match(source, /--no-browser/)
   assert.match(source, /navigate\(/)
   assert.match(source, /initialization_script/)
+  assert.match(source, /include_str!\("\.\.\/auth-recovery\.js"\)/)
   assert.match(source, /__DSH_PORTABLE_NATIVE__/)
   assert.match(source, /portable_host_message/)
+  assert.match(source, /dsh-portable\/reconnect-workspace/)
+  assert.match(source, /dsh-portable\/auth-recovery-ready/)
+  assert.match(source, /validated_reconnect_url/)
+  assert.match(source, /same_origin/)
+  assert.match(source, /DSH_PORTABLE_TEST_AUTH_RECOVERY/)
+  assert.match(source, /DSH_AUTH_RECOVERY_TEST_PASSED/)
+  assert.match(authRecovery, /body\.textContent\.trim\(\) !== AUTH_REQUIRED_TEXT/)
+  assert.match(authRecovery, /重新连接工作台.*Reconnect workspace/s)
+  assert.match(authRecovery, /schemaVersion: 1, type: RECONNECT_TYPE/)
+  assert.match(authRecovery, /button\.disabled = true/)
+  assert.doesNotMatch(authRecovery, /setInterval/)
   assert.match(source, /dsh-portable\/pick-directory/)
   assert.match(source, /dsh-portable\/pick-data-export/)
   assert.match(source, /dsh-portable\/pick-data-import/)
@@ -133,12 +146,13 @@ test('Linux shell is a native Tauri window over the official local DSH server', 
 })
 
 test('Linux packaging and real product smokes run independently on x64 and arm64', async () => {
-  const [workflow, build, updateSmoke, portableSmoke, appImagePluginSmoke] = await Promise.all([
+  const [workflow, build, updateSmoke, portableSmoke, appImagePluginSmoke, desktopSmoke] = await Promise.all([
     read('.github/workflows/ci.yml'),
     read('scripts/build-linux.sh'),
     read('scripts/smoke-update-artifact.mjs'),
     read('scripts/smoke-portable.mjs'),
     read('scripts/smoke-linux-appimage-plugins.sh'),
+    read('scripts/smoke-linux-desktop-host.sh'),
   ])
   for (const runner of ['ubuntu-22.04', 'ubuntu-22.04-arm']) assert.match(workflow, new RegExp(runner.replaceAll('.', '\\.')))
   assert.match(workflow, /^  linux-build:/m)
@@ -164,6 +178,11 @@ test('Linux packaging and real product smokes run independently on x64 and arm64
   assert.match(appImagePluginSmoke, /--dump-config/)
   assert.match(appImagePluginSmoke, /DSH-Portable-data/)
   assert.match(appImagePluginSmoke, /mv "\$ROOT" "\$MOVED"/)
+  assert.match(desktopSmoke, /DSH_PORTABLE_TEST_AUTH_RECOVERY=1/)
+  assert.match(desktopSmoke, /DSH_AUTH_RECOVERY_TEST_PASSED/)
+  assert.match(desktopSmoke, /--location/)
+  assert.match(desktopSmoke, /--cookie-jar/)
+  assert.match(desktopSmoke, /recovered_backend_pid[\s\S]+BACKEND_PID/)
 })
 
 test('Linux CI dependency installation is bounded, retryable, and shared by every product job', async () => {

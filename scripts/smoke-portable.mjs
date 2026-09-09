@@ -142,10 +142,10 @@ async function assertWebReady(url) {
   assert.equal(await workspaceDocumentReady(url, 2_000), true, 'DSH Web did not return a usable workspace document')
 }
 
-for (const filename of [nodeFor(originalRoot), cliFor(originalRoot), path.join(originalRoot, 'README.zh-CN.txt'), path.join(originalRoot, 'README.en.txt')]) {
+for (const filename of [nodeFor(originalRoot), cliFor(originalRoot), path.join(originalRoot, 'README.txt'), ...['README.zh-CN.txt', 'README.en.txt', 'DATA-MIGRATION.zh-CN.txt', 'DATA-MIGRATION.en.txt'].map(name => path.join(originalRoot, 'docs', name))]) {
   assert.equal(await exists(filename), true, `missing package file: ${filename}`)
 }
-assert.doesNotMatch(await readFile(path.join(originalRoot, 'README.zh-CN.txt'), 'utf8'), /build script|development history|community\.1/i)
+assert.doesNotMatch(await readFile(path.join(originalRoot, 'docs', 'README.zh-CN.txt'), 'utf8'), /build script|development history|community\.1/i)
 
 let nativeHost = null
 

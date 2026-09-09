@@ -23,6 +23,8 @@ npm test
 
 平台或打包改动还必须通过 GitHub Actions 中对应的成品冒烟测试；源码能够构建不等于可以发布。
 
+桌面改动以 0.6.4 的用户验收体验为基线：启动阶段保持连续加载与亮暗主题，原生导航和菜单一致，快捷键可用。默认插件也必须验证实际操作及受支持内核，不能只检查安装成功。Issue 关闭说明应对应具体修复和验证范围；包内组件版本、下载资产与 README 截图必须反映交付成品。保留失败日志和验收证据，不用重复重试代替定位。
+
 Pull Request 请说明用户可见的问题、实现边界和实际完成的验证。无关重构请拆分提交。
 
 提交贡献即表示你同意按本仓库的 Apache-2.0 许可证授权该贡献。
@@ -40,6 +42,8 @@ Thanks for helping improve DSH-Portable. Small, focused changes are easier to re
 Keep Portable-specific behavior in the launcher, desktop bridge, packaging, or update boundary. Preserve sessions, credentials, plugins, and workspaces across updates and repairs. Never commit credentials, private conversations, generated release artifacts, or local build caches.
 
 Run `npm test` before opening a pull request. Platform or packaging changes must also pass their finished-product smoke tests in GitHub Actions; a successful source build alone is not sufficient release evidence.
+
+Use the user-accepted 0.6.4 desktop experience as the baseline: continuous loading and theme state, consistent native navigation and menus, and working shortcuts. Default plugins need real-operation checks on supported cores, beyond installation. Close issues with the specific fix and verification scope; keep component pins, assets and README screenshots aligned with the delivered product. Retain failure evidence instead of retrying until a check turns green.
 
 Explain the user-visible problem, the implementation boundary, and the verification performed. Keep unrelated refactoring in a separate pull request.
 

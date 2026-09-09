@@ -55,7 +55,7 @@ BUILD_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/dsh-portable-macos.XXXXXX")"
 STAGE="$BUILD_ROOT/DSH-Portable"
 trap 'rm -rf "$BUILD_ROOT"' EXIT
 
-mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node/bin,licenses,default-plugins,data,workspace}
+mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node/bin,licenses,default-plugins,data,workspace,docs}
 cp -R "$PROJECT_ROOT/desktop-bridge" "$STAGE/desktop-bridge"
 
 if [[ ! -f "$ARCHIVE" ]]; then
@@ -83,16 +83,17 @@ cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
 cp -R "$PROJECT_ROOT/app/vendor" "$STAGE/app/vendor"
 cp "$PROJECT_ROOT"/launcher/*.mjs "$STAGE/launcher/"
-cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/DATA-MIGRATION.zh-CN.txt"
-cp "$PROJECT_ROOT/templates/DATA-MIGRATION.en.txt" "$STAGE/DATA-MIGRATION.en.txt"
+cp "$PROJECT_ROOT/templates/DATA-MIGRATION.zh-CN.txt" "$STAGE/docs/DATA-MIGRATION.zh-CN.txt"
+cp "$PROJECT_ROOT/templates/DATA-MIGRATION.en.txt" "$STAGE/docs/DATA-MIGRATION.en.txt"
 cp "$PROJECT_ROOT/launcher/macos/dsh" "$STAGE/dsh"
 chmod 755 "$STAGE/dsh"
 mkdir -p "$STAGE/launcher/terminal-bin"
 cp "$PROJECT_ROOT/launcher/unix/dsh-terminal" "$STAGE/launcher/dsh-terminal.command"
 cp "$PROJECT_ROOT/launcher/unix/terminal-bin/dsh" "$STAGE/launcher/terminal-bin/dsh"
 chmod 755 "$STAGE/launcher/dsh-terminal.command" "$STAGE/launcher/terminal-bin/dsh"
-cp "$PROJECT_ROOT/templates/USER-README.zh-CN.txt" "$STAGE/README.zh-CN.txt"
-cp "$PROJECT_ROOT/templates/USER-README.en.txt" "$STAGE/README.en.txt"
+cp "$PROJECT_ROOT/templates/USER-README.zh-CN.txt" "$STAGE/docs/README.zh-CN.txt"
+cp "$PROJECT_ROOT/templates/USER-README.en.txt" "$STAGE/docs/README.en.txt"
+cp "$PROJECT_ROOT/templates/START-HERE.txt" "$STAGE/README.txt"
 cp "$PROJECT_ROOT/templates/DATA-README.txt" "$STAGE/data/README.txt"
 cp "$PROJECT_ROOT/templates/WORKSPACE-README.txt" "$STAGE/workspace/README.txt"
 cp "$PROJECT_ROOT/LICENSE" "$STAGE/licenses/DSH-Portable-LICENSE.txt"

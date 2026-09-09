@@ -31,7 +31,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/dsh-interface-zh.png" width="1040" alt="DSH-Portable 中文桌面工作台">
+  <img src="assets/dsh-workspace-0.6.4.png" width="1040" alt="DSH-Portable 0.6.4 工作台实测截图">
 </p>
 
 > [!NOTE]
@@ -56,7 +56,7 @@ Windows 开启“任务通知”后，后台任务完成或需要回答、批准
 | **长期更新** | DSH-Portable 与官方 DSH 内核分开更新，均保留 `data` 和 `workspace`。 |
 | **出现异常** | 内置只读检查、保留数据的精准修复和脱敏支持报告。 |
 
-0.5 系列的 Windows 离线包约 **58 MB**，解压后约 **44 个外层文件**。官方 DSH 运行环境以一个经过校验的紧凑包随附，首次在本机准备，之后复用；会话、设置、插件和工作区仍在 Portable 文件夹中。这样保留完整插件运行时，也减少复制和更新要处理的小文件。发布门会检查压缩包体积、落地体积、文件数量和启动性能。
+0.6.4 Windows 验收包约 **54 MiB**，官方发布包的精确大小以 Release 下载项为准。官方 DSH 运行环境以一个经过校验的紧凑包随附，首次在本机准备，之后复用；会话、设置、插件和工作区仍在 Portable 文件夹中。这样保留完整插件运行时，也减少复制和更新要处理的小文件。发布门会检查压缩包体积、落地体积、文件数量和启动性能。
 
 ### 组件边界与发布节奏
 
@@ -106,6 +106,8 @@ chmod +x DeepSeek-Herness-linux-x64.AppImage
 
 AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable-data` 文件夹；移动或备份时把两者一起复制。
 
+完整便携目录中的 `DeepSeek-Herness` 是可直接运行的 Linux ELF；部分文件管理器会显示通用可执行文件图标。需要桌面图标和应用菜单集成时，请使用上面的 AppImage。
+
 ## 移动与备份
 
 完整步骤、数据包迁移和无需第二台电脑的验证方法见[跨电脑迁移指南](docs/move-between-computers.md)。
@@ -124,7 +126,7 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 可选 Provider：[Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT/Codex 订阅；不会默认安装。
 
-全新安装仅预装两个经过审核、可自行卸载的插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 用于查看任务中的图片；已有的 [Chat Manager](https://github.com/WSL043/dsh-chat-manager) 当前只补充官方界面暂未提供的归档会话恢复入口。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件；如果你卸载了任一默认插件，后续启动或升级不会自动装回。
+全新安装仅预装两个经过审核、可自行卸载的插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 提供图集、缩放、拖动、下载和区域标注；[Chat Manager](https://github.com/WSL043/dsh-chat-manager) 提供归档搜索、恢复及带确认的会话删除。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件；如果你卸载了任一默认插件，后续启动或升级不会自动装回。
 
 Windows 可双击 `dsh.exe`，或从托盘的 **更多 → DSH 终端** 打开；macOS 可从应用菜单打开 **DSH 终端**；Linux 可从托盘打开 **DSH 终端**。在这个专用终端里，按插件文档提供的标准 DSH 命令可以原样粘贴：
 
@@ -142,10 +144,16 @@ dsh --profile web --dump-config
 
 ## Windows 桌面操作
 
+![Windows native navigation](assets/windows-navigation-dark.png)
+
+原生导航栏支持亮暗主题、侧栏折叠和前进后退。
+
+
 启动期间只显示原生 Logo、加载动画和阶段说明，工作台准备完成后一次性交接；加载页与菜单遵循已保存的亮暗主题。左上角的“文件 / 视图 / 帮助”菜单提供常用桌面操作。
 
 | 操作 | 快捷键 |
 | --- | --- |
+| 折叠侧栏 / 后退 / 前进 | `Ctrl+B` / `Alt+←` / `Alt+→` |
 | 新会话 / 设置 | `Ctrl+N` / `Ctrl+,` |
 | 只重新加载界面，后台任务继续 | `Ctrl+R` 或 `F5` |
 | 放大 / 缩小 / 实际大小 | `Ctrl++` / `Ctrl+-` / `Ctrl+0` |
@@ -170,11 +178,15 @@ dsh --profile web --dump-config
 
 发布说明的写法和证据要求见 [Release 写作规范](docs/release-writing.md)。
 
+## 文件夹里有什么
+
+根目录的 `README.txt` 是统一入口；中英文使用说明和迁移命令收在 `docs/`，许可及组件版本收在 `licenses/`。日常只需打开 `DeepSeek-Herness.exe`，或使用 `dsh.exe` 进入终端。`app/`、`launcher/`、`runtime/` 和 `default-plugins/` 是程序组件，请保持在原位置。
+
 ## 便携数据
 
 正常更新会原地保留 `data` 和 `workspace`。需要迁入新的 Portable 环境时，可在**设置 → 通用设置 → 便携版 → 数据与迁移**选择「导出迁移包」或「导出加密私密包」。两者内容相同，都包含会话、设置、插件配置和 API 凭据；只有后者需要密码才能读取。未加密包只应保存在信任的设备上，它仍是带完整性校验的压缩容器而不是文本文件。运行时、缓存、日志和工作区文件不会被塞进迁移包。导入会恢复插件依赖并验证 Profile；任何失败都会自动恢复导入前的数据。
 
-成品根目录的 `DATA-MIGRATION.zh-CN.txt` 提供中文检查和恢复命令；`DATA-MIGRATION.en.txt` 提供独立英文说明。恢复默认只补入缺失数据；明确选择覆盖时，先在 `data/backups/` 生成回滚副本。
+成品 `docs/` 目录的 `DATA-MIGRATION.zh-CN.txt` 提供中文检查和恢复命令；`DATA-MIGRATION.en.txt` 提供独立英文说明。恢复默认只补入缺失数据；明确选择覆盖时，先在 `data/backups/` 生成回滚副本。
 
 | 路径 | 内容 |
 | --- | --- |

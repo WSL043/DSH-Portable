@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { acquireRuntimeLease } from './runtime-capsule.mjs'
 import { appendStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { startRuntimeHealth, startStartupProfile } from './runtime-health.mjs'
+import { startSourceCache } from './startup-source-cache.mjs'
 
 const [dshBin, ...dshArgs] = process.argv.slice(2)
 const controlPipe = process.env.DSH_PORTABLE_CONTROL_PIPE
@@ -75,6 +76,8 @@ await new Promise((resolve, reject) => {
 appendStartupTrace(startupTrace, 'portable-host', 'control-ready')
 
 process.argv = [process.execPath, path.resolve(dshBin), ...dshArgs]
+const sourceCache = startSourceCache(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), runtimeRoot)
+appendStartupTrace(startupTrace, 'portable-host', 'startup-source-cache-ready', sourceCache.result)
 const finishStartupProfile = await startStartupProfile(logDirectory, startupTrace?.startupId || '',
   progress => healthPhase(null, progress))
 appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-begin')
@@ -111,4 +114,5 @@ try {
   throw error
 } finally {
   await finishStartupProfile(startupOutcome)
+  appendStartupTrace(startupTrace, 'portable-host', 'startup-source-cache-released', sourceCache.finish())
 }

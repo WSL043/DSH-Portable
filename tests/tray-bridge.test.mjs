@@ -202,6 +202,46 @@ function fakeContext(initialSessions) {
   }
 }
 
+test('title navigation follows session visits, skips deleted sessions, and clears the forward branch', async () => {
+  const client = await loadBridgeClient()
+  const runtime = fakeContext(sessionList())
+  let toggles = 0
+  runtime.ctx.layout = { toggleSidebar() { toggles += 1 } }
+  const visit = id => runtime.setSessions({ ...runtime.ctx.sessions.list.getSnapshot(), current: id })
+  runtime.ctx.sessions.open = visit
+  runtime.ctx.sessions.clear = () => visit(null)
+  client.exports.apply(runtime.ctx)
+  try {
+    assert.equal(client.posted.at(-1).canGoBack, false)
+    client.send({ type: 'dsh-portable/action', action: 'toggle-sidebar' })
+    assert.equal(toggles, 1)
+    visit('session-9')
+    visit('session-8')
+    const navigate = direction => client.send({ type: 'dsh-portable/action', action: `navigate-${direction}` })
+    navigate('back')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, 'session-9')
+    assert.equal(client.posted.at(-1).canGoForward, true)
+    navigate('forward')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, 'session-8')
+    navigate('back')
+    visit('session-7')
+    navigate('forward')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, 'session-7')
+    const snapshot = structuredClone(runtime.ctx.sessions.list.getSnapshot())
+    delete snapshot.byId['session-9']
+    runtime.setSessions(snapshot)
+    navigate('back')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, 'session-11')
+    navigate('forward')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, 'session-7')
+    visit(null)
+    navigate('back')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, 'session-7')
+    navigate('forward')
+    assert.equal(runtime.ctx.sessions.list.getSnapshot().current, null)
+  } finally { runtime.dispose() }
+})
+
 test('Portable registers its owned workspace only for a truly empty first run', async () => {
   const client = await loadBridgeClient()
   const fresh = fakeContext({ ids: [], byId: {}, current: undefined, phase: 'ready' })
@@ -381,7 +421,7 @@ test('private tray bridge projects bounded official runtime state and invokes on
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList())
 
-  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload'])
+  assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload', 'layout'])
   client.exports.apply(runtime.ctx)
   assert.equal(runtime.slotEntries.length, 0)
 
