@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -22,9 +22,11 @@ test('startup cache preserves ESM, CommonJS and JSON, leaves profile files alone
     for (const [name, source] of Object.entries(sources)) await writeFile(path.join(target, name), name === 'package.json' ? source : name === 'data.json' ? '{"answer":0}' : 'throw Error("disk source read")')
     const mutable = path.join(root, 'profile.mjs')
     await writeFile(mutable, 'export default 99')
+    const alias = path.join(root, 'root-alias')
+    await symlink(root, alias, process.platform === 'win32' ? 'junction' : 'dir')
     const code = `import assert from 'node:assert/strict';
       import {startSourceCache} from ${JSON.stringify(new URL('../launcher/startup-source-cache.mjs', import.meta.url).href)};
-      const cache=startSourceCache(${JSON.stringify(root)},${JSON.stringify(runtime)},{});
+      const cache=startSourceCache(${JSON.stringify(root)},${JSON.stringify(path.join(alias, manifest.sha256))},{});
       assert.equal(cache.result.status,'ready');
       assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'main.mjs')).href)})).default,41);
       assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'legacy.cjs')).href)})).default,7);
