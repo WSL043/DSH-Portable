@@ -2,6 +2,14 @@ const releaseBase =
   "https://github.com/WSL043/DSH-Portable/releases/latest/download/";
 const copy = {
   en: {
+    guidesTitle: "Start with your question.",
+    guideStart: "How do I start without runtime setup?",
+    guideStartText: "Download, connect a model, and install plugins visually. Guide in Chinese.",
+    guideMove: "What happens to my sessions when I move?",
+    guideMoveText: "Same-platform migration and backup: what to take with you. Guide in Chinese.",
+    starProject: "☆ Star",
+    starInvite: "Find it useful? Star the project on GitHub, or share it with someone who needs a portable DSH workspace.",
+    starAction: "Star on GitHub ↗",
     viewerTitle: "Give details a closer look.",
     viewerText:
       "Zoom in, download originals, and leave region notes. Image Viewer is included by default and can be removed independently.",
@@ -16,7 +24,7 @@ const copy = {
       "Runtime and plugin market, ready to use.<br>Sessions, settings, and your default workspace stay in your own folder.",
     downloadFor: "Download for Windows",
     otherPlatforms: "Other platforms",
-    heroNote: "No Node.js setup / Install plugins visually",
+    heroNote: "No runtime setup / Visual plugins / Independent kernel updates",
     stageCaption: "One folder. Your complete working environment.",
     portableTitle: "A new location.<br>The same workspace.",
     portableIntro:

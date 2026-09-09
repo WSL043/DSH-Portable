@@ -86,6 +86,7 @@ try {
     !moving.equals(await canvas.screenshot()),
     "Enabled fog and water must move",
   );
+  await page.evaluate(() => scrollTo(0, 0));
   await page.mouse.move(1240, 250);
   await page.waitForTimeout(500);
   await page.screenshot({ path: path.join(evidence, "desktop-hover.png") });
@@ -201,6 +202,18 @@ try {
   results.push(
     "Scene failure retains screenshot, content, and working downloads",
   );
+  await fallback.close();
+  const guide = await pageFor({viewport:{width:390,height:844}});
+  for (const slug of ['get-started','move-workspace']) {
+    const response = await guide.goto(base + '/guides/' + slug + '.html');
+    assert.equal(response.status(),200);
+    assert.equal(await guide.locator('article, .guide-article').count(),1);
+    assert.ok((await guide.locator('h2').count())>=3);
+    assert.equal(await guide.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+    await guide.screenshot({path:path.join(evidence,slug+'.png'),fullPage:true});
+  }
+  await guide.close();
+  results.push('Both published guides render on mobile with canonical metadata');
   assert.deepEqual(errors, []);
   await writeFile(
     path.join(evidence, "results.json"),

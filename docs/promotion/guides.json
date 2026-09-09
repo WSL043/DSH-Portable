@@ -1,0 +1,162 @@
+[
+  {
+    "slug": "get-started",
+    "title": "不想配置环境，怎么开始用 DeepSeek Harness？",
+    "description": "用 DSH-Portable 准备 DeepSeek Harness 工作环境，在界面连接模型、安装插件，并了解稳定版与候选版的区别。",
+    "date": "2026-09-10",
+    "body": [
+      {
+        "type": "p",
+        "text": "想试试 DeepSeek Harness，但不想先安装 Node.js、处理依赖，再记住启动命令？DSH-Portable 把运行环境和插件市场放进一个桌面工作目录。下面从第一次打开说起。"
+      },
+      {
+        "type": "h2",
+        "text": "1. 选适合自己的包"
+      },
+      {
+        "type": "p",
+        "text": "Windows 可以下载小体积便携启动器，把它放在希望保存工作环境的位置后运行；它会联网准备完整目录。需要手动解压或在目标电脑离线准备时，选择完整离线 ZIP。macOS 和 Linux 请在下载页按系统与 CPU 架构选择对应包。"
+      },
+      {
+        "type": "link",
+        "text": "打开下载页，选择系统与架构",
+        "url": "https://wsl043.github.io/DSH-Portable/#downloads"
+      },
+      {
+        "type": "h2",
+        "text": "2. 连接你自己的模型服务"
+      },
+      {
+        "type": "p",
+        "text": "打开工作台后，在模型设置里配置你使用的模型服务及其所需凭据，再新建会话开始工作。Portable 提供的是运行环境，不包含免费模型额度；完整离线包也不等于默认附带可离线推理的模型。"
+      },
+      {
+        "type": "image",
+        "src": "dsh-interface-zh.png",
+        "alt": "DSH-Portable 中的 DeepSeek Harness 暗色工作台",
+        "caption": "实际工作台截图；上游版本不同，部分文字与布局可能变化。"
+      },
+      {
+        "type": "h2",
+        "text": "3. 想装插件，先打开界面里的市场"
+      },
+      {
+        "type": "steps",
+        "items": [
+          "打开设置 → 插件 → 插件市场。",
+          "搜索需要的插件，查看说明后点击安装。",
+          "按页面提示刷新或重启，再使用新功能。"
+        ]
+      },
+      {
+        "type": "p",
+        "text": "常规安装不需要自己输入命令。Portable 融入了社区的 dsh-market，并默认提供图片查看器和会话管理插件。它们可以独立更新或卸载，其他市场插件则按自己的需求选择。"
+      },
+      {
+        "type": "link",
+        "text": "了解上游 dsh-market",
+        "url": "https://github.com/dsh-market/dsh-market"
+      },
+      {
+        "type": "image",
+        "src": "viewer-dark.png",
+        "alt": "默认 Image Viewer 的图片查看和区域备注界面",
+        "caption": "默认图片查看器：缩放、原图下载与区域备注。"
+      },
+      {
+        "type": "h2",
+        "text": "4. 更新时看清楚更新的是哪一部分"
+      },
+      {
+        "type": "p",
+        "text": "Portable 桌面部分与官方 DeepSeek Harness 内核分别管理。日常使用优先选择稳定版；候选通道提供经过相应兼容检查的预览版本。不同产品版本的设置入口可能不同，以当前页面提示和 Release 说明为准；不是所有上游版本都适用于当前 Portable。"
+      },
+      {
+        "type": "p",
+        "text": "DSH-Portable 是独立社区发行版，不是 DeepSeek 官方桌面应用。它主要解决环境准备、桌面操作、插件入口和便携目录管理。想换电脑时继续工作，可以再看下面的迁移指南。"
+      },
+      {
+        "type": "link",
+        "text": "下一步：换电脑时保留会话、插件和工作区",
+        "url": "https://wsl043.github.io/DSH-Portable/guides/move-workspace.html"
+      }
+    ]
+  },
+  {
+    "slug": "move-workspace",
+    "title": "换电脑时，怎样保留 DSH 会话、插件和工作区？",
+    "description": "DSH-Portable 同系统同架构迁移指南：完全退出、复制完整目录、检查外部项目，并正确处理 Linux AppImage 的数据目录。",
+    "date": "2026-09-10",
+    "body": [
+      {
+        "type": "p",
+        "text": "换电脑最麻烦的，往往不是再下载一次程序，而是找回之前的会话、配置和插件。DSH-Portable 把这些内容集中保存，让同平台移动与备份更直接。"
+      },
+      {
+        "type": "h2",
+        "text": "先确认：两台电脑的平台是否相同"
+      },
+      {
+        "type": "p",
+        "text": "直接复制完整程序目录，适用于相同操作系统和 CPU 架构。Windows 程序不能复制到 macOS 后直接运行，x64 与 ARM64 也不应混用对应程序包。跨平台需要目标平台的产品包和额外的数据迁移处理；跨系统恢复尚未通过成品验收，不属于当前的直接复制承诺。"
+      },
+      {
+        "type": "h2",
+        "text": "完整目录的迁移步骤"
+      },
+      {
+        "type": "steps",
+        "items": [
+          "结束当前工作，在系统托盘选择退出 DeepSeek Harness，等待程序完全退出。默认关闭窗口可能只是收进托盘。",
+          "复制整个 DSH-Portable 文件夹到新位置，保留目录结构。不要只复制 exe。",
+          "在目标电脑打开对应启动入口。Windows 完整目录使用 DeepSeek-Herness.exe。",
+          "确认原有会话、模型设置、插件与默认工作区，再继续工作。"
+        ]
+      },
+      {
+        "type": "p",
+        "text": "运行环境位于 runtime/ 等程序目录；会话、设置与插件位于 data/ 下；默认工作区位于 workspace/。Portable 会处理由自己管理的路径，外部项目和你自己写入配置的绝对路径仍需检查。"
+      },
+      {
+        "type": "image",
+        "src": "dsh-workspace-0.6.4.png",
+        "alt": "DSH-Portable 的工作区与会话入口",
+        "caption": "实际工作台截图：迁移后检查工作区、会话与模型配置。"
+      },
+      {
+        "type": "h2",
+        "text": "Linux AppImage 要多带上一个目录"
+      },
+      {
+        "type": "p",
+        "text": "使用 AppImage 时，程序文件旁的 DSH-Portable-data 数据目录也要一起移动或备份。使用 tar.gz 完整目录包时，保留完整 DSH-Portable 目录即可。不同打包方式不要只凭文件扩展名判断数据位置。"
+      },
+      {
+        "type": "h2",
+        "text": "还有三件事需要带上"
+      },
+      {
+        "type": "steps",
+        "items": [
+          "外部项目：如果工作目录选在 Portable 之外，请单独复制项目文件，并检查新电脑上的路径。",
+          "必要的访问凭据：数据目录可能包含 API 凭据和私人会话，备份应保存在自己信任的位置，不要当成公开附件发送。",
+          "完整退出：不要让两台电脑同时读写或同步同一份会话目录。"
+        ]
+      },
+      {
+        "type": "p",
+        "text": "正常更新保留用户数据，与迁移到新电脑是两件事。更新前的独立备份依然有价值；遇到问题时优先导出支持报告，避免公开整个 data 目录。"
+      },
+      {
+        "type": "link",
+        "text": "查看完整迁移文档与恢复说明",
+        "url": "https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md"
+      },
+      {
+        "type": "link",
+        "text": "还没开始使用？查看免配环境入门指南",
+        "url": "https://wsl043.github.io/DSH-Portable/guides/get-started.html"
+      }
+    ]
+  }
+]

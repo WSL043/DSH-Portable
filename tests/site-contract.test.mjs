@@ -140,3 +140,14 @@ test("website publishes truthful privacy and code-signing boundaries", () => {
   assert.match(signing, /current release files are unsigned/i);
   assert.match(signing, /Free code signing provided by SignPath\.io, certificate by SignPath Foundation/);
 });
+
+
+test("Star links point at the repository, and usage guides are crawlable HTML", async () => {
+  assert.match(html, /data-i18n="starAction"/);
+  assert.doesNotMatch(html, /DSH-Portable\/stargazers/);
+  assert.match(sitemap, /guides\/get-started\.html/);
+  const guide = await readFile(new URL("../build/site/guides/get-started.html", import.meta.url), "utf8");
+  assert.match(guide, /<h1>[^<]+<\/h1>/);
+  assert.match(guide, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/guides\/get-started\.html">/);
+  assert.doesNotMatch(guide, /<canvas/);
+});

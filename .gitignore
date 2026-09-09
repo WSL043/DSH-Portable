@@ -18,3 +18,6 @@ build/
 /ROADMAP.en.md
 /INTERNAL*.md
 /PRIVATE*.md
+
+# Local ecosystem review snapshots and submission payloads.
+/.artifacts/ecosystem/

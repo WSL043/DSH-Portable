@@ -4,7 +4,7 @@ import path from 'node:path'
 
 // Run manually with an authenticated GitHub CLI. No client telemetry or tokens are stored.
 const repo = 'WSL043/DSH-Portable'
-const read = endpoint => JSON.parse(execFileSync('gh', ['api', `repos/${repo}${endpoint}`], { encoding: 'utf8' }))
+const read = endpoint => JSON.parse(execFileSync('gh', ['api', `repos/${repo}${endpoint}`], { encoding: 'utf8', windowsHide: true }))
 const metadata = read('')
 const snapshot = {
   capturedAt: new Date().toISOString(), repo,

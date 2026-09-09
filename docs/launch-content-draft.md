@@ -1,25 +1,74 @@
-# 推广素材草案（尚未对外发布）
+# 对外介绍与推广入口
 
-## 定位
+## 统一定位
 
-给想使用 DeepSeek Harness、但不想配置运行环境或通过命令安装插件的用户，一个开箱可用、方便移动和备份的桌面工作环境。
+DSH-Portable 是面向希望直接使用 DeepSeek Harness 的用户的独立社区桌面发行版。
 
-标题：**DSH-Portable：自带插件市场的 DeepSeek Harness 便携桌面版**
+一句话：**免配运行环境、在界面安装插件，把 DSH 工作环境一起带走。**
 
-短介绍：下载后连接自己的模型服务即可开始。运行环境随包提供，插件在设置中搜索并点击安装；会话、设置与默认工作区集中保存，便于在同平台电脑间移动。支持 Windows、macOS 和 Linux，独立社区维护。
+四个宣传重点，按顺序展开：
 
-English: **DSH-Portable: DeepSeek Harness with a bundled runtime and visual plugin market.** Connect your model service, install plugins from Settings, and keep sessions and your default workspace together for same-platform moves and backup. Independently maintained for Windows, macOS, and Linux.
+1. **免配环境**：运行环境随包提供，连接自己的模型服务即可开始。
+2. **界面装插件**：融入上游 [dsh-market](https://github.com/dsh-market/dsh-market)，常规安装不用敲命令。
+3. **工作环境随行**：完整退出后在同系统同架构电脑间复制完整目录。外部项目单独迁移；AppImage 同时携带旁边的数据目录。
+4. **独立更新**：Portable 桌面和官方内核分别管理，内核选择受兼容性约束；正常更新保留数据。
 
-官网：https://wsl043.github.io/DSH-Portable/
+不是官方客户端，不包含免费模型额度，不承诺同一程序目录跨系统运行，也不把市场收录当作对所有插件的验证。
 
-## 截图展示
+English: **DeepSeek Harness with a bundled runtime, visual plugin installation, and a movable workspace.** Portable and compatible official kernels update separately. Independently maintained for Windows, macOS, and Linux; complete-folder moves require the same OS and architecture.
 
-按用户最新决定，不制作演示视频。官网使用已有暗色实机截图，点击可放大，并明确区分截图与网页中的快捷键示意。后续替换截图需保留版本及来源，使用测试会话，不展示私人内容。
+## 两篇可复用图文
 
-## 衡量
+内容源：`docs/promotion/guides.json`。网站构建同时生成正式网页和 `build/promotion/*.md`，避免官网与社区稿件分别维护。
 
-运行 `node scripts/snapshot-repository-traffic.mjs`，将 GitHub 聚合数据保存在本地 `.artifacts/traffic/`。需要已登录且有流量读取权限的 GitHub CLI；不添加客户端遥测。
+- 入门：https://wsl043.github.io/DSH-Portable/guides/get-started.html
+- 迁移：https://wsl043.github.io/DSH-Portable/guides/move-workspace.html
 
-每周同一时间手动保存，比较来源、访问日期和同一资源的下载增量。14 天窗口重叠，不相加；来源访客可能重复。旧版本下载不能直接解释为新增用户，克隆可能来自 CI。Star 只作辅助指标，不从这些数据计算安装转化率或留存。官网访问和下载按钮点击目前没有单独测量，不把 GitHub 的官网引荐数当官网总访问量。
+图片使用仓库的真实界面截图，标明版本差异。官网烟雾、水面和倾斜效果只用于视觉展示，不当作运行中的 DSH 演示。
 
-优先检查：新首屏是否让用户快速找到下载和插件市场；真实演示上线后是否出现新的社区引荐。没有效果再调整素材和渠道，不以增加功能数量替代验证。
+## Star 入口
+
+README 顶部使用 Star 数量徽章；底部和官网链接到仓库首页，引导使用 GitHub 原生 Star 按钮。
+
+README 图片不能执行点赞请求；GitHub 的 Star API 需要用户身份与授权。普通第三方 Star 徽章也只是仓库链接，不能代访客直接点赞。不要请求访客粘贴令牌、不要把跳转标记为点赞成功。
+
+## 当前生态入口（2026-09-10 核对）
+
+| 入口 | 当前状态 | 后续动作 |
+| --- | --- | --- |
+| 0xsline/awesome-deepseek-harness | Portable 已收录，描述包含运行环境、插件市场、数据保留 | 保留，不重复投稿 |
+| Zhiyuan-Fan/Awesome-DeepSeek-Harness-Plugins | Portable 已收录，已有官网链接 | 保留，不重复投稿 |
+| Dominic789654/awesome-deepseek-harness | 已收录，但描述错误暗示 Windows/macOS 之间直接移动，遗漏 Linux | [更正请求 #438](https://github.com/Dominic789654/awesome-deepseek-harness/issues/438)，等待维护者处理 |
+| awesome-dsh-plugin/awesome-dsh-plugin | 两个默认插件均有 YAML 数据条目 | [图片查看器移除过时 Beta 标签 #4756](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/4756)，投稿门检查已通过；目录构建因其他三个条目缺少可推导日期而失败，已在 PR 记录日志，待上游处理。Portable 本身不符合该目录的可安装插件要求 |
+| DeepSeek Harness 上游社区 | 已有维护者发布的介绍帖 [#5060](https://github.com/deepseek-ai/deepseek-harness/discussions/5060) | 在原帖同步四个重点和使用指南，不重复开帖 |
+
+## 首轮渠道实验
+
+面向现有 DSH 用户，先更新上游已有介绍帖；面向潜在新用户，准备在两个已获账号授权的社区发布上述图文。具体社区账号尚待用户选择，不代表已经投放。
+
+- 第一篇面向新用户，重点是开始使用的路径。
+- 第二篇面向已有会话和插件的用户，重点是迁移边界和实际操作。
+- 两个社区的首次发布至少错开 7 天，避免难以分辨变化来源。正文说明作者是维护者，先给可用步骤，再放下载链接。
+- 阅读社区当前自荐规则后使用合适分区；不批量复制评论、不重复顶帖。
+- 每篇保留来源网址、发布时间、阅读量、相关访问引荐、实际反馈，以及相同安装包下载计数的变化。公开稿件中不把下载计数称为使用人数。
+
+UTM 示例：`?utm_source=community_name&utm_medium=community&utm_campaign=portable_202609`。当前没有官网访问/点击统计服务，UTM 仅是来源标记，单独加上它不能生成渠道转化报告。
+
+## 复盘
+
+1. 发布前运行 `node scripts/snapshot-repository-traffic.mjs` 保存 GitHub 基线。
+2. 发布 7 天后再次保存，运行 `node scripts/compare-repository-traffic.mjs <旧快照> <新快照>`。
+3. 看来源、问题反馈和同一资源下载增量；Star 是辅助指标。克隆可能来自 CI，下载包含重复请求。14 天访客窗口有重叠且可能滞后，不相减推算新增用户或安装转化率。
+4. 出现新用户的同类问题时先改文档或产品；有效渠道再追加案例，无效渠道先调整受众与文案。
+
+## 搜索收录
+
+官网提供可直接抓取的中英文首页、两篇静态 HTML 指南、canonical、社交预览元数据和 sitemap。
+
+Google Search Console 使用 URL 前缀属性 `https://wsl043.github.io/DSH-Portable/`，不要把共享的 github.io 当作自己的域名。Bing 也可验证这个 URL 前缀。
+
+待账号与公开 HTML 验证标签提供后，添加验证文件或 meta 标签，完成所有权确认，并提交 `https://wsl043.github.io/DSH-Portable/sitemap.xml`。再对新版首页和指南请求索引；只有平台确认后才记为“已提交”。
+
+项目目录中的 `/DSH-Portable/robots.txt` 不是整个域名根目录的 robots.txt，不能把它当作搜索引擎一定会读取的站点地图发现入口。Search Console/Bing 的所有权验证与提交仍需完成。
+
+参考：[Google 站点地图](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)、[请求重新抓取](https://developers.google.com/search/docs/crawling-indexing/ask-google-to-recrawl)、[Bing 添加和验证站点](https://www.bing.com/webmasters/help/add-and-verify-site-12184f8b)。

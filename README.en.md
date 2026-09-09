@@ -5,7 +5,7 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  <strong>Start using DeepSeek Harness and take your workspace with you.</strong><br>
+  <strong>DeepSeek Harness, ready to use. Install plugins visually. Take your workspace with you.</strong><br>
   Includes the runtime, desktop window, and Plugin Market. Keep sessions, settings, plugins, and the default workspace together for moving and backup.
 </p>
 
@@ -20,6 +20,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&amp;label=Star&amp;color=171717" alt="Star DSH-Portable on GitHub"></a>
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=tag&label=release&style=flat-square&color=171717" alt="Latest release"></a>
   <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=downloads&color=171717" alt="GitHub downloads"></a>
   <a href="https://github.com/WSL043/DSH-Portable/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/WSL043/DSH-Portable/ci.yml?branch=main&style=flat-square&label=build&color=171717" alt="Cross-platform build status"></a>
@@ -283,6 +284,6 @@ Dependencies, release contents, and finished-product tests are pinned by the rep
 
 </details>
 
-If DSH-Portable helps you, consider leaving a [**Star**](https://github.com/WSL043/DSH-Portable/stargazers). It helps other people looking for a portable DSH discover the project.
+If DSH-Portable helps you, use the **Star** button at the top of the [GitHub repository](https://github.com/WSL043/DSH-Portable) to save it. Share it with people who want a bundled runtime, visual plugin installation, or a movable workspace.
 
 DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is independently maintained by WSL043 and is not endorsed by DeepSeek.

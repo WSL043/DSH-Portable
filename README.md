@@ -5,7 +5,7 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  <strong>开箱使用 DeepSeek Harness，把工作环境一起带走。</strong><br>
+  <strong>免配环境、界面装插件，把 DSH 工作环境一起带走。</strong><br>
   自带运行环境、桌面窗口和插件市场。会话、设置、插件与默认工作区集中保存，方便移动和备份。
 </p>
 
@@ -20,6 +20,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/WSL043/DSH-Portable"><img src="https://img.shields.io/github/stars/WSL043/DSH-Portable?style=flat-square&amp;label=Star&amp;color=171717" alt="Star DSH-Portable on GitHub"></a>
   <a href="https://github.com/WSL043/DSH-Portable/releases/latest"><img src="https://img.shields.io/github/v/release/WSL043/DSH-Portable?display_name=tag&label=%E7%89%88%E6%9C%AC&style=flat-square&color=171717" alt="最新版本"></a>
   <a href="https://github.com/WSL043/DSH-Portable/releases"><img src="https://img.shields.io/github/downloads/WSL043/DSH-Portable/total?style=flat-square&label=%E4%B8%8B%E8%BD%BD&color=171717" alt="GitHub 下载量"></a>
   <a href="https://github.com/WSL043/DSH-Portable/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/WSL043/DSH-Portable/ci.yml?branch=main&style=flat-square&label=%E6%9E%84%E5%BB%BA&color=171717" alt="跨平台构建状态"></a>
@@ -285,6 +286,6 @@ bash scripts/build-linux.sh x64     # 或 arm64
 
 </details>
 
-如果 DSH-Portable 对你有帮助，欢迎点一个 [**Star**](https://github.com/WSL043/DSH-Portable/stargazers)。它会帮助更多需要便携 DSH 的用户找到这个项目。
+如果 DSH-Portable 对你有帮助，欢迎在仓库右上角点击 **Star** 收藏项目。[打开 GitHub 仓库](https://github.com/WSL043/DSH-Portable)，也可以把它分享给需要免配环境、界面装插件或迁移工作环境的朋友。
 
 DeepSeek Harness、DeepSeek 名称与标志归 DeepSeek 所有。DSH-Portable 由 WSL043 独立维护，未获 DeepSeek 背书。

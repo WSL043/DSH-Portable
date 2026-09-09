@@ -12,4 +12,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://wsl043.github.io/DSH-Portable/en/" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://wsl043.github.io/DSH-Portable/" />
   </url>
+  <url><loc>https://wsl043.github.io/DSH-Portable/guides/get-started.html</loc></url>
+  <url><loc>https://wsl043.github.io/DSH-Portable/guides/move-workspace.html</loc></url>
 </urlset>

@@ -5,7 +5,8 @@ on:
     paths:
       - "site/**"
       - "assets/**"
-      - "scripts/build-site.mjs"
+      - "scripts/build-site*.mjs"
+      - "docs/promotion/guides.json"
       - "scripts/check-site-browser.mjs"
       - "tests/site-contract.test.mjs"
       - ".github/workflows/pages.yml"
@@ -14,7 +15,8 @@ on:
     paths:
       - "site/**"
       - "assets/**"
-      - "scripts/build-site.mjs"
+      - "scripts/build-site*.mjs"
+      - "docs/promotion/guides.json"
       - "scripts/check-site-browser.mjs"
       - "tests/site-contract.test.mjs"
       - ".github/workflows/pages.yml"
