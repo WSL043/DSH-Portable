@@ -63,7 +63,7 @@
       <div class="hero-content">
         <div class="hero-copy" data-hero-copy>
           <p class="hero-kicker" data-i18n="heroKicker">DeepSeek Harness · 随处继续</p>
-          <h1 data-i18n="heroTitle">打开就用，<br>随身带走。</h1>
+          <h1 data-i18n="heroTitle">你的 AI 工作台。<br>不止于这台电脑。</h1>
           <p class="hero-lede" data-i18n="heroLede">自带 DeepSeek Harness 运行环境和插件市场，装插件不用敲命令。会话、设置与默认工作区集中保存，方便移动和备份。</p>
           <div class="hero-actions">
             <a class="download-button" data-primary-download href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><span><strong data-i18n="downloadFor">下载 Windows 便携版</strong><small data-i18n="downloadMeta">最新稳定版 · 便携 · 无需安装</small></span></a>
@@ -79,10 +79,18 @@
       <a class="scroll-cue" href="#portable" data-i18n="scrollCue">看看它怎样移动</a>
     </section>
 
+    <section class="showcase reveal" id="showcase">
+      <div class="section-heading"><div><p class="section-kicker">BUILT FOR YOUR EVERYDAY</p><h2 data-i18n="showcaseTitle">看得见的细节。</h2></div><p data-i18n="showcaseIntro">实际界面截图。点开看清楚，再决定要不要下载。</p></div>
+      <div class="showcase-grid">
+        <figure class="shot-card"><button type="button" data-screenshot aria-label="Image Viewer screenshot"><img src="assets/viewer-dark.png" loading="lazy" width="1440" height="900" alt="Image Viewer dark interface with region annotations"></button><figcaption><span class="shot-tag">01 / IMAGE VIEWER</span><h3 data-i18n="viewerTitle">让细节，有处落笔。</h3><p data-i18n="viewerText">缩放、原图下载与区域备注。图片查看器默认提供，也可自行卸载。</p></figcaption></figure>
+        <figure class="shot-card native-card"><button type="button" data-screenshot aria-label="Native desktop navigation screenshot"><img src="assets/windows-navigation-dark.png" loading="lazy" alt="Portable native dark navigation and menus"></button><div class="key-demo" aria-hidden="true"><span>SIDEBAR <kbd>Ctrl</kbd><kbd>B</kbd></span><span>FULL SCREEN <kbd>F11</kbd></span><span>QUICK SETTINGS <kbd>Ctrl</kbd><kbd>,</kbd></span></div><figcaption><span class="shot-tag">02 / DESKTOP NATIVE</span><h3 data-i18n="nativeTitle">熟悉的操作，顺手的桌面。</h3><p data-i18n="nativeText">侧栏折叠、前进后退、键盘快捷键，让日常操作更直接。</p></figcaption></figure>
+      </div>
+    </section>
+
     <section class="portable-story reveal" id="portable">
       <div class="story-intro">
         <p class="section-kicker" data-i18n="portableKicker">随处继续</p>
-        <h2 data-i18n="portableTitle">一个目录。同平台继续。</h2>
+        <h2 data-i18n="portableTitle">环境随行。<br>工作继续。</h2>
         <p data-i18n="portableIntro">平时照常工作。需要迁移时，从托盘完全退出，再复制整个 DSH-Portable 文件夹。</p>
         <a class="story-guide" data-migration-guide href="https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md" data-i18n="migrationGuide">查看完整迁移指南</a>
         <dl class="portable-facts" aria-label="Portable verification">
@@ -121,7 +129,7 @@
     </section>
 
     <section class="details reveal" id="details">
-      <div class="section-heading"><div><p class="section-kicker" data-i18n="insideKicker">装好即可用</p><h2 data-i18n="insideTitle">桌面体验，没有额外负担。</h2></div><p data-i18n="insideIntro">便携不等于简化功能。窗口、托盘、通知、插件市场、更新和修复都留在产品里。</p></div>
+      <div class="section-heading"><div><p class="section-kicker" data-i18n="insideKicker">装好即可用</p><h2 data-i18n="insideTitle">桌面体验，<br>开箱即用。</h2></div><p data-i18n="insideIntro">便携不等于简化功能。窗口、托盘、通知、插件市场、更新和修复都留在产品里。</p></div>
       <div class="included-list">
         <article><span>01</span><h3 data-i18n="marketTitle">插件市场</h3><p data-i18n="marketText">设置 → 插件 → 插件市场：搜索后点击安装，不用输入命令。基于上游 dsh-market 融入 Portable。</p><a href="https://github.com/dsh-market/dsh-market">dsh-market ↗</a></article>
         <article><span>02</span><h3 data-i18n="trayTitle">托盘与通知</h3><p data-i18n="trayText">返回最近会话、创建新会话，并在任务完成时收到通知。</p></article>
@@ -141,6 +149,7 @@
     </section>
   </main>
 
+  <dialog class="screenshot-dialog" aria-label="Screenshot preview"><button type="button" data-close-screenshot aria-label="Close screenshot">✕</button><img alt=""></dialog>
   <footer>
       <div class="footer-brand"><img src="assets/DSH-Portable-white.svg" alt="" width="28" height="28"><div><strong>DSH-Portable</strong><span data-i18n="footerCommunity">独立社区发行版</span></div></div>
     <div class="footer-links"><a href="https://github.com/WSL043/DSH-Portable" data-i18n="sourceCode">源代码</a><a href="https://github.com/WSL043/DSH-Portable/issues" data-i18n="support">问题反馈</a><a href="https://github.com/WSL043/DSH-Portable/discussions" data-i18n="community">讨论</a><a href="https://github.com/WSL043/DSH-Portable/blob/main/PRIVACY.md" data-i18n="privacy">隐私</a><a href="https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md" data-i18n="codeSigning">代码签名</a></div>

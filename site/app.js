@@ -4,8 +4,9 @@ const releaseBase = "https://github.com/WSL043/DSH-Portable/releases/latest/down
 
 const copy = {
   en: {
+    showcaseTitle: "Details you can see.", showcaseIntro: "Actual interface screenshots. Take a closer look before downloading.", viewerTitle: "Make your point. Precisely.", viewerText: "Zoom, original downloads, and region notes. Included by default and independently removable.", nativeTitle: "A desktop that feels familiar.", nativeText: "Sidebar controls, navigation, and keyboard shortcuts keep everyday actions close.",
     skip: "Skip to content", brandEdition: "Community portable edition", navPortable: "Portable", navDownload: "Download", navGithub: "GitHub", headerDownload: "Download",
-    heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "Open it. Work.<br>Take your setup with you.", heroLede: "DeepSeek Harness with its runtime and plugin market included. Install plugins visually and keep sessions, settings, and your default workspace together for moving and backup.",
+    heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "Your AI workspace.<br>Beyond one machine.", heroLede: "DeepSeek Harness with its runtime and plugin market included. Install plugins visually and keep sessions, settings, and your default workspace together for moving and backup.",
     downloadFor: "Download for Windows", downloadMeta: "Latest stable · Portable · No install", otherPlatforms: "Other platforms", heroNote: "Open-source community project · Windows / macOS / Linux", stageCaption: "DeepSeek Harness running in DSH-Portable", scrollCue: "See how it moves",
     portableKicker: "Works where you do", portableTitle: "One folder. Same-platform moves.", portableIntro: "Work normally. When it is time to move, exit fully from the tray and copy the whole DSH-Portable folder.", migrationGuide: "Read the complete migration guide",
     factNodeValue: "No Node.js required", factLauncher: "Runtime included", factFiles: "User data and default workspace", factTargetsValue: "3 systems · 5 targets", factTargets: "Finished-product move tests",
@@ -225,3 +226,13 @@ const initialLanguage = document.querySelector("meta[name='dsh-page-language']")
 setLanguage(initialLanguage);
 updateScrollState();
 requestAnimationFrame(() => document.documentElement.classList.add("is-ready"));
+
+const screenshotDialog = document.querySelector('.screenshot-dialog');
+document.querySelectorAll('[data-screenshot]').forEach(button => button.addEventListener('click', () => {
+  const source = button.querySelector('img');
+  const target = screenshotDialog.querySelector('img');
+  target.src = source.src; target.alt = source.alt;
+  screenshotDialog.showModal();
+}));
+document.querySelector('[data-close-screenshot]').addEventListener('click', () => screenshotDialog.close());
+screenshotDialog.addEventListener('click', event => { if (event.target === screenshotDialog) { const r = screenshotDialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) screenshotDialog.close(); } });

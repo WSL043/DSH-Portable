@@ -1,5 +1,6 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { runInNewContext } from "node:vm";
 
 const root = path.resolve(import.meta.dirname, "..");
 const output = path.join(root, "build", "site");
@@ -8,7 +9,7 @@ await rm(output, { recursive: true, force: true });
 await mkdir(path.join(output, "assets"), { recursive: true });
 await cp(path.join(root, "site"), output, { recursive: true });
 
-for (const asset of ["DSH-Portable.svg", "DSH-Portable-white.svg", "DSH-Portable-512.png", "dsh-interface-zh.png", "dsh-interface-en.png", "hero-atmosphere.png"]) {
+for (const asset of ["DSH-Portable.svg", "DSH-Portable-white.svg", "DSH-Portable-512.png", "dsh-interface-zh.png", "dsh-interface-en.png", "hero-atmosphere.png", "viewer-dark.png", "windows-navigation-dark.png"]) {
   await cp(path.join(root, "assets", asset), path.join(output, "assets", asset));
 }
 
@@ -47,6 +48,13 @@ english = english
   .replace('src="app.js"', 'src="../app.js"');
 
 await mkdir(path.join(output, "en"), { recursive: true });
+// Render translated content into HTML as well, so English readers and crawlers
+// get the same page without waiting for client-side JavaScript.
+const clientSource = await readFile(path.join(root, "site/app.js"), "utf8");
+const dictionarySource = clientSource.slice(clientSource.indexOf("const copy ="), clientSource.indexOf("const zhCopy"));
+const translations = runInNewContext(`${dictionarySource}; copy.en`, {}, { timeout: 1000 });
+english = english.replace(/<([a-z][a-z0-9]*)\b([^>]*\bdata-i18n="([^"]+)"[^>]*)>[\s\S]*?<\/\1>/gi,
+  (original, tag, attributes, key) => translations[key] === undefined ? original : `<${tag}${attributes}>${translations[key]}</${tag}>`);
 await writeFile(path.join(output, "en", "index.html"), english);
 
 console.log(`Website staged at ${output}`);
