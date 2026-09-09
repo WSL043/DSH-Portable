@@ -1,0 +1,6 @@
+# Next update: user-reported visual and kernel selection issues
+
+- Window close-button top-right corner: user screenshot shows possible light edge pixels against a dark desktop. Deferred to the next update at user request. Verify native captured output at 100%, 125%, 150% DPI, light/dark themes, normal/maximized state, and hover transitions before changing clipping or frame painting. Screenshot alone does not establish the source of the pixels.
+- Kernel selection on Portable 0.6.5-rc.1 rejects catalog capsules built for 0.6.4. `launcher/update-core.mjs` currently requires exact Portable version equality for engine updates. This is not a blanket prerelease exclusion; releasing 0.6.5 alone will not make 0.6.4 capsules eligible.
+- Before the next release, generate and qualify kernel capsules/catalog entries for the released Portable version. Improve the incompatibility message to distinguish the capsule build target from a minimum version requirement. Do not bypass the existing qualification check merely by accepting a newer version number.
+- Consider a separately versioned capsule compatibility contract to reuse validated upstream kernels across shell releases. Only replace exact version matching after proving runtime, bridge, updater, and default-plugin compatibility.

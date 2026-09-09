@@ -5,8 +5,8 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  <strong>Take your entire DeepSeek Harness workspace with you.</strong><br>
-  Sessions, settings, plugins, and workspace stay together. Copy one folder and continue working.
+  <strong>Start using DeepSeek Harness and take your workspace with you.</strong><br>
+  Includes the runtime, desktop window, and Plugin Market. Keep sessions, settings, plugins, and the default workspace together for moving and backup.
 </p>
 
 <p align="center">
@@ -38,6 +38,19 @@
 > DSH-Portable is an independent community distribution, not an official DeepSeek desktop app. It packages an adapted and finished-product-tested preview of official DeepSeek Harness.
 
 ## Why portable
+
+Want to use DeepSeek Harness without first setting up a runtime, remembering launch commands, or rebuilding your plugin and session setup on another computer? Portable brings those everyday tasks into a movable desktop environment. Run the launcher or extract the complete package, connect your model service, and start working.
+
+| What you need | How Portable helps |
+| --- | --- |
+| **Start working** | Bundled Node.js and plugin tools, with a desktop entry point instead of a development-environment setup. |
+| **Install plugins visually** | Search, install, and manage plugins in the built-in market. Routine installation needs no terminal commands. |
+| **Move your environment** | Exit completely and copy the folder to a computer with the same OS and CPU architecture. Move external projects separately. |
+| **Keep your setup through updates** | Product updates preserve sessions, settings, plugins, and workspace. Official-core updates are offered separately from Portable updates. |
+| **Use desktop controls** | Dedicated window, tray, shortcuts, full screen, task notifications, and remembered window placement. |
+| **Diagnose problems** | Export a redacted support report from settings, or check and repair reproducible program components. |
+
+If you already prefer deploying official DSH, managing its runtime, and launching it from a terminal, that remains an option. Portable brings installation, desktop controls, moving, and maintenance together; model capabilities still come from your connected service. The complete offline package avoids the initial program-component download, but online models and new plugin downloads still need a network connection.
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
@@ -124,9 +137,14 @@ Copying the complete folder is supported only between the same operating system 
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
+**Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Portable integrates the upstream [dsh-market](https://github.com/dsh-market/dsh-market) project.
+
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
 Fresh installs include only two reviewed, removable defaults, currently on the Stable channel: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) **0.1.0** provides galleries, zoom, pan, download and region notes; [Chat Manager](https://github.com/WSL043/dsh-chat-manager) **1.3.3** provides archive search, restoration and confirmed session deletion. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
+
+<details>
+<summary>Advanced: manage plugins through DSH Terminal</summary>
 
 On Windows, double-click `dsh.exe` or choose **More → DSH Terminal** from the tray. On macOS, open **DSH Terminal** from the application menu. On Linux, open **DSH Terminal** from the tray. Standard DSH commands documented by a plugin can be pasted unchanged in this terminal:
 
@@ -139,6 +157,8 @@ dsh --profile web --dump-config
 ```
 
 The Portable DSH Terminal recognizes `dsh` only inside that window and never changes the system `PATH`. After moving the complete Portable folder within the same OS and architecture, a newly opened DSH Terminal automatically resolves the new location without repairing environment variables.
+
+</details>
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
@@ -176,6 +196,8 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 - When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
 - Choose Later or **Skip this version**; installation waits for active tasks. Before replacing the core, the new core composes every existing profile and its plugins; an incompatible update leaves the installed version unchanged. A new version commits only after its workspace becomes ready, and a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
 - Settings → Updates offers separate Portable and official core version selection. Portable history starts with qualified 0.6.5-rc.1 artifacts; older releases are not imported automatically, and known defective versions are excluded.
+
+The core list reflects finished-package qualification for the current Portable version, rather than every upstream release immediately. Core update packages currently require a matching Portable version: a package built for 0.6.4 cannot be used directly on 0.6.5-rc.1. Moving to stable 0.6.5 alone does not remove that restriction; a qualified core package for that version is needed.
 
 - **Settings → Portable** provides checks, repair, and a redacted support report. Startup traces and desktop/backend health samples are grouped by launch in `data/logs/history/`. Retention defaults to the latest 30 runs within 14 days, capped at 32 MiB; each log rotates at 128 KiB. Support reports include redacted launch history and explicitly mark truncation when the export budget is reached; retained local history remains available for further investigation. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
 
