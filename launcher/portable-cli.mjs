@@ -170,6 +170,28 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
   let attempts = 0
   let urlReported = false
   let identityVerified = false
+  let inspectionTimeoutRetried = false
+  const inspectOwnership = () => {
+    const queryStarted = Date.now()
+    if (onPhase) onPhase('host-process-query-begin', { final: identityVerified })
+    try {
+      const owned = ownedState(state)
+      if (onPhase) onPhase('host-process-query-end', { durationMs: Date.now() - queryStarted, owned })
+      return owned
+    } catch (error) {
+      if (onPhase) onPhase('host-process-query-failed', { durationMs: Date.now() - queryStarted, code: error?.cause?.code || 'inspection-failed' })
+      // A cold PowerShell/CIM query can time out while the child is healthy.
+      // Unknown identity is never ownership. Permit one fresh read only while
+      // the existing startup deadline still allows the bounded 10-second query.
+      if (layout.platform === 'win32' && !inspectionTimeoutRetried
+          && error?.cause?.code === 'ETIMEDOUT' && Date.now() + 10000 <= deadline) {
+        inspectionTimeoutRetried = true
+        if (onPhase) onPhase('host-process-query-retry', { attempts, reason: 'inspection-timeout' })
+        return null
+      }
+      throw error
+    }
+  }
   if (onPhase) onPhase('host-wait-begin', { pid: state.pid, port: state.port })
   while (Date.now() < deadline) {
     attempts += 1
@@ -177,7 +199,12 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
       if (onPhase) onPhase('host-process-exited', { attempts })
       return null
     }
-    if (!identityVerified && !ownedState(state)) {
+    const ownership = identityVerified ? true : inspectOwnership()
+    if (ownership === null) {
+      await new Promise((resolve) => setTimeout(resolve, 100))
+      continue
+    }
+    if (!ownership) {
       // WMI/CIM can briefly lag a just-spawned process on Windows. A live PID
       // gets a short identity grace period; mismatched or exited processes do
       // not get treated as owned and are never terminated here.
@@ -204,7 +231,12 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
     if (await httpReady(url, 1200, { preserveAccessToken: true })) {
       // Revalidate before returning the URL; polling liveness alone never grants
       // ownership for reuse or termination of a process.
-      if (!ownedState(state)) return null
+      const finalOwnership = inspectOwnership()
+      if (finalOwnership === null) {
+        await new Promise((resolve) => setTimeout(resolve, 100))
+        continue
+      }
+      if (!finalOwnership) return null
       if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
       return url
     }
