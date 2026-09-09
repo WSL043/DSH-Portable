@@ -149,7 +149,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null } = {}) 
     createElement() { return {} },
   }
   const native = nativeMessages && {
-    capabilities: { preferences: true },
+    capabilities: { preferences: true, openUpdate: true },
     postMessage(message) { nativeMessages.push(message) },
     addEventListener() {},
     removeEventListener() {},
@@ -187,6 +187,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null } = {}) 
   exports.apply(ctx)
   const registration = registered.find(entry => entry.options.id === 'portable')
   assert.ok(registration, 'Portable settings registration is present')
+  assert.equal(registration.options.name, 'settings.section', 'Portable owns a settings navigation entry')
   return { harness, mount: () => harness.mount(registration.component) }
 }
 
@@ -204,12 +205,13 @@ function settings(updateChannel = 'stable', overrides = {}) {
 }
 
 test('core update feedback names the DSH version instead of the Portable version', async () => {
+  const nativeMessages = []
   const client = await loadSettingsComponent(async url => {
     if (url === '/dsh-portable/settings') return jsonResponse({ settings: settings('candidate'), versions: { portable: '0.6.4', engine: '0.1.2-rc.1' } })
     if (url === '/dsh-portable/engine-versions') return jsonResponse({ schemaVersion: 1, releaseChannel: 'candidate', versions: [] })
     if (url === '/dsh-portable/check-update') return jsonResponse({ status: 'available', latest: '0.6.4', engineLatest: '0.1.3-alpha.2' })
     throw Error(`unexpected request: ${url}`)
-  })
+  }, { nativeMessages })
   const mounted = client.mount()
   try {
     await settle()
@@ -221,6 +223,36 @@ test('core update feedback names the DSH version instead of the Portable version
     const feedback = findNode(mounted.tree, node => node.props?.role === 'status' && textContent(node).includes('available'))
     assert.match(textContent(feedback), /0\.1\.3-alpha\.2/)
     assert.doesNotMatch(textContent(feedback), /0\.6\.4/)
+    const install = findNode(mounted.tree, node => typeof node.props?.onClick === 'function' && textContent(node) === 'Install update')
+    assert.ok(install, 'an available update can be installed from settings')
+    install.props.onClick()
+    assert.equal(nativeMessages.at(-1)?.type, 'dsh-portable/open-update')
+    assert.equal(nativeMessages.at(-1)?.scope, 'engine')
+  } finally { mounted.unmount() }
+})
+
+test('switching channels discards an old update response and its install action', async () => {
+  const pending = deferred()
+  let channel = 'stable'
+  const client = await loadSettingsComponent(async (url, options) => {
+    if (url === '/dsh-portable/settings') {
+      if (options?.method === 'POST') channel = JSON.parse(options.body).updateChannel || channel
+      return jsonResponse({ settings: settings(channel), versions: { portable: '0.6.4', engine: '0.1.2-rc.1' } })
+    }
+    if (url === '/dsh-portable/engine-versions') return jsonResponse({ schemaVersion: 1, releaseChannel: channel, versions: [] })
+    if (url === '/dsh-portable/check-update') return pending.promise
+    throw Error(url)
+  })
+  const mounted = client.mount()
+  try {
+    await settle()
+    findNode(mounted.tree, node => typeof node.props?.onClick === 'function' && textContent(node) === 'Check for updates').props.onClick()
+    await settle()
+    findNode(mounted.tree, node => node.props?.label === 'Update channel').props.onSelect('candidate')
+    await settle()
+    pending.resolve(jsonResponse({ status: 'available', latest: '0.6.5' }))
+    await settle()
+    assert.doesNotMatch(textContent(mounted.tree), /0\.6\.5|Install update/)
   } finally { mounted.unmount() }
 })
 

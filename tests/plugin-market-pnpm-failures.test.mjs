@@ -36,7 +36,16 @@ test('explicit tarball mismatch takes precedence over its prepare wrapper and de
   assert.match(multiple.message, /@scope\/plugin/)
   assert.match(multiple.message, /other/)
 })
-import { pnpmNeverStarted } from '../app/vendor/dsh-portable-plugin-market/src/dsh-cli.ts'
+import { pnpmNeverStarted, provisionPnpm } from '../app/vendor/dsh-portable-plugin-market/src/dsh-cli.ts'
+
+test('missing bundled tools stay unavailable and request Portable repair', async () => {
+  let attempts = 0
+  const result = await provisionPnpm(async () => { attempts++; return false })
+  assert.equal(attempts, 1)
+  assert.equal(result.ok, false)
+  assert.match(result.hint, /Settings → Portable/)
+  assert.deepEqual(await provisionPnpm(async () => true), { ok: true })
+})
 
 const failed = (overrides = {}) => ({
   exitCode: 1,

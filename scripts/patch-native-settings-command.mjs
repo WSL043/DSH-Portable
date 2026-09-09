@@ -37,6 +37,17 @@ async function main() {
   const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js')
   const source = await readFile(filename, 'utf8')
   await writeFile(filename, patchNativeSettingsCommand(source), 'utf8')
+  const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
+  let plugins = await readFile(pluginsFile, 'utf8')
+  for (const [before, after] of [
+    ['Configure and inspect the plugins installed in this deployment.',
+      'Install plugins in Plugin Market; update or remove them in Installed. Plugin configuration changes their settings.'],
+    ['配置和查看本部署已安装的插件。',
+      '在「插件市场」安装插件，在「已安装」中更新或卸载；「插件配置」用于修改插件设置。'],
+  ]) {
+    if (!plugins.includes(after)) plugins = replaceRequired(plugins, before, after, 'Portable plugin installation guidance')
+  }
+  await writeFile(pluginsFile, plugins, 'utf8')
   console.log(filename)
 }
 

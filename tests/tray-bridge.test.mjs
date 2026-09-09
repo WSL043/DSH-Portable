@@ -692,13 +692,13 @@ test('portable launch and packages compose the bridge as a private official DSH 
   assert.match(macBuild, /"requiredShellFingerprint": "\$SHELL_FINGERPRINT"/)
 })
 
-test('Portable maintenance is a native General settings item backed by same-origin product routes', async () => {
+test('Portable maintenance has its own settings entry backed by same-origin product routes', async () => {
   const [client, host] = await Promise.all([
     readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8'),
     readFile(new URL('../desktop-bridge/lib/index.js', import.meta.url), 'utf8'),
   ])
-  assert.match(client, /settings\.general\.item/)
-  assert.doesNotMatch(client, /settings\.section/)
+  assert.match(client, /settings\.section/)
+  assert.doesNotMatch(client, /settings\.general\.item/)
   assert.match(client, /id:\s*'portable'/)
   assert.match(client, /\/dsh-portable\/settings/)
   assert.match(client, /\/dsh-portable\/doctor/)

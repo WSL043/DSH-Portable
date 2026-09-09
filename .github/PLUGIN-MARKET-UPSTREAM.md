@@ -11,6 +11,28 @@ Reviewed means every relevant change has a disposition below, not that the
 upstream feature set is copied or that these changes are already released.
 The lock and this document advance together. Release preparation is manual.
 
+## Applicability review
+
+Treat each upstream claim as unverified for Portable. For every change, record
+one disposition: adopt, already covered, not applicable, or defer. Include the
+upstream change, the actual Portable execution path, and source/test evidence.
+An unfamiliar file or a clean local test run is not evidence of irrelevance.
+
+1. Trace whether Portable exposes or executes the affected feature. Runtime,
+   install/update/remove, profile persistence and compatibility changes take
+   priority. Follow behavior rather than matching filenames.
+2. Compare the actual implementation with the proposed fix. If already covered,
+   name the existing guard and its test; do not copy it again or bump versions.
+3. For a relevant defect, reproduce it on Portable and validate the smallest fix
+   through the affected product behavior, including recovery when data can change.
+4. Defer optional UI/features explicitly with a reason. Unknown applicability
+   remains pending review; version discovery never marks it safe or unnecessary.
+
+Before each planned release, review from the recorded baseline through the latest
+upstream release and account for every change. Advance the lock and review matrix
+only after dispositions are recorded. Confirmed serious defects receive their own
+issue and priority fix; ordinary version announcements remain Actions reports.
+
 ## Compatibility matrix
 
 | Upstream behavior | Portable decision |
@@ -96,6 +118,12 @@ The lock and this document advance together. Release preparation is manual.
 | Migrate historical Git installs to a catalog-declared npm package | Deferred; changing source and publisher needs a separate product contract and finished-product rollback proof |
 | Canonicalize upstream market plugin pages to its catalog site | Not applicable; Portable has no mirrored per-plugin public website pages |
 | Third-party desktop-host compatibility branches | Reviewed only when they affect the official DSH contract |
+
+Ordinary version discovery writes the release and comparison JSON plus a summary
+to the `plugin-market-review` Actions artifact (30-day retention), without opening
+or assigning routine issues. Review the accumulated delta before a planned
+Portable release, and create an issue only for a confirmed applicable defect.
+An unchanged or already adopted release needs no code change or plugin version bump.
 
 When `dsh-market` publishes a newer release, review its user-visible fixes
 against this matrix. Port the smallest applicable behavior with a failing test
