@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
         previousVersion: '上一版本',
         product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。',
         engine: 'DeepSeek Harness', engineHint: '官方内核，独立于 Portable 更新。选择通过兼容验证的版本。',
-        startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本',
+        startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
         incompatible: '此内核需要先更新 DSH-Portable。', engineFollowsProduct: '所选通道尚未提供内核更新包，请稍后重试。', channelUnpublished: '所选通道尚未提供更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
@@ -60,7 +60,7 @@ window.__ModuleLoader__.load({
         previousVersion: 'the previous version',
         product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations.',
         engine: 'DeepSeek Harness', engineHint: 'The official core updates independently. Choose a compatible, verified version.',
-        startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version',
+        startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
         incompatible: 'Update DSH-Portable before installing this core.', engineFollowsProduct: 'The selected channel has no engine update package yet. Please try again later.', channelUnpublished: 'The selected channel has no update package yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
@@ -314,6 +314,9 @@ window.__ModuleLoader__.load({
       const [lastUpdate, setLastUpdate] = useState(null)
       const [updateOffers, setUpdateOffers] = useState({})
       const [notificationAvailability, setNotificationAvailability] = useState('unknown')
+      const [productVersions, setProductVersions] = useState([])
+      const [productVersion, setProductVersion] = useState('')
+      const productRequestSequenceRef = React.useRef(0)
       const [engineVersions, setEngineVersions] = useState([])
       const [engineVersion, setEngineVersion] = useState('')
       const [engineVersionManifestUrls, setEngineVersionManifestUrls] = useState({})
@@ -409,6 +412,26 @@ window.__ModuleLoader__.load({
           setEngineUnavailable(unavailable)
         }).catch(error => {
           if (current()) setStatus('update-engine', format(t('failed'), error.message || error))
+        })
+        return () => { active = false }
+      }, [persistedChannel, catalogRevision])
+
+      useEffect(() => {
+        let active = true
+        const sequence = ++productRequestSequenceRef.current
+        setProductVersions([])
+        setProductVersion('')
+        if (page !== 'updates' || !persistedChannel) return () => { active = false }
+        fetch('/dsh-portable/product-versions', { cache: 'no-store' }).then(async response => {
+          const body = await response.json()
+          if (!response.ok || body.error || body.schemaVersion !== 1 || body.releaseChannel !== persistedChannel || !Array.isArray(body.versions)) throw new Error(body.error || t('updateUnavailable'))
+          return body
+        }).then(body => {
+          if (!active || sequence !== productRequestSequenceRef.current) return
+          setProductVersions(body.versions)
+          setProductVersion(body.versions.some(item => item.version === body.current) ? body.current : body.versions[0]?.version || '')
+        }).catch(error => {
+          if (active && sequence === productRequestSequenceRef.current) setStatus('update-product', format(t('failed'), error.message || error))
         })
         return () => { active = false }
       }, [persistedChannel, catalogRevision])
@@ -534,8 +557,9 @@ window.__ModuleLoader__.load({
       }
       const checkUpdate = scope => {
         if (settingsSavingRef.current || settingsSaving || busy) return
-        const selectedManifest = scope === 'engine' && engineVersion && engineVersion !== versions.engine
-          ? engineVersionManifestUrls[engineVersion] : null
+        const selectedManifest = scope === 'product'
+          ? productVersion && productVersion !== versions.portable ? productVersions.find(item => item.version === productVersion)?.manifestUrl : null
+          : engineVersion && engineVersion !== versions.engine ? engineVersionManifestUrls[engineVersion] : null
         if (selectedManifest || updateOffers[scope]) {
           if (!postToNativeHost({
             type: 'dsh-portable/open-update', schemaVersion: 1, scope,
@@ -686,8 +710,15 @@ window.__ModuleLoader__.load({
             h('div', { style: styles.hint }, hint),
             version && h('div', { style: styles.version }, format(t('currentVersion'), version))),
           h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
-            busy === `update-${scope}` ? t('checking') : scope === 'engine' && engineVersion && engineVersion !== version
+            busy === `update-${scope}` ? t('checking') : (scope === 'engine' && engineVersion && engineVersion !== version) || (scope === 'product' && productVersion && productVersion !== version)
               ? t('installVersion') : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))),
+        scope === 'product' && h('div', { style: styles.updateHeader },
+          h('div', { style: styles.label }, t('productVersionChoice')),
+          productVersions.length ? h(PortableSelector, {
+            primitives, value: productVersion, label: t('productVersionChoice'),
+            items: productVersions.map(item => ({ id: item.version, label: item.version })),
+            onSelect: setProductVersion,
+          }) : h('div', { style: styles.hint }, t('noProductVersions'))),
         scope === 'engine' && version && h('div', { style: styles.updateHeader },
           h('div', { style: styles.label }, t('versionChoice')),
           h(PortableSelector, {
@@ -716,6 +747,9 @@ window.__ModuleLoader__.load({
             onSelect: updateChannel => {
               if (updateChannel === (selectedChannel || persistedChannel || settings.updateChannel || 'stable')) return
               setSelectedChannel(updateChannel)
+              ++productRequestSequenceRef.current
+              setProductVersions([])
+              setProductVersion('')
               ++updateRequestSequenceRef.current
               setUpdateOffers({})
               setBusy('')

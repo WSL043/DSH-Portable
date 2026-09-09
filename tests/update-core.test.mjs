@@ -24,6 +24,7 @@ import {
   ignoreUpdate,
   installAvailableAppUpdate,
   listEngineVersions,
+  listProductVersions,
   platformUpdateKey,
   readInstalledUpdateState,
   rollbackPendingAppUpdate,
@@ -1109,4 +1110,40 @@ test('an interrupted swap can be rolled back from its durable journal', async ()
   } finally {
     await rm(fixture.root, { recursive: true, force: true })
   }
+})
+
+
+test('Portable catalog filters channels and keeps exact approved version URLs', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-product-catalog-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  const installed = { portableVersion: '0.6.6', releaseChannel: 'stable', dshVersion: '0.1.3-alpha.2', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify(installed))
+  const platform = platformUpdateKey(process.platform, process.arch)
+  const entry = version => ({ version,
+    manifestUrl: `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-candidate/portable-update-${platform}-${version}.json`,
+    manifest: updateManifest({ portableVersion: version, releaseChannel: version.includes('-') ? 'candidate' : 'stable', platform }),
+  })
+  const catalog = { schemaVersion: 1, releaseChannel: 'stable', versions: [entry('0.6.5-rc.1'), entry('0.6.5')] }
+  const options = { layout, fetchImpl: async () => new Response(JSON.stringify(catalog)) }
+  const result = await listProductVersions(options)
+  assert.deepEqual(result.versions.map(item => item.version), ['0.6.5'])
+  assert.equal(result.versions[0].manifestUrl, entry('0.6.5').manifestUrl)
+  assert.equal(evaluateUpdate(entry('0.6.5').manifest, installed, platform).status, 'current', 'automatic checks never downgrade')
+  assert.equal(evaluateUpdate(entry('0.6.5').manifest, installed, platform, { allowProductVersionChange: true }).status, 'available', 'explicit approved selection can change versions')
+  catalog.versions[0].manifestUrl = 'https://example.invalid/portable-update.json'
+  await assert.rejects(listProductVersions(options), /Untrusted Portable/)
+})
+
+test('selected Portable version must match the downloaded manifest', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-product-selection-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.4', dshVersion: '0.1.2-rc.1', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }))
+  const result = await checkForUpdate({ layout: layoutForRoot(root), manifestUrl: 'https://example.invalid/selected.json', releaseChannel: 'candidate', force: true,
+    expectedProductVersion: '0.6.5-rc.1', allowProductVersionChange: true,
+    fetchImpl: async () => new Response(JSON.stringify(updateManifest({ portableVersion: '0.6.6', releaseChannel: 'stable' }))) })
+  assert.equal(result.status, 'unavailable')
+  assert.match(result.message, /Selected Portable version/)
 })

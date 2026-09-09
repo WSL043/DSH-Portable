@@ -164,7 +164,7 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 
 ## Updates and repair
 
-> The screenshot and dedicated Updates settings page below describe the current development build. In the published 0.6.4 release, use Settings → General → Portable.
+> The screenshot and dedicated Updates settings page below describe the 0.6.5-rc.1 candidate. In the published 0.6.4 release, use Settings → General → Portable.
 
 ![Dedicated Updates settings page](assets/portable-updates.png)
 
@@ -175,6 +175,8 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 - A normal update downloads only the changed DSH application component and shows the real download percentage. Sessions, settings, credentials, and workspace remain in place.
 - When the runtime compatibility boundary changes, DSH-Portable downloads the verified complete package and replaces the app in place while preserving user data.
 - Choose Later or **Skip this version**; installation waits for active tasks. Before replacing the core, the new core composes every existing profile and its plugins; an incompatible update leaves the installed version unchanged. A new version commits only after its workspace becomes ready, and a startup failure or timeout restores the previous program automatically while keeping sessions, settings, plugins, and workspace.
+- Settings → Updates offers separate Portable and official core version selection. Portable history starts with qualified 0.6.5-rc.1 artifacts; older releases are not imported automatically, and known defective versions are excluded.
+
 - **Settings → Portable** provides checks, repair, and a redacted support report. Startup traces and desktop/backend health samples are grouped by launch in `data/logs/history/`. Retention defaults to the latest 30 runs within 14 days, capped at 32 MiB; each log rotates at 128 KiB. Support reports include redacted launch history and explicitly mark truncation when the export budget is reached; retained local history remains available for further investigation. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
 
 Official DSH versions are discovered from the official npm registry every hour. Each discovered version records immutable package integrity and official source provenance, then must pass finished-product qualification on five targets: Windows x64, macOS arm64, macOS x64, Linux x64, and Linux arm64. The catalog processes the latest missing version first; historical backfill is supported only within a window of at most 20 versions. A failed version never replaces the accepted catalog. A compatible official release can enter the independent core channel without a new DSH-Portable release; publication never directly replaces the working environment, and the two release lines can use different versions and dates.

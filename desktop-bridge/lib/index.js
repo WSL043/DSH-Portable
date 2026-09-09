@@ -260,6 +260,13 @@ export function mountPortableRoutes(webServer, options = {}) {
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 
+  register({ kind: 'exact', path: '/dsh-portable/product-versions', handler: async (request, response) => {
+    if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try { sendJson(response, 200, await runCli(['list-updates', '--scope', 'product', '--json', '--wait-for-lock-ms', '10000'])) }
+    catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+  } })
+
   register({ kind: 'exact', path: '/dsh-portable/doctor', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })

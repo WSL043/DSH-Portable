@@ -37,6 +37,7 @@ import {
   ignoreUpdate,
   installAvailableAppUpdate,
   listEngineVersions,
+  listProductVersions,
   readInstalledUpdateState,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
@@ -723,19 +724,30 @@ async function restoreData(options) {
 }
 
 async function checkUpdate(options) {
+  const selectedProduct = options.updateScope === 'product' && Boolean(options.updateManifest)
+  let selectedVersion
+  const testManifest = options.allowHttp && options.updateManifest
+    && new URL(options.updateManifest).protocol === 'http:'
+    && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(options.updateManifest).hostname)
+  if (selectedProduct && !testManifest) {
+    const catalog = await listProductVersions({ layout, releaseChannel: preferredUpdateChannel(options) })
+    selectedVersion = catalog.versions.find(item => item.manifestUrl === options.updateManifest)?.version
+    if (!selectedVersion) throw new Error('This Portable version is not in the approved update catalog.')
+  }
   return checkForUpdate({
     layout,
     scope: options.updateScope,
     releaseChannel: preferredUpdateChannel(options),
     manifestUrl: options.updateManifest || undefined,
+    allowProductVersionChange: selectedProduct,
+    expectedProductVersion: selectedVersion,
     allowHttp: options.allowHttp,
-    force: options.force,
+    force: options.force || selectedProduct,
   })
 }
 
 async function listUpdates(options) {
-  if (options.updateScope !== 'engine') throw new Error('Version selection is currently supported for the DeepSeek Harness engine only.')
-  return listEngineVersions({
+  return (options.updateScope === 'engine' ? listEngineVersions : listProductVersions)({
     layout,
     releaseChannel: preferredUpdateChannel(options),
     allowHttp: options.allowHttp,
@@ -746,14 +758,7 @@ async function update(options) {
   requireRuntime()
   await ensurePortableDirectories(layout)
   await migratePortableRoot(layout)
-  const available = await checkForUpdate({
-    layout,
-    scope: options.updateScope,
-    releaseChannel: preferredUpdateChannel(options),
-    manifestUrl: options.updateManifest || undefined,
-    allowHttp: options.allowHttp,
-    force: true,
-  })
+  const available = await checkUpdate({ ...options, force: true })
   if (available.status !== 'available') return available
 
   await assertSharedComponentsIdle({ allowCurrent: true })

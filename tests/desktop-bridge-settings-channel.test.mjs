@@ -133,7 +133,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates' } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -142,6 +142,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
     'IconChevronDownOutline14', 'IconDownloadOutline16', 'IconFolderOpenOutline16',
   ].map(name => [name, function Primitive() {}]))
   let definition
+  let productChannel = 'stable'
   const document = {
     documentElement: { lang: 'en' },
     head: { appendChild() {} },
@@ -158,7 +159,15 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
   vm.runInNewContext(source, {
     console,
     document,
-    fetch: fetchImpl,
+    fetch: async (url, options) => {
+      if (url === '/dsh-portable/product-versions') return productFetch ? productFetch(url, options) : jsonResponse({ schemaVersion: 1, current: '', releaseChannel: productChannel, versions: [] })
+      const response = await fetchImpl(url, options)
+      if (url === '/dsh-portable/settings') {
+        const read = response.json.bind(response)
+        response.json = async () => { const body = await read(); productChannel = body.settings?.updateChannel || productChannel; return body }
+      }
+      return response
+    },
     queueMicrotask,
     requestAnimationFrame(callback) { callback(); return 0 },
     setTimeout,
@@ -536,5 +545,25 @@ test('installed core is not shown as an unavailable install target', async () =>
   await settle()
   assert.doesNotMatch(textContent(mounted.tree), /Version 0\.1\.2-rc\.1:/)
   assert.match(textContent(mounted.tree), /Version 0\.1\.3:/)
+  mounted.unmount()
+})
+
+
+test('Portable version selection sends the exact approved manifest to the desktop host', async () => {
+  const messages = []
+  const manifestUrl = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-candidate/portable-update-windows-x64-0.6.5-rc.1.json'
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings('candidate'), versions: { portable: '0.6.4', engine: '0.1.3-alpha.2' } }
+    : { schemaVersion: 1, releaseChannel: 'candidate', current: '0.1.3-alpha.2', versions: [], unavailable: [] }), {
+    nativeMessages: messages,
+    productFetch: async () => jsonResponse({ schemaVersion: 1, releaseChannel: 'candidate', current: '0.6.4', versions: [{ version: '0.6.5-rc.1', manifestUrl }] }),
+  })
+  const mounted = client.mount()
+  await settle()
+  const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
+  assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.5-rc.1'])
+  findNode(mounted.tree, node => textContent(node) === 'Install selected version' && typeof node.props?.onClick === 'function').props.onClick()
+  assert.equal(messages.at(-1).scope, 'product')
+  assert.equal(messages.at(-1).manifestUrl, manifestUrl)
   mounted.unmount()
 })
