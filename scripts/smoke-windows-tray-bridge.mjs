@@ -119,21 +119,25 @@ async function reserveLoopbackPort() {
 
 async function waitForDevTools(port, process, output, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
+  let lastProbe = 'not attempted'
   while (Date.now() < deadline) {
+    if (output.error) throw new Error(`headless Chrome spawn failed: ${output.error}`)
     if (process.exitCode !== null) {
       throw new Error(`headless Chrome exited before DevTools became ready (code ${process.exitCode}): ${output.stderr || output.stdout}`)
     }
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/list`)
+      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(1500) })
+      lastProbe = `HTTP ${response.status}`
       if (response.ok) {
         const targets = await response.json()
+        lastProbe = JSON.stringify(targets.map(target => ({ type: target.type, url: target.url })))
         const page = targets.find(target => target.type === 'page')
         if (page?.webSocketDebuggerUrl) return page
       }
-    } catch { /* Chrome is still starting */ }
+    } catch (error) { lastProbe = String(error.cause || error) }
     await new Promise(resolve => setTimeout(resolve, 100))
   }
-  throw new Error(`timed out waiting for headless Chrome DevTools on 127.0.0.1:${port}: ${output.stderr || output.stdout}`)
+  throw new Error(`timed out waiting for headless Chrome DevTools on 127.0.0.1:${port}; pid=${process.pid}; exit=${process.exitCode}; probe=${lastProbe}; output=${JSON.stringify(output)}`)
 }
 
 class CdpClient {
@@ -271,7 +275,9 @@ try {
   profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-tray-headless-'))
   const debugPort = await reserveLoopbackPort()
   const chromeOutput = { stdout: '', stderr: '' }
-  chrome = spawn(chromeExecutable(), [
+  const executable = chromeExecutable()
+  process.stdout.write(`${JSON.stringify({ phase: 'chrome-launch', executable, profile, debugPort, node: process.version })}\n`)
+  chrome = spawn(executable, [
     '--headless=new',
     `--remote-debugging-port=${debugPort}`,
     '--remote-debugging-address=127.0.0.1',
@@ -281,9 +287,11 @@ try {
     '--disable-background-networking',
     '--disable-component-update',
     '--disable-gpu',
+    '--enable-logging=stderr',
     '--window-size=1440,900',
     'about:blank',
   ], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  chrome.on('error', error => { chromeOutput.error = String(error) })
   chrome.stdout.on('data', chunk => { chromeOutput.stdout = `${chromeOutput.stdout}${chunk}`.slice(-8000) })
   chrome.stderr.on('data', chunk => { chromeOutput.stderr = `${chromeOutput.stderr}${chunk}`.slice(-8000) })
 

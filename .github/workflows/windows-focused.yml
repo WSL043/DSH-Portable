@@ -1,0 +1,59 @@
+name: Focused Windows artifact verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Existing CI run containing windows-x64-build (diagnostic reuse only)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  tray-bridge:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Record artifact and harness provenance
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.run_id }}
+        run: |
+          New-Item -ItemType Directory evidence | Out-Null
+          gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" --jq '{id,head_sha,path,conclusion,head_branch}' | Out-File evidence/source-run.json -Encoding utf8
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve source run' }
+          git rev-parse HEAD | Out-File evidence/harness-commit.txt
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ github.token }}
+      - name: Verify tray bridge using existing product
+        shell: pwsh
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-focused'
+          New-Item -ItemType Directory -Force $Root | Out-Null
+          Get-FileHash artifacts/DSH-Portable-windows-x64-offline.zip | Format-List | Out-File evidence/artifact-sha256.txt
+          tar.exe -xf artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
+          node scripts/smoke-windows-tray-bridge.mjs (Join-Path $Root 'DSH-Portable') 2>&1 | Tee-Object evidence/tray-bridge.log
+          if ($LASTEXITCODE -ne 0) { throw 'Tray bridge check failed; see retained evidence' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: focused-windows-${{ matrix.runner }}
+          path: evidence/
+          retention-days: 14
