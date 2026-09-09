@@ -1121,6 +1121,17 @@ namespace DshPortable
         protected override Padding DefaultPadding { get { return new Padding(0, 6, 0, 6); } }
     }
 
+    internal sealed class DesktopMenuItem : ToolStripMenuItem
+    {
+        internal DesktopMenuItem(string text) : base(text) { }
+        protected override void OnMouseEnter(EventArgs e)
+        {
+            // ToolStripMenuItem starts its auto-expand timer here. Selection is
+            // painted by the strip; clicks and keyboard navigation retain native handling.
+            Invalidate();
+        }
+    }
+
     internal sealed class DesktopTitleStrip : MenuStrip
     {
         internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
@@ -1559,6 +1570,19 @@ namespace DshPortable
 
         protected override void WndProc(ref Message message)
         {
+            if (desktopStart && !fullscreen && message.Msg == 0x0085)
+            {
+                message.Result = IntPtr.Zero;
+                return;
+            }
+            if (desktopStart && !fullscreen && message.Msg == 0x0086)
+            {
+                // Activate normally without repainting a classic non-client frame
+                // over the client-drawn title row.
+                message.LParam = new IntPtr(-1);
+                base.WndProc(ref message);
+                return;
+            }
             if (desktopStart && !fullscreen && message.Msg == 0x0083 && message.WParam != IntPtr.Zero)
             {
                 // Keep native sizing styles but render through the invisible
@@ -1623,9 +1647,9 @@ namespace DshPortable
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
             desktopContent.BringToFront();
-            ToolStripMenuItem file = new ToolStripMenuItem(L("文件", "&File"));
-            ToolStripMenuItem view = new ToolStripMenuItem(L("视图", "&View"));
-            ToolStripMenuItem help = new ToolStripMenuItem(L("帮助", "&Help"));
+            ToolStripMenuItem file = new DesktopMenuItem(L("文件", "&File"));
+            ToolStripMenuItem view = new DesktopMenuItem(L("视图", "&View"));
+            ToolStripMenuItem help = new DesktopMenuItem(L("帮助", "&Help"));
             file.Name = "menu-file"; view.Name = "menu-view"; help.Name = "menu-help";
             desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
@@ -5245,6 +5269,10 @@ namespace DshPortable
             webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
             webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
             await webView.EnsureCoreWebView2Async(webViewEnvironment);
+            webView.SendToBack();
+            if (launchPanel.Visible) launchPanel.BringToFront();
+            AppendStartupTrace("native-host", "webview-initialized-behind-loader",
+                new Dictionary<string, object> { { "loadingFrontmost", desktopContent.Controls.GetChildIndex(launchPanel) == 0 } });
             ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
             RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
         }
@@ -5267,7 +5295,7 @@ namespace DshPortable
                 Dock = DockStyle.Fill,
                 Location = Point.Empty,
                 DefaultBackgroundColor = BackColor,
-                Visible = true,
+                Visible = false,
             };
             view.KeyDown += delegate(object sender, KeyEventArgs args)
             {
