@@ -646,6 +646,8 @@ namespace DshPortable
         private Color Border { get { return dark ? Color.FromArgb(61, 63, 66) : Color.FromArgb(218, 218, 218); } }
         internal Color TextColor { get { return dark ? Color.FromArgb(238, 239, 241) : Color.FromArgb(15, 17, 21); } }
         internal Color CaptionColor { get { return dark ? Color.FromArgb(173, 178, 184) : Color.FromArgb(97, 102, 107); } }
+        internal Color DisabledColor { get { return dark ? Color.FromArgb(121, 124, 129) : Color.FromArgb(148, 151, 157); } }
+        internal Color DisabledCaptionColor { get { return dark ? Color.FromArgb(112, 116, 121) : Color.FromArgb(157, 160, 166); } }
         internal Color SurfaceColor { get { return Surface; } }
         internal Color SelectedColor { get { return Selected; } }
         internal Color BorderColor { get { return Border; } }
@@ -905,13 +907,67 @@ namespace DshPortable
     internal sealed class DesktopTitleRenderer : ToolStripProfessionalRenderer
     {
         private readonly bool dark;
-        internal DesktopTitleRenderer(bool isDark) : base(new DshMenuColorTable(isDark)) { dark = isDark; }
+        private readonly DshMenuColorTable colors;
+
+        internal DesktopTitleRenderer(bool isDark) : this(new DshMenuColorTable(isDark), isDark) { }
+
+        private DesktopTitleRenderer(DshMenuColorTable menuColors, bool isDark) : base(menuColors)
+        {
+            colors = menuColors;
+            dark = isDark;
+            RoundedEdges = false;
+        }
+
+        internal DshMenuColorTable Colors { get { return colors; } }
+
+        private bool IsDesktopDropDown(ToolStrip toolStrip)
+        {
+            return toolStrip is ToolStripDropDown;
+        }
+
+        private static GraphicsPath RoundedRectangle(Rectangle bounds, int radius)
+        {
+            int diameter = radius * 2;
+            GraphicsPath path = new GraphicsPath();
+            path.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        protected override void OnRenderToolStripBackground(ToolStripRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                using (SolidBrush brush = new SolidBrush(colors.SurfaceColor))
+                    e.Graphics.FillRectangle(brush, new Rectangle(Point.Empty, e.ToolStrip.Size));
+                return;
+            }
+            base.OnRenderToolStripBackground(e);
+        }
+
         protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
         {
             if (!(e.ToolStrip is DesktopTitleStrip)) base.OnRenderToolStripBorder(e);
         }
+
         protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
         {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
+                using (SolidBrush surface = new SolidBrush(colors.SurfaceColor))
+                    e.Graphics.FillRectangle(surface, new Rectangle(Point.Empty, e.Item.Size));
+                if (dropDownItem == null || (!dropDownItem.Selected && !dropDownItem.Pressed)) return;
+                Rectangle selectedBounds = new Rectangle(4, 2, Math.Max(1, e.Item.Width - 8), Math.Max(1, e.Item.Height - 4));
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (GraphicsPath path = RoundedRectangle(selectedBounds, 4))
+                using (SolidBrush selected = new SolidBrush(colors.SelectedColor))
+                    e.Graphics.FillPath(selected, path);
+                return;
+            }
             if (!(e.ToolStrip is DesktopTitleStrip)) { base.OnRenderMenuItemBackground(e); return; }
             if (!e.Item.Selected && !e.Item.Pressed) return;
             bool close = e.Item.Name == "caption-close";
@@ -937,8 +993,50 @@ namespace DshPortable
                 }
             }
         }
+
+        protected override void OnRenderSeparator(ToolStripSeparatorRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                int y = e.Item.Height / 2;
+                using (Pen pen = new Pen(colors.BorderColor))
+                    e.Graphics.DrawLine(pen, 12, y, Math.Max(12, e.Item.Width - 12), y);
+                return;
+            }
+            base.OnRenderSeparator(e);
+        }
+
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
+            if (IsDesktopDropDown(e.ToolStrip))
+            {
+                ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
+                if (dropDownItem == null) { base.OnRenderItemText(e); return; }
+                string shortcut = dropDownItem.ShowShortcutKeys ? dropDownItem.ShortcutKeyDisplayString ?? "" : "";
+                Size shortcutSize = String.IsNullOrEmpty(shortcut)
+                    ? Size.Empty
+                    : TextRenderer.MeasureText(shortcut, e.TextFont, Size.Empty,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                int trailing = dropDownItem.DropDownItems.Count > 0 ? 30 : 12;
+                int shortcutLeft = Math.Max(12, e.Item.Width - trailing - shortcutSize.Width);
+                Color titleColor = dropDownItem.Enabled ? colors.TextColor : colors.DisabledColor;
+                Color shortcutColor = dropDownItem.Enabled ? colors.CaptionColor : colors.DisabledCaptionColor;
+                if (e.Text == dropDownItem.Text)
+                {
+                    int titleRight = String.IsNullOrEmpty(shortcut) ? e.Item.Width - trailing : shortcutLeft - 12;
+                    Rectangle titleBounds = new Rectangle(12, 0, Math.Max(1, titleRight - 12), e.Item.Height);
+                    TextRenderer.DrawText(e.Graphics, dropDownItem.Text, e.TextFont, titleBounds, titleColor,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter);
+                    return;
+                }
+                if (e.Text == shortcut && !String.IsNullOrEmpty(shortcut))
+                {
+                    Rectangle shortcutBounds = new Rectangle(shortcutLeft, 0, shortcutSize.Width, e.Item.Height);
+                    TextRenderer.DrawText(e.Graphics, shortcut, e.TextFont, shortcutBounds, shortcutColor,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine | TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
+                }
+                return;
+            }
             if (e.ToolStrip is DesktopTitleStrip && e.Item.Name.StartsWith("nav-"))
             {
                 Color color = !e.Item.Enabled ? (dark ? Color.FromArgb(76, 76, 80) : Color.FromArgb(186, 186, 190))
@@ -970,6 +1068,26 @@ namespace DshPortable
                     : dark ? Color.FromArgb(174, 174, 178) : Color.FromArgb(87, 87, 92);
             base.OnRenderItemText(e);
         }
+
+        protected override void OnRenderArrow(ToolStripArrowRenderEventArgs e)
+        {
+            if (IsDesktopDropDown(e.Item.Owner))
+            {
+                ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
+                Color glyph = dropDownItem != null && dropDownItem.Enabled ? colors.TextColor : colors.DisabledColor;
+                Rectangle arrowBounds = new Rectangle(Math.Max(0, e.Item.Width - 24),
+                    Math.Max(0, (e.Item.Height - 12) / 2), 12, 12);
+                ControlPaint.DrawMenuGlyph(e.Graphics, arrowBounds, MenuGlyph.Arrow, glyph,
+                    e.Item.Selected ? colors.SelectedColor : colors.SurfaceColor);
+                return;
+            }
+            base.OnRenderArrow(e);
+        }
+    }
+
+    internal sealed class DesktopDropDown : ToolStripDropDownMenu
+    {
+        protected override Padding DefaultPadding { get { return new Padding(0, 6, 0, 6); } }
     }
 
     internal sealed class DesktopTitleStrip : MenuStrip
@@ -1500,7 +1618,23 @@ namespace DshPortable
                     Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
             help.DropDownItems.Add(CreateReportProblemItem());
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
+            foreach (ToolStripMenuItem menu in desktopMenu.Items) AttachDesktopDropDownHandlers(menu);
             RefreshDesktopCommands();
+        }
+
+        private void AttachDesktopDropDownHandlers(ToolStripMenuItem menu)
+        {
+            if (menu.DropDownItems.Count == 0) return;
+            ToolStripDropDown previous = menu.DropDown;
+            ToolStripItem[] items = previous.Items.Cast<ToolStripItem>().ToArray();
+            previous.Items.Clear();
+            menu.DropDown = new DesktopDropDown();
+            menu.DropDown.Items.AddRange(items);
+            previous.Dispose();
+            ToolStripDropDown dropDown = menu.DropDown;
+            dropDown.Opened += delegate { ApplyRoundedCorners(dropDown); };
+            foreach (ToolStripMenuItem child in dropDown.Items.OfType<ToolStripMenuItem>())
+                AttachDesktopDropDownHandlers(child);
         }
 
         private void AddCaptionCommand(string name, string glyph, string label, EventHandler action)
@@ -1693,6 +1827,70 @@ namespace DshPortable
             catch { }
         }
 
+        private static int MeasureDesktopDropDownWidth(ToolStripDropDown dropDown)
+        {
+            int desired = 260;
+            foreach (ToolStripItem item in dropDown.Items)
+            {
+                ToolStripMenuItem menuItem = item as ToolStripMenuItem;
+                if (menuItem == null) continue;
+                Font font = menuItem.Font ?? dropDown.Font;
+                Size title = TextRenderer.MeasureText(menuItem.Text ?? "", font, Size.Empty,
+                    TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                string shortcut = menuItem.ShowShortcutKeys ? menuItem.ShortcutKeyDisplayString ?? "" : "";
+                Size shortcutSize = String.IsNullOrEmpty(shortcut)
+                    ? Size.Empty
+                    : TextRenderer.MeasureText(shortcut, font, Size.Empty,
+                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                int trailing = menuItem.DropDownItems.Count > 0 ? 30 : 12;
+                int measured = 12 + title.Width + (shortcutSize.Width > 0 ? 24 + shortcutSize.Width : 0) + trailing + 2;
+                desired = Math.Max(desired, measured);
+            }
+            return desired;
+        }
+
+        private static void ApplyDesktopDropDownTheme(ToolStripDropDown dropDown, DesktopTitleRenderer renderer,
+            DshMenuColorTable colors)
+        {
+            ToolStripDropDownMenu menu = dropDown as ToolStripDropDownMenu;
+            if (menu != null)
+            {
+                menu.ShowImageMargin = false;
+                menu.ShowCheckMargin = false;
+            }
+            dropDown.Renderer = renderer;
+            dropDown.BackColor = colors.SurfaceColor;
+            dropDown.ForeColor = colors.TextColor;
+            dropDown.Padding = new Padding(0, 6, 0, 6);
+            dropDown.AutoSize = false;
+            int width = MeasureDesktopDropDownWidth(dropDown);
+            int itemWidth = Math.Max(1, width - 2);
+            int height = dropDown.Padding.Vertical + 4;
+            foreach (ToolStripItem item in dropDown.Items)
+            {
+                item.BackColor = colors.SurfaceColor;
+                item.ForeColor = colors.TextColor;
+                item.AutoSize = false;
+                item.Margin = Padding.Empty;
+                if (item is ToolStripSeparator)
+                {
+                    item.Padding = Padding.Empty;
+                    item.Size = new Size(itemWidth, 13);
+                    height += item.Height;
+                    continue;
+                }
+                item.Padding = new Padding(12, 0, 12, 0);
+                item.Size = new Size(itemWidth, 30);
+                height += item.Height;
+                ToolStripMenuItem menuItem = item as ToolStripMenuItem;
+                if (menuItem != null && menuItem.DropDownItems.Count > 0)
+                    ApplyDesktopDropDownTheme(menuItem.DropDown, renderer, colors);
+            }
+            dropDown.MinimumSize = new Size(width, height);
+            dropDown.MaximumSize = new Size(width, height);
+            dropDown.Size = new Size(width, height);
+        }
+
         private void ApplyDesktopChrome()
         {
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
@@ -1733,13 +1931,13 @@ namespace DshPortable
             {
                 desktopMenu.BackColor = dark ? Color.FromArgb(30, 30, 32) : Color.FromArgb(250, 250, 251);
                 desktopMenu.ForeColor = foreground;
-                desktopMenu.Renderer = new DesktopTitleRenderer(dark);
+                DesktopTitleRenderer renderer = new DesktopTitleRenderer(dark);
+                DshMenuColorTable colors = renderer.Colors;
+                desktopMenu.Renderer = renderer;
                 foreach (ToolStripMenuItem menu in desktopMenu.Items)
                 {
                     menu.ForeColor = foreground;
-                    menu.DropDown.BackColor = background;
-                    menu.DropDown.ForeColor = foreground;
-                    foreach (ToolStripItem item in menu.DropDownItems) item.ForeColor = foreground;
+                    ApplyDesktopDropDownTheme(menu.DropDown, renderer, colors);
                 }
             }
             if (webView != null && !webView.IsDisposed) webView.DefaultBackgroundColor = background;

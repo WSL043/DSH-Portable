@@ -1,5 +1,5 @@
 param([Parameter(Mandatory=$true)][string]$Root, [Parameter(Mandatory=$true)][string]$Evidence,
-      [switch]$HeaderOnly, [switch]$HighlightMenu, [switch]$NavigationPreview, [string]$Language)
+      [switch]$HeaderOnly, [switch]$HighlightMenu, [switch]$NavigationPreview, [switch]$PopupMenus, [string]$Language)
 $ErrorActionPreference='Stop'
 $env:DSH_PORTABLE_TEST_HIDDEN='1'
 $env:DSH_PORTABLE_TEST_AUTOMATION='1'
@@ -16,6 +16,7 @@ public static class TitlebarProbe {
 '@
 $Root=(Resolve-Path -LiteralPath $Root).Path
 New-Item -ItemType Directory -Path $Evidence -Force | Out-Null
+$Evidence=(Resolve-Path -LiteralPath $Evidence).Path
 $assembly=[Reflection.Assembly]::LoadFrom((Join-Path $Root 'DeepSeek-Herness.exe'))
 $type=$assembly.GetType('DshPortable.LauncherWindow',$true)
 $flags=[Reflection.BindingFlags]'Instance,Public,NonPublic'
@@ -57,7 +58,8 @@ try {
  if($window.WindowState -ne 'Minimized'){throw 'Minimize command failed'}
  $window.WindowState='Normal'
  $window.Location=[Drawing.Point]::new(-32000,-32000)
- if($NavigationPreview){
+ $popupCaptures=[ordered]@{}
+ if($NavigationPreview -or $PopupMenus){
    $state=[Activator]::CreateInstance($assembly.GetType('DshPortable.TrayBridgeState'),$true)
    $state.canGoBack=$true
    $state.canGoForward=$false
@@ -66,7 +68,7 @@ try {
    $type.GetField('trayBridgeReady',$flags).SetValue($window,$true)
    $type.GetField('operationRunning',$flags).SetValue($window,$false)
    $type.GetMethod('RefreshDesktopCommands',$flags).Invoke($window,@()) | Out-Null
-   if(-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-back'].Enabled -or $menu.Items['nav-forward'].Enabled){throw 'Navigation availability does not follow host state'}
+   if($NavigationPreview -and (-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-back'].Enabled -or $menu.Items['nav-forward'].Enabled)){throw 'Navigation availability does not follow host state'}
  }
  foreach($theme in @('dark','light')){
    $type.GetField('trayTheme',$flags).SetValue($window,$theme)
@@ -82,6 +84,34 @@ try {
    finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
    $bitmap.Save((Join-Path $Evidence "$theme.png"))
    $bitmap.Dispose()
+   if($PopupMenus){
+     $popupCaptures[$theme]=[ordered]@{}
+     foreach($name in @('menu-file','menu-view','menu-help')){
+       $dropDown=$menu.Items[$name].DropDown
+       $dropDown.PerformLayout()
+       $dropDown.CreateControl()
+       $selectable=@($dropDown.Items | Where-Object { $_ -is [Windows.Forms.ToolStripMenuItem] -and $_.Enabled })
+       if($selectable.Count -gt 0){$selectable[0].Select()}
+       [Windows.Forms.Application]::DoEvents()
+       if($dropDown.Width -lt 260){throw "$name dropdown is narrower than 260px: $($dropDown.Width)"}
+       if($dropDown.Padding.Top -ne 6 -or $dropDown.Padding.Bottom -ne 6){throw "$name dropdown padding is not 6px"}
+       foreach($item in $dropDown.Items){
+         if($item -is [Windows.Forms.ToolStripSeparator]){
+           if($item.Height -ne 13){throw "$name separator height is not 13px: $($item.Height)"}
+         } elseif($item -is [Windows.Forms.ToolStripMenuItem] -and $item.Height -ne 30){
+           throw "$name menu row height is not 30px: $($item.Height)"
+         }
+       }
+       # Draw the real native dropdown off-screen; this does not exercise DWM's popup shadow.
+       $popupBitmap=[Drawing.Bitmap]::new($dropDown.Width,$dropDown.Height)
+       $dropDown.DrawToBitmap($popupBitmap,[Drawing.Rectangle]::new(0,0,$popupBitmap.Width,$popupBitmap.Height))
+       $popupName=$name.Substring(5)
+       $popupPath=Join-Path $Evidence "$theme-$popupName.png"
+       $popupBitmap.Save($popupPath)
+       $popupBitmap.Dispose()
+       $popupCaptures[$theme][$popupName]=$popupPath
+     }
+   }
  }
- @{passed=$true;captionInset=$inset;titleHeight=$menu.Height;contentTop=$content.Top;dragHitTest=$hit;captionCommands=@('minimize','maximize','restore');themes=@('dark','light')} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Evidence 'result.json') -Encoding UTF8
+ @{passed=$true;captionInset=$inset;titleHeight=$menu.Height;contentTop=$content.Top;dragHitTest=$hit;captionCommands=@('minimize','maximize','restore');themes=@('dark','light');popupMenus=$popupCaptures;popupMenuCapture='DrawToBitmap';popupMenuShadowVerified=$false} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Evidence 'result.json') -Encoding UTF8
 } finally { $window.Dispose() }
