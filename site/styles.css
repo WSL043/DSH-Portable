@@ -233,10 +233,10 @@ html[data-motion="full"] .scroll-cue { animation: cue-breathe 2.8s ease-in-out i
 
 html[data-motion="reduced"] { scroll-behavior: auto; }
 html[data-motion="reduced"] *, html[data-motion="reduced"] *::before, html[data-motion="reduced"] *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-delay: 0ms !important; }
-html[data-motion="reduced"] .hero-atmosphere, html[data-motion="reduced"] .product-window, html[data-motion="reduced"] .js .hero-copy > *, html[data-motion="reduced"] .js .product-stage, html[data-motion="reduced"] .js .reveal { opacity: 1 !important; transform: none !important; }
+html[data-motion="reduced"] .hero-atmosphere, html[data-motion="reduced"] .product-window, html.js[data-motion="reduced"] .hero-copy > *, html.js[data-motion="reduced"] .product-stage, html.js[data-motion="reduced"] .reveal { opacity: 1 !important; transform: none !important; }
 
 @media (prefers-reduced-motion: reduce) {
   html:not([data-motion="full"]) { scroll-behavior: auto; }
   html:not([data-motion="full"]) *, html:not([data-motion="full"]) *::before, html:not([data-motion="full"]) *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-delay: 0ms !important; }
-  html:not([data-motion="full"]) .hero-atmosphere, html:not([data-motion="full"]) .product-window, html:not([data-motion="full"]) .js .hero-copy > *, html:not([data-motion="full"]) .js .product-stage, html:not([data-motion="full"]) .js .reveal { opacity: 1 !important; transform: none !important; }
+  html:not([data-motion="full"]) .hero-atmosphere, html:not([data-motion="full"]) .product-window, html.js:not([data-motion="full"]) .hero-copy > *, html.js:not([data-motion="full"]) .product-stage, html.js:not([data-motion="full"]) .reveal { opacity: 1 !important; transform: none !important; }
 }
