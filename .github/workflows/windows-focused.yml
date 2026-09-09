@@ -97,3 +97,10 @@ jobs:
           name: focused-windows-${{ matrix.runner }}
           path: evidence/
           retention-days: 14
+      - name: Retain isolated product logs even when start fails
+        if: always() && inputs.scope == 'tray'
+        uses: actions/upload-artifact@v7
+        with:
+          name: focused-product-logs-${{ matrix.runner }}
+          path: ${{ runner.temp }}/dsh-focused/DSH-Portable/data/logs/
+          retention-days: 14
