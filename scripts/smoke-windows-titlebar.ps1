@@ -39,7 +39,7 @@ try {
  $window.PerformLayout()
  $origin=$window.PointToScreen([Drawing.Point]::Empty)
  $inset=$origin.Y-$window.Top
- if($inset -gt 12){throw "Separate native caption remains: $inset px"}
+ if($inset -ne 0){throw "Extra top frame remains above the title row: $inset px"}
  if($menu.Height -ne 36 -or $content.Top -ne $menu.Bottom){throw 'Expected a single 36px title row above content'}
  foreach($name in @('caption-minimize','caption-maximize','caption-close')){
    $item=$menu.Items[$name]
@@ -49,6 +49,10 @@ try {
  $packed=([long]($point.Y -band 65535) -shl 16) -bor ($point.X -band 65535)
  $hit=[TitlebarProbe]::SendMessage($handle,0x84,[IntPtr]::Zero,[IntPtr]$packed).ToInt32()
  if($hit -ne 2){throw "Blank title row does not use native drag hit testing: $hit"}
+ $resizePoint=$menu.PointToScreen([Drawing.Point]::new([int]($menu.Width/2),2))
+ $resizePacked=([long]($resizePoint.Y -band 65535) -shl 16) -bor ($resizePoint.X -band 65535)
+ $resizeHit=[TitlebarProbe]::SendMessage($handle,0x84,[IntPtr]::Zero,[IntPtr]$resizePacked).ToInt32()
+ if($resizeHit -ne 12){throw "Top resize edge is unavailable: $resizeHit"}
  # Hidden controls exercise the same caption handlers without moving a visible window.
  $menu.Items['caption-maximize'].PerformClick()
  if($window.WindowState -ne 'Maximized'){throw 'Maximize command failed'}

@@ -977,16 +977,35 @@ namespace DshPortable
             if (!e.Item.Enabled || (!e.Item.Selected && !e.Item.Pressed)) return;
             bool close = e.Item.Name == "caption-close";
             Rectangle bounds = new Rectangle(0, 0, e.Item.Width, e.Item.Height);
-            Color color = close ? Color.FromArgb(196, 43, 28)
+            Color color = close ? Color.FromArgb(232, 17, 35)
                 : e.Item.Pressed ? (dark ? Color.FromArgb(62, 62, 62) : Color.FromArgb(220, 220, 220))
                 : dark ? Color.FromArgb(47, 47, 47) : Color.FromArgb(235, 235, 235);
             using (SolidBrush brush = new SolidBrush(color))
             {
-                if (e.Item.Name.StartsWith("caption-")) { e.Graphics.FillRectangle(brush, bounds); return; }
+                if (e.Item.Name.StartsWith("caption-"))
+                {
+                    if (close && e.ToolStrip.FindForm().WindowState == FormWindowState.Normal)
+                    {
+                        using (GraphicsPath corner = new GraphicsPath())
+                        {
+                            corner.AddLine(0, 0, bounds.Right - 8, 0);
+                            corner.AddArc(bounds.Right - 16, 0, 16, 16, 270, 90);
+                            corner.AddLine(bounds.Right, 8, bounds.Right, bounds.Bottom);
+                            corner.AddLine(bounds.Right, bounds.Bottom, 0, bounds.Bottom);
+                            corner.CloseFigure();
+                            SmoothingMode previous = e.Graphics.SmoothingMode;
+                            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                            e.Graphics.FillPath(brush, corner);
+                            e.Graphics.SmoothingMode = previous;
+                        }
+                    }
+                    else e.Graphics.FillRectangle(brush, bounds);
+                    return;
+                }
                 bounds.Inflate(-1, -2);
                 using (GraphicsPath shape = new GraphicsPath())
                 {
-                    const int diameter = 8;
+                    int diameter = e.Item.Name.StartsWith("nav-") ? 14 : 8;
                     shape.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
                     shape.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
                     shape.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
@@ -1117,7 +1136,9 @@ namespace DshPortable
             {
                 long position = message.LParam.ToInt64();
                 Point point = PointToClient(new Point((short)position, (short)(position >> 16)));
-                if (GetItemAt(point) == null) { message.Result = new IntPtr(-1); return; }
+                if (GetItemAt(point) == null || (FindForm().WindowState == FormWindowState.Normal
+                    && (point.Y < 4 || point.X < 4 || point.X >= Width - 4)))
+                { message.Result = new IntPtr(-1); return; }
             }
             base.WndProc(ref message);
         }
@@ -1537,10 +1558,30 @@ namespace DshPortable
 
         protected override void WndProc(ref Message message)
         {
+            if (desktopStart && !fullscreen && message.Msg == 0x0083 && message.WParam != IntPtr.Zero)
+            {
+                // Keep native sizing styles but render through the invisible
+                // resize frame; otherwise its inset separates controls from DWM corners.
+                int[] bounds = new int[4];
+                Marshal.Copy(message.LParam, bounds, 0, bounds.Length);
+                base.WndProc(ref message);
+                if (WindowState == FormWindowState.Normal)
+                    Marshal.Copy(bounds, 0, message.LParam, bounds.Length);
+                return;
+            }
             if (desktopStart && !fullscreen && desktopMenu != null && message.Msg == 0x0084)
             {
                 long position = message.LParam.ToInt64();
                 Point point = desktopMenu.PointToClient(new Point((short)position, (short)(position >> 16)));
+                Point clientPoint = PointToClient(new Point((short)position, (short)(position >> 16)));
+                if (WindowState == FormWindowState.Normal && ClientRectangle.Contains(clientPoint))
+                {
+                    bool left = clientPoint.X < 4, right = clientPoint.X >= ClientSize.Width - 4;
+                    bool top = clientPoint.Y < 4, bottom = clientPoint.Y >= ClientSize.Height - 4;
+                    int edge = top ? (left ? 13 : right ? 14 : 12)
+                        : bottom ? (left ? 16 : right ? 17 : 15) : left ? 10 : right ? 11 : 0;
+                    if (edge != 0) { message.Result = new IntPtr(edge); return; }
+                }
                 if (desktopMenu.ClientRectangle.Contains(point) && desktopMenu.GetItemAt(point) == null)
                 {
                     message.Result = new IntPtr(2); // Native caption drag/double-click/system menu.
@@ -3719,6 +3760,20 @@ namespace DshPortable
                     BeginInvoke((MethodInvoker)delegate {
                         Interlocked.Exchange(ref desktopHealthAck, Stopwatch.GetTimestamp());
                         Interlocked.Exchange(ref desktopHealthPending, 0);
+                        if (desktopStart && !desktopReady && launchPanel != null && activityRing != null)
+                        {
+                            Point clientOrigin = PointToScreen(Point.Empty);
+                            Rectangle ringBounds = launchPanel.RectangleToClient(activityRing.RectangleToScreen(activityRing.ClientRectangle));
+                            AppendStartupTrace("native-host", "native-loading-observation", new Dictionary<string, object> {
+                                { "windowVisible", Visible }, { "windowState", WindowState.ToString() },
+                                { "topFrameInset", clientOrigin.Y - Top }, { "menuTop", desktopMenu == null ? -1 : desktopMenu.Top },
+                                { "loadingVisible", launchPanel.Visible }, { "ringVisible", activityRing.Visible },
+                                { "loadingFrontmost", desktopContent.Controls.GetChildIndex(launchPanel) == 0 },
+                                { "ringInViewport", launchPanel.ClientRectangle.IntersectsWith(ringBounds) },
+                                { "paintedFrames", activityRing.PaintedFrames }, { "rotation", activityRing.Rotation },
+                                { "loadingWidth", launchPanel.Width }, { "loadingHeight", launchPanel.Height }
+                            });
+                        }
                     });
             }
             catch { }
