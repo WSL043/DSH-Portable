@@ -37,6 +37,22 @@
 > [!NOTE]
 > DSH-Portable is an independent community distribution, not an official DeepSeek desktop app. It packages an adapted and finished-product-tested preview of official DeepSeek Harness.
 
+## More than a desktop window
+
+| No setup | Visual plugin installation | Move your setup | Keep your data |
+| --- | --- | --- | --- |
+| Bundled runtime | Built-in [dsh-market](https://github.com/dsh-market/dsh-market): search and install | Exit and copy to the same OS and architecture | Product and core updates preserve sessions, settings, and plugins |
+
+[Try the interactive workflow](https://wsl043.github.io/DSH-Portable/en/#tryout) · [Download](#downloads)
+
+| Separate product and core updates | Included Image Viewer |
+| --- | --- |
+| ![Actual 0.6.5-rc.1 settings in Chinese](assets/portable-updates.png) | ![Actual Image Viewer interface in Chinese](assets/viewer-dark.png) |
+| Versions are selected separately; cores must match Portable. Candidate screenshot; 0.6.4 uses General settings. | Galleries, zoom, original downloads, and region notes. Independently removable. |
+
+<details>
+<summary>Read more: who it is for, runtime, and component boundaries</summary>
+
 ## Why portable
 
 Want to use DeepSeek Harness without first setting up a runtime, remembering launch commands, or rebuilding your plugin and session setup on another computer? Portable brings those everyday tasks into a movable desktop environment. Run the launcher or extract the complete package, connect your model service, and start working.
@@ -78,6 +94,8 @@ DSH-Portable maintains the desktop shell, portable layout, update, repair, and m
 The chat workspace, model configuration, and general settings follow official DSH. Portable focuses on windows and the tray, its runtime, updates, migration, and recovery; upstream pages receive only the adaptations needed for Portable compatibility.
 
 The Plugin Market and the two default plugins are Portable integration components. The market catalog mainly lists community plugins; a listing is not official endorsement or a security audit. Only the defaults are pinned and covered by Portable finished-product verification. Evaluate other plugins yourself and install them as needed. Compatibility not listed in the relevant Release notes or verification scope is not a Portable promise.
+
+</details>
 
 ## Start in 3 steps
 
@@ -162,6 +180,9 @@ The Portable DSH Terminal recognizes `dsh` only inside that window and never cha
 
 Plugins that can be mounted safely take effect immediately, while client-only plugins need only a refresh. Updating host code is marked as pending restart. The market never updates, removes, or silently restarts DSH while a task is running. Install only plugins you trust.
 
+<details>
+<summary>Desktop shortcuts, updates, repair, and folder layout</summary>
+
 ## Windows desktop controls
 
 ![Windows native navigation](assets/windows-navigation-dark.png)
@@ -227,6 +248,8 @@ Normal updates preserve `data` and `workspace` in place. To move data into a cle
 DSH can execute local code, so use trusted models, plugins, and projects. The local service binds only to `127.0.0.1`, and the Portable shell disables DSH telemetry by default. `data` may contain API credentials and private conversations; protect it accordingly and prefer NTFS on removable Windows drives.
 
 Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and [code-signing policy](CODE_SIGNING.md). Current Windows releases are unsigned while the open-source signing application with SignPath Foundation is in progress.
+
+</details>
 
 ## Get help
 

@@ -4,9 +4,10 @@ const releaseBase = "https://github.com/WSL043/DSH-Portable/releases/latest/down
 
 const copy = {
   en: {
+    tryLink: "Try the portable workflow ↗", tryKicker: "Interactive demo / No download", tryTitle: "Try the everyday operations.", tryIntro: "Install a sample plugin, move the folder, and see what stays with you.", demoPlugins: "Plugin Market", demoMove: "Move your setup", demoInstallTitle: "Install without terminal commands.", demoInstallIntro: "Toggle a sample plugin. No plugin code is downloaded or executed here.", demoViewer: "Zoom, downloads, and region notes", demoManager: "Archive search and session restore", demoMoveTitle: "A new location. The same setup.", demoMoveIntro: "Simulates exiting and moving the folder on the same OS and architecture. External projects must be moved separately.", demoSessions: "Sample sessions: 3", demoSettings: "Model settings: kept", demoMoveButton: "Move to USB drive", demoDisclaimer: "Workflow illustration, not an online DSH instance. No model calls, file access, or data uploads. Reload to reset.",
     showcaseTitle: "Details you can see.", showcaseIntro: "Actual interface screenshots. Take a closer look before downloading.", viewerTitle: "Make your point. Precisely.", viewerText: "Zoom, original downloads, and region notes. Included by default and independently removable.", nativeTitle: "A desktop that feels familiar.", nativeText: "Sidebar controls, navigation, and keyboard shortcuts keep everyday actions close.",
     skip: "Skip to content", brandEdition: "Community portable edition", navPortable: "Portable", navDownload: "Download", navGithub: "GitHub", headerDownload: "Download",
-    heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "Your AI workspace.<br>Beyond one machine.", heroLede: "DeepSeek Harness with its runtime and plugin market included. Install plugins visually and keep sessions, settings, and your default workspace together for moving and backup.",
+    heroKicker: "DeepSeek Harness · continue anywhere", heroTitle: "DeepSeek Harness.<br>Ready to work.", heroLede: "DeepSeek Harness with its runtime and plugin market included. Install plugins visually and keep sessions, settings, and your default workspace together for moving and backup.",
     downloadFor: "Download for Windows", downloadMeta: "Latest stable · Portable · No install", otherPlatforms: "Other platforms", heroNote: "Open-source community project · Windows / macOS / Linux", stageCaption: "DeepSeek Harness running in DSH-Portable", scrollCue: "See how it moves",
     portableKicker: "Works where you do", portableTitle: "One folder. Same-platform moves.", portableIntro: "Work normally. When it is time to move, exit fully from the tray and copy the whole DSH-Portable folder.", migrationGuide: "Read the complete migration guide",
     factNodeValue: "No Node.js required", factLauncher: "Runtime included", factFiles: "User data and default workspace", factTargetsValue: "3 systems · 5 targets", factTargets: "Finished-product move tests",
@@ -236,3 +237,45 @@ document.querySelectorAll('[data-screenshot]').forEach(button => button.addEvent
 }));
 document.querySelector('[data-close-screenshot]').addEventListener('click', () => screenshotDialog.close());
 screenshotDialog.addEventListener('click', event => { if (event.target === screenshotDialog) { const r = screenshotDialog.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) screenshotDialog.close(); } });
+
+const demoInstalled = new Set(['viewer']);
+let demoMoved = false;
+const demoEnglish = document.documentElement.lang === 'en';
+const demoStatus = document.querySelector('[data-demo-status]');
+function renderDemo() {
+  document.querySelectorAll('[data-demo-plugin]').forEach(button => {
+    const installed = demoInstalled.has(button.dataset.demoPlugin);
+    button.textContent = demoEnglish ? (installed ? 'Remove' : 'Install') : (installed ? '移除' : '安装');
+    button.setAttribute('aria-label', `${button.textContent} ${button.dataset.demoPlugin === 'viewer' ? 'Image Viewer' : 'Chat Manager'}`);
+  });
+  document.querySelector('[data-demo-count]').textContent = demoEnglish ? `Installed plugins: ${demoInstalled.size}` : `已安装插件：${demoInstalled.size}`;
+  document.querySelector('[data-demo-path]').textContent = demoMoved ? 'E:/DSH-Portable' : 'C:/Work/DSH-Portable';
+  document.querySelector('[data-demo-move]').textContent = demoEnglish ? (demoMoved ? 'Move back' : 'Move to USB drive') : (demoMoved ? '移回原目录' : '移动到 U 盘');
+}
+document.querySelectorAll('[data-demo-tab]').forEach(button => button.addEventListener('click', () => {
+  document.querySelectorAll('[data-demo-tab]').forEach(tab => {
+    const active = tab === button; tab.setAttribute('aria-selected', String(active)); tab.tabIndex = active ? 0 : -1;
+    document.getElementById(`demo-${tab.dataset.demoTab}`).hidden = !active;
+  });
+  demoStatus.textContent = '';
+}));
+const demoTabs = [...document.querySelectorAll('[data-demo-tab]')];
+demoTabs.forEach((tab, index) => {
+  tab.tabIndex = index === 0 ? 0 : -1;
+  tab.addEventListener('keydown', event => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? demoTabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + demoTabs.length) % demoTabs.length;
+    demoTabs[next].focus(); demoTabs[next].click();
+  });
+});
+document.querySelectorAll('[data-demo-plugin]').forEach(button => button.addEventListener('click', () => {
+  const key=button.dataset.demoPlugin;
+  if(demoInstalled.has(key)) demoInstalled.delete(key); else demoInstalled.add(key);
+  renderDemo(); demoStatus.textContent = demoEnglish ? 'Demo state updated. Your three sample sessions are unchanged.' : '演示状态已更新，3 个示例会话保持不变。';
+}));
+document.querySelector('[data-demo-move]').addEventListener('click', () => {
+  demoMoved = !demoMoved; renderDemo();
+  demoStatus.textContent = demoEnglish ? 'Demo folder moved. Sessions, settings, and your selected plugins stayed together.' : '演示目录已移动。会话、设置及你刚选择的插件状态一起保留。';
+});
+renderDemo();

@@ -37,6 +37,22 @@
 > [!NOTE]
 > DSH-Portable 是独立社区发行版，不是 DeepSeek 官方桌面应用。它内置经过适配和成品测试的官方 DeepSeek Harness 预览版本。
 
+## 不只是一个桌面窗口
+
+| 免配环境 | 界面装插件 | 环境可移动 | 更新留数据 |
+| --- | --- | --- | --- |
+| 运行环境随包提供 | 内置 [dsh-market](https://github.com/dsh-market/dsh-market)，搜索后点击安装 | 完全退出后复制目录，同系统同架构继续 | Portable 与内核分别更新，保留会话、设置和插件 |
+
+[先试交互演示](https://wsl043.github.io/DSH-Portable/#tryout) · [直接下载](#下载)
+
+| 产品与内核分别管理 | 默认图片查看器 |
+| --- | --- |
+| ![0.6.5-rc.1 更新设置实机截图](assets/portable-updates.png) | ![图片查看器真实界面](assets/viewer-dark.png) |
+| 两套版本各自选择；内核需匹配当前 Portable。截图为候选版，0.6.4 的入口位于通用设置。 | 图集、缩放、原图下载与区域备注，可独立卸载。 |
+
+<details>
+<summary>展开：适合谁、运行环境与组件边界</summary>
+
 ## 为什么是 Portable
 
 想用 DeepSeek Harness，但不想先配置运行环境、记住启动命令，或每次换电脑都重新整理插件和会话？Portable 把这些日常操作放进一个可移动的桌面工作环境：下载启动器或解压完整包，连接自己的模型服务，就可以开始使用。
@@ -78,6 +94,8 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 聊天工作台、模型配置和通用设置沿用官方 DSH。Portable 的改动聚焦窗口与托盘、运行环境、更新、迁移和恢复；上游页面仅在 Portable 集成确有兼容问题时做必要适配。
 
 插件市场和两个默认插件属于 Portable 集成组件；市场目录主要收录社区插件，收录不代表官方认可或安全审计。只有默认插件按锁定版本经过本项目的成品验证，其他插件请自行评估并按需安装。对应 Release 说明或验证范围没有列出的兼容性，不视为 Portable 的承诺。
+
+</details>
 
 ## 三步启动
 
@@ -162,6 +180,9 @@ dsh --profile web --dump-config
 
 能安全热加载的插件会立即生效，纯界面插件只需刷新；已经载入宿主代码的插件更新会标记为待重启。市场不会在任务运行时更新、卸载或偷偷重启 DSH。只安装你信任的插件。
 
+<details>
+<summary>桌面快捷键、更新修复和目录说明</summary>
+
 ## Windows 桌面操作
 
 ![Windows native navigation](assets/windows-navigation-dark.png)
@@ -229,6 +250,8 @@ dsh --profile web --dump-config
 DSH 具备本地代码执行能力，请只使用可信模型、插件和项目。本地服务只绑定 `127.0.0.1`，便携外壳默认关闭 DSH 遥测。`data` 可能包含 API 凭据和私人会话；请妥善保管，Windows 移动盘优先使用 NTFS。
 
 查看完整的[隐私说明](PRIVACY.md)、[安全策略](SECURITY.md)和[代码签名策略](CODE_SIGNING.md)。当前 Windows Release 尚未签名；SignPath Foundation 的开源签名申请正在进行中。
+
+</details>
 
 ## 获取帮助
 
