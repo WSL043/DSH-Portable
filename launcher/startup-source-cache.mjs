@@ -40,7 +40,11 @@ export function startSourceCache(portableRoot, runtimeRoot, env = process.env) {
       offset = end
     }
     hook = registerHooks({ load(url, context, nextLoad) {
-      if (url.startsWith('file:') && ['module', 'commonjs', 'json'].includes(context.format)) {
+      const attributes = context.importAttributes || {}
+      const standardAttributes = context.format === 'json'
+        ? attributes.type === 'json' && Object.keys(attributes).length === 1
+        : Object.keys(attributes).length === 0
+      if (standardAttributes && url.startsWith('file:') && ['module', 'commonjs', 'json'].includes(context.format)) {
         const range = sources.get(fileURLToPath(url))
         if (range !== undefined) {
           result.hits++

@@ -30,6 +30,7 @@ test('startup cache preserves ESM, CommonJS and JSON, leaves profile files alone
       assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'legacy.cjs')).href)})).default,7);
       assert.equal((await import(${JSON.stringify(pathToFileURL(path.join(target, 'data.json')).href)},{with:{type:'json'}})).default.answer,42);
       assert.equal((await import(${JSON.stringify(pathToFileURL(mutable).href)})).default,99);
+      await assert.rejects(import(${JSON.stringify(pathToFileURL(path.join(target, 'data.json')).href + '?no-attribute')}),{code:'ERR_IMPORT_ATTRIBUTE_MISSING'});
       assert.equal(cache.finish().hits,3);
       await assert.rejects(import(${JSON.stringify(pathToFileURL(path.join(target, 'main.mjs')).href + '?after')}),/disk source read/);`
     execFileSync(process.execPath, ['--input-type=module', '-e', code], { windowsHide: true })
