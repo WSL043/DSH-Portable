@@ -15,18 +15,35 @@ internal static class DshCommand
 {
     private static int LaunchDshTerminal(string root, string environmentId)
     {
-        var terminal = Path.Combine(root, "launcher", "dsh-terminal.cmd");
-        if (!File.Exists(terminal)) throw new FileNotFoundException("DSH terminal launcher is missing.", terminal);
+        var start = TerminalStartInfo(root, environmentId);
+        using (var child = Process.Start(start))
+        {
+            if (child == null) throw new InvalidOperationException("Could not open DSH Terminal.");
+            child.WaitForExit();
+            return child.ExitCode;
+        }
+    }
+
+    private static ProcessStartInfo TerminalStartInfo(string root, string environmentId)
+    {
+        var terminal = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "PowerShell", "7", "pwsh.exe");
+        if (!File.Exists(terminal))
+            terminal = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+        if (!File.Exists(terminal)) throw new FileNotFoundException("PowerShell is missing.", terminal);
         var start = new ProcessStartInfo
         {
             FileName = terminal,
-            Arguments = String.IsNullOrEmpty(environmentId) ? String.Empty : QuoteWindowsArgument(environmentId),
+            Arguments = "-NoLogo -NoExit -Command \"$Host.UI.RawUI.WindowTitle = 'DSH Terminal'\"",
             WorkingDirectory = root,
-            UseShellExecute = true,
+            UseShellExecute = false,
+            CreateNoWindow = false,
             WindowStyle = ProcessWindowStyle.Normal,
         };
-        if (Process.Start(start) == null) throw new InvalidOperationException("Could not open DSH Terminal.");
-        return 0;
+        start.EnvironmentVariables["DSH_PORTABLE_TERMINAL"] = "1";
+        if (!String.IsNullOrEmpty(environmentId))
+            start.EnvironmentVariables["DSH_PORTABLE_ENVIRONMENT"] = environmentId;
+        start.EnvironmentVariables["PATH"] = root + Path.PathSeparator + start.EnvironmentVariables["PATH"];
+        return start;
     }
 
     private static string TerminalEnvironment(string[] arguments)

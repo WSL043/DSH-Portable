@@ -2205,7 +2205,8 @@ namespace DshPortable
                         FileName = command,
                         Arguments = "--terminal --environment " + QuoteArgument(environmentId),
                         WorkingDirectory = root,
-                        UseShellExecute = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = false,
                         WindowStyle = ProcessWindowStyle.Normal,
                     });
                 }

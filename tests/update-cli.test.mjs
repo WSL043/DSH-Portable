@@ -202,6 +202,14 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       timeout: 30000,
       windowsHide: true,
     })
+    const checkArgs = [cli, 'check-update', '--json', '--allow-http', '--update-manifest', `${origin}/update.json`]
+    const checkStatus = async (extra = []) => JSON.parse((await execFileAsync(runtimeNode, [...checkArgs, ...extra], {
+      timeout: 30000, windowsHide: true,
+    })).stdout.trim()).status
+    assert.equal(await checkStatus(['--force']), 'available')
+    await execFileAsync(runtimeNode, [cli, 'defer-update', '--json'], { timeout: 30000, windowsHide: true })
+    assert.equal(await checkStatus(), 'deferred', 'a manifest URL alone must not bypass deferred updates')
+    assert.equal(await checkStatus(['--force']), 'available', 'an explicit user check can override deferral')
     await execFileAsync(runtimeNode, [cli, 'start', '--no-browser', '--json'], {
       timeout: 30000,
       windowsHide: true,
