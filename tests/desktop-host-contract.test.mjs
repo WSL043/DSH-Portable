@@ -1,3 +1,4 @@
+import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
@@ -474,7 +475,7 @@ test('native desktop hosts diagnose renderer failures and recover without restar
 
 test('CI release gate verifies native desktop ownership, lifecycle, and application identity', async () => {
   const [workflow, windowsSmoke, detachedUpdaterSmoke, traySmoke, nativeDownloadSmoke, nativeWorkspacePickerSmoke, parallelRootsSmoke, macSmoke] = await Promise.all([
-    read('.github/workflows/ci.yml'),
+    readNativeWorkflow(),
     read('scripts/smoke-windows-desktop-host.ps1'),
     read('scripts/smoke-windows-detached-updater.ps1'),
     read('scripts/smoke-windows-native-tray.ps1'),
@@ -637,7 +638,7 @@ test('candidate builders overlay current Portable-owned integrations after impor
 test('Windows startup audit accepts log-backed loader evidence and persists failures', async () => {
   const [audit, workflow] = await Promise.all([
     read('scripts/audit-windows-startup-transition.mjs'),
-    read('.github/workflows/ci.yml'),
+    readNativeWorkflow(),
   ])
   assert.match(audit, /capture-windows-native-window\.ps1/)
   assert.match(audit, /entry\.phase === 'native-loading-ready'/)
@@ -647,7 +648,7 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
   assert.match(audit, /startupTimeoutSeconds/)
   assert.match(audit, /url: String\(location\.origin \|\| ''\) \+ String\(location\.pathname \|\| ''\)/)
   assert.doesNotMatch(audit, /url: location\.href/)
-  assert.match(workflow, /audit-windows-startup-transition\.mjs[^\r\n]+\$\{\{ matrix\.firstColdStartSeconds \}\}/)
+  assert.match(workflow, /audit-windows-startup-transition\.mjs[^\r\n]+\$FirstColdStartSeconds/)
   assert.ok(
     audit.indexOf("await writeFile(path.join(output, 'samples.json')") < audit.indexOf("assert.ok(capturedBoot && nativeLoading"),
     'startup samples must be uploaded even when the transition assertion fails',

@@ -1,3 +1,4 @@
+import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -46,7 +47,7 @@ test('Windows finished-product smoke proves usable DOM wins over a stalled subre
   const [source, smoke, workflow] = await Promise.all([
     readFile(launcherSource, 'utf8'),
     readFile(path.join(projectRoot, 'scripts', 'smoke-windows-dom-ready.ps1'), 'utf8'),
-    readFile(path.join(projectRoot, '.github', 'workflows', 'ci.yml'), 'utf8'),
+    readNativeWorkflow(),
   ])
   assert.match(source, /DSH_PORTABLE_TEST_STALLED_RESOURCE_URL/)
   assert.match(source, /DSH_PORTABLE_TEST_CONTINUOUS_DOM_MUTATION/)
