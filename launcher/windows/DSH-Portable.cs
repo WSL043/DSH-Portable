@@ -824,6 +824,7 @@ namespace DshPortable
         private bool indeterminate = true;
         private int progressValue;
         private int rotation;
+        private readonly Stopwatch animationClock = Stopwatch.StartNew();
 
         internal DshActivityRing()
         {
@@ -833,7 +834,7 @@ namespace DshPortable
             animationTimer = new System.Windows.Forms.Timer { Interval = 16, Enabled = true };
             animationTimer.Tick += delegate
             {
-                rotation = (rotation + 7) % 360;
+                rotation = (int)(animationClock.Elapsed.TotalMilliseconds * 0.24) % 360;
                 Invalidate();
             };
         }
@@ -1566,7 +1567,10 @@ namespace DshPortable
                 Marshal.Copy(message.LParam, bounds, 0, bounds.Length);
                 base.WndProc(ref message);
                 if (WindowState == FormWindowState.Normal)
+                {
                     Marshal.Copy(bounds, 0, message.LParam, bounds.Length);
+                    message.Result = IntPtr.Zero;
+                }
                 return;
             }
             if (desktopStart && !fullscreen && desktopMenu != null && message.Msg == 0x0084)
@@ -2003,7 +2007,7 @@ namespace DshPortable
                 int darkMode = dark ? 1 : 0;
                 uint caption = ToColorRef(background);
                 uint text = ToColorRef(foreground);
-                uint border = caption;
+                uint border = 0xFFFFFFFE; // DWMWA_COLOR_NONE: DWM still owns corner clipping/shadow.
                 try
                 {
                     DwmSetWindowAttribute(Handle, DwmwaUseImmersiveDarkMode, ref darkMode, sizeof(int));
@@ -5335,21 +5339,8 @@ namespace DshPortable
             applicationUri = new Uri(url);
             await NavigateWorkspaceAsync(url, false);
 
-            SuspendLayout();
-            FormBorderStyle = fullscreen ? FormBorderStyle.None : FormBorderStyle.Sizable;
-            MaximizeBox = true;
-            MinimizeBox = true;
-            MinimumSize = new Size(900, 620);
-            FitWebViewToClient();
-            webView.Visible = true;
-            webView.BringToFront();
-            if (desktopMenu != null) desktopContent.BringToFront();
-            ApplyDesktopWindowCorners();
-            ApplyDesktopChrome();
-            launchPanel.Visible = false;
-            ResumeLayout(true);
-            FitWebViewToClient();
-            BeginInvoke(new Action(FitWebViewToClient));
+            // NavigateWorkspaceAsync performs the single native-to-WebView handoff.
+            // Reapplying chrome/layout here repaints an already visible workspace.
             operationRunning = false;
             desktopReady = true;
             RefreshDesktopCommands();
