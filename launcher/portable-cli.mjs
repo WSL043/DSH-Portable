@@ -655,7 +655,7 @@ async function status() {
   const state = readProcessState()
   if (!ownedState(state)) return { status: 'stopped', environment: layout.environmentId, root: layout.root }
   return {
-    status: await httpReady(state.url || state.port, 1200, { preserveAccessToken: true }) ? 'running' : 'starting',
+    status: state.url && await httpReady(state.url, 1200, { preserveAccessToken: true }) ? 'running' : 'starting',
     environment: layout.environmentId,
     root: layout.root,
     pid: state.pid,
