@@ -11,7 +11,7 @@ on:
       scope:
         description: Isolated tray bridge or the original native check sequence
         type: choice
-        options: [tray, native, migration]
+        options: [tray, native, migration, update]
         default: tray
       node_version:
         description: Harness Node version for controlled environment comparison
@@ -34,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/setup-test-chrome
-        if: inputs.scope != 'migration'
+        if: inputs.scope == 'tray' || inputs.scope == 'native'
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ inputs.node_version }}
@@ -82,8 +82,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
           node scripts/smoke-windows-data-export.mjs (Join-Path $Root 'DSH-Portable') (Join-Path $env:RUNNER_TEMP 'dsh-native-migration-evidence-focused') 2>&1 | Tee-Object evidence/migration.log
           if ($LASTEXITCODE -ne 0) { throw 'Migration check failed' }
+      - name: Verify component update and rollback independently
+        if: inputs.scope == 'update'
+        shell: pwsh
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-focused-update'
+          New-Item -ItemType Directory -Force $Root | Out-Null
+          tar.exe -xf artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
+          node scripts/smoke-update-artifact.mjs (Join-Path $Root 'DSH-Portable') artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip 2>&1 | Tee-Object evidence/component-update.log
+          if ($LASTEXITCODE -ne 0) { throw 'Component update check failed' }
+      - name: Retain component update product logs
+        if: always() && inputs.scope == 'update'
+        uses: actions/upload-artifact@v7
+        with:
+          name: focused-update-logs-${{ matrix.runner }}
+          path: ${{ runner.temp }}/dsh-focused-update/DSH-Portable/data/logs/
       - name: Retain native structured failure evidence
-        if: always() && inputs.scope != 'tray'
+        if: always() && (inputs.scope == 'native' || inputs.scope == 'migration')
         uses: actions/upload-artifact@v7
         with:
           name: focused-native-${{ matrix.runner }}
@@ -96,4 +112,11 @@ jobs:
         with:
           name: focused-windows-${{ matrix.runner }}
           path: evidence/
+          retention-days: 14
+      - name: Retain isolated product logs even when start fails
+        if: always() && inputs.scope == 'tray'
+        uses: actions/upload-artifact@v7
+        with:
+          name: focused-product-logs-${{ matrix.runner }}
+          path: ${{ runner.temp }}/dsh-focused/DSH-Portable/data/logs/
           retention-days: 14

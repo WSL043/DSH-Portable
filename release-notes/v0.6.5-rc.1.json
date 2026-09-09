@@ -5,7 +5,7 @@
     "highlights": [
       "新增「设置 → 更新」，位于通用设置下方；Portable 与官方内核分别提供版本选择、检查更新和启动检查。",
       "版本目录只收录经过验收的版本，已知问题版本不进入选项；切换通道丢弃过时结果，安装前重新核对所选版本。",
-      "顶部菜单在点击页面、窗口失焦或按 Escape 时关闭，并移除额外的弹出阴影；修复 WebView2 需要强制退出时，点击重启却只退出的问题。",
+      "顶部菜单在点击页面、窗口失焦或按 Escape 时关闭，并移除额外的弹出阴影；修复 WebView2 强制退出时重启丢失，以及 Windows 进程身份查询偶发超时导致启动或更新中断的问题。",
       "Windows DSH 终端直接启动本机 PowerShell，移除菜单和批处理脚本间重复的 Shell 转发及来源提示。",
       "插件安装说明指向市场和已安装页面；内置 pnpm 缺失时提供 Portable 修复入口，不尝试全局安装工具。",
       "插件市场上游变化改为生成差异审查报告，避免普通版本更新反复创建 issue；README 与实机截图同步更新。"
@@ -20,7 +20,7 @@
     "highlights": [
       "Settings → Updates now sits below General. Portable and the official core have separate version selection, update checks and startup controls.",
       "Version catalogs contain qualified releases only and omit known defective versions. Channel changes discard stale results; selected versions are revalidated before installation.",
-      "Native menus close on page clicks, window deactivation and Escape, with the extra popup shadow removed. Restart now relaunches the app even when WebView2 requires forced process cleanup.",
+      "Native menus close on page clicks, window deactivation and Escape, with the extra popup shadow removed. Restart survives forced WebView2 cleanup; one transient Windows process-inspection timeout can recover within the existing startup deadline.",
       "Windows DSH Terminal starts the installed PowerShell directly, removing redundant Shell handoffs and internal download-origin prompts.",
       "Plugin guidance points to Plugin Market and Installed. Missing bundled pnpm leads to Portable repair guidance instead of global tool installation.",
       "Routine market releases generate applicability review reports instead of repetitive issues. README text and real-machine screenshots are updated."

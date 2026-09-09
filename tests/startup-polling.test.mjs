@@ -33,6 +33,7 @@ function fixture({ alive = () => true, owned = () => true } = {}) {
   const wait = vm.runInNewContext(`(${waitSource})`, {
     Date: { now: () => now },
     setTimeout: (callback, delay) => { now += delay; callback() },
+    layout: { platform: 'win32' },
     processExists: () => { polls += 1; return alive(now) },
     ownedState: () => owned(++identities, now),
     officialWorkspaceUrl: () => now >= 5000 ? 'http://127.0.0.1:3080/?token=test' : null,
@@ -64,4 +65,34 @@ test('identity grace expires and a live but silent host still respects the start
   const phases = []
   assert.equal(await silent.wait({ pid: 123, port: 3080 }, 1000, null, phase => phases.push(phase)), null)
   assert.equal(phases.at(-1), 'host-wait-timeout')
+})
+
+function inspectionTimeout() {
+  return new Error('Could not inspect process', { cause: Object.assign(new Error('CIM timeout'), { code: 'ETIMEDOUT' }) })
+}
+
+test('startup retries one timed-out identity read and still verifies final ownership', async () => {
+  const phases = []
+  const probe = fixture({ owned: call => { if (call === 1) throw inspectionTimeout(); return true } })
+  const url = await probe.wait({ pid: 123, port: 3080 }, 20000, { filename: 'fixture', offset: 0 }, phase => phases.push(phase))
+  assert.match(url, /127\.0\.0\.1/)
+  assert.equal(probe.identities, 3)
+  assert.equal(phases.filter(phase => phase === 'host-process-query-retry').length, 1)
+})
+
+test('repeated timeouts and non-timeout inspection errors remain failures', async () => {
+  const repeated = fixture({ owned: () => { throw inspectionTimeout() } })
+  await assert.rejects(repeated.wait({ pid: 123, port: 3080 }, 20000), /Could not inspect process/)
+  assert.equal(repeated.identities, 2)
+  const denied = fixture({ owned: () => { throw new Error('Access denied') } })
+  await assert.rejects(denied.wait({ pid: 123, port: 3080 }, 20000), /Access denied/)
+  assert.equal(denied.identities, 1)
+})
+
+test('an inspection retry neither grants ownership nor extends the startup deadline', async () => {
+  const changed = fixture({ owned: call => { if (call === 1) throw inspectionTimeout(); return false } })
+  assert.equal(await changed.wait({ pid: 123, port: 3080 }, 20000), null)
+  const expired = fixture({ owned: () => { throw inspectionTimeout() } })
+  await assert.rejects(expired.wait({ pid: 123, port: 3080 }, 1000), /Could not inspect process/)
+  assert.equal(expired.identities, 1)
 })
