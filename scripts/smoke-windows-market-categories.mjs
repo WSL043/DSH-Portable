@@ -64,6 +64,26 @@ try {
     return false
   })()`, Boolean, 'native settings command opens after onboarding')
 
+  await writeFile(path.join(output, 'general-page.txt'), await evaluate('document.body.innerText'))
+  await until(click(['Portable']), Boolean, 'dedicated Portable settings navigation')
+  const nativeState = key => evaluate(`new Promise(resolve => {
+    const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
+      chrome.webview.removeEventListener('message', listener); resolve(event.data); };
+    chrome.webview.addEventListener('message', listener);
+    chrome.webview.postMessage({type:'dsh-portable/test-desktop',${key == null ? '' : `key:${key},`}});
+  })`)
+  for (const key of [262214, 262230, 262216]) {
+    assert.equal((await nativeState(key)).openMenus.length, 1, 'keyboard opens one native menu')
+    await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 600, y: 130, button: 'left', clickCount: 1 })
+    await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: 600, y: 130, button: 'left', clickCount: 1 })
+    assert.deepEqual((await nativeState()).openMenus, [], 'WebView click closes native menus')
+    await nativeState(key)
+    assert.deepEqual((await nativeState(27)).openMenus, [], 'Escape closes the menu before affecting the page')
+  }
+  await writeFile(path.join(output, 'menu-dismissal.json'), JSON.stringify({ passed: true, menus: 3, webViewPointer: true, escape: true }))
+  await evaluate(`document.querySelector('section[aria-label="Updates"],section[aria-label="更新"]')?.scrollIntoView({block:'start'})`)
+  const portableScreenshot = await send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+  await writeFile(path.join(output, 'portable-settings.png'), Buffer.from(portableScreenshot.data, 'base64'))
   const generalBorders = await until(`(() => {
     const textOf = node => (node?.textContent || '').replace(/\\s+/g, ' ').trim()
     const portableLabels = new Set(['Portable', '便携版'])
@@ -100,6 +120,12 @@ try {
   assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
   assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
   await until(click(['Plugins','插件']), Boolean, 'plugins');
+  await until(click(['Plugin configuration','插件配置']), Boolean, 'plugin configuration');
+  await delay(500);
+  await writeFile(path.join(output, 'plugin-configuration.txt'), await evaluate('document.body.innerText'));
+  await until(click(['Plugin list','插件列表']), Boolean, 'official plugin list');
+  await delay(500);
+  await writeFile(path.join(output, 'plugin-list.txt'), await evaluate('document.body.innerText'));
   await until(click(['Plugin Market','插件市场']), Boolean, 'market');
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
   const checks=[];

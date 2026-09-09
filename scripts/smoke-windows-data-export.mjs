@@ -392,7 +392,7 @@ try {
     const dismissed = await evaluate(client, clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later']))
     await new Promise(resolve => setTimeout(resolve, dismissed?.clicked ? 200 : 120))
   }
-  await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings tab')
+  await waitForValue(client, clickButton(['Portable']), value => value?.clicked, 'Portable settings tab')
   await waitForValue(client, `/(迁移与备份|Migration and backup)/.test(document.body?.innerText || '')`, Boolean, 'migration settings')
   await evaluate(client, `(() => {
     const marker = [...document.querySelectorAll('*')].find(item => /^(迁移与备份|Migration and backup)$/.test((item.textContent || '').trim()))

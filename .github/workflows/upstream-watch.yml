@@ -92,68 +92,31 @@ jobs:
             fi
           fi
           echo 'changed=true' >> "$GITHUB_OUTPUT"
-      - name: Create or refresh the plugin-market review issue
+      - name: Report plugin-market changes without opening routine issues
         if: steps.market.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PINNED: ${{ steps.market.outputs.pinned }}
           LATEST: ${{ steps.market.outputs.latest }}
-          RELEASE_URL: ${{ steps.market.outputs.url }}
         run: |
           set -euo pipefail
-          TITLE="Dependency intake: dsh-market"
-          MACHINE=$(mktemp)
-          BODY=$(mktemp)
-          STATE=$(mktemp)
-          printf '%s\n' \
-            '<!-- dsh-market-monitor:start -->' \
-            "- reviewed upstream baseline: \`${PINNED}\`" \
-            "- observed latest release: [\`${LATEST}\`](${RELEASE_URL})" \
-            '- review: manual review and merge are required by a human; this workflow never merges or releases.' \
-            '- release cadence: accepted fixes follow the next planned DSH-Portable release.' \
-            '<!-- dsh-market-monitor:end -->' > "$MACHINE"
-          ISSUE=$(gh issue list --state open --search "dsh-market in:title" --json number,title --jq '[.[] | select(.title == "Dependency intake: dsh-market" or (.title | startswith("Review dsh-market")))][0].number // empty')
-          if [ -n "$ISSUE" ]; then
-            ISSUE_DATA=$(mktemp)
-            gh issue view "$ISSUE" --json title,body,assignees > "$ISSUE_DATA"
-            TARGET_TITLE="$TITLE" TARGET_ASSIGNEE="WSL043" node --input-type=module - "$ISSUE_DATA" "$MACHINE" "$BODY" "$STATE" <<'NODE'
-          import { readFileSync, writeFileSync } from 'node:fs'
-
-          const [issuePath, machinePath, bodyPath, statePath] = process.argv.slice(2)
-          const issue = JSON.parse(readFileSync(issuePath, 'utf8'))
-          const existing = String(issue.body ?? '')
-          const machine = readFileSync(machinePath, 'utf8').trimEnd()
-          const startMarker = '<!-- dsh-market-monitor:start -->'
-          const endMarker = '<!-- dsh-market-monitor:end -->'
-          const start = existing.indexOf(startMarker)
-          const end = existing.indexOf(endMarker, start >= 0 ? start + startMarker.length : 0)
-          const body = start >= 0 && end >= start
-            ? `${existing.slice(0, start)}${machine}${existing.slice(end + endMarker.length)}`
-            : (existing.trimEnd() ? `${existing.trimEnd()}\n\n${machine}\n` : `${machine}\n`)
-
-          writeFileSync(bodyPath, body)
-          writeFileSync(statePath, JSON.stringify({
-            bodyChanged: body !== existing,
-            titleChanged: issue.title !== process.env.TARGET_TITLE,
-            assigned: Array.isArray(issue.assignees)
-              && issue.assignees.some(({ login }) => login === process.env.TARGET_ASSIGNEE),
-          }))
-          NODE
-            EDIT_ARGS=()
-            if [ "$(jq -r '.bodyChanged' "$STATE")" = true ]; then EDIT_ARGS+=(--body-file "$BODY"); fi
-            if [ "$(jq -r '.titleChanged' "$STATE")" = true ]; then EDIT_ARGS+=(--title "$TITLE"); fi
-            if [ "${#EDIT_ARGS[@]}" -gt 0 ]; then gh issue edit "$ISSUE" "${EDIT_ARGS[@]}"; fi
-            if [ "$(jq -r '.assigned' "$STATE")" != true ]; then gh issue edit "$ISSUE" --add-assignee WSL043; fi
-          else
-            printf '%s\n' \
-              'Rolling review inbox for dsh-market changes that may apply to Portable.' \
-              '' 'Manual review and merge are required by a human; the upstream working tree is never merged automatically.' \
-              'An accepted fix follows the DSH-Portable release cadence; an upstream release never triggers a Portable release.' \
-              '' 'Use .github/PLUGIN-MARKET-UPSTREAM.md as the decision matrix. Port only applicable behavior with a failing test first.' \
-              '' 'Accepted fixes accumulate on main and ship with the next planned Portable release unless they close a blocking security, installation, or data-safety defect.' > "$BODY"
-            cat "$MACHINE" >> "$BODY"
-            gh issue create --title "$TITLE" --body-file "$BODY" --assignee WSL043
-          fi
+          mkdir -p market-intake
+          gh api "repos/dsh-market/dsh-market/releases/tags/$LATEST" > market-intake/release.json
+          gh api "repos/dsh-market/dsh-market/compare/$PINNED...$LATEST" > market-intake/compare.json
+          {
+            printf '### Plugin market review: %s → %s\n\n' "$PINNED" "$LATEST"
+            printf 'Changes await applicability review for the next Portable release. Version discovery does not create an issue or accept upstream code.\n\n'
+            jq -r '.html_url' market-intake/compare.json
+            jq -r '.files[] | "- " + .filename + " (" + .status + ")"' market-intake/compare.json
+          } > market-intake/summary.md
+          cat market-intake/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: steps.market.outputs.changed == 'true'
+        with:
+          name: plugin-market-review
+          path: market-intake/
+          retention-days: 30
+          if-no-files-found: error
       - name: Summarize source-only upstream activity
         if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.source_changed == 'true'
         env:

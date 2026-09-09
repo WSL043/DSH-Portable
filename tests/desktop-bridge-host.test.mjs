@@ -338,15 +338,15 @@ test('Portable data import inspects plain and encrypted packages without retaini
   await assert.rejects(readFile(passwordFile, 'utf8'), /ENOENT/)
 })
 
-test('Portable preferences belong to the official General settings surface', async () => {
+test('Portable preferences use the official settings navigation', async () => {
   const client = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
 
-  assert.match(client, /settings\.general\.item/)
-  assert.doesNotMatch(client, /settings\.section/)
-  const settingsRegistration = client.slice(client.indexOf("name: 'settings.general.item'"), client.indexOf('}, SettingsSection)'))
-  assert.doesNotMatch(settingsRegistration, /label:/)
+  assert.match(client, /settings\.section/)
+  assert.doesNotMatch(client, /settings\.general\.item/)
+  const settingsRegistration = client.slice(client.indexOf("name: 'settings.section'"), client.indexOf('}, SettingsSection)'))
+  assert.match(settingsRegistration, /label:/)
   assert.match(client, /borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"]/);
-  assert.match(client, /padding:\s*['"]20px 0 8px['"]/);
+  assert.match(client, /padding:\s*['"]0 0 8px['"]/);
   assert.match(client, /section:\s*\{[^}]*gap:\s*0[^}]*marginTop:\s*18/s)
   assert.match(client, /item:\s*\{[^}]*padding:\s*['"]14px 0['"][^}]*borderBottom:\s*['"]1px solid var\(--dsw-alias-border-l2\)['"][^}]*flexWrap:\s*['"]wrap['"]/s)
   assert.match(client, /text:\s*\{[^}]*gap:\s*4/s)

@@ -1118,6 +1118,7 @@ namespace DshPortable
 
     internal sealed class DesktopDropDown : ToolStripDropDownMenu
     {
+        internal DesktopDropDown() { DropShadowEnabled = false; }
         protected override Padding DefaultPadding { get { return new Padding(0, 6, 0, 6); } }
     }
 
@@ -1739,9 +1740,29 @@ namespace DshPortable
 
         protected override void OnSizeChanged(EventArgs eventArgs)
         {
+            CloseDesktopMenus();
             base.OnSizeChanged(eventArgs);
             if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
                 desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
+        }
+
+        private void CloseDesktopMenus()
+        {
+            if (desktopMenu == null || desktopMenu.IsDisposed) return;
+            foreach (ToolStripMenuItem menu in desktopMenu.Items)
+                if (menu.HasDropDownItems && menu.DropDown.Visible) menu.HideDropDown();
+        }
+
+        protected override void OnDeactivate(EventArgs eventArgs)
+        {
+            CloseDesktopMenus();
+            base.OnDeactivate(eventArgs);
+        }
+
+        protected override void OnMouseDown(MouseEventArgs eventArgs)
+        {
+            CloseDesktopMenus();
+            base.OnMouseDown(eventArgs);
         }
 
         private void AddDesktopCommand(ToolStripMenuItem parent, string id, string title, Keys shortcut, EventHandler action)
@@ -1796,6 +1817,11 @@ namespace DshPortable
             }
             if (key == Keys.Escape)
             {
+                if (desktopMenu.Items.OfType<ToolStripMenuItem>().Any(menu => menu.HasDropDownItems && menu.DropDown.Visible))
+                {
+                    CloseDesktopMenus();
+                    return true;
+                }
                 if (!fullscreen) return false;
                 BeginInvoke(new Action(delegate { SetDesktopFullscreen(false); }));
                 return true;
@@ -2627,7 +2653,8 @@ namespace DshPortable
         private static void ApplyRoundedCorners(ToolStripDropDown menu)
         {
             if (menu == null || menu.IsDisposed || !menu.IsHandleCreated) return;
-            DwmWindowCornerPreference preference = DwmWindowCornerPreference.Round;
+            DwmWindowCornerPreference preference = menu is DesktopDropDown
+                ? DwmWindowCornerPreference.RoundSmall : DwmWindowCornerPreference.Round;
             try { DwmSetWindowAttribute(menu.Handle, DwmwaWindowCornerPreference, ref preference, sizeof(int)); }
             catch (DllNotFoundException) { }
             catch (EntryPointNotFoundException) { }
@@ -2652,6 +2679,12 @@ namespace DshPortable
                 Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
                 object messageType;
                 if (message != null && message.TryGetValue("type", out messageType)
+                    && Convert.ToString(messageType) == "dsh-portable/dismiss-menu")
+                {
+                    CloseDesktopMenus();
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
                     && Convert.ToString(messageType) == "dsh-portable/test-desktop"
                     && hiddenForAutomation
                     && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION") == "1")
@@ -2664,6 +2697,8 @@ namespace DshPortable
                         webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(new {
                             type = "dsh-portable/test-desktop-result", fullscreen = fullscreen,
                             menuVisible = desktopMenu.Visible, nativeLoadingVisible = launchPanel.Visible,
+                            openMenus = desktopMenu.Items.OfType<ToolStripMenuItem>()
+                                .Where(menu => menu.HasDropDownItems && menu.DropDown.Visible).Select(menu => menu.Name).ToArray(),
                             paintedFrames = activityRing.PaintedFrames, rotation = activityRing.Rotation,
                             bounds = new { x = Bounds.X, y = Bounds.Y, width = Bounds.Width, height = Bounds.Height },
                             windowState = WindowState.ToString(), chrome = FormBorderStyle.ToString(),
@@ -5214,6 +5249,10 @@ namespace DshPortable
             webView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             webView.CoreWebView2.Settings.IsStatusBarEnabled = false;
             webView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+            // WebView input belongs to another process and does not reach the
+            // WinForms menu message filter. Dismiss without consuming the click.
+            await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "document.addEventListener('pointerdown',()=>window.chrome.webview.postMessage({type:'dsh-portable/dismiss-menu'}),true);");
             // Official UI styles initially use their default palette before the
             // settings plugin publishes. Keep that interval in the selected scheme.
             await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(

@@ -312,53 +312,11 @@ export function probePnpm(): Promise<boolean> {
   })
 }
 
-function runQuiet(file: string, args: string[], timeoutMs: number): Promise<{ code: number | null; output: string }> {
-  return new Promise((resolvePromise) => {
-    const child = spawnShim(file, args, {
-      env: spawnEnv(),
-      stdio: ['ignore', 'pipe', 'pipe'],
-      viaShell: winCmdShim,
-    })
-    let output = ''
-    const timer = setTimeout(() => killChild(child), timeoutMs)
-    const collect = (chunk: Buffer): void => { output = (output + chunk.toString()).slice(-8 * 1024) }
-    child.stdout?.on('data', collect)
-    child.stderr?.on('data', collect)
-    child.on('error', (error) => { clearTimeout(timer); resolvePromise({ code: 127, output: error.message }) })
-    child.on('close', (code) => { clearTimeout(timer); resolvePromise({ code, output }) })
-  })
-}
-
-/**
- * Provision pnpm without user involvement: corepack (ships with Node) first,
- * a global npm install as fallback.
- * @returns true when `pnpm --version` succeeds afterwards.
- */
-export async function provisionPnpm(): Promise<{ ok: boolean; hint?: string }> {
-  const corepack = await runQuiet('corepack', ['enable', 'pnpm'], 60 * 1000)
-  logEvent(corepack.code === 0 ? 'info' : 'warn', 'setup-pnpm', `corepack enable: exit=${String(corepack.code)} ${corepack.output.slice(-200)}`)
-  if (await probePnpm()) return { ok: true }
-  const npm = await runQuiet('npm', ['install', '-g', 'pnpm'], 3 * 60 * 1000)
-  logEvent(npm.code === 0 ? 'info' : 'error', 'setup-pnpm', `npm -g: exit=${String(npm.code)} ${npm.output.slice(-200)}`)
-  if (await probePnpm()) return { ok: true }
-  // The install SUCCEEDED but the new binary is somewhere this process does
-  // not look (#149: corepack exit=0, npm -g exit=0, and the market still
-  // said "setup failed"). npm knows where it just put it, so ask — and if
-  // pnpm runs from there, remember that directory for every later spawn
-  // instead of telling the user a successful install failed.
-  if (npm.code === 0 || corepack.code === 0) {
-    const prefix = await runQuiet('npm', ['prefix', '-g'], 30 * 1000)
-    const bin = prefix.code === 0 ? join(prefix.output.trim().split('\n').pop() ?? '', 'bin') : ''
-    if (bin !== '' && isAbsolute(bin) && !extraPathDirs.includes(bin)) {
-      extraPathDirs.push(bin)
-      logEvent('info', 'setup-pnpm', `added npm's global bin to the probe path: ${bin}`)
-      if (await probePnpm()) return { ok: true }
-      extraPathDirs.pop()
-    }
-  }
-  const npmFound = toolOnPath('npm')
-  if (!npmFound) logEvent('warn', 'setup-pnpm', `npm is not on any searched path (node lives in ${nodeBinDir})`)
-  return { ok: false, hint: provisionHint(corepack.output, npm.output, npmFound) }
+/** Portable owns pnpm; this endpoint may only recheck the bundled tool. */
+export async function provisionPnpm(probe: () => Promise<boolean> = probePnpm): Promise<{ ok: boolean; hint?: string }> {
+  pnpmReady = false
+  if (await probe()) return { ok: true }
+  return { ok: false, hint: 'Portable bundled pnpm is unavailable. Open Settings → Portable → Check and repair; no global tools were installed.' }
 }
 
 /** Executable suffixes a bare command name can carry on this platform. */

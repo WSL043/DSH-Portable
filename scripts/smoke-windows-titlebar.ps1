@@ -66,6 +66,15 @@ try {
  if($window.WindowState -ne 'Minimized'){throw 'Minimize command failed'}
  $window.WindowState='Normal'
  $window.Location=[Drawing.Point]::new(-32000,-32000)
+ foreach($name in @('menu-file','menu-view','menu-help')) {
+   $item=$menu.Items[$name]
+   if($item.DropDown.DropShadowEnabled){throw "$name still enables the large native popup shadow"}
+   $item.ShowDropDown()
+   [Windows.Forms.Application]::DoEvents()
+   if(-not $item.DropDown.Visible){throw "$name did not open"}
+   $type.GetMethod('OnDeactivate',$flags).Invoke($window,@([EventArgs]::Empty)) | Out-Null
+   if($item.DropDown.Visible){throw "$name remained open when the window deactivated"}
+ }
  $popupCaptures=[ordered]@{}
  if($NavigationPreview -or $PopupMenus){
    $state=[Activator]::CreateInstance($assembly.GetType('DshPortable.TrayBridgeState'),$true)
