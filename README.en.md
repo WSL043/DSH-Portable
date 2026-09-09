@@ -164,11 +164,11 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 
 ## Updates and repair
 
-> The screenshot and dedicated Portable settings page below describe the current development build. In the published 0.6.4 release, use Settings → General → Portable.
+> The screenshot and dedicated Updates settings page below describe the current development build. In the published 0.6.4 release, use Settings → General → Portable.
 
-![Portable settings and independent update controls](assets/portable-settings.png)
+![Dedicated Updates settings page](assets/portable-updates.png)
 
-- DSH-Portable opens the local workspace first, then checks in the background only when the corresponding startup setting is enabled. Product updates and official DeepSeek Harness core updates are independent, and both **Check for updates at startup** settings are off by default; **Settings → Portable** is the primary update entry: check DSH-Portable or the official DeepSeek Harness core, then install the update in-page after desktop-host confirmation. Their check and install operations are independent but share the Stable/Candidate preference.
+- DSH-Portable opens the local workspace first, then checks in the background only when the corresponding startup setting is enabled. Product updates and official DeepSeek Harness core updates are independent, and both **Check for updates at startup** settings are off by default; **Settings → Updates** is the primary update entry: check DSH-Portable or the official DeepSeek Harness core, then install the update in-page after desktop-host confirmation. Their check and install operations are independent but share the Stable/Candidate preference.
 - Choose the **Stable** or **Candidate** update channel. Stable is intended for daily use; Candidate carries Alpha, Beta, or RC builds according to their actual maturity, after the matching Portable finished-product gates pass. Switching channels never downgrades the installed version. See the [release-stage policy](docs/release-policy.md).
 - The tray provides both manual checks as an alternate entry. Network checking, waiting for a decision, and applying an update are separate states, so the menu does not remain stuck on “Checking”.
 - Every prompt names the target—DSH-Portable or DeepSeek Harness—and shows that target's current and next version.

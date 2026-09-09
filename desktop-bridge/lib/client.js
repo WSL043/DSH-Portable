@@ -11,11 +11,11 @@ window.__ModuleLoader__.load({
         updates: '更新',
         updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: '候选版（Alpha / Beta / RC）',
         updateChannelHint: '稳定版适合日常使用；候选版按成熟度提供 Alpha、Beta 或 RC，可能不完整或不稳定。切换不会自动降级当前版本。',
-        updateRecovery: '新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。',
+        updateRecovery: '启动检查默认关闭。新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。',
         updateRolledBack: '上次更新未通过启动验证，已自动恢复到 {0}。',
         previousVersion: '上一版本',
-        product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。启动检查默认关闭。',
-        engine: 'DeepSeek Harness', engineHint: '官方内核。仅推送通过 Portable 兼容验证的版本；启动检查默认关闭。',
+        product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。',
+        engine: 'DeepSeek Harness', engineHint: '官方内核，独立于 Portable 更新。选择通过兼容验证的版本。',
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
@@ -55,11 +55,11 @@ window.__ModuleLoader__.load({
         updates: 'Updates',
         updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Candidate (Alpha / Beta / RC)',
         updateChannelHint: 'Stable is recommended for daily use. Candidates may be Alpha, Beta, or RC builds and may be incomplete or unstable. Switching never downgrades the installed version.',
-        updateRecovery: 'If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact.',
+        updateRecovery: 'Startup checks are off by default. If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact.',
         updateRolledBack: 'The last update failed startup verification and automatically restored {0}.',
         previousVersion: 'the previous version',
-        product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations. Startup checks are off by default.',
-        engine: 'DeepSeek Harness', engineHint: 'Official core. Only Portable-verified builds are offered; startup checks are off by default.',
+        product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations.',
+        engine: 'DeepSeek Harness', engineHint: 'The official core updates independently. Choose a compatible, verified version.',
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
@@ -303,7 +303,7 @@ window.__ModuleLoader__.load({
         h(primitives.IconFolderOpenOutline16, { size: 14 }), h('span', null, name))
     }
 
-    function PortableSettings(ctx, primitives) {
+    function PortableSettings(ctx, primitives, page = 'portable') {
       const h = React.createElement
       const useEffect = React.useEffect
       const useState = React.useState
@@ -382,7 +382,7 @@ window.__ModuleLoader__.load({
         setEngineVersionManifestUrls({})
         setEngineUnavailable([])
         setStatus('update-engine', '')
-        if (!settings || !persistedChannel) return () => { active = false }
+        if (page !== 'updates' || !settings || !persistedChannel) return () => { active = false }
         fetch('/dsh-portable/engine-versions', { cache: 'no-store' }).then(async response => {
           let body
           try { body = await response.json() }
@@ -396,7 +396,7 @@ window.__ModuleLoader__.load({
           if (!current()) return
           const items = Array.isArray(body.versions) ? body.versions : []
           const unavailable = Array.isArray(body.unavailable) ? body.unavailable
-            .filter(item => item && item.version)
+            .filter(item => item && item.version && String(item.version) !== String(body.current || ''))
             .map(item => ({
               version: String(item.version),
               status: String(item.status || ''),
@@ -665,13 +665,13 @@ window.__ModuleLoader__.load({
         importFile: { color: 'var(--dsw-alias-label-secondary)', fontFamily: 'ui-monospace, SFMono-Regular, Consolas, monospace', fontSize: 11, lineHeight: '18px', overflowWrap: 'anywhere' },
         version: { color: 'var(--dsw-alias-label-secondary)', fontSize: 12, lineHeight: '18px', whiteSpace: 'nowrap' },
         rowActions: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', flexWrap: 'wrap', gap: 8, flex: '0 1 auto', maxWidth: '100%' },
-        updateControls: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10, maxWidth: '100%' },
-        optionLabel: { display: 'flex', alignItems: 'center', gap: 8, color: 'var(--dsw-alias-label-secondary)', fontSize: 12 },
+        updateBlock: { display: 'flex', flexDirection: 'column', gap: 16, padding: '22px 0', borderBottom: '1px solid var(--dsw-alias-border-l2)' },
+        updateHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' },
       }
       const inlineStatus = key => messages[key]
         ? h('div', { ref: node => { statusRefs.current[key] = node }, style: styles.status, role: 'status', 'aria-live': 'polite' }, messages[key])
         : null
-      if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t('title')),
+      if (!settings) return h('div', { style: styles.group }, h('div', { style: styles.heading }, t(page === 'updates' ? 'updates' : 'title')),
         h('div', { style: styles.hint, role: 'status' }, messages.portable || t('checking')))
       const booleanRow = (key, title, hint) => h('div', { style: styles.item },
         h('div', { style: styles.text }, h('div', { style: styles.label }, title), h('div', { style: styles.hint }, hint)),
@@ -680,30 +680,34 @@ window.__ModuleLoader__.load({
           items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
           onSelect: value => update({ [key]: value === 'on' }),
         }))
-      const updateRow = (scope, key, title, version, hint, details = null) => h('div', { style: styles.item },
-        h('div', { style: styles.text }, h('div', { style: styles.label }, title),
-          h('div', { style: styles.hint }, hint),
-          version && h('div', { style: styles.version }, format(t('currentVersion'), version)),
-          inlineStatus(`update-${scope}`), details),
-        h('div', { style: styles.updateControls },
-          scope === 'engine' && engineVersions.length > 0 && h(PortableSelector, {
+      const updateRow = (scope, key, title, version, hint, details = null) => h('section', { style: styles.updateBlock, 'aria-label': title },
+        h('div', { style: styles.updateHeader },
+          h('div', { style: styles.text }, h('div', { style: styles.heading }, title),
+            h('div', { style: styles.hint }, hint),
+            version && h('div', { style: styles.version }, format(t('currentVersion'), version))),
+          h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
+            busy === `update-${scope}` ? t('checking') : scope === 'engine' && engineVersion && engineVersion !== version
+              ? t('installVersion') : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))),
+        scope === 'engine' && version && h('div', { style: styles.updateHeader },
+          h('div', { style: styles.label }, t('versionChoice')),
+          h(PortableSelector, {
             primitives, value: engineVersion || version, label: t('versionChoice'),
             items: [{ id: version, label: version }, ...engineVersions.filter(item => item.version !== version).map(item => ({ id: item.version, label: item.version }))],
             onSelect: setEngineVersion,
-          }),
-          h('label', { style: styles.optionLabel },
-            h('input', { type: 'checkbox', checked: Boolean(settings[key]), disabled: settingsSaving,
-              'aria-label': `${title} · ${t('startupCheck')}`, onChange: event => update({ [key]: event.target.checked }) }), t('startupCheck')),
-          h(primitives.Button, { size: 'sm', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
-            busy === `update-${scope}` ? t('checking') : scope === 'engine' && engineVersion && engineVersion !== version
-              ? t('installVersion') : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))))
+          })),
+        h('div', { style: styles.updateHeader },
+          h('div', { style: styles.label }, t('startupCheck')),
+          h(PortableSelector, {
+            primitives, value: settings[key] ? 'on' : 'off', label: `${title} · ${t('startupCheck')}`,
+            items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
+            onSelect: value => update({ [key]: value === 'on' }),
+          })),
+        inlineStatus(`update-${scope}`), details)
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
-        h('div', { style: styles.sectionHeading }, t('updates')),
         h('div', { style: styles.item },
           h('div', { style: styles.text },
             h('div', { style: styles.label }, t('updateChannel')),
             h('div', { style: styles.hint }, t('updateChannelHint')),
-            h('div', { style: styles.hint }, t('updateRecovery')),
             lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
               format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion')))),
           h(PortableSelector, {
@@ -730,6 +734,10 @@ window.__ModuleLoader__.load({
           engineUnavailable.map((item, index) => h('div', {
             key: `${item.version}-${index}`, style: styles.status, role: 'status',
           }, unavailableMessage(item)))))
+      if (page === 'updates') return h('div', { style: styles.group },
+        h('div', { style: styles.heading }, t('updates')),
+        inlineStatus('portable'), updatesSection,
+        h('div', { style: { ...styles.hint, marginTop: 16 } }, t('updateRecovery')))
       const environmentItems = environments.items.map(item => ({
         id: item.id,
         label: item.id === 'default' ? t('defaultEnvironment') : item.name || item.id,
@@ -847,7 +855,6 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.heading }, t('title')),
         inlineStatus('portable'),
         environmentSection,
-        updatesSection,
         desktopSection,
         careSection,
         dataSection,
@@ -1024,6 +1031,10 @@ window.__ModuleLoader__.load({
             ctx.slots.inject('settings.section', () => ctx.slots.register({
               name: 'settings.section', id: 'portable', order: 60, label: () => copy[localeOf(ctx)].title,
             }, SettingsSection))
+            const UpdatesSection = () => PortableSettings(ctx, primitives, 'updates')
+            ctx.slots.inject('settings.section', () => ctx.slots.register({
+              name: 'settings.section', id: 'portable-updates', order: 1, label: () => copy[localeOf(ctx)].updates,
+            }, UpdatesSection))
             const UpdateAction = props => PortableUpdateAction({ ...props, primitives })
             ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
               name: 'sidebar.footer.action', id: 'portable-update', order: 80, label: () => copy[localeOf(ctx)].updateReady,

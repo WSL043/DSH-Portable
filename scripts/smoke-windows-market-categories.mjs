@@ -66,6 +66,26 @@ try {
 
   await writeFile(path.join(output, 'general-page.txt'), await evaluate('document.body.innerText'))
   await until(click(['Portable']), Boolean, 'dedicated Portable settings navigation')
+  await until(`document.body.innerText.includes('Check and repair') || document.body.innerText.includes('检查与修复')`, Boolean, 'Portable maintenance without update controls')
+  assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`), false)
+  await until(click(['Updates', '更新']), Boolean, 'dedicated Updates navigation')
+  await until(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`, Boolean, 'update channel control')
+  const updateNavigation = await evaluate(`(() => {
+    const button = labels => [...document.querySelectorAll('button')].find(node => labels.includes((node.textContent || '').trim()))
+    const general = button(['General', '通用设置']), updates = button(['Updates', '更新']), models = button(['Models', '模型'])
+    return { ordered: general?.getBoundingClientRect().y < updates?.getBoundingClientRect().y && updates?.getBoundingClientRect().y < models?.getBoundingClientRect().y,
+      distinctIcon: Boolean(updates?.querySelector('svg')) && updates.querySelector('svg').innerHTML !== general?.querySelector('svg')?.innerHTML }
+  })()`)
+  assert.deepEqual(updateNavigation, { ordered: true, distinctIcon: true })
+  await writeFile(path.join(output, 'updates-navigation.json'), JSON.stringify(updateNavigation))
+  await delay(500)
+  await writeFile(path.join(output, 'updates-settings.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+  await until(click(['Engine version', '内核版本']), Boolean, 'core version selector')
+  await until(`Boolean(document.querySelector('button[aria-label="Engine version"][aria-expanded="true"],button[aria-label="内核版本"][aria-expanded="true"]'))`, Boolean, 'core version menu open')
+  await delay(150)
+  await writeFile(path.join(output, 'updates-version-menu.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+  await until(click(['Engine version', '内核版本']), Boolean, 'close core version selector')
+  await until(click(['Portable']), Boolean, 'return to Portable maintenance')
   const nativeState = key => evaluate(`new Promise(resolve => {
     const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
       chrome.webview.removeEventListener('message', listener); resolve(event.data); };

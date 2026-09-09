@@ -31,12 +31,24 @@ export function patchNativeSettingsCommand(source) {
   return replaceRequired(source, seam, replacement, 'native settings command seam changed upstream')
 }
 
+export function patchPortableUpdatesIcon(source) {
+  const marker = 'dsh-portable-updates-nav-icon-v1'
+  if (source.includes(marker)) return source
+  const seam = 'function navIcon(id) {'
+  return replaceRequired(source, seam, `${seam}
+            /* ${marker} */
+            if (id === "portable-updates") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDownloadOutline16, {
+                className: SettingsRoot_module_css_default.navIcon,
+                size: 16
+            });`, 'settings navigation icon seam changed upstream')
+}
+
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
   const appRoot = path.resolve(process.argv[2])
   const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js')
   const source = await readFile(filename, 'utf8')
-  await writeFile(filename, patchNativeSettingsCommand(source), 'utf8')
+  await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
   const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
   let plugins = await readFile(pluginsFile, 'utf8')
   for (const [before, after] of [

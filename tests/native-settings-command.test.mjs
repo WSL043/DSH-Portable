@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
-import { patchNativeSettingsCommand } from '../scripts/patch-native-settings-command.mjs'
+import { patchNativeSettingsCommand, patchPortableUpdatesIcon } from '../scripts/patch-native-settings-command.mjs'
 
 const upstream = `\t\tfunction SettingsRoot(props) {
 \t\t\tconst { wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t } = props;
@@ -81,4 +81,19 @@ test('every platform build applies the native settings command patch beside boot
     const source = await readFile(new URL(`../scripts/${filename}`, import.meta.url), 'utf8')
     assert.match(source, /patch-native-boot-handoff\.mjs[\s\S]{0,240}patch-native-settings-command\.mjs/, filename)
   }
+})
+
+
+test('Updates uses the shared download icon and preserves other navigation icons', () => {
+  const source = 'function navIcon(id) { return "existing-icon"; }'
+  const output = patchPortableUpdatesIcon(source)
+  const context = { react_jsx_runtime: { jsx: (icon, props) => ({ icon, props }) },
+    _deepseek_ai_dsh_client_ui_primitives: { IconDownloadOutline16: 'download' },
+    SettingsRoot_module_css_default: { navIcon: 'nav-icon' } }
+  vm.runInNewContext(`${output}; this.icon = navIcon`, context)
+  assert.equal(context.icon('portable-updates').icon, 'download')
+  assert.equal(context.icon('portable-updates').props.size, 16)
+  assert.equal(context.icon('general'), 'existing-icon')
+  assert.equal(patchPortableUpdatesIcon(output), output)
+  assert.throws(() => patchPortableUpdatesIcon('changed upstream'), /expected 1 match/)
 })
