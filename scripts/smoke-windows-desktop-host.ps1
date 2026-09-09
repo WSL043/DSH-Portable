@@ -206,7 +206,11 @@ try {
     $Status = Get-ProductStatus
 
     if ($Process.MainWindowHandle -eq [IntPtr]::Zero) { throw 'DeepSeek-Herness.exe did not create a native top-level window.' }
-    if ($Status.Status -ne 'running') { throw 'DeepSeek Harness did not become ready behind the desktop host.' }
+    if ($Status.Status -ne 'running') {
+        $ErrorLog = Join-Path $Root 'data\logs\portable-errors.jsonl'
+        $StartupErrors = if (Test-Path -LiteralPath $ErrorLog) { (Get-Content -LiteralPath $ErrorLog -Tail 3) -join "`n" } else { 'No structured startup error was recorded.' }
+        throw "DeepSeek Harness did not become ready behind the desktop host at $Root.`n$($Status.Raw)`n$StartupErrors"
+    }
     if ($Process.MainWindowTitle) { throw "The compact desktop chrome must not repeat product identity: $($Process.MainWindowTitle)" }
 
     $AppId = [WindowAppIdentity]::GetAppUserModelId($Process.MainWindowHandle)
