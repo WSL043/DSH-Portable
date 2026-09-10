@@ -98,7 +98,7 @@ test('restore keeps target conflicts by default and imports missing data', async
   assert.equal(await readFile(path.join(target.layout.dshHome, 'sessions', 'workspace-b', 'session-two', 'session.jsonl.zstd'), 'utf8'), 'target')
 })
 
-for (const sessionFilename of ['session.jsonl.zstd', 'session.v2.jsonl.zstd', 'session.jsonl', 'session.v2.jsonl']) {
+for (const sessionFilename of ['session.jsonl.zstd', 'session.v2.jsonl.zstd', 'session.jsonl', 'session.v2.jsonl', 'session.v3.jsonl', 'session.v3.jsonl.zstd']) {
 test(`restore relocates ${sessionFilename} without rewriting historical event text`, async () => {
   const source = await fixture()
   const sessionId = 'session-11111111-1111-4111-8111-111111111111'

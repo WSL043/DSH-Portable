@@ -631,8 +631,8 @@ test('moving the whole folder migrates only its owned workspace references', asy
   await mkdir(sessionDir, { recursive: true })
   const headerFrame = zstdCompressSync(Buffer.from(`${JSON.stringify({ type: 'session', version: 0, id: 'session-one', createdAt: 1, cwd: first.workspace, isSeeded: false, delegationDepth: 0 })}\n`))
   const eventFrame = zstdCompressSync(Buffer.from(`${JSON.stringify({ type: 'event', text: first.workspace })}\n`))
-  const compressedNames = ['session.jsonl.zstd', 'session.v2.jsonl.zstd']
-  const plainNames = ['session.jsonl', 'session.v2.jsonl']
+  const compressedNames = ['session.jsonl.zstd', 'session.v2.jsonl.zstd', 'session.v3.jsonl.zstd']
+  const plainNames = ['session.jsonl', 'session.v2.jsonl', 'session.v3.jsonl']
   for (const name of compressedNames) await writeFile(path.join(sessionDir, name), Buffer.concat([headerFrame, eventFrame]))
   for (const name of plainNames) await writeFile(path.join(sessionDir, name), Buffer.concat([zstdDecompressSync(headerFrame), zstdDecompressSync(eventFrame)]))
 

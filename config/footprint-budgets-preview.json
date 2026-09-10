@@ -42,7 +42,7 @@
       "marketFiles": 230
     },
     "linux-arm64": {
-      "archiveBytes": 90100000,
+      "archiveBytes": 91200000,
       "extractedBytes": 325000000,
       "files": 14250,
       "directories": 3975,

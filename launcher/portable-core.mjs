@@ -1122,9 +1122,9 @@ async function migrateSessionDirectory(dshHome, before, after) {
     if (!entry.isDirectory()) continue
     const sessionDir = path.join(targetDir, entry.name)
     let migrated = false
-    // Preview cores can retain legacy logs alongside their v2 session log.
+    // Preview cores can retain legacy logs alongside their v2/v3 session logs.
     // Update every existing header, without rewriting historical events.
-    for (const name of ['session.jsonl.zstd', 'session.jsonl', 'session.v2.jsonl.zstd', 'session.v2.jsonl']) {
+    for (const name of ['session.jsonl.zstd', 'session.jsonl', 'session.v2.jsonl.zstd', 'session.v2.jsonl', 'session.v3.jsonl.zstd', 'session.v3.jsonl']) {
       const filename = path.join(sessionDir, name)
       if (existsSync(filename) && await migrateSessionHeader(filename, before, after, name.endsWith('.zstd'))) migrated = true
     }
