@@ -130,7 +130,12 @@ test('the packaged market ships runtime artifacts only', async () => {
     'NOTICE.md',
   ])
   assert.equal(manifest.files.some((entry) => entry === 'src' || entry.includes('*.map') || entry.includes('types')), false)
-  assert.deepEqual(await readdir(path.join(root, 'app/vendor/dsh-portable-plugin-market/lib')), ['index.js'])
+  const runtimeFiles = await readdir(path.join(root, 'app/vendor/dsh-portable-plugin-market/lib'))
+  assert.ok(runtimeFiles.includes('index.js') && runtimeFiles.includes('import-preflight.js'))
+  for (const file of runtimeFiles) assert.match(file, /^(?:index|import-preflight(?:-[A-Za-z0-9_-]+)?)\.js$/)
+  const sizes = await Promise.all(runtimeFiles.map(file => stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/lib', file))))
+  assert.ok(sizes.reduce((total, entry) => total + entry.size, 0) < 200_000)
+
   assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/lib/index.js'))).size < 200_000)
   assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/client/client.js'))).size < 220_000)
 })

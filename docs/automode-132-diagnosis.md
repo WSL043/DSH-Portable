@@ -41,3 +41,7 @@ For this targeted test, the rebuilt market was placed in each isolated extracted
 Import checks execute module top-level code in a separate process, not a security sandbox. They do not invoke the plugin lifecycle and cannot prove compatibility of deferred imports, live model behavior, or recovery after a host/process crash during installation. No general repair of arbitrary existing plugin corruption is claimed. Avoid downgrading or replacing the permission module alone because the host services are coupled.
 
 Evidence: `evidence/{stable,rc2}/install.json`, `links-before.json`, `links-after.json`, `data/logs/dsh.stderr.log`, native captures, and `evidence/official/`.
+
+## Portable terminal entry
+
+The Portable `dsh plugin --profile <name> add/install/update/up` adapter also uses the same compiled import probe. After a successful package command, it checks non-official profile bundles before reporting success. Import failure restores package.json and pnpm-lock.yaml and attempts to rematerialize the previous dependency graph. A new profile has no prior graph to restore. Sessions and workspace files are excluded. Results and redacted import errors are written to launcher.log. Direct upstream Node or pnpm invocations bypass this adapter. This is not crash-atomic recovery or a sandbox for module top-level side effects.

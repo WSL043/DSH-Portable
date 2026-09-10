@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: { index: 'src/index.ts' },
+  entry: { index: 'src/index.ts', 'import-preflight': 'src/import-preflight.ts' },
   outDir: 'lib',
   format: 'esm',
   platform: 'node',
@@ -15,6 +15,6 @@ export default defineConfig({
     neverBundle: [/^@deepseek-ai\//],
   },
   outputOptions: {
-    entryFileNames: 'index.js',
+    entryFileNames: '[name].js',
   },
 })

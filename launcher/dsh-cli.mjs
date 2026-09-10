@@ -1,3 +1,4 @@
+import { runCheckedPluginMutation } from './plugin-command-check.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
@@ -462,11 +463,21 @@ export async function main(inputArgv = process.argv.slice(2), source = process.e
     spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source, selected.environmentId)
     await relinkMovedProfileIfNeeded(spec, normalizedArgv)
 
-    const result = await runPluginCommandWithFreshReleaseRecovery(
-      spec,
-      normalizedArgv,
-      (retryArgv) => buildPluginCliSpec(root, stateRoot, retryArgv, process.platform, source, selected.environmentId),
-    )
+    const makeSpec = args => buildPluginCliSpec(root, stateRoot, args, process.platform, source, selected.environmentId)
+    const run = () => runPluginCommandWithFreshReleaseRecovery(spec, normalizedArgv, makeSpec)
+    const profile = requestedProfile(argv)
+    const profileRoot = path.resolve(spec.layout.dshHome, 'profiles', profile)
+    const operation = argv[pluginOperationIndex(argv)]
+    const guarded = profile && ['add', 'install', 'update', 'up'].includes(operation)
+    if (guarded && !isInsidePath(profileRoot, path.join(spec.layout.dshHome, 'profiles'), process.platform)) throw new Error('Invalid plugin profile path.')
+    const result = guarded ? await runCheckedPluginMutation({
+      profileRoot, layout: spec.layout, run,
+      reinstall: () => {
+        const args = ['plugin', '--profile', profile, 'install', '--no-frozen-lockfile', RELEASE_AGE_REMOVAL_OVERRIDE]
+        return runPluginCommandWithFreshReleaseRecovery(makeSpec(args), args, makeSpec)
+      },
+    }) : await run()
+    if (guarded && result.status !== 0 && result.stderr) process.stderr.write(result.stderr)
     const exitCode = Number.isInteger(result.status) ? result.status : 1
     if (exitCode === 0 && isMutatingPluginCommand(argv)) {
       process.stderr.write('\n插件已写入当前 DSH 配置。若 DSH 正在运行，请保存任务并手动停止、重新启动后加载；本工具不会自动重启。\n')

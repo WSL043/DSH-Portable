@@ -561,9 +561,21 @@ test('Portable version selection sends the exact approved manifest to the deskto
   const mounted = client.mount()
   await settle()
   const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
-  assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.5-rc.1'])
+  assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.4', '0.6.5-rc.1'])
   findNode(mounted.tree, node => textContent(node) === 'Install selected version' && typeof node.props?.onClick === 'function').props.onClick()
   assert.equal(messages.at(-1).scope, 'product')
   assert.equal(messages.at(-1).manifestUrl, manifestUrl)
+  mounted.unmount()
+})
+
+test('Portable current version remains visible with an empty approved catalog', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings('candidate'), versions: { portable: '0.6.5-rc.2', engine: '0.1.5-rc.1' } }
+    : { schemaVersion: 1, releaseChannel: 'candidate', current: '0.1.5-rc.1', versions: [], unavailable: [] }))
+  const mounted = client.mount()
+  await settle()
+  const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
+  assert.equal(selector.props.value, '0.6.5-rc.2')
+  assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.5-rc.2'])
   mounted.unmount()
 })

@@ -715,11 +715,12 @@ window.__ModuleLoader__.load({
               ? t('installVersion') : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))),
         scope === 'product' && h('div', { style: styles.updateHeader },
           h('div', { style: styles.label }, t('productVersionChoice')),
-          productVersions.length ? h(PortableSelector, {
-            primitives, value: productVersion, label: t('productVersionChoice'),
-            items: productVersions.map(item => ({ id: item.version, label: item.version })),
+          h(PortableSelector, {
+            primitives, value: productVersion || version, label: t('productVersionChoice'),
+            items: [...(version && !productVersions.some(item => item.version === version) ? [{ id: version, label: version }] : []), ...productVersions.map(item => ({ id: item.version, label: item.version }))],
             onSelect: setProductVersion,
-          }) : h('div', { style: styles.hint }, t('noProductVersions'))),
+          }),
+          !productVersions.some(item => item.version !== version) && h('div', { style: styles.hint }, t('noProductVersions'))),
         scope === 'engine' && version && h('div', { style: styles.updateHeader },
           h('div', { style: styles.label }, t('versionChoice')),
           h(PortableSelector, {
