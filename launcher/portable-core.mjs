@@ -147,29 +147,59 @@ export async function retirePendingExtensionOperation(layout) {
   return true
 }
 
+// One state model shared by startup, doctor and repair; inspecting never mutates data.
+export async function inspectPackageFallback(layout, target, fallback, expectedName) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  if (!existsSync(paths.join(target, 'package.json'))) return { state: 'missing-target', repairable: false }
+  let current
+  try { current = await lstat(fallback) } catch (error) {
+    if (error.code === 'ENOENT') return { state: 'missing', repairable: true }
+    throw error
+  }
+  if (current.isSymbolicLink()) {
+    try {
+      const matches = sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)
+      return { state: matches ? 'linked' : 'stale-link', repairable: true }
+    } catch (error) {
+      if (error.code === 'ENOENT') return { state: 'stale-link', repairable: true }
+      throw error
+    }
+  }
+  if (!current.isDirectory()) return { state: 'unknown-file', repairable: false }
+  if ((await readdir(fallback)).length === 0) return { state: 'empty-directory', repairable: true }
+  let manifest
+  try { manifest = JSON.parse(await readFile(paths.join(fallback, 'package.json'), 'utf8')) } catch (error) {
+    if (error.code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error
+  }
+  return manifest?.name === expectedName
+    ? { state: 'materialized-package', repairable: true }
+    : { state: 'unknown-directory', repairable: false }
+}
+
+export async function inspectDesktopBridgeFallbacks(layout) {
+  const paths = layout.platform === 'win32' ? path.win32 : path.posix
+  return Promise.all([
+    ['generated.desktopBridgeResolver', paths.dirname(layout.desktopBridgePatch), layout.desktopBridgeFallback, '@wsl043/dsh-portable-desktop-bridge'],
+    ['generated.pluginMarketResolver', layout.pluginMarketRoot, layout.pluginMarketFallback, '@wsl043/dsh-portable-plugin-market'],
+  ].map(async ([id, target, fallback, name]) => {
+    const { state, repairable } = await inspectPackageFallback(layout, target, fallback, name)
+    return { id, status: ['linked', 'missing'].includes(state) ? 'ok' : 'error', repairable,
+      detail: state === 'missing' ? 'created-on-start' : state, requiresPackage: state === 'missing-target' }
+  }))
+}
+
 async function ensurePackageFallback(layout, target, fallback, label) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
-  const packageFile = paths.join(target, 'package.json')
-  if (!existsSync(packageFile)) throw new Error(`Portable ${label} is missing: ${packageFile}`)
-
+  const expectedName = label === 'desktop bridge'
+    ? '@wsl043/dsh-portable-desktop-bridge' : '@wsl043/dsh-portable-plugin-market'
+  const { state } = await inspectPackageFallback(layout, target, fallback, expectedName)
+  if (state === 'missing-target') throw new Error(`Portable ${label} is missing: ${paths.join(target, 'package.json')}`)
+  if (state.startsWith('unknown-')) throw new Error(`Portable ${label} fallback contains unrecognized content; preserved unchanged: ${fallback}`)
+  if (state === 'linked') return false
   await mkdir(paths.dirname(fallback), { recursive: true })
-  let current = null
-  try {
-    current = await lstat(fallback)
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error
-  }
-
+  const current = state !== 'missing'
   if (current) {
-    if (!current.isSymbolicLink()) {
-      const expectedName = label === 'desktop bridge'
-        ? '@wsl043/dsh-portable-desktop-bridge' : '@wsl043/dsh-portable-plugin-market'
-      let manifest = null
-      try { manifest = JSON.parse(await readFile(paths.join(fallback, 'package.json'), 'utf8')) } catch {}
-      const empty = current.isDirectory() && (await readdir(fallback)).length === 0
-      if (!current.isDirectory() || (!empty && manifest?.name !== expectedName)) {
-        throw new Error(`Portable ${label} fallback contains unrecognized content; preserved unchanged: ${fallback}`)
-      }
+    if (state === 'materialized-package' || state === 'empty-directory') {
       // Preserve the whole materialized package outside node_modules before rebuilding its link.
       const recoveryRoot = paths.join(layout.dataDir, 'recovery', 'managed-packages')
       await mkdir(recoveryRoot, { recursive: true })
@@ -177,7 +207,7 @@ async function ensurePackageFallback(layout, target, fallback, label) {
       const backup = paths.join(recovery, 'original')
       await writeFile(paths.join(recovery, 'recovery.json'), JSON.stringify({
         schemaVersion: 1, package: expectedName, fallback, target, backup,
-        createdAt: new Date().toISOString(), reason: empty ? 'empty-directory' : 'materialized-package',
+        createdAt: new Date().toISOString(), reason: state,
       }, null, 2) + '\n')
       await rename(fallback, backup)
       try {
@@ -191,11 +221,6 @@ async function ensurePackageFallback(layout, target, fallback, label) {
         throw error
       }
       return true
-    }
-    try {
-      if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) return false
-    } catch {
-      // A moved portable directory leaves a broken link. Replace only this owned link.
     }
     await unlink(fallback)
   }

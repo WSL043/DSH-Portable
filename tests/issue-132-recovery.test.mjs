@@ -37,6 +37,10 @@ for (const component of ['desktop-bridge', 'plugin-market']) {
             await writeFile(path.join(fallback, 'sentinel'), 'preserve all original bytes')
           }
         }
+        const checkId = component === 'desktop-bridge' ? 'generated.desktopBridgeResolver' : 'generated.pluginMarketResolver'
+        const before = (await core.inspectDesktopBridgeFallbacks(layout)).find(check => check.id === checkId)
+        assert.equal(before.status, 'error')
+        assert.equal(before.repairable, mode === 'materialized' || mode === 'empty')
         if (mode === 'unknown' || mode === 'file') {
           await assert.rejects(core.ensureDesktopBridgeFallback(layout), /preserved unchanged/)
           assert.equal((await lstat(fallback)).isSymbolicLink(), false)
@@ -47,6 +51,9 @@ for (const component of ['desktop-bridge', 'plugin-market']) {
         assert.equal(await core.ensureDesktopBridgeFallback(layout), true)
         assert.equal(await readFile(profile, 'utf8'), 'user profile must remain byte-identical')
         assert.equal(await realpath(fallback), await realpath(target))
+        const after = (await core.inspectDesktopBridgeFallbacks(layout)).find(check => check.id === checkId)
+        assert.equal(after.status, 'ok')
+        assert.equal(after.detail, 'linked')
         const recovery = path.join(layout.dataDir, 'recovery', 'managed-packages')
         const entries = await readdir(recovery)
         assert.equal(entries.length, 1)
@@ -69,4 +76,43 @@ for (const component of ['desktop-bridge', 'plugin-market']) {
       }
     })
   }
+}
+
+// Separate processes keep filesystem fault injection out of other tests.
+for (const rollbackFails of [false, true]) {
+  test(`link creation failure preserves original content; rollback failure=${rollbackFails}`, async () => {
+    const { execFileSync } = await import('node:child_process')
+    execFileSync(process.execPath, ['--experimental-test-module-mocks', '--input-type=module', '-e', `
+      import { mock } from 'node:test';
+      import * as fs from 'node:fs/promises';
+      import path from 'node:path';
+      import os from 'node:os';
+      import assert from 'node:assert/strict';
+      const original = {...fs};
+      mock.module('node:fs/promises', { namedExports: {
+        ...original,
+        symlink: async () => { throw Object.assign(new Error('injected link failure'), {code:'EACCES'}) },
+        rename: async (from,to) => {
+          if (${rollbackFails} && path.basename(from)==='original') throw new Error('injected rollback failure');
+          return original.rename(from,to);
+        },
+      }});
+      const core = await import('./launcher/portable-core.mjs');
+      const root = await original.mkdtemp(path.join(os.tmpdir(),'dsh-132-fault-'));
+      try {
+        const l = core.layoutForRoot(root);
+        const target = path.dirname(l.desktopBridgePatch);
+        await original.mkdir(target,{recursive:true});
+        await original.writeFile(path.join(target,'package.json'),'{}');
+        await original.mkdir(l.desktopBridgeFallback,{recursive:true});
+        await original.writeFile(path.join(l.desktopBridgeFallback,'package.json'),JSON.stringify({name:'@wsl043/dsh-portable-desktop-bridge'}));
+        await original.writeFile(path.join(l.desktopBridgeFallback,'sentinel'),'original bytes');
+        await assert.rejects(core.ensureDesktopBridgeFallback(l), ${rollbackFails} ? /original content is preserved/ : /injected link failure/);
+        const recovery = path.join(l.dataDir,'recovery','managed-packages');
+        const [entry] = await original.readdir(recovery);
+        const preserved = ${rollbackFails} ? path.join(recovery,entry,'original') : l.desktopBridgeFallback;
+        assert.equal(await original.readFile(path.join(preserved,'sentinel'),'utf8'),'original bytes');
+      } finally { await original.rm(root,{recursive:true,force:true}) }
+    `], { cwd: new URL('..', import.meta.url), windowsHide: true, stdio: 'pipe' })
+  })
 }

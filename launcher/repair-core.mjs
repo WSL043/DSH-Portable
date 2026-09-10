@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 
 import {
   ensureDesktopBridgeFallback,
+  inspectDesktopBridgeFallbacks,
   ensurePortableDirectories,
   inspectManagedProfileModuleFallback,
   inspectPackagedDshRuntime,
@@ -105,26 +106,13 @@ async function generatedChecks(layout) {
       repairable: profileResolver.repairable,
       detail: profileResolver.detail,
     },
-    {
-      id: 'generated.desktopBridgeResolver',
-      status: 'ok',
-      repairable: true,
-      detail: existsSync(layout.desktopBridgeFallback) ? 'present' : 'created-on-start',
-    },
-    {
-      id: 'generated.pluginMarketResolver',
-      status: 'ok',
-      repairable: true,
-      detail: existsSync(path.join(layout.pluginMarketRoot, 'package.json'))
-        ? (existsSync(layout.pluginMarketFallback) ? 'present' : 'created-on-start')
-        : 'not-packaged',
-    },
+    ...await inspectDesktopBridgeFallbacks(layout),
   ]
 }
 
 export async function diagnosePortable(layout) {
   const checks = [...await runtimeChecks(layout), ...await generatedChecks(layout)]
-  const needsFullPackage = checks.some((check) => check.status === 'error' && !check.repairable)
+  const needsFullPackage = checks.some((check) => check.status === 'error' && !check.repairable && check.requiresPackage !== false)
   return {
     schemaVersion: REPORT_SCHEMA,
     ok: !checks.some((check) => check.status === 'error'),
@@ -145,12 +133,12 @@ export async function repairPortable(layout, { running = false } = {}) {
       checks: before.checks,
     }
   }
-  if (before.needsFullPackage) {
+  if (before.checks.some(check => check.status === 'error' && !check.repairable)) {
     return {
       schemaVersion: REPORT_SCHEMA,
       ok: false,
       deferred: false,
-      needsFullPackage: true,
+      needsFullPackage: before.needsFullPackage,
       actions: [],
       checks: before.checks,
     }
