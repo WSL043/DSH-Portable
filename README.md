@@ -116,9 +116,9 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 | --- | --- |
 | 可以联网，希望自动下载并准备工作文件夹 | [**在线便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐；0.6.5 约 75 KiB） |
 | 普通电脑，想下载后直接解压使用 | [**标准 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)（0.6.5 约 55.9 MiB） |
-| 准备在完全断网的电脑上使用，或启动时提示缺少组件 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.5 约 340.9 MiB；额外带齐窗口显示组件） |
+| 目标电脑缺少窗口显示组件，且无法联网补装；或不确定目标电脑是否具备组件 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.5 约 340.9 MiB；额外带齐窗口显示组件） |
 
-**不知道怎么选？能联网就用在线启动器；想自己解压就用标准 ZIP。** 完整离线 ZIP 主要用于隔离环境，普通电脑通常不需要下载这个大包。
+**不知道怎么选？能联网就用在线启动器；想自己解压就用标准 ZIP。** 电脑已有窗口显示组件时，标准 ZIP 也可完全断网使用，无需下载完整离线大包。
 
 窗口显示组件叫 WebView2，[Windows 11 预装，大多数 Windows 10 电脑也已有](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/end-user-faq)。标准 ZIP 使用电脑已有的组件；完整离线 ZIP 额外自带一份。
 

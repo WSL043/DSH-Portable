@@ -107,6 +107,8 @@ test('default capsule compression preserves every payload byte and failed output
     await createRuntimeCapsule(app, before, path.join(root, 'before.json'), { level: 10 })
     await createRuntimeCapsule(app, after, path.join(root, 'after.json'))
     assert.deepEqual(zstdDecompressSync(await readFile(before)), zstdDecompressSync(await readFile(after)))
+    await createRuntimeCapsule(app, after, path.join(root, 'after.json'), { level: 22 })
+    assert.deepEqual(zstdDecompressSync(await readFile(before)), zstdDecompressSync(await readFile(after)))
     const blocked = path.join(root, 'blocked.dshpack')
     await mkdir(blocked)
     await assert.rejects(createRuntimeCapsule(app, blocked, path.join(root, 'blocked.json')))

@@ -302,11 +302,20 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-complete-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw 'Complete package extraction failed' }
           $Portable = Join-Path $Root 'DSH-Portable'
+          node scripts/audit-windows-startup-transition.mjs $Portable system-evidence 75
+          if ($LASTEXITCODE -ne 0) { throw 'System runtime native startup failed' }
+          $Log = Join-Path $Portable 'data/logs/startup-latest.jsonl'
+          if (-not (Select-String -Path $Log -SimpleMatch 'system-webview-runtime"')) { throw 'Native host did not use system WebView2' }
+          if (Select-String -Path $Log -SimpleMatch 'bundled-webview-prepare-begin') { throw 'System runtime startup expanded the offline capsule' }
+          # Exercise absence without uninstalling the runner's shared runtime.
+          $env:DSH_PORTABLE_TEST_WEBVIEW2_MISSING = '1'
           node scripts/audit-windows-startup-transition.mjs $Portable complete-evidence 75
+          Remove-Item Env:DSH_PORTABLE_TEST_WEBVIEW2_MISSING
           if ($LASTEXITCODE -ne 0) { throw 'Complete offline native startup failed' }
           $Log = Join-Path $Portable 'data/logs/startup-latest.jsonl'
           if (-not (Select-String -Path $Log -SimpleMatch 'bundled-webview-runtime')) { throw 'Native host did not use bundled WebView2' }
           Copy-Item $Log complete-evidence/bundled-runtime.jsonl
+          Copy-Item -Recurse system-evidence complete-evidence/system-runtime
       - uses: actions/upload-artifact@v7
         if: always()
         with:

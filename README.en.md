@@ -116,9 +116,9 @@ The close button sends the app to the system tray by default, so an active task 
 | --- | --- |
 | You have internet access and want the folder prepared automatically | [**Online portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended; about 75 KiB in 0.6.5) |
 | You use a regular PC and want to download, extract, and run | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) (about 55.9 MiB in 0.6.5) |
-| You are preparing for a completely offline computer, or see a missing-component message | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes the window-rendering component) |
+| The target PC lacks the window-rendering component and cannot download it, or you are unsure whether it has it | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes the window-rendering component) |
 
-**Not sure? Use the online launcher if you have internet access, or the standard ZIP if you prefer manual extraction.** The larger complete offline ZIP is mainly for isolated environments.
+**Not sure? Use the online launcher if you have internet access, or the standard ZIP if you prefer manual extraction.** If the computer already has the window-rendering component, the standard ZIP also works completely offline; the larger package is unnecessary.
 
 The window-rendering component is called WebView2. [Windows 11 includes it, and most Windows 10 PCs already have it](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/end-user-faq). The standard ZIP uses that existing component; the complete offline ZIP carries its own copy.
 

@@ -5339,8 +5339,29 @@ namespace DshPortable
                 throw new COMException("The requested resource is in use.", WebViewResourceInUseHResult);
             }
 
-            string browserFolder = await ResolveBundledWebViewRuntimeAsync();
-            webViewEnvironment = await CoreWebView2Environment.CreateAsync(browserFolder, userData, options);
+            // Try the installed runtime first. Merely carrying an offline capsule
+            // must not unpack another browser on machines that already have one.
+            bool systemRuntimeMissing = false;
+            try
+            {
+                if (String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_MISSING"), "1", StringComparison.Ordinal))
+                    throw new WebView2RuntimeNotFoundException();
+                webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userData, options);
+                AppendStartupTrace("native-host", "system-webview-runtime", new Dictionary<string, object>
+                    { { "version", webViewEnvironment.BrowserVersionString } });
+            }
+            catch (WebView2RuntimeNotFoundException)
+            {
+                AppendStartupTrace("native-host", "system-webview-runtime-missing", new Dictionary<string, object>());
+                if (!Directory.Exists(Path.Combine(root, "runtime", "webview2"))) throw;
+                systemRuntimeMissing = true;
+            }
+            if (systemRuntimeMissing)
+            {
+                string browserFolder = await ResolveBundledWebViewRuntimeAsync();
+                if (browserFolder == null) throw new WebView2RuntimeNotFoundException();
+                webViewEnvironment = await CoreWebView2Environment.CreateAsync(browserFolder, userData, options);
+            }
             webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
             webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
             await webView.EnsureCoreWebView2Async(webViewEnvironment);
