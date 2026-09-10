@@ -9,6 +9,85 @@ import test from 'node:test'
 import { mountMarketRoutes } from '../app/vendor/dsh-portable-plugin-market/src/routes.ts'
 import { checkUpdates } from '../app/vendor/dsh-portable-plugin-market/src/updates.ts'
 
+test('bad imports roll back installation and lockfile without changing user data', async t => {
+  const lockfile = '# exact previous resolution\n'
+  const bed = await updateTestbed(t, {
+    installed: false, lockfile,
+    async onAdd({ manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      manifest.dsh.profile.bundles.push('fixture-plugin')
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeFile(path.join(profile, 'pnpm-lock.yaml'), '# changed lock\n')
+      await writeInstalledPlugin(profile, '1.2.0', { type: 'module' })
+      const plugin = path.join(profile, 'node_modules', 'fixture-plugin')
+      await writeFile(path.join(plugin, 'lib/index.js'), "import {removed} from './host.js'; export default removed")
+      await writeFile(path.join(plugin, 'lib/host.js'), 'export const current = 1')
+      return ok()
+    },
+    async onInstall({ profile, manifestFile }) {
+      assert.equal(await readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'), lockfile)
+      const restored = JSON.parse(await readFile(manifestFile, 'utf8'))
+      assert.deepEqual(restored.dependencies, {})
+      assert.deepEqual(restored.dsh.profile.bundles, [])
+      await rm(path.join(profile, 'node_modules', 'fixture-plugin'), { recursive: true })
+      return ok()
+    },
+  })
+  const data = { 'sessions.jsonl': '{"message":"keep chat"}\n', 'groups.json': '{"group":"keep grouping"}', 'workspace.txt': 'keep workspace\n', 'cordis.patch.yml': '# user configuration\n' }
+  for (const [name, bytes] of Object.entries(data)) await writeFile(path.join(bed.profile, name), bytes)
+  const { response, body } = await bed.install()
+  assert.equal(response.status, 502)
+  assert.equal(body.ok, false)
+  assert.match(body.error, /does not provide an export named 'removed'/)
+  assert.match(body.error, /installation was rolled back/)
+  assert.equal(body.activationAction, undefined)
+  assert.deepEqual(body.installed, {})
+  for (const [name, bytes] of Object.entries(data)) assert.equal(await readFile(path.join(bed.profile, name), 'utf8'), bytes)
+})
+
+test('failed dependency recovery is reported instead of claiming a successful rollback', async t => {
+  const bed = await updateTestbed(t, {
+    installed: false,
+    async onAdd({ manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      manifest.dsh.profile.bundles.push('fixture-plugin')
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.2.0', { type: 'module' })
+      await writeFile(path.join(profile, 'node_modules/fixture-plugin/lib/index.js'), "throw Error('bad plugin')")
+      return ok()
+    },
+    async onInstall() { return { ...ok(), exitCode: 1, stderr: 'recovery unavailable' } },
+  })
+  const { body } = await bed.install()
+  assert.equal(body.ok, false)
+  assert.match(body.error, /dependency recovery failed/)
+  assert.doesNotMatch(body.error, /installation was rolled back/)
+  assert.deepEqual(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dsh.profile.bundles, [])
+})
+
+test('an update with an invalid import restores the exact previously installed build', async t => {
+  const bed = await updateTestbed(t, {
+    async onAdd({ target, manifestFile, profile }) {
+      const version = target.endsWith('@1.0.0') ? '1.0.0' : '1.2.0'
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = version
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, version, { type: 'module' })
+      if (version === '1.2.0') await writeFile(path.join(profile, 'node_modules/fixture-plugin/lib/index.js'), "import './missing.js'")
+      return ok()
+    },
+  })
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 502)
+  assert.equal(body.ok, false)
+  assert.match(body.error, /previous plugin version was restored/)
+  assert.deepEqual(bed.calls.map(args => args.at(-1)), ['fixture-plugin@1.2.0', 'fixture-plugin@1.0.0'])
+  assert.equal(JSON.parse(await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8')).version, '1.0.0')
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '^1.0.0')
+})
+
 test('external plugin sources never fall through to a same-name registry update', async t => {
   for (const spec of ['git+https://gitea.example/team/plugin.git#release', 'https://gitlab.example/team/plugin', 'git@example.com:team/plugin.git', 'https://example.com/plugin.tgz', 'npm:other-plugin@1.0.0']) {
     await t.test(spec, async t => {
@@ -66,6 +145,7 @@ async function updateTestbed(t, {
   spec = '^1.0.0',
   lockfile = '',
   onAdd,
+  onInstall,
   installed = true,
   installedVersion = '1.0.0',
   loaderEntries = [],
@@ -87,6 +167,7 @@ async function updateTestbed(t, {
       calls.push(args)
       if (args[0] === 'store' && args[1] === 'path') return ok(profile)
       if (args[0] === 'add') return await onAdd({ args, target: args.at(-1), manifestFile, profile })
+      if (args.at(-1) === 'install' && onInstall) return await onInstall({ args, manifestFile, profile })
       throw new Error(`unexpected plugin command: ${args.join(' ')}`)
     },
     probePnpm: async () => true,

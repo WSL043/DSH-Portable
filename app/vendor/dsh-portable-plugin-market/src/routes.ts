@@ -8,7 +8,7 @@
  * same-origin POSTs and only sources present in the curated registry.
  */
 
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hasPluginCategory, loadRegistry, readRegistrySnapshot, revalidateRegistry } from './registry.ts'
@@ -26,6 +26,7 @@ import {
 import { addProfileBundle, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { preflightNpmUpdate } from './update-preflight.ts'
+import { preflightPluginImports } from './import-preflight.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
@@ -438,9 +439,14 @@ export function mountMarketRoutes(
    * next start still fails. Re-run pnpm install against the restored
    * manifest to rematerialize the previous build's files.
    */
-  async function rollbackUpdateBuild(name: string, manifestBefore: ProfileManifestSnapshot): Promise<{ ok: boolean; detail: string | null }> {
+  async function rollbackUpdateBuild(name: string, manifestBefore: ProfileManifestSnapshot, lockfileBefore?: string | null): Promise<{ ok: boolean; detail: string | null }> {
     const rolledBack = restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
     if (rolledBack.length === 0) return { ok: true, detail: null }
+    if (lockfileBefore !== undefined) {
+      const lockfile = join(activeProfileDir, 'pnpm-lock.yaml')
+      if (lockfileBefore === null) rmSync(lockfile, { force: true })
+      else writeFileSync(lockfile, lockfileBefore)
+    }
     // CI=true (the market always runs pnpm that way) turns frozen-lockfile
     // on, and the restored manifest pin now disagrees with the lockfile the
     // bad add just wrote — without the flag this restore run fails with
@@ -1595,6 +1601,21 @@ export function mountMarketRoutes(
             }
             let profileHealthError: string | null = null
             if (ok) {
+              const imports = hasHostHalf(config.profile, name, activeProfileDir)
+                ? await preflightPluginImports(activeProfileDir, [name])
+                : { ok: true, checked: [], detail: undefined }
+              if (!imports.ok) {
+                ok = false
+                const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
+                rollbackOk = rollback.ok
+                rollbackDetail = rollback.detail
+                profileHealthError = `插件加载检查失败：${imports.detail ?? 'unknown'}\n${rollback.ok
+                  ? '已恢复更新前的插件版本。 / The previous plugin version was restored.'
+                  : `无法恢复更新前的插件版本：${rollback.detail ?? 'unknown'} / The previous plugin version could not be restored.`}`
+                logEvent('error', 'update-import', `${name}: ${profileHealthError}`)
+              }
+            }
+            if (ok) {
               const newlyUnresolved = introducedUnresolvedBundles(updateBootBefore, unresolvedProfileBundles())
               if (newlyUnresolved.length > 0) {
                 ok = false
@@ -2353,6 +2374,8 @@ export function mountMarketRoutes(
             const compatibilityBefore = assessProfile(config.profile, activeProfileDir)
             const bundlesBefore = brokenClientBundles(config.profile, activeProfileDir)
             const installBootBefore = unresolvedProfileBundles()
+            const lockfilePath = join(activeProfileDir, 'pnpm-lock.yaml')
+            const installLockBefore = existsSync(lockfilePath) ? readFileSync(lockfilePath, 'utf8') : null
             // RAW manifest snapshot for failure rollback (#65): pnpm writes
             // package.json before the build-script check / registry fetches
             // run, so a hard-failed add leaves ghost dependencies that break
@@ -2410,11 +2433,24 @@ export function mountMarketRoutes(
               const newlyUnresolved = introducedUnresolvedBundles(installBootBefore, unresolvedProfileBundles())
               if (newlyUnresolved.length > 0) {
                 ok = false
-                const rollback = await rollbackUpdateBuild(entry.name, manifestBefore)
+                const rollback = await rollbackUpdateBuild(entry.name, manifestBefore, installLockBefore)
                 profileHealthError = rollback.ok
                   ? `安装留下了无法解析的插件层（${newlyUnresolved.join('、')}），已撤销本次变更。 / The install left unresolvable bundle rows (${newlyUnresolved.join(', ')}); this change was rolled back.`
                   : `安装留下了无法解析的插件层（${newlyUnresolved.join('、')}），自动恢复失败：${rollback.detail ?? 'unknown'} / The install left unresolvable bundle rows (${newlyUnresolved.join(', ')}) and automatic recovery failed: ${rollback.detail ?? 'unknown'}`
                 logEvent('error', 'profile-health', `${entry.name}: unresolved after install — ${newlyUnresolved.join(', ')}`)
+              }
+            }
+            if (ok) {
+              const added = Object.keys(readInstalled(config.profile, activeProfileDir)).filter(name => !before.has(name)
+                && hasHostHalf(config.profile, name, activeProfileDir))
+              const imports = await preflightPluginImports(activeProfileDir, added)
+              if (!imports.ok) {
+                ok = false
+                const rollback = await rollbackUpdateBuild(entry.name, manifestBefore, installLockBefore)
+                profileHealthError = `插件加载检查失败：${imports.detail ?? 'unknown'}\n${rollback.ok
+                  ? '已撤销本次插件安装，原有会话和工作区未被回滚。 / This plugin installation was rolled back; existing sessions and workspace were not rolled back.'
+                  : `插件配置已恢复，但依赖恢复失败：${rollback.detail ?? 'unknown'} / Plugin configuration was restored, but dependency recovery failed.`}`
+                logEvent('error', 'install-import', `${entry.name}: ${profileHealthError}`)
               }
             }
             const conflictGroups = groupConflictsByOwner(conflicts)
