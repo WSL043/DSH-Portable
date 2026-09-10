@@ -1,0 +1,21 @@
+{
+  "version": "0.6.6",
+  "zh": {
+    "summary": "优化 Windows 完整离线包：已有界面运行组件时不再重复展开，下载体积进一步减小。",
+    "highlights": [
+      "优先使用电脑已有的 WebView2，仅缺少时才展开内置组件，避免额外占用约 798 MiB 缓存空间。",
+      "提高内置 WebView2 的无损压缩率，组件压缩体积减少约 15 MiB，保留全部运行文件。",
+      "明确下载选择：已有 WebView2 的电脑，使用标准 ZIP 也可完全断网运行。"
+    ],
+    "upgradeNotes": ["本次不更换官方内核和默认插件。完全离线使用仍需提前准备本地模型服务及模型文件。"]
+  },
+  "en": {
+    "summary": "A smaller Windows complete offline package that avoids extracting another browser runtime when one is already available.",
+    "highlights": [
+      "Use the installed WebView2 runtime first and extract the bundled fallback only when missing, avoiding about 798 MiB of additional cache space.",
+      "Reduce the bundled WebView2 payload by about 15 MiB with stronger lossless compression, retaining every runtime file.",
+      "Clarify download choices: the standard ZIP also works completely offline when WebView2 is already installed."
+    ],
+    "upgradeNotes": ["The official core and default plugins are unchanged. Offline use still requires a prepared local model server and model files."]
+  }
+}
