@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 import path from 'node:path'
@@ -162,7 +162,31 @@ async function ensurePackageFallback(layout, target, fallback, label) {
 
   if (current) {
     if (!current.isSymbolicLink()) {
-      throw new Error(`Portable ${label} fallback is occupied by another file: ${fallback}`)
+      const expectedName = label === 'desktop bridge'
+        ? '@wsl043/dsh-portable-desktop-bridge' : '@wsl043/dsh-portable-plugin-market'
+      let manifest = null
+      try { manifest = JSON.parse(await readFile(paths.join(fallback, 'package.json'), 'utf8')) } catch {}
+      const empty = current.isDirectory() && (await readdir(fallback)).length === 0
+      if (!current.isDirectory() || (!empty && manifest?.name !== expectedName)) {
+        throw new Error(`Portable ${label} fallback contains unrecognized content; preserved unchanged: ${fallback}`)
+      }
+      // Preserve the whole materialized package outside node_modules before rebuilding its link.
+      const recoveryRoot = paths.join(layout.dataDir, 'recovery', 'managed-packages')
+      await mkdir(recoveryRoot, { recursive: true })
+      const recovery = await mkdtemp(paths.join(recoveryRoot, 'fallback-'))
+      const backup = paths.join(recovery, 'original')
+      await writeFile(paths.join(recovery, 'recovery.json'), JSON.stringify({
+        schemaVersion: 1, package: expectedName, fallback, target, backup,
+        createdAt: new Date().toISOString(), reason: empty ? 'empty-directory' : 'materialized-package',
+      }, null, 2) + '\n')
+      await rename(fallback, backup)
+      try {
+        await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
+      } catch (error) {
+        await rename(backup, fallback)
+        throw error
+      }
+      return true
     }
     try {
       if (sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) return false
