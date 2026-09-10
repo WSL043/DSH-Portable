@@ -69,7 +69,7 @@
 
 如果你已经习惯自行部署官方 DSH、管理运行环境并在终端启动，也可以继续使用上游。Portable 的价值是把安装、桌面操作、移动和维护集中起来；模型能力仍来自你连接的服务。标准 ZIP 可免去首次下载程序组件，但在线模型和新插件下载仍需网络。
 
-离线部署需提前准备本地模型服务与模型权重。Windows 标准 ZIP 需要系统 WebView2；0.6.5 起另提供[完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v0.6.5/DSH-Portable-windows-x64-complete-offline.zip)，内含 WebView2 和默认插件依赖，不含模型。验收范围见[离线部署说明](docs/offline-deployment-acceptance.md)。
+离线部署需提前准备本地模型服务与模型权重。Windows 标准 ZIP 需要系统 WebView2；0.6.5 起另提供[完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v0.6.6/DSH-Portable-windows-x64-complete-offline.zip)，内含 WebView2 和默认插件依赖，不含模型。验收范围见[离线部署说明](docs/offline-deployment-acceptance.md)。
 
 | 一个文件夹 | 换位置继续 | 更新不动数据 |
 | --- | --- | --- |
@@ -114,9 +114,9 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 | 适合你，如果… | 下载 |
 | --- | --- |
-| 可以联网，希望自动下载并准备工作文件夹 | [**在线便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐；0.6.5 约 75 KiB） |
-| 普通电脑，想下载后直接解压使用 | [**标准 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)（0.6.5 约 55.9 MiB） |
-| 目标电脑缺少窗口显示组件，且无法联网补装；或不确定目标电脑是否具备组件 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.5 约 340.9 MiB；额外带齐窗口显示组件） |
+| 可以联网，希望自动下载并准备工作文件夹 | [**在线便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐；0.6.6 约 75 KiB） |
+| 普通电脑，想下载后直接解压使用 | [**标准 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)（0.6.6 约 55.9 MiB） |
+| 目标电脑缺少窗口显示组件，且无法联网补装；或不确定目标电脑是否具备组件 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.6 约 325.9 MiB；额外带齐窗口显示组件） |
 
 **不知道怎么选？能联网就用在线启动器；想自己解压就用标准 ZIP。** 电脑已有窗口显示组件时，标准 ZIP 也可完全断网使用，无需下载完整离线大包。
 
