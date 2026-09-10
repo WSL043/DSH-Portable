@@ -116,7 +116,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 | --- | --- |
 | 可以联网，希望自动下载并准备工作文件夹 | [**在线便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐；0.6.5 约 75 KiB） |
 | 普通电脑，想下载后直接解压使用 | [**标准 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)（0.6.5 约 55.9 MiB） |
-| 公司内网、完全断网，或启动时提示缺少组件 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.5 约 340.9 MiB；额外带齐窗口显示组件） |
+| 准备在完全断网的电脑上使用，或启动时提示缺少组件 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.5 约 340.9 MiB；额外带齐窗口显示组件） |
 
 **不知道怎么选？能联网就用在线启动器；想自己解压就用标准 ZIP。** 完整离线 ZIP 主要用于隔离环境，普通电脑通常不需要下载这个大包。
 

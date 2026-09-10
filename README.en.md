@@ -116,7 +116,7 @@ The close button sends the app to the system tray by default, so an active task 
 | --- | --- |
 | You have internet access and want the folder prepared automatically | [**Online portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended; about 75 KiB in 0.6.5) |
 | You use a regular PC and want to download, extract, and run | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) (about 55.9 MiB in 0.6.5) |
-| You use an isolated company network, have no internet, or see a missing-component message | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes the window-rendering component) |
+| You are preparing for a completely offline computer, or see a missing-component message | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes the window-rendering component) |
 
 **Not sure? Use the online launcher if you have internet access, or the standard ZIP if you prefer manual extraction.** The larger complete offline ZIP is mainly for isolated environments.
 
