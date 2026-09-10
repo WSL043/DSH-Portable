@@ -183,7 +183,11 @@ async function ensurePackageFallback(layout, target, fallback, label) {
       try {
         await symlink(target, fallback, layout.platform === 'win32' ? 'junction' : 'dir')
       } catch (error) {
-        await rename(backup, fallback)
+        try {
+          await rename(backup, fallback)
+        } catch (restoreError) {
+          throw new AggregateError([error, restoreError], `Portable ${label} link repair failed; original content is preserved at ${backup}`)
+        }
         throw error
       }
       return true
