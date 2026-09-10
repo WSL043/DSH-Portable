@@ -186,10 +186,13 @@ try {
         }
         $RuntimeRoot = Join-Path $CacheParent ([string]$Capsule.sha256)
     }
-    $ClsxRoot = Join-Path $RuntimeRoot 'app\node_modules\clsx'
-    $ClsxManifest = Get-Content -Raw -LiteralPath (Join-Path $ClsxRoot 'package.json') | ConvertFrom-Json
-    & tar.exe -czf $ClsxArchive -C (Split-Path -Parent $ClsxRoot) 'clsx'
-    if ($LASTEXITCODE -ne 0) { throw 'could not create the clsx fixture archive' }
+    # Test registry dependency, independent of the selected core's dependency closure.
+    $ClsxManifest = Invoke-RestMethod 'https://registry.npmjs.org/clsx/2.1.1'
+    Invoke-WebRequest -UseBasicParsing 'https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz' -OutFile $ClsxArchive
+    $Hasher = [System.Security.Cryptography.SHA512]::Create()
+    try { $Integrity = 'sha512-' + [Convert]::ToBase64String($Hasher.ComputeHash([System.IO.File]::ReadAllBytes($ClsxArchive))) }
+    finally { $Hasher.Dispose() }
+    if ($Integrity -ne [string]$ClsxManifest.dist.integrity) { throw 'clsx fixture integrity mismatch' }
     $RegistryArguments = @($RegistryScript, $RegistryV1, $RegistryV2, $RegistryChannel, $RegistryReady, $ClsxArchive, [string]$ClsxManifest.version)
     [System.IO.File]::WriteAllText($RegistryChannel, "1.0.0`n", [System.Text.UTF8Encoding]::new($false))
     $RegistryProcess = Start-Process -FilePath $Node -ArgumentList $RegistryArguments -PassThru -WindowStyle Hidden

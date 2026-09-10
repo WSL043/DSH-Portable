@@ -12,8 +12,7 @@
     ],
     "upgradeNotes": [
       "这是候选版，稳定通道仍为 0.6.4。升级前请退出程序并保留数据备份。",
-      "独立工具的深层诊断需要包内 Node 和启动脚本完整；缺失时会提示使用完整离线包恢复。",
-      "#132 的用户侧验证仍在等待反馈；本版不承诺恢复会话分组或完成 automode 插件兼容性验证。"
+      "独立工具的深层诊断需要包内 Node 和启动脚本完整；缺失时会提示使用完整离线包恢复。"
     ]
   },
   "en": {
@@ -28,8 +27,7 @@
     ],
     "upgradeNotes": [
       "This is a release candidate. The stable channel remains on 0.6.4. Exit the application and keep a backup before upgrading.",
-      "Deep diagnostics require the bundled Node runtime and launcher scripts. Missing files lead to full-package recovery guidance.",
-      "Reporter verification for #132 is pending. Session grouping recovery and automode compatibility have not been qualified."
+      "Deep diagnostics require the bundled Node runtime and launcher scripts. Missing files lead to full-package recovery guidance."
     ]
   }
 }

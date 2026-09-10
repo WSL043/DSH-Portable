@@ -226,6 +226,13 @@ if (platform === 'linux') {
   // Koffi publishes both glibc and musl binaries in the same Linux package.
   // DSH-Portable is built and supported on Ubuntu/glibc; retaining the unused
   // musl binary makes linuxdeploy try to resolve libc.musl-*.so.1 and abort.
+  const systemRoot = path.join(nodeModules, '@deepseek-ai', `node-addon-system-linux-${architecture}`, 'bin')
+  try {
+    await access(path.join(systemRoot, 'glibc', 'system.node'))
+    await removeTree(path.join(systemRoot, 'musl'))
+  } catch (error) {
+    if (error?.code !== 'ENOENT') throw error
+  }
   const koffiNativeRoot = path.join(nodeModules, '@koromix', `koffi-linux-${architecture}`)
   const koffiGlibcRoot = path.join(koffiNativeRoot, `linux_${architecture}`)
   const koffiMuslRoot = path.join(koffiNativeRoot, `musl_${architecture}`)
