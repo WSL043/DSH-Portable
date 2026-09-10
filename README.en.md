@@ -115,8 +115,12 @@ The close button sends the app to the system tray by default, so an active task 
 | Choose this when… | Download |
 | --- | --- |
 | You have internet access and want the folder prepared automatically | [**Online portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended; about 75 KiB in 0.6.5) |
-| You want to extract and run, and the computer already has WebView2 | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) (about 55.9 MiB in 0.6.5; requires system WebView2) |
-| The destination is offline or has no WebView2 installed | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes WebView2) |
+| You use a regular PC and want to download, extract, and run | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) (about 55.9 MiB in 0.6.5) |
+| You use an isolated company network, have no internet, or see a missing-component message | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes the window-rendering component) |
+
+**Not sure? Use the online launcher if you have internet access, or the standard ZIP if you prefer manual extraction.** The larger complete offline ZIP is mainly for isolated environments.
+
+The window-rendering component is called WebView2. [Windows 11 includes it, and most Windows 10 PCs already have it](https://learn.microsoft.com/en-us/microsoft-edge/webview2/concepts/end-user-faq). The standard ZIP uses that existing component; the complete offline ZIP carries its own copy.
 
 None of these includes a model service or model weights. Prepare a local model before offline use. Both ZIPs include the application runtime and default-plugin dependencies.
 
