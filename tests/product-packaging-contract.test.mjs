@@ -168,15 +168,15 @@ test('README status badges stay compact, useful, and visually consistent', async
   const english = await read('README.en.md')
 
   for (const document of [chinese, english]) {
-    const badgeBlock = document.match(/<p align="center">\s*(?:<a[^>]+><img[^>]+><\/a>\s*){4}<\/p>/)?.[0] ?? ''
-    assert.notEqual(badgeBlock, '', 'README must expose one compact four-badge status row')
+    const badgeBlock = document.match(/<p align="center">\s*(?:<a[^>]+><img[^>]+><\/a>\s*){5}<\/p>/)?.[0] ?? ''
+    assert.notEqual(badgeBlock, '', 'README must expose one compact five-badge status row')
     assert.match(badgeBlock, /github\/v\/release\/WSL043\/DSH-Portable\?display_name=tag/)
     assert.match(badgeBlock, /github\/downloads\/WSL043\/DSH-Portable\/total/)
     assert.match(badgeBlock, /github\/actions\/workflow\/status\/WSL043\/DSH-Portable\/ci\.yml\?branch=main/)
     assert.match(badgeBlock, /github\/license\/WSL043\/DSH-Portable/)
-    assert.doesNotMatch(badgeBlock, /github\/stars|Windows%20%7C|display_name=release/)
-    assert.equal((badgeBlock.match(/style=flat-square/g) ?? []).length, 4)
-    assert.equal((badgeBlock.match(/color=171717/g) ?? []).length, 4)
+    assert.doesNotMatch(badgeBlock, /Windows%20%7C|display_name=release/)
+    assert.equal((badgeBlock.match(/style=flat-square/g) ?? []).length, 5)
+    assert.equal((badgeBlock.match(/color=171717/g) ?? []).length, 5)
   }
 })
 
