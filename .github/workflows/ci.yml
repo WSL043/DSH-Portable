@@ -311,9 +311,13 @@ jobs:
         if: always()
         with:
           name: windows-complete-offline
-          path: |
-            artifacts/DSH-Portable-windows-x64-complete-offline.zip*
-            complete-evidence/
+          path: artifacts/DSH-Portable-windows-x64-complete-offline.zip*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-complete-offline-evidence
+          path: complete-evidence/
 
   windows-plugin-smoke:
     name: Windows bundled plugin management

@@ -69,7 +69,7 @@
 
 如果你已经习惯自行部署官方 DSH、管理运行环境并在终端启动，也可以继续使用上游。Portable 的价值是把安装、桌面操作、移动和维护集中起来；模型能力仍来自你连接的服务。标准 ZIP 可免去首次下载程序组件，但在线模型和新插件下载仍需网络。
 
-离线部署还需提前准备本地模型服务与模型权重；Windows 桌面需已安装 WebView2 Runtime（ZIP 不内含）。企业隔离网的验收范围及当前限制见[离线部署说明](docs/offline-deployment-acceptance.md)。
+离线部署需提前准备本地模型服务与模型权重。Windows 标准 ZIP 需要系统 WebView2；0.6.5 起另提供[完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v0.6.5/DSH-Portable-windows-x64-complete-offline.zip)，内含 WebView2 和默认插件依赖，不含模型。验收范围见[离线部署说明](docs/offline-deployment-acceptance.md)。
 
 | 一个文件夹 | 换位置继续 | 更新不动数据 |
 | --- | --- | --- |
@@ -266,7 +266,7 @@ DSH 具备本地代码执行能力，请只使用可信模型、插件和项目�
 - [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
 
-内置 DSH 0.1.2-rc.1 存在已知网络兼容限制：Clash/Mihomo 的 Fake-IP DNS 可能使 `web_fetch` 返回 `WEB_BLOCKED_URL`。相关进展见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)。
+官方 DSH 的网络兼容限制仍需按内核版本核对：Clash/Mihomo 的 Fake-IP DNS 可能使 `web_fetch` 返回 `WEB_BLOCKED_URL`。相关进展见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)。
 
 请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 

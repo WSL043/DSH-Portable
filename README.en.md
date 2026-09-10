@@ -69,7 +69,7 @@ Want to use DeepSeek Harness without first setting up a runtime, remembering lau
 
 If you already prefer deploying official DSH, managing its runtime, and launching it from a terminal, that remains an option. Portable brings installation, desktop controls, moving, and maintenance together; model capabilities still come from your connected service. The standard ZIP avoids the initial program-component download, but online models and new plugin downloads still need a network connection.
 
-Offline deployment also requires a prepared local model server and model weights. The Windows desktop needs an installed WebView2 Runtime, which the ZIP does not include. See the [offline deployment acceptance notes](docs/offline-deployment-acceptance.md) for the current scope and limitations.
+Offline deployment requires a prepared local model server and model weights. The standard Windows ZIP requires system WebView2. Starting with 0.6.5, a separate [complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v0.6.5/DSH-Portable-windows-x64-complete-offline.zip) includes WebView2 and default-plugin dependencies, but no models. See the [offline deployment acceptance notes](docs/offline-deployment-acceptance.md).
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
@@ -260,7 +260,7 @@ Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and 
 - [Request an improvement](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml)
 - [Join a discussion](https://github.com/WSL043/DSH-Portable/discussions)
 
-The bundled DSH 0.1.2-rc.1 has a known network compatibility limitation: Clash/Mihomo Fake-IP DNS can cause `web_fetch` to return `WEB_BLOCKED_URL`. See the [upstream discussion](https://github.com/deepseek-ai/deepseek-harness/discussions/5202) for progress.
+Official DSH network compatibility depends on the selected core version: Clash/Mihomo Fake-IP DNS can cause `web_fetch` to return `WEB_BLOCKED_URL`. See the [upstream discussion](https://github.com/deepseek-ai/deepseek-harness/discussions/5202) for progress.
 
 Do not paste API keys, login credentials, or private conversations into an issue.
 
