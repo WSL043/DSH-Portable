@@ -361,6 +361,9 @@ try {
     assert.equal(opened, true, `session was not found in the live sidebar: ${openSessionTitle}`)
     await waitForValue(client, `![...document.querySelectorAll('button')].some(node => /Standard mode|标准模式/.test(String(node.textContent || '')))`, Boolean, 'active conversation header', 10000)
   }
+  const resizeProbe = await execFileAsync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', path.join(import.meta.dirname, 'verify-windows-resize-border.ps1'),
+    '-TargetProcessId', String(launcher.pid)], { windowsHide: true, timeout: 15000 })
+  await writeFile(path.join(output, 'resize-border.txt'), resizeProbe.stdout, 'utf8')
   let portableShell = await evaluate(client, `({
     updateActions: document.querySelectorAll('.dshPortableFooterUpdate').length,
     environmentChips: document.querySelectorAll('.dshPortableEnvironmentChip').length,

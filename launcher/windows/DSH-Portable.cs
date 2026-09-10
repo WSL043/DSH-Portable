@@ -1149,9 +1149,29 @@ namespace DshPortable
             {
                 long position = message.LParam.ToInt64();
                 Point point = PointToClient(new Point((short)position, (short)(position >> 16)));
+                int border = Math.Max(4, (int)Math.Ceiling(4 * DeviceDpi / 96.0));
                 if (GetItemAt(point) == null || (FindForm().WindowState == FormWindowState.Normal
-                    && (point.Y < 4 || point.X < 4 || point.X >= Width - 4)))
+                    && (point.Y < border || point.X < border || point.X >= Width - border)))
                 { message.Result = new IntPtr(-1); return; }
+            }
+            base.WndProc(ref message);
+        }
+    }
+
+    internal sealed class DesktopContentPanel : Panel
+    {
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == 0x0084)
+            {
+                long position = message.LParam.ToInt64();
+                Point point = PointToClient(new Point((short)position, (short)(position >> 16)));
+                if (ClientRectangle.Contains(point) && !DisplayRectangle.Contains(point))
+                {
+                    // The reserved border belongs to the top-level sizing frame.
+                    message.Result = new IntPtr(-1); // HTTRANSPARENT
+                    return;
+                }
             }
             base.WndProc(ref message);
         }
@@ -1246,7 +1266,7 @@ namespace DshPortable
         private string trayTheme = "light";
         private string themePreference = "system";
         private string notificationSessionId;
-        private readonly Panel desktopContent = new Panel { Dock = DockStyle.Fill };
+        private readonly Panel desktopContent = new DesktopContentPanel { Dock = DockStyle.Fill };
         private bool logoDark;
         private string desktopMenuLanguage;
         private MenuStrip desktopMenu;
@@ -1605,8 +1625,9 @@ namespace DshPortable
                 Point clientPoint = PointToClient(new Point((short)position, (short)(position >> 16)));
                 if (WindowState == FormWindowState.Normal && ClientRectangle.Contains(clientPoint))
                 {
-                    bool left = clientPoint.X < 4, right = clientPoint.X >= ClientSize.Width - 4;
-                    bool top = clientPoint.Y < 4, bottom = clientPoint.Y >= ClientSize.Height - 4;
+                    int border = Math.Max(4, (int)Math.Ceiling(4 * DeviceDpi / 96.0));
+                    bool left = clientPoint.X < border, right = clientPoint.X >= ClientSize.Width - border;
+                    bool top = clientPoint.Y < border, bottom = clientPoint.Y >= ClientSize.Height - border;
                     int edge = top ? (left ? 13 : right ? 14 : 12)
                         : bottom ? (left ? 16 : right ? 17 : 15) : left ? 10 : right ? 11 : 0;
                     if (edge != 0) { message.Result = new IntPtr(edge); return; }
@@ -1742,6 +1763,7 @@ namespace DshPortable
         {
             CloseDesktopMenus();
             base.OnSizeChanged(eventArgs);
+            if (desktopContent != null) FitWebViewToClient();
             if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
                 desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
         }
@@ -2004,6 +2026,7 @@ namespace DshPortable
             Color background = dark ? Color.FromArgb(24, 24, 26) : Color.FromArgb(248, 248, 248);
             Color foreground = dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(35, 35, 35);
             BackColor = background;
+            desktopContent.BackColor = background;
             launchPanel.BackColor = background;
             launchContent.BackColor = background;
             if (logoDark != dark && productIcon.Image != null)
@@ -5536,6 +5559,10 @@ namespace DshPortable
 
         private void FitWebViewToClient()
         {
+            int border = desktopStart && !fullscreen && WindowState == FormWindowState.Normal
+                ? Math.Max(4, (int)Math.Ceiling(4 * DeviceDpi / 96.0)) : 0;
+            desktopContent.Padding = new Padding(border, 0, border, border);
+            desktopContent.BackColor = BackColor;
             if (webView == null || webView.IsDisposed) return;
             if (desktopMenu != null) desktopContent.BringToFront();
             if (webView.Dock != DockStyle.Fill) webView.Dock = DockStyle.Fill;
