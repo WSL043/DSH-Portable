@@ -81,7 +81,7 @@ On Windows, enabling **Task notifications** shows a system notification when a b
 
 | Where you start | What Portable handles |
 | --- | --- |
-| **Online** | Download the 76,288-byte (about 74.5 KiB) launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
+| **Online** | Download the lightweight launcher, place it where you want to keep the product, and run it. It prepares and verifies the complete folder beside itself. |
 | **Offline** | The complete ZIP includes official DSH, its runtime, the Plugin Market, and plugin management tools. |
 | **Another PC or USB drive (same OS/architecture)** | Copy the folder; Portable repairs the paths it owns on the next launch. |
 | **Personal data only** | Export the same migration contents as either a plain package or a password-encrypted private package. |
@@ -114,8 +114,11 @@ The close button sends the app to the system tray by default, so an active task 
 
 | Choose this when… | Download |
 | --- | --- |
-| You want a movable folder prepared automatically | [**Portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended, 76,288 bytes, about 74.5 KiB) |
-| The destination computer is offline, or you need manual extraction | [Standard ZIP (requires system WebView2)](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| You have internet access and want the folder prepared automatically | [**Online portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended; about 75 KiB in 0.6.5) |
+| You want to extract and run, and the computer already has WebView2 | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) (about 55.9 MiB in 0.6.5; requires system WebView2) |
+| The destination is offline or has no WebView2 installed | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 340.9 MiB in 0.6.5; includes WebView2) |
+
+None of these includes a model service or model weights. Prepare a local model before offline use. Both ZIPs include the application runtime and default-plugin dependencies.
 
 ### macOS
 

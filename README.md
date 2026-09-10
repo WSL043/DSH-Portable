@@ -81,7 +81,7 @@ Windows 开启“任务通知”后，后台任务完成或需要回答、批准
 
 | 从哪里开始 | Portable 为你处理什么 |
 | --- | --- |
-| **联网使用** | 下载 76,288 字节（约 74.5 KiB）的启动器，把它放到希望保存的位置后运行；它会在旁边自动准备并校验完整工作目录。 |
+| **联网使用** | 下载轻量启动器，把它放到希望保存的位置后运行；它会在旁边自动准备并校验完整工作目录。 |
 | **离线使用** | 完整 ZIP 自带官方 DSH、运行环境、插件市场和插件管理工具。 |
 | **同平台换电脑或 U 盘** | 复制文件夹即可；启动时修正由 Portable 管理的旧路径。 |
 | **只迁移个人数据** | 导出同一份迁移内容，可选择普通包或密码加密的私密包。 |
@@ -114,8 +114,11 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 | 适合你，如果… | 下载 |
 | --- | --- |
-| 想要可移动、自动准备的工作文件夹 | [**便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐，76,288 字节，约 74.5 KiB） |
-| 目标电脑无法联网，或需要手动解压 | [标准 ZIP（需系统 WebView2）](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 可以联网，希望自动下载并准备工作文件夹 | [**在线便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐；0.6.5 约 75 KiB） |
+| 希望直接解压使用，电脑已有 WebView2 | [**标准 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)（0.6.5 约 55.9 MiB；需系统 WebView2） |
+| 目标电脑离线，或未安装 WebView2 | [**完整离线 ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip)（0.6.5 约 340.9 MiB；内含 WebView2） |
+
+三种入口均不包含模型服务和模型权重。离线使用需提前准备本地模型；标准 ZIP 和完整离线 ZIP 均内含程序运行环境及默认插件依赖。
 
 ### macOS
 
