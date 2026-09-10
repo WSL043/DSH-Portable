@@ -289,6 +289,16 @@ test('Portable data export offers a small migration package and password-protect
   const passwordFile = calls[1][calls[1].indexOf('--password-file') + 1]
   await assert.rejects(readFile(passwordFile, 'utf8'), /ENOENT/)
 
+  const dataOnly = response()
+  await routes.get('/dsh-portable/data-export').handler(request('POST', { kind: 'standard', scope: 'data-only' }), dataOnly)
+  assert.equal(dataOnly.status, 200)
+  assert.equal(calls.at(-1)[calls.at(-1).indexOf('--categories') + 1], 'settings,sessions')
+  const invalidScope = response()
+  const callsBefore = calls.length
+  await routes.get('/dsh-portable/data-export').handler(request('POST', { kind: 'standard', scope: 'everything' }), invalidScope)
+  assert.equal(invalidScope.status, 400)
+  assert.equal(calls.length, callsBefore)
+
   const missingPassword = response()
   await routes.get('/dsh-portable/data-export').handler(request('POST', { kind: 'private', password: '' }), missingPassword)
   assert.equal(missingPassword.status, 400)

@@ -307,7 +307,9 @@ export function mountPortableRoutes(webServer, options = {}) {
       if (requestedOutput && !path.isAbsolute(requestedOutput)) return sendJson(response, 400, { error: 'output path must be absolute' })
       const output = requestedOutput || path.join(stateRoot, 'data', 'backups', `DSH-Portable-${kind}-${stamp}.dshdata`)
       mkdirSync(path.dirname(output), { recursive: true })
-      const args = ['backup-data', '--json', '--categories', 'settings,sessions,plugins,credentials', '--output', output]
+      if (body.scope !== undefined && !['full', 'data-only'].includes(body.scope)) return sendJson(response, 400, { error: 'invalid migration scope' })
+      const categories = body.scope === 'data-only' ? 'settings,sessions' : 'settings,sessions,plugins,credentials'
+      const args = ['backup-data', '--json', '--categories', categories, '--output', output]
       if (kind === 'standard') args.push('--allow-unencrypted-credentials')
       if (kind === 'private') {
         if (typeof body.password !== 'string' || body.password.length < 8)

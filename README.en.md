@@ -289,3 +289,7 @@ If DSH-Portable helps you, use the **Star** button at the top of the [GitHub rep
 DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is independently maintained by WSL043 and is not endorsed by DeepSeek.
 
 If the Windows desktop cannot open, run `DSH-Recovery.exe` from the package root (available since 0.6.5-rc.2) to check files, diagnose, repair generated components, or export a support report. It does not require WebView2; deeper diagnostics still require the bundled Node runtime and launcher scripts. Exit Portable and keep a backup before repair.
+
+Choose "Sessions and settings only" under migration contents to exclude plugin installation configuration and credential files. Conversations remain private data. Exit Portable before moving the complete folder; copying isolated session files can omit grouping, related storage, and path metadata. Prefer a migration package for selective transfers.
+
+Deleting a plugin ZIP/TGZ does not uninstall it. Use the plugin market or `dsh plugin --profile web remove <package>` to remove dependencies and activation configuration. Deleting a locally referenced archive can prevent reinstallation.

@@ -38,8 +38,8 @@ window.__ModuleLoader__.load({
         repair: '下次启动时安全修复', scheduled: '已安排，下次启动时执行', repaired: '上次修复已完成',
         fullPackage: '程序文件不完整，自动修复未改动用户数据。请使用完整版本覆盖安装。',
         report: '导出支持报告', more: '更多', cancel: '取消', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
-        data: '数据', dataTitle: '迁移与备份', dataHint: '会话、设置、插件配置和 API 凭据；不包含缓存、运行环境和工作区文件。',
-        dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。',
+        data: '数据', dataTitle: '迁移与备份', dataHint: '按所选范围导出；不包含缓存、运行环境和工作区文件。',
+        dataScope: '迁移内容', dataFull: '全部配置与会话（含插件和凭据）', dataOnly: '仅会话与设置（不含插件和凭据）', dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。',
         dataPrivate: '导出加密私密包', dataPrivateHint: '内容与迁移包相同，恢复时需要密码。',
         dataPrivateDialogHint: '为会话、设置、插件和 API 凭据设置恢复密码。密码不会保存在 DSH-Portable 中。',
         dataPassword: '密码（至少 8 位）', dataPasswordConfirm: '确认密码', dataPasswordMismatch: '两次输入的密码不一致。',
@@ -82,8 +82,8 @@ window.__ModuleLoader__.load({
         repair: 'Repair safely on next start', scheduled: 'Scheduled for the next start', repaired: 'The last repair completed',
         fullPackage: 'Program files are incomplete. Automatic repair preserved user data; reinstall the complete package.',
         report: 'Export support report', more: 'More', cancel: 'Cancel', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
-        data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Sessions, settings, plugin configuration, and API credentials; caches, runtimes, and workspace files stay out.',
-        dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.',
+        data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Exports the selected contents; caches, runtimes, and workspace files stay out.',
+        dataScope: 'Migration contents', dataFull: 'Full migration (including plugins and credentials)', dataOnly: 'Sessions and settings only (no plugins or credentials)', dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.',
         dataPrivate: 'Export encrypted private package', dataPrivateHint: 'Contains the same data and requires its password to restore.',
         dataPrivateDialogHint: 'Set a recovery password for sessions, settings, plugins, and API credentials. DSH-Portable never stores it.',
         dataPassword: 'Password (8+ characters)', dataPasswordConfirm: 'Confirm password', dataPasswordMismatch: 'The passwords do not match.',
@@ -327,6 +327,7 @@ window.__ModuleLoader__.load({
       const [environments, setEnvironments] = useState({ current: 'default', items: [{ id: 'default', name: '' }] })
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
+      const [dataScope, setDataScope] = useState('full')
       const [privatePassword, setPrivatePassword] = useState('')
       const [privatePasswordConfirm, setPrivatePasswordConfirm] = useState('')
       const [importPassword, setImportPassword] = useState('')
@@ -657,7 +658,7 @@ window.__ModuleLoader__.load({
           if (output === null) return
           const res = await fetch('/dsh-portable/data-export', {
             method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ kind, output: output || undefined, password: kind === 'private' ? privatePassword : undefined }),
+            body: JSON.stringify({ kind, scope: dataScope, output: output || undefined, password: kind === 'private' ? privatePassword : undefined }),
           })
           const body = await res.json()
           if (body.error) throw new Error(body.error)
@@ -881,6 +882,8 @@ window.__ModuleLoader__.load({
           hiddenImportFileCount > 0 && h('div', { style: styles.importFile }, format(t('dataImportMoreFiles'), hiddenImportFileCount))))) : null
       const dataSection = h('section', { style: styles.section, 'aria-label': t('data') },
         h('div', { style: styles.sectionHeading }, t('data')),
+        h('div', { style: styles.item }, h('div', { style: styles.label }, t('dataScope')),
+          h(PortableSelector, { primitives, label: t('dataScope'), value: dataScope, items: [{ id: 'full', label: t('dataFull') }, { id: 'data-only', label: t('dataOnly') }], onSelect: setDataScope })),
         h('div', { style: { ...styles.item, borderBottom: 'none' } },
           h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataTitle')), h('div', { style: styles.hint }, t('dataHint')), inlineStatus('data')),
           h('div', { style: styles.rowActions },
