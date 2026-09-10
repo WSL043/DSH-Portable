@@ -8,7 +8,8 @@
       "Windows 包新增 DSH-Recovery.exe，主界面无法打开时仍可检查运行文件、诊断、修复可重建组件和导出支持报告。",
       "RC 使用独立的官方内核验收目录，避免与稳定版的兼容清单混用；目录尚未发布时显示等待提示。",
       "插件安装和更新在启用前检查模块加载；发现导入错误或超时会报告原因并尝试恢复此前的插件状态。",
-      "内置官方内核更新至 0.1.5-rc.1。"
+      "内置官方内核更新至 0.1.5-rc.1。",
+      "迁移可选择仅会话与设置，不带插件安装配置和凭据文件；Portable 版本选择始终显示当前版本。"
     ],
     "upgradeNotes": [
       "这是候选版，稳定通道仍为 0.6.4。升级前请退出程序并保留数据备份。",
@@ -24,7 +25,8 @@
       "Windows packages include DSH-Recovery.exe for file checks, diagnostics, generated-component repair and support reports without opening the desktop UI.",
       "Release candidates use isolated qualified core catalogs instead of mixing stable-shell compatibility metadata; unpublished catalogs show a waiting message.",
       "Plugin installations and updates check module imports before activation; import failures or timeouts report the cause and attempt to restore the previous plugin state.",
-      "The bundled official core is updated to 0.1.5-rc.1."
+      "The bundled official core is updated to 0.1.5-rc.1.",
+      "Migration can export sessions and settings without plugin installation configuration or credential files; the Portable version selector always shows the current version."
     ],
     "upgradeNotes": [
       "This is a release candidate. The stable channel remains on 0.6.4. Exit the application and keep a backup before upgrading.",
