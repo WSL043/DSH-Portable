@@ -49,7 +49,7 @@ await Promise.all([
   stageJsonVersion('launcher/linux/package-lock.json', 2),
   stageJsonVersion('launcher/linux/tauri.conf.json'),
   stageReplace('installer/windows/DSH-Portable.iss', /#define AppVersion "[^"]+"([\s\S]*?)VersionInfoVersion=[^\r\n]+/, `#define AppVersion "${policy.version}"$1VersionInfoVersion=${policy.windowsVersion}`),
-  ...['launcher/windows/DSH-Bootstrap.cs', 'launcher/windows/DSH-Portable.cs', 'launcher/windows/DSH-Command.cs'].map((filename) =>
+  ...['launcher/windows/DSH-Bootstrap.cs', 'launcher/windows/DSH-Portable.cs', 'launcher/windows/DSH-Command.cs', 'launcher/windows/DSH-Recovery.cs'].map((filename) =>
     stageReplaceMany(filename, [
       [/AssemblyVersion\("[^"]+"\)/, `AssemblyVersion("${policy.windowsVersion}")`],
       [/AssemblyFileVersion\("[^"]+"\)/, `AssemblyFileVersion("${policy.windowsVersion}")`],

@@ -290,4 +290,4 @@ bash scripts/build-linux.sh x64     # 或 arm64
 
 DeepSeek Harness、DeepSeek 名称与标志归 DeepSeek 所有。DSH-Portable 由 WSL043 独立维护，未获 DeepSeek 背书。
 
-Windows 主界面无法打开时，可运行根目录 `DSH-Recovery.exe`（后续版本提供）：独立检查运行文件、诊断、修复可重建组件和导出支持报告。它不依赖 WebView2；深层诊断仍需要包内 Node 与启动脚本完整。修复前退出 Portable 并保留备份。
+Windows 主界面无法打开时，可运行根目录 `DSH-Recovery.exe`（0.6.5-rc.2 起提供）：独立检查运行文件、诊断、修复可重建组件和导出支持报告。它不依赖 WebView2；深层诊断仍需要包内 Node 与启动脚本完整。修复前退出 Portable 并保留备份。
