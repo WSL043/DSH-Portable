@@ -99,7 +99,7 @@ async function waitForReady(target, manifest, timeoutMs = 30000) {
   return false
 }
 
-async function extractPayload(payload, target, expectedCount) {
+async function extractPayload(payload, target, expectedCount, progress = () => {}) {
   if (!payload.subarray(0, MAGIC.length).equals(MAGIC)) throw new Error('Runtime capsule magic is invalid.')
   const headerLength = payload.readUInt32LE(MAGIC.length)
   if (headerLength <= 0 || HEADER_BYTES + headerLength > payload.length) throw new Error('Runtime capsule header is invalid.')
@@ -124,12 +124,15 @@ async function extractPayload(payload, target, expectedCount) {
     files.push({ filename, bytes })
   }
   if (offset !== payload.length) throw new Error('Runtime capsule contains trailing data.')
+  progress('extract-index-verified', { files: files.length, directories: directories.size })
   const directoryList = [...directories]
   for (let index = 0; index < directoryList.length; index += 64) {
     await Promise.all(directoryList.slice(index, index + 64).map((directory) => mkdir(directory, { recursive: true })))
   }
+  progress('extract-directories-ready')
   for (let index = 0; index < files.length; index += 32) {
     await Promise.all(files.slice(index, index + 32).map(({ filename, bytes }) => writeFile(filename, bytes)))
+    if (index % 1024 === 0 || index + 32 >= files.length) progress('extract-files-progress', { completed: Math.min(index + 32, files.length), total: files.length })
   }
 }
 
@@ -358,6 +361,8 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
 }
 
 export async function ensureRuntimeCapsule(root, options = {}) {
+  const progress = (phase, fields = {}) => { try { options.onProgress?.(phase, fields) } catch { /* diagnostics cannot break preparation */ } }
+  progress('cache-inspect')
   const paths = capsulePaths(root, options.env)
   if (paths.mode === 'expanded') return { mode: 'expanded', runtimeRoot: paths.runtimeRoot, reused: true }
 
@@ -372,6 +377,7 @@ export async function ensureRuntimeCapsule(root, options = {}) {
     throw new Error('The DSH runtime cache is currently being maintained.')
   }
 
+  progress('cache-lock-acquire')
   const lockFile = path.join(paths.cacheParent, `${manifest.sha256}.lock`)
   const release = await acquireLock(lockFile)
   if (!release) {
@@ -382,20 +388,26 @@ export async function ensureRuntimeCapsule(root, options = {}) {
   const temporary = path.join(paths.cacheParent, `.${manifest.sha256}.${process.pid}.${Date.now()}`)
   try {
     if (await readyRuntime(target, manifest)) return { mode: 'capsule', runtimeRoot: target, reused: true, manifest }
+    progress('capsule-read')
     const compressed = await readFile(capsuleFile)
     if (compressed.length !== manifest.bytes || sha256(compressed) !== manifest.sha256) {
       throw new Error('Runtime capsule failed SHA-256 verification.')
     }
     await rm(temporary, { recursive: true, force: true })
     await mkdir(temporary, { recursive: true })
-    await extractPayload(zstdDecompressSync(compressed), temporary, manifest.fileCount)
+    progress('capsule-verified')
+    const payload = zstdDecompressSync(compressed)
+    progress('capsule-decompressed')
+    await extractPayload(payload, temporary, manifest.fileCount, progress)
     for (const relative of manifest.required) {
       const safe = safeRelativePath(relative)
       if (!safe || !existsSync(path.join(temporary, ...safe.split('/')))) throw new Error(`Runtime capsule is incomplete: ${relative}`)
     }
     await writeFile(path.join(temporary, READY_FILE), `${JSON.stringify({ schemaVersion: 1, sha256: manifest.sha256 })}\n`, 'utf8')
     if (existsSync(target)) await rm(target, { recursive: true, force: true })
+    progress('cache-commit')
     await commitRuntimeDirectory(temporary, target, options)
+    progress('cache-committed')
     return { mode: 'capsule', runtimeRoot: target, reused: false, manifest }
   } finally {
     await rm(temporary, { recursive: true, force: true }).catch(() => {})

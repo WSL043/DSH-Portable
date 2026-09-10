@@ -8,6 +8,10 @@ on:
         required: true
         type: string
 
+      trace_runtime:
+        description: Overlay runtime preparation tracing for diagnosis only (not release qualification)
+        type: boolean
+        default: false
       scope:
         description: Isolated tray bridge or the original native check sequence
         type: choice
@@ -68,10 +72,12 @@ jobs:
       - name: Verify original native check sequence
         if: inputs.scope == 'native'
         shell: powershell
+        env:
+          TRACE_RUNTIME: ${{ inputs.trace_runtime }}
         run: |
           Get-FileHash artifacts/DSH-Portable-windows-x64-offline.zip | Format-List | Out-File evidence/artifact-sha256.txt
           Start-Transcript -Path evidence/native-sequence.log
-          try { ./scripts/verify-windows-native-artifact.ps1 -RunnerLabel focused } finally { Stop-Transcript }
+          try { ./scripts/verify-windows-native-artifact.ps1 -RunnerLabel focused -TraceRuntimePreparation:($env:TRACE_RUNTIME -eq 'true') } finally { Stop-Transcript }
       - name: Verify migration independently
         if: inputs.scope == 'migration'
         shell: pwsh

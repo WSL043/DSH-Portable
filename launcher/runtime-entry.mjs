@@ -40,6 +40,7 @@ if (isStart) {
 reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()
 const prepared = await ensureRuntimeCapsule(root, {
+  onProgress: (phase, fields) => appendStartupTrace(startupTrace, 'runtime-capsule', phase, fields),
   onRetry: fields => appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-commit-retry', fields),
 })
 const preparationElapsed = performance.now() - preparationStarted

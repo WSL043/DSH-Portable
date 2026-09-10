@@ -1,12 +1,20 @@
 param(
     [string]$RunnerLabel = "focused",
-    [int]$FirstColdStartSeconds = 75
+    [int]$FirstColdStartSeconds = 75,
+    [switch]$TraceRuntimePreparation
 )
 $ErrorActionPreference = "Stop"
 $Root = Join-Path $env:RUNNER_TEMP 'dsh-desktop-host'
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
 if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
+if ($TraceRuntimePreparation) {
+    # Diagnostic overlay only; this run cannot qualify the original release artifact.
+    foreach ($Module in @('runtime-capsule.mjs', 'runtime-entry.mjs')) {
+        Copy-Item -LiteralPath (Join-Path $PSScriptRoot "../launcher/$Module") -Destination (Join-Path $Root "DSH-Portable/launcher/$Module")
+    }
+    Write-Host 'DIAGNOSTIC OVERLAY: runtime preparation phase tracing; no timeout or concurrency changes.'
+}
 $StartupEvidence = Join-Path $env:RUNNER_TEMP "dsh-startup-transition-$RunnerLabel"
 node scripts/audit-windows-startup-transition.mjs (Join-Path $Root 'DSH-Portable') $StartupEvidence $FirstColdStartSeconds
 if ($LASTEXITCODE -ne 0) { throw "Windows startup transition audit failed with exit code $LASTEXITCODE" }
