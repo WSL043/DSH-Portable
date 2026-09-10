@@ -7,9 +7,9 @@ const copy = {
     guideStartText: "Download, connect a model, and install plugins visually. Guide in Chinese.",
     guideMove: "What happens to my sessions when I move?",
     guideMoveText: "Same-platform migration and backup: what to take with you. Guide in Chinese.",
-    starProject: "☆ Star",
-    starInvite: "Find it useful? Star the project on GitHub, or share it with someone who needs a portable DSH workspace.",
-    starAction: "Star on GitHub ↗",
+    starProject: "GitHub ↗",
+    starInvite: "Find it useful? Use the Star button at the top right of the GitHub repository, or share it with someone who needs a portable DSH workspace.",
+    starAction: "View on GitHub ↗",
     viewerTitle: "Give details a closer look.",
     viewerText:
       "Zoom in, download originals, and leave region notes. Image Viewer is included by default and can be removed independently.",
