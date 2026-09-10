@@ -1,7 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { cp, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 import { buildDshEnv } from './portable-core.mjs'
@@ -75,6 +75,17 @@ function exactVersionFromSpec(value) {
   return match?.[1] ?? null
 }
 
+async function bundledInstallEnvironment(layout, adapters) {
+  const store = path.join(layout.root, 'default-plugins', 'store')
+  if ((adapters.existsSync ?? existsSync)(store)) {
+    await (adapters.cp ?? cp)(store, layout.packageManagerStore, { recursive: true, force: false,
+      filter: source => path.basename(source) !== 'projects' })
+  }
+  return { ...buildDshEnv(layout), pnpm_config_offline: 'true', npm_config_offline: 'true',
+    pnpm_config_cache_dir: path.join(layout.packageManagerStore, 'metadata'),
+    npm_config_cache_dir: path.join(layout.packageManagerStore, 'metadata') }
+}
+
 function installedDefaultVersion(profileRoot, plugin, adapters = {}) {
   const exists = adapters.existsSync ?? existsSync
   const load = adapters.readFileSync ?? readFileSync
@@ -130,9 +141,10 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     }
     const result = run(layout.nodeExe, [layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives], {
       cwd: profileRoot,
-      env: buildDshEnv(layout),
+      env: await bundledInstallEnvironment(layout, adapters),
       encoding: 'utf8',
       windowsHide: true,
+      timeout: 30000,
     })
     if (result?.error) throw result.error
     if (result?.status !== 0) throw pluginInstallError(result)
@@ -192,9 +204,10 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
     }
     const result = run(layout.nodeExe, [layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives], {
       cwd: profileRoot,
-      env: buildDshEnv(layout),
+      env: await bundledInstallEnvironment(layout, adapters),
       encoding: 'utf8',
       windowsHide: true,
+      timeout: 30000,
     })
     if (result?.error) throw result.error
     if (result?.status !== 0) throw pluginInstallError(result)

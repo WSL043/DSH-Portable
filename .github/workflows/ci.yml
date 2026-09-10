@@ -234,6 +234,23 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-portable.mjs (Join-Path $Root 'DSH-Portable')
+      - name: First startup with empty cache and Node external TCP denied
+        shell: powershell
+        run: |
+          $OfflineRoot = Join-Path $env:RUNNER_TEMP 'dsh-offline-package'
+          New-Item -ItemType Directory -Force -Path $OfflineRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $OfflineRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Offline test package extraction failed' }
+          node scripts/check-offline-startup.mjs (Join-Path $OfflineRoot 'DSH-Portable') offline-evidence
+          if ($LASTEXITCODE -ne 0) { throw 'Offline backend startup failed' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-offline-backend-evidence
+          path: |
+            offline-evidence/result.json
+            offline-evidence/blocked-connections.jsonl
+            offline-evidence/data/logs/*.log
       - name: Run two isolated portable roots in parallel
         shell: powershell
         run: |
@@ -247,6 +264,49 @@ jobs:
           node scripts/smoke-portable-parallel-roots.mjs `
             (Join-Path $FirstRoot 'DSH-Portable') `
             (Join-Path $SecondRoot 'DSH-Portable')
+
+  windows-complete-offline:
+    name: Windows complete offline bundle with WebView2
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: windows-build
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - name: Build the separate complete offline package
+        shell: powershell
+        run: |
+          $Lock = Get-Content -Raw config/webview2-runtime.lock.json | ConvertFrom-Json
+          $Cab = Join-Path $env:RUNNER_TEMP 'webview2.cab'
+          Invoke-WebRequest -UseBasicParsing -Uri $Lock.url -OutFile $Cab
+          ./scripts/build-windows-complete-offline.ps1 -BaseArchive artifacts/DSH-Portable-windows-x64-offline.zip -WebView2Cab $Cab -OutputArchive artifacts/DSH-Portable-windows-x64-complete-offline.zip
+      - name: Verify the bundled runtime in a fresh native host
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-complete-offline'
+          New-Item -ItemType Directory -Path $Root | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-complete-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw 'Complete package extraction failed' }
+          $Portable = Join-Path $Root 'DSH-Portable'
+          node scripts/audit-windows-startup-transition.mjs $Portable complete-evidence 75
+          if ($LASTEXITCODE -ne 0) { throw 'Complete offline native startup failed' }
+          $Log = Join-Path $Portable 'data/logs/startup-latest.jsonl'
+          if (-not (Select-String -Path $Log -SimpleMatch 'bundled-webview-runtime')) { throw 'Native host did not use bundled WebView2' }
+          Copy-Item $Log complete-evidence/bundled-runtime.jsonl
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-complete-offline
+          path: |
+            artifacts/DSH-Portable-windows-x64-complete-offline.zip*
+            complete-evidence/
 
   windows-plugin-smoke:
     name: Windows bundled plugin management
@@ -783,6 +843,7 @@ jobs:
       - windows-inno-build
       - windows-update-smoke
       - windows-portable-smoke
+      - windows-complete-offline
       - windows-plugin-smoke
       - windows-desktop-host
       - windows-bootstrap-smoke

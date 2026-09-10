@@ -67,7 +67,9 @@
 | **像桌面应用一样使用** | 独立窗口、托盘、快捷键、全屏、任务通知和窗口位置恢复。 |
 | **出了问题能排查** | 从设置导出脱敏支持报告，或检查并修复可再生的程序组件。 |
 
-如果你已经习惯自行部署官方 DSH、管理运行环境并在终端启动，也可以继续使用上游。Portable 的价值是把安装、桌面操作、移动和维护集中起来；模型能力仍来自你连接的服务。完整离线包可免去首次下载程序组件，但在线模型和新插件下载仍需网络。
+如果你已经习惯自行部署官方 DSH、管理运行环境并在终端启动，也可以继续使用上游。Portable 的价值是把安装、桌面操作、移动和维护集中起来；模型能力仍来自你连接的服务。标准 ZIP 可免去首次下载程序组件，但在线模型和新插件下载仍需网络。
+
+离线部署还需提前准备本地模型服务与模型权重；Windows 桌面需已安装 WebView2 Runtime（ZIP 不内含）。企业隔离网的验收范围及当前限制见[离线部署说明](docs/offline-deployment-acceptance.md)。
 
 | 一个文件夹 | 换位置继续 | 更新不动数据 |
 | --- | --- | --- |
@@ -113,7 +115,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 | 适合你，如果… | 下载 |
 | --- | --- |
 | 想要可移动、自动准备的工作文件夹 | [**便携启动器**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)（推荐，76,288 字节，约 74.5 KiB） |
-| 目标电脑无法联网，或需要手动解压 | [完整离线 ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| 目标电脑无法联网，或需要手动解压 | [标准 ZIP（需系统 WebView2）](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### macOS
 

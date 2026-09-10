@@ -5339,7 +5339,8 @@ namespace DshPortable
                 throw new COMException("The requested resource is in use.", WebViewResourceInUseHResult);
             }
 
-            webViewEnvironment = await CoreWebView2Environment.CreateAsync(null, userData, options);
+            string browserFolder = await ResolveBundledWebViewRuntimeAsync();
+            webViewEnvironment = await CoreWebView2Environment.CreateAsync(browserFolder, userData, options);
             webViewBrowserExited = new TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs>();
             webViewEnvironment.BrowserProcessExited += OnWebViewBrowserProcessExited;
             await webView.EnsureCoreWebView2Async(webViewEnvironment);
@@ -5349,6 +5350,69 @@ namespace DshPortable
                 new Dictionary<string, object> { { "loadingFrontmost", desktopContent.Controls.GetChildIndex(launchPanel) == 0 } });
             ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
             RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
+        }
+
+        private async Task<string> ResolveBundledWebViewRuntimeAsync()
+        {
+            string folder = Path.Combine(root, "runtime", "webview2");
+            if (!Directory.Exists(folder)) return null;
+            if (File.Exists(Path.Combine(folder, "runtime-capsule.json")))
+            {
+                AppendStartupTrace("native-host", "bundled-webview-prepare-begin", new Dictionary<string, object>());
+                folder = await Task.Run(delegate
+                {
+                    var start = new ProcessStartInfo(Path.Combine(root, "runtime", "node", "node.exe"),
+                        "\"" + Path.Combine(root, "launcher", "webview-runtime.mjs") + "\" \"" + root + "\"");
+                    start.UseShellExecute = false;
+                    start.CreateNoWindow = true;
+                    start.WindowStyle = ProcessWindowStyle.Hidden;
+                    start.RedirectStandardOutput = true;
+                    start.RedirectStandardError = true;
+                    start.StandardOutputEncoding = Encoding.UTF8;
+                    start.StandardErrorEncoding = Encoding.UTF8;
+                    start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = stateRoot;
+                    start.EnvironmentVariables["DSH_PORTABLE_STARTUP_ID"] = startupId;
+                    start.EnvironmentVariables["DSH_PORTABLE_STARTUP_STARTED_AT"] = startupStartedAt.ToString(CultureInfo.InvariantCulture);
+                    using (var process = Process.Start(start))
+                    {
+                        var output = process.StandardOutput.ReadToEndAsync();
+                        var error = process.StandardError.ReadToEndAsync();
+                        if (!process.WaitForExit(120000))
+                        {
+                            process.Kill();
+                            throw new TimeoutException("Bundled WebView2 preparation timed out.");
+                        }
+                        if (process.ExitCode != 0) throw new InvalidOperationException("Bundled WebView2 preparation failed: " + error.Result);
+                        var result = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(output.Result);
+                        return Convert.ToString(result["browserFolder"], CultureInfo.InvariantCulture);
+                    }
+                });
+            }
+            if (!File.Exists(Path.Combine(folder, "msedgewebview2.exe")))
+                throw new InvalidOperationException("The bundled WebView2 runtime is incomplete. Extract the complete offline package again.");
+
+            // Unpackaged Windows 10 hosts require AppContainer read/execute
+            // access for Fixed Version 120+. Keep these rights inside our runtime.
+            if (Environment.OSVersion.Version.Major == 10 && Environment.OSVersion.Version.Build < 22000)
+            {
+                var security = Directory.GetAccessControl(folder);
+                bool changed = false;
+                foreach (string sid in new string[] { "S-1-15-2-1", "S-1-15-2-2" })
+                {
+                    var identity = new System.Security.Principal.SecurityIdentifier(sid);
+                    var rule = new System.Security.AccessControl.FileSystemAccessRule(identity,
+                        System.Security.AccessControl.FileSystemRights.ReadAndExecute,
+                        System.Security.AccessControl.InheritanceFlags.ContainerInherit | System.Security.AccessControl.InheritanceFlags.ObjectInherit,
+                        System.Security.AccessControl.PropagationFlags.None,
+                        System.Security.AccessControl.AccessControlType.Allow);
+                    bool modified;
+                    security.ModifyAccessRule(System.Security.AccessControl.AccessControlModification.Add, rule, out modified);
+                    changed |= modified;
+                }
+                if (changed) Directory.SetAccessControl(folder, security);
+            }
+            AppendStartupTrace("native-host", "bundled-webview-runtime", new Dictionary<string, object> { { "folder", folder } });
+            return folder;
         }
 
         private static bool IsWebViewResourceInUse(Exception error)

@@ -33,12 +33,16 @@ test('fresh products declare only the reviewed image viewer and existing chat ma
 test('a fresh product seeds both reviewed archives and promotes their update specs', async (t) => {
   const layout = await fixture(t)
   await writeReviewedArchives(layout)
+  const store = path.join(layout.root, 'default-plugins', 'store')
+  await mkdir(path.join(store, 'v11', 'projects'), { recursive: true })
+  await writeFile(path.join(store, 'dependency'), 'bundled dependency')
+  await writeFile(path.join(store, 'v11', 'projects', 'build-only'), 'not portable')
   let invocation
 
   const result = await seedDefaultPlugins(layout, {
     verifyArchive: async () => true,
     spawnSync(command, args, options) {
-      invocation = { command, args }
+      invocation = { command, args, options }
       writeFileSync(path.join(options.cwd, 'package.json'), '{"dependencies":{}}\n')
       return { status: 0 }
     },
@@ -46,6 +50,10 @@ test('a fresh product seeds both reviewed archives and promotes their update spe
 
   assert.deepEqual(result, { status: 'seeded', profile: 'web', plugins: ['dsh-image-viewer', 'dsh-chat-manager'] })
   assert.equal(invocation.command, layout.nodeExe)
+  assert.equal(invocation.options.env.pnpm_config_offline, 'true')
+  assert.equal(invocation.options.timeout, 30000)
+  assert.equal(await readFile(path.join(layout.packageManagerStore, 'dependency'), 'utf8'), 'bundled dependency')
+  await assert.rejects(readFile(path.join(layout.packageManagerStore, 'v11', 'projects', 'build-only')), { code: 'ENOENT' })
   assert.deepEqual(invocation.args.slice(0, 4), [layout.dshBin, 'plugin', '--profile', 'web'])
   const manifest = JSON.parse(await readFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), 'utf8'))
   assert.equal(manifest.dependencies['dsh-image-viewer'], '0.1.0')

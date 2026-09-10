@@ -74,7 +74,7 @@ export async function createRuntimeCapsule(appDir, capsuleFile, manifestFile, op
     bytes: compressed.length,
     rawBytes,
     fileCount: entries.length,
-    required: [
+    required: options.required ?? [
       'app/package.json',
       'app/node_modules/@deepseek-ai/dsh/lib/bin.js',
       'app/node_modules/@wsl043/dsh-portable-desktop-bridge/cordis.patch.yml',

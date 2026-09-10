@@ -67,7 +67,9 @@ Want to use DeepSeek Harness without first setting up a runtime, remembering lau
 | **Use desktop controls** | Dedicated window, tray, shortcuts, full screen, task notifications, and remembered window placement. |
 | **Diagnose problems** | Export a redacted support report from settings, or check and repair reproducible program components. |
 
-If you already prefer deploying official DSH, managing its runtime, and launching it from a terminal, that remains an option. Portable brings installation, desktop controls, moving, and maintenance together; model capabilities still come from your connected service. The complete offline package avoids the initial program-component download, but online models and new plugin downloads still need a network connection.
+If you already prefer deploying official DSH, managing its runtime, and launching it from a terminal, that remains an option. Portable brings installation, desktop controls, moving, and maintenance together; model capabilities still come from your connected service. The standard ZIP avoids the initial program-component download, but online models and new plugin downloads still need a network connection.
+
+Offline deployment also requires a prepared local model server and model weights. The Windows desktop needs an installed WebView2 Runtime, which the ZIP does not include. See the [offline deployment acceptance notes](docs/offline-deployment-acceptance.md) for the current scope and limitations.
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
@@ -113,7 +115,7 @@ The close button sends the app to the system tray by default, so an active task 
 | Choose this when… | Download |
 | --- | --- |
 | You want a movable folder prepared automatically | [**Portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended, 76,288 bytes, about 74.5 KiB) |
-| The destination computer is offline, or you need manual extraction | [Complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
+| The destination computer is offline, or you need manual extraction | [Standard ZIP (requires system WebView2)](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) |
 
 ### macOS
 

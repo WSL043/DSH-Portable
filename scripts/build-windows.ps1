@@ -249,6 +249,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Windows subprocess hiding adaptation failed with exit code $LASTEXITCODE" }
     [System.IO.Directory]::Delete((Join-Path $Stage 'desktop-bridge'), $true)
 
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\prepare-default-plugin-store.mjs') $Stage
+    if ($LASTEXITCODE -ne 0) { throw 'Default plugin offline dependency preparation failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\prune-runtime.mjs') (Join-Path $Stage 'app') win32 x64
     if ($LASTEXITCODE -ne 0) { throw "runtime pruning failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-runtime.mjs') (Join-Path $Stage 'app')

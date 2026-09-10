@@ -141,6 +141,7 @@ fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-client-module-startup.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-windows-subprocess-hide.mjs" "$STAGE/app"
 rm -rf "$STAGE/desktop-bridge"
+"$BUILD_NODE" "$PROJECT_ROOT/scripts/prepare-default-plugin-store.mjs" "$STAGE"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/prune-runtime.mjs" "$STAGE/app" darwin "$ARCH"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-runtime.mjs" "$STAGE/app"
 

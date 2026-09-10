@@ -12,6 +12,7 @@ const script = fileURLToPath(new URL('../scripts/stage-release-assets.mjs', impo
 const required = [
   'DSH-Portable-windows-x64.exe',
   'DSH-Portable-windows-x64-offline.zip',
+  'DSH-Portable-windows-x64-complete-offline.zip',
   'DSH-Portable-macos-arm64.zip',
   'DSH-Portable-macos-x64.zip',
   'DSH-Portable-linux-x64.tar.gz',
@@ -48,7 +49,7 @@ test('stable release staging exposes obvious packages for every platform and kee
   try {
     const user = (await readdir(path.join(output, 'user-assets'))).sort()
     const update = (await readdir(path.join(output, 'update-assets'))).sort()
-    assert.equal(user.length, 10)
+    assert.equal(user.length, 11)
     assert.ok(user.includes('portable-manifest.json'), 'the immutable version release must publish the exact full-package manifest used by desktop updates')
     assert.ok(user.includes('checksums.txt'))
     assert.ok(!user.some((name) => name.endsWith('.sha256')))
@@ -57,7 +58,7 @@ test('stable release staging exposes obvious packages for every platform and kee
     await assert.rejects(readdir(path.join(output, 'engine-update-assets')), { code: 'ENOENT' })
     await assert.rejects(readdir(path.join(output, 'compat-assets')), { code: 'ENOENT' })
     const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
-    assert.equal(checksums.trim().split(/\r?\n/).length, 9)
+    assert.equal(checksums.trim().split(/\r?\n/).length, 10)
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -69,10 +70,11 @@ test('candidate releases never offer a stable-channel bootstrap as a candidate d
     const user = (await readdir(path.join(output, 'user-assets'))).sort()
     assert.ok(!user.includes('DSH-Portable-windows-x64.exe'))
     assert.ok(user.includes('DSH-Portable-windows-x64-offline.zip'))
+    assert.ok(user.includes('DSH-Portable-windows-x64-complete-offline.zip'))
     assert.ok(user.includes('portable-manifest.json'))
     const checksums = await readFile(path.join(output, 'user-assets', 'checksums.txt'), 'ascii')
     assert.ok(!checksums.includes('DSH-Portable-windows-x64.exe'))
-    assert.equal(checksums.trim().split(/\r?\n/).length, 8)
+    assert.equal(checksums.trim().split(/\r?\n/).length, 9)
   } finally {
     await rm(root, { recursive: true, force: true })
   }

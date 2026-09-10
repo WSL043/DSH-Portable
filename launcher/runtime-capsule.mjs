@@ -144,10 +144,20 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
     }
   }
   progress('extract-directories-ready')
-  for (let index = 0; index < files.length; index += 32) {
-    await Promise.all(files.slice(index, index + 32).map(({ filename, bytes }) => writeFile(filename, bytes)))
-    if (index % 1024 === 0 || index + 32 >= files.length) progress('extract-files-progress', { completed: Math.min(index + 32, files.length), total: files.length })
-  }
+  // Keep a bounded queue busy instead of waiting for the slowest write in each
+  // batch. Drain in-flight writes before propagating errors and deleting staging.
+  let next = 0
+  let completed = 0
+  let failure
+  await Promise.all(Array.from({ length: Math.min(32, files.length) }, async () => {
+    while (!failure && next < files.length) {
+      const { filename, bytes } = files[next++]
+      try { await writeFile(filename, bytes) } catch (error) { failure ??= error; return }
+      completed++
+      if (completed % 1024 === 0 || completed === files.length) progress('extract-files-progress', { completed, total: files.length })
+    }
+  }))
+  if (failure) throw failure
 }
 
 function processExists(pid) {

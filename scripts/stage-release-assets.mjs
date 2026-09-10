@@ -13,6 +13,7 @@ const userAssets = [
   ...(channel === 'candidate' ? [] : ['DSH-Portable-windows-x64.exe']),
   'portable-manifest.json',
   'DSH-Portable-windows-x64-offline.zip',
+  'DSH-Portable-windows-x64-complete-offline.zip',
   'DSH-Portable-macos-arm64.zip',
   'DSH-Portable-macos-x64.zip',
   'DSH-Portable-linux-x64.tar.gz',
