@@ -44,7 +44,11 @@ README 图片不能执行点赞请求；GitHub 的 Star API 需要用户身份�
 
 ## 首轮渠道实验
 
-面向现有 DSH 用户，先更新上游已有介绍帖；面向潜在新用户，准备在两个已获账号授权的社区发布上述图文。具体社区账号尚待用户选择，不代表已经投放。
+按已观察到的来源决定优先级，不要求维护者凭感觉挑选两个社区。2026-09-10 查询 GitHub 引荐统计：GitHub 197 次访问 / 74 位独立访客，Bing 67 / 35，官网 56 / 16，Google 17 / 14。各来源访客可能重叠；这些是仓库引荐统计，不代表平台总体潜力、官网访问量或安装转化。
+
+1. 优先 GitHub：维护现有上游介绍帖与已收录目录，跟进上述更正请求；不重复投稿。
+2. 其次搜索：两篇指南已上线，待站长所有权验证后提交 sitemap，并依据实际查询词改进页面。
+3. 外部社区作为后续小规模实验：先核对受众和自荐规则，再准备对应稿件。账号与发布授权确认前不代发，也不把尚未投放记为完成。
 
 - 第一篇面向新用户，重点是开始使用的路径。
 - 第二篇面向已有会话和插件的用户，重点是迁移边界和实际操作。
@@ -72,3 +76,9 @@ Google Search Console 使用 URL 前缀属性 `https://wsl043.github.io/DSH-Port
 项目目录中的 `/DSH-Portable/robots.txt` 不是整个域名根目录的 robots.txt，不能把它当作搜索引擎一定会读取的站点地图发现入口。Search Console/Bing 的所有权验证与提交仍需完成。
 
 参考：[Google 站点地图](https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)、[请求重新抓取](https://developers.google.com/search/docs/crawling-indexing/ask-google-to-recrawl)、[Bing 添加和验证站点](https://www.bing.com/webmasters/help/add-and-verify-site-12184f8b)。
+
+## 本轮验收记录
+
+- 2026-09-10：官网提交 `c273597` 的 [Website 工作流](https://github.com/WSL043/DSH-Portable/actions/runs/34421221212) 成功；线上中英文首页、两篇指南和 sitemap 均返回 HTTP 200，中文首页已显示新的 GitHub 跳转文案。
+- 新流量快照已保存到本地 `.artifacts/traffic/2026-09-10T00-31-18.557Z.json`。距首轮调整不足一天，不据此判断推广成效。
+- 生态 PR #4756 与更正 issue #438 仍开放，尚未合并或解决。搜索平台所有权验证、实际社区投放和转化分析仍未完成。
