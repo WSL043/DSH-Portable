@@ -104,8 +104,24 @@ export async function readOfficialSourceMetadata(commit, callbacks) {
     throw new Error(`official source packageManager must be pnpm@<major>.<minor>.<patch>: ${packageManager}`)
   }
 
-  return {
-    packageManager,
-    packedFamilies: countPackedFamilies(tree),
+  const packedFamilies = countPackedFamilies(tree)
+  if (familiesSource.includes('...PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES.map(')) {
+    const policy = await callbacks.text(`${RAW_BASE}/${commit}/scripts/experimental-package-policy.ts`)
+    const declaration = /PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES\s*=\s*\[([\s\S]*?)\]/.exec(policy)
+    if (!declaration) throw new Error('Unsupported public experimental package policy')
+    const extra = [...declaration[1].matchAll(/['"](packages\/experimental\/[^'"/]+)['"]/g)].map(match => `${match[1]}/package.json`)
+    const paths = tree.tree.filter(entry => entry.type === 'blob').map(entry => entry.path)
+    for (const filename of extra) if (!paths.includes(filename)) throw new Error(`Missing public experimental package: ${filename}`)
+    const selected = paths.filter(filename => {
+      const match = DSH_PACKAGE.exec(filename)
+      return (match && match[1] !== 'experimental') || APP_PACKAGE.test(filename) || extra.includes(filename)
+    })
+    let count = 0
+    for (let offset = 0; offset < selected.length; offset += 12) {
+      const manifests = await Promise.all(selected.slice(offset, offset + 12).map(filename => callbacks.json(`${RAW_BASE}/${commit}/${filename}`)))
+      count += manifests.filter(manifest => manifest.private !== true).length
+    }
+    packedFamilies.dsh = count
   }
+  return { packageManager, packedFamilies }
 }

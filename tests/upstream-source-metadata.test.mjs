@@ -70,3 +70,13 @@ test('rejects an unknown release family glob instead of guessing its count', asy
     /unsupported official release family glob/,
   )
 })
+
+test('public experimental exceptions join the release while private apps stay excluded', async () => {
+  const callbacks = fixture({ families: familiesSource.replace("'apps/*/package.json'", "'apps/*/package.json', ...PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES.map(directory => `${directory}/package.json`)") })
+  const originalJson = callbacks.json, originalText = callbacks.text
+  callbacks.text = async url => url.endsWith('/experimental-package-policy.ts')
+    ? "export const PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES = ['packages/experimental/skip'] as const"
+    : originalText(url)
+  callbacks.json = async url => url.endsWith('/apps/cli/package.json') ? { private: true } : originalJson(url)
+  assert.equal((await readOfficialSourceMetadata(commit, callbacks)).packedFamilies.dsh, 2)
+})

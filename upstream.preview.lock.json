@@ -12,7 +12,7 @@
     "buildProfile": "official",
     "packageManager": "pnpm@11.7.0",
     "packedFamilies": {
-      "dsh": 262,
+      "dsh": 265,
       "vendor": 9,
       "landlock": 0
     }
