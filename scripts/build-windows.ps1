@@ -350,6 +350,9 @@ try {
     )
     & $Csc $CompilerArgs
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $LauncherExe)) { throw 'Windows launcher compilation failed.' }
+    $RecoveryExe = Join-Path $Stage 'DSH-Recovery.exe'
+    & $Csc /nologo /target:exe /platform:x64 /optimize+ "/win32icon:$ProjectRoot\assets\DSH-Portable.ico" "/out:$RecoveryExe" (Join-Path $ProjectRoot 'launcher\windows\DSH-Recovery.cs')
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $RecoveryExe)) { throw 'Recovery launcher compilation failed.' }
     $CommandExe = Join-Path $Stage 'dsh.exe'
     $CommandCompilerArgs = @(
         '/nologo', '/target:exe', '/platform:x64', '/optimize+',
