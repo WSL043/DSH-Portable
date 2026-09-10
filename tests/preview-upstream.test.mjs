@@ -22,7 +22,11 @@ test('stable and candidate cores have independently pinned official source locks
   assert.match(preview.dsh.npmIntegrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
   assert.match(preview.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
   assert.equal(preview.dsh.buildProfile, 'official')
-  for (const count of Object.values(preview.dsh.packedFamilies)) assert.ok(Number.isSafeInteger(count) && count > 0)
+  for (const family of ['dsh', 'vendor']) {
+    const count = preview.dsh.packedFamilies[family]
+    assert.ok(Number.isSafeInteger(count) && count > 0)
+  }
+  assert.ok([0, 1].includes(preview.dsh.packedFamilies.landlock), 'standalone landlock is optional in newer official sources')
   assert.deepEqual(preview.defaultPlugins, stable.defaultPlugins)
 })
 
