@@ -1,0 +1,33 @@
+{
+  "version": "0.6.5",
+  "zh": {
+    "summary": "完善离线部署与启动恢复，内置官方 DeepSeek Harness 0.1.5-rc.1。",
+    "highlights": [
+      "新增 Windows 完整离线 ZIP，随包提供 WebView2；标准 ZIP 继续保持轻量。模型权重和本地推理服务需要另行准备。",
+      "补齐默认插件的离线依赖，修复新电脑首次启动仍尝试下载依赖并长时间等待的问题。",
+      "优化首次运行时文件写入调度，保留完整校验和缓存复用；再次启动不重复解包。",
+      "恢复内置桥接和插件市场的目录冲突；Windows 独立 DSH-Recovery.exe 可在主界面无法启动时诊断、修复和导出日志。",
+      "插件安装和更新在启用前检查加载错误；迁移可仅携带会话与设置，不带插件配置和凭据。",
+      "完整离线安装通过标准包升级时保留随包 WebView2，避免升级后失去离线启动能力。"
+    ],
+    "upgradeNotes": [
+      "升级前请退出程序并保留数据备份。Portable 与官方内核分别更新，内核版本号中的 rc 不代表 Portable 仍是候选版。",
+      "完全隔离环境需预先准备模型服务、权重及所需外部工具；在线模型、远程搜索、下载插件和在线更新仍需要相应网络。"
+    ]
+  },
+  "en": {
+    "summary": "Improve offline deployment and startup recovery, bundled with official DeepSeek Harness 0.1.5-rc.1.",
+    "highlights": [
+      "Add a complete offline Windows ZIP with bundled WebView2 while keeping the standard ZIP lightweight. Model weights and a local inference service are separate prerequisites.",
+      "Bundle default-plugin dependencies to prevent first launches on fresh computers from waiting on registry downloads.",
+      "Improve first-run file write scheduling while retaining full verification and cache reuse; subsequent launches do not repeat extraction.",
+      "Recover built-in bridge and plugin market directory conflicts. Windows DSH-Recovery.exe provides diagnostics, repairs and support logs even when the desktop cannot start.",
+      "Check plugin imports before activation; migration can include only sessions and settings without plugin configuration or credentials.",
+      "Preserve bundled WebView2 when upgrading a complete offline installation through a standard package."
+    ],
+    "upgradeNotes": [
+      "Exit the application and keep a data backup before upgrading. Portable and the official core update independently; rc in the core version does not make Portable a release candidate.",
+      "Isolated deployments require pre-provisioned model services, weights and external tools. Online models, remote search, plugin downloads and online updates still require network access."
+    ]
+  }
+}

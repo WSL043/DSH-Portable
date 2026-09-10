@@ -24,8 +24,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.6.5.50002")]
-[assembly: System.Reflection.AssemblyFileVersion("0.6.5.50002")]
+[assembly: System.Reflection.AssemblyVersion("0.6.5.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.6.5.65534")]
 
 namespace DshPortableBootstrap
 {
@@ -385,6 +385,7 @@ namespace DshPortableBootstrap
                 {
                     if (!IsCompletePortable(options.Destination))
                         throw new InvalidOperationException(BootstrapText.L("现有 DSH-Portable 目录不完整；没有修改任何文件。", "The existing DSH-Portable folder is incomplete. No files were changed."));
+                    PreserveBundledWebViewRuntime(extracted);
                     reportStatus(BootstrapText.L("正在停止当前版本…", "Stopping the current version…"));
                     StopRunningPortable();
                     reportStatus(BootstrapText.L("正在刷新 DSH profile 模块映射…", "Refreshing the DSH profile module mapping…"));
@@ -908,6 +909,32 @@ namespace DshPortableBootstrap
             else TryDeleteFile(fallback);
             if (Directory.Exists(fallback) || File.Exists(fallback))
                 throw new IOException(BootstrapText.L("无法刷新 DSH profile 的可再生模块映射；没有替换程序文件。", "The regenerable DSH profile module mapping could not be refreshed. No program files were replaced."));
+        }
+
+        private void PreserveBundledWebViewRuntime(string extracted)
+        {
+            string source = Path.Combine(options.Destination, "runtime", "webview2");
+            string target = Path.Combine(extracted, "runtime", "webview2");
+            // A standard update must not silently remove the offline browser.
+            // A newly bundled runtime takes precedence; copies stay in staging
+            // so rollback retains the original complete installation.
+            if (!Directory.Exists(source) || Directory.Exists(target)) return;
+            CopyBundledRuntimeDirectory(source, target);
+        }
+
+        private static void CopyBundledRuntimeDirectory(string source, string target)
+        {
+            if ((File.GetAttributes(source) & FileAttributes.ReparsePoint) != 0)
+                throw new IOException("Bundled browser runtime must not contain directory links.");
+            Directory.CreateDirectory(target);
+            foreach (string file in Directory.GetFiles(source))
+            {
+                if ((File.GetAttributes(file) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("Bundled browser runtime must not contain file links.");
+                File.Copy(file, Path.Combine(target, Path.GetFileName(file)), false);
+            }
+            foreach (string directory in Directory.GetDirectories(source))
+                CopyBundledRuntimeDirectory(directory, Path.Combine(target, Path.GetFileName(directory)));
         }
 
         private void ReplacePortableTransactionally(string extracted, string backupRoot)

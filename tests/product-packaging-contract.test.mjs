@@ -879,7 +879,8 @@ test('scheduled core publication can stop after producing the engine component',
 
 test('the bundled plugin market declares every runtime import at the app root', async () => {
   const app = JSON.parse(await read('app/package.json'))
-  assert.equal(app.dependencies['@deepseek-ai/dsh-settings'], '0.1.2-rc.1')
+  const lock = JSON.parse(await read('upstream.lock.json'))
+  assert.equal(app.dependencies['@deepseek-ai/dsh-settings'], lock.dsh.version)
 })
 
 test('CI executes contracts and real package smoke tests on Windows and both Mac architectures', async () => {

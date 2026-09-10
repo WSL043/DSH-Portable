@@ -286,6 +286,8 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
     await writeFile(path.join(destination, 'workspace', 'project.txt'), 'keep workspace\n')
+    await mkdir(path.join(destination, 'runtime', 'webview2', 'runtime'), { recursive: true })
+    await writeFile(path.join(destination, 'runtime', 'webview2', 'runtime', 'browser.dshpack'), 'offline browser payload')
 
     await withFixtureServer(fixture, async ({ manifestUrl }) => {
       await execBootstrap(executable, [
@@ -304,6 +306,7 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"fixture"}\n')
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
     assert.equal(await readFile(path.join(destination, 'workspace', 'project.txt'), 'utf8'), 'keep workspace\n')
+    assert.equal(await readFile(path.join(destination, 'runtime', 'webview2', 'runtime', 'browser.dshpack'), 'utf8'), 'offline browser payload')
     assert.deepEqual(
       (await readdir(path.dirname(destination))).filter((name) => name.startsWith('.dsh-portable-')),
       [],

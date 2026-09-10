@@ -87,7 +87,14 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app --ignore-scripts
-      - run: npm test
+      - name: Run contracts outside Windows
+        if: runner.os != 'Windows'
+        run: npm test
+        env:
+          DSH_TEST_EVIDENCE_DIR: ${{ runner.temp }}/startup-contract-evidence
+      - name: Run Windows contracts with bounded native process contention
+        if: runner.os == 'Windows'
+        run: node --test --test-concurrency=2 tests/*.test.mjs
         env:
           DSH_TEST_EVIDENCE_DIR: ${{ runner.temp }}/startup-contract-evidence
       - name: Retain startup sampling evidence including failures
