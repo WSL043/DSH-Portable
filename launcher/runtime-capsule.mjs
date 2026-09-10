@@ -125,9 +125,23 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
   }
   if (offset !== payload.length) throw new Error('Runtime capsule contains trailing data.')
   progress('extract-index-verified', { files: files.length, directories: directories.size })
-  const directoryList = [...directories]
-  for (let index = 0; index < directoryList.length; index += 64) {
-    await Promise.all(directoryList.slice(index, index + 64).map((directory) => mkdir(directory, { recursive: true })))
+  // The extraction root is new. Create each ancestor once, parent levels first,
+  // instead of repeatedly walking the same ancestor chain with recursive mkdir.
+  const levels = new Map()
+  const unique = new Set()
+  for (const leaf of directories) {
+    for (let directory = leaf; directory !== target; directory = path.dirname(directory)) {
+      if (unique.has(directory)) break
+      unique.add(directory)
+      const depth = path.relative(target, directory).split(path.sep).length
+      if (!levels.has(depth)) levels.set(depth, [])
+      levels.get(depth).push(directory)
+    }
+  }
+  for (const [, level] of [...levels].sort(([a], [b]) => a - b)) {
+    for (let index = 0; index < level.length; index += 64) {
+      await Promise.all(level.slice(index, index + 64).map(directory => mkdir(directory)))
+    }
   }
   progress('extract-directories-ready')
   for (let index = 0; index < files.length; index += 32) {
