@@ -43,14 +43,19 @@ export function defaultUpdateManifestUrl(releaseChannel = 'stable', platform = p
   return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${releaseChannel}/portable-update-${platformUpdateKey(platform, arch)}.json`
 }
 
-export function defaultEngineUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
-  normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-${releaseChannel}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
+function engineChannelTag(releaseChannel, portableVersion) {
+  if (portableVersion) parseSemanticVersion(portableVersion)
+  return `update-channel-core-${releaseChannel}${portableVersion?.includes('-') ? `-${portableVersion}` : ''}`
 }
 
-export function defaultEngineUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
+export function defaultEngineUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch, portableVersion) {
   normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-${releaseChannel}/dsh-core-index-${platformUpdateKey(platform, arch)}.json`
+  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/${engineChannelTag(releaseChannel, portableVersion)}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
+}
+
+export function defaultEngineUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch, portableVersion) {
+  normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/${engineChannelTag(releaseChannel, portableVersion)}/dsh-core-index-${platformUpdateKey(platform, arch)}.json`
 }
 
 export function defaultProductUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
@@ -377,8 +382,16 @@ export async function listEngineVersions({
 }) {
   const installed = await readInstalledUpdateState(layout)
   if (releaseChannel) installed.releaseChannel = normalizeReleaseChannel(releaseChannel, installed.portableVersion)
-  indexUrl ||= defaultEngineUpdateIndexUrl(installed.releaseChannel, layout.platform, process.arch)
-  const index = await fetchJson(indexUrl, { allowHttp, fetchImpl, timeoutMs })
+  const explicitIndex = Boolean(indexUrl)
+  indexUrl ||= defaultEngineUpdateIndexUrl(installed.releaseChannel, layout.platform, process.arch, installed.portableVersion)
+  let index
+  try { index = await fetchJson(indexUrl, { allowHttp, fetchImpl, timeoutMs }) } catch (error) {
+    if (!explicitIndex && error.message === 'HTTP 404') return {
+      schemaVersion: 1, status: 'channel-unpublished', current: installed.dshVersion,
+      releaseChannel: installed.releaseChannel, versions: [], unavailable: [],
+    }
+    throw error
+  }
   if (!index || index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 20) {
     throw new Error('Unsupported engine version catalog.')
   }
@@ -467,7 +480,7 @@ async function checkForUpdateUnlocked({
   const updateCheckCache = updateCacheForScope(layout, scope)
   const explicitManifest = Boolean(manifestUrl)
   manifestUrl ||= scope === 'engine'
-    ? defaultEngineUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
+    ? defaultEngineUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch, installed.portableVersion)
     : defaultUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
   const platform = platformUpdateKey(layout.platform, process.arch)
   const cached = await readJson(updateCheckCache, null)

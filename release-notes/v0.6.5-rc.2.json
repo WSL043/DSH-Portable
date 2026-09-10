@@ -5,7 +5,8 @@
     "highlights": [
       "启动时可恢复被物化为普通目录的内置桥接和插件市场组件，原目录保留在 data/recovery；未知内容不会覆盖。",
       "启动、诊断和修复统一检查组件链接状态，避免路径存在却无法启动时仍显示正常。",
-      "Windows 包新增 DSH-Recovery.exe，主界面无法打开时仍可检查运行文件、诊断、修复可重建组件和导出支持报告。"
+      "Windows 包新增 DSH-Recovery.exe，主界面无法打开时仍可检查运行文件、诊断、修复可重建组件和导出支持报告。",
+      "RC 使用独立的官方内核验收目录，避免与稳定版的兼容清单混用；目录尚未发布时显示等待提示。"
     ],
     "upgradeNotes": [
       "这是候选版，稳定通道仍为 0.6.4。升级前请退出程序并保留数据备份。",
@@ -18,7 +19,8 @@
     "highlights": [
       "Materialized desktop bridge and plugin market directories can be recovered at startup; originals are retained under data/recovery. Unknown content is preserved unchanged.",
       "Startup, diagnostics and repair share component link checks, avoiding false healthy results for conflicting paths.",
-      "Windows packages include DSH-Recovery.exe for file checks, diagnostics, generated-component repair and support reports without opening the desktop UI."
+      "Windows packages include DSH-Recovery.exe for file checks, diagnostics, generated-component repair and support reports without opening the desktop UI.",
+      "Release candidates use isolated qualified core catalogs instead of mixing stable-shell compatibility metadata; unpublished catalogs show a waiting message."
     ],
     "upgradeNotes": [
       "This is a release candidate. The stable channel remains on 0.6.4. Exit the application and keep a backup before upgrading.",

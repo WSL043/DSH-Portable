@@ -1147,3 +1147,23 @@ test('selected Portable version must match the downloaded manifest', async t => 
   assert.equal(result.status, 'unavailable')
   assert.match(result.message, /Selected Portable version/)
 })
+
+test('candidate shells use isolated core catalogs while stable clients retain their endpoint', () => {
+  assert.match(defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.5-rc.2'), /update-channel-core-candidate-0\.6\.5-rc\.2\/dsh-core-index-windows-x64\.json$/)
+  assert.match(defaultEngineUpdateManifestUrl('stable', 'win32', 'x64', '0.6.5-rc.2'), /update-channel-core-stable-0\.6\.5-rc\.2\/dsh-core-update-windows-x64\.json$/)
+  assert.equal(defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.4'), defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64'))
+  assert.throws(() => defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '../other'))
+})
+
+test('an unpublished default core catalog is distinct from a broken explicit URL', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-pending-core-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.5-rc.2', releaseChannel: 'candidate', dshVersion: '0.1.3-alpha.2' }))
+  const fetchImpl = async () => new Response('', { status: 404 })
+  const result = await listEngineVersions({ layout, fetchImpl })
+  assert.equal(result.status, 'channel-unpublished')
+  assert.deepEqual(result.versions, [])
+  await assert.rejects(listEngineVersions({ layout, fetchImpl, indexUrl: 'https://example.com/broken.json' }), /HTTP 404/)
+})

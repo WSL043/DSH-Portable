@@ -397,6 +397,7 @@ window.__ModuleLoader__.load({
           return body
         }).then(body => {
           if (!current()) return
+          if (body.status === 'channel-unpublished') setStatus('update-engine', t('engineFollowsProduct'))
           const items = Array.isArray(body.versions) ? body.versions : []
           const unavailable = Array.isArray(body.unavailable) ? body.unavailable
             .filter(item => item && item.version && String(item.version) !== String(body.current || ''))
