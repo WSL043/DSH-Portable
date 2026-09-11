@@ -40,6 +40,7 @@ import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.ts'
 import { activationAfterReplace, brokenClientBundles, checkClientBundle, hasHostHalf, newlyBrokenBundles, verifyActivation } from './verify.ts'
+import { HostVersionState } from './host-version-state.ts'
 import {
   carrierDisableIds, disableRow, enableRow, findUserPatchPath, isProtectedModule, packagePatchFlags,
   readUserPatchState, removeRowBlocks, rowIdsForPackage, userPatchPackageReferences,
@@ -256,6 +257,11 @@ export function mountMarketRoutes(
   // Remounts and disk rollbacks do not prove that the host's module cache
   // and transitive dependencies now match disk. Retain this until restart.
   const replacedWhileLive = new Set<string>()
+  const hostVersions = new HostVersionState()
+  for (const name of Object.keys(readInstalled(config.profile, activeProfileDir))) {
+    hostVersions.observe(name, readInstalledVersion(config.profile, name, activeProfileDir),
+      hasHostHalf(config.profile, name, activeProfileDir))
+  }
   const groups = marketState.groups
   const groupOrder = marketState.groupOrder
   // A choice made in a previous session outranks whatever the entry layer
@@ -899,6 +905,8 @@ export function mountMarketRoutes(
         const activation: Record<string, ReturnType<typeof verifyActivation>> = {}
         const live = liveNames()
         for (const name of Object.keys(installed)) {
+          if (hostVersions.observe(name, readInstalledVersion(config.profile, name, activeProfileDir),
+            hasHostHalf(config.profile, name, activeProfileDir))) replacedWhileLive.add(name)
           activation[name] = activationAfterReplace(
             verifyActivation(config.profile, name, live, activeProfileDir,
               disabled.has(name) || patchFlags.disabled.includes(name)),

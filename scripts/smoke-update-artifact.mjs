@@ -221,7 +221,7 @@ async function main() {
       rollbackDiagnostic = `${error?.stderr ?? ''}\n${error?.stdout ?? ''}`
       const rollbackError = JSON.parse(rollbackDiagnostic.trim().split(/\r?\n/).filter(Boolean).at(-1))
       assert.equal(rollbackError.type, 'portable-error')
-      assert.equal(rollbackError.code, 'UPDATE_ROLLED_BACK')
+      assert.equal(rollbackError.code, 'UPDATE_ROLLED_BACK', JSON.stringify(rollbackError))
       assert.doesNotMatch(rollbackDiagnostic, /(?:token|authorization|cookie)=/i)
     }
     const rollbackStatus = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
