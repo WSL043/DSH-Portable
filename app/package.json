@@ -1,18 +1,18 @@
 {
   "name": "deepseek-harness-portable-runtime",
-  "version": "0.1.5-rc.1",
+  "version": "0.1.5-rc.2",
   "private": true,
   "description": "Pinned official DeepSeek Harness runtime for DSH-Portable.",
   "license": "Apache-2.0",
   "dependencies": {
-    "@deepseek-ai/dsh": "0.1.5-rc.1",
-    "@deepseek-ai/dsh-settings": "0.1.5-rc.1",
+    "@deepseek-ai/dsh": "0.1.5-rc.2",
+    "@deepseek-ai/dsh-settings": "0.1.5-rc.2",
     "@wsl043/dsh-portable-desktop-bridge": "file:../desktop-bridge",
     "@wsl043/dsh-portable-plugin-market": "file:vendor/dsh-portable-plugin-market",
     "pnpm": "11.11.0"
   },
   "allowScripts": {
-    "@deepseek-ai/dsh-subprocess-local@0.1.5-rc.1": true,
+    "@deepseek-ai/dsh-subprocess-local@0.1.5-rc.2": true,
     "@google/genai@1.52.0": true,
     "koffi@3.2.1": true,
     "node-pty@1.2.0-beta.15": true,
