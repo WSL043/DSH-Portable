@@ -147,6 +147,7 @@ if (changed) {
   await writeFile(runtimeManifestPath, `${JSON.stringify(runtimeManifest, null, 2)}\n`, 'utf8')
   await writeFile(packageLockPath, `${JSON.stringify(packageLock, null, 2)}\n`, 'utf8')
   currentLock.dsh.version = version
+  currentLock.dsh.tag = `dsh-v${version}`
   currentLock.dsh.integrity = state.integrity
   currentLock.dsh.reviewedCommit = state.commit
   currentLock.dsh.noticesSha256 = noticesSha256
