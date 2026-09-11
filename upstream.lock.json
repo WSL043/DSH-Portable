@@ -3,7 +3,7 @@
   "dsh": {
     "package": "@deepseek-ai/dsh",
     "version": "0.1.5-rc.2",
-    "tag": "dsh-v0.1.5-rc.1",
+    "tag": "dsh-v0.1.5-rc.2",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
     "reviewedCommit": "fb2c4b9e698e30edb738bca4cf0618587db7d203",
     "noticesSha256": "33cef3c1707e1443c8919116b70b5b116519c7117d00b8d05475b31458ac9991",
