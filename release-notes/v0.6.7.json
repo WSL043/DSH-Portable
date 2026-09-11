@@ -1,0 +1,21 @@
+{
+  "version": "0.6.7",
+  "zh": {
+    "summary": "修复 Windows 窗口边缘无法拖动调整大小的问题，并改进插件更新后的生效提示。",
+    "highlights": [
+      "恢复窗口四边和四角的原生缩放操作，边缘区域随显示缩放比例调整，最大化和全屏时不占用内容区域。",
+      "通过命令行更换插件版本后，插件市场会提示已加载的服务端插件需要重启，避免把磁盘新版本误认为已生效。",
+      "内置官方 DeepSeek Harness 更新至 0.1.5-rc.2。"
+    ],
+    "upgradeNotes": ["插件更新提示检测版本号变化，不会自动中断运行中的任务；请保存任务后重启以加载新版本。"]
+  },
+  "en": {
+    "summary": "Restore resizing from Windows window edges and improve activation notices after plugin updates.",
+    "highlights": [
+      "Restore native resizing from all four edges and corners, with display-scaled borders that disappear when maximized or fullscreen.",
+      "After a command-line plugin version change, the market marks loaded server plugins as requiring a restart instead of implying that the disk version is already active.",
+      "Update the bundled official DeepSeek Harness core to 0.1.5-rc.2."
+    ],
+    "upgradeNotes": ["Plugin update detection tracks version changes and never interrupts running tasks automatically. Save your work and restart to activate updated host modules."]
+  }
+}
