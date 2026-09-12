@@ -174,6 +174,9 @@ try {
     socket?.close()
     try {
       await cli('stop')
+    } catch (error) {
+      passed = false
+      throw error
     } finally {
       if (child.exitCode === null) child.kill()
       await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions }, null, 2))

@@ -262,7 +262,7 @@ export async function acquireRuntimeLease(runtimeRoot, options = {}) {
   throw new Error('The DSH runtime cache changed while it was being opened.')
 }
 
-async function activeRuntimeLeases(cacheParent, hash) {
+async function activeRuntimeLeases(cacheParent, hash, { reclaimStale = false } = {}) {
   let names = []
   try { names = await readdir(cacheParent) } catch (error) {
     if (error?.code === 'ENOENT') return []
@@ -272,8 +272,15 @@ async function activeRuntimeLeases(cacheParent, hash) {
   for (const name of names.filter((value) => value.startsWith(runtimeLeasePrefix(hash)) && value.endsWith('.json'))) {
     const filename = path.join(cacheParent, name)
     const lease = await readLock(filename)
-    if (lease && processExists(lease.pid)) active.push({ filename, pid: lease.pid })
-    else await rm(filename, { force: true }).catch(() => {})
+    // A killed writer may leave empty JSON; our own UUID filename still records
+    // its PID. Unknown filenames remain protected rather than guessed away.
+    const namedOwner = /^([1-9][0-9]*)\.[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\.json$/.exec(name.slice(runtimeLeasePrefix(hash).length))
+    const pid = lease?.pid ?? (namedOwner ? Number(namedOwner[1]) : null)
+    if (!Number.isSafeInteger(pid) || pid <= 0) {
+      // An unreadable lease is not evidence that its owner has exited.
+      if (existsSync(filename)) active.push({ filename, pid: null, uncertain: true })
+    } else if (processExists(pid)) active.push({ filename, pid })
+    else if (reclaimStale) await rm(filename, { force: true }).catch(() => {})
   }
   return active
 }
@@ -281,15 +288,21 @@ async function activeRuntimeLeases(cacheParent, hash) {
 async function directoryFootprint(root) {
   let bytes = 0
   let files = 0
-  for (const entry of await readdir(root, { withFileTypes: true })) {
+  const entries = await readdir(root, { withFileTypes: true })
+  const regularFiles = entries.filter(entry => entry.isFile() && !entry.isSymbolicLink())
+  for (let index = 0; index < regularFiles.length; index += 32) {
+    const sizes = await Promise.all(regularFiles.slice(index, index + 32).map(async entry =>
+      (await stat(path.join(root, entry.name))).size))
+    bytes += sizes.reduce((total, size) => total + size, 0)
+    files += sizes.length
+  }
+  // Traverse directories serially so concurrency stays bounded at every depth.
+  for (const entry of entries) {
     const filename = path.join(root, entry.name)
-    if (entry.isDirectory()) {
+    if (entry.isDirectory() && !entry.isSymbolicLink()) {
       const nested = await directoryFootprint(filename)
       bytes += nested.bytes
       files += nested.files
-    } else if (entry.isFile()) {
-      bytes += (await stat(filename)).size
-      files += 1
     }
   }
   return { bytes, files }
@@ -315,19 +328,31 @@ export async function commitRuntimeDirectory(temporary, target, options = {}) {
 
 export async function runtimeCacheStatus(root, options = {}) {
   const paths = capsulePaths(root, options.env)
-  if (paths.mode === 'expanded') return { mode: 'expanded', caches: [], bytes: 0, files: 0 }
+  if (paths.mode === 'expanded') return { mode: 'expanded', caches: [], bytes: 0, files: 0, complete: true, errors: [] }
   const manifest = await readManifest(paths.manifestFile)
   let names = []
   try { names = await readdir(paths.cacheParent, { withFileTypes: true }) } catch (error) {
     if (error?.code !== 'ENOENT') throw error
   }
   const caches = []
+  const errors = []
   for (const entry of names) {
-    if (!entry.isDirectory() || !HASH_PATTERN.test(entry.name)) continue
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+    const incomplete = INCOMPLETE_CACHE_PATTERN.exec(entry.name)
+    if (!incomplete && !HASH_PATTERN.test(entry.name)) continue
+    const hash = incomplete ? incomplete[1] : entry.name
     const target = path.join(paths.cacheParent, entry.name)
-    const footprint = await directoryFootprint(target)
-    const leases = await activeRuntimeLeases(paths.cacheParent, entry.name)
-    caches.push({ hash: entry.name, current: entry.name === manifest.sha256, active: leases.length > 0, ...footprint })
+    try {
+      const footprint = await directoryFootprint(target)
+      const leases = await activeRuntimeLeases(paths.cacheParent, hash)
+      caches.push({ hash, current: !incomplete && hash === manifest.sha256,
+        active: incomplete ? processExists(Number(incomplete[2])) : leases.length > 0,
+        ...(incomplete ? { incomplete: true, directory: entry.name } : {}),
+        ...(leases.some(lease => lease.uncertain) ? { uncertainLease: true } : {}), ...footprint })
+    } catch (error) {
+      if (error?.code === 'ENOENT' && !existsSync(target)) continue
+      errors.push({ directory: entry.name, code: error?.code || 'unknown' })
+    }
   }
   return {
     mode: 'capsule',
@@ -336,6 +361,8 @@ export async function runtimeCacheStatus(root, options = {}) {
     caches,
     bytes: caches.reduce((sum, item) => sum + item.bytes, 0),
     files: caches.reduce((sum, item) => sum + item.files, 0),
+    complete: errors.length === 0,
+    errors,
   }
 }
 
@@ -380,7 +407,7 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
         retained.push({ ...identity, reason: 'preparing' })
         continue
       }
-      if ((!incomplete && (await activeRuntimeLeases(paths.cacheParent, hash)).length > 0)
+      if ((!incomplete && (await activeRuntimeLeases(paths.cacheParent, hash, { reclaimStale: true })).length > 0)
           || (incomplete && processExists(Number(incomplete[2])))) {
         retained.push({ ...identity, reason: 'active' })
         continue

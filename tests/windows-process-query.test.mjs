@@ -5,6 +5,7 @@ import { queryWindowsProcess } from '../launcher/portable-core.mjs'
 
 function createAdapter(output, calls = []) {
   return {
+    pidExists: () => true,
     execute: (file, args, options) => {
       calls.push({ file, args, options })
       return output
@@ -78,4 +79,16 @@ test('returns null for invalid process IDs without executing PowerShell', () => 
     assert.equal(queryWindowsProcess(pid, adapter), null)
   }
   assert.equal(executions, 0)
+})
+
+test('empty CIM metadata counts as stopped only when an independent PID probe confirms exit', () => {
+  for (const commandLine of [null, '', '  ']) {
+    const adapter = createAdapter(JSON.stringify({ executablePath: null, commandLine }))
+    assert.equal(queryWindowsProcess(2468, { ...adapter, pidExists: () => false }), null)
+    assert.throws(() => queryWindowsProcess(2468, adapter), /Could not inspect process/)
+    const probeError = Object.assign(new Error('probe denied'), { code: 'EPERM' })
+    assert.throws(() => queryWindowsProcess(2468, { ...adapter, pidExists: () => { throw probeError } }),
+      error => error.cause === probeError)
+  }
+  assert.throws(() => queryWindowsProcess(2468, { ...createAdapter('{bad json'), pidExists: () => false }), /Could not inspect process/)
 })

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
+import { promises as fsPromises } from 'node:fs'
+import { syncBuiltinESMExports } from 'node:module'
 import { mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -262,7 +264,7 @@ test('capsule packaging never carries smoke data or user workspaces into a relea
   }
 })
 
-test('cache cleanup removes only unused old runtimes and never an active lease or current runtime', async () => {
+test('cache cleanup removes only unused old runtimes and never an active lease or current runtime', async t => {
   const { parent, root, app } = await fixture()
   const cache = path.join(parent, 'machine-cache')
   try {
@@ -275,16 +277,44 @@ test('cache cleanup removes only unused old runtimes and never an active lease o
     const oldRuntime = path.join(cache, oldHash)
     await mkdir(oldRuntime, { recursive: true })
     await writeFile(path.join(oldRuntime, 'old-runtime.txt'), 'old')
+    const deadPid = Number(execFileSync(process.execPath, ['-p', 'process.pid'], { encoding: 'utf8', windowsHide: true }).trim())
+    const staleLease = path.join(cache, `${oldHash}.lease.${deadPid}.exited.json`)
+    await writeFile(staleLease, JSON.stringify({ pid: deadPid, token: 'exited' }))
+    const interruptedLease = path.join(cache, `${oldHash}.lease.${deadPid}.12345678-1234-1234-1234-123456789abc.json`)
+    await writeFile(interruptedLease, '')
     const release = await acquireRuntimeLease(oldRuntime, { waitMs: 50 })
 
     const before = await runtimeCacheStatus(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
     assert.equal(before.caches.find((entry) => entry.hash === oldHash)?.active, true)
+    assert.equal(JSON.parse(await readFile(staleLease, 'utf8')).pid, deadPid, 'status must not remove stale leases')
+    assert.equal(await readFile(interruptedLease, 'utf8'), '', 'status must not remove an interrupted lease')
+    const actualStat = fsPromises.stat
+    const mockedStat = t.mock.method(fsPromises, 'stat', async (filename, ...args) => {
+      if (filename === path.join(oldRuntime, 'old-runtime.txt')) throw Object.assign(new Error('fixture access denied'), { code: 'EACCES' })
+      return actualStat(filename, ...args)
+    })
+    syncBuiltinESMExports()
+    try {
+      const partial = await runtimeCacheStatus(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
+      assert.equal(partial.complete, false)
+      assert.deepEqual(partial.errors, [{ directory: oldHash, code: 'EACCES' }])
+      assert.equal(partial.caches.some(entry => entry.current), true, 'other caches still contribute to a partial report')
+    } finally { mockedStat.mock.restore(); syncBuiltinESMExports() }
     const retained = await cleanUnusedRuntimeCaches(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
     assert.deepEqual(retained.removed, [])
     assert.equal(retained.retained.some((entry) => entry.hash === oldHash && entry.reason === 'active'), true)
     assert.equal(retained.retained.some((entry) => entry.hash === path.basename(current.runtimeRoot) && entry.reason === 'current'), true)
+    await assert.rejects(stat(staleLease), { code: 'ENOENT' }, 'only cleanup reclaims exited leases')
+    await assert.rejects(stat(interruptedLease), { code: 'ENOENT' }, 'cleanup can recover a killed lease writer from its owned filename')
 
     await release()
+    const malformedLease = path.join(cache, `${oldHash}.lease.unknown.json`)
+    await writeFile(malformedLease, '{')
+    const uncertain = await runtimeCacheStatus(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
+    assert.equal(uncertain.caches.find(entry => entry.hash === oldHash)?.uncertainLease, true)
+    assert.equal((await cleanUnusedRuntimeCaches(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })).removed.length, 0)
+    assert.equal(await readFile(malformedLease, 'utf8'), '{', 'an unreadable lease does not prove its owner exited')
+    await rm(malformedLease)
     const preparationLock = path.join(cache, `${oldHash}.lock`)
     await writeFile(preparationLock, JSON.stringify({ pid: process.pid, token: 'test-preparer' }))
     const preparing = await cleanUnusedRuntimeCaches(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
@@ -327,6 +357,13 @@ test('cache cleanup reclaims abandoned extraction directories but preserves rece
     await writeFile(path.join(outside, 'keep'), 'user data')
     const linked = path.join(cache, `.${'b'.repeat(64)}.${deadPid}.${old}`)
     await symlink(outside, linked, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const status = await runtimeCacheStatus(root, { env })
+    assert.equal(status.complete, true)
+    assert.deepEqual(status.errors, [])
+    assert.equal(status.caches.filter(entry => entry.incomplete).length, 3)
+    assert.equal(status.caches.find(entry => entry.directory === abandoned)?.bytes, Buffer.byteLength(abandoned))
+    assert.equal(status.bytes, status.caches.reduce((total, entry) => total + entry.bytes, 0))
 
     const result = await cleanUnusedRuntimeCaches(root, { env })
     assert.deepEqual(result.removed.map(entry => entry.directory), [abandoned])

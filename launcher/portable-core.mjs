@@ -906,6 +906,11 @@ export function queryWindowsProcess(pid, adapters = {}) {
     if (!output) return null
     const parsed = JSON.parse(output)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || typeof parsed.commandLine !== 'string' || !parsed.commandLine.trim()) {
+      // CIM can retain a process row briefly after its command line disappears
+      // during exit. Only a separate PID absence check may classify it as gone.
+      const emptyCommand = parsed && !Array.isArray(parsed)
+        && (parsed.commandLine === null || (typeof parsed.commandLine === 'string' && !parsed.commandLine.trim()))
+      if (emptyCommand && !(adapters.pidExists ?? processExists)(processId)) return null
       throw new Error('Windows process query returned invalid process data.')
     }
     return parsed
@@ -1248,7 +1253,7 @@ function processExists(pid) {
     process.kill(Number(pid), 0)
     return true
   } catch (error) {
-    return error?.code === 'EPERM'
+    return error?.code !== 'ESRCH'
   }
 }
 
