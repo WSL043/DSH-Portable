@@ -69,7 +69,7 @@ Want to use DeepSeek Harness without first setting up a runtime, remembering lau
 
 If you already prefer deploying official DSH, managing its runtime, and launching it from a terminal, that remains an option. Portable brings installation, desktop controls, moving, and maintenance together; model capabilities still come from your connected service. The standard ZIP avoids the initial program-component download, but online models and new plugin downloads still need a network connection.
 
-Offline deployment requires a prepared local model server and model weights. The standard Windows ZIP requires system WebView2. Starting with 0.6.5, a separate [complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/download/v0.6.7/DSH-Portable-windows-x64-complete-offline.zip) includes WebView2 and default-plugin dependencies, but no models. See the [offline deployment acceptance notes](docs/offline-deployment-acceptance.md).
+Offline deployment requires a prepared local model server and model weights. The standard Windows ZIP requires system WebView2. Starting with 0.6.5, a separate [complete offline ZIP](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) includes WebView2 and default-plugin dependencies, but no models. See the [offline deployment acceptance notes](docs/offline-deployment-acceptance.md).
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
@@ -114,9 +114,9 @@ The close button sends the app to the system tray by default, so an active task 
 
 | Choose this when… | Download |
 | --- | --- |
-| You have internet access and want the folder prepared automatically | [**Online portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended; about 75 KiB in 0.6.7) |
-| You use a regular PC and want to download, extract, and run | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip) (about 55.9 MiB in 0.6.7) |
-| The target PC lacks the window-rendering component and cannot download it, or you are unsure whether it has it | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (about 326.0 MiB in 0.6.7; includes the window-rendering component) |
+| You have internet access and want the folder prepared automatically | [**Online portable launcher**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe) (recommended) |
+| You use a regular PC and want to download, extract, and run | [**Standard ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip)  |
+| The target PC lacks the window-rendering component and cannot download it, or you are unsure whether it has it | [**Complete offline ZIP**](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip) (includes the window-rendering component) |
 
 **Not sure? Use the online launcher if you have internet access, or the standard ZIP if you prefer manual extraction.** If the computer already has the window-rendering component, the standard ZIP also works completely offline; the larger package is unnecessary.
 

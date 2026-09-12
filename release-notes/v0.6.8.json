@@ -1,0 +1,31 @@
+{
+  "version": "0.6.8",
+  "zh": {
+    "summary": "改善首次启动的进度反馈和运行环境准备速度，增强缓存清理、诊断与更新恢复。",
+    "highlights": [
+      "首次准备运行环境时显示真实的阶段进度和百分比，加载动画保持连续。",
+      "优化 Windows 运行文件展开的读写调度，减少准备阶段的等待；实际收益随设备和缓存状态而异。",
+      "自动回收符合条件的中断解包残留，保留当前及正在使用的运行环境；缓存统计也会显示中断目录和读取失败。",
+      "加快检查与修复中的依赖扫描，减少重复读取，提高缓存占用查询效率。",
+      "改进中断内核更新后的启动恢复，并更清楚地提示内核兼容条件及版本列表读取失败。",
+      "修复 Windows 进程退出期间可能误报无法检查后台状态的问题。"
+    ],
+    "upgradeNotes": [
+      "更新保留现有会话、设置、凭据、插件和工作区。已准备好的运行环境继续复用；准备新内核时会再次显示展开进度。"
+    ]
+  },
+  "en": {
+    "summary": "Improve first-start progress and runtime preparation, with more reliable cache cleanup, diagnostics, and update recovery.",
+    "highlights": [
+      "Show measured phase progress and percentages while preparing a runtime, alongside the continuous native loading animation.",
+      "Improve Windows file I/O scheduling during runtime extraction; benefits vary with the device and cache state.",
+      "Reclaim eligible abandoned extraction directories while preserving current and active runtimes. Cache reports include incomplete directories and read failures.",
+      "Reduce repeated dependency reads during checks and repairs, and speed up cache footprint queries.",
+      "Improve startup recovery after interrupted core updates, with clearer compatibility requirements and version-catalog failure messages.",
+      "Fix a Windows process-inspection error that could occur while the backend was exiting."
+    ],
+    "upgradeNotes": [
+      "Updates preserve sessions, settings, credentials, plugins, and workspaces. Prepared runtimes remain reusable; preparing a new core shows extraction progress again."
+    ]
+  }
+}
