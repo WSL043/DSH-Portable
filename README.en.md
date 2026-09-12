@@ -49,7 +49,7 @@
 | Separate product and core updates | Included Image Viewer |
 | --- | --- |
 | ![Actual 0.6.5-rc.1 settings in Chinese](assets/portable-updates.png) | ![Actual Image Viewer interface in Chinese](assets/viewer-dark.png) |
-| Versions are selected separately; cores must match Portable. Candidate screenshot; 0.6.4 uses General settings. | Galleries, zoom, original downloads, and region notes. Independently removable. |
+| Versions are selected separately; cores must match Portable. Screenshot from 0.6.5-rc.1; the current entry is Settings → Updates. | Galleries, zoom, original downloads, and region notes. Independently removable. |
 
 <details>
 <summary>Read more: who it is for, runtime, and component boundaries</summary>
@@ -88,7 +88,7 @@ On Windows, enabling **Task notifications** shows a system notification when a b
 | **Long-term updates** | DSH-Portable and the official DSH core update independently while preserving `data` and `workspace`. |
 | **Something goes wrong** | Use the read-only check, data-preserving repair, and redacted support report built into the product. |
 
-The published 0.6.4 Windows offline ZIP is **56,409,457 bytes (about 53.8 MiB)**, and the Windows bootstrap EXE is **76,288 bytes (about 74.5 KiB)**. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This keeps the complete plugin runtime while reducing the small-file work needed to copy and update it.
+The standard ZIP includes DSH and Node; the complete offline ZIP also carries WebView2 for systems without it. See the download table and the corresponding Release assets for package sizes. The official DSH runtime travels as one verified compact package, is prepared once on each computer, and is reused afterward; sessions, settings, plugins, and workspace remain in the Portable folder. This keeps the complete plugin runtime while reducing the small-file work needed to copy and update it.
 
 ### Component boundaries and release cadence
 
@@ -215,7 +215,7 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 
 ## Updates and repair
 
-> The screenshot and dedicated Updates settings page below describe the 0.6.5-rc.1 candidate. In the published 0.6.4 release, use Settings → General → Portable.
+> The screenshot was captured on 0.6.5-rc.1. The current entry is Settings → Updates.
 
 ![Dedicated Updates settings page](assets/portable-updates.png)
 

@@ -386,29 +386,35 @@ export async function inspectManagedProfileModuleFallback(layout) {
   const expectedPackages = managedProfileExpectedPackages(layout, links)
   const missing = []
   const wrongTarget = []
-  for (const [packageName, target] of links) {
-    const fallback = paths.join(fallbackRoot, packageName)
-    let info
-    try {
-      info = await lstat(fallback)
-    } catch (error) {
-      if (error?.code === 'ENOENT') {
-        missing.push(packageName)
-        continue
+  const entries = [...links]
+  // Read-only probes are independent. Bound filesystem concurrency while
+  // preserving the same sorted diagnostic result and validating every target.
+  for (let index = 0; index < entries.length; index += 32) {
+    await Promise.all(entries.slice(index, index + 32).map(async ([packageName, target]) => {
+      const fallback = paths.join(fallbackRoot, packageName)
+      let info
+      try {
+        info = await lstat(fallback)
+      } catch (error) {
+        if (error?.code === 'ENOENT') {
+          missing.push(packageName)
+          return
+        }
+        throw error
       }
-      throw error
-    }
-    if (!info.isSymbolicLink()) {
-      wrongTarget.push(packageName)
-      continue
-    }
-    try {
-      if (!sameComparablePath(await realpath(fallback), await realpath(target), layout.platform)) {
+      if (!info.isSymbolicLink()) {
+        wrongTarget.push(packageName)
+        return
+      }
+      try {
+        const [actualPath, expectedPath] = await Promise.all([realpath(fallback), realpath(target)])
+        if (!sameComparablePath(actualPath, expectedPath, layout.platform)) {
+          wrongTarget.push(packageName)
+        }
+      } catch {
         wrongTarget.push(packageName)
       }
-    } catch {
-      wrongTarget.push(packageName)
-    }
+    }))
   }
 
   const presentPackages = await managedProfileResolverEntries(fallbackRoot, paths)

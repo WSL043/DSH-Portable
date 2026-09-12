@@ -347,9 +347,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return
         }
         if status == "core-incompatible" {
-            alert.messageText = L("需要先更新 DSH-Portable", "Update DSH-Portable first")
-            alert.informativeText = L("此 DeepSeek Harness 版本需要较新的 DSH-Portable。",
-                                      "This DeepSeek Harness version needs a newer DSH-Portable.")
+            alert.messageText = L("内核更新包不兼容", "Incompatible core update package")
+            alert.informativeText = L("此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本或稍后重新检查。",
+                                      "This core update package is not qualified for the current DSH-Portable. Select a verified version or check again later.")
             alert.runModal()
             return
         }

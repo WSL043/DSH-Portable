@@ -486,8 +486,8 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool, scope: &'static str)
                     PRODUCT_NAME,
                     &text(
                         &layout,
-                        "此 DeepSeek Harness 版本需要较新的 DSH-Portable。请先更新 DSH-Portable。",
-                        "This DeepSeek Harness version needs a newer DSH-Portable. Update DSH-Portable first.",
+                        "此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本或稍后重新检查。",
+                        "This core update package is not qualified for the current DSH-Portable. Select a verified version or check again later.",
                     ),
                     MessageLevel::Info,
                 );

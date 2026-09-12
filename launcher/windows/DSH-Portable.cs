@@ -4443,9 +4443,9 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("这项 DeepSeek Harness 更新需要较新的 DSH-Portable。请先更新 DSH-Portable，再重新检查内核更新。",
-                          "This DeepSeek Harness update needs a newer DSH-Portable. Update DSH-Portable first, then check the engine again."),
-                        L("需要先更新 DSH-Portable", "Update DSH-Portable first"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        L("此内核更新包尚未适配当前 DSH-Portable。请在更新设置中选择通过验证的内核版本，或稍后重新检查。",
+                          "This core update package is not qualified for the current DSH-Portable. Select a verified core in update settings, or check again later."),
+                        L("内核更新包不兼容", "Incompatible core update package"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 if (updateStatus == "unavailable")

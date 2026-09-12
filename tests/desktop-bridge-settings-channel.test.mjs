@@ -308,7 +308,7 @@ test('channel catalog state follows the final confirmed save and localizes unava
   }))
   await settle()
   const initialText = textContent(mounted.tree)
-  assert.match(initialText, /Version 0\.1\.1: This core is incompatible with the current Portable; requires 0\.6\.2\./)
+  assert.match(initialText, /Version 0\.1\.1: This update package was built for Portable 0\.6\.2 and is not qualified for the current version\./)
   assert.match(initialText, /Version 0\.1\.0: A matching full Portable package is required\./)
   assert.match(initialText, /Version 0\.0\.9: Switch to the candidate channel\./)
   assert.match(initialText, /Version 0\.0\.8: Not available for this system\./)
