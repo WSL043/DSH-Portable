@@ -86,7 +86,19 @@ const release = prepared.mode === 'capsule' ? await acquireRuntimeLease(prepared
 if (prepared.mode === 'capsule' && entryName === 'portable-host.mjs') {
   // Cleanup is delayed until the desktop has had ample time to become usable.
   // Current and live old runtimes are protected by their leases.
-  setTimeout(() => { cleanUnusedRuntimeCaches(root).catch(() => {}) }, 60_000).unref()
+  setTimeout(() => {
+    cleanUnusedRuntimeCaches(root).then(result => {
+      const failed = result.retained.filter(entry => entry.reason === 'cleanup-failed')
+      if (result.removed.length || failed.length) appendStartupTrace(startupTrace, 'runtime-cache', 'maintenance-complete', {
+        removed: result.removed.length,
+        removedIncomplete: result.removed.filter(entry => entry.incomplete).length,
+        reclaimedBytes: result.removed.reduce((total, entry) => total + entry.bytes, 0),
+        retained: result.retained.length,
+        failureCount: failed.length,
+        failures: failed.slice(0, 8).map(({ hash, code }) => ({ hash, code })),
+      })
+    }).catch(error => appendStartupTrace(startupTrace, 'runtime-cache', 'maintenance-failed', { code: error?.code || 'unknown' }))
+  }, 60_000).unref()
 }
 try {
   await import(pathToFileURL(process.argv[1]).href)

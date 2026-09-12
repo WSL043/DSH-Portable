@@ -9,6 +9,8 @@ const MAGIC = Buffer.from('DSHPACK1', 'ascii')
 const HEADER_BYTES = 12
 const READY_FILE = '.dsh-runtime-ready.json'
 const HASH_PATTERN = /^[a-f0-9]{64}$/
+const INCOMPLETE_CACHE_PATTERN = /^\.([a-f0-9]{64})\.([1-9][0-9]*)\.([0-9]{13})$/
+const INCOMPLETE_CACHE_GRACE_MS = 24 * 60 * 60 * 1000
 
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
@@ -348,37 +350,54 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
   const removed = []
   const retained = []
   for (const entry of names) {
-    if (!entry.isDirectory() || !HASH_PATTERN.test(entry.name)) continue
-    const hash = entry.name
-    if (hash === manifest.sha256) {
-      retained.push({ hash, reason: 'current' })
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+    const incomplete = INCOMPLETE_CACHE_PATTERN.exec(entry.name)
+    if (!incomplete && !HASH_PATTERN.test(entry.name)) continue
+    const hash = incomplete ? incomplete[1] : entry.name
+    const identity = incomplete ? { hash, directory: entry.name, incomplete: true } : { hash }
+    if (incomplete && (Date.now() - Number(incomplete[3]) < INCOMPLETE_CACHE_GRACE_MS
+        || !Number.isSafeInteger(Number(incomplete[2])) || processExists(Number(incomplete[2])))) {
+      retained.push({ ...identity, reason: 'incomplete-recent-or-active' })
       continue
     }
-    if ((await activeRuntimeLeases(paths.cacheParent, hash)).length > 0) {
-      retained.push({ hash, reason: 'active' })
+    if (!incomplete && hash === manifest.sha256) {
+      retained.push({ ...identity, reason: 'current' })
       continue
     }
     const gcLock = runtimeGcLock(paths.cacheParent, hash)
-    const release = await acquireLock(gcLock)
-    if (!release) {
-      retained.push({ hash, reason: 'busy' })
-      continue
-    }
+    let release
+    let releasePreparation
     try {
-      const leases = await activeRuntimeLeases(paths.cacheParent, hash)
-      if (leases.length > 0) {
-        retained.push({ hash, reason: 'active' })
+      release = await acquireLock(gcLock)
+      if (!release) {
+        retained.push({ ...identity, reason: 'busy' })
         continue
       }
-      const target = path.join(paths.cacheParent, hash)
-      if (path.dirname(target) !== path.resolve(paths.cacheParent) || !HASH_PATTERN.test(path.basename(target))) {
+      // A preparer can have passed the GC check before we acquired its lock.
+      // Serialize against its commit, not only against consumers' leases.
+      releasePreparation = await acquireLock(path.join(paths.cacheParent, `${hash}.lock`))
+      if (!releasePreparation) {
+        retained.push({ ...identity, reason: 'preparing' })
+        continue
+      }
+      if ((!incomplete && (await activeRuntimeLeases(paths.cacheParent, hash)).length > 0)
+          || (incomplete && processExists(Number(incomplete[2])))) {
+        retained.push({ ...identity, reason: 'active' })
+        continue
+      }
+      const target = path.join(paths.cacheParent, entry.name)
+      if (path.dirname(target) !== path.resolve(paths.cacheParent)
+          || (!HASH_PATTERN.test(path.basename(target)) && !INCOMPLETE_CACHE_PATTERN.test(path.basename(target)))) {
         throw new Error('Refusing to clean an unsafe runtime cache path.')
       }
       const footprint = await directoryFootprint(target)
       await rm(target, { recursive: true, force: true })
-      removed.push({ hash, ...footprint })
+      removed.push({ ...identity, ...footprint })
+    } catch (error) {
+      if (error?.code === 'ENOENT' && !existsSync(path.join(paths.cacheParent, entry.name))) continue
+      retained.push({ ...identity, reason: 'cleanup-failed', code: error?.code || 'unknown' })
     } finally {
-      await release()
+      try { await releasePreparation?.() } finally { await release?.() }
     }
   }
   return { mode: 'capsule', cacheParent: paths.cacheParent, currentHash: manifest.sha256, removed, retained }

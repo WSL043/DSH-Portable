@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { execFileSync } from 'node:child_process'
+import { mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -284,10 +285,57 @@ test('cache cleanup removes only unused old runtimes and never an active lease o
     assert.equal(retained.retained.some((entry) => entry.hash === path.basename(current.runtimeRoot) && entry.reason === 'current'), true)
 
     await release()
+    const preparationLock = path.join(cache, `${oldHash}.lock`)
+    await writeFile(preparationLock, JSON.stringify({ pid: process.pid, token: 'test-preparer' }))
+    const preparing = await cleanUnusedRuntimeCaches(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
+    assert.equal(preparing.retained.some(entry => entry.hash === oldHash && entry.reason === 'preparing'), true)
+    assert.equal(await readFile(path.join(oldRuntime, 'old-runtime.txt'), 'utf8'), 'old')
+    await rm(preparationLock)
     const cleaned = await cleanUnusedRuntimeCaches(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
     assert.equal(cleaned.removed.some((entry) => entry.hash === oldHash), true)
     await assert.rejects(stat(oldRuntime), { code: 'ENOENT' })
     assert.equal((await stat(current.runtimeRoot)).isDirectory(), true)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('cache cleanup reclaims abandoned extraction directories but preserves recent, live, unknown and linked entries', async () => {
+  const { parent, root, app } = await fixture()
+  const cache = path.join(parent, 'machine-cache')
+  const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }
+  try {
+    await createRuntimeCapsule(app, path.join(root, 'runtime', 'DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+      platform: process.platform, arch: process.arch, level: 1,
+    })
+    const current = await ensureRuntimeCapsule(root, { env })
+    const hash = path.basename(current.runtimeRoot)
+    const deadPid = Number(execFileSync(process.execPath, ['-p', 'process.pid'], { encoding: 'utf8', windowsHide: true }).trim())
+    const old = Date.now() - 2 * 86400000
+    const abandoned = `.${hash}.${deadPid}.${old}`
+    const preserved = [
+      `.${hash}.${deadPid}.${Date.now()}`,
+      `.${hash}.${process.pid}.${old}`,
+      '.unrecognized-user-folder',
+    ]
+    for (const name of [abandoned, ...preserved]) {
+      await mkdir(path.join(cache, name))
+      await writeFile(path.join(cache, name, 'sentinel'), name)
+    }
+    const outside = path.join(parent, 'user-data')
+    await mkdir(outside)
+    await writeFile(path.join(outside, 'keep'), 'user data')
+    const linked = path.join(cache, `.${'b'.repeat(64)}.${deadPid}.${old}`)
+    await symlink(outside, linked, process.platform === 'win32' ? 'junction' : 'dir')
+
+    const result = await cleanUnusedRuntimeCaches(root, { env })
+    assert.deepEqual(result.removed.map(entry => entry.directory), [abandoned])
+    assert.equal(result.removed[0].incomplete, true)
+    await assert.rejects(stat(path.join(cache, abandoned)), { code: 'ENOENT' })
+    for (const name of preserved) assert.equal(await readFile(path.join(cache, name, 'sentinel'), 'utf8'), name)
+    assert.equal(await readFile(path.join(linked, 'keep'), 'utf8'), 'user data')
+    assert.equal((await stat(current.runtimeRoot)).isDirectory(), true)
+    assert.deepEqual((await cleanUnusedRuntimeCaches(root, { env })).removed, [])
   } finally {
     await rm(parent, { recursive: true, force: true })
   }
