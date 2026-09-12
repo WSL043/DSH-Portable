@@ -1,0 +1,11 @@
+{
+  "name": "dsh-portable-appshots",
+  "version": "0.1.0-alpha.3",
+  "description": "Experimental Portable window capture with Ctrl+Ctrl",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": { ".": "./lib/index.js", "./client": "./lib/client.js", "./cordis.patch.yml": "./cordis.patch.yml", "./package.json": "./package.json" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" }, "client": { "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-primitives", "@deepseek-ai/dsh-client-locale"], "platform": "web" } },
+  "files": ["lib", "native", "cordis.patch.yml"],
+  "license": "Apache-2.0"
+}

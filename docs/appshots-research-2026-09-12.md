@@ -50,7 +50,17 @@ Preferred next integration is a narrow public file-intake action shared with the
 
 ## Still required before default availability
 
-- Composer intake integration and native bridge correlation/cancellation.
+### Local integration update
+
+Experimental plugin `0.1.0-alpha.3` is installed in the user's existing Portable 0.6.8, with explicit consent for simultaneous left/right Ctrl. The normal native shutdown/restart path loaded the plugin successfully. The keyboard helper registered successfully and the pending endpoint reports ready. State-machine checks cover repeat suppression and ordinary Ctrl shortcuts; physical key delivery has not been simulated or claimed verified.
+
+Seven focused capture/attachment checks pass. An independent headless browser against the actual installed DSH 0.1.5-rc.2 loaded the plugin and rendered its preview. Only its pending-capture transport was supplied the previously captured native fixture. Both PNG and text then entered the real core's draft attachment path, without alerts or sending a model request. This verifies client integration, not the entire physical hotkey-to-preview path. Evidence: `build/appshots-plugin/intake-alpha3.json` and `intake-alpha3.png`.
+
+Pending images/text are memory-only, expire after two minutes, and are not included in diagnostic logs. Dismissal is capture-ID scoped so a previous preview cannot clear a newer capture. The published default plugin set is unchanged.
+
+### Remaining broader qualification
+
+- Broader qualification of the isolated composer adapter and native bridge correlation/cancellation beyond the tested core.
 - First-use explanation; explicit hotkey opt-in/conflict handling; latch-before-focus and release semantics. Do not register both Alt keys silently alongside Codex.
 - Screenshot/text preview, removal, repeated captures and current/new/automatic destination behavior.
 - Capability detection for image input, clear text-only fallback, reload/draft/session-switch behavior, bounded pending capture lifetime.
