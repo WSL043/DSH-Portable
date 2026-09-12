@@ -925,6 +925,7 @@ async function main() {
   const productLockedCommands = new Set([
     'start',
     'runtime-cache-clean',
+    'recover-update',
     'update',
   ])
   const releaseProduct = productLockedCommands.has(options.command)
@@ -932,9 +933,10 @@ async function main() {
     : async () => {}
   try {
     await ensurePortableDirectories(layout)
-    if (existsSync(layout.updateJournal) && ['start', 'runtime-cache-clean', 'update'].includes(options.command)) {
+    let recovery = { status: 'none' }
+    if (existsSync(layout.updateJournal) && ['start', 'runtime-cache-clean', 'update', 'recover-update'].includes(options.command)) {
       await assertSharedComponentsIdle({ allowCurrentDesktop: options.command === 'start' })
-      await rollbackPendingAppUpdate(layout, {
+      recovery = await rollbackPendingAppUpdate(layout, {
         beforeRestore: async () => {
           const current = readProcessState()
           if (ownedState(current)) await stop()
@@ -942,7 +944,8 @@ async function main() {
       })
     }
     let result
-    if (options.command === 'diagnostic-root') result = {
+    if (options.command === 'recover-update') result = recovery
+    else if (options.command === 'diagnostic-root') result = {
       status: 'ok',
       root: layout.root,
       stateRoot: layout.stateRoot,

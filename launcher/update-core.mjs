@@ -625,7 +625,8 @@ async function writeJournal(layout, value) {
 export async function rollbackPendingAppUpdate(layout, { beforeRestore = async () => {} } = {}) {
   const journal = await readJson(layout.updateJournal, null)
   if (!journal) return { status: 'none' }
-  if (journal.schemaVersion !== UPDATE_SCHEMA_VERSION || !/^[A-Za-z0-9._-]{1,100}$/.test(String(journal.operationId ?? ''))) {
+  if (journal.schemaVersion !== UPDATE_SCHEMA_VERSION || typeof journal.operationId !== 'string'
+    || !/^[A-Za-z0-9._-]{1,100}$/.test(journal.operationId) || ['.', '..'].includes(journal.operationId)) {
     throw new Error('Update recovery journal is invalid.')
   }
   const paths = transactionPaths(layout, journal.operationId)
@@ -636,12 +637,20 @@ export async function rollbackPendingAppUpdate(layout, { beforeRestore = async (
   }
   await beforeRestore(journal)
   if (journal.kind === 'dsh-runtime-capsule') {
-    await rm(paths.rootCapsuleManifest, { force: true })
-    await rm(paths.rootCapsuleFile, { force: true })
-    if (existsSync(paths.backupCapsuleManifest)) await rename(paths.backupCapsuleManifest, paths.rootCapsuleManifest)
-    if (existsSync(paths.backupCapsuleFile)) {
-      await mkdir(path.dirname(paths.rootCapsuleFile), { recursive: true })
-      await rename(paths.backupCapsuleFile, paths.rootCapsuleFile)
+    const files = [
+      [paths.backupCapsuleManifest, paths.rootCapsuleManifest],
+      [paths.backupCapsuleFile, paths.rootCapsuleFile],
+    ]
+    // Backup moves can be interrupted separately. Keep originals that have not
+    // moved yet, and files already restored by an interrupted recovery attempt.
+    for (const [backup, current] of files) {
+      if (!existsSync(backup) && !existsSync(current)) throw new Error('Update recovery is missing both a runtime file and its backup.')
+    }
+    for (const [backup, current] of files) {
+      if (!existsSync(backup)) continue
+      await mkdir(path.dirname(current), { recursive: true })
+      await rm(current, { force: true })
+      await rename(backup, current)
     }
   } else if (existsSync(paths.backupApp)) {
     await rm(layout.appDir, { recursive: true, force: true })

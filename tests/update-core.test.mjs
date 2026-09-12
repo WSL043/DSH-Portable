@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -1196,4 +1196,49 @@ test('catalog size limit stops a chunked response before the server finishes sen
   }
   const json = JSON.stringify({ schemaVersion: 1, versions: [] })
   assert.deepEqual((await listEngineVersions({ layout, fetchImpl: async () => new Response(json.padEnd(256 * 1024, ' ')) })).versions, [])
+})
+
+for (const phase of ['prepared', 'manifest-backed-up', 'runtime-backed-up', 'testing', 'manifest-restored']) {
+  test(`capsule recovery preserves originals across interrupted steps: ${phase}`, async t => {
+    const fixture = await makeCapsuleUpdateFixture()
+    t.after(() => rm(fixture.root, { recursive: true, force: true }))
+    const { layout, root, oldCapsule, newCapsule } = fixture
+    const backup = path.join(layout.updateDir, 'interrupted', 'backup')
+    await mkdir(backup, { recursive: true })
+    const manifest = path.join(root, 'runtime-capsule.json')
+    const capsule = path.join(root, 'runtime', 'DSH-App.dshpack')
+    const originalManifest = await readFile(manifest)
+    const originalComponents = await readFile(path.join(root, 'licenses', 'COMPONENTS.json'))
+    if (phase !== 'prepared') await rename(manifest, path.join(backup, 'runtime-capsule.json'))
+    if (!['prepared', 'manifest-backed-up'].includes(phase)) await rename(capsule, path.join(backup, 'DSH-App.dshpack'))
+    if (['testing', 'manifest-restored'].includes(phase)) {
+      await copyFile(path.join(fixture.stagedRoot, 'runtime-capsule.json'), manifest)
+      await writeFile(capsule, newCapsule)
+    }
+    if (phase === 'manifest-restored') {
+      await rm(manifest)
+      await rename(path.join(backup, 'runtime-capsule.json'), manifest)
+    }
+    await mkdir(path.dirname(layout.updateJournal), { recursive: true })
+    await writeFile(layout.updateJournal, JSON.stringify({ schemaVersion: 1, operationId: 'interrupted', kind: 'dsh-runtime-capsule', phase: 'prepared', hadLicenses: ['COMPONENTS.json','DeepSeek-Harness-LICENSE.txt','DeepSeek-Harness-THIRD_PARTY_NOTICES.md','dsh-market-LICENSE.txt','pnpm-LICENSE.txt'] }))
+    assert.equal((await rollbackPendingAppUpdate(layout)).status, 'rolled-back')
+    assert.deepEqual(await readFile(capsule), oldCapsule)
+    assert.deepEqual(await readFile(manifest), originalManifest)
+    assert.deepEqual(await readFile(path.join(root,'licenses','COMPONENTS.json')), originalComponents)
+    assert.equal(await readFile(path.join(layout.dataDir,'private-session.txt'),'utf8'), 'keep me')
+    assert.equal((await rollbackPendingAppUpdate(layout)).status, 'none')
+  })
+}
+
+test('recovery rejects parent operation IDs without touching data or deleting the journal', async t => {
+  const fixture = await makeCapsuleUpdateFixture()
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  for (const operationId of ['.', '..']) {
+    const journal = JSON.stringify({schemaVersion:1, operationId, phase:'committed'})
+    await mkdir(path.dirname(fixture.layout.updateJournal), { recursive: true })
+    await writeFile(fixture.layout.updateJournal, journal)
+    await assert.rejects(rollbackPendingAppUpdate(fixture.layout), /journal is invalid/)
+    assert.equal(await readFile(fixture.layout.updateJournal,'utf8'), journal)
+    assert.equal(await readFile(path.join(fixture.layout.dataDir,'private-session.txt'),'utf8'), 'keep me')
+  }
 })

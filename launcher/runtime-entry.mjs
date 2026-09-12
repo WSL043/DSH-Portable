@@ -1,12 +1,15 @@
 import { appendFile, mkdir } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
+import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
 import { pruneLogHistory } from './log-history.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
-import { environmentStateRoot, parseCli } from './portable-core.mjs'
+import { environmentStateRoot, layoutForRoot, parseCli } from './portable-core.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const [entryName, ...forwarded] = process.argv.slice(2)
@@ -36,6 +39,25 @@ if (!startupTrace && isStart) {
 }
 if (isStart) {
   pruneLogHistory(logDirectory, { currentStartupId: startupTrace?.startupId || process.env.DSH_PORTABLE_STARTUP_ID })
+}
+// Recovery must run before touching the possibly missing/damaged capsule.
+// The direct CLI uses only shipped launcher modules, acquires the existing
+// mutation locks, and refuses to restore while a Portable environment is live.
+if (cliOptions?.command === 'repair') {
+  const recoveryLayout = layoutForRoot(root, process.platform, effectiveStateRoot, root, requestedEnvironment)
+  if (existsSync(recoveryLayout.updateJournal)) {
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      path.join(root, 'launcher', 'portable-cli.mjs'), 'recover-update', '--json',
+      '--environment', requestedEnvironment,
+    ], {
+      cwd: root, windowsHide: true, timeout: 60000,
+      env: { ...process.env, DSH_PORTABLE_RUNTIME_ROOT: root },
+    })
+    const recovery = JSON.parse(stdout.trim())
+    await mkdir(logDirectory, { recursive: true })
+    await appendFile(path.join(logDirectory, 'launcher.log'),
+      `${new Date().toISOString()} [update-recovery] status=${recovery.status}\n`, 'utf8')
+  }
 }
 reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()

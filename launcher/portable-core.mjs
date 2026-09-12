@@ -742,7 +742,7 @@ export function parseCli(argv) {
       conflict = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recover-update', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
