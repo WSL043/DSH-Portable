@@ -130,11 +130,17 @@ test('runtime capsule extracts once, verifies its content, and follows a moved p
     await rm(app, { recursive: true, force: true })
 
     const phases = []
-    const first = await ensureRuntimeCapsule(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }, onProgress: phase => phases.push(phase) })
+    const progress = []
+    const first = await ensureRuntimeCapsule(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }, onProgress: (phase, fields) => { phases.push(phase); progress.push({ phase, ...fields }) } })
     assert.ok(phases.indexOf('capsule-verified') < phases.indexOf('extract-files-progress'))
     assert.equal(phases.at(-1), 'cache-committed')
     assert.equal(first.mode, 'capsule')
     assert.equal(first.reused, false)
+    for (const phase of ['extract-directories-progress', 'extract-files-progress']) {
+      const entries = progress.filter(entry => entry.phase === phase)
+      assert.equal(entries.at(-1).completed, entries.at(-1).total)
+      assert.ok(entries.every((entry, index) => entry.completed <= entry.total && (!index || entry.completed >= entries[index - 1].completed)))
+    }
     assert.equal(await readFile(path.join(first.runtimeRoot, 'app', 'package.json'), 'utf8'), 'package.json\n')
 
     const moved = path.join(parent, 'portable-b')

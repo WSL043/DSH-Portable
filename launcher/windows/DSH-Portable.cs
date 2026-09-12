@@ -5990,6 +5990,19 @@ namespace DshPortable
             string phase = JsonString(jsonLine, "phase");
             if (phase == "runtime-preparing")
                 statusLabel.Text = L("正在准备便携运行环境…", "Preparing the portable runtime…");
+            else if (phase == "runtime-directories" || phase == "runtime-files")
+            {
+                long completed = JsonLong(jsonLine, "completed");
+                long total = JsonLong(jsonLine, "total");
+                if (total <= 0) return;
+                int percent = (int)Math.Max(0, Math.Min(100, completed * 100D / total));
+                // Each percentage describes this phase, not an estimated ETA.
+                statusLabel.Text = (phase == "runtime-directories"
+                    ? L("正在准备运行环境…", "Preparing the runtime…")
+                    : L("正在展开运行文件…", "Unpacking runtime files…")) + " " + percent + "%";
+            }
+            else if (phase == "runtime-finalizing")
+                statusLabel.Text = L("正在完成运行环境准备…", "Finishing runtime preparation…");
             else if (phase == "runtime-ready")
                 statusLabel.Text = L("正在加载插件和会话…", "Loading plugins and sessions…");
             else if (phase == "plugins-ready" || phase == "workspace-starting")

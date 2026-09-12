@@ -62,7 +62,12 @@ if (cliOptions?.command === 'repair') {
 reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()
 const prepared = await ensureRuntimeCapsule(root, {
-  onProgress: (phase, fields) => appendStartupTrace(startupTrace, 'runtime-capsule', phase, fields),
+  onProgress: (phase, fields) => {
+    appendStartupTrace(startupTrace, 'runtime-capsule', phase, fields)
+    if (phase === 'extract-directories-progress') reportStartupProgress('runtime-directories', fields)
+    else if (phase === 'extract-files-progress') reportStartupProgress('runtime-files', fields)
+    else if (phase === 'cache-commit') reportStartupProgress('runtime-finalizing')
+  },
   onRetry: fields => appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-commit-retry', fields),
 })
 const preparationElapsed = performance.now() - preparationStarted

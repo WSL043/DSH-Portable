@@ -140,9 +140,17 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
       levels.get(depth).push(directory)
     }
   }
+  let preparedDirectories = 0
+  let lastDirectoryReport = performance.now()
+  progress('extract-directories-progress', { completed: 0, total: unique.size })
   for (const [, level] of [...levels].sort(([a], [b]) => a - b)) {
     for (let index = 0; index < level.length; index += 64) {
       await Promise.all(level.slice(index, index + 64).map(directory => mkdir(directory)))
+      preparedDirectories += Math.min(64, level.length - index)
+      if (performance.now() - lastDirectoryReport >= 500 || preparedDirectories === unique.size) {
+        progress('extract-directories-progress', { completed: preparedDirectories, total: unique.size })
+        lastDirectoryReport = performance.now()
+      }
     }
   }
   progress('extract-directories-ready')
@@ -151,12 +159,16 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
   let next = 0
   let completed = 0
   let failure
+  let lastFileReport = performance.now()
   await Promise.all(Array.from({ length: Math.min(32, files.length) }, async () => {
     while (!failure && next < files.length) {
       const { filename, bytes } = files[next++]
       try { await writeFile(filename, bytes) } catch (error) { failure ??= error; return }
       completed++
-      if (completed % 1024 === 0 || completed === files.length) progress('extract-files-progress', { completed, total: files.length })
+      if (performance.now() - lastFileReport >= 500 || completed === files.length) {
+        progress('extract-files-progress', { completed, total: files.length })
+        lastFileReport = performance.now()
+      }
     }
   }))
   if (failure) throw failure

@@ -13,9 +13,9 @@ on:
         type: boolean
         default: false
       scope:
-        description: Isolated tray bridge or the original native check sequence
+        description: Isolated native checks or cold runtime preparation measurement
         type: choice
-        options: [tray, native, migration, update]
+        options: [tray, native, migration, update, preparation]
         default: tray
       node_version:
         description: Harness Node version for controlled environment comparison
@@ -58,6 +58,17 @@ jobs:
           path: artifacts
           run-id: ${{ inputs.run_id }}
           github-token: ${{ github.token }}
+      - name: Compare cold runtime preparation without changing product defaults
+        if: inputs.scope == 'preparation'
+        shell: pwsh
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-preparation-benchmark-product'
+          New-Item -ItemType Directory -Force $Root | Out-Null
+          Get-FileHash artifacts/DSH-Portable-windows-x64-offline.zip | Format-List | Out-File evidence/artifact-sha256.txt
+          tar.exe -xf artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
+          node scripts/benchmark-runtime-preparation.mjs (Join-Path $Root 'DSH-Portable') evidence/preparation
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime preparation measurement failed' }
       - name: Verify tray bridge using existing product
         if: inputs.scope == 'tray'
         shell: pwsh
