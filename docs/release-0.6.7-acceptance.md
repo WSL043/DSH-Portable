@@ -6,4 +6,4 @@
 - 外部插件版本变化检测通过针对性测试和服务端构建；检测版本号变化，不宣称修复订阅插件历史 `undefined.get` 错误，也不涵盖相同版本号下修改文件。
 - [发布工作流](https://github.com/WSL043/DSH-Portable/actions/runs/34580228552)成功，发布复用验收产物。Windows 标准 ZIP 58,610,416 字节，完整离线 ZIP 341,783,522 字节。
 - 稳定和候选通道的五个平台 Portable 索引已逐一读取，首项均为 0.6.7。
-- [新 Portable 基线的内核重新验证](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/34580346648)已触发，记录时尚未确认完成。
+- [新 Portable 基线的内核重新验证](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/34580346648)已完成并成功（2026-09-12 回查确认）。该结论对应此次运行的基线，不代替后续提交的资格验证。

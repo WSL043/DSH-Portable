@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { assessStartupHandoff } from './startup-handoff-evidence.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -117,6 +118,17 @@ async function logTail(offset) {
   return value.slice(value.length >= offset ? offset : 0)
 }
 
+async function readAuditedStartupTrace(pid) {
+  const logsDirectory = path.dirname(launcherLog)
+  const recent = (await Promise.all(['startup-latest.jsonl', 'startup-previous.jsonl']
+    .map(name => readFile(path.join(logsDirectory, name), 'utf8').catch(() => ''))))
+    .join('\n').trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
+  const startupId = recent.find(entry => entry.pid === pid)?.startupId
+  assert.match(startupId ?? '', /^[a-f0-9]{32}$/i, 'missing audited native startup identity')
+  return (await readFile(path.join(logsDirectory, 'history', startupId, 'startup.jsonl'), 'utf8'))
+    .trim().split(/\r?\n/).map(line => JSON.parse(line))
+}
+
 async function capture(client, filename) {
   const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
   await writeFile(path.join(output, filename), Buffer.from(screenshot.data, 'base64'))
@@ -185,6 +197,7 @@ async function createExistingSession(client) {
 
 let launcher = null
 let client = null
+let auditError = null
 const logOffset = existsSync(launcherLog) ? (await readFile(launcherLog, 'utf8')).length : 0
 try {
   await execFileAsync(portableNode, [portableCli, ...stopArgs], {
@@ -229,7 +242,9 @@ try {
   let capturedReveal = false
   let capturedWorkspace = false
   let workspaceStableSamples = 0
-  while (Date.now() < startupDeadline) {
+  // Collect settling evidence for up to two seconds after the ready deadline.
+  // The native interactive-ready timestamp must still meet the original budget.
+  while (Date.now() < startupDeadline + 2000) {
     const state = await evaluate(client, `(() => {
       const visible = node => {
         if (!(node instanceof Element)) return false
@@ -264,6 +279,7 @@ try {
         candidates,
       }
     })()`)
+    state.observedAt = Date.now()
     state.log = await logTail(logOffset)
     samples.push(state)
     if (state.log.includes('dsh-first-paint-ready') && !state.bootVisible && state.bodyText.length > 0 && !capturedReveal) {
@@ -279,39 +295,35 @@ try {
     } else {
       workspaceStableSamples = 0
     }
-    if (workspaceStableSamples >= 8) break
+    if (workspaceStableSamples >= 8) {
+      const trace = await readAuditedStartupTrace(launcher.pid)
+      if (assessStartupHandoff({ samples, trace, pid: launcher.pid, deadline: startupDeadline }).reason === 'ready') break
+    }
     await new Promise(resolve => setTimeout(resolve, 20))
   }
 
-  const logsDirectory = path.dirname(launcherLog)
-  const recentTrace = (await Promise.all(['startup-latest.jsonl', 'startup-previous.jsonl']
-    .map(name => readFile(path.join(logsDirectory, name), 'utf8').catch(() => ''))))
-    .join('\n').trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
-  const auditedStartupId = recentTrace.find(entry => entry.pid === launcher.pid)?.startupId
-  assert.match(auditedStartupId ?? '', /^[a-f0-9]{32}$/i, 'missing audited native startup identity')
   // Another invocation can rotate the latest file while this host is loading.
   // The per-start history is the authoritative, complete trace for this PID.
-  const startupTrace = (await readFile(path.join(logsDirectory, 'history', auditedStartupId, 'startup.jsonl'), 'utf8'))
-    .trim().split(/\r?\n/).map(line => JSON.parse(line))
+  const startupTrace = await readAuditedStartupTrace(launcher.pid)
   const nativeLoading = startupTrace.find(entry => entry.phase === 'native-loading-ready' && entry.pid === launcher.pid)
   const nativeReady = startupTrace.find(entry => entry.phase === 'interactive-ready' && entry.pid === launcher.pid)
-  const revealSample = samples.find(sample => sample.log.includes('dsh-first-paint-ready')
-    && !sample.bootVisible
-    && sample.bodyText.length > 0)
-  const workspaceSample = samples.find(sample => revealSample
-    && sample.at > revealSample.at
-    && !sample.bootVisible
-    && sample.bodyText.length > 0)
+  const handoff = assessStartupHandoff({ samples, trace: startupTrace, pid: launcher.pid, deadline: startupDeadline })
+  const { revealSample, workspaceSample } = handoff
   await writeFile(path.join(output, 'samples.json'), JSON.stringify(samples, null, 2))
   await writeFile(path.join(output, 'native-startup-trace.json'), JSON.stringify(startupTrace, null, 2))
+  await writeFile(path.join(output, 'handoff-result.json'), JSON.stringify({
+    reason: handoff.reason, deadline: new Date(startupDeadline).toISOString(),
+    nativeReadyAt: nativeReady?.timestamp, overdueMs: handoff.overdueMs,
+    observationGraceMs: 2000, samples: samples.length,
+  }, null, 2))
   if (requireLoading) {
     assert.ok(capturedBoot && nativeLoading, 'the native loading surface was not captured and painted')
     assert.ok(nativeReady && nativeLoading.elapsedMs < nativeReady.elapsedMs,
       'native loading must precede the usable workspace handoff')
   }
-  assert.ok(revealSample, 'the native loading surface never handed off to the settled workspace')
-  assert.match(revealSample.log, /surface-ready-message/)
-  assert.match(revealSample.log, /surface-handoff:native-bridge/)
+  assert.equal(handoff.reason, 'ready', `startup handoff failed: ${handoff.reason}; see handoff-result.json`)
+  assert.ok(startupTrace.some(entry => entry.pid === launcher.pid && entry.phase === 'surface-ready-message'))
+  assert.ok(startupTrace.some(entry => entry.pid === launcher.pid && entry.phase === 'surface-handoff:native-bridge'))
   assert.equal(revealSample.bootVisible, false, 'the native surface revealed the intermediate DSH loader')
   assert.ok(revealSample.bodyText.length > 0, 'the native surface revealed an empty workspace')
   assert.ok(revealSample.visibleControls >= 2, 'the native surface revealed before primary controls were ready')
@@ -512,14 +524,23 @@ try {
     workspaceAt: Math.round(workspaceSample.at),
     settledAfterRevealMs: Math.round(workspaceSample.at - revealSample.at),
   }))
+} catch (error) {
+  auditError = error
+  throw error
 } finally {
   client?.close()
+  let stopError = null
   await execFileAsync(portableNode, [portableCli, ...stopArgs], {
     cwd: root,
     windowsHide: true,
     timeout: 60000,
-  }).catch(() => {})
+  }).catch(error => { stopError = error })
   if (launcher && launcher.exitCode === null) {
     await execFileAsync('taskkill.exe', ['/PID', String(launcher.pid), '/T', '/F'], { windowsHide: true }).catch(() => {})
   }
+  await mkdir(output, { recursive: true })
+  await writeFile(path.join(output, 'cleanup-result.json'), JSON.stringify({
+    stopPassed: !stopError, error: stopError?.message, auditPassed: !auditError && !stopError,
+  }, null, 2))
+  if (stopError && !auditError) throw stopError
 }

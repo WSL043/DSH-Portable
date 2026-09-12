@@ -644,7 +644,8 @@ test('Windows startup audit accepts log-backed loader evidence and persists fail
   assert.match(audit, /entry\.phase === 'native-loading-ready'/)
   assert.match(audit, /assert\.ok\(capturedBoot && nativeLoading/)
   assert.doesNotMatch(audit, /dsh-boot-surface-visible/)
-  assert.match(audit, /const revealSample = samples\.find\(sample => sample\.log\.includes\('dsh-first-paint-ready'\)\s*&& !sample\.bootVisible\s*&& sample\.bodyText\.length > 0\)/)
+  // Timing and stable-surface behavior are exercised by startup-handoff-evidence.test.mjs.
+  assert.match(audit, /assessStartupHandoff\(\{ samples, trace: startupTrace, pid: launcher\.pid, deadline: startupDeadline \}\)/)
   assert.match(audit, /startupTimeoutSeconds/)
   assert.match(audit, /url: String\(location\.origin \|\| ''\) \+ String\(location\.pathname \|\| ''\)/)
   assert.doesNotMatch(audit, /url: location\.href/)
