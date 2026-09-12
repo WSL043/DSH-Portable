@@ -309,12 +309,26 @@ async function packagedDshDependencyClosure(layout) {
   return links
 }
 
-export async function inspectPackagedDshRuntime(layout) {
+// Share a dependency snapshot only within one read-only assessment. Repair and
+// subsequent assessments always read the installed manifests again.
+export async function inspectDshRuntimeState(layout, { inspectProfileResolver = true } = {}) {
+  let links
   try {
-    const closure = await packagedDshDependencyClosure(layout)
-    return { ok: true, packages: closure.size, detail: `${closure.size} packages verified` }
+    links = await packagedDshDependencyClosure(layout)
   } catch (error) {
-    return { ok: false, packages: 0, detail: error?.message ?? String(error) }
+    const detail = error?.message ?? String(error)
+    return {
+      runtime: { ok: false, packages: 0, detail },
+      profileResolver: inspectProfileResolver
+        ? { ok: false, repairable: false, expected: 0, missing: [], wrongTarget: [], stale: [], detail }
+        : { ok: true, repairable: true, detail: 'created-on-start' },
+    }
+  }
+  return {
+    runtime: { ok: true, packages: links.size, detail: `${links.size} packages verified` },
+    profileResolver: inspectProfileResolver
+      ? await inspectManagedProfileModuleFallbackWithLinks(layout, links)
+      : { ok: true, repairable: true, detail: 'created-on-start' },
   }
 }
 
@@ -365,23 +379,9 @@ function resolverDetail({ missing, wrongTarget, stale }) {
   return parts.length ? parts.join('; ') : 'all managed profile packages resolve to the packaged runtime'
 }
 
-export async function inspectManagedProfileModuleFallback(layout) {
+async function inspectManagedProfileModuleFallbackWithLinks(layout, links) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const fallbackRoot = paths.join(layout.dshHome, 'profiles', 'node_modules')
-  let links
-  try {
-    links = await packagedDshDependencyClosure(layout)
-  } catch (error) {
-    return {
-      ok: false,
-      repairable: false,
-      expected: 0,
-      missing: [],
-      wrongTarget: [],
-      stale: [],
-      detail: error?.message ?? String(error),
-    }
-  }
 
   const expectedPackages = managedProfileExpectedPackages(layout, links)
   const missing = []

@@ -9,8 +9,7 @@ import {
   ensureDesktopBridgeFallback,
   inspectDesktopBridgeFallbacks,
   ensurePortableDirectories,
-  inspectManagedProfileModuleFallback,
-  inspectPackagedDshRuntime,
+  inspectDshRuntimeState,
   repairManagedProfileModuleFallback,
 } from './portable-core.mjs'
 import { redactDiagnosticText, readLogTail } from './diagnostic-policy.mjs'
@@ -61,7 +60,7 @@ const WINDOWS_DIAGNOSTIC_PROCESSES = Object.freeze([
   'pwsh.exe',
 ])
 
-async function runtimeChecks(layout) {
+function runtimeChecks(layout, closure) {
   const required = [
     ['runtime.node', layout.nodeExe],
     ['runtime.dsh', layout.dshBin],
@@ -82,7 +81,6 @@ async function runtimeChecks(layout) {
     repairable: false,
     detail: existsSync(filename) ? 'present' : 'missing-from-package',
   }))
-  const closure = await inspectPackagedDshRuntime(layout)
   checks.push({
     id: 'runtime.dshDependencyClosure',
     status: closure.ok ? 'ok' : 'error',
@@ -92,13 +90,7 @@ async function runtimeChecks(layout) {
   return checks
 }
 
-async function generatedChecks(layout) {
-  // Normal shutdown removes these move-sensitive links; startup recreates them.
-  const pendingStartup = !existsSync(path.join(layout.dshHome, 'profiles', 'node_modules'))
-    && !existsSync(layout.processState)
-  const profileResolver = pendingStartup
-    ? { ok: true, repairable: true, detail: 'created-on-start' }
-    : await inspectManagedProfileModuleFallback(layout)
+async function generatedChecks(layout, profileResolver) {
   return [
     {
       id: 'generated.dshProfileResolver',
@@ -111,7 +103,11 @@ async function generatedChecks(layout) {
 }
 
 export async function diagnosePortable(layout) {
-  const checks = [...await runtimeChecks(layout), ...await generatedChecks(layout)]
+  // Normal shutdown removes these move-sensitive links; startup recreates them.
+  const pendingStartup = !existsSync(path.join(layout.dshHome, 'profiles', 'node_modules'))
+    && !existsSync(layout.processState)
+  const { runtime, profileResolver } = await inspectDshRuntimeState(layout, { inspectProfileResolver: !pendingStartup })
+  const checks = [...runtimeChecks(layout, runtime), ...await generatedChecks(layout, profileResolver)]
   const needsFullPackage = checks.some((check) => check.status === 'error' && !check.repairable && check.requiresPackage !== false)
   return {
     schemaVersion: REPORT_SCHEMA,

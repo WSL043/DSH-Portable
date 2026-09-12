@@ -81,6 +81,7 @@ test('doctor accepts shutdown-cleaned links but detects their loss while a host 
 
 test('doctor detects a missing transitive DSH package before the profile fails to boot', async (t) => {
   const layout = await fixture(t)
+  assert.equal((await diagnosePortable(layout)).ok, true)
   await writeFile(path.join(layout.appDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), JSON.stringify({
     name: '@deepseek-ai/dsh',
     dependencies: { '@deepseek-ai/missing-runtime-package': '1.0.0' },
@@ -92,6 +93,16 @@ test('doctor detects a missing transitive DSH package before the profile fails t
   assert.equal(broken.checks.some(check => check.id === 'runtime.dshDependencyClosure'
     && check.status === 'error'
     && check.detail.includes('@deepseek-ai/missing-runtime-package')), true)
+
+  // A prior successful assessment must not hide a changed dependency graph,
+  // and repairing it must perform a fresh assessment rather than reuse failure.
+  const restored = path.join(layout.appDir, 'node_modules', '@deepseek-ai', 'missing-runtime-package')
+  await mkdir(restored, { recursive: true })
+  await writeFile(path.join(restored, 'package.json'), '{"name":"@deepseek-ai/missing-runtime-package"}')
+  const repaired = await repairPortable(layout)
+  assert.equal(repaired.ok, true)
+  assert.equal(repaired.checks.find(check => check.id === 'runtime.dshDependencyClosure').detail, '2 packages verified')
+  assert.equal(await readFile(path.join(layout.dshHome, 'sessions', 'keep', 'session.jsonl'), 'utf8'), 'private conversation')
 })
 
 test('doctor detects and repair rebuilds a missing managed profile resolver without replacing the package', async (t) => {
