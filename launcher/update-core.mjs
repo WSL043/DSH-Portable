@@ -349,11 +349,20 @@ async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs }) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
     const declared = Number(response.headers.get('content-length') ?? 0)
     if (declared > 256 * 1024) throw new Error('Update manifest is too large.')
-    const bytes = Buffer.from(await response.arrayBuffer())
-    if (bytes.length > 256 * 1024) throw new Error('Update manifest is too large.')
+    const chunks = []
+    let size = 0
+    if (response.body) {
+      for await (const chunk of response.body) {
+        size += chunk.byteLength
+        if (size > 256 * 1024) throw new Error('Update manifest is too large.')
+        chunks.push(chunk)
+      }
+    }
+    const bytes = Buffer.concat(chunks, size)
     return JSON.parse(bytes.toString('utf8'))
   } finally {
     clearTimeout(timer)
+    controller.abort()
   }
 }
 
@@ -423,10 +432,11 @@ export async function listEngineVersions({
 export async function listProductVersions({ layout, indexUrl, releaseChannel, allowHttp = false, fetchImpl = fetch, timeoutMs = 5000 }) {
   const installed = await readInstalledUpdateState(layout)
   if (releaseChannel) installed.releaseChannel = normalizeReleaseChannel(releaseChannel, installed.portableVersion)
+  const explicitIndex = Boolean(indexUrl)
   indexUrl ||= defaultProductUpdateIndexUrl(installed.releaseChannel, layout.platform, process.arch)
   let index
   try { index = await fetchJson(indexUrl, { allowHttp, fetchImpl, timeoutMs }) }
-  catch (error) { if (error.message !== 'HTTP 404') throw error; index = { schemaVersion: 1, releaseChannel: installed.releaseChannel, versions: [] } }
+  catch (error) { if (explicitIndex || error.message !== 'HTTP 404') throw error; index = { schemaVersion: 1, releaseChannel: installed.releaseChannel, versions: [] } }
   if (index?.schemaVersion !== 1 || index.releaseChannel !== installed.releaseChannel || !Array.isArray(index.versions) || index.versions.length > 20) throw new Error('Invalid Portable version catalog.')
   const platform = platformUpdateKey(layout.platform, process.arch)
   const versions = [], seen = new Set()

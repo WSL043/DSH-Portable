@@ -1166,4 +1166,34 @@ test('an unpublished default core catalog is distinct from a broken explicit URL
   assert.equal(result.status, 'channel-unpublished')
   assert.deepEqual(result.versions, [])
   await assert.rejects(listEngineVersions({ layout, fetchImpl, indexUrl: 'https://example.com/broken.json' }), /HTTP 404/)
+  assert.deepEqual((await listProductVersions({ layout, fetchImpl })).versions, [])
+  await assert.rejects(listProductVersions({ layout, fetchImpl, indexUrl: 'https://example.com/broken.json' }), /HTTP 404/)
+})
+
+test('catalog size limit stops a chunked response before the server finishes sending', { timeout: 3000 }, async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bounded-catalog-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.7', dshVersion: '0.1.5-rc.2', releaseChannel: 'stable' }))
+  for (const headers of [{}, { 'content-length': '1' }]) {
+    let cancelled = false
+    let signal
+    const fetchImpl = async (_url, options) => {
+      signal = options.signal
+      return new Response(new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(256 * 1024))
+          controller.enqueue(new Uint8Array(1))
+          // Deliberately never close: the client must stop reading on overflow.
+        },
+        cancel() { cancelled = true },
+      }), { headers })
+    }
+    await assert.rejects(listEngineVersions({ layout, fetchImpl }), /Update manifest is too large/)
+    assert.equal(cancelled, true)
+    assert.equal(signal.aborted, true)
+  }
+  const json = JSON.stringify({ schemaVersion: 1, versions: [] })
+  assert.deepEqual((await listEngineVersions({ layout, fetchImpl: async () => new Response(json.padEnd(256 * 1024, ' ')) })).versions, [])
 })
