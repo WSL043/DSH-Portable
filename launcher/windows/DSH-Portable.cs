@@ -6132,6 +6132,14 @@ namespace DshPortable
                 ? stateRoot
                 : Directory.GetParent(Directory.GetParent(stateRoot).FullName).FullName;
             start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = baseStateRoot;
+            // Only the preparation process gets this default. runtime-entry
+            // clears it before starting the core or plugin helpers.
+            if (actionArgs.Length > 0 && actionArgs[0] == "start"
+                && !start.EnvironmentVariables.ContainsKey("UV_THREADPOOL_SIZE"))
+            {
+                start.EnvironmentVariables["UV_THREADPOOL_SIZE"] = "16";
+                start.EnvironmentVariables["DSH_PORTABLE_PREPARATION_POOL"] = "16";
+            }
             if (startupTraceActive)
             {
                 start.EnvironmentVariables["DSH_PORTABLE_STARTUP_ID"] = startupId;

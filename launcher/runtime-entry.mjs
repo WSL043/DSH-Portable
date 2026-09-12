@@ -61,6 +61,7 @@ if (cliOptions?.command === 'repair') {
 }
 reportStartupProgress('runtime-preparing')
 const preparationStarted = performance.now()
+const preparationPool = process.env.UV_THREADPOOL_SIZE || 'default'
 const prepared = await ensureRuntimeCapsule(root, {
   onProgress: (phase, fields) => {
     appendStartupTrace(startupTrace, 'runtime-capsule', phase, fields)
@@ -69,6 +70,11 @@ const prepared = await ensureRuntimeCapsule(root, {
     else if (phase === 'cache-commit') reportStartupProgress('runtime-finalizing')
   },
   onRetry: fields => appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-commit-retry', fields),
+}).finally(() => {
+  if (process.env.DSH_PORTABLE_PREPARATION_POOL === '16') {
+    delete process.env.DSH_PORTABLE_PREPARATION_POOL
+    if (process.env.UV_THREADPOOL_SIZE === '16') delete process.env.UV_THREADPOOL_SIZE
+  }
 })
 const preparationElapsed = performance.now() - preparationStarted
 reportStartupProgress('runtime-ready', { reused: prepared.reused === true })
@@ -76,6 +82,7 @@ appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-capsule-ready', {
   mode: prepared.mode,
   reused: prepared.reused === true,
   elapsedMsRuntime: Math.round(preparationElapsed),
+  fileThreadPool: preparationPool,
 })
 try {
   await mkdir(logDirectory, { recursive: true })
