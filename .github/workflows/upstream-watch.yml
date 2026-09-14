@@ -38,6 +38,26 @@ permissions:
   pull-requests: write
 
 jobs:
+  desktop-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Collect official desktop source and release evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/check-official-desktop.mjs
+      - uses: actions/upload-artifact@v7
+        with:
+          name: official-desktop-review
+          path: build/official-desktop-intake/
+          retention-days: 30
+          if-no-files-found: error
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 45
