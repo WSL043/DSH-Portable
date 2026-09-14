@@ -8,6 +8,7 @@ window.__ModuleLoader__.load({
     const copy = {
       zh: {
         title: 'Portable',
+        dataExport: '导出数据', exportFormat: '保护方式', exportPlain: '普通文件', exportEncrypted: '密码加密', continue: '继续',
         updates: '更新',
         updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: '候选版（Alpha / Beta / RC）',
         updateChannelHint: '稳定版适合日常使用；候选版按成熟度提供 Alpha、Beta 或 RC，可能不完整或不稳定。切换不会自动降级当前版本。',
@@ -53,6 +54,7 @@ window.__ModuleLoader__.load({
       },
       en: {
         title: 'Portable',
+        dataExport: 'Export data', exportFormat: 'Protection', exportPlain: 'Standard file', exportEncrypted: 'Password encrypted', continue: 'Continue',
         updates: 'Updates',
         updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Candidate (Alpha / Beta / RC)',
         updateChannelHint: 'Stable is recommended for daily use. Candidates may be Alpha, Beta, or RC builds and may be incomplete or unstable. Switching never downgrades the installed version.',
@@ -233,19 +235,19 @@ window.__ModuleLoader__.load({
       })
     }
 
-    function PortableSelector({ value, items, onSelect, label, primitives }) {
+    function PortableSelector({ value, items, onSelect, label, primitives, disabled = false }) {
       const h = React.createElement
       const [open, setOpen] = React.useState(false)
       const selected = items.find(item => item.id === value)
       const anchor = h('button', {
-        type: 'button', className: 'dshPortableSelector', 'aria-label': label,
+        type: 'button', className: 'dshPortableSelector', 'aria-label': label, disabled,
         'aria-haspopup': 'menu', 'aria-expanded': open,
         onClick: () => setOpen(current => !current),
       }, selected?.label || value, h(primitives.IconChevronDownOutline14, { className: 'dshPortableSelectorChevron' }))
       return h(primitives.Menu, {
-        open, anchor, items, selectedId: value, align: 'end', portal: true,
+        open: open && !disabled, anchor, items, selectedId: value, align: 'end', portal: true,
         onClose: () => setOpen(false),
-        onSelect: id => { setOpen(false); onSelect(id) },
+        onSelect: id => { setOpen(false); if (!disabled) onSelect(id) },
       })
     }
 
@@ -346,6 +348,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
       const [dataScope, setDataScope] = useState('full')
+      const [exportKind, setExportKind] = useState('standard')
       const [privatePassword, setPrivatePassword] = useState('')
       const [privatePasswordConfirm, setPrivatePasswordConfirm] = useState('')
       const [importPassword, setImportPassword] = useState('')
@@ -552,8 +555,11 @@ window.__ModuleLoader__.load({
       }
       const action = (name, path) => {
         setBusy(name); setStatus('maintenance', '')
-        fetch(path, { method: 'POST' }).then(res => res.json()).then(body => {
-          if (body.error) throw new Error(body.error)
+        fetch(path, { method: 'POST' }).then(async res => {
+          const body = await res.json()
+          if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`)
+          return body
+        }).then(body => {
           if (name === 'doctor') {
             const count = (body.checks || []).filter(item => item.status !== 'ok').length
             setStatus('maintenance', body.needsFullPackage ? t('fullPackage') : count ? format(t('issues'), count) : t('healthy'))
@@ -679,9 +685,9 @@ window.__ModuleLoader__.load({
             body: JSON.stringify({ kind, scope: dataScope, output: output || undefined, password: kind === 'private' ? privatePassword : undefined }),
           })
           const body = await res.json()
-          if (body.error) throw new Error(body.error)
+          if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`)
           setStatus('data', format(t('dataSaved'), body.output || ''))
-          if (kind === 'private') closePrivateDialog()
+          closePrivateDialog()
         } catch (error) {
           setStatus('data', format(t('failed'), error.message || error))
         } finally {
@@ -863,7 +869,7 @@ window.__ModuleLoader__.load({
         h(primitives.Input, { style: styles.modalInput, maxLength: 40, value: environmentName, onChange: event => setEnvironmentName(event.target.value), autoFocus: true }))) : null
       const privateDialog = dataDialog === 'private' ? h(primitives.Modal, {
         open: true,
-        onClose: closePrivateDialog,
+        onClose: () => { if (!busy) closePrivateDialog() },
         title: t('dataPrivate'),
         description: t('dataPrivateDialogHint'),
         footer: h(React.Fragment, null,
@@ -881,7 +887,8 @@ window.__ModuleLoader__.load({
           h('span', { style: styles.modalLabel }, t('dataPasswordConfirm')),
           h(primitives.Input, { style: styles.modalInput, type: 'password', autoComplete: 'new-password', value: privatePasswordConfirm, onChange: event => setPrivatePasswordConfirm(event.target.value) })),
         privatePasswordMismatch && h('div', { style: styles.modalError, role: 'alert' }, t('dataPasswordMismatch')),
-        h('div', { style: styles.hint }, t('chooseSaveLocation')))) : null
+        h('div', { style: styles.hint }, t('chooseSaveLocation')),
+        inlineStatus('data'))) : null
       const importPasswordDialog = dataDialog === 'import-password' ? h(primitives.Modal, {
         open: true, onClose: closeImportDialog, title: t('dataImportPassword'), description: t('dataImportPasswordHint'),
         footer: h(React.Fragment, null,
@@ -907,22 +914,33 @@ window.__ModuleLoader__.load({
           hiddenImportFileCount > 0 && h('div', { style: styles.importFile }, format(t('dataImportMoreFiles'), hiddenImportFileCount))))) : null
       const dataSection = h('section', { style: styles.section, 'aria-label': t('data') },
         h('div', { style: styles.sectionHeading }, t('data')),
-        h('div', { style: styles.item }, h('div', { style: styles.label }, t('dataScope')),
-          h(PortableSelector, { primitives, label: t('dataScope'), value: dataScope, items: [{ id: 'full', label: t('dataFull') }, { id: 'data-only', label: t('dataOnly') }], onSelect: setDataScope })),
         h('div', { style: { ...styles.item, borderBottom: 'none' } },
           h('div', { style: styles.text }, h('div', { style: styles.label }, t('dataTitle')), h('div', { style: styles.hint }, t('dataHint')), inlineStatus('data')),
           h('div', { style: styles.rowActions },
             h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataImportHint'), disabled: Boolean(busy), onClick: beginImport }, t('dataImport')),
-            h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataStandardHint'), disabled: Boolean(busy), onClick: () => exportData('standard') }, busy === 'data-standard' ? t('checking') : t('dataStandard')),
-            h(primitives.Button, { size: 'sm', variant: 'outline', title: t('dataPrivateHint'), disabled: Boolean(busy), onClick: () => setDataDialog('private') }, t('dataPrivate')))))
+            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => { setStatus('data', ''); setDataDialog('export') } }, t('dataExport')))))
+      const exportDialog = dataDialog === 'export' ? h(primitives.Modal, {
+        open: true, title: t('dataExport'), description: t('dataHint'),
+        onClose: () => { if (!busy) setDataDialog('') },
+        footer: h(React.Fragment, null,
+          h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: () => setDataDialog('') }, t('cancel')),
+          h(primitives.Button, { variant: 'primary', disabled: Boolean(busy), onClick: () => exportKind === 'private' ? setDataDialog('private') : exportData('standard') }, busy ? t('checking') : t('continue'))),
+      }, h('div', { style: styles.modalFields },
+        h('div', { style: styles.modalLabel }, t('dataScope')),
+        h(PortableSelector, { primitives, label: t('dataScope'), value: dataScope, disabled: Boolean(busy), items: [{ id: 'full', label: t('dataFull') }, { id: 'data-only', label: t('dataOnly') }], onSelect: setDataScope }),
+        h('div', { style: styles.modalLabel }, t('exportFormat')),
+        h(PortableSelector, { primitives, label: t('exportFormat'), value: exportKind, disabled: Boolean(busy), items: [{ id: 'standard', label: t('exportPlain') }, { id: 'private', label: t('exportEncrypted') }], onSelect: setExportKind }),
+        h('div', { style: styles.hint }, t(exportKind === 'private' ? 'dataPrivateHint' : 'dataStandardHint')),
+        inlineStatus('data'))) : null
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
         inlineStatus('portable'),
-        environmentSection,
         desktopSection,
-        careSection,
         dataSection,
+        environmentSection,
+        careSection,
         environmentCreateDialog,
+        exportDialog,
         privateDialog,
         importPasswordDialog,
         importConfirmDialog)

@@ -607,3 +607,35 @@ test('web cache maintenance requires host support and waits for the matching nat
     assert.equal(listeners.size, 0)
   } finally { mounted.unmount() }
 })
+
+test('Portable export options live in the export dialog and HTTP failure keeps it open', async () => {
+  const exports = []
+  const client = await loadSettingsComponent(async (url, options) => {
+    if (url === '/dsh-portable/data-export') { exports.push(JSON.parse(options.body)); return jsonResponse({}, { ok: false, status: 503 }) }
+    return jsonResponse({ settings: settings(), versions: {} })
+  }, { page: 'portable' })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const sections = mounted.tree.children.filter(n => n?.type === 'section').map(n => n.props['aria-label'])
+    assert.deepEqual(sections, ['Desktop behavior', 'Data', 'Maintenance'])
+    assert.equal(findNode(mounted.tree, n => n.props?.label === 'Export scope'), null)
+    const button = findNode(mounted.tree, n => typeof n.props?.onClick === 'function' && textContent(n) === 'Export data')
+    assert.ok(button)
+    button.props.onClick(); await settle()
+    const modal = findNode(mounted.tree, n => n.props?.title === 'Export data' && n.props?.footer)
+    assert.ok(modal)
+    const choices = []
+    const walk = n => { if (!n || typeof n !== 'object') return; if (n.props?.items) choices.push(n); for (const c of n.children || []) Array.isArray(c) ? c.forEach(walk) : walk(c) }
+    walk(modal)
+    choices.find(n => n.props.items.some(i => i.id === 'data-only')).props.onSelect('data-only')
+    await settle()
+    const updated = findNode(mounted.tree, n => n.props?.title === 'Export data' && n.props?.footer)
+    findNode(updated.props.footer, n => typeof n.props?.onClick === 'function' && textContent(n) === 'Continue').props.onClick()
+    await settle()
+    assert.equal(exports[0].scope, 'data-only')
+    assert.equal(exports[0].kind, 'standard')
+    assert.ok(findNode(mounted.tree, n => n.props?.title === 'Export data' && n.props?.footer))
+    assert.ok(textContent(mounted.tree).includes('HTTP 503'))
+  } finally { mounted.unmount() }
+})
