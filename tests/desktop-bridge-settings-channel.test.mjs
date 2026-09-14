@@ -534,6 +534,23 @@ test('Portable maintenance stays separate from Updates and does not fetch the co
   mounted.unmount()
 })
 
+test('Portable maintenance reports an incomplete doctor result', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/doctor'
+    ? {}
+    : { settings: settings(), versions: {} }), { page: 'portable' })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const check = findNode(mounted.tree, node => typeof node.props?.onClick === 'function' && textContent(node) === 'Run check')
+    assert.ok(check)
+    check.props.onClick()
+    await settle()
+    const content = textContent(mounted.tree)
+    assert.match(content, /incomplete result/)
+    assert.doesNotMatch(content, /No issues found/)
+  } finally { mounted.unmount() }
+})
+
 
 test('installed core is not shown as an unavailable install target', async () => {
   const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'

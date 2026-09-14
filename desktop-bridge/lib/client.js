@@ -8,6 +8,7 @@ window.__ModuleLoader__.load({
     const copy = {
       zh: {
         title: 'Portable',
+        invalidResult: '未收到完整的操作结果，请重试或导出支持报告。',
         dataExport: '导出数据', exportFormat: '保护方式', exportPlain: '普通文件', exportEncrypted: '密码加密', continue: '继续',
         updates: '更新',
         updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: '候选版（Alpha / Beta / RC）',
@@ -54,6 +55,7 @@ window.__ModuleLoader__.load({
       },
       en: {
         title: 'Portable',
+        invalidResult: 'The operation returned an incomplete result. Retry or export a support report.',
         dataExport: 'Export data', exportFormat: 'Protection', exportPlain: 'Standard file', exportEncrypted: 'Password encrypted', continue: 'Continue',
         updates: 'Updates',
         updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Candidate (Alpha / Beta / RC)',
@@ -561,9 +563,13 @@ window.__ModuleLoader__.load({
           return body
         }).then(body => {
           if (name === 'doctor') {
-            const count = (body.checks || []).filter(item => item.status !== 'ok').length
+            if (!Array.isArray(body.checks) || !body.checks.length || body.checks.some(item => !item || typeof item.status !== 'string')) throw new Error(t('invalidResult'))
+            const count = body.checks.filter(item => item.status !== 'ok').length
             setStatus('maintenance', body.needsFullPackage ? t('fullPackage') : count ? format(t('issues'), count) : t('healthy'))
-          } else if (name === 'repair') setStatus('maintenance', t('scheduled'))
+          } else if (name === 'repair') {
+            if (body.scheduled !== true) throw new Error(t('invalidResult'))
+            setStatus('maintenance', t('scheduled'))
+          }
           else setStatus('maintenance', format(t('exported'), body.output || ''))
         }).catch(error => setStatus('maintenance', format(t('failed'), error.message || error))).finally(() => setBusy(''))
       }
@@ -577,7 +583,8 @@ window.__ModuleLoader__.load({
           })
           const body = await response.json()
           if (!response.ok || body.error) throw new Error(body.error || `HTTP ${response.status}`)
-          setStatus('maintenance', format(t('exported'), body.output || output))
+          if (typeof body.output !== 'string' || !body.output.trim()) throw new Error(t('invalidResult'))
+          setStatus('maintenance', format(t('exported'), body.output))
         } catch (error) { setStatus('maintenance', format(t('failed'), error.message || error)) }
         finally { setBusy('') }
       }
@@ -686,6 +693,7 @@ window.__ModuleLoader__.load({
           })
           const body = await res.json()
           if (!res.ok || body.error) throw new Error(body.error || `HTTP ${res.status}`)
+          if (typeof body.output !== 'string' || !body.output.trim()) throw new Error(t('invalidResult'))
           setStatus('data', format(t('dataSaved'), body.output || ''))
           closePrivateDialog()
         } catch (error) {
@@ -858,7 +866,7 @@ window.__ModuleLoader__.load({
       const privatePasswordMismatch = privatePasswordConfirm.length > 0 && privatePassword !== privatePasswordConfirm
       const environmentCreateDialog = environmentDialog ? h(primitives.Modal, {
         open: true,
-        onClose: () => { setEnvironmentDialog(false); setEnvironmentName('') },
+        onClose: () => { if (!busy) { setEnvironmentDialog(false); setEnvironmentName('') } },
         title: t('newEnvironment'),
         description: t('environmentHint'),
         footer: h(React.Fragment, null,
@@ -871,7 +879,7 @@ window.__ModuleLoader__.load({
         open: true,
         onClose: () => { if (!busy) closePrivateDialog() },
         title: t('dataPrivate'),
-        description: t('dataPrivateDialogHint'),
+        description: `${t('dataScope')}：${t(dataScope === 'data-only' ? 'dataOnly' : 'dataFull')}`,
         footer: h(React.Fragment, null,
           h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closePrivateDialog }, t('cancel')),
           h(primitives.Button, {
@@ -890,7 +898,7 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.hint }, t('chooseSaveLocation')),
         inlineStatus('data'))) : null
       const importPasswordDialog = dataDialog === 'import-password' ? h(primitives.Modal, {
-        open: true, onClose: closeImportDialog, title: t('dataImportPassword'), description: t('dataImportPasswordHint'),
+        open: true, onClose: () => { if (!busy) closeImportDialog() }, title: t('dataImportPassword'), description: t('dataImportPasswordHint'),
         footer: h(React.Fragment, null,
           h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closeImportDialog }, t('cancel')),
           h(primitives.Button, { variant: 'primary', disabled: Boolean(busy) || importPassword.length < 8, onClick: unlockImport }, busy ? t('checking') : t('dataImportReview'))),
@@ -901,7 +909,7 @@ window.__ModuleLoader__.load({
       const importPreviewFiles = Array.isArray(importInfo?.files) ? importInfo.files.map(String).slice(0, 80) : []
       const hiddenImportFileCount = Array.isArray(importInfo?.files) ? Math.max(0, importInfo.files.length - importPreviewFiles.length) : 0
       const importConfirmDialog = dataDialog === 'import-confirm' && importInfo ? h(primitives.Modal, {
-        open: true, onClose: closeImportDialog, title: t('dataImportReview'),
+        open: true, onClose: () => { if (!busy) closeImportDialog() }, title: t('dataImportReview'),
         description: format(t('dataImportReviewHint'), Array.isArray(importInfo.files) ? importInfo.files.length : 0),
         footer: h(React.Fragment, null,
           h(primitives.Button, { variant: 'ghost', disabled: Boolean(busy), onClick: closeImportDialog }, t('cancel')),
