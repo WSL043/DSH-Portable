@@ -455,7 +455,7 @@ try {
     action.scrollIntoView({ block: 'center' })
     return true
   })()`, Boolean, 'data export availability')
-  await waitForValue(client, clickButton(['导出数据', 'Export data']), value => value?.clicked, 'standard export action')
+  await waitForValue(client, clickButton(['导出数据', 'Export data']), value => value?.clicked, 'migration export action')
   await waitForValue(client, clickButton(['保护方式', 'Protection']), value => value?.clicked, 'export protection selector')
   await waitForValue(client, clickChoice(['普通文件', 'Standard file']), value => value?.clicked, 'standard export choice')
   await waitForValue(client, clickButton(['继续', 'Continue']), value => value?.clicked, 'standard export continuation')
