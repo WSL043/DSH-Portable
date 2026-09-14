@@ -7,7 +7,7 @@ window.__ModuleLoader__.load({
 
     const copy = {
       zh: {
-        title: 'Portable',
+        title: '桌面与数据',
         invalidResult: '未收到完整的操作结果，请重试或导出支持报告。',
         dataExport: '导出数据', exportFormat: '保护方式', exportPlain: '普通文件', exportEncrypted: '密码加密', continue: '继续',
         updates: '更新',
@@ -54,7 +54,7 @@ window.__ModuleLoader__.load({
         dataImportCategories: '包含：{0}', dataImportFiles: '文件明细', dataImportMoreFiles: '另有 {0} 个文件', dataImportRestart: '重启并导入', dataImporting: '正在重启并导入…',
       },
       en: {
-        title: 'Portable',
+        title: 'Desktop & data',
         invalidResult: 'The operation returned an incomplete result. Retry or export a support report.',
         dataExport: 'Export data', exportFormat: 'Protection', exportPlain: 'Standard file', exportEncrypted: 'Password encrypted', continue: 'Continue',
         updates: 'Updates',
@@ -258,11 +258,17 @@ window.__ModuleLoader__.load({
     const portableShellSummaryListeners = new Set()
 
     function loadPortableShellSummary() {
-      if (portableShellSummary) return Promise.resolve(portableShellSummary)
       if (portableShellSummaryPromise) return portableShellSummaryPromise
+      if (portableShellSummary) return Promise.resolve(portableShellSummary)
       portableShellSummaryPromise = fetch('/dsh-portable/settings', { cache: 'no-store' })
-        .then(response => response.json())
+        .then(async response => {
+          if (!response.ok) throw new Error('Portable settings unavailable')
+          return response.json()
+        })
         .then(async body => {
+          // Local environment identity must not wait for network update checks.
+          portableShellSummary = { environments: body.environments, availableScopes: [] }
+          for (const listener of portableShellSummaryListeners) listener(portableShellSummary)
           const enabled = [
             body.settings?.productUpdateCheckEnabled ? 'product' : '',
             body.settings?.engineUpdateCheckEnabled ? 'engine' : '',

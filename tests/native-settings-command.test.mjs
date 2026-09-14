@@ -97,3 +97,15 @@ test('Updates uses the shared download icon and preserves other navigation icons
   assert.equal(patchPortableUpdatesIcon(output), output)
   assert.throws(() => patchPortableUpdatesIcon('changed upstream'), /expected 1 match/)
 })
+
+test('Desktop and data adds its own monitor icon without changing existing tabs', () => {
+  const previous = 'function navIcon(id) { /* dsh-portable-updates-nav-icon-v1 */ if (id === "portable-updates") return "download"; return "existing"; }'
+  const output = patchPortableUpdatesIcon(previous)
+  const context = { react_jsx_runtime: { jsx: (icon, props) => ({ icon, props }) }, SettingsRoot_module_css_default: { navIcon: 'nav-icon' } }
+  vm.runInNewContext(`${output}; this.icon = navIcon`, context)
+  assert.equal(context.icon('portable').icon, 'svg')
+  assert.equal(context.icon('portable').props.width, 16)
+  assert.equal(context.icon('general'), 'existing')
+  assert.equal(context.icon('portable-updates'), 'download')
+  assert.equal(patchPortableUpdatesIcon(output), output)
+})

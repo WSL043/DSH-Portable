@@ -12,3 +12,5 @@ Validation:
 - The isolated first-run dialogs were dismissed before the final screenshots. No model credentials or user data were used. Test backend was stopped through its normal CLI.
 
 This is real-control browser acceptance, not final packaged native-host acceptance. No release was published or installed application replaced. Whole-profile cache deletion and a background cache scanner remain excluded.
+
+Follow-up: navigation is now named 桌面与数据 / Desktop & data with a 16 px currentColor monitor icon scoped to the Portable tab. The existing update/general icons are preserved. Browser acceptance verified the actual SVG path and absence of horizontal overflow (`build/settings-desktop-data.png`). Local environment summary now publishes before background update checks finish; a stalled-network regression confirms no duplicate requests. The 19 focused settings/icon/summary tests pass (`build/settings-label-regression.log`). No broad startup-speed improvement is claimed from this change. The isolated backend was stopped normally.

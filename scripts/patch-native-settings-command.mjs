@@ -33,14 +33,23 @@ export function patchNativeSettingsCommand(source) {
 
 export function patchPortableUpdatesIcon(source) {
   const marker = 'dsh-portable-updates-nav-icon-v1'
-  if (source.includes(marker)) return source
   const seam = 'function navIcon(id) {'
-  return replaceRequired(source, seam, `${seam}
+  if (!source.includes(marker)) source = replaceRequired(source, seam, `${seam}
             /* ${marker} */
             if (id === "portable-updates") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDownloadOutline16, {
                 className: SettingsRoot_module_css_default.navIcon,
                 size: 16
             });`, 'settings navigation icon seam changed upstream')
+  const desktopMarker = 'dsh-portable-desktop-nav-icon-v1'
+  if (source.includes(desktopMarker)) return source
+  return replaceRequired(source, seam, `${seam}
+            /* ${desktopMarker} */
+            if (id === "portable") return (0, react_jsx_runtime.jsx)("svg", {
+                className: SettingsRoot_module_css_default.navIcon,
+                width: 16, height: 16, viewBox: "0 0 16 16", fill: "none",
+                stroke: "currentColor", strokeWidth: 1.25, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true,
+                children: (0, react_jsx_runtime.jsx)("path", { d: "M2.5 2.5h11v8h-11zM8 10.5v3m-3 0h6" })
+            });`, 'Portable navigation icon seam changed upstream')
 }
 
 async function main() {
