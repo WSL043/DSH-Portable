@@ -193,6 +193,8 @@ export function mountPortableRoutes(webServer, options = {}) {
     ? scope => runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
     : async scope => {
       const { listInstalledVersions } = await import(pathToFileURL(path.join(root, 'launcher', 'update-core.mjs')).href)
+      // An independently updated kernel can still be hosted by an older launcher.
+      if (typeof listInstalledVersions !== 'function') return runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
       return listInstalledVersions({ root, baseStateRoot, scope })
     }
   const probeNotifications = options.notificationAvailability || windowsNotificationAvailability

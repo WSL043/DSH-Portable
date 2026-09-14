@@ -8,6 +8,7 @@ This is engineering evidence for the next release, not release qualification.
 - Windows cache maintenance uses the same transport and capability contract as other desktop operations. macOS/Linux do not advertise this Windows-specific operation.
 - Desktop version catalogs and the CLI share `listInstalledVersions`. Desktop reads no longer spawn a Node process. The existing manifest validation, compatibility checks, channel rules and request timeout remain in `update-core.mjs`.
 - Preferences are reread for each catalog request. There is no new persistent version cache to become stale after a channel change.
+- Unreadable preferences retain the existing default-channel fallback. If an independently updated bridge runs with an older launcher lacking the shared reader, it uses the legacy CLI entry point.
 
 ## Decisions from the ownership and operation audit
 
@@ -25,4 +26,4 @@ Local evidence is in `build/framework-acceptance/` (ignored build output). Five 
 
 Tests cover explicit/legacy/unknown capability contracts, missing capability disabling, channel changes, and desktop catalogs operating without a CLI executable. Existing update/data-import and full regression results are recorded alongside native compile output. Platform artifact checks are required before a release; source tests and local compilation alone do not qualify a shipped package.
 
-Final local regression: 635 passed, zero failed or skipped (`node --test tests/*.test.mjs`, the package test command). The first run had one stale exact capability-object assertion; it was corrected to expect the unsupported cache capability to be false. The Windows production compiler block succeeded with four existing obsolete toast API warnings. The injected Windows script also passed message forwarding, listener removal and repeated-injection checks in a JavaScript fixture; this is not a substitute for native artifact acceptance.
+Final local regression: 636 passed, zero failed or skipped (`node --test tests/*.test.mjs`, the package test command). The first run had one stale exact capability-object assertion; it was corrected to expect the unsupported cache capability to be false. The Windows production compiler block succeeded with four existing obsolete toast API warnings. The injected Windows script also passed message forwarding, listener removal and repeated-injection checks in a JavaScript fixture; this is not a substitute for native artifact acceptance.

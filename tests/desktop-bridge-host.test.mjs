@@ -53,6 +53,21 @@ test('desktop catalogs work without a CLI executable and reread channel preferen
   }
 })
 
+test('a new desktop bridge can still list versions using an older launcher', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-legacy-catalog-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'launcher'))
+  await writeFile(path.join(root, 'launcher', 'update-core.mjs'), 'export const legacy = true;')
+  await writeFile(path.join(root, 'launcher', 'runtime-entry.mjs'), "console.log(JSON.stringify({versions:[],scope:process.argv[process.argv.indexOf('--scope')+1]}));")
+  const routes = new Map()
+  const dispose = mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root })
+  t.after(dispose)
+  const result = response()
+  await routes.get('/dsh-portable/engine-versions').handler(request('GET'), result)
+  assert.equal(result.status, 200)
+  assert.equal(result.json().scope, 'engine')
+})
+
 test('Portable settings routes default to privacy-safe updates and preserve unrelated settings', async (t) => {
   const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-settings-'))
   t.after(() => rm(stateRoot, { recursive: true, force: true }))
