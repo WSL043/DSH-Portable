@@ -386,7 +386,7 @@ export async function readInstalledUpdateState(layout) {
 export async function listInstalledVersions({ root, baseStateRoot = root, scope, releaseChannel, ...options }) {
   if (!['engine', 'product'].includes(scope)) throw new Error('Unsupported update scope.')
   if (!releaseChannel) {
-    const settings = await readJson(path.join(baseStateRoot, 'data', 'launcher-settings.json'), null)
+    const settings = await readJson(path.join(baseStateRoot, 'data', 'launcher-settings.json'), null).catch(() => null)
     if (['stable', 'candidate'].includes(settings?.updateChannel)) releaseChannel = settings.updateChannel
   }
   return (scope === 'engine' ? listEngineVersions : listProductVersions)({

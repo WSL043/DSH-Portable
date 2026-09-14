@@ -1166,6 +1166,8 @@ test('shared catalog reader honors base preferences on every call and explicit c
   assert.equal((await listInstalledVersions(options)).releaseChannel, 'candidate')
   assert.equal((await listInstalledVersions({ ...options, releaseChannel: 'stable' })).releaseChannel, 'stable')
   assert.match(urls[1], /candidate/)
+  await writeFile(path.join(baseStateRoot, 'data', 'launcher-settings.json'), '{incomplete')
+  assert.equal((await listInstalledVersions(options)).releaseChannel, 'stable')
   await assert.rejects(listInstalledVersions({ ...options, scope: 'arbitrary' }), /Unsupported update scope/)
 })
 
