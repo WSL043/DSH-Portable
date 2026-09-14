@@ -408,11 +408,11 @@ try {
     }
   })()`, value => value?.localized, 'localized permission label in General settings')
   assert.deepEqual(permissionLabels, { localized: true, mixed: false })
-  await waitForValue(client, clickButton(['Portable']), value => value?.clicked, 'Portable settings navigation')
+  await waitForValue(client, clickButton(['Desktop & data', '桌面与数据', 'Portable']), value => value?.clicked, 'Portable settings navigation')
   const portableSettings = await waitForValue(client, `(() => {
     const text = document.body?.innerText || ''
     return {
-      title: /(?:^|\\n)(?:Portable|便携版)(?:\\n|$)/.test(text),
+      title: /(?:^|\\n)(?:Desktop & data|桌面与数据|Portable|便携版)(?:\\n|$)/.test(text),
       notifications: /Task notifications|任务通知/.test(text),
       maintenance: /Check and repair|检查与修复/.test(text),
     }
@@ -454,10 +454,10 @@ try {
     await mkdir(path.dirname(generalScreenshotPath), { recursive: true })
     await writeFile(generalScreenshotPath, Buffer.from(screenshot.data, 'base64'))
   }
-  await waitForValue(client, clickButton(['Portable']), value => value?.clicked, 'Portable settings navigation after updates')
+  await waitForValue(client, clickButton(['Desktop & data', '桌面与数据', 'Portable']), value => value?.clicked, 'Portable settings navigation after updates')
   if (generalBottomScreenshotPath) {
     await evaluate(client, `(() => {
-      const marker = [...document.querySelectorAll('*')].find(item => ['Portable', '便携版'].includes((item.textContent || '').trim()))
+      const marker = [...document.querySelectorAll('*')].find(item => ['Desktop & data', '桌面与数据', 'Portable', '便携版'].includes((item.textContent || '').trim()))
       let scroller = marker?.parentElement
       while (scroller && scroller.scrollHeight <= scroller.clientHeight + 20) scroller = scroller.parentElement
       if (!scroller) return false

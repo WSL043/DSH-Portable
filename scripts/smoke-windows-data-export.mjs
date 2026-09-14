@@ -370,7 +370,7 @@ try {
     const dismissed = await evaluate(client, clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later']))
     await new Promise(resolve => setTimeout(resolve, dismissed?.clicked ? 200 : 120))
   }
-  await waitForValue(client, clickButton(['Portable']), value => value?.clicked, 'Portable settings tab')
+  await waitForValue(client, clickButton(['Desktop & data', '桌面与数据', 'Portable']), value => value?.clicked, 'Portable settings tab')
   await waitForValue(client, `/(迁移与备份|Migration and backup)/.test(document.body?.innerText || '')`, Boolean, 'migration settings')
   await evaluate(client, `(() => {
     const marker = [...document.querySelectorAll('*')].find(item => /^(迁移与备份|Migration and backup)$/.test((item.textContent || '').trim()))
@@ -387,17 +387,20 @@ try {
   assert.equal(existsSync(supportReport), true)
 
   await evaluate(client, `(() => {
-    const target = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出加密私密包|Export encrypted private package)$/.test((item.textContent || '').trim()))
+    const target = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出数据|Export data)$/.test((item.textContent || '').trim()))
     target?.scrollIntoView({ block: 'center' })
     return Boolean(target)
   })()`)
   await new Promise(resolve => setTimeout(resolve, 150))
   await waitForValue(
     client,
-    clickButton(['导出加密私密包', 'Export encrypted private package']),
+    clickButton(['导出数据', 'Export data']),
     value => value?.clicked,
-    'private export action after transient settings overlays close',
+    'data export action after transient settings overlays close',
   )
+  await waitForValue(client, clickButton(['保护方式', 'Protection']), value => value?.clicked, 'export protection selector')
+  await waitForValue(client, clickChoice(['密码加密', 'Password encrypted']), value => value?.clicked, 'encrypted export choice')
+  await waitForValue(client, clickButton(['继续', 'Continue']), value => value?.clicked, 'encrypted export continuation')
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /导出加密私密包|Export encrypted private package/.test(item.textContent || '')))`, Boolean, 'private export dialog')
   const privateGeometry = await evaluate(client, `(() => {
     const dialog = [...document.querySelectorAll('[role="dialog"]')].find(item => /导出加密私密包|Export encrypted private package/.test(item.textContent || ''))
@@ -447,12 +450,15 @@ try {
     return !privatePasswordInput
   })()`, Boolean, 'private export completion')
   await waitForValue(client, `(() => {
-    const action = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出迁移包|Export migration package)$/.test((item.textContent || '').trim()))
+    const action = [...document.querySelectorAll('button,[role="button"]')].find(item => /^(导出数据|Export data)$/.test((item.textContent || '').trim()))
     if (!action || action.disabled || action.getAttribute('aria-disabled') === 'true') return false
     action.scrollIntoView({ block: 'center' })
     return true
-  })()`, Boolean, 'migration export availability')
-  await waitForValue(client, clickButton(['导出迁移包', 'Export migration package']), value => value?.clicked, 'migration export action')
+  })()`, Boolean, 'data export availability')
+  await waitForValue(client, clickButton(['导出数据', 'Export data']), value => value?.clicked, 'standard export action')
+  await waitForValue(client, clickButton(['保护方式', 'Protection']), value => value?.clicked, 'export protection selector')
+  await waitForValue(client, clickChoice(['普通文件', 'Standard file']), value => value?.clicked, 'standard export choice')
+  await waitForValue(client, clickButton(['继续', 'Continue']), value => value?.clicked, 'standard export continuation')
   const standardArchive = await waitForArchive('DSH-Portable-data-')
 
   await waitForValue(client, clickButton(['导入数据包', 'Import data package']), value => value?.clicked, 'data import action')

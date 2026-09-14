@@ -65,7 +65,7 @@ try {
   })()`, Boolean, 'native settings command opens after onboarding')
 
   await writeFile(path.join(output, 'general-page.txt'), await evaluate('document.body.innerText'))
-  await until(click(['Portable']), Boolean, 'dedicated Portable settings navigation')
+  await until(click(['Desktop & data', '桌面与数据', 'Portable']), Boolean, 'dedicated Portable settings navigation')
   await until(`document.body.innerText.includes('Check and repair') || document.body.innerText.includes('检查与修复')`, Boolean, 'Portable maintenance without update controls')
   assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`), false)
   await until(click(['Updates', '更新']), Boolean, 'dedicated Updates navigation')
@@ -85,7 +85,7 @@ try {
   await delay(150)
   await writeFile(path.join(output, 'updates-version-menu.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
   await until(click(['Engine version', '内核版本']), Boolean, 'close core version selector')
-  await until(click(['Portable']), Boolean, 'return to Portable maintenance')
+  await until(click(['Desktop & data', '桌面与数据', 'Portable']), Boolean, 'return to Portable maintenance')
   const nativeState = key => evaluate(`new Promise(resolve => {
     const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
       chrome.webview.removeEventListener('message', listener); resolve(event.data); };
@@ -106,7 +106,7 @@ try {
   await writeFile(path.join(output, 'portable-settings.png'), Buffer.from(portableScreenshot.data, 'base64'))
   const generalBorders = await until(`(() => {
     const textOf = node => (node?.textContent || '').replace(/\\s+/g, ' ').trim()
-    const portableLabels = new Set(['Portable', '便携版'])
+    const portableLabels = new Set(['Desktop & data', '桌面与数据', 'Portable', '便携版'])
     const dataLabels = new Set(['Data', '数据'])
     const portableGroup = [...document.querySelectorAll('div')].find(node => {
       const heading = [...node.children].find(child => portableLabels.has(textOf(child)))
