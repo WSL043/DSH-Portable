@@ -37,6 +37,7 @@ window.__ModuleLoader__.load({
         check: '运行检查', checking: '正在检查…', healthy: '未发现问题', issues: '发现 {0} 项问题',
         repair: '下次启动时安全修复', scheduled: '已安排，下次启动时执行', repaired: '上次修复已完成',
         fullPackage: '程序文件不完整，自动修复未改动用户数据。请使用完整版本覆盖安装。',
+        clearWebCache: '清理网页缓存', webCacheCleared: '网页缓存已清理；登录状态和本地数据已保留。',
         report: '导出支持报告', more: '更多', cancel: '取消', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
         data: '数据', dataTitle: '迁移与备份', dataHint: '按所选范围导出；不包含缓存、运行环境和工作区文件。',
         dataScope: '迁移内容', dataFull: '全部配置与会话（含插件和凭据）', dataOnly: '仅会话与设置（不含插件和凭据）', dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。',
@@ -81,6 +82,7 @@ window.__ModuleLoader__.load({
         check: 'Run check', checking: 'Checking…', healthy: 'No problems found', issues: '{0} issue(s) found',
         repair: 'Repair safely on next start', scheduled: 'Scheduled for the next start', repaired: 'The last repair completed',
         fullPackage: 'Program files are incomplete. Automatic repair preserved user data; reinstall the complete package.',
+        clearWebCache: 'Clear web cache', webCacheCleared: 'Web cache cleared. Sign-in state and local data were preserved.',
         report: 'Export support report', more: 'More', cancel: 'Cancel', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
         data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Exports the selected contents; caches, runtimes, and workspace files stay out.',
         dataScope: 'Migration contents', dataFull: 'Full migration (including plugins and credentials)', dataOnly: 'Sessions and settings only (no plugins or credentials)', dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.',
@@ -158,6 +160,22 @@ window.__ModuleLoader__.load({
           requestId,
           kind,
         })
+      })
+    }
+
+    function clearWebCache() {
+      const bridge = window.chrome?.webview
+      if (!window.__DSH_PORTABLE_WEB_CACHE__ || !bridge) return Promise.reject(new Error('Web cache maintenance is unavailable.'))
+      return new Promise((resolve, reject) => {
+        const requestId = `web-cache-${Date.now().toString(36)}-${++dataExportRequestSequence}`
+        const finish = error => { clearTimeout(timer); bridge.removeEventListener('message', receive); error ? reject(error) : resolve() }
+        const receive = event => {
+          if (event.data?.type !== 'dsh-portable/clear-web-cache-result' || event.data.requestId !== requestId) return
+          finish(event.data.ok ? null : new Error(event.data.error || 'Web cache cleanup failed.'))
+        }
+        const timer = setTimeout(() => finish(new Error('Web cache cleanup has not been confirmed.')), 30000)
+        bridge.addEventListener('message', receive)
+        try { bridge.postMessage({ type: 'dsh-portable/clear-web-cache', requestId }) } catch (error) { finish(error) }
       })
     }
 
@@ -806,12 +824,19 @@ window.__ModuleLoader__.load({
         open: maintenanceMenuOpen,
         anchor: h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setMaintenanceMenuOpen(current => !current) }, t('more')),
         align: 'end', portal: true,
-        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') }],
+        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') },
+          ...(window.__DSH_PORTABLE_WEB_CACHE__ === true ? [{ id: 'web-cache', label: t('clearWebCache') }] : [])],
         onClose: () => setMaintenanceMenuOpen(false),
         onSelect: id => {
           setMaintenanceMenuOpen(false)
           if (id === 'repair') action('repair', '/dsh-portable/repair')
           else if (id === 'report') exportSupportReport()
+          else if (id === 'web-cache') {
+            setBusy('web-cache')
+            clearWebCache().then(() => setStatus('maintenance', t('webCacheCleared')))
+              .catch(error => setStatus('maintenance', format(t('failed'), error.message)))
+              .finally(() => setBusy(''))
+          }
         },
       })
       const careSection = h('section', { style: styles.section, 'aria-label': t('care') },

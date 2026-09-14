@@ -133,7 +133,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null, webCacheHost = null } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -156,6 +156,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
     removeEventListener() {},
   }
   const window = { __ModuleLoader__: { load(value) { definition = value } }, ...(native ? { __DSH_PORTABLE_NATIVE__: native } : {}) }
+  if (webCacheHost) Object.assign(window, { __DSH_PORTABLE_WEB_CACHE__: true, chrome: { webview: webCacheHost } })
   vm.runInNewContext(source, {
     console,
     document,
@@ -181,7 +182,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
     throw new Error(`unexpected client dependency: ${id}`)
   })
   const ctx = {
-    effect: native ? () => {} : undefined,
+    effect: (native || webCacheHost) ? () => {} : undefined,
     locale: { getLocale: () => ({ active: 'en' }) },
     theme: { getTheme: () => ({ active: { colorScheme: 'light' } }) },
     slots: {
@@ -578,4 +579,31 @@ test('Portable current version remains visible with an empty approved catalog', 
   assert.equal(selector.props.value, '0.6.5-rc.2')
   assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.5-rc.2'])
   mounted.unmount()
+})
+
+test('web cache maintenance requires host support and waits for the matching native result', async () => {
+  const listeners = new Set(), sent = []
+  const bridge = { addEventListener(_, fn) { listeners.add(fn) }, removeEventListener(_, fn) { listeners.delete(fn) }, postMessage(message) { sent.push(message) } }
+  const fetchSettings = async () => jsonResponse({ settings: settings(), versions: {} })
+  const oldClient = await loadSettingsComponent(fetchSettings, { page: 'portable' })
+  const old = oldClient.mount()
+  await settle()
+  assert.equal(findNode(old.tree, n => n.props?.items?.some(i => i.id === 'web-cache')), null)
+  old.unmount()
+  const client = await loadSettingsComponent(fetchSettings, { page: 'portable', webCacheHost: bridge })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const menu = findNode(mounted.tree, n => n.props?.items?.some(i => i.id === 'web-cache'))
+    assert.ok(menu)
+    menu.props.onSelect('web-cache')
+    await settle()
+    for (const fn of listeners) fn({ data: { type: 'dsh-portable/clear-web-cache-result', requestId: 'other', ok: true } })
+    await settle()
+    assert.ok(!textContent(mounted.tree).includes('Web cache cleared.'))
+    for (const fn of [...listeners]) fn({ data: { type: 'dsh-portable/clear-web-cache-result', requestId: sent[0].requestId, ok: true } })
+    await settle()
+    assert.ok(textContent(mounted.tree).includes('Web cache cleared.'))
+    assert.equal(listeners.size, 0)
+  } finally { mounted.unmount() }
 })

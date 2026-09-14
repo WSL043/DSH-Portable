@@ -2684,6 +2684,32 @@ namespace DshPortable
             catch (EntryPointNotFoundException) { }
         }
 
+        private bool webCacheCleanupRunning;
+
+        private async void ClearWebCache(string requestId)
+        {
+            var core = webView.CoreWebView2;
+            bool accepted = !webCacheCleanupRunning;
+            string error = accepted ? null : "Web cache cleanup is already running.";
+            var clock = Stopwatch.StartNew();
+            if (accepted)
+            {
+                webCacheCleanupRunning = true;
+                try
+                {
+                    // Never use AllProfile/AllSite: these also contain user state.
+                    await core.Profile.ClearBrowsingDataAsync(CoreWebView2BrowsingDataKinds.DiskCache);
+                }
+                catch (Exception failure) { error = failure.GetType().Name; }
+                finally { webCacheCleanupRunning = false; }
+                WriteLauncherLog("web-cache", "completed=" + (error == null) + " elapsedMs=" + clock.ElapsedMilliseconds
+                    + (error == null ? String.Empty : " error=" + error));
+            }
+            try { core.PostWebMessageAsJson(json.Serialize(new {
+                type = "dsh-portable/clear-web-cache-result", requestId = requestId, ok = error == null, error = error
+            })); } catch (Exception) { /* The window may have closed during cleanup. */ }
+        }
+
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs eventArgs)
         {
             Uri source;
@@ -2884,6 +2910,14 @@ namespace DshPortable
                         : String.Empty;
                     if (!Regex.IsMatch(requestId ?? String.Empty, "^host-restart-[A-Za-z0-9-]{1,96}$")) return;
                     BeginInvoke((MethodInvoker)delegate { HandleDesktopRestartRequest(requestId); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && Convert.ToString(messageType) == "dsh-portable/clear-web-cache")
+                {
+                    object requestValue;
+                    string requestId = message.TryGetValue("requestId", out requestValue) ? Convert.ToString(requestValue) : String.Empty;
+                    if (Regex.IsMatch(requestId ?? String.Empty, "^web-cache-[A-Za-z0-9-]{1,96}$")) ClearWebCache(requestId);
                     return;
                 }
                 TrayBridgeState state = json.Deserialize<TrayBridgeState>(eventArgs.WebMessageAsJson);
@@ -5342,6 +5376,8 @@ namespace DshPortable
                     + "},{once:true});");
             }
             webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
+                "Object.defineProperty(window,'__DSH_PORTABLE_WEB_CACHE__',{value:true});");
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
