@@ -122,6 +122,7 @@ window.__ModuleLoader__.load({
       openUpdate: false,
       preferences: true,
       sessionProjection: true,
+      clearWebCache: false,
     })
 
     const webView2HostCapabilities = Object.freeze({
@@ -132,7 +133,16 @@ window.__ModuleLoader__.load({
 
     function nativeHostTransport() {
       const native = window.__DSH_PORTABLE_NATIVE__
+      const hasProtocolVersion = native != null && Object.prototype.hasOwnProperty.call(native, 'protocolVersion')
+      if (hasProtocolVersion && native.protocolVersion !== 1) return null
+      if (hasProtocolVersion && ['postMessage', 'addEventListener', 'removeEventListener'].some(name => typeof native[name] !== 'function')) return null
       if (native?.postMessage && native?.addEventListener) {
+        if (hasProtocolVersion) {
+          const capabilities = {}
+          const advertised = native.capabilities || {}
+          for (const name of Object.keys(completeHostCapabilities)) capabilities[name] = advertised[name] === true
+          return { bridge: native, capabilities: Object.freeze(capabilities) }
+        }
         return {
           bridge: native,
           capabilities: Object.freeze({ ...completeHostCapabilities, ...(native.capabilities || {}) }),
@@ -140,7 +150,13 @@ window.__ModuleLoader__.load({
       }
       const webview = window.chrome?.webview
       if (webview?.postMessage && webview?.addEventListener) {
-        return { bridge: webview, capabilities: webView2HostCapabilities }
+        return {
+          bridge: webview,
+          capabilities: Object.freeze({
+            ...webView2HostCapabilities,
+            clearWebCache: window.__DSH_PORTABLE_WEB_CACHE__ === true,
+          }),
+        }
       }
       return null
     }
@@ -168,8 +184,9 @@ window.__ModuleLoader__.load({
     }
 
     function clearWebCache() {
-      const bridge = window.chrome?.webview
-      if (!window.__DSH_PORTABLE_WEB_CACHE__ || !bridge) return Promise.reject(new Error('Web cache maintenance is unavailable.'))
+      const host = nativeHostTransport()
+      if (!host || host.capabilities.clearWebCache !== true) return Promise.reject(new Error('Web cache maintenance is unavailable.'))
+      const bridge = host.bridge
       return new Promise((resolve, reject) => {
         const requestId = `web-cache-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         const finish = error => { clearTimeout(timer); bridge.removeEventListener('message', receive); error ? reject(error) : resolve() }
@@ -853,7 +870,7 @@ window.__ModuleLoader__.load({
         anchor: h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setMaintenanceMenuOpen(current => !current) }, t('more')),
         align: 'end', portal: true,
         items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') },
-          ...(window.__DSH_PORTABLE_WEB_CACHE__ === true ? [{ id: 'web-cache', label: t('clearWebCache') }] : [])],
+          ...(nativeHostTransport()?.capabilities.clearWebCache === true ? [{ id: 'web-cache', label: t('clearWebCache') }] : [])],
         onClose: () => setMaintenanceMenuOpen(false),
         onSelect: id => {
           setMaintenanceMenuOpen(false)

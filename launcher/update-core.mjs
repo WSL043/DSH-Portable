@@ -381,6 +381,19 @@ export async function readInstalledUpdateState(layout) {
   }
 }
 
+// Shared read-only entry point for the desktop bridge and command line.
+// Read preferences on every request so switching channels needs no restart.
+export async function listInstalledVersions({ root, baseStateRoot = root, scope, releaseChannel, ...options }) {
+  if (!['engine', 'product'].includes(scope)) throw new Error('Unsupported update scope.')
+  if (!releaseChannel) {
+    const settings = await readJson(path.join(baseStateRoot, 'data', 'launcher-settings.json'), null)
+    if (['stable', 'candidate'].includes(settings?.updateChannel)) releaseChannel = settings.updateChannel
+  }
+  return (scope === 'engine' ? listEngineVersions : listProductVersions)({
+    ...options, layout: { root, platform: process.platform }, releaseChannel,
+  })
+}
+
 export async function listEngineVersions({
   layout,
   indexUrl,

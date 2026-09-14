@@ -126,9 +126,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
       Object.defineProperty(window, '__DSH_PORTABLE_NATIVE__', {
         configurable: false,
         value: Object.freeze({
+          protocolVersion: 1,
           capabilities: Object.freeze({
             pickDirectory: true, saveDataPackage: true, openDataPackage: true,
-            importData: true, restartHost: true, preferences: true, sessionProjection: true
+            importData: true, restartHost: true, preferences: true, sessionProjection: true,
+            clearWebCache: false
           }),
           postMessage(message) { window.webkit.messageHandlers.dshPortable.postMessage(message); },
           addEventListener(name, listener) { if (name === 'message') listeners.add(listener); },

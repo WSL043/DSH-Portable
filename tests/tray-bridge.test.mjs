@@ -371,6 +371,7 @@ test('Portable uses one capability-aware host transport outside WebView2', async
       openUpdate: false,
       preferences: true,
       sessionProjection: true,
+      clearWebCache: false,
     },
   )
   assert.notEqual(runtime.ctx.workspaces.pickDirectory, original)

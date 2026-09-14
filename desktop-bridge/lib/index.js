@@ -3,6 +3,7 @@ import { randomBytes } from 'node:crypto'
 import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { pathToFileURL } from 'node:url'
 
 export const name = 'dsh-portable-desktop-bridge'
 export const inject = ['webServer']
@@ -188,6 +189,12 @@ export function mountPortableRoutes(webServer, options = {}) {
   const repairResult = path.join(stateRoot, 'data', 'runtime', 'repair-result.json')
   const updateResult = path.join(stateRoot, 'data', 'runtime', 'last-update-result.json')
   const runCli = options.runCli || ((args) => defaultRunCli(root, baseStateRoot, currentEnvironment, args))
+  const listVersions = options.runCli
+    ? scope => runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
+    : async scope => {
+      const { listInstalledVersions } = await import(pathToFileURL(path.join(root, 'launcher', 'update-core.mjs')).href)
+      return listInstalledVersions({ root, baseStateRoot, scope })
+    }
   const probeNotifications = options.notificationAvailability || windowsNotificationAvailability
   let notificationProbe = null
   const notificationAvailability = () => {
@@ -263,14 +270,14 @@ export function mountPortableRoutes(webServer, options = {}) {
   register({ kind: 'exact', path: '/dsh-portable/engine-versions', handler: async (request, response) => {
     if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-    try { sendJson(response, 200, await runCli(['list-updates', '--scope', 'engine', '--json', '--wait-for-lock-ms', '10000'])) }
+    try { sendJson(response, 200, await listVersions('engine')) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 
   register({ kind: 'exact', path: '/dsh-portable/product-versions', handler: async (request, response) => {
     if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-    try { sendJson(response, 200, await runCli(['list-updates', '--scope', 'product', '--json', '--wait-for-lock-ms', '10000'])) }
+    try { sendJson(response, 200, await listVersions('product')) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 

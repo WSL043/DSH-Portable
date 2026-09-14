@@ -5377,7 +5377,20 @@ namespace DshPortable
             }
             webView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
             await webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                "Object.defineProperty(window,'__DSH_PORTABLE_WEB_CACHE__',{value:true});");
+                "(()=>{"
+                + "if(window.__DSH_PORTABLE_NATIVE__)return;"
+                + "const bridge=window.chrome&&window.chrome.webview;"
+                + "if(!bridge||typeof bridge.postMessage!=='function'||typeof bridge.addEventListener!=='function'||typeof bridge.removeEventListener!=='function')return;"
+                + "const native={protocolVersion:1,capabilities:Object.freeze({"
+                + "pickDirectory:true,saveDataPackage:true,openDataPackage:true,importData:true,restartHost:true,"
+                + "openEnvironment:true,openUpdate:true,preferences:true,sessionProjection:true,clearWebCache:true"
+                + "}),"
+                + "postMessage:function(message){return bridge.postMessage(message);},"
+                + "addEventListener:function(name,listener){return bridge.addEventListener(name,listener);},"
+                + "removeEventListener:function(name,listener){return bridge.removeEventListener(name,listener);}"
+                + "};"
+                + "Object.defineProperty(window,'__DSH_PORTABLE_NATIVE__',{configurable:false,value:Object.freeze(native)});"
+                + "})();");
             webView.CoreWebView2.NewWindowRequested += OnNewWindowRequested;
             webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
             webView.CoreWebView2.DownloadStarting += OnDownloadStarting;

@@ -36,7 +36,7 @@ import {
   deferUpdate,
   ignoreUpdate,
   installAvailableAppUpdate,
-  listEngineVersions,
+  listInstalledVersions,
   listProductVersions,
   readInstalledUpdateState,
   rollbackPendingAppUpdate,
@@ -779,8 +779,10 @@ async function checkUpdate(options) {
 }
 
 async function listUpdates(options) {
-  return (options.updateScope === 'engine' ? listEngineVersions : listProductVersions)({
-    layout,
+  return listInstalledVersions({
+    root: layout.root,
+    baseStateRoot: layout.baseStateRoot,
+    scope: options.updateScope,
     releaseChannel: preferredUpdateChannel(options),
     allowHttp: options.allowHttp,
   })

@@ -38,9 +38,11 @@ const NATIVE_BRIDGE_SCRIPT: &str = r#"
   if (window.__DSH_PORTABLE_NATIVE__) return;
   const listeners = new Set();
   const native = {
+    protocolVersion: 1,
     capabilities: Object.freeze({
       pickDirectory: true, saveDataPackage: true, openDataPackage: true,
-      importData: true, restartHost: true, preferences: true, sessionProjection: true
+      importData: true, restartHost: true, preferences: true, sessionProjection: true,
+      clearWebCache: false
     }),
     postMessage(message) {
       const invoke = window.__TAURI__?.core?.invoke;

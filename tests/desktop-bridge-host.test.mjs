@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -26,6 +26,32 @@ function response() {
     json() { return JSON.parse(this.chunks.join('')) },
   }
 }
+
+test('desktop catalogs work without a CLI executable and reread channel preferences', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-inprocess-catalog-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  for (const directory of ['launcher', 'licenses', 'data']) await mkdir(path.join(root, directory))
+  for (const filename of ['update-core.mjs', 'portable-core.mjs']) {
+    await copyFile(new URL(`../launcher/${filename}`, import.meta.url), path.join(root, 'launcher', filename))
+  }
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.8', dshVersion: '0.1.5-rc.2' }))
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response('', { status: 404 })
+  t.after(() => { globalThis.fetch = originalFetch })
+  const routes = new Map()
+  const dispose = mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root })
+  t.after(dispose)
+  for (const channel of ['stable', 'candidate']) {
+    await writeFile(path.join(root, 'data', 'launcher-settings.json'), JSON.stringify({ updateChannel: channel }))
+    for (const scope of ['engine', 'product']) {
+      const result = response()
+      await routes.get(`/dsh-portable/${scope}-versions`).handler(request('GET'), result)
+      assert.equal(result.status, 200)
+      assert.equal(result.json().releaseChannel, channel)
+      assert.deepEqual(result.json().versions, [])
+    }
+  }
+})
 
 test('Portable settings routes default to privacy-safe updates and preserve unrelated settings', async (t) => {
   const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-settings-'))

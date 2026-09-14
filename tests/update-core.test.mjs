@@ -24,6 +24,7 @@ import {
   ignoreUpdate,
   installAvailableAppUpdate,
   listEngineVersions,
+  listInstalledVersions,
   listProductVersions,
   platformUpdateKey,
   readInstalledUpdateState,
@@ -1146,6 +1147,26 @@ test('selected Portable version must match the downloaded manifest', async t => 
     fetchImpl: async () => new Response(JSON.stringify(updateManifest({ portableVersion: '0.6.6', releaseChannel: 'stable' }))) })
   assert.equal(result.status, 'unavailable')
   assert.match(result.message, /Selected Portable version/)
+})
+
+test('shared catalog reader honors base preferences on every call and explicit channel overrides', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-catalog-service-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const baseStateRoot = path.join(root, 'state')
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await mkdir(path.join(baseStateRoot, 'data'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.8', dshVersion: '0.1.5-rc.2' }))
+  const urls = []
+  const options = { root, baseStateRoot, scope: 'engine', fetchImpl: async url => {
+    urls.push(String(url))
+    return new Response('', { status: 404 })
+  } }
+  assert.equal((await listInstalledVersions(options)).releaseChannel, 'stable')
+  await writeFile(path.join(baseStateRoot, 'data', 'launcher-settings.json'), JSON.stringify({ updateChannel: 'candidate' }))
+  assert.equal((await listInstalledVersions(options)).releaseChannel, 'candidate')
+  assert.equal((await listInstalledVersions({ ...options, releaseChannel: 'stable' })).releaseChannel, 'stable')
+  assert.match(urls[1], /candidate/)
+  await assert.rejects(listInstalledVersions({ ...options, scope: 'arbitrary' }), /Unsupported update scope/)
 })
 
 test('candidate shells use isolated core catalogs while stable clients retain their endpoint', () => {
