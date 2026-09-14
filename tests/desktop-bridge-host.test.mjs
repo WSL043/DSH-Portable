@@ -418,3 +418,30 @@ test('Portable settings expose the owned workspace path to the official client b
   await routes.get('/dsh-portable/settings').handler(request('GET'), reply)
   assert.equal(reply.json().workspacePath, path.join(root, 'workspace'))
 })
+
+test('local settings do not wait for the OS probe and simultaneous status queries share one probe', async t => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-local-settings-'))
+  t.after(() => rm(stateRoot, { recursive: true, force: true }))
+  const routes = new Map(); let finish, probes = 0
+  const pending = new Promise(resolve => { finish = resolve })
+  const dispose = mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => routes.delete(route.path) } }, {
+    root: stateRoot, stateRoot, notificationAvailability: () => { probes++; return pending },
+  })
+  t.after(dispose)
+  const req = request('GET'); req.headers['x-dsh-portable-settings'] = 'local-only'
+  const fast = response()
+  await routes.get('/dsh-portable/settings').handler(req, fast)
+  assert.equal(fast.json().settings.schemaVersion, 2)
+  assert.equal(fast.json().notificationAvailability.status, 'unknown')
+  assert.equal(probes, 0)
+  const a = response(), b = response(), legacy = response()
+  const jobs = [routes.get('/dsh-portable/notification-status').handler(request('GET'), a),
+    routes.get('/dsh-portable/notification-status').handler(request('GET'), b),
+    routes.get('/dsh-portable/settings').handler(request('GET'), legacy)]
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(probes, 1)
+  finish({ status: 'disabled-system' }); await Promise.all(jobs)
+  assert.equal(a.json().status, 'disabled-system')
+  assert.equal(b.json().status, 'disabled-system')
+  assert.equal(legacy.json().notificationAvailability.status, 'disabled-system')
+})

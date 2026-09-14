@@ -188,7 +188,12 @@ export function mountPortableRoutes(webServer, options = {}) {
   const repairResult = path.join(stateRoot, 'data', 'runtime', 'repair-result.json')
   const updateResult = path.join(stateRoot, 'data', 'runtime', 'last-update-result.json')
   const runCli = options.runCli || ((args) => defaultRunCli(root, baseStateRoot, currentEnvironment, args))
-  const notificationAvailability = options.notificationAvailability || windowsNotificationAvailability
+  const probeNotifications = options.notificationAvailability || windowsNotificationAvailability
+  let notificationProbe = null
+  const notificationAvailability = () => {
+    if (!notificationProbe) notificationProbe = Promise.resolve().then(probeNotifications).finally(() => { notificationProbe = null })
+    return notificationProbe
+  }
   const disposers = []
   const register = route => disposers.push(webServer.register(route))
   const installedUpdateChannel = () => {
@@ -208,7 +213,9 @@ export function mountPortableRoutes(webServer, options = {}) {
       })(),
       lastRepair: readJsonFile(repairResult),
       lastUpdate: readJsonFile(updateResult),
-      notificationAvailability: await notificationAvailability(),
+      // New clients fetch the OS status separately; preserve older client behavior.
+      notificationAvailability: request.headers?.['x-dsh-portable-settings'] === 'local-only'
+        ? { status: 'unknown' } : await notificationAvailability(),
       workspacePath: path.join(stateRoot, 'workspace'),
       environments: environmentSnapshot(baseStateRoot, currentEnvironment, environmentRegistryFile),
     })
@@ -272,6 +279,12 @@ export function mountPortableRoutes(webServer, options = {}) {
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
     try { sendJson(response, 200, await runCli(['doctor', '--json'])) }
     catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+  } })
+
+  register({ kind: 'exact', path: '/dsh-portable/notification-status', handler: async (request, response) => {
+    if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
+    try { sendJson(response, 200, await notificationAvailability()) }
+    catch { sendJson(response, 200, { status: 'unknown' }) }
   } })
 
   register({ kind: 'exact', path: '/dsh-portable/repair', handler: async (request, response) => {

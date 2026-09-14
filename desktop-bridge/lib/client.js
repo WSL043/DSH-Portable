@@ -260,7 +260,7 @@ window.__ModuleLoader__.load({
     function loadPortableShellSummary() {
       if (portableShellSummaryPromise) return portableShellSummaryPromise
       if (portableShellSummary) return Promise.resolve(portableShellSummary)
-      portableShellSummaryPromise = fetch('/dsh-portable/settings', { cache: 'no-store' })
+      portableShellSummaryPromise = fetch('/dsh-portable/settings', { cache: 'no-store', headers: { 'x-dsh-portable-settings': 'local-only' } })
         .then(async response => {
           if (!response.ok) throw new Error('Portable settings unavailable')
           return response.json()
@@ -293,11 +293,12 @@ window.__ModuleLoader__.load({
     }
 
     function usePortableShellSummary() {
-      const [summary, setSummary] = React.useState(null)
+      const [summary, setSummary] = React.useState(() => portableShellSummary)
       React.useEffect(() => {
         let active = true
         const update = value => { if (active) setSummary(value) }
         portableShellSummaryListeners.add(update)
+        if (portableShellSummary) update(portableShellSummary)
         loadPortableShellSummary().then(update)
         return () => { active = false; portableShellSummaryListeners.delete(update) }
       }, [])
@@ -382,7 +383,7 @@ window.__ModuleLoader__.load({
       }
       useEffect(() => {
         let active = true
-        fetch('/dsh-portable/settings', { cache: 'no-store' })
+        fetch('/dsh-portable/settings', { cache: 'no-store', headers: { 'x-dsh-portable-settings': 'local-only' } })
           .then(async response => {
             const body = await response.json()
             if (!response.ok || body?.error || !body?.settings) throw new Error(body?.error || `Invalid settings response (HTTP ${response.status})`)
@@ -402,6 +403,13 @@ window.__ModuleLoader__.load({
             if (body.environments) setEnvironments(body.environments)
             if (body.lastRepair?.needsFullPackage) setStatus('maintenance', t('fullPackage'))
             else if (body.lastRepair?.ok) setStatus('maintenance', t('repaired'))
+            if (page !== 'updates' && body.notificationAvailability?.status === 'unknown') {
+              // This supplementary OS query must never delay rendering saved settings.
+              fetch('/dsh-portable/notification-status', { cache: 'no-store' })
+                .then(response => response.ok ? response.json() : null)
+                .then(value => { if (active && typeof value?.status === 'string') setNotificationAvailability(value.status) })
+                .catch(() => {})
+            }
           })
           .catch(error => { if (active) setStatus('portable', format(t('failed'), error.message || error)) })
         return () => { active = false }

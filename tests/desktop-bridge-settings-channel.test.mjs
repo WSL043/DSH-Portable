@@ -656,3 +656,20 @@ test('Portable export options live in the export dialog and HTTP failure keeps i
     assert.ok(textContent(mounted.tree).includes('HTTP 503'))
   } finally { mounted.unmount() }
 })
+
+test('desktop settings render while supplementary notification status is pending', async () => {
+  const pending = deferred(); let notificationRequests = 0
+  const client = await loadSettingsComponent(async url => {
+    if (url === '/dsh-portable/notification-status') { notificationRequests++; return pending.promise }
+    return jsonResponse({ settings: settings(), versions: {}, notificationAvailability: { status: 'unknown' } })
+  }, { page: 'portable' })
+  const mounted = client.mount()
+  try {
+    await settle()
+    assert.ok(textContent(mounted.tree).includes('Migration and backup'))
+    assert.equal(notificationRequests, 1)
+    pending.resolve(jsonResponse({ status: 'disabled-system' }))
+    await settle()
+    assert.ok(textContent(mounted.tree).includes('Windows notifications are turned off.'))
+  } finally { mounted.unmount() }
+})
