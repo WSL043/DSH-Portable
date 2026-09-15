@@ -354,12 +354,16 @@ try {
     })
   })()`, Boolean, 'DSH navigation controls', 60000)
 
-  let settings = await evaluate(client, clickButton(['Settings', '设置']))
-  if (!settings?.clicked) {
-    const sidebar = await evaluate(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']))
-    assert.equal(sidebar.clicked, true, `Settings unavailable: ${JSON.stringify(settings)}`)
-    settings = await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, 'Settings button')
-  }
+  // Onboarding can appear after navigation mounts. Wait for an actually
+  // clickable Settings control; a visible control behind a modal is not ready.
+  await waitForValue(client, `(() => {
+    const settings = ${clickButton(['Settings', '设置'])}
+    if (settings.clicked) return settings
+    const onboarding = ${clickButton(['Continue', '继续', '稍后配置', 'Set up later', 'Configure later'])}
+    if (onboarding.clicked) return { clicked: false, pending: 'onboarding' }
+    const sidebar = ${clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar'])}
+    return { ...settings, sidebarOpened: sidebar.clicked }
+  })()`, value => value?.clicked, 'unobstructed Settings button', 60000)
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /Settings|设置/.test(item.textContent || '')))`, Boolean, 'Settings dialog')
 
   if (!/(^|\n)语言(\n|$)/.test(await evaluate(client, 'document.body?.innerText || ""'))) {
@@ -633,6 +637,11 @@ try {
     screenshots: ['03-general-settings.png', '04-private-export-modal.png', '05-import-password-modal.png', '06-import-confirm-modal.png'],
   })}\n`)
 } catch (error) {
+  if (client) {
+    await capture(client, 'failure.png').catch(() => {})
+    const page = await evaluate(client, `({ text: document.body?.innerText, dialogs: [...document.querySelectorAll('[role="dialog"]')].map(item => item.outerHTML) })`).catch(() => null)
+    await writeFile(path.join(outputDirectory, 'failure-page.json'), JSON.stringify(page, null, 2))
+  }
   await writeFile(path.join(outputDirectory, 'failure.json'), JSON.stringify({ message: error.message, stack: error.stack }, null, 2))
   throw error
 } finally {
