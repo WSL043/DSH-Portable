@@ -973,6 +973,9 @@ async function main() {
     else if (options.command === 'update') result = await update(options)
     else throw new Error(`Unsupported command: ${options.command}`)
     print(result, options.json)
+    if (['doctor', 'repair'].includes(options.command) && result.ok === false) {
+      process.exitCode = result.deferred ? 2 : 1
+    }
   } finally {
     try { await releaseProduct() } finally { await release() }
   }

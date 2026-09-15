@@ -124,6 +124,8 @@ export async function repairPortable(layout, { running = false } = {}) {
       schemaVersion: REPORT_SCHEMA,
       ok: false,
       deferred: true,
+      reason: 'portable-running',
+      message: 'Portable 仍在运行，未执行修复。请从系统托盘完全退出后重试。Portable is still running; repair was not performed. Quit from the system tray, then retry.',
       needsFullPackage: before.needsFullPackage,
       actions: [],
       checks: before.checks,

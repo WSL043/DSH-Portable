@@ -68,6 +68,8 @@ internal static class PortableRecovery
                 if (command == null) continue;
                 int code = Run(root, command);
                 Console.WriteLine("Exit code: " + code + ". 请查看上方诊断结果 / Review the result above.");
+                if (choice == "3" && code == 2)
+                    Console.WriteLine("未执行修复：请从系统托盘完全退出 Portable 后重试。\nRepair not performed: quit Portable from the system tray, then retry.");
                 if (choice == "4") Console.WriteLine("报告目录 / Reports: " + Path.Combine(root, "data", "logs"));
             }
         } catch (Exception error) {

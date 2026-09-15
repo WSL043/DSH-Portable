@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { cp, link, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { execFile, spawn } from 'node:child_process'
+import { once } from 'node:events'
+import { promisify } from 'node:util'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -53,6 +56,47 @@ test('doctor is read-only and distinguishes repairable generated state from a mi
   assert.equal(broken.needsFullPackage, true)
   assert.equal(broken.checks.some((check) => check.id === 'runtime.desktopBridge' && check.status === 'error'), true)
   await assert.rejects(readFile(layout.desktopBridgePatch), { code: 'ENOENT' })
+})
+
+test('the recovery CLI returns failure for missing payloads instead of exit zero', async t => {
+  const layout = await fixture(t)
+  await cp(new URL('../launcher/', import.meta.url), path.join(layout.root, 'launcher'), { recursive: true })
+  const run = promisify(execFile)
+  const cli = path.join(layout.root, 'launcher', 'portable-cli.mjs')
+  const env = { ...process.env }
+  for (const key of ['DSH_PORTABLE_STATE_ROOT', 'DSH_PORTABLE_RUNTIME_ROOT', 'DSH_PORTABLE_ENVIRONMENT']) delete env[key]
+  await rm(layout.desktopBridgePatch)
+  await assert.rejects(run(process.execPath, [cli, 'repair', '--json'], { env, windowsHide: true }), error => {
+    assert.equal(error.code, 1)
+    const result = JSON.parse(error.stdout.trim())
+    assert.equal(result.ok, false)
+    assert.equal(result.deferred, false)
+    assert.equal(result.needsFullPackage, true)
+    return true
+  })
+})
+
+test('the recovery CLI reports running-process deferral as exit two', async t => {
+  const layout = await fixture(t)
+  await cp(new URL('../launcher/', import.meta.url), path.join(layout.root, 'launcher'), { recursive: true })
+  await rm(layout.nodeExe)
+  await link(process.execPath, layout.nodeExe)
+  await writeFile(layout.hostBin, 'setInterval(() => {}, 1000)')
+  const child = spawn(layout.nodeExe, [layout.hostBin, layout.dshBin, '--port', '14199'], { windowsHide: true, stdio: 'ignore' })
+  await once(child, 'spawn')
+  try {
+    await mkdir(path.dirname(layout.processState), { recursive: true })
+    await writeFile(layout.processState, JSON.stringify({ pid: child.pid, port: 14199 }))
+    const env = { ...process.env }
+    for (const key of ['DSH_PORTABLE_STATE_ROOT', 'DSH_PORTABLE_RUNTIME_ROOT', 'DSH_PORTABLE_ENVIRONMENT']) delete env[key]
+    await assert.rejects(promisify(execFile)(process.execPath, [path.join(layout.root, 'launcher/portable-cli.mjs'), 'repair', '--json'], { env, windowsHide: true }), error => {
+      assert.equal(error.code, 2)
+      const result = JSON.parse(error.stdout.trim())
+      assert.equal(result.reason, 'portable-running')
+      assert.deepEqual(result.actions, [])
+      return true
+    })
+  } finally { const exited = once(child, 'exit'); child.kill(); await exited }
 })
 
 test('doctor reports a missing Windows desktop dependency as a complete-package repair', { skip: process.platform !== 'win32' }, async (t) => {
@@ -159,6 +203,8 @@ test('repair never mutates generated runtime state while DSH is running', async 
   const result = await repairPortable(layout, { running: true })
   assert.equal(result.ok, false)
   assert.equal(result.deferred, true)
+  assert.equal(result.reason, 'portable-running')
+  assert.match(result.message, /system tray/)
   assert.deepEqual(result.actions, [])
 })
 
