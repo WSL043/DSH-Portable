@@ -59,14 +59,6 @@ test('the native settings command opens Settings and removes its listener on cle
   assert.equal(listeners.size, 1)
   window.dispatchEvent({ type: 'dsh-portable/open-settings' })
   assert.deepEqual(setCalls, [{ index: 0, value: true }])
-  let acknowledged = false
-  window.dispatchEvent({ type: 'dsh-portable/open-settings', detail: { section: 'archived-sessions' }, preventDefault() { acknowledged = true } })
-  assert.equal(acknowledged, true)
-  assert.deepEqual(setCalls.splice(1), [{ index: 1, value: 'archived-sessions' }, { index: 0, value: true }])
-  acknowledged = false
-  window.dispatchEvent({ type: 'dsh-portable/open-settings', detail: { section: 'archived-sessions', probe: true }, preventDefault() { acknowledged = true } })
-  assert.equal(acknowledged, true)
-  assert.deepEqual(setCalls, [{ index: 0, value: true }])
   cleanup()
   assert.equal(listeners.size, 0)
   window.dispatchEvent({ type: 'dsh-portable/open-settings' })
@@ -75,22 +67,13 @@ test('the native settings command opens Settings and removes its listener on cle
 
 test('the native settings command patch is idempotent and rejects a changed or duplicated seam', () => {
   const output = patchNativeSettingsCommand(upstream)
-  assert.match(output, /dsh-portable-native-settings-command-v2/)
+  assert.match(output, /dsh-portable-native-settings-command-v1/)
   assert.match(output, /window\.addEventListener\("dsh-portable\/open-settings", openSettings\)/)
   assert.match(output, /window\.removeEventListener\("dsh-portable\/open-settings", openSettings\)/)
-  assert.match(output, /openSettings = \(event\) =>/)
+  assert.match(output, /openSettings = \(\) => \{\s+setOpen\(true\);\s+\};/)
   assert.equal(patchNativeSettingsCommand(output), output)
   assert.throws(() => patchNativeSettingsCommand(upstream.replace('wasOpen.current = open;', 'wasOpen.current = false;')), /seam changed upstream/)
   assert.throws(() => patchNativeSettingsCommand(`${upstream}\n${upstream}`), /expected 1 match, found 2/)
-})
-
-test('upgrades the previous installed settings bridge without adding a second listener', () => {
-  const previous = '/* dsh-portable-native-settings-command-v1 */\nconst openSettings = () => {\n\t\t\t\t\tsetOpen(true);\n\t\t\t\t};'
-  const upgraded = patchNativeSettingsCommand(previous)
-  assert.match(upgraded, /setActiveId\(section\)/)
-  assert.doesNotMatch(upgraded, /native-settings-command-v1/)
-  assert.equal(patchNativeSettingsCommand(upgraded), upgraded)
-  assert.throws(() => patchNativeSettingsCommand(previous.replace('setOpen(true)', 'setOpen(false)')), /handler changed/)
 })
 
 test('every platform build applies the native settings command patch beside boot handoff', async () => {

@@ -2,7 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const MARKER = 'dsh-portable-native-settings-command-v2'
+const MARKER = 'dsh-portable-native-settings-command-v1'
 
 function replaceRequired(source, needle, replacement, label) {
   const matches = source.split(needle).length - 1
@@ -13,18 +13,6 @@ function replaceRequired(source, needle, replacement, label) {
 export function patchNativeSettingsCommand(source) {
   if (source.includes(MARKER)) return source
 
-  const handler = `const openSettings = (event) => {
-                    if (event.detail?.probe === true) { event.preventDefault?.(); return; }
-                    const section = event.detail?.section;
-                    if (typeof section === "string" && section.length > 0) setActiveId(section);
-                    setOpen(true);
-                    event.preventDefault?.();
-                };`
-  if (source.includes('dsh-portable-native-settings-command-v1')) {
-    return replaceRequired(source, 'const openSettings = () => {\n\t\t\t\t\tsetOpen(true);\n\t\t\t\t};', handler,
-      'native settings v1 handler changed').replace('dsh-portable-native-settings-command-v1', MARKER)
-  }
-
   const seam = `\t\t\t(0, react.useEffect)(() => {
 \t\t\t\tif (wasOpen.current && !open) triggerButton.current?.focus();
 \t\t\t\twasOpen.current = open;
@@ -32,7 +20,9 @@ export function patchNativeSettingsCommand(source) {
   const replacement = `${seam}
 \t\t\t/* ${MARKER} */
 \t\t\t(0, react.useEffect)(() => {
-\t\t\t\t${handler}
+\t\t\t\tconst openSettings = () => {
+\t\t\t\t\tsetOpen(true);
+\t\t\t\t};
 \t\t\t\twindow.addEventListener("dsh-portable/open-settings", openSettings);
 \t\t\t\treturn () => {
 \t\t\t\t\twindow.removeEventListener("dsh-portable/open-settings", openSettings);

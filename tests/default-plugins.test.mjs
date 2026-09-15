@@ -9,6 +9,8 @@ import { layoutForRoot } from '../launcher/portable-core.mjs'
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
 
 const lock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8'))
+const imageVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-image-viewer').version
+const chatVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-chat-manager').version
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-plugin-'))
@@ -26,8 +28,8 @@ async function writeReviewedArchives(layout) {
 test('fresh products declare only the reviewed image viewer and existing chat manager defaults', () => {
   assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
   assert.deepEqual(DEFAULT_PLUGINS.map(plugin => plugin.name), ['dsh-image-viewer', 'dsh-chat-manager'])
-  assert.equal(lock.defaultPlugins.imageViewer.version, '0.1.0')
-  assert.equal(lock.defaultPlugins.chatManager.version, '1.3.3')
+  assert.equal(lock.defaultPlugins.imageViewer.version, imageVersion)
+  assert.equal(lock.defaultPlugins.chatManager.version, chatVersion)
 })
 
 test('a fresh product seeds both reviewed archives and promotes their update specs', async (t) => {
@@ -56,8 +58,8 @@ test('a fresh product seeds both reviewed archives and promotes their update spe
   await assert.rejects(readFile(path.join(layout.packageManagerStore, 'v11', 'projects', 'build-only')), { code: 'ENOENT' })
   assert.deepEqual(invocation.args.slice(0, 4), [layout.dshBin, 'plugin', '--profile', 'web'])
   const manifest = JSON.parse(await readFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), 'utf8'))
-  assert.equal(manifest.dependencies['dsh-image-viewer'], '0.1.0')
-  assert.equal(manifest.dependencies['dsh-chat-manager'], '1.3.3')
+  assert.equal(manifest.dependencies['dsh-image-viewer'], imageVersion)
+  assert.equal(manifest.dependencies['dsh-chat-manager'], chatVersion)
 })
 
 test('a product upgrade refreshes installed defaults from reviewed archives without touching user plugins', async (t) => {
@@ -84,7 +86,7 @@ test('a product upgrade refreshes installed defaults from reviewed archives with
   assert.deepEqual(invocation.args.slice(0, 4), [layout.dshBin, 'plugin', '--profile', 'web'])
   assert.equal(invocation.args.filter(value => String(value).startsWith('file:')).length, 1)
   const manifest = JSON.parse(await readFile(path.join(profileRoot, 'package.json'), 'utf8'))
-  assert.equal(manifest.dependencies['dsh-image-viewer'], '0.1.0')
+  assert.equal(manifest.dependencies['dsh-image-viewer'], imageVersion)
   assert.equal(manifest.dependencies['user-selected-plugin'], '3.1.4')
 })
 
@@ -113,7 +115,8 @@ test('a newer installed default is never downgraded to the packaged review basel
   const layout = await fixture(t)
   const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
   await mkdir(profileRoot, { recursive: true })
-  const packageJson = '{"dependencies":{"dsh-image-viewer":"0.1.1","user-selected-plugin":"3.1.4"}}\n'
+  const futureVersion = `${Number(imageVersion.split('.')[0]) + 1}.0.0`
+  const packageJson = JSON.stringify({ dependencies: { 'dsh-image-viewer': futureVersion, 'user-selected-plugin': '3.1.4' } })
   await writeFile(path.join(profileRoot, 'package.json'), packageJson)
   let spawned = false
 
@@ -142,7 +145,7 @@ test('removing a default plugin is durable because every existing profile skips 
   const layout = await fixture(t)
   const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
   await mkdir(profileRoot, { recursive: true })
-  const packageJson = '{"dependencies":{"dsh-image-viewer":"0.1.0"}}\n'
+  const packageJson = JSON.stringify({ dependencies: { 'dsh-image-viewer': imageVersion } })
   await writeFile(path.join(profileRoot, 'package.json'), packageJson)
   let spawned = false
   const result = await seedDefaultPlugins(layout, { spawnSync() { spawned = true; return { status: 0 } } })
