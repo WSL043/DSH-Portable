@@ -19,6 +19,7 @@
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
 import { asChannel, type Channel } from './channels.ts'
 import { logEvent } from './log.ts'
 
@@ -60,6 +61,17 @@ let hotTreeClass: unknown | null | undefined
  * the shim fiber exists purely to satisfy that registration.
  */
 const shimNames = new Set<string>()
+
+/** Resolve installed host entries from their profile, not the loader's package. */
+export function resolveProfileEntry(profileDir: string, name: string): string {
+  if (!name || name.startsWith('.') || name.startsWith('/') || name.includes(':')) return name
+  try {
+    return pathToFileURL(createRequire(join(profileDir, 'package.json')).resolve(name)).href
+  } catch {
+    // Do not invent index.js for exports-only or otherwise unresolved packages.
+    return name
+  }
+}
 
 async function loadHotTreeClass(): Promise<unknown | null> {
   if (hotTreeClass !== undefined) return hotTreeClass
@@ -389,7 +401,7 @@ export async function hotMount(ctx: HotContext, profileDir: string, packageName:
     hotSequence += 1
     const file = join(dir, `hot-${String(hotSequence)}.yml`)
     const yml = rows
-      .map(row => `- id: 'mkt-${row.id}'\n  name: '${row.name}'\n`)
+      .map(row => `- id: 'mkt-${row.id}'\n  name: '${shimNames.has(row.name) ? row.name : resolveProfileEntry(profileDir, row.name)}'\n`)
       .join('')
     writeFileSync(file, yml)
     const handle = ctx.plugin(HotTree, { path: pathToFileURL(file).href })

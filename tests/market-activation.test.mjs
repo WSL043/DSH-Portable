@@ -1,6 +1,26 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { awaitHotActivation } from '../app/vendor/dsh-portable-plugin-market/src/hot.ts'
+import { awaitHotActivation, resolveProfileEntry } from '../app/vendor/dsh-portable-plugin-market/src/hot.ts'
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { pathToFileURL } from 'node:url'
+
+test('hot entry resolution follows each installed profile and preserves unresolvable specifiers', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'market-profile-entry-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  for (const name of ['first', 'second']) {
+    const profile = join(root, name)
+    const packageDir = join(profile, 'node_modules', 'sample-plugin')
+    await mkdir(packageDir, { recursive: true })
+    await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'sample-plugin', main: 'host.cjs' }))
+    await writeFile(join(packageDir, 'host.cjs'), 'module.exports = {}')
+    assert.equal(resolveProfileEntry(profile, 'sample-plugin'), pathToFileURL(join(packageDir, 'host.cjs')).href)
+    for (const specifier of ['missing-plugin', './relative.js', 'cordis:builtin', 'file:///fixture.js']) {
+      assert.equal(resolveProfileEntry(profile, specifier), specifier)
+    }
+  }
+})
 
 test('failed activation disposes partial host effects and preserves the original failure', async () => {
   const failure = new Error('activation failed after registering a route')
