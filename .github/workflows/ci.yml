@@ -90,10 +90,6 @@ jobs:
           node-version: 24.19.0
           cache: npm
           cache-dependency-path: app/package-lock.json
-      - name: Select an isolated candidate version for official preview qualification
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
-        shell: bash
-        run: node scripts/prepare-preview-qualification.mjs
       - run: npm ci --prefix app --ignore-scripts
       - name: Run contracts outside Windows
         if: runner.os != 'Windows'
