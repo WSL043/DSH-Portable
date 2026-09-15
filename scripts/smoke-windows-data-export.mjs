@@ -637,12 +637,22 @@ try {
     screenshots: ['03-general-settings.png', '04-private-export-modal.png', '05-import-password-modal.png', '06-import-confirm-modal.png'],
   })}\n`)
 } catch (error) {
-  if (client) {
-    await capture(client, 'failure.png').catch(() => {})
-    const page = await evaluate(client, `({ text: document.body?.innerText, dialogs: [...document.querySelectorAll('[role="dialog"]')].map(item => item.outerHTML) })`).catch(() => null)
-    await writeFile(path.join(outputDirectory, 'failure-page.json'), JSON.stringify(page, null, 2))
-  }
+  // Persist the original failure before asking a possibly disconnected browser for evidence.
   await writeFile(path.join(outputDirectory, 'failure.json'), JSON.stringify({ message: error.message, stack: error.stack }, null, 2))
+  console.error(error.stack || error.message)
+  if (client) {
+    let timer
+    try {
+      await Promise.race([
+        (async () => {
+          await capture(client, 'failure.png').catch(() => {})
+          const page = await evaluate(client, `({ text: document.body?.innerText, dialogs: [...document.querySelectorAll('[role="dialog"]')].map(item => item.outerHTML) })`).catch(() => null)
+          await writeFile(path.join(outputDirectory, 'failure-page.json'), JSON.stringify(page, null, 2))
+        })(),
+        new Promise(resolve => { timer = setTimeout(resolve, 5000) }),
+      ])
+    } finally { clearTimeout(timer) }
+  }
   throw error
 } finally {
   client?.close()
