@@ -25,7 +25,9 @@ function assertCallbacks(callbacks) {
 }
 
 function assertFamilyPatterns(source) {
-  const expected = Object.values(FAMILY_PATTERNS).flat()
+  const allPackages = source.includes("'packages/*/*/package.json'") || source.includes('"packages/*/*/package.json"')
+  const expected = Object.values(FAMILY_PATTERNS).flat().map(pattern =>
+    allPackages && pattern === 'packages/!(experimental)/*/package.json' ? 'packages/*/*/package.json' : pattern)
   const declarations = [...source.matchAll(/readonly\s+patterns\s*=\s*\[([\s\S]*?)\]/g)]
   if (declarations.length !== 2) throw new Error('unsupported official release family declarations')
   const declared = declarations.flatMap((match) => (
@@ -48,6 +50,7 @@ function assertFamilyPatterns(source) {
       throw new Error(`official release family declaration is missing the known glob: ${pattern}`)
     }
   }
+  return allPackages
 }
 
 function countPackedFamilies(tree) {
@@ -97,7 +100,7 @@ export async function readOfficialSourceMetadata(commit, callbacks) {
   if (familiesSource === null || typeof familiesSource !== 'string') {
     throw new Error('official release families source is not text')
   }
-  assertFamilyPatterns(familiesSource)
+  const allPackages = assertFamilyPatterns(familiesSource)
 
   const packageManager = packageManifest?.packageManager
   if (typeof packageManager !== 'string' || !/^pnpm@\d+\.\d+\.\d+$/.test(packageManager)) {
@@ -105,7 +108,23 @@ export async function readOfficialSourceMetadata(commit, callbacks) {
   }
 
   const packedFamilies = countPackedFamilies(tree)
-  if (familiesSource.includes('...PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES.map(')) {
+  if (allPackages) {
+    // 0.1.6 selects every package category, then excludes private manifests.
+    // Read the pinned manifests instead of assuming experimental means private.
+    const selected = tree.tree.filter(entry => entry.type === 'blob' &&
+      (DSH_PACKAGE.test(entry.path) || APP_PACKAGE.test(entry.path) || VENDOR_PACKAGE.test(entry.path)))
+    const counts = { dsh: 0, vendor: 0 }
+    for (let offset = 0; offset < selected.length; offset += 12) {
+      const batch = selected.slice(offset, offset + 12)
+      const manifests = await Promise.all(batch.map(entry => callbacks.json(`${RAW_BASE}/${commit}/${entry.path}`)))
+      manifests.forEach((manifest, index) => {
+        if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new Error('Invalid official package manifest')
+        if (manifest.private !== true) counts[VENDOR_PACKAGE.test(batch[index].path) ? 'vendor' : 'dsh']++
+      })
+    }
+    if (!counts.dsh || !counts.vendor) throw new Error('official source tree has an empty public release family')
+    Object.assign(packedFamilies, counts)
+  } else if (familiesSource.includes('...PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES.map(')) {
     const policy = await callbacks.text(`${RAW_BASE}/${commit}/scripts/experimental-package-policy.ts`)
     const declaration = /PUBLIC_EXPERIMENTAL_PACKAGE_DIRECTORIES\s*=\s*\[([\s\S]*?)\]/.exec(policy)
     if (!declaration) throw new Error('Unsupported public experimental package policy')

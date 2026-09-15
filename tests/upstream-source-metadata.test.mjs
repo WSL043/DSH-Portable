@@ -12,6 +12,15 @@ class VendorFamily {
 }
 `
 
+test('0.1.6 counts public experimental packages and excludes private apps and vendors', async () => {
+  const callbacks = fixture({ families: familiesSource.replace('packages/!(experimental)/*/package.json', 'packages/*/*/package.json') })
+  const original = callbacks.json
+  callbacks.json = async url => url.endsWith('/apps/cli/package.json') ? { private: true } : original(url)
+  assert.deepEqual((await readOfficialSourceMetadata(commit, callbacks)).packedFamilies, { dsh: 2, vendor: 1, landlock: 1 })
+  callbacks.json = async url => url.endsWith('/vendor/one/package.json') ? { private: true } : original(url)
+  await assert.rejects(readOfficialSourceMetadata(commit, callbacks), /empty public release family/)
+})
+
 function fixture(overrides = {}) {
   const tree = overrides.tree ?? {
     truncated: false,
