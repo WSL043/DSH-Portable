@@ -17,7 +17,9 @@ import { appendHistoryLog } from '../launcher/log-history.mjs'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 
 async function fixture(t) {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-repair-'))
+  // macOS exposes temp directories through /var -> /private/var; Node resolves
+  // the CLI module path before deriving its installation root. Use the same root.
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-repair-')))
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root, process.platform)
   const required = [layout.nodeExe, layout.dshBin, layout.hostBin, layout.desktopBridgePatch, layout.packageManagerBin]
