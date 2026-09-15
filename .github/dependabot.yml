@@ -1,10 +1,11 @@
+# Routine version PRs are paused; GitHub security updates remain enabled.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
-    open-pull-requests-limit: 2
+    open-pull-requests-limit: 0
     # Rust is a coordinated compiler baseline, validated with Cargo and native artifacts.
     ignore:
       - dependency-name: dtolnay/rust-toolchain
