@@ -361,6 +361,7 @@ window.__ModuleLoader__.load({
       const [updateOffers, setUpdateOffers] = useState({})
       const [notificationAvailability, setNotificationAvailability] = useState('unknown')
       const [productVersions, setProductVersions] = useState([])
+      const [productCatalogLoaded, setProductCatalogLoaded] = useState(false)
       const [productVersion, setProductVersion] = useState('')
       const productRequestSequenceRef = React.useRef(0)
       const [engineVersions, setEngineVersions] = useState([])
@@ -475,6 +476,7 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         let active = true
         const sequence = ++productRequestSequenceRef.current
+        setProductCatalogLoaded(false)
         setProductVersions([])
         setProductVersion('')
         if (page !== 'updates' || !persistedChannel) return () => { active = false }
@@ -485,6 +487,7 @@ window.__ModuleLoader__.load({
         }).then(body => {
           if (!active || sequence !== productRequestSequenceRef.current) return
           setProductVersions(body.versions)
+          setProductCatalogLoaded(true)
           setProductVersion(body.versions.some(item => item.version === body.current) ? body.current : body.versions[0]?.version || '')
         }).catch(error => {
           if (active && sequence === productRequestSequenceRef.current) setStatus('update-product', format(t('failed'), error.message || error))
@@ -783,8 +786,9 @@ window.__ModuleLoader__.load({
             primitives, value: productVersion || version, label: t('productVersionChoice'),
             items: [...(version && !productVersions.some(item => item.version === version) ? [{ id: version, label: version }] : []), ...productVersions.map(item => ({ id: item.version, label: item.version }))],
             onSelect: setProductVersion,
-          }),
-          !productVersions.some(item => item.version !== version) && h('div', { style: styles.hint }, t('noProductVersions'))),
+          })),
+        scope === 'product' && productCatalogLoaded && !productVersions.some(item => item.version !== version)
+          && h('div', { style: styles.hint }, t('noProductVersions')),
         scope === 'engine' && version && h('div', { style: styles.updateHeader },
           h('div', { style: styles.label }, t('versionChoice')),
           h(PortableSelector, {
@@ -814,6 +818,7 @@ window.__ModuleLoader__.load({
               if (updateChannel === (selectedChannel || persistedChannel || settings.updateChannel || 'stable')) return
               setSelectedChannel(updateChannel)
               ++productRequestSequenceRef.current
+              setProductCatalogLoaded(false)
               setProductVersions([])
               setProductVersion('')
               ++updateRequestSequenceRef.current

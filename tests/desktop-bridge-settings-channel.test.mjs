@@ -214,6 +214,30 @@ function settings(updateChannel = 'stable', overrides = {}) {
   }
 }
 
+test('delayed product catalogs never insert empty-state text into the selector row', async () => {
+  for (const additionalVersions of [[], [{ version: '0.6.8' }]]) {
+    const pending = deferred()
+    const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+      ? { settings: settings(), versions: { portable: '0.6.9', engine: '0.1.5-rc.2' } }
+      : { schemaVersion: 1, releaseChannel: 'stable', versions: [], unavailable: [] }), {
+      productFetch: () => pending.promise,
+    })
+    const mounted = client.mount()
+    const hint = 'No other qualified versions are available.'
+    const selectorRow = () => findNode(mounted.tree, node => node.children?.some(child => child?.props?.label === 'Portable version'))
+    try {
+      await settle()
+      assert.ok(!textContent(mounted.tree).includes(hint), 'loading is not an empty result')
+      assert.equal(selectorRow().children.length, 2)
+      pending.resolve(jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: '0.6.9', versions: [{ version: '0.6.9' }, ...additionalVersions] }))
+      await settle()
+      assert.equal(textContent(mounted.tree).includes(hint), additionalVersions.length === 0)
+      assert.equal(selectorRow().children.length, 2, 'the label and selector retain their two-column layout')
+      assert.ok(!textContent(selectorRow()).includes(hint), 'empty-state text has its own row')
+    } finally { mounted.unmount() }
+  }
+})
+
 test('core update feedback names the DSH version instead of the Portable version', async () => {
   const nativeMessages = []
   const client = await loadSettingsComponent(async url => {
