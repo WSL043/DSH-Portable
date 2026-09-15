@@ -708,7 +708,7 @@ jobs:
           cache-dependency-path: |
             app/package-lock.json
             launcher/linux/package-lock.json
-      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: dtolnay/rust-toolchain@1.120.0
         with:
           components: rustfmt
       - name: Install pinned Linux desktop build dependencies
