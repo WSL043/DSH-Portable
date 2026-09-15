@@ -340,8 +340,18 @@ async function readJson(filename, fallback = null) {
   }
 }
 
+export function freshUpdateMetadataUrl(urlValue, nonce = Date.now()) {
+  const url = new URL(urlValue)
+  // GitHub caches mutable release assets even for a forced update check.
+  // Leave custom/signed endpoints and immutable component downloads alone.
+  if (url.hostname === 'github.com' && /^\/WSL043\/DSH-Portable(?:-Updates)?\/releases\/download\/update-channel[^/]*\/[^/]+\.json$/i.test(url.pathname)) {
+    url.searchParams.set('_portable_check', String(nonce))
+  }
+  return url
+}
+
 async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs }) {
-  const url = validateRemoteUrl(urlValue, allowHttp)
+  const url = freshUpdateMetadataUrl(validateRemoteUrl(urlValue, allowHttp))
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {

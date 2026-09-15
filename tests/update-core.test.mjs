@@ -21,6 +21,7 @@ import {
   downloadVerifiedComponent,
   evaluateUpdate,
   extractUpdateArchive,
+  freshUpdateMetadataUrl,
   ignoreUpdate,
   installAvailableAppUpdate,
   listEngineVersions,
@@ -34,6 +35,17 @@ import {
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
+
+test('mutable GitHub update metadata bypasses stale CDN entries without altering other downloads', () => {
+  const url = defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.9')
+  assert.equal(freshUpdateMetadataUrl(url, 123).searchParams.get('_portable_check'), '123')
+  assert.notEqual(freshUpdateMetadataUrl(url, 123).href, freshUpdateMetadataUrl(url, 124).href)
+  for (const untouched of [
+    'https://example.com/index.json?signature=keep',
+    'https://github.com/WSL043/DSH-Portable/releases/download/v0.6.9/portable-manifest.json',
+    'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/core.zip',
+  ]) assert.equal(freshUpdateMetadataUrl(untouched, 123).href, untouched)
+})
 
 async function compileUpdateExtractor(output) {
   const csc = path.join(process.env.WINDIR || 'C:\\Windows', 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
