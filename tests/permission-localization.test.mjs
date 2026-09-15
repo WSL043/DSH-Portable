@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
+
+test('moved official permission surface requires localized presets and the connected slot', () => {
+  const conversation = 'renderSlot("conversation.input.permission", { locked })'
+  const presets = [
+    '"preset.readOnly":', '"preset.workspaceWrite":', '"preset.fullAccess":',
+    'function displayPermissionPreset(value, name, t)', 'displayPermissionPreset(option.id, option.label, t)',
+    'function permissionLabel(value, name, t)', 'permissionLabel(option.value, option.name, t)',
+    'ctx.slots.inject("conversation.input.permission"',
+  ].join('\n')
+  assert.equal(patchConversationPermissions(conversation, presets), conversation)
+  assert.throws(() => patchConversationPermissions(conversation, presets.replace('function permissionLabel', 'function otherLabel')))
+  assert.throws(() => patchConversationPermissions('unrecognized conversation', presets))
+})
 import {
   hasConversationPermissionLocalization,
   hasPermissionSettingsLocalization,

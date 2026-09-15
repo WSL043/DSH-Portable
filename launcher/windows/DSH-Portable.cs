@@ -2117,12 +2117,31 @@ namespace DshPortable
             if (!trayNoticeShown)
             {
                 trayNoticeShown = true;
+                if (!TryClaimTrayNotice(Path.GetDirectoryName(LauncherSettingsPath()))) return;
                 notificationSessionId = null;
                 trayIcon.ShowBalloonTip(3000,
                     L("DeepSeek Harness 仍在运行", "DeepSeek Harness is still running"),
                     L("正在执行的任务会继续。右键托盘图标可以打开或退出。", "Active tasks will continue. Right-click the tray icon to open or exit."),
                     ToolTipIcon.Info);
             }
+        }
+
+        internal static bool TryClaimTrayNotice(string dataRoot)
+        {
+            // Product data survives restarts and application updates. CreateNew
+            // also prevents two environments from repeating the onboarding tip.
+            try
+            {
+                Directory.CreateDirectory(dataRoot);
+                using (FileStream marker = new FileStream(Path.Combine(dataRoot, "tray-notice-seen"),
+                    FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    marker.WriteByte(1);
+                }
+                return true;
+            }
+            catch (IOException) { return false; }
+            catch (UnauthorizedAccessException) { return false; }
         }
 
         private void RestoreFromTray()

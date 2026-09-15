@@ -137,7 +137,17 @@ export function patchPermissionSettings(input) {
   return output
 }
 
-export function patchConversationPermissions(input) {
+export function patchConversationPermissions(input, permissionSettings = '') {
+  // 0.1.6 moves the localized permission UI into the presets package. Verify
+  // both ends of the slot contract rather than patching an absent old surface.
+  if (hasPermissionSettingsLocalization(permissionSettings)
+      && includesAll(permissionSettings, [
+        'function permissionLabel(value, name, t)',
+        'permissionLabel(option.value, option.name, t)',
+        'ctx.slots.inject("conversation.input.permission"',
+      ])
+      && input.includes('renderSlot("conversation.input.permission", { locked })')
+      && !input.includes('function optionLabel(')) return input
   if (hasConversationPermissionLocalization(input)) return input
 
   if (input.includes('\t\tfunction optionLabel(option, t) {')) {
@@ -231,7 +241,7 @@ export async function patchInstalledPermissionLocales(appRoot) {
   const settingsSource = await readFile(settingsTarget, 'utf8')
   const conversationSource = await readFile(conversationTarget, 'utf8')
   const settingsOutput = patchPermissionSettings(settingsSource)
-  const conversationOutput = patchConversationPermissions(conversationSource)
+  const conversationOutput = patchConversationPermissions(conversationSource, settingsSource)
   if (settingsOutput !== settingsSource) await writeFile(settingsTarget, settingsOutput, 'utf8')
   if (conversationOutput !== conversationSource) await writeFile(conversationTarget, conversationOutput, 'utf8')
   return [settingsTarget, conversationTarget]
