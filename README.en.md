@@ -101,11 +101,10 @@ The Plugin Market and the two default plugins are Portable integration component
 </details>
 
 <!-- core-support:start -->
-### Selectable core versions
+**Choose your core version** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
 
-**Version selection is available from 0.6.5-rc.1, or 0.6.5 for stable releases.** Select Portable and core versions separately in Settings → Updates.
-
-This table reflects published core catalogs for the latest stable **Portable 0.6.9**. Older and RC builds may offer different versions; the application checks compatibility.
+<details>
+<summary>View available cores for Portable 0.6.9</summary>
 
 | Platform | Stable channel | Candidate channel |
 | --- | --- | --- |
@@ -115,7 +114,9 @@ This table reflects published core catalogs for the latest stable **Portable 0.6
 | Linux x64 | [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json) | [0.1.6-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.3-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json) |
 | Linux arm64 | [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json) | [0.1.6-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.3-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json) |
 
-The list syncs hourly from qualified, published catalogs. New official releases appear after compatibility qualification, not immediately. Channel names do not change the upstream version maturity. — means no matching catalog entry.
+Synced hourly from qualified catalogs. Older and RC builds depend on in-app compatibility checks; — means no matching version.
+
+</details>
 
 <!-- core-support:end -->
 

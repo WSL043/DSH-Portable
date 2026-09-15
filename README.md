@@ -101,11 +101,10 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 </details>
 
 <!-- core-support:start -->
-### 可选内核版本
+**内核版本可选** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
 
-**版本选择从 0.6.5-rc.1 提供，正式版从 0.6.5 开始支持。** 在「设置 → 更新」分别选择 Portable 和内核版本。
-
-下表对应最新正式版 **Portable 0.6.9** 的已发布内核目录；旧版和 RC 的可选范围可能不同，以应用内兼容检查为准。
+<details>
+<summary>查看 Portable 0.6.9 的可选内核</summary>
 
 | 平台 | 稳定通道 | 候选通道 |
 | --- | --- | --- |
@@ -115,7 +114,9 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 | Linux x64 | [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json) | [0.1.6-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.5-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.3-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json) |
 | Linux arm64 | [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json) | [0.1.6-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.5-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.3-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.2-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json) |
 
-列表每小时自动同步已验收并发布的目录；官方发布后需先完成兼容验收，并非立即支持。通道名称不代表官方内核自身的版本阶段。— 表示该平台暂无匹配目录项。
+每小时同步已验收的发布目录。旧版及 RC 以应用内兼容检查为准；— 表示暂无匹配版本。
+
+</details>
 
 <!-- core-support:end -->
 

@@ -45,11 +45,12 @@ export async function updateReadmes() {
   const updates = await Promise.all(['README.md', 'README.en.md'].map(async (name, i) => {
     const zh = i === 0
     const intro = zh
-      ? `### 可选内核版本\n\n**版本选择从 0.6.5-rc.1 提供，正式版从 0.6.5 开始支持。** 在「设置 → 更新」分别选择 Portable 和内核版本。\n\n下表对应最新正式版 **Portable ${baseline}** 的已发布内核目录；旧版和 RC 的可选范围可能不同，以应用内兼容检查为准。`
-      : `### Selectable core versions\n\n**Version selection is available from 0.6.5-rc.1, or 0.6.5 for stable releases.** Select Portable and core versions separately in Settings → Updates.\n\nThis table reflects published core catalogs for the latest stable **Portable ${baseline}**. Older and RC builds may offer different versions; the application checks compatibility.`
+      ? '**内核版本可选** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。'
+      : '**Choose your core version** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).'
+    const summary = zh ? `查看 Portable ${baseline} 的可选内核` : `View available cores for Portable ${baseline}`
     const table = zh ? '| 平台 | 稳定通道 | 候选通道 |' : '| Platform | Stable channel | Candidate channel |'
-    const note = zh ? '列表每小时自动同步已验收并发布的目录；官方发布后需先完成兼容验收，并非立即支持。通道名称不代表官方内核自身的版本阶段。— 表示该平台暂无匹配目录项。' : 'The list syncs hourly from qualified, published catalogs. New official releases appear after compatibility qualification, not immediately. Channel names do not change the upstream version maturity. — means no matching catalog entry.'
-    const content = `${intro}\n\n${table}\n| --- | --- | --- |\n${rows.join('\n')}\n\n${note}\n`
+    const note = zh ? '每小时同步已验收的发布目录。旧版及 RC 以应用内兼容检查为准；— 表示暂无匹配版本。' : 'Synced hourly from qualified catalogs. Older and RC builds depend on in-app compatibility checks; — means no matching version.'
+    const content = `${intro}\n\n<details>\n<summary>${summary}</summary>\n\n${table}\n| --- | --- | --- |\n${rows.join('\n')}\n\n${note}\n\n</details>\n`
     const url = new URL(`../${name}`, import.meta.url)
     const original = await readFile(url, 'utf8')
     return { url, original, next: replaceSupport(original, content) }
