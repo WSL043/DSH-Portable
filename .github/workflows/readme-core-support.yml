@@ -1,0 +1,38 @@
+name: Sync README core support
+on:
+  schedule:
+    - cron: '53 * * * *'
+  workflow_dispatch:
+  repository_dispatch:
+    types: [core-catalog-published]
+permissions:
+  contents: write
+concurrency:
+  group: readme-core-support
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Read published catalogs and update both languages
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-readme-core-support.mjs
+      - name: Commit only changed support tables
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add README.md README.en.md
+          if git diff --cached --quiet; then exit 0; fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'docs: sync published core support catalogs'
+          git pull --rebase origin main
+          git push origin HEAD:main
