@@ -37,6 +37,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - name: Resolve the product channel and locked upstream source
         id: preview
         run: |
@@ -84,6 +88,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app --ignore-scripts
@@ -114,6 +122,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
           cache: npm
           cache-dependency-path: app/package-lock.json
       - uses: actions/download-artifact@v8
@@ -206,6 +218,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -229,6 +245,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -283,6 +303,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -452,6 +476,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -468,6 +496,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -560,6 +592,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
           cache: npm
           cache-dependency-path: app/package-lock.json
       - uses: actions/download-artifact@v8
@@ -610,6 +646,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: macos-${{ matrix.arch }}-build
@@ -704,6 +744,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
           cache: npm
           cache-dependency-path: |
             app/package-lock.json
@@ -767,6 +811,10 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - name: Select an isolated candidate version for official preview qualification
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
+        shell: bash
+        run: node scripts/prepare-preview-qualification.mjs
       - uses: actions/download-artifact@v8
         with:
           name: linux-${{ matrix.arch }}-build
