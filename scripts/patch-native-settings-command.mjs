@@ -28,12 +28,6 @@ export function patchNativeSettingsCommand(source) {
                 const api = { open: (section) => openSettings({ detail: { section } }) };
                 window.__DSH_PORTABLE_SETTINGS__ = api;
                 try {
-                    const restart = JSON.parse(localStorage.getItem("dsh-portable-settings-restart") || "null");
-                    localStorage.removeItem("dsh-portable-settings-restart");
-                    if (restart?.expires > Date.now()) {
-                        sessionStorage.setItem("dsh-portable-settings-view", JSON.stringify({open:true,section:"plugins"}));
-                        sessionStorage.setItem("dsh-portable-plugin-tab", "installed");
-                    }
                     const saved = JSON.parse(sessionStorage.getItem("dsh-portable-settings-view") || "null");
                     if (saved?.open === true) openSettings({ detail: { section: saved.section } });
                 } catch {}

@@ -1237,9 +1237,8 @@ export function MarketSection(props: MarketSectionProps) {
   const doRestart = useCallback(() => {
     if (bootId === null || restarting) return
     const previousBoot = bootId
-    // The native host replaces WebView2, so sessionStorage alone cannot carry
-    // the route. This one-shot, expiring marker contains no user content.
-    try { localStorage.setItem('dsh-portable-settings-restart', JSON.stringify({ expires: Date.now() + 120000 })) } catch { /* storage unavailable */ }
+    // Installation reloads retain Settings; an explicit restart returns to chat.
+    try { sessionStorage.removeItem('dsh-portable-settings-view') } catch { /* storage unavailable */ }
     setRestarting(true)
     setInstallError(null)
     const awaitNewBoot = (unconfirmedError?: unknown) => {
@@ -1249,6 +1248,7 @@ export function MarketSection(props: MarketSectionProps) {
           .then(res => res.json())
           .then((next) => {
             if (typeof next.boot === 'string' && next.boot !== previousBoot) {
+              try { sessionStorage.removeItem('dsh-portable-settings-view') } catch { /* storage unavailable */ }
               location.reload()
               return
             }
