@@ -21,6 +21,17 @@ Before promotion:
 
 ## Desktop scope
 
+## Follow-up implementation
+
+- Fixed market hot activation cleanup: every activation rejection now attempts to dispose its partially mounted fiber, not just timeouts. This matters because upstream no longer promises transactional activation rollback. Disposal is best effort and never masks the original failure or blocks the request indefinitely; the UI still requires restart and does not claim rollback succeeded. Rebuilt the shipped server bundle.
+- Executed the existing market settings adapter with real published `dsh-settings@0.1.6-alpha.1`, `cordis@4.0.2` and `schemastery@3.18.2`. In-memory provider writes toggled allowRestart both ways and preserved the unrelated beta channel. Added the corresponding optional settings peer range only after this probe passed. This resolves the declaration blocker above, not complete market qualification.
+- In the separate dsh-chat-manager development repository, restoration now prefers official `workspaceRegistry.unarchiveSession()` and retains the old private registry fallback only when the public method is absent. Public API errors propagate without private writes. The Portable bundled plugin version is unchanged pending plugin release/acceptance.
+- Portable regression: 642 passed. After peer metadata edits, affected market tests: 54 passed. Chat archive behavior: 15 passed; full plugin suite: 90 passed, one documentation-version assertion failed (README fixed 1.3.3 versus test expecting 1.3.4). No complete plugin acceptance is claimed.
+
+Reproduce the settings probe by installing the three exact packages above in an isolated `build/alpha016-settings` directory, then running `node experiments/official-desktop/probe-market-settings.mjs`. It uses actual service lifecycle and synthetic memory persistence, not the user's running profile. Evidence is `build/alpha016-settings/result.json`.
+
+## Desktop source report
+
 The desktop source report observed 15 changed files since the reviewed baseline, at master `0d1f50007f9bca3f52b06e1c3074fa14d5fb0720`. Changes include host, main, profiles and packaging. The review baseline was NOT advanced automatically. This release has no GitHub release assets; a production signed desktop artifact has not been verified.
 
 Evidence: `build/official-desktop-intake/alpha-intake.json`, `proposed-preview.json`, `alpha-regression.log`, `report.json`. Temporary candidate lock was restored after preserving the failing evidence.

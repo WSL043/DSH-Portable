@@ -276,6 +276,17 @@ const hotHandles = new Map<string, PluginHandle>()
 /** Activation did not settle within HOT_MOUNT_TIMEOUT_MS. */
 class ActivationTimeout extends Error {}
 
+/** Failed activation may leave live fibers on newer hosts; always dispose it. */
+export async function awaitHotActivation(handle: PluginHandle): Promise<void> {
+  try {
+    await raceActivationTimeout(handle.await())
+  } catch (error) {
+    // Disposal must not hold the request lock forever or mask the activation error.
+    try { Promise.resolve(handle.dispose()).catch(() => {}) } catch { /* best effort */ }
+    throw error
+  }
+}
+
 /**
  * Race an activation awaitable against the hot-mount ceiling. The handlers
  * stay attached to the original promise, so a late rejection after a timeout
@@ -382,19 +393,7 @@ export async function hotMount(ctx: HotContext, profileDir: string, packageName:
       .join('')
     writeFileSync(file, yml)
     const handle = ctx.plugin(HotTree, { path: pathToFileURL(file).href })
-    try {
-      await raceActivationTimeout(handle.await())
-    } catch (error) {
-      if (error instanceof ActivationTimeout) {
-        // A wedged activation would otherwise hold this request open forever:
-        // the route's `finally { installing = false }` never runs, so every
-        // later install/update/uninstall gets 409'd until a host restart.
-        // Unwind the half-mounted subtree best-effort; disposal never blocks
-        // the reply, and the caller falls back to restart activation.
-        try { Promise.resolve(handle.dispose()).catch(() => {}) } catch { /* best effort */ }
-      }
-      throw error
-    }
+    await awaitHotActivation(handle)
     hotHandles.set(packageName, handle)
     ctx.logger?.info?.(`[dsh-market] hot-mounted ${packageName}`)
     logEvent('info', 'hot-mount', `${packageName}: live${shimNames.has(packageName) ? ' (client-only shim)' : ''}`)
