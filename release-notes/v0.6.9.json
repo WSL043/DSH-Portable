@@ -1,0 +1,29 @@
+{
+  "version": "0.6.9",
+  "zh": {
+    "summary": "减少桌面打扰，改进设置响应和插件安装后的恢复体验。",
+    "highlights": [
+      "关闭窗口转入托盘时仅首次提醒；重启、更新和移动便携目录后不再重复弹出提示。",
+      "减少读取本地版本列表时的额外进程启动，让设置操作更轻快。",
+      "插件热挂载从实际安装目录解析入口，减少安装后错误提示找不到插件的情况。",
+      "插件激活失败后尝试清理部分挂载，避免残留功能；需要重启时继续明确提示。",
+      "更新权限界面适配，保留新版上游已经提供的本地化界面。"
+    ],
+    "upgradeNotes": [
+      "本版仍内置已验证的 DSH 0.1.5-rc.2。后续候选内核通过独立验收后进入候选通道，用户可自行选择。"
+    ]
+  },
+  "en": {
+    "summary": "Reduce desktop interruptions and improve settings responsiveness and recovery after plugin installation.",
+    "highlights": [
+      "Show the close-to-tray explanation only once, preserving this choice across restarts, updates and folder moves.",
+      "Avoid an extra process when reading local version catalogs for more responsive settings.",
+      "Resolve hot-mounted plugin entries from their installed profile to avoid misleading missing-plugin errors.",
+      "Attempt cleanup after partial plugin activation failures while retaining explicit restart guidance.",
+      "Update permission UI compatibility to preserve localization already provided by newer upstream components."
+    ],
+    "upgradeNotes": [
+      "This release still bundles qualified DSH 0.1.5-rc.2. Candidate cores become selectable through the candidate channel after separate qualification."
+    ]
+  }
+}

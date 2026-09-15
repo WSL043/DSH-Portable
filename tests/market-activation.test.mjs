@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { awaitHotActivation, resolveProfileEntry } from '../app/vendor/dsh-portable-plugin-market/src/hot.ts'
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { pathToFileURL } from 'node:url'
@@ -15,7 +15,7 @@ test('hot entry resolution follows each installed profile and preserves unresolv
     await mkdir(packageDir, { recursive: true })
     await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'sample-plugin', main: 'host.cjs' }))
     await writeFile(join(packageDir, 'host.cjs'), 'module.exports = {}')
-    assert.equal(resolveProfileEntry(profile, 'sample-plugin'), pathToFileURL(join(packageDir, 'host.cjs')).href)
+    assert.equal(resolveProfileEntry(profile, 'sample-plugin'), pathToFileURL(await realpath(join(packageDir, 'host.cjs'))).href)
     for (const specifier of ['missing-plugin', './relative.js', 'cordis:builtin', 'file:///fixture.js']) {
       assert.equal(resolveProfileEntry(profile, specifier), specifier)
     }
