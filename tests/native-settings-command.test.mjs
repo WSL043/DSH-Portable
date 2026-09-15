@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
-import { patchNativeSettingsCommand, patchPortableUpdatesIcon } from '../scripts/patch-native-settings-command.mjs'
+import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation } from '../scripts/patch-native-settings-command.mjs'
 
 const upstream = `\t\tfunction SettingsRoot(props) {
 \t\t\tconst { wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t } = props;
@@ -51,26 +51,60 @@ test('the native settings command opens Settings and removes its listener on cle
       useEffect: effect => effects.push(effect),
     },
     window,
+    Event,
   }
   vm.runInNewContext(`${output}\nthis.SettingsRoot = SettingsRoot`, context)
   context.SettingsRoot({})
-  assert.equal(effects.length, 2)
+  assert.equal(effects.length, 3)
   const cleanup = effects[1]()
   assert.equal(listeners.size, 1)
+  window.dispatchEvent({ type: 'dsh-portable/open-settings', detail: { probe: true } })
+  assert.deepEqual(setCalls, [])
+  assert.equal(typeof window.__DSH_PORTABLE_SETTINGS__.open, 'function')
   window.dispatchEvent({ type: 'dsh-portable/open-settings' })
   assert.deepEqual(setCalls, [{ index: 0, value: true }])
   cleanup()
+  assert.equal(window.__DSH_PORTABLE_SETTINGS__, undefined)
   assert.equal(listeners.size, 0)
   window.dispatchEvent({ type: 'dsh-portable/open-settings' })
   assert.deepEqual(setCalls, [{ index: 0, value: true }])
 })
 
+test('settings survives a reload but explicit close clears restoration', () => {
+  const data = new Map([['dsh-portable-settings-view', JSON.stringify({open:true,section:'plugins'})]])
+  const storage = { getItem: k => data.get(k) ?? null, setItem: (k,v) => data.set(k,v), removeItem: k => data.delete(k) }
+  const effects = [], calls = [], callbacks = []
+  let index = 0
+  const context = { Event, Date, sessionStorage: storage, localStorage: { getItem: () => null, removeItem() {} },
+    window: { addEventListener() {}, removeEventListener() {}, dispatchEvent() {} },
+    react: { useState: value => { const i=index++; return [value, v=>calls.push([i,v])] },
+      useRef: current=>({current}), useEffect: f=>effects.push(f), useCallback: f=>{callbacks.push(f);return f} } }
+  vm.runInNewContext(patchNativeSettingsCommand(upstream)+'\nSettingsRoot({});', context)
+  const cleanup = effects[1]()
+  assert.deepEqual(calls, [[1,'plugins'],[0,true]])
+  calls.length=0
+  context.window.__DSH_PORTABLE_SETTINGS__.open('archived-sessions')
+  assert.deepEqual(calls, [[1,'archived-sessions'],[0,true]])
+  cleanup()
+  assert.equal(data.has('dsh-portable-settings-view'), true)
+  callbacks[0]()
+  assert.equal(data.has('dsh-portable-settings-view'), false)
+})
+
+test('plugin subtab restoration is bounded to the native tab state', () => {
+  const source='const [activeId, setActiveId] = (0, react.useState)();'
+  const patched=patchPluginSettingsNavigation(source)
+  assert.match(patched, /sessionStorage.getItem\("dsh-portable-plugin-tab"\)/)
+  assert.equal(patchPluginSettingsNavigation(patched),patched)
+  assert.throws(()=>patchPluginSettingsNavigation('changed'), /seam changed upstream/)
+})
+
 test('the native settings command patch is idempotent and rejects a changed or duplicated seam', () => {
   const output = patchNativeSettingsCommand(upstream)
-  assert.match(output, /dsh-portable-native-settings-command-v1/)
+  assert.match(output, /dsh-portable-native-settings-command-v3/)
   assert.match(output, /window\.addEventListener\("dsh-portable\/open-settings", openSettings\)/)
   assert.match(output, /window\.removeEventListener\("dsh-portable\/open-settings", openSettings\)/)
-  assert.match(output, /openSettings = \(\) => \{\s+setOpen\(true\);\s+\};/)
+  assert.match(output, /setActiveId\(event.detail.section\)/)
   assert.equal(patchNativeSettingsCommand(output), output)
   assert.throws(() => patchNativeSettingsCommand(upstream.replace('wasOpen.current = open;', 'wasOpen.current = false;')), /seam changed upstream/)
   assert.throws(() => patchNativeSettingsCommand(`${upstream}\n${upstream}`), /expected 1 match, found 2/)
