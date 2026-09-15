@@ -11,8 +11,15 @@ test('moved official permission surface requires localized presets and the conne
     'ctx.slots.inject("conversation.input.permission"',
   ].join('\n')
   assert.equal(patchConversationPermissions(conversation, presets), conversation)
+  // The runtime gate must use the same no-op contract as the patch step.
+  // A detached slot or unlocalized provider must still fail qualification.
   assert.throws(() => patchConversationPermissions(conversation, presets.replace('function permissionLabel', 'function otherLabel')))
   assert.throws(() => patchConversationPermissions('unrecognized conversation', presets))
+})
+
+test('runtime verification checks both permission surfaces with the patch contract', async () => {
+  const verifier = await read('scripts/verify-runtime.mjs')
+  assert.match(verifier, /patchConversationPermissions\(readFileSync\(conversationClientPath, 'utf8'\), readFileSync\(permissionSettingsClientPath, 'utf8'\)\) === readFileSync\(conversationClientPath, 'utf8'\)/)
 })
 import {
   hasConversationPermissionLocalization,
@@ -193,7 +200,7 @@ test('permission localization is guarded, idempotent, and part of every product 
   assert.match(macos, /patch-permission-localization\.mjs/)
   assert.match(linux, /patch-permission-localization\.mjs/)
   assert.match(verify, /hasPermissionSettingsLocalization/)
-  assert.match(verify, /hasConversationPermissionLocalization/)
+  assert.match(verify, /patchConversationPermissions/)
   assert.match(productSmoke, /permissionLabels/)
   assert.match(productSmoke, /工作区内修改/)
 })

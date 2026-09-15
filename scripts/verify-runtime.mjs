@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
-  hasConversationPermissionLocalization,
+  patchConversationPermissions,
   hasPermissionSettingsLocalization,
 } from './patch-permission-localization.mjs'
 
@@ -145,7 +145,7 @@ assert.ok(
   'Permission settings client is missing native localization or the locale adapter',
 )
 assert.ok(
-  hasConversationPermissionLocalization(readFileSync(conversationClientPath, 'utf8')),
+  patchConversationPermissions(readFileSync(conversationClientPath, 'utf8'), readFileSync(permissionSettingsClientPath, 'utf8')) === readFileSync(conversationClientPath, 'utf8'),
   'Conversation permission client is missing native localization or the locale adapter',
 )
 
