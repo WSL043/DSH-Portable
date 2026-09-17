@@ -1,3 +1,4 @@
+import { boundedTimeout } from './timeout.ts'
 /**
  * Restart-free installs: mount a freshly installed plugin into the running
  * composition through a market-owned Include subtree.
@@ -46,7 +47,7 @@ const HOT_DIR = '.dsh-market'
  * (typically a plugin pending on a service nothing provides) and falls back
  * to restart activation.
  */
-const HOT_MOUNT_TIMEOUT_MS = Number(process.env.DSH_MARKET_HOT_MOUNT_TIMEOUT_MS) || 10000
+const HOT_MOUNT_TIMEOUT_MS = boundedTimeout(process.env.DSH_MARKET_HOT_MOUNT_TIMEOUT_MS, 10000, 60000)
 
 let hotTreeClass: unknown | null | undefined
 

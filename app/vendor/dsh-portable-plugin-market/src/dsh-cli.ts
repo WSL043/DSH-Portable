@@ -1,3 +1,4 @@
+import { boundedTimeout } from './timeout.ts'
 /**
  * Process layer: re-invoking the dsh CLI that launched this host, spawning
  * `dsh plugin` commands with timeouts and live progress, and provisioning
@@ -78,7 +79,7 @@ function spawnEnv(): NodeJS.ProcessEnv {
   return { ...process.env, CI: 'true', PATH: parts.join(separator) }
 }
 
-const INSTALL_TIMEOUT_MS = Number(process.env.DSH_MARKET_INSTALL_TIMEOUT_MS) || 15 * 60 * 1000
+const INSTALL_TIMEOUT_MS = boundedTimeout(process.env.DSH_MARKET_INSTALL_TIMEOUT_MS, 15 * 60 * 1000, 60 * 60 * 1000)
 
 /**
  * Windows npm/corepack/pnpm are `.cmd` shims. Node's `spawn` without a shell
@@ -578,6 +579,7 @@ export function createDesktopPluginRuntime(
   if (!isAbsolute(invokingDir) || invokingDir.includes('\0')) {
     throw new Error('dsh-market: Desktop invoking directory must be an absolute path without NUL')
   }
+  timeoutMs = boundedTimeout(timeoutMs, INSTALL_TIMEOUT_MS, 60 * 60 * 1000)
   const owner = Symbol('dsh-market desktop runtime')
   let closed = false
 
