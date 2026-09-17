@@ -6,10 +6,9 @@
       "插件市场融入官方插件管理页；发现和安装插件后，可在官方列表统一启用、禁用和管理。",
       "默认会话管理器跟进新内核的会话生命周期；归档入口统一进入设置页，支持取消归档和带二次确认的永久删除。",
       "默认图片查看器适配新内核，将标注图片和备注放回原会话草稿；会话切换时阻止误投递。",
-      "修复新内核下通过命令安装含空格路径的本地插件包失败的问题。",
+      "修复含空格路径的本地插件包安装失败；加强插件声明的文件路径校验，拒绝绝对路径和父目录跳转。",
       "Windows 窗口恢复随明暗主题变化的细边框，活动窗口边界更清晰。",
-      "顶部帮助菜单增加项目仓库、Star 和建议入口；反馈问题可选择合适的模板。",
-      "加强插件声明的文件路径校验，拒绝绝对路径和父目录跳转。"
+      "顶部帮助菜单增加项目仓库、Star 和建议入口；反馈问题可选择合适的模板。"
     ],
     "upgradeNotes": [
       "这是 0.7.0 的首个 Beta，使用候选通道，内置官方 DSH 0.1.6-alpha.2。",
@@ -23,10 +22,9 @@
       "Open the plugin market from the official plugin manager, then manage installed plugins in the official inventory.",
       "Update the bundled session manager for the new core lifecycle, with unified archive settings, unarchive and confirmed permanent deletion.",
       "Return annotated images and notes to the original draft on the new core, refusing delivery if the selected conversation changes.",
-      "Fix command-line installation of local plugin archives whose paths contain spaces on the new core.",
+      "Fix installation of local plugin archives with spaces in their paths, and reject absolute paths and parent traversal in plugin-declared files.",
       "Restore a subtle, theme-aware Windows border to distinguish the active window.",
-      "Add repository, Star and suggestion links to the Help menu, with issue template selection for problem reports.",
-      "Strengthen validation of plugin-declared file paths by rejecting absolute paths and parent-directory traversal."
+      "Add repository, Star and suggestion links to the Help menu, with issue template selection for problem reports."
     ],
     "upgradeNotes": [
       "This first 0.7.0 Beta uses the candidate channel and bundles official DSH 0.1.6-alpha.2.",

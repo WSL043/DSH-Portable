@@ -139,6 +139,19 @@ pass actual acceptance. Indexing CodeQL alerts is not resolving all alerts.
   acceptance exercises the new built-in configuration surface in both themes,
   while retaining legacy diagnostic contrast checks for older cores.
 
-Remaining publication gates: verify these last fixes against actual finished
-products, then pass cross-platform qualification on the exact final commit.
+- Local isolated Windows plugin acceptance passed all seven phases, including
+  paths with spaces, updating while running, manual restart, repeated archive
+  installation and moving the product. Evidence: `build/beta-plugin-path-final.log`.
+- Hidden Chrome/CDP bridge acceptance passed against the staged Windows runtime,
+  including light/dark built-in Shell settings and offline loopback. This is
+  bridge acceptance, not the final native WebView2 product qualification.
+  Evidence: `build/beta-native-tray-final.log`. The official plugin manager retains
+  its detail route across tabs; the test now returns to its list before opening
+  Shell, using the real accessible button labels.
+- Final local source suite: 677 passed, 1 skipped (678 total), recorded in
+  `build/beta-final-source-tests.log`. Release notes were reduced to the required
+  six highlights per language after run `35254344880` rejected seven highlights.
+
+Remaining publication gate: pass cross-platform finished-product qualification
+on the exact final commit, including native WebView2 startup and lifecycle.
 No Portable beta tag has been published yet.

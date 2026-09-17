@@ -758,7 +758,9 @@ try {
       await waitForValue(client, clickButton(theme === 'light' ? ['Light', '浅色', '亮色'] : ['Dark', '深色']), value => value?.clicked, `${theme} theme`)
       await waitForValue(client, stateExpression, value => value?.theme === theme, `${theme} theme state`)
       await waitForValue(client, clickButton(['Built-in plugins', '内置插件']), value => value?.clicked, `${theme} built-in plugin settings`)
-      await waitForValue(client, clickButton(['Shell', '终端']), value => value?.clicked, `${theme} official Shell configuration`)
+      // The official manager retains its detail route across settings tabs.
+      await evaluate(client, clickButton(['Back to plugins', '返回插件列表']))
+      await waitForValue(client, clickButton(['View Shell', '查看 终端', 'Shell', '终端']), value => value?.clicked, `${theme} official Shell configuration`)
       await waitForValue(client, `(() => ({
         fields: [...document.querySelectorAll('input[inputmode="numeric"]')].filter(item => item.getBoundingClientRect().width > 0).length,
         description: /Command timeout|命令超时/.test(document.body.innerText),
