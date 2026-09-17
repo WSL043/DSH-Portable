@@ -683,10 +683,10 @@ test('fresh products bundle only reviewed removable defaults and upgrades preser
     read('launcher/default-plugins.mjs'),
   ])
   assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
-  assert.deepEqual(previewLock.defaultPlugins, lock.defaultPlugins)
+  assert.deepEqual(Object.keys(previewLock.defaultPlugins).sort(), Object.keys(lock.defaultPlugins).sort())
   assert.deepEqual(Object.values(lock.defaultPlugins).map(plugin => plugin.package), ['dsh-image-viewer', 'dsh-chat-manager'])
   assert.equal(new Set(Object.values(lock.defaultPlugins).map(plugin => plugin.filename)).size, 2)
-  for (const plugin of Object.values(lock.defaultPlugins)) {
+  for (const plugin of [...Object.values(lock.defaultPlugins), ...Object.values(previewLock.defaultPlugins)]) {
     assert.match(plugin.sha256, /^[0-9a-f]{64}$/)
     assert.match(plugin.integrity, /^sha512-[A-Za-z0-9+/]+={0,2}$/)
     assert.match(plugin.reviewedCommit, /^[0-9a-f]{40}$/)

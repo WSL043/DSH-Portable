@@ -4,6 +4,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { npmCliCandidates, productionPackageClosure } from '../scripts/stage-preview-runtime.mjs'
+import { DEFAULT_PLUGINS, PREVIEW_DEFAULT_PLUGINS, defaultsForProduct } from '../launcher/default-plugins.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -29,7 +30,19 @@ test('stable and candidate cores have independently pinned official source locks
     assert.ok(Number.isSafeInteger(count) && count > 0)
   }
   assert.ok([0, 1].includes(preview.dsh.packedFamilies.landlock), 'standalone landlock is optional in newer official sources')
-  assert.deepEqual(preview.defaultPlugins, stable.defaultPlugins)
+  assert.deepEqual(Object.keys(preview.defaultPlugins).sort(), Object.keys(stable.defaultPlugins).sort())
+  for (const [lock, reviewed] of [[stable, DEFAULT_PLUGINS], [preview, PREVIEW_DEFAULT_PLUGINS]]) {
+    const entries = Object.values(lock.defaultPlugins)
+    const selected = defaultsForProduct({ root }, { existsSync: () => true,
+      readFileSync: () => JSON.stringify({ defaultPlugins: entries }),
+    })
+    assert.deepEqual(selected, reviewed)
+    for (const entry of entries) {
+      assert.equal(entry.spec, entry.version)
+      assert.match(entry.sha256, /^[a-f0-9]{64}$/)
+      assert.match(entry.reviewedCommit, /^[a-f0-9]{40}$/)
+    }
+  }
 })
 
 test('preview staging is an explicit build input and never rewrites the stable app lock', async () => {

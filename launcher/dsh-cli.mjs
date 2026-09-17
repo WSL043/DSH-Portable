@@ -1,7 +1,7 @@
 import { runCheckedPluginMutation } from './plugin-command-check.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -64,7 +64,10 @@ function quoteForWindowsPluginShell(argument) {
   return /[\s&|<>^()]/.test(argument) ? `"${argument}"` : argument
 }
 
-export function normalizeDshArgvForWindowsShell(argv, cwd = process.cwd()) {
+export function normalizeDshArgvForWindowsShell(argv, cwd = process.cwd(), structured = false) {
+  // New official package operations accept an argv array and anchor paths
+  // themselves. Shell quoting here would become literal package-name bytes.
+  if (structured) return [...argv]
   const pluginIndex = argv.indexOf('plugin')
   if (pluginIndex < 0) return [...argv]
 
@@ -84,6 +87,22 @@ export function normalizeDshArgvForWindowsShell(argv, cwd = process.cwd()) {
       : `${match.groups.prefix ?? ''}${path.win32.resolve(cwd, match.groups.relative)}`
     return quoteForWindowsPluginShell(normalized)
   })
+}
+
+export function pluginCliUsesStructuredArgv(layout, adapters = {}) {
+  const list = adapters.readdirSync ?? readdirSync
+  const read = adapters.readFileSync ?? readFileSync
+  const directory = path.dirname(layout.dshBin)
+  try {
+    return list(directory).filter(name => /^plugin(?:-[A-Za-z0-9_-]+)?\.js$/.test(name)).some(name => {
+      const source = read(path.join(directory, name), 'utf8')
+      return /from ["']@deepseek-ai\/dsh-plugin-manager\/operations["']/.test(source)
+        && /\brunPluginCommand\s*\(/.test(source)
+    })
+  } catch (error) {
+    if (error.code === 'ENOENT') return false
+    throw error
+  }
 }
 
 const RELEASE_AGE_REMOVAL_OVERRIDE = '--config.minimumReleaseAge=0'
@@ -191,7 +210,9 @@ export function buildPluginCliSpec(
 ) {
   const runtimeRoot = environmentValue(source, 'DSH_PORTABLE_RUNTIME_ROOT', platform) || root
   const layout = layoutForRoot(root, platform, stateRoot, runtimeRoot, environmentId)
-  const forwardedArgv = platform === 'win32' ? normalizeDshArgvForWindowsShell(argv) : [...argv]
+  const forwardedArgv = platform === 'win32'
+    ? normalizeDshArgvForWindowsShell(argv, process.cwd(), argv.includes('plugin') && pluginCliUsesStructuredArgv(layout))
+    : [...argv]
   return {
     command: layout.nodeExe,
     args: [layout.dshBin, ...forwardedArgv],

@@ -35,15 +35,44 @@ export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   reviewedCommit: '7fabd0a2f10b57632cfcbd25a36bd7d74828baea',
 })])
 
-function defaultsForProduct(layout, adapters = {}) {
+// Candidate artifacts are reviewed separately; stable products keep their pins.
+export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
+  {
+    "name": "dsh-image-viewer",
+    "version": "0.1.2-beta.1",
+    "spec": "0.1.2-beta.1",
+    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.2-beta.1.tgz",
+    "sha256": "6db62fab6981541e8f6322e55e2bf18f7d5d1e5a8b523322d1eb516e2f18a5a2",
+    "integrity": "sha512-RPOiONNKzrSSvCzGXiBFHb8cT8thwHaXkRDSxa5kOog0YmY+M3oXUaf6IYVjy4h6z3unzSFH2VbKmJ3SKslu6g==",
+    "license": "MIT",
+    "reviewedCommit": "9025825e91536e3cb2b13735946c4dcc37d2ce74",
+    "filename": "dsh-image-viewer.tgz"
+  },
+  {
+    "name": "dsh-chat-manager",
+    "version": "1.4.0-beta.1",
+    "spec": "1.4.0-beta.1",
+    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.4.0-beta.1.tgz",
+    "sha256": "9627b4443383617b0d5607b3230bceeaecd25755118ad85a25b024148725f7f6",
+    "integrity": "sha512-/qP6zvkuIq4bDtyUPMoSIsqIZmBEiaLlFQB68vDn9+RUeFgXnva9ephXq5fZfZnieHGEngED20HLTv00zt5JYA==",
+    "license": "MIT",
+    "reviewedCommit": "2af54bdf8d72dd0d46c5bab368c19e4a57bd0e28",
+    "filename": "dsh-chat-manager.tgz"
+  }
+].map(Object.freeze))
+
+export function defaultsForProduct(layout, adapters = {}) {
   const exists = adapters.existsSync ?? existsSync
   const load = adapters.readFileSync ?? readFileSync
   const components = path.join(layout.root, 'licenses', 'COMPONENTS.json')
   if (!exists(components)) return DEFAULT_PLUGINS
   const configured = JSON.parse(load(components, 'utf8')).defaultPlugins
   if (!Array.isArray(configured)) throw new Error('Portable component metadata has no default plugin list.')
+  if (new Set(configured.map(entry => entry?.package)).size !== configured.length) {
+    throw new Error('Portable component metadata contains duplicate default plugins.')
+  }
   return Object.freeze(configured.map((entry) => {
-    const matched = DEFAULT_PLUGINS.find(plugin => plugin.name === entry?.package && plugin.version === entry?.version)
+    const matched = [...DEFAULT_PLUGINS, ...PREVIEW_DEFAULT_PLUGINS].find(plugin => plugin.name === entry?.package && plugin.version === entry?.version)
     if (!matched || matched.sha256 !== entry?.sha256 || matched.integrity !== entry?.integrity) {
       throw new Error(`Portable component metadata contains an unrecognized default plugin: ${entry?.package ?? 'unknown'}`)
     }

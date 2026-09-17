@@ -120,6 +120,25 @@ pass actual acceptance. Indexing CodeQL alerts is not resolving all alerts.
   `experiments/official-desktop`; it is not part of product builds or a qualified
   replacement shell. Its coordinator makes no official update I/O in the test.
 
-Remaining publication gates: finish default-plugin live acceptance, release and
-pin reviewed candidate plugin artifacts, rebuild the exact final commit, and
-pass cross-platform product qualification. No beta tag has been published.
+## Published plugin candidates and final product preparation
+
+- Chat-manager `1.4.0-beta.1` passed stable `0.1.5-rc.2` and preview
+  `0.1.6-alpha.2` release acceptance in run `35252566016`, including confirmed
+  deletion of the newly created synthetic transcript. npm `latest` stayed at
+  `1.3.5`; `beta` now points to this candidate.
+- Image-viewer `0.1.2-beta.1` passed stable `0.1.2-rc.1` and preview
+  `0.1.6-alpha.2` release acceptance in run `35252608804`. npm `latest` stayed
+  at `0.1.1`; `next` points to this candidate. npm and GitHub asset hashes match.
+- These published archives are now pinned separately in the candidate lock and
+  reviewed launcher catalog. Stable pins remain unchanged. The candidate frozen
+  dependency-store preparation passed locally without network work at first boot.
+- Product run `35251820493` exposed two further blockers: an old Windows shell
+  quoting workaround added literal quotes to the new official structured plugin
+  argv; the native test also targeted the removed legacy Diagnostics page.
+  The CLI now detects the actual shared official operations entry. Native
+  acceptance exercises the new built-in configuration surface in both themes,
+  while retaining legacy diagnostic contrast checks for older cores.
+
+Remaining publication gates: verify these last fixes against actual finished
+products, then pass cross-platform qualification on the exact final commit.
+No Portable beta tag has been published yet.

@@ -26,10 +26,10 @@ const marketManifest = JSON.parse(await readFile(
   path.join(prepared.runtimeRoot, 'app', 'node_modules', '@wsl043', 'dsh-portable-plugin-market', 'package.json'),
   'utf8',
 ))
-const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
+const { defaultsForProduct } = await import(pathToFileURL(path.join(root, 'launcher', 'default-plugins.mjs')).href)
 const components = JSON.parse(await readFile(path.join(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
 const configuredDefaultNames = (components.defaultPlugins ?? []).map(plugin => plugin.package)
-const productDefaults = DEFAULT_PLUGINS.filter(plugin => configuredDefaultNames.includes(plugin.name))
+const productDefaults = defaultsForProduct({ root })
 assert.deepEqual(productDefaults.map(plugin => plugin.name).sort(), configuredDefaultNames.sort(), 'finished-product default metadata')
 let running = false
 

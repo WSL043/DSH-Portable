@@ -6,11 +6,23 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { layoutForRoot } from '../launcher/portable-core.mjs'
-import { DEFAULT_PLUGINS, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
+import { DEFAULT_PLUGINS, defaultsForProduct, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
 
 const lock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8'))
 const imageVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-image-viewer').version
 const chatVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-chat-manager').version
+
+test('product metadata must identify an exact reviewed artifact without duplicate names', () => {
+  const plugin = DEFAULT_PLUGINS[0]
+  const entry = { package: plugin.name, version: plugin.version, sha256: plugin.sha256, integrity: plugin.integrity }
+  const select = entries => defaultsForProduct({ root: '/fixture' }, {
+    existsSync: () => true, readFileSync: () => JSON.stringify({ defaultPlugins: entries }),
+  })
+  assert.deepEqual(select([entry]), [plugin])
+  assert.throws(() => select([{ ...entry, version: '99.0.0' }]), /unrecognized/)
+  assert.throws(() => select([{ ...entry, sha256: '0'.repeat(64) }]), /unrecognized/)
+  assert.throws(() => select([entry, entry]), /duplicate/)
+})
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-plugin-'))

@@ -748,6 +748,28 @@ try {
     const result = await waitForValue(client, diagnosticContrastExpression, value => value?.text && value.contrastRatio >= 4.5, `diagnostic override contrast in ${themeLabel} theme`)
     assert.ok(result.contrastRatio >= 4.5, `${themeLabel} diagnostic override contrast was ${result.contrastRatio}`)
   }
+  const modernBuiltIns = await evaluate(client, `(() => [...document.querySelectorAll('button')].some(item =>
+    ['Built-in plugins', '内置插件'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0))()`)
+  if (modernBuiltIns) {
+    // Alpha.2 replaces the legacy Installed/Diagnostics surface. Exercise its
+    // real configuration UI in both themes; do not pretend old override tags exist.
+    for (const theme of ['light', 'dark']) {
+      await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, `${theme} general settings`)
+      await waitForValue(client, clickButton(theme === 'light' ? ['Light', '浅色', '亮色'] : ['Dark', '深色']), value => value?.clicked, `${theme} theme`)
+      await waitForValue(client, stateExpression, value => value?.theme === theme, `${theme} theme state`)
+      await waitForValue(client, clickButton(['Built-in plugins', '内置插件']), value => value?.clicked, `${theme} built-in plugin settings`)
+      await waitForValue(client, clickButton(['Shell', '终端']), value => value?.clicked, `${theme} official Shell configuration`)
+      await waitForValue(client, `(() => ({
+        fields: [...document.querySelectorAll('input[inputmode="numeric"]')].filter(item => item.getBoundingClientRect().width > 0).length,
+        description: /Command timeout|命令超时/.test(document.body.innerText),
+      }))()`, value => value?.fields >= 2 && value.description, `${theme} official Shell fields`)
+    }
+    if (diagnosticsScreenshotPath) {
+      const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+      await mkdir(path.dirname(diagnosticsScreenshotPath), { recursive: true })
+      await writeFile(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+    }
+  } else {
   await verifyDiagnosticContrast('light')
   await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings before dark diagnostics')
   await waitForValue(client, clickButton(['Dark', '深色']), value => value?.clicked, 'dark theme button')
@@ -764,6 +786,7 @@ try {
     const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
     await mkdir(path.dirname(diagnosticsScreenshotPath), { recursive: true })
     await writeFile(diagnosticsScreenshotPath, Buffer.from(screenshot.data, 'base64'))
+  }
   }
   await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings after dark diagnostics')
   await waitForValue(client, clickButton(['Light', '浅色', '亮色']), value => value?.clicked, 'restore light theme button')
@@ -784,6 +807,8 @@ try {
     sessions: state.sessions.length,
     headless: true,
     offlineLoopback: true,
+    pluginSettingsSurface: modernBuiltIns ? 'official-built-in-settings' : 'legacy-diagnostics',
+    legacyOverrideContrast: modernBuiltIns ? 'not-applicable-upstream-surface-removed' : 'passed-light-and-dark',
   })}\n`)
 } finally {
   client?.close()

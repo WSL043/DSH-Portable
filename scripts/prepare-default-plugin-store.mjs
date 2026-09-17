@@ -3,6 +3,7 @@ import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
+import { createHash } from 'node:crypto';
 
 const stage = path.resolve(process.argv[2] || '');
 if (!process.argv[2]) throw Error('Provide the staged Portable root.');
@@ -12,6 +13,14 @@ const pnpmRoot = path.join(runtimeRoot, 'app/node_modules/pnpm');
 const pnpmManifest = JSON.parse(await readFile(path.join(pnpmRoot, 'package.json'), 'utf8'));
 const archives = (await readdir(archiveRoot)).filter(name => name.endsWith('.tgz'));
 if (!archives.length) throw Error('No reviewed default-plugin archives.');
+const archiveIntegrities = await Promise.all(archives.map(async name =>
+  `sha512-${createHash('sha512').update(await readFile(path.join(archiveRoot, name))).digest('base64')}`));
+const reviewedLocks = await Promise.all(['pnpm-lock.yaml', 'pnpm-lock.preview.yaml'].map(async name => {
+  const file = new URL(`./default-plugin-store/${name}`, import.meta.url);
+  return { file, text: await readFile(file, 'utf8') };
+}));
+const selectedLock = reviewedLocks.find(lock => archiveIntegrities.every(integrity => lock.text.includes(`integrity: ${integrity}, tarball: file:.dsh-portable-archives/`)));
+if (!selectedLock) throw Error('Default-plugin archives do not match a reviewed stable or candidate dependency lock.');
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-store-'));
 try {
   await mkdir(path.join(temporary, '.dsh-portable-archives'));
@@ -21,7 +30,7 @@ try {
     dependencies[archive.replace(/\.tgz$/, '')] = `file:.dsh-portable-archives/${archive}`;
   }
   await writeFile(path.join(temporary, 'package.json'), JSON.stringify({private:true,dependencies}));
-  await copyFile(new URL('./default-plugin-store/pnpm-lock.yaml', import.meta.url), path.join(temporary, 'pnpm-lock.yaml'));
+  await copyFile(selectedLock.file, path.join(temporary, 'pnpm-lock.yaml'));
   const result = spawnSync(process.execPath, [path.join(pnpmRoot, pnpmManifest.bin.pnpm),
     'install', '--frozen-lockfile',
     '--store-dir', path.join(archiveRoot, 'store'),

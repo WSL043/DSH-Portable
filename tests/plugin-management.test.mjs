@@ -11,6 +11,7 @@ import {
   materializeRemotePluginArchives,
   normalizeFreshReleaseRemovalArgv,
   normalizeDshArgvForWindowsShell,
+  pluginCliUsesStructuredArgv,
   portableDataArgv,
   profileNeedsRelink,
   runMovedProfileRelinkWithFreshReleaseRecovery,
@@ -160,6 +161,19 @@ test('Windows plugin forwarding preserves a local path with spaces through the o
     normalizeDshArgvForWindowsShell(['plugin', '--profile', 'web', 'list', '--depth', '0'], 'C:\\Work'),
     ['plugin', '--profile', 'web', 'list', '--depth', '0'],
   )
+})
+
+test('shared official plugin operations receive literal argv without legacy shell quotes', () => {
+  const args = ['plugin', '--profile', 'web', 'add', 'C:\\USB drive\\generic plugin.tgz']
+  const structured = pluginCliUsesStructuredArgv({ dshBin: '/runtime/lib/bin.js' }, {
+    readdirSync: () => ['bin.js', 'plugin-reviewed.js'],
+    readFileSync: () => 'import { runPluginCommand } from "@deepseek-ai/dsh-plugin-manager/operations"; runPluginCommand(context, args);',
+  })
+  assert.equal(structured, true)
+  assert.deepEqual(normalizeDshArgvForWindowsShell(args, 'C:\\Work', structured), args)
+  assert.equal(pluginCliUsesStructuredArgv({ dshBin: '/runtime/lib/bin.js' }, {
+    readdirSync: () => ['plugin-old.js'], readFileSync: () => 'execaCommand(args.join(" "), { shell: true });',
+  }), false)
 })
 
 test('removing an installed plugin cannot be blocked by pnpm fresh-release verification', () => {

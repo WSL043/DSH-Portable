@@ -980,7 +980,7 @@ test('finished products verify and smoke the visual market through the real DSH 
   assert.match(runtime, /assert\.match\(marketManifest\.version,\s*\/\^0\\\.1\\\.0-beta/s)
   assert.match(smoke, /\/dsh-market\/status/)
   assert.match(smoke, /\/dsh-market\/installed/)
-  assert.match(smoke, /DEFAULT_PLUGINS/)
+  assert.match(smoke, /defaultsForProduct/)
   assert.match(smoke, /configuredDefaultNames/)
   assert.match(smoke, /productDefaults/)
   assert.doesNotMatch(smoke, /['"]1\.0\.4['"]|['"]1\.0\.6['"]/) // version is read from the finished product
