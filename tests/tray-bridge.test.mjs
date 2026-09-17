@@ -243,6 +243,62 @@ test('title navigation follows session visits, skips deleted sessions, and clear
   } finally { runtime.dispose() }
 })
 
+test('alpha2 navigation uses uiWorkspace APIs and retained main-view selection', async () => {
+  const client = await loadBridgeClient()
+  const initial = sessionList(4)
+  delete initial.current
+  for (const session of Object.values(initial.byId)) session.retainedBy = {}
+  initial.byId['session-3'].retainedBy = { mainView: 1 }
+  const runtime = fakeContext(initial)
+  const calls = []
+  const select = id => {
+    const snapshot = runtime.ctx.sessions.list.getSnapshot()
+    const byId = Object.fromEntries(Object.entries(snapshot.byId).map(([key, session]) => [key, { ...session, retainedBy: {} }]))
+    if (id !== null && byId[id]) byId[id] = { ...byId[id], retainedBy: { mainView: 1 } }
+    runtime.setSessions({ ...snapshot, byId })
+  }
+  runtime.ctx.uiWorkspace = {
+    openSession(id) { calls.push(['open', id]); select(id) },
+    startSession() { calls.push(['start']); select(null) },
+    clearMain() { calls.push(['clear']); select(null) },
+  }
+  runtime.ctx.sessions.open = () => { throw new Error('legacy sessions.open must not handle alpha2 navigation') }
+  runtime.ctx.sessions.clear = () => { throw new Error('legacy sessions.clear must not handle alpha2 navigation') }
+
+  assert.equal((await client.exports.ensurePortableWorkspace(runtime.ctx, 'C:\\Portable\\workspace')).status, 'preserved')
+  client.exports.apply(runtime.ctx)
+  try {
+    assert.equal(client.posted.at(-1).currentSessionId, 'session-3', 'alpha2 current selection comes from retainedBy.mainView')
+    select('session-2')
+    select('session-1')
+
+    client.send({ type: 'dsh-portable/action', action: 'navigate-back' })
+    assert.deepEqual(calls.at(-1), ['open', 'session-2'])
+    assert.equal(client.posted.at(-1).currentSessionId, 'session-2')
+    client.send({ type: 'dsh-portable/action', action: 'navigate-forward' })
+    assert.deepEqual(calls.at(-1), ['open', 'session-1'])
+    assert.equal(client.posted.at(-1).currentSessionId, 'session-1')
+
+    runtime.ctx.uiWorkspace.clearMain()
+    select('session-0')
+    client.send({ type: 'dsh-portable/action', action: 'navigate-back' })
+    assert.deepEqual(calls.at(-1), ['clear'], 'historical empty view must use clearMain when alpha2 exposes it')
+    assert.equal(client.posted.at(-1).currentSessionId, '')
+    client.send({ type: 'dsh-portable/action', action: 'navigate-forward' })
+    assert.deepEqual(calls.at(-1), ['open', 'session-0'])
+
+    client.send({ type: 'dsh-portable/action', action: 'new-session' })
+    assert.deepEqual(calls.at(-1), ['start'], 'new-session uses the public startSession flow')
+    client.send({
+      type: 'dsh-portable/action', action: 'open-session', sessionId: 'session-1', activationId: 'a'.repeat(32),
+    })
+    assert.deepEqual(calls.at(-1), ['open', 'session-1'])
+    assert.deepEqual(client.posted.at(-1), {
+      type: 'dsh-portable/notification-action-result', activationId: 'a'.repeat(32), terminal: true,
+    })
+  } finally { runtime.dispose() }
+})
+
 test('Portable registers its owned workspace only for a truly empty first run', async () => {
   const client = await loadBridgeClient()
   const fresh = fakeContext({ ids: [], byId: {}, current: undefined, phase: 'ready' })
@@ -422,6 +478,7 @@ function sessionList(count = 12) {
 test('private tray bridge projects bounded official runtime state and invokes only SessionRuntime actions', async () => {
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList())
+  runtime.ctx.uiWorkspace = {}
 
   assert.deepEqual([...client.exports.inject], ['slots', 'locale', 'theme', 'sessions', 'workspaces', 'uiWorkspace', 'sessionLogDownload', 'layout'])
   client.exports.apply(runtime.ctx)

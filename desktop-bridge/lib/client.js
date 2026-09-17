@@ -1050,6 +1050,7 @@ window.__ModuleLoader__.load({
 
     function sessionState(ctx) {
       const source = ctx.sessions.list.getSnapshot()
+      const current = currentSessionIdFromSnapshot(source)
       const sourceSessions = (source.ids ?? [])
         .map(id => source.byId?.[id])
         .filter(Boolean)
@@ -1088,10 +1089,54 @@ window.__ModuleLoader__.load({
         locale: localeOf(ctx),
         theme: themeOf(ctx),
         themePreference: ctx.theme?.getTheme?.()?.preference || 'system',
-        currentSessionId: source.current == null ? '' : String(source.current),
+        currentSessionId: current == null ? '' : String(current),
         hasRunningSession,
         sessions,
       }
+    }
+
+    function currentSessionIdFromSnapshot(snapshot) {
+      if (Object.prototype.hasOwnProperty.call(snapshot || {}, 'current')) return snapshot.current ?? null
+      return Object.values(snapshot?.byId || {}).find(item => (item?.retainedBy?.mainView ?? 0) > 0)?.id ?? null
+    }
+
+    function openSession(ctx, sessionId) {
+      const uiWorkspace = ctx.uiWorkspace
+      if (typeof uiWorkspace?.openSession === 'function') {
+        uiWorkspace.openSession(sessionId)
+        return true
+      }
+      if (typeof ctx.sessions?.open === 'function') {
+        ctx.sessions.open(sessionId)
+        return true
+      }
+      return false
+    }
+
+    function startSession(ctx) {
+      const uiWorkspace = ctx.uiWorkspace
+      if (typeof uiWorkspace?.startSession === 'function') {
+        uiWorkspace.startSession()
+        return true
+      }
+      if (typeof ctx.sessions?.clear === 'function') {
+        ctx.sessions.clear()
+        return true
+      }
+      return false
+    }
+
+    function clearCurrentSession(ctx) {
+      const uiWorkspace = ctx.uiWorkspace
+      if (typeof uiWorkspace?.clearMain === 'function') {
+        uiWorkspace.clearMain()
+        return true
+      }
+      if (typeof ctx.sessions?.clear === 'function') {
+        ctx.sessions.clear()
+        return true
+      }
+      return false
     }
 
     function applyNativeDownload(ctx, message) {
@@ -1142,7 +1187,7 @@ window.__ModuleLoader__.load({
         })
       }
       if ((snapshot.items || []).length > 0) return { status: 'preserved' }
-      if (ctx.sessions?.list?.getSnapshot?.().current != null) return { status: 'preserved' }
+      if (currentSessionIdFromSnapshot(ctx.sessions?.list?.getSnapshot?.()) != null) return { status: 'preserved' }
       const workspace = await ctx.workspaces.create({ path: target })
       const startSession = ctx.uiWorkspace?.startSession?.bind(ctx.uiWorkspace)
         || ctx.workspaces.startSession?.bind(ctx.workspaces)
@@ -1210,7 +1255,7 @@ window.__ModuleLoader__.load({
         const recordNavigation = () => {
           const snapshot = ctx.sessions.list.getSnapshot()
           if (snapshot.phase !== 'ready') return
-          const current = snapshot.current ?? null
+          const current = currentSessionIdFromSnapshot(snapshot)
           if (current === observedSession) return
           observedSession = current
           if (navigationIndex >= 0 && navigation[navigationIndex] === current) return
@@ -1347,10 +1392,20 @@ window.__ModuleLoader__.load({
             recordNavigation()
             const target = navigationTarget(message.action === 'navigate-back' ? -1 : 1)
             if (target < 0) return
+            const previousIndex = navigationIndex
             navigationIndex = target
             const id = navigation[target]
-            if (id === null) ctx.sessions.clear()
-            else ctx.sessions.open(id)
+            let applied
+            try {
+              applied = id === null ? clearCurrentSession(ctx) : openSession(ctx, id)
+            } catch (error) {
+              navigationIndex = previousIndex
+              throw error
+            }
+            if (!applied) {
+              navigationIndex = previousIndex
+              return
+            }
             publish()
             return
           }
@@ -1359,7 +1414,7 @@ window.__ModuleLoader__.load({
             return
           }
           if (message.action === 'new-session') {
-            ctx.sessions.clear()
+            startSession(ctx)
             return
           }
           if (message.action === 'reply-session') {
@@ -1424,7 +1479,7 @@ window.__ModuleLoader__.load({
           const snapshot = ctx.sessions.list.getSnapshot()
           if (snapshot?.phase !== 'ready' && !snapshot.byId?.[sessionId]) { acknowledgeNotification(activationId, false); return }
           if (snapshot.byId?.[sessionId] && snapshot.byId[sessionId].origin !== 'subagent') {
-            ctx.sessions.open(sessionId)
+            if (!openSession(ctx, sessionId)) { acknowledgeNotification(activationId, false); return }
           }
           acknowledgeNotification(activationId, true)
         }
