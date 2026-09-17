@@ -106,7 +106,13 @@ pass actual acceptance. Indexing CodeQL alerts is not resolving all alerts.
   `build/beta-viewer-acceptance`. This is browser acceptance, not native-shell proof.
 - Latest Portable source suite: 675 passed, 1 skipped (676 total), recorded in
   `build/beta-source-final.log`. Chat-manager source suite: 97 passed. Viewer:
-  31 passed. New chat archive-shortcut changes still require live acceptance.
+  31 passed.
+- Live alpha.2 archive acceptance with the candidate chat plugin passed: the
+  sidebar opens unified settings without the old dialog, delete is red
+  (`rgb(236, 19, 19)`), cancellation makes no delete request, restoration succeeds,
+  and closing/reopening/closing settings does not reopen it. No page reload or
+  runtime exception was observed. Evidence: `build/beta-chat-modern-acceptance`.
+  The test restored a synthetic session; permanent deletion was not executed.
 - PR #138's preview lock was already integrated and was verified before closing
   it and deleting its branch. Portable, chat-manager and image-viewer each have
   only remote `main` after cleanup.
