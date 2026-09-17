@@ -10,6 +10,9 @@
       "Windows 窗口恢复随明暗主题变化的细边框，活动窗口边界更清晰。",
       "顶部帮助菜单增加项目仓库、Star 和建议入口；反馈问题可选择合适的模板。"
     ],
+    "knownIssues": [
+      "用户反馈：打开插件页后无法关闭该页面。此问题尚未修复，后续版本跟进。"
+    ],
     "upgradeNotes": [
       "这是 0.7.0 的首个 Beta，使用候选通道，内置官方 DSH 0.1.6-alpha.2。",
       "官方调整了插件加载与卸载接口，第三方插件的兼容性仍需由各插件确认。升级前请退出 Portable 并备份数据。",
@@ -25,6 +28,9 @@
       "Fix installation of local plugin archives with spaces in their paths, and reject absolute paths and parent traversal in plugin-declared files.",
       "Restore a subtle, theme-aware Windows border to distinguish the active window.",
       "Add repository, Star and suggestion links to the Help menu, with issue template selection for problem reports."
+    ],
+    "knownIssues": [
+      "User-reported: the plugin page cannot be closed after opening it. This issue remains unresolved and will be addressed in a later version."
     ],
     "upgradeNotes": [
       "This first 0.7.0 Beta uses the candidate channel and bundles official DSH 0.1.6-alpha.2.",
