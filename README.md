@@ -32,11 +32,13 @@
 </p>
 
 <p align="center">
-  <img src="assets/portable-layout-zh.svg" width="1040" alt="Windows 便携目录示意：程序组件、data 数据与 workspace 工作区集中保存，退出后复制到同平台新位置">
+  <img src="assets/portable-hero-zh.png" width="1040" alt="DSH-Portable：以真实 DSH 暗色主界面为参考的便携工作环境主视觉">
 </p>
 
 > [!NOTE]
 > DSH-Portable 是独立社区发行版，不是 DeepSeek 官方桌面应用。它内置经过适配和成品测试的官方 DeepSeek Harness 预览版本。
+
+<p align="center"><sub>主视觉基于真实 DSH 界面制作；AI 辅助合成，非实机截图。</sub></p>
 
 ## 不只是一个桌面窗口
 

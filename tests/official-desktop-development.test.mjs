@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { configureDevelopmentPaths } from '../experiments/official-desktop/development-paths.mjs';
+import { adaptDevelopmentSource } from '../experiments/official-desktop/prepare-development.mjs';
+
+test('development refuses missing, relative, filesystem-root and late path configuration', () => {
+  const app = { isReady: () => false };
+  for (const value of [undefined, '.', resolve('/')]) {
+    assert.throws(() => configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: value }));
+  }
+  assert.throws(() => configureDevelopmentPaths({ isReady: () => true }, { DSH_PORTABLE_DEVELOPMENT_ROOT: tmpdir() }), /before Electron/);
+});
+test('each development launch derives Electron and DSH storage from its current root', t => {
+  const temporary = mkdtempSync(join(tmpdir(), 'dsh-desktop-development-'));
+  t.after(() => rmSync(temporary, { recursive: true, force: true }));
+  for (const name of ['A', 'B']) {
+    const paths = {};
+    const app = { isReady: () => false, setPath: (key, path) => { paths[key] = path; }, setAppLogsPath: path => { paths.appLogs = path; } };
+    const env = { DSH_PORTABLE_DEVELOPMENT_ROOT: join(temporary, name), DSH_HOME: 'do-not-reuse-production' };
+    configureDevelopmentPaths(app, env);
+    assert.equal(env.DSH_HOME, join(temporary, name, 'data', 'dsh-home'));
+    assert.equal(paths.userData, join(temporary, name, 'data', 'electron'));
+    assert.equal(paths.sessionData, paths.userData);
+    assert.equal(paths.logs, paths.appLogs);
+    assert.equal(env.DSH_DESKTOP_UPDATE_JOURNAL_DIR, join(paths.logs, 'desktop-update'));
+  }
+});
+test('source adapter refuses unknown or modified official files before writing', () => {
+  assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream')), /Unreviewed/);
+  assert.throws(() => adaptDevelopmentSource('unknown.ts', Buffer.from('')), /Unreviewed/);
+});

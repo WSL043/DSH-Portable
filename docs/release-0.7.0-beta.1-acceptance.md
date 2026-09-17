@@ -91,3 +91,29 @@ pass actual acceptance. Indexing CodeQL alerts is not resolving all alerts.
   The packaged chat manager still targets the older session API. Publication
   remains blocked until plugin and native navigation compatibility are fixed
   and this acceptance passes with default plugins enabled.
+
+## Follow-up fixes — 2026-09-18
+
+- The desktop bridge now uses alpha.2's `uiWorkspace` navigation and derives
+  current selection from main-view retention. Legacy navigation remains supported.
+- The real Windows native market smoke passed with the locally rebuilt capsule
+  and candidate chat-manager installed, without runtime exceptions. Evidence:
+  `build/beta-native-market-fixed`. This fixture differs from the original ZIP;
+  it is not evidence that the still-pinned published default plugin works.
+- Image-viewer browser acceptance on the actual alpha.2 runtime passed gallery,
+  zoom, pan, annotations, download, focus, and returning the annotated image and
+  notes to the original draft without sending it. Evidence:
+  `build/beta-viewer-acceptance`. This is browser acceptance, not native-shell proof.
+- Latest Portable source suite: 675 passed, 1 skipped (676 total), recorded in
+  `build/beta-source-final.log`. Chat-manager source suite: 97 passed. Viewer:
+  31 passed. New chat archive-shortcut changes still require live acceptance.
+- PR #138's preview lock was already integrated and was verified before closing
+  it and deleting its branch. Portable, chat-manager and image-viewer each have
+  only remote `main` after cleanup.
+- The official Electron development source adapter is isolated under
+  `experiments/official-desktop`; it is not part of product builds or a qualified
+  replacement shell. Its coordinator makes no official update I/O in the test.
+
+Remaining publication gates: finish default-plugin live acceptance, release and
+pin reviewed candidate plugin artifacts, rebuild the exact final commit, and
+pass cross-platform product qualification. No beta tag has been published.

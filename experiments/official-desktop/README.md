@@ -1,5 +1,25 @@
 # Official desktop boundary prototype
 
+## Alpha.2 development adapter — 2026-09-18
+
+`prepare-development.mjs` now generates source overlays for the reviewed official commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. It checks the exact SHA-256 of both upstream inputs before writing and refuses a nonempty output directory. This is a development implementation, not a downloadable or qualified desktop edition.
+
+- Before Electron readiness, the adapted main entry requires an absolute `DSH_PORTABLE_DEVELOPMENT_ROOT`; DSH home, Electron user/session data, logs and crash dumps derive from that separate root. It never defaults to a user's production DSH home.
+- The development coordinator cannot check the official installer feed. The mandatory-update policy also receives no configuration. This does not introduce a replacement updater; development builds are updated manually.
+- The official source files and signed release bundles remain untouched. Only an explicitly prepared unsigned development checkout should consume the generated overlays.
+
+Place the exact official `apps/desktop/src/main.ts` and `update-coordinator.ts` in a reviewed input directory, then run:
+
+```powershell
+node experiments/official-desktop/prepare-development.mjs build/desktop-alpha2-adapter-inputs build/desktop-alpha2-development-overlay
+node experiments/official-desktop/verify-development.mjs build/desktop-alpha2-development-overlay
+node --test tests/official-desktop-development.test.mjs
+```
+
+The overlay contains three TypeScript source files and `provenance.json`. To continue native qualification, copy only those source files into `apps/desktop/src` of an isolated checkout of the pinned commit, build using upstream's pinned dependencies, and launch with a dedicated development root. Never point this prototype at an existing Portable `data` directory.
+
+Verified: generated TypeScript parses; the actual adapted update coordinator rejects check/download/install without making update I/O calls; path configuration derives from each supplied root and rejects late initialization. Pending: full upstream build, actual official desktop startup, early module-import path audit, directory relocation, credentials, plugins, process shutdown, and cross-machine behavior. These source tests do not qualify Electron adoption or change the production Portable shell.
+
 Experimental engineering fixtures only. Nothing here is installed into Portable or enabled in product builds. Requires Node 24.19 and, for the native substrate probe, Electron 44.0.0 Windows x64. No visible window or foreground input is used.
 
 ## Observed results — 2026-09-14
