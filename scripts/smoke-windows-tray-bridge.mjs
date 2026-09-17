@@ -807,6 +807,30 @@ try {
     await waitForValue(client, `(() => [...document.querySelectorAll('[role="textbox"][contenteditable="true"],textarea')]
       .some(item => item.getBoundingClientRect().width > 0 && item.getBoundingClientRect().height > 0
         && getComputedStyle(item).visibility !== 'hidden'))()`, Boolean, 'native new-session opens the conversation composer')
+    // A visible composer is not proof that typing works. Use the browser's
+    // input pipeline without sending a message or contacting a model.
+    const probeText = 'Portable input acceptance 测试'
+    await waitForValue(client, `(() => {
+      const input = [...document.querySelectorAll('[role="textbox"][contenteditable="true"],textarea')]
+        .find(item => item.getBoundingClientRect().width > 0 && item.getBoundingClientRect().height > 0
+          && getComputedStyle(item).visibility !== 'hidden' && !item.disabled)
+      if (!input) return false
+      input.focus()
+      return document.activeElement === input
+    })()`, Boolean, 'conversation composer accepts focus')
+    await client.send('Input.insertText', { text: probeText })
+    await waitForValue(client, `(() => {
+      const input = document.activeElement
+      return (input?.value ?? input?.textContent ?? '').includes(${JSON.stringify(probeText)})
+    })()`, Boolean, 'conversation composer accepts actual text input')
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 })
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 })
+    await client.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+    await client.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+    await waitForValue(client, `(() => {
+      const input = document.activeElement
+      return (input?.value ?? input?.textContent ?? '').trim() === ''
+    })()`, Boolean, 'synthetic input is cleared without sending')
   } else {
     const afterClear = await waitForValue(client, stateCountExpression, value => value > beforeClear, 'SessionRuntime.clear state update')
     assert.ok(afterClear > beforeClear)
