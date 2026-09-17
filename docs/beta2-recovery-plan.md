@@ -30,7 +30,10 @@ features are outside this recovery release.
   the cause of the disabled composer.
 - A no-third-party-plugin alpha2 fixture without a workspace/session has an
   inert composer. This is not an effective input regression test.
-- A hidden WebView2 fixture can open and close the Plugin Market modal. This
+- A hidden WebView2 fixture using an earlier local beta artifact can open and
+  close the Plugin Market modal. Its archive SHA256 starts `301f90ee`; the
+  withdrawn published Windows archive starts `516b8329`, so this is NOT an
+  acceptance result for the shipped Beta 1. This
   does not establish that the official Plugins main panel can return to an
   existing conversation. Keep these two surfaces distinct.
 
