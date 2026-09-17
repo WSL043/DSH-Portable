@@ -37,7 +37,30 @@ try {
   socket.onmessage = ({ data }) => { const message = JSON.parse(data); if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params?.exceptionDetails?.exception?.description || message.params?.exceptionDetails?.text); const entry = pending.get(message.id); if (!entry) return; pending.delete(message.id); clearTimeout(entry.timer); message.error ? entry.reject(new Error(JSON.stringify(message.error))) : entry.resolve(message.result) }
   const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++next; const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout ${method}`)) }, 15000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })) })
   evaluate = async expression => { const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text); return result.result?.value }
-  const until = async (expression, predicate, label) => { const limit = Date.now() + 30000; let result; while (Date.now() < limit) { result = await evaluate(expression); if (predicate(result)) return result; await delay(100) } throw new Error(`${label}: ${JSON.stringify(result)}`) }
+  const dismissLateOnboarding = `(() => {
+    const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
+      .filter(item => item.getBoundingClientRect().width > 0)
+      .find(item => /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
+    if (!notice) return false
+    const button = [...notice.querySelectorAll('button')].find(item =>
+      ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
+    button?.click()
+    return Boolean(button)
+  })()`
+  const until = async (expression, predicate, label) => {
+    const limit = Date.now() + 30000
+    let result
+    while (Date.now() < limit) {
+      // A provider notice can mount after settings are already interactive.
+      // Dismiss only these known first-run prompts, never arbitrary dialogs.
+      if (!await evaluate(dismissLateOnboarding)) {
+        result = await evaluate(expression)
+        if (predicate(result)) return result
+      }
+      await delay(100)
+    }
+    throw new Error(`${label}: ${JSON.stringify(result)}`)
+  }
   const click = names => `(() => {const names=${JSON.stringify(names)};const button=[...document.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
   await send('Runtime.enable')
   await send('Page.enable')
@@ -140,12 +163,9 @@ try {
   assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
   assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
   const hasBuiltInPluginsNavigation = await evaluate(`(() => {
-    const dialog = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
-      .filter(item => item.getBoundingClientRect().width > 0)
-      .at(-1)
-    if (!dialog) return false
     const labels = new Set(['内置插件', 'Built-in plugins'])
-    return [...dialog.querySelectorAll('button,[role="button"],[role="tab"]')].some(item =>
+    // The topmost dialog may be a late provider notice, not settings.
+    return [...document.querySelectorAll('[role="dialog"] button,dialog button,[role="dialog"] [role="tab"]')].some(item =>
       labels.has((item.getAttribute('aria-label') || item.textContent || '').trim()) &&
       item.getBoundingClientRect().width > 0 && !item.disabled)
   })()`)
