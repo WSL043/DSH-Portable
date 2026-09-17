@@ -223,11 +223,15 @@ try {
 
   // Capture the native HWND in parallel with WebView startup. The off-screen
   // compositor does not generate normal paints, and no intermediate HTML page
-  // is supposed to be visible in the native host anymore.
+  // is supposed to be visible in the native host anymore. Capture the initial
+  // loader once: repeated synchronous WM_PRINT calls during WebView creation
+  // can block the capture helper. Handoff continuity is checked below through
+  // timed CDP samples and the native trace, not repeated loader screenshots.
   const nativeCapture = requireLoading ? execFileAsync('powershell.exe', [
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
     path.join(import.meta.dirname, 'capture-windows-native-window.ps1'),
     '-TargetProcessId', String(launcher.pid), '-OutputDirectory', path.join(output, '01-native-loader'),
+    '-FrameCount', '1',
   ], { windowsHide: true, timeout: 20000 }) : Promise.resolve()
   nativeCapture.catch(() => {}) // Keep errors for the awaited capture below.
   const page = await waitForTarget(debugPort, launcher, Math.max(1, startupDeadline - Date.now()))

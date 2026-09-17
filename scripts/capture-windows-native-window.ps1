@@ -1,6 +1,7 @@
 ﻿param(
     [Parameter(Mandatory = $true)][int]$TargetProcessId,
-    [Parameter(Mandatory = $true)][string]$OutputDirectory
+    [Parameter(Mandatory = $true)][string]$OutputDirectory,
+    [ValidateRange(1, 12)][int]$FrameCount = 12
 )
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
@@ -38,17 +39,19 @@ if ($window -eq [IntPtr]::Zero) { throw 'Native test window was not found' }
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 # WM_PRINT captures only the target HWND; it never activates or moves a window.
 # Off-screen windows do not receive normal compositor paints, so request them.
-for ($frame = 0; $frame -lt 12; $frame++) {
+for ($frame = 0; $frame -lt $FrameCount; $frame++) {
     $rect = New-Object NativeWindowCapture+Rect
     if (-not [NativeWindowCapture]::GetWindowRect($window, [ref]$rect)) { throw 'GetWindowRect failed' }
     $bitmap = New-Object Drawing.Bitmap ($rect.Right - $rect.Left), ($rect.Bottom - $rect.Top)
     $graphics = [Drawing.Graphics]::FromImage($bitmap)
     $dc = $graphics.GetHdc()
     try {
+        Write-Output "native-capture frame=$frame phase=print-begin"
         if (-not [NativeWindowCapture]::PrintWindow($window, $dc, 0)) { throw 'PrintWindow failed' }
+        Write-Output "native-capture frame=$frame phase=print-end"
     } finally { $graphics.ReleaseHdc($dc); $graphics.Dispose() }
     try {
-        if ($frame -eq 0 -or $frame -eq 11) {
+        if ($frame -eq 0 -or $frame -eq ($FrameCount - 1)) {
             $bitmap.Save((Join-Path $OutputDirectory "native-$frame.png"))
         }
     } finally { $bitmap.Dispose() }

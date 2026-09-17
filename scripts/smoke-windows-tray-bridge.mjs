@@ -796,9 +796,21 @@ try {
 
   const stateCountExpression = `window.__dshTrayMessages?.filter(item => item.type === 'dsh-portable/state').length || 0`
   const beforeClear = await evaluate(client, stateCountExpression)
+  if (modernBuiltIns) {
+    await waitForValue(client, clickButton(['Close', '关闭']), value => value?.clicked, 'close settings before native new-session')
+    await waitForValue(client, clickButton(['Plugins', '插件']), value => value?.clicked, 'open sidebar plugins before native new-session')
+  }
   await evaluate(client, `window.chrome.webview.__emit({ type: 'dsh-portable/action', action: 'new-session' })`)
-  const afterClear = await waitForValue(client, stateCountExpression, value => value > beforeClear, 'SessionRuntime.clear state update')
-  assert.ok(afterClear > beforeClear)
+  if (modernBuiltIns) {
+    // Modern DSH reuses a blank workspace session. An unchanged native
+    // projection is deliberately deduplicated, so verify the actual navigation.
+    await waitForValue(client, `(() => [...document.querySelectorAll('[role="textbox"][contenteditable="true"],textarea')]
+      .some(item => item.getBoundingClientRect().width > 0 && item.getBoundingClientRect().height > 0
+        && getComputedStyle(item).visibility !== 'hidden'))()`, Boolean, 'native new-session opens the conversation composer')
+  } else {
+    const afterClear = await waitForValue(client, stateCountExpression, value => value > beforeClear, 'SessionRuntime.clear state update')
+    assert.ok(afterClear > beforeClear)
+  }
   assert.equal(await evaluate(client, 'navigator.onLine'), false)
   assert.deepEqual(exceptions, [])
 

@@ -155,3 +155,14 @@ pass actual acceptance. Indexing CodeQL alerts is not resolving all alerts.
 Remaining publication gate: pass cross-platform finished-product qualification
 on the exact final commit, including native WebView2 startup and lifecycle.
 No Portable beta tag has been published yet.
+
+Run `35255143855` passed the plugin-management and cross-platform product checks,
+but exposed two native-harness problems. Windows 2025 reached the workspace and
+failed a message-count assertion: the new core may reuse a blank session, while
+the bridge deliberately deduplicates unchanged projections. The modern check
+now navigates from the plugin panel to the real editable composer through the
+native new-session command; local replay passed (`build/beta-native-new-session.log`).
+Windows 2022 saved a complete native loader image, then its repeated synchronous
+window capture timed out. Initial loader capture now takes one frame; workspace
+handoff still requires the timed CDP observations and native trace within the
+unchanged startup budget. Final remote qualification is still required.
