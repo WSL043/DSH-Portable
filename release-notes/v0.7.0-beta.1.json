@@ -10,7 +10,8 @@
     ],
     "upgradeNotes": [
       "这是 0.7.0 的首个 Beta，使用候选通道，内置官方 DSH 0.1.6-alpha.2。",
-      "官方调整了插件加载与卸载接口，第三方插件的兼容性仍需由各插件确认。升级前请退出 Portable 并备份数据。"
+      "官方调整了插件加载与卸载接口，第三方插件的兼容性仍需由各插件确认。升级前请退出 Portable 并备份数据。",
+      "新内核包含官方 Office 文档处理组件，下载和解压体积较旧版增加；保留完整功能，未裁剪该组件。"
     ]
   },
   "en": {
@@ -23,7 +24,8 @@
     ],
     "upgradeNotes": [
       "This first 0.7.0 Beta uses the candidate channel and bundles official DSH 0.1.6-alpha.2.",
-      "Official plugin loading and unloading interfaces have changed. Third-party plugin compatibility must be confirmed individually. Exit Portable and back up your data before upgrading."
+      "Official plugin loading and unloading interfaces have changed. Third-party plugin compatibility must be confirmed individually. Exit Portable and back up your data before upgrading.",
+      "The new core includes official Office document processing components, increasing download and extracted sizes. These components are retained in full."
     ]
   }
 }

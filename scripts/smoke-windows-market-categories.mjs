@@ -5,8 +5,8 @@ import { createServer } from 'node:net'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-const root = process.argv[2]
-const output = process.argv[3]
+const root = process.argv[2] && path.resolve(process.argv[2])
+const output = process.argv[3] && path.resolve(process.argv[3])
 assert.ok(process.argv.includes('--disposable'), 'use an isolated test installation with --disposable')
 assert.ok(root && output)
 await mkdir(output, { recursive: true })
@@ -139,14 +139,38 @@ try {
   assert.equal(generalBorders.portableGroup.borderBottom.px, 0, 'Portable group bottom border must be zero')
   assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
   assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
-  await until(click(['Plugins','插件']), Boolean, 'plugins');
-  await until(click(['Plugin configuration','插件配置']), Boolean, 'plugin configuration');
-  await delay(500);
-  await writeFile(path.join(output, 'plugin-configuration.txt'), await evaluate('document.body.innerText'));
-  await until(click(['Plugin list','插件列表']), Boolean, 'official plugin list');
-  await delay(500);
-  await writeFile(path.join(output, 'plugin-list.txt'), await evaluate('document.body.innerText'));
-  await until(click(['Plugin Market','插件市场']), Boolean, 'market');
+  const hasBuiltInPluginsNavigation = await evaluate(`(() => {
+    const dialog = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
+      .filter(item => item.getBoundingClientRect().width > 0)
+      .at(-1)
+    if (!dialog) return false
+    const labels = new Set(['内置插件', 'Built-in plugins'])
+    return [...dialog.querySelectorAll('button,[role="button"],[role="tab"]')].some(item =>
+      labels.has((item.getAttribute('aria-label') || item.textContent || '').trim()) &&
+      item.getBoundingClientRect().width > 0 && !item.disabled)
+  })()`)
+  if (hasBuiltInPluginsNavigation) {
+    await until(`(() => {
+      const dialog = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
+        .filter(item => item.getBoundingClientRect().width > 0)
+        .at(-1)
+      const button = dialog && [...dialog.querySelectorAll('button')]
+        .find(item => ['关闭', 'Close'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()) && item.getBoundingClientRect().width > 0 && !item.disabled)
+      button?.click()
+      return Boolean(button)
+    })()`, Boolean, 'close settings dialog');
+    await until(click(['Plugins', '插件']), Boolean, 'sidebar plugins');
+    await until(click(['Plugin Market', '插件市场']), Boolean, 'market');
+  } else {
+    await until(click(['Plugins','插件']), Boolean, 'plugins');
+    await until(click(['Plugin configuration','插件配置']), Boolean, 'plugin configuration');
+    await delay(500);
+    await writeFile(path.join(output, 'plugin-configuration.txt'), await evaluate('document.body.innerText'));
+    await until(click(['Plugin list','插件列表']), Boolean, 'official plugin list');
+    await delay(500);
+    await writeFile(path.join(output, 'plugin-list.txt'), await evaluate('document.body.innerText'));
+    await until(click(['Plugin Market','插件市场']), Boolean, 'market');
+  }
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
   const checks=[];
   for(const width of [580,1200,580]){

@@ -2,53 +2,64 @@
   "schemaVersion": 1,
   "platforms": {
     "windows-x64": {
-      "archiveBytes": 65000000,
-      "extractedBytes": 218000000,
-      "files": 9300,
+      "archiveBytes": 150000000,
+      "extractedBytes": 568000000,
+      "files": 10500,
       "directories": 2950,
-      "items": 12250,
-      "appBytes": 122000000,
-      "appFiles": 9200,
+      "items": 13000,
+      "appBytes": 472000000,
+      "appFiles": 10400,
       "appDirectories": 2900,
-      "appItems": 12100,
+      "appItems": 12600,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 350000000,
+      "extractedBytesWithoutOfficeRuntime": 218000000,
+      "appBytesWithoutOfficeRuntime": 122000000
     },
     "macos-x64": {
-      "archiveBytes": 78000000,
-      "extractedBytes": 250000000,
-      "files": 9500,
+      "archiveBytes": 190000000,
+      "extractedBytes": 535000000,
+      "files": 10500,
       "directories": 2950,
-      "items": 12400,
+      "items": 13000,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 285000000,
+      "extractedBytesWithoutOfficeRuntime": 250000000
     },
     "macos-arm64": {
-      "archiveBytes": 76000000,
-      "extractedBytes": 245000000,
-      "files": 9500,
+      "archiveBytes": 178000000,
+      "extractedBytes": 520000000,
+      "files": 10500,
       "directories": 2950,
-      "items": 12400,
+      "items": 13000,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 275000000,
+      "extractedBytesWithoutOfficeRuntime": 245000000
     },
     "linux-x64": {
-      "archiveBytes": 91800000,
-      "extractedBytes": 330000000,
+      "archiveBytes": 155000000,
+      "extractedBytes": 530000000,
       "files": 14250,
       "directories": 3975,
       "items": 18250,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 200000000,
+      "extractedBytesWithoutOfficeRuntime": 330000000
     },
     "linux-arm64": {
-      "archiveBytes": 91200000,
-      "extractedBytes": 325000000,
+      "archiveBytes": 154000000,
+      "extractedBytes": 525000000,
       "files": 14250,
       "directories": 3975,
       "items": 18250,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 200000000,
+      "extractedBytesWithoutOfficeRuntime": 325000000
     }
   }
 }

@@ -113,10 +113,12 @@ test('preview footprint has a separate reviewed budget without weakening stable 
   ])
   for (const platform of ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64', 'linux-arm64']) {
     assert.ok(preview.platforms[platform])
-    assert.ok(
-      preview.platforms[platform].archiveBytes <= stable.platforms[platform].archiveBytes * 1.01,
-      `${platform} preview archive budget must stay within one percent of the stable ceiling`,
-    )
+    const budget = preview.platforms[platform]
+    assert.ok(budget.officeRuntimeBytes > 0 && budget.officeRuntimeBytes <= 350000000)
+    assert.ok(budget.extractedBytesWithoutOfficeRuntime <= stable.platforms[platform].extractedBytes * 1.01,
+      `${platform} non-Office growth must retain the previous ceiling`)
+    assert.ok(budget.extractedBytes <= budget.extractedBytesWithoutOfficeRuntime + budget.officeRuntimeBytes)
+    assert.ok(budget.archiveBytes < budget.extractedBytes)
   }
 })
 

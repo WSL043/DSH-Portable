@@ -2,6 +2,8 @@ import { lstat, readFile, readdir, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+const OFFICE_RUNTIME_PACKAGE_PREFIX = '@deepseek-ai/libreoffice-kit-'
+
 function parseArgs(argv) {
   const result = { root: '', archive: '', platform: '', budget: '', baseline: '', output: '' }
   for (let index = 0; index < argv.length; index += 1) {
@@ -68,21 +70,28 @@ async function packageBreakdown(nodeModules) {
 }
 
 function metric(report, key) {
+  const app = report.sections.find((item) => item.name === 'app')
+  const appBytes = app?.bytes ?? 0
+  const officeRuntimeBytes = report.packages
+    .filter((item) => item.name.startsWith(OFFICE_RUNTIME_PACKAGE_PREFIX))
+    .reduce((total, item) => total + item.bytes, 0)
   const values = {
     archiveBytes: report.archiveBytes,
     extractedBytes: report.total.bytes,
     files: report.total.files,
     directories: report.total.directories,
     items: report.total.files + report.total.directories + report.total.links,
-    appBytes: report.sections.find((item) => item.name === 'app')?.bytes ?? 0,
-    appFiles: report.sections.find((item) => item.name === 'app')?.files ?? 0,
-    appDirectories: report.sections.find((item) => item.name === 'app')?.directories ?? 0,
+    appBytes,
+    appFiles: app?.files ?? 0,
+    appDirectories: app?.directories ?? 0,
     appItems: (() => {
-      const app = report.sections.find((item) => item.name === 'app')
       return app ? app.files + app.directories + app.links : 0
     })(),
     marketBytes: report.packages.find((item) => item.name === '@wsl043/dsh-portable-plugin-market')?.bytes ?? 0,
     marketFiles: report.packages.find((item) => item.name === '@wsl043/dsh-portable-plugin-market')?.files ?? 0,
+    officeRuntimeBytes,
+    appBytesWithoutOfficeRuntime: Math.max(0, appBytes - officeRuntimeBytes),
+    extractedBytesWithoutOfficeRuntime: Math.max(0, report.total.bytes - officeRuntimeBytes),
   }
   return values[key]
 }

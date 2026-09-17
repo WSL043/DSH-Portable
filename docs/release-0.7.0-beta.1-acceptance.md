@@ -73,3 +73,21 @@ pass actual acceptance. Indexing CodeQL alerts is not resolving all alerts.
 - [ ] Full source checks and exact-main cross-platform product CI pass.
 - [ ] Publish only the qualified artifacts as a prerelease; read back assets
   and candidate update indexes. Keep the stable channel unchanged.
+
+## Additional acceptance — 2026-09-18
+
+- Exact-main run 35245061836 passed all five source contract platforms and
+  packed official runtime production. All five product builds stopped at the
+  previous footprint ceilings, before downstream product qualification.
+- Office component growth is reviewed separately in [the footprint report](alpha2-office-footprint.md).
+  Local Windows ZIP passes the revised bounded preview budget; no features
+  were removed. Stable budgets are unchanged.
+- Local built Windows ZIP passed hidden native restart and runtime-health
+  recovery tests (beta-native-restart.log and beta-native-health.log). This
+  does not substitute for exact-commit cross-platform qualification.
+- The updated native market test reached the official manager and category
+  controls but failed on an uncaught default-plugin exception:
+  this.sessions.open is not a function, in connectWorkspace.then.initial.
+  The packaged chat manager still targets the older session API. Publication
+  remains blocked until plugin and native navigation compatibility are fixed
+  and this acceptance passes with default plugins enabled.

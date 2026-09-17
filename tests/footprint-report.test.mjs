@@ -53,6 +53,82 @@ test('footprint budget blocks a regression and accepts a bounded product', async
   await assert.rejects(createFootprintReport({ root: product, platform: 'test', budget: strict }), /extractedBytes=10 exceeds 9/)
 })
 
+test('footprint budget isolates Office runtime growth and excludes the wrapper from its exemption', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-office-runtime-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'runtime/node/node.exe', 3)
+  await fixtureFile(product, 'app/node_modules/@deepseek-ai/libreoffice-kit-win32-x64/bin/runtime.dll', 20)
+  await fixtureFile(product, 'app/node_modules/@deepseek-ai/libreoffice-kit-wasm/index.js', 30)
+  await fixtureFile(product, 'app/node_modules/@deepseek-ai/libreoffice-kit/package.json', 7)
+  await fixtureFile(product, 'app/node_modules/other/index.js', 11)
+  await fixtureFile(product, 'workspace/example.txt', 5)
+
+  const budget = path.join(root, 'budget.json')
+  await writeFile(budget, JSON.stringify({
+    platforms: {
+      test: {
+        appBytes: 1000,
+        extractedBytes: 1000,
+        officeRuntimeBytes: 50,
+        appBytesWithoutOfficeRuntime: 18,
+        extractedBytesWithoutOfficeRuntime: 26,
+      },
+    },
+  }))
+  const report = await createFootprintReport({ root: product, platform: 'test', budget })
+  assert.equal(report.budget.passed, true)
+
+  const officeStrict = path.join(root, 'office-strict.json')
+  await writeFile(officeStrict, JSON.stringify({ platforms: { test: { officeRuntimeBytes: 49 } } }))
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget: officeStrict }),
+    /officeRuntimeBytes=50 exceeds 49/,
+  )
+})
+
+test('footprint budget still catches non-Office app and extracted growth at the old thresholds', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-office-boundary-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'runtime/node/node.exe', 4)
+  await fixtureFile(product, 'app/node_modules/@deepseek-ai/libreoffice-kit-windows-x64/bin/runtime.dll', 40)
+  await fixtureFile(product, 'app/node_modules/application/index.js', 21)
+  await fixtureFile(product, 'workspace/example.txt', 5)
+
+  const appBudget = path.join(root, 'app-budget.json')
+  await writeFile(appBudget, JSON.stringify({
+    platforms: {
+      test: {
+        appBytes: 1000,
+        extractedBytes: 1000,
+        officeRuntimeBytes: 40,
+        appBytesWithoutOfficeRuntime: 20,
+        extractedBytesWithoutOfficeRuntime: 30,
+      },
+    },
+  }))
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget: appBudget }),
+    /appBytesWithoutOfficeRuntime=21 exceeds 20/,
+  )
+
+  const extractedBudget = path.join(root, 'extracted-budget.json')
+  await writeFile(extractedBudget, JSON.stringify({
+    platforms: {
+      test: {
+        officeRuntimeBytes: 40,
+        appBytesWithoutOfficeRuntime: 21,
+        extractedBytesWithoutOfficeRuntime: 29,
+      },
+    },
+  }))
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget: extractedBudget }),
+    /extractedBytesWithoutOfficeRuntime=30 exceeds 29/,
+  )
+})
+
 test('footprint baseline reports added, removed, and growing sections and packages', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-baseline-'))
   t.after(() => rm(root, { recursive: true, force: true }))
