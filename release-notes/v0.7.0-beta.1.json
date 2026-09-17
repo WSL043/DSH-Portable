@@ -11,7 +11,7 @@
       "顶部帮助菜单增加项目仓库、Star 和建议入口；反馈问题可选择合适的模板。"
     ],
     "knownIssues": [
-      "用户反馈：打开插件页后无法关闭该页面。此问题尚未修复，后续版本跟进。"
+      "打开插件页后无法关闭。当前 Beta 尚未修复。"
     ],
     "upgradeNotes": [
       "这是 0.7.0 的首个 Beta，使用候选通道，内置官方 DSH 0.1.6-alpha.2。",
@@ -30,7 +30,7 @@
       "Add repository, Star and suggestion links to the Help menu, with issue template selection for problem reports."
     ],
     "knownIssues": [
-      "User-reported: the plugin page cannot be closed after opening it. This issue remains unresolved and will be addressed in a later version."
+      "The plugin page cannot be closed after opening it. This remains unfixed in the current Beta."
     ],
     "upgradeNotes": [
       "This first 0.7.0 Beta uses the candidate channel and bundles official DSH 0.1.6-alpha.2.",
