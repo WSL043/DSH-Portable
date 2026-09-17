@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { layoutForRoot } from '../launcher/portable-core.mjs'
-import { DEFAULT_PLUGINS, defaultsForProduct, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
+import { DEFAULT_PLUGINS, PREVIEW_DEFAULT_PLUGINS, defaultsForProduct, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
 
 const lock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8'))
 const imageVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-image-viewer').version
@@ -122,6 +122,43 @@ test('a failed reviewed-default refresh restores the original profile manifest',
   assert.doesNotMatch(result.message, /private-test-value/)
   assert.equal(await readFile(path.join(profileRoot, 'package.json'), 'utf8'), packageJson)
 })
+
+for (const core of ['0.1.6-alpha.2', '0.1.5-rc.2']) {
+  test(`failed offline default refresh preserves data and isolates only the known incompatible core (${core})`, async (t) => {
+    const layout = await fixture(t)
+    await writeReviewedArchives(layout)
+    await mkdir(path.join(layout.root, 'licenses'), { recursive: true })
+    await writeFile(path.join(layout.root, 'licenses', 'COMPONENTS.json'), JSON.stringify({
+      dshVersion: core,
+      defaultPlugins: PREVIEW_DEFAULT_PLUGINS.map(p => ({ package: p.name, version: p.version, sha256: p.sha256, integrity: p.integrity })),
+    }))
+    const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+    await mkdir(profileRoot, { recursive: true })
+    const original = {
+      dependencies: { 'dsh-chat-manager': '1.3.5', 'dsh-codex-subscription': '2.1.2' },
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-web-app', 'dsh-chat-manager', 'dsh-codex-subscription'], patchReload: 'live' } },
+    }
+    await writeFile(path.join(profileRoot, 'package.json'), JSON.stringify(original))
+    const dataFile = path.join(profileRoot, 'session-preservation-proof')
+    await writeFile(dataFile, 'unchanged session data')
+    const result = await seedDefaultPlugins(layout, {
+      verifyArchive: async () => true,
+      spawnSync() { return { status: 1, stderr: 'ERR_PNPM_NO_OFFLINE_META: unrelated optional dependency' } },
+    })
+    const actual = JSON.parse(await readFile(path.join(profileRoot, 'package.json'), 'utf8'))
+    assert.deepEqual(actual.dependencies, original.dependencies)
+    assert.equal(actual.dsh.profile.patchReload, 'live')
+    assert.equal(await readFile(dataFile, 'utf8'), 'unchanged session data')
+    assert.equal(result.status, 'warning')
+    if (core === '0.1.6-alpha.2') {
+      assert.deepEqual(result.disabledPlugins, ['dsh-chat-manager'])
+      assert.deepEqual(actual.dsh.profile.bundles, ['@deepseek-ai/dsh-web-app', 'dsh-codex-subscription'])
+    } else {
+      assert.equal(result.disabledPlugins, undefined)
+      assert.deepEqual(actual, original)
+    }
+  })
+}
 
 test('a newer installed default is never downgraded to the packaged review baseline', async (t) => {
   const layout = await fixture(t)

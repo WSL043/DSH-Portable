@@ -43,6 +43,23 @@ handoff artifact). Do not commit raw user logs or authentication URLs.
 
 ## Ordered remaining work
 
+### Current implementation and evidence
+
+The active-session A/B is now complete: the isolated alpha2 control accepts
+text; adding chat-manager 1.3.5 produces `new session failed` and leaves the
+composer inert. Logs are `beta-input-editability-control-active.log` in the
+control directory and `build/input-editability-chat13-20260918/`.
+
+Beta 2 now suspends that exact plugin/core combination when the default-plugin
+upgrade fails. Only the enabled bundle entry is removed; dependency declarations,
+files and session data remain. Profile restoration errors propagate instead of
+being swallowed. This is a recovery guard, not a claim that all offline dependency
+resolution is fixed. Other plugin/core combinations retain their existing behavior.
+
+Source suite: 679 passed, 1 skipped; version/release/default-plugin preflight:
+20 passed. Runtime recovery acceptance and exact-commit platform qualification
+are still required before publication.
+
 1. Register a synthetic workspace and active session in an isolated alpha2
    fixture. Type text without submitting, first without third-party plugins,
    then with chat-manager 1.3.5, then the reviewed beta plugin. Record actual

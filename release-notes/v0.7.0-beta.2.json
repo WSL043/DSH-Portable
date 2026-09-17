@@ -1,0 +1,33 @@
+{
+  "version": "0.7.0-beta.2",
+  "zh": {
+    "summary": "修复旧环境升级后，会话插件更新失败仍继续加载不兼容版本的问题。",
+    "highlights": [
+      "内置 DSH 0.1.6-alpha.2 时，如果会话管理插件离线升级失败，会暂停加载已确认不兼容的 1.3.5，避免旧工作区实现阻断新建会话和输入。",
+      "暂停加载不会删除插件文件、会话或设置；其他插件的启用状态保持不变。",
+      "加强升级失败后的配置恢复：恢复写入失败时明确报错，不再静默继续启动。"
+    ],
+    "knownIssues": [
+      "已有第三方插件的依赖不在离线缓存中时，默认插件自动升级仍可能失败；被暂停的旧会话管理插件需要更新至兼容版本后再启用。"
+    ],
+    "upgradeNotes": [
+      "Beta 1 已撤回。本版本仍为候选版，内置官方 DSH 0.1.6-alpha.2。",
+      "升级前请退出 Portable 并备份数据；第三方插件的兼容性需逐个确认。"
+    ]
+  },
+  "en": {
+    "summary": "Prevent an incompatible session plugin from remaining active when its offline upgrade fails in an existing installation.",
+    "highlights": [
+      "With DSH 0.1.6-alpha.2, a failed offline upgrade suspends the known-incompatible session manager 1.3.5 instead of allowing its old workspace implementation to block session creation and input.",
+      "Suspension preserves plugin files, sessions and settings, and leaves other plugins enabled as before.",
+      "Report profile restoration failures instead of silently continuing startup after a failed upgrade."
+    ],
+    "knownIssues": [
+      "Automatic default-plugin upgrades may still fail when existing third-party dependencies are absent from the offline cache. Update a suspended session manager to a compatible version before enabling it again."
+    ],
+    "upgradeNotes": [
+      "Beta 1 has been withdrawn. This remains a candidate release and bundles official DSH 0.1.6-alpha.2.",
+      "Exit Portable and back up your data before upgrading. Third-party plugin compatibility must be checked individually."
+    ]
+  }
+}

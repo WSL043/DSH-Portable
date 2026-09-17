@@ -157,6 +157,7 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
   const run = adapters.spawnSync ?? spawnSync
   const manifestPath = paths.join(profileRoot, 'package.json')
   const manifestBefore = await load(manifestPath, 'utf8')
+  const installedChatVersion = installedDefaultVersion(profileRoot, { name: 'dsh-chat-manager' }, adapters)
   try {
     await makeDirectory(archiveRoot, { recursive: true })
     const relativeArchives = []
@@ -180,9 +181,31 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     await promoteBundledPluginsToRegistryLifecycle(profileRoot, candidates, adapters)
     return { status: 'updated', profile, plugins: candidates.map(plugin => plugin.name) }
   } catch (error) {
+    // Alpha 2 changed the workspace/session lifecycle. The old bundled
+    // replacement prevents session creation if the offline upgrade fails.
+    // Disable only the reproduced combination, keeping dependencies and data.
+    let restoredManifest = manifestBefore
+    const disabledPlugins = []
+    const previous = JSON.parse(manifestBefore)
+    const bundles = previous.dsh?.profile?.bundles
+    const componentsPath = paths.join(layout.root, 'licenses', 'COMPONENTS.json')
+    if (Array.isArray(bundles) && bundles.includes('dsh-chat-manager')
+      && installedChatVersion === '1.3.5'
+      && (adapters.existsSync ?? existsSync)(componentsPath)) {
+      const components = JSON.parse(await load(componentsPath, 'utf8'))
+      if (components.dshVersion === '0.1.6-alpha.2') {
+        previous.dsh.profile.bundles = bundles.filter(name => name !== 'dsh-chat-manager')
+        disabledPlugins.push('dsh-chat-manager')
+        restoredManifest = `${JSON.stringify(previous, null, 2)}\n`
+      }
+    }
     const temporary = `${manifestPath}.${process.pid}.restore.tmp`
-    await save(temporary, manifestBefore, 'utf8').then(() => move(temporary, manifestPath)).catch(() => {})
-    return { status: 'warning', code: 'default_plugin_update_failed', profile, message: error?.message ?? String(error) }
+    // Do not claim a recovered profile if writing it failed.
+    await save(temporary, restoredManifest, 'utf8')
+    await move(temporary, manifestPath)
+    return { status: 'warning', code: 'default_plugin_update_failed', profile,
+      ...(disabledPlugins.length ? { disabledPlugins } : {}),
+      message: `${disabledPlugins.length ? 'Paused incompatible dsh-chat-manager 1.3.5; plugin files and session data are retained. Update the plugin before enabling it again. ' : ''}${error?.message ?? String(error)}` }
   }
 }
 
