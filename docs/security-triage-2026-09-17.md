@@ -40,3 +40,12 @@ can replace system executables. No other alerts are dismissed by similarity.
 - Keep the separate Linux glib dependency advisory open pending a compatible fix.
 
 Do not disable scanning or bulk-dismiss alerts to reduce the displayed count.
+
+## Follow-up: browser fallback
+
+The Windows workspace fallback no longer passes a URL through cmd.exe /c start.
+It invokes Explorer with an argument array and validates an HTTP loopback URL
+without credentials. macOS uses /usr/bin/open; Linux uses xdg-open. Tests cover
+query separators and rejected remote/executable URLs. Native default-browser
+acceptance remains pending; this change is not a claim that all command alerts
+are resolved.

@@ -1,3 +1,4 @@
+import { defaultBrowserSpec } from './browser-fallback.mjs'
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs'
@@ -343,9 +344,7 @@ function findBrowser() {
 async function openBrowser(url) {
   const executable = findBrowser()
   if (!executable) {
-    const fallback = process.platform === 'darwin'
-      ? { command: 'open', args: [url] }
-      : { command: 'cmd.exe', args: ['/d', '/s', '/c', 'start', '', url] }
+    const fallback = defaultBrowserSpec(url)
     spawn(fallback.command, fallback.args, { detached: true, stdio: 'ignore', windowsHide: true }).unref()
     rmSync(layout.browserState, { force: true })
     return { portableProfile: false, executable: 'default-browser' }

@@ -1763,6 +1763,7 @@ namespace DshPortable
         {
             CloseDesktopMenus();
             base.OnSizeChanged(eventArgs);
+            ApplyDesktopBorder();
             if (desktopContent != null) FitWebViewToClient();
             if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
                 desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
@@ -1779,6 +1780,7 @@ namespace DshPortable
         {
             CloseDesktopMenus();
             base.OnDeactivate(eventArgs);
+            ApplyDesktopBorder();
         }
 
         protected override void OnMouseDown(MouseEventArgs eventArgs)
@@ -2080,7 +2082,7 @@ namespace DshPortable
                 int darkMode = dark ? 1 : 0;
                 uint caption = ToColorRef(background);
                 uint text = ToColorRef(foreground);
-                uint border = 0xFFFFFFFE; // DWMWA_COLOR_NONE: DWM still owns corner clipping/shadow.
+                uint border = DesktopBorderColor(); // DWM owns the physical-pixel edge and corner clipping.
                 try
                 {
                     DwmSetWindowAttribute(Handle, DwmwaUseImmersiveDarkMode, ref darkMode, sizeof(int));
@@ -2091,6 +2093,30 @@ namespace DshPortable
                 catch (DllNotFoundException) { }
                 catch (EntryPointNotFoundException) { }
             }
+        }
+
+        protected override void OnActivated(EventArgs eventArgs)
+        {
+            base.OnActivated(eventArgs);
+            ApplyDesktopBorder();
+        }
+
+        private uint DesktopBorderColor()
+        {
+            if (fullscreen || WindowState != FormWindowState.Normal) return 0xFFFFFFFE;
+            bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
+            bool active = Form.ActiveForm == this;
+            int shade = dark ? (active ? 76 : 54) : (active ? 184 : 211);
+            return ToColorRef(Color.FromArgb(shade, shade, shade));
+        }
+
+        private void ApplyDesktopBorder()
+        {
+            if (!desktopStart || !IsHandleCreated || IsDisposed) return;
+            uint border = DesktopBorderColor();
+            try { DwmSetWindowAttribute(Handle, DwmwaBorderColor, ref border, sizeof(uint)); }
+            catch (DllNotFoundException) { }
+            catch (EntryPointNotFoundException) { }
         }
 
         private static uint ToColorRef(Color color)
