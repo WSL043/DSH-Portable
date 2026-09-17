@@ -535,10 +535,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path $TagDir | Out-Null
           gh release download $PriorTag --repo "$env:GITHUB_REPOSITORY" `
             --pattern 'DSH-Portable-windows-x64-offline.zip' --dir $TagDir
+          if ($LASTEXITCODE -ne 0) {
+            throw "Could not download $PriorTag Windows offline package (gh exit code $LASTEXITCODE)."
+          }
           $PriorZip = Join-Path $TagDir 'DSH-Portable-windows-x64-offline.zip'
-          $ComponentsJson = tar.exe -xOf $PriorZip DSH-Portable/licenses/COMPONENTS.json
-          if ($LASTEXITCODE -ne 0 -or -not $ComponentsJson) {
-            throw "Could not read COMPONENTS.json from $PriorTag."
+          if (-not (Test-Path -LiteralPath $PriorZip -PathType Leaf)) {
+            throw "gh release download did not produce DSH-Portable-windows-x64-offline.zip for $PriorTag."
+          }
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $Archive = $null
+          $EntryStream = $null
+          $Reader = $null
+          try {
+            $Archive = [System.IO.Compression.ZipFile]::OpenRead($PriorZip)
+            $ComponentEntries = @($Archive.Entries | Where-Object {
+              $_.FullName -ceq 'DSH-Portable/licenses/COMPONENTS.json'
+            })
+            if ($ComponentEntries.Count -ne 1) {
+              throw "Expected exactly one DSH-Portable/licenses/COMPONENTS.json entry, found $($ComponentEntries.Count)."
+            }
+            $EntryStream = $ComponentEntries[0].Open()
+            $Reader = [System.IO.StreamReader]::new($EntryStream, [System.Text.Encoding]::UTF8, $true)
+            $ComponentsJson = $Reader.ReadToEnd()
+          } catch {
+            throw "Could not read COMPONENTS.json from ${PriorTag}: $($_.Exception.Message)"
+          } finally {
+            if ($null -ne $Reader) { $Reader.Dispose() }
+            elseif ($null -ne $EntryStream) { $EntryStream.Dispose() }
+            if ($null -ne $Archive) { $Archive.Dispose() }
+          }
+          if ([string]::IsNullOrWhiteSpace($ComponentsJson)) {
+            throw "Could not read COMPONENTS.json from ${PriorTag}: ZIP entry was empty."
           }
           $Components = $ComponentsJson | ConvertFrom-Json
           Write-Host "Testing declared upgrade path from $PriorTag to $CandidateVersion."

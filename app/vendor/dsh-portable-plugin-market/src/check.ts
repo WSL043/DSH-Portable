@@ -30,6 +30,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { JSON_SCHEMA, Type, load } from 'js-yaml'
 import { INBOX_BUNDLES, readBundleRules, suggestOrder, validateOrder } from './order.ts'
+import { resolvePackageRelativePath } from './package-path.ts'
 
 /** js-yaml dialect for `!!js` scalars — identical to dsh-app-boot's entryListSchema. */
 const jsExpr = new Type('tag:yaml.org,2002:js', {
@@ -791,7 +792,11 @@ export function buildBundleLayers(
       layer.error = 'bundle declares no dsh.bundle.patch — the profile will fail to boot'
       return layer
     }
-    const patchPath = join(directory, declared)
+    const patchPath = resolvePackageRelativePath(directory, declared)
+    if (patchPath === null) {
+      layer.error = 'declared dsh.bundle.patch must be a package-relative path — the profile will fail to boot'
+      return layer
+    }
     if (!existsSync(patchPath)) {
       layer.error = `declared patch ${declared} is missing — the profile will fail to boot`
       return layer

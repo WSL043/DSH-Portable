@@ -6,6 +6,9 @@
  * primitive (progress bar, banners, tabs, swatches). */
 
 .root{height:100%;display:flex;flex-direction:column;min-width:0;color:var(--dsw-alias-label-primary,#1f2328);position:relative;container-type:inline-size}
+.managerModal{width:min(960px,calc(100vw - 48px));max-width:calc(100vw - 48px)}
+.managerModalContent{height:min(78vh,720px);max-height:calc(100vh - 96px);min-height:min(320px,calc(100vh - 96px))}
+.managerModalContent>div:last-child{flex:1;min-height:0;overflow:auto}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);align-items:flex-end}
 .operationBar{display:flex;align-items:center;justify-content:flex-end;min-height:32px;margin-bottom:8px}
 .notices{display:flex;flex-direction:column;gap:12px;padding:12px 4px 0}

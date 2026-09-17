@@ -115,6 +115,16 @@ test('official DSH Alpha shared process owner is recognized and requests SW_HIDE
   assert.equal(patchWindowsWin32ProcessHide(output), output)
 })
 
+test('Alpha 2 shared process owner preserves its upstream SW_HIDE implementation', () => {
+  const upstreamHidden = alphaWin32ProcessFixture
+    .replaceAll('dwFlags: 256,', 'dwFlags: 257,\n\t\t\twShowWindow: 0,')
+  const output = patchWindowsWin32ProcessHide(upstreamHidden)
+  assert.match(output, /dsh-portable-windows-process-hide-v1/)
+  assert.equal(output.match(/dwFlags: 257/g)?.length, 2)
+  assert.equal(output.match(/wShowWindow: 0/g)?.length, 2)
+  assert.equal(patchWindowsWin32ProcessHide(output), output)
+})
+
 test('all finished-product builders apply the subprocess hiding patch', async () => {
   for (const filename of [
     'scripts/build-windows.ps1',

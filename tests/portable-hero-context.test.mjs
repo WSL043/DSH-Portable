@@ -19,3 +19,13 @@ test('every platform build exposes the same Portable Hero context seat', async (
     assert.match(source, /patch-portable-hero-context\.mjs/, filename)
   }
 })
+
+test('alpha.2 retains the official session owner while Portable stays application-wide', () => {
+  const modern = upstream.replace('scope: "root"', 'scope: "session-maybe"')
+  const output = patchPortableHeroContext(modern)
+  assert.match(output, /"conversation\.hero\.agentPreset": \{\s+kind: "single",\s+scope: "session-maybe"/)
+  assert.match(output, /"conversation\.hero\.portableContext": \{\s+kind: "list",\s+scope: "root"/)
+  assert.equal(patchPortableHeroContext(output), output)
+  assert.throws(() => patchPortableHeroContext(upstream.replace('scope: "root"', 'scope: "unknown"')), /supported scope/)
+  assert.throws(() => patchPortableHeroContext(upstream + upstream), /expected 1 match/)
+})

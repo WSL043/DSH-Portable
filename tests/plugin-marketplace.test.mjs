@@ -98,7 +98,7 @@ test('the current product line pins one live visual catalog and no curated exten
     read('README.en.md'),
   ])
 
-  assert.match(product.version, /^0\.[456]\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/)
+  assert.match(product.version, /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/)
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(app.dependencies.dshmarket, undefined)
 
@@ -140,11 +140,13 @@ test('the packaged market ships runtime artifacts only', async () => {
   assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/client/client.js'))).size < 220_000)
 })
 
-test('the Portable market is a native Plugins tab with readable cards and direct project links', async () => {
-  const [app, market, registration, section, styles, clientBundle] = await Promise.all([
+test('the Portable market reaches the modern manager and retains an old-host fallback', async () => {
+  const [app, market, registration, compat, action, section, styles, clientBundle] = await Promise.all([
     read('app/package.json').then(JSON.parse),
     read('app/vendor/dsh-portable-plugin-market/package.json').then(JSON.parse),
     read('app/vendor/dsh-portable-plugin-market/src/client/index.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/slot-compat.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/MarketAction.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
     read('app/vendor/dsh-portable-plugin-market/src/client/Market.module.css'),
     read('app/vendor/dsh-portable-plugin-market/client/client.js'),
@@ -153,8 +155,17 @@ test('the Portable market is a native Plugins tab with readable cards and direct
   assert.equal(app.dependencies['@wsl043/dsh-portable-plugin-market'], 'file:vendor/dsh-portable-plugin-market')
   assert.equal(market.name, '@wsl043/dsh-portable-plugin-market')
   assert.match(market.version, /^0\.1\.0-beta\.\d+$/)
-  assert.match(registration, /ctx\.slots\.inject\('settings\.plugins\.tab'/)
-  assert.match(registration, /name:\s*'settings\.plugins\.tab'/)
+  assert.match(registration, /coordinateMarketSurfaces/)
+  assert.match(registration, /PORTABLE_ACTIONS_SLOT/)
+  assert.match(registration, /LEGACY_PLUGIN_TAB_SLOT/)
+  assert.match(compat, /settings\.plugins\.tab/)
+  assert.match(compat, /spec\?/)
+  assert.match(compat, /subscribe\?/)
+  assert.match(action, /<Modal/)
+  assert.match(action, /closeLabel=\{props\.t\('cancel'\)\}/)
+  assert.match(action, /className=\{css\.managerModal\}/)
+  assert.match(action, /view="discover"/)
+  assert.doesNotMatch(registration, /plugins\.item/)
   assert.doesNotMatch(registration, /ctx\.slots\.inject\('settings\.section'/)
   assert.match(styles, /\.grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\)/s)
   assert.doesNotMatch(styles, /\.grid\s*\{[^}]*repeat\(2/s)
@@ -613,13 +624,16 @@ test('opening the market revalidates installed-plugin updates instead of serving
   assert.doesNotMatch(initialEffect, /refreshInstalled\(\)\s*$/m)
 })
 
-test('plugin market and installed plugins are sibling native plugin tabs', async () => {
-  const [entry, section] = await Promise.all([
+test('plugin market keeps old-host tabs and modern manager action mutually exclusive', async () => {
+  const [entry, compat, section] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/index.ts'),
+    read('app/vendor/dsh-portable-plugin-market/src/client/slot-compat.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
   ])
-  const registrations = entry.match(/settings\.plugins\.tab/g) ?? []
-  assert.equal(registrations.length, 4, 'two native plugin tabs should each inject and register once')
+  assert.match(entry, /coordinateMarketSurfaces\(ctx\.slots/)
+  assert.match(compat, /PORTABLE_ACTIONS_SLOT/)
+  assert.match(compat, /LEGACY_PLUGIN_TAB_SLOT/)
+  assert.match(compat, /factories\.legacy/)
   assert.match(entry, /id:\s*'market'[\s\S]*view:\s*'discover'/)
   assert.match(entry, /id:\s*'installed'[\s\S]*view:\s*'installed'/)
   assert.match(entry, /label:\s*\(\)\s*=>\s*t\('tabInstalled'\)/)

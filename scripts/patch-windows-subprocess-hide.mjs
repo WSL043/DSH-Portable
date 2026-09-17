@@ -80,13 +80,24 @@ export function patchWindowsAclHide(source) {
 
 export function patchWindowsWin32ProcessHide(source) {
   if (source.includes(WIN32_PROCESS_MARKER)) return source
-  const needle = `\t\t\tcb: 104,\n\t\t\tdwFlags: 256,\n\t\t\thStdInput:`
+  const legacyNeedle = `\t\t\tcb: 104,\n\t\t\tdwFlags: 256,\n\t\t\thStdInput:`
   const replacement = `\t\t\tcb: 104,\n\t\t\tdwFlags: 257,\n\t\t\twShowWindow: 0,\n\t\t\thStdInput:`
-  const matches = source.split(needle).length - 1
-  if (matches !== 2) {
-    throw new Error(`Windows shared process CreateProcessAsUserW seams changed upstream: expected 2 matches, found ${matches}`)
+  const upstreamHiddenNeedle = `\t\t\tcb: 104,\n\t\t\tdwFlags: 257,\n\t\t\twShowWindow: 0,\n\t\t\thStdInput:`
+  const legacyMatches = source.split(legacyNeedle).length - 1
+  const upstreamHiddenMatches = source.split(upstreamHiddenNeedle).length - 1
+  const hiddenFlags = source.match(/dwFlags: 257/g)?.length ?? 0
+  const hiddenWindows = source.match(/wShowWindow: 0/g)?.length ?? 0
+  if (legacyMatches === 0 && upstreamHiddenMatches === 2 && hiddenFlags === 2 && hiddenWindows === 2) {
+    // Alpha 2's shared owner already requests STARTF_USESHOWWINDOW/SW_HIDE
+    // on both CreateProcessAsUserW paths. Preserve the official implementation
+    // and mark it so the build remains idempotent and the smoke can distinguish
+    // verified upstream behavior from the legacy source rewrite.
+    return `/* ${WIN32_PROCESS_MARKER} */\n${source}`
   }
-  return `/* ${WIN32_PROCESS_MARKER} */\n${source.split(needle).join(replacement)}`
+  if (legacyMatches !== 2 || upstreamHiddenMatches !== 0) {
+    throw new Error(`Windows shared process CreateProcessAsUserW seams changed upstream: expected 2 legacy matches or 2 upstream hidden matches, found legacy ${legacyMatches}, upstream ${upstreamHiddenMatches}`)
+  }
+  return `/* ${WIN32_PROCESS_MARKER} */\n${source.split(legacyNeedle).join(replacement)}`
 }
 
 async function main() {

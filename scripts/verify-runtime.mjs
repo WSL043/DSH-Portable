@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import {
@@ -126,6 +126,24 @@ assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'client.js')), true,
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'lib', 'index.js')), true, 'desktop bridge host entry is missing')
 assert.equal(existsSync(path.join(desktopBridgeRoot, 'cordis.patch.yml')), true, 'desktop bridge patch is missing')
 assert.equal(marketManifest.name, '@wsl043/dsh-portable-plugin-market')
+// A direct Node import is insufficient on cores using the official profile
+// resolver. Check its real generated dependency map before shipping a capsule.
+const appBoot = await import(pathToFileURL(requireFromApp.resolve('@deepseek-ai/dsh-app-boot')).href)
+if (typeof appBoot.createProfileResolutionGeneration === 'function') {
+  const generation = await appBoot.createProfileResolutionGeneration({
+    installAnchor: dshManifestPath,
+    home: path.join(appDir, '.resolution-verification-only'),
+  })
+  for (const [name, directory] of [
+    ['@wsl043/dsh-portable-desktop-bridge', desktopBridgeRoot],
+    ['@wsl043/dsh-portable-plugin-market', marketRoot],
+  ]) {
+    const entry = generation.entries.find(entry => entry.name === name)
+    assert.ok(entry, `Official runtime resolver omits managed integration: ${name}`)
+    assert.equal(realpathSync(entry.packageDir), realpathSync(directory), `Wrong managed integration target: ${name}`)
+  }
+  loaded.push('official-managed-integration-resolution')
+}
 assert.match(marketManifest.version, /^0\.1\.0-beta\.\d+$/, 'pinned Portable visual market version')
 assert.equal(existsSync(marketClientPath), true, 'Portable plugin market client is missing')
 assert.match(

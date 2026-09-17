@@ -1,6 +1,7 @@
 /**
- * DSH-Portable plugin market client: registers a native Plugins tab rendering the
- * plugin market UI, plus the post-install toast in the shell overlay layer.
+ * DSH-Portable plugin market client: contributes a Portable action to the
+ * modern Plugins manager and falls back to native Plugins tabs on older hosts,
+ * plus the post-install toast in the shell overlay layer.
  * Built by tsdown into the __ModuleLoader__ factory bundle at
  * client/client.js; the only externals are the loader module table's react
  * entries.
@@ -11,6 +12,8 @@ import { en, zh } from './locales.ts'
 import { InstallToast } from './InstallToast.tsx'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
+import { MarketAction } from './MarketAction.tsx'
+import { coordinateMarketSurfaces, LEGACY_PLUGIN_TAB_SLOT, PORTABLE_ACTIONS_SLOT } from './slot-compat.ts'
 import type { Translate } from './market-data.ts'
 
 const NS = 'dsh-portable-plugin-market'
@@ -38,8 +41,10 @@ interface LocaleService {
 
 /** The subset of the slots service this plugin touches. */
 interface SlotsService {
-  inject(slot: string, register: () => unknown): void
-  register(meta: Record<string, unknown>, component: () => unknown): unknown
+  inject(slot: string, register: () => unknown): unknown
+  register(meta: Record<string, unknown>, component: (owner?: unknown) => unknown): unknown
+  spec?: (slot: string) => unknown
+  subscribe?: (slot: string, callback: () => void) => unknown
 }
 
 /** The client cordis context shape this plugin relies on (structural: the
@@ -66,37 +71,44 @@ export function apply(ctx: MarketClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-portable-plugin-market: dictionaries')
   const t = ctx.locale.bind(NS)
 
-  // The market belongs to the Plugins settings domain. DSH exposes a native
-  // sub-page slot for exactly this use; registering as a top-level settings
-  // section makes one plugin look like a product category of its own.
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-      name: 'settings.plugins.tab',
-      id: 'market',
+  ctx.effect(() => coordinateMarketSurfaces(ctx.slots, {
+    modern: () => ctx.slots.register({
+      name: PORTABLE_ACTIONS_SLOT,
+      id: 'dsh-portable-plugin-market',
       order: 40,
       label: () => t('nav'),
       locale: NS,
-      inject: () => ({ t }),
-    }, () => h(MarketErrorBoundary, { view: 'discover' }, h(MarketSection, {
-      t,
-      locale: ctx.locale,
-      view: 'discover',
-    }))))
-
-  // Installed plugins are a sibling of the market in DSH's native Plugins
-  // navigation. Keeping it out of the market surface removes one unnecessary
-  // level and makes "what I have" reachable without first entering discovery.
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-      name: 'settings.plugins.tab',
-      id: 'installed',
-      order: 50,
-      label: () => t('tabInstalled'),
-      locale: NS,
-      inject: () => ({ t }),
-    }, () => h(MarketErrorBoundary, { view: 'installed' }, h(MarketSection, {
-      t,
-      locale: ctx.locale,
-      view: 'installed',
-    }))))
+    }, owner => {
+      const refresh = (owner as { refresh?: () => void } | undefined)?.refresh
+      return h(MarketAction, { t, locale: ctx.locale, refresh })
+    }),
+    legacy: [
+      () => ctx.slots.register({
+        name: LEGACY_PLUGIN_TAB_SLOT,
+        id: 'market',
+        order: 40,
+        label: () => t('nav'),
+        locale: NS,
+        inject: () => ({ t }),
+      }, () => h(MarketErrorBoundary, { view: 'discover' }, h(MarketSection, {
+        t,
+        locale: ctx.locale,
+        view: 'discover',
+      }))),
+      () => ctx.slots.register({
+        name: LEGACY_PLUGIN_TAB_SLOT,
+        id: 'installed',
+        order: 50,
+        label: () => t('tabInstalled'),
+        locale: NS,
+        inject: () => ({ t }),
+      }, () => h(MarketErrorBoundary, { view: 'installed' }, h(MarketSection, {
+        t,
+        locale: ctx.locale,
+        view: 'installed',
+      }))),
+    ],
+  }), 'dsh-portable-plugin-market: manager surfaces')
 
   const Toast = () => h(InstallToast, { t })
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({

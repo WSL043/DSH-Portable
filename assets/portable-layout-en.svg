@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="560" viewBox="0 0 1120 560" role="img" aria-labelledby="title desc">
+<title id="title">Your Agent environment. In one folder.</title><desc id="desc">DSH-Portable: runtime/, launcher/, data/, workspace/. Exit → Copy → Continue. Local caches rebuild. Move external projects and models separately.</desc>
+<rect width="1120" height="560" rx="24" fill="#111214"/>
+<g font-family="Segoe UI,Microsoft YaHei,sans-serif" fill="#f4f4f4">
+<text x="48" y="65" font-size="30" font-weight="600">Your Agent environment. In one folder.</text><text x="48" y="97" font-size="15" fill="#a6a8ad">Windows portable layout · supporting files omitted</text>
+<rect x="48" y="134" width="626" height="316" rx="16" fill="#1a1c1f" stroke="#393c42"/>
+<path d="M72 158h20l7 7h23v24H72z" fill="none" stroke="#ddd" stroke-width="1.5"/>
+<text x="137" y="183" font-size="21" font-weight="600">DSH-Portable/</text>
+<path d="M91 213v193m0-160h22m-22 79h22m-22 79h22" fill="none" stroke="#555961" stroke-width="1.5"/>
+<text x="129" y="232" font-size="18">runtime/ · launcher/</text><text x="129" y="257" font-size="14" fill="#a6a8ad">Program components — Desktop entry · official core · runtime</text>
+<text x="129" y="311" font-size="20" font-weight="600">data/</text><text x="129" y="336" font-size="15" fill="#c3c5ca">Your data — Sessions · settings · plugin configuration</text>
+<text x="129" y="390" font-size="20" font-weight="600">workspace/</text><text x="129" y="415" font-size="15" fill="#c3c5ca">Default workspace — Project files · work produced by your Agent</text>
+<path d="M704 290h45m-10-9 10 9-10 9" fill="none" stroke="#a6a8ad" stroke-width="2"/>
+<path d="M801 235h43l13 13h88v76H801z" fill="#22252a" stroke="#9b9fa7" stroke-width="1.5"/>
+<text x="870" y="369" font-size="20" text-anchor="middle">Exit → Copy → Continue</text>
+<text x="870" y="400" font-size="12" text-anchor="middle" fill="#a6a8ad">A new location on the same OS and architecture</text>
+<text x="48" y="497" font-size="20">Update the program. Keep your environment.</text><text x="48" y="527" font-size="14" fill="#a6a8ad">Local caches rebuild. Move external projects and models separately.</text>
+</g></svg>

@@ -128,6 +128,11 @@ test("Pages workflow deploys only the staged website", () => {
   assert.match(workflow, /node scripts\/build-site\.mjs/);
   assert.match(workflow, /path: build\/site/);
   assert.doesNotMatch(workflow, /path:\s*\.\s*$/m);
+  const build = workflow.split('\n  build:')[1].split('\n  deploy:')[0];
+  const defaults = workflow.split('\njobs:')[0];
+  assert.doesNotMatch(defaults + build, /(?:pages|id-token): write/);
+  assert.match(workflow.split('\n  deploy:')[1], /github\.ref == 'refs\/heads\/main'/);
+  assert.match(workflow.split('\n  deploy:')[1], /permissions:\s+pages: write\s+id-token: write/);
 });
 
 test("website publishes truthful privacy and code-signing boundaries", () => {

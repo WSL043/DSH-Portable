@@ -659,7 +659,10 @@ test('Portable export options live in the export dialog and HTTP failure keeps i
   try {
     await settle()
     const sections = mounted.tree.children.filter(n => n?.type === 'section').map(n => n.props['aria-label'])
-    assert.deepEqual(sections, ['Desktop behavior', 'Data', 'Maintenance'])
+    assert.deepEqual(sections, ['Desktop behavior', 'Data', 'Maintenance', 'Help and feedback'])
+    const feedback = findNode(mounted.tree, n => n.type === 'a' && n.props?.href === 'https://github.com/WSL043/DSH-Portable/issues/new/choose')
+    assert.ok(feedback)
+    assert.equal(feedback.props.rel, 'noopener noreferrer')
     assert.equal(findNode(mounted.tree, n => n.props?.label === 'Export scope'), null)
     const button = findNode(mounted.tree, n => typeof n.props?.onClick === 'function' && textContent(n) === 'Export data')
     assert.ok(button)

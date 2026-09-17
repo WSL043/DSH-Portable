@@ -8,6 +8,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, statSy
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
+import { resolvePackageRelativePath } from './package-path.ts'
 import { githubRemoteIdentities, githubRepoIdentities } from './sources.ts'
 
 /**
@@ -310,7 +311,10 @@ export function entryArtifactExists(dir: string): boolean {
       for (const value of Object.values(rootExport)) if (typeof value === 'string') candidates.push(value)
     }
     if (candidates.length === 0) candidates.push('index.js')
-    return candidates.some(rel => existsSync(join(dir, rel)))
+    return candidates.some(rel => {
+      const artifact = resolvePackageRelativePath(dir, rel)
+      return artifact !== null && existsSync(artifact)
+    })
   } catch {
     return false
   }
@@ -422,7 +426,9 @@ function readBundlePatchRows(dir: string): { names: string[]; ids: string[]; ins
     }
     const declared = manifest.dsh?.bundle?.patch
     if (typeof declared !== 'string' || declared === '') return empty
-    return parsePatchRows(readFileSync(join(dir, declared), 'utf8'))
+    const patchPath = resolvePackageRelativePath(dir, declared)
+    if (patchPath === null) return empty
+    return parsePatchRows(readFileSync(patchPath, 'utf8'))
   } catch {
     return empty
   }

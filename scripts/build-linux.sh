@@ -129,7 +129,6 @@ if [[ -n "$PREVIEW_APP_SOURCE" ]]; then
   "$BUILD_NODE" -e 'const fs=require("fs"); const receipt=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); const lock=JSON.parse(fs.readFileSync(process.argv[2],"utf8")); if(receipt.dshVersion!==lock.dsh.version||receipt.dshCommit!==lock.dsh.reviewedCommit) throw new Error("Source-pack receipt does not match selected upstream lock")' "$PREVIEW_APP_SOURCE/preview-runtime.json" "$COMPONENT_LOCK_FILE"
   rm -rf "$STAGE/app"
   cp -R "$PREVIEW_APP_SOURCE" "$STAGE/app"
-  "$NODE_EXE" "$PROJECT_ROOT/scripts/stage-local-integrations.mjs" "$STAGE/app"
 else
   "$NODE_EXE" "$PROJECT_ROOT/scripts/verify-lock.mjs" "$PROJECT_ROOT/app/package-lock.json" "$LOCK_FILE"
   (
@@ -138,6 +137,7 @@ else
       "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund --install-links
   )
 fi
+"$NODE_EXE" "$PROJECT_ROOT/scripts/stage-local-integrations.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-session-export-ui.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-permission-localization.mjs" "$STAGE/app"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/patch-theme-bootstrap.mjs" "$STAGE/app"

@@ -1,0 +1,29 @@
+{
+  "version": "0.7.0-beta.1",
+  "zh": {
+    "summary": "跟进官方新内核，收敛插件管理入口，改善桌面边界与反馈入口。",
+    "highlights": [
+      "插件市场融入官方插件管理页；发现和安装插件后，可在官方列表统一启用、禁用和管理。",
+      "Windows 窗口恢复随明暗主题变化的细边框，活动窗口边界更清晰。",
+      "顶部帮助菜单增加项目仓库、Star 和建议入口；反馈问题可选择合适的模板。",
+      "加强插件声明的文件路径校验，拒绝绝对路径和父目录跳转。"
+    ],
+    "upgradeNotes": [
+      "这是 0.7.0 的首个 Beta，使用候选通道，内置官方 DSH 0.1.6-alpha.2。",
+      "官方调整了插件加载与卸载接口，第三方插件的兼容性仍需由各插件确认。升级前请退出 Portable 并备份数据。"
+    ]
+  },
+  "en": {
+    "summary": "Follow the new official core, consolidate plugin management, and improve window boundaries and feedback access.",
+    "highlights": [
+      "Open the plugin market from the official plugin manager, then manage installed plugins in the official inventory.",
+      "Restore a subtle, theme-aware Windows border to distinguish the active window.",
+      "Add repository, Star and suggestion links to the Help menu, with issue template selection for problem reports.",
+      "Strengthen validation of plugin-declared file paths by rejecting absolute paths and parent-directory traversal."
+    ],
+    "upgradeNotes": [
+      "This first 0.7.0 Beta uses the candidate channel and bundles official DSH 0.1.6-alpha.2.",
+      "Official plugin loading and unloading interfaces have changed. Third-party plugin compatibility must be confirmed individually. Exit Portable and back up your data before upgrading."
+    ]
+  }
+}

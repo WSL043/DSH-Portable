@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.6.9.65534")]
-[assembly: AssemblyFileVersion("0.6.9.65534")]
+[assembly: AssemblyVersion("0.7.0.30001")]
+[assembly: AssemblyFileVersion("0.7.0.30001")]
 
 namespace DshPortable
 {
@@ -1719,7 +1719,14 @@ namespace DshPortable
             AddDesktopCommand(help, "logs", L("打开日志文件夹", "Open logs folder"), Keys.None,
                 delegate { string directory = ResolveLauncherLogDirectory(); Directory.CreateDirectory(directory);
                     Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
+            help.DropDownItems.Add(new ToolStripSeparator());
+            help.DropDownItems.Add(CreateExternalLinkItem(L("项目仓库", "Project repository"),
+                "https://github.com/WSL043/DSH-Portable"));
+            help.DropDownItems.Add(CreateExternalLinkItem(L("喜欢的话，点个 Star", "If you like it, leave a Star"),
+                "https://github.com/WSL043/DSH-Portable"));
             help.DropDownItems.Add(CreateReportProblemItem());
+            help.DropDownItems.Add(CreateExternalLinkItem(L("提出建议", "Suggest an idea"),
+                "https://github.com/WSL043/DSH-Portable/discussions/new"));
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
             foreach (ToolStripMenuItem menu in desktopMenu.Items) AttachDesktopDropDownHandlers(menu);
             RefreshDesktopCommands();
@@ -2300,10 +2307,13 @@ namespace DshPortable
 
         private ToolStripMenuItem CreateReportProblemItem()
         {
-            return new ToolStripMenuItem(L("反馈问题", "Report a problem"), null, delegate
-            {
-                OpenExternalUrl("https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml");
-            });
+            return CreateExternalLinkItem(L("反馈问题", "Report a problem"),
+                "https://github.com/WSL043/DSH-Portable/issues/new/choose");
+        }
+
+        private ToolStripMenuItem CreateExternalLinkItem(string title, string url)
+        {
+            return new ToolStripMenuItem(title, null, delegate { OpenExternalUrl(url); });
         }
 
         private void RebuildTrayMenu()

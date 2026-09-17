@@ -83,14 +83,11 @@ export function patchPortableUpdatesIcon(source) {
             });`, 'Portable navigation icon seam changed upstream')
 }
 
-async function main() {
-  if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
-  const appRoot = path.resolve(process.argv[2])
-  const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js')
-  const source = await readFile(filename, 'utf8')
-  await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
-  const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
-  let plugins = patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8'))
+export function patchPluginInstallationGuidance(plugins) {
+  // Alpha 2 moved installation to the official plugin manager. The old
+  // settings page now only describes built-in plugins; preserve that copy.
+  const officialCopy = ['Inspect the plugins this deployment ships.', '查看内置部署的插件列表']
+  if (officialCopy.every(text => plugins.split(text).length === 2)) return plugins
   for (const [before, after] of [
     ['Configure and inspect the plugins installed in this deployment.',
       'Install plugins in Plugin Market; update or remove them in Installed. Plugin configuration changes their settings.'],
@@ -99,7 +96,39 @@ async function main() {
   ]) {
     if (!plugins.includes(after)) plugins = replaceRequired(plugins, before, after, 'Portable plugin installation guidance')
   }
+  return plugins
+}
+
+export function patchPluginManagerActions(source) {
+  const marker = 'dsh-portable-plugin-manager-actions-v1'
+  if (source.includes(marker)) return source
+  // A bounded presentation extension: the official manager still owns its
+  // inventory and every existing action. No profile or controller is replaced.
+  source = replaceRequired(source, '"plugins.bundle.config": {',
+    `/* ${marker} */\n                    "plugins.portable.actions": { kind: "list", scope: "root" },\n                    "plugins.bundle.config": {`,
+    'official plugin manager action declaration changed upstream')
+  return replaceRequired(source,
+    'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [',
+    'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [renderSlot("plugins.portable.actions", { refresh: props.refresh }), ',
+    'official plugin manager toolbar changed upstream')
+}
+
+async function main() {
+  if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
+  const appRoot = path.resolve(process.argv[2])
+  const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js')
+  const source = await readFile(filename, 'utf8')
+  await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
+  const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
+  let plugins = patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8'))
+  plugins = patchPluginInstallationGuidance(plugins)
   await writeFile(pluginsFile, plugins, 'utf8')
+  const managerFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-plugin-manager', 'lib', 'client.js')
+  let manager
+  try { manager = await readFile(managerFile, 'utf8') } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  if (manager !== undefined) await writeFile(managerFile, patchPluginManagerActions(manager), 'utf8')
   console.log(filename)
 }
 

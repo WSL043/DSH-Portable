@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { load } from 'js-yaml'
 import { findDshInstallDir } from './check.ts'
+import { resolvePackageRelativePath } from './package-path.ts'
 import { entryArtifactExists } from './profile.ts'
 
 export interface ImportPreflightResult {
@@ -54,7 +55,9 @@ function importTargets(dir: string): string[] {
       visit(value.children)
     }
   }
-  visit(load(readFileSync(join(dir, manifest.dsh.bundle.patch), 'utf8')))
+  const patchPath = resolvePackageRelativePath(dir, manifest.dsh.bundle.patch)
+  if (patchPath === null) return []
+  visit(load(readFileSync(patchPath, 'utf8')))
   return targets
 }
 

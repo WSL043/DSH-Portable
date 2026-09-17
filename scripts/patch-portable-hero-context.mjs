@@ -17,7 +17,13 @@ export function patchPortableHeroContext(source) {
   const renderReplacement = `${renderNeedle},\n\t\t\t\t\t/* ${MARKER} */\n\t\t\t\t\trenderSlot("conversation.hero.portableContext", {})`
   let output = replaceRequired(source, renderNeedle, renderReplacement, 'Hero context render seam changed upstream')
 
-  const contractNeedle = `\t\t\t\t\t"conversation.hero.agentPreset": {\n\t\t\t\t\t\tkind: "single",\n\t\t\t\t\t\tscope: "root"\n\t\t\t\t\t}`
+  // alpha.2 gives the official preset an optional session owner. Preserve
+  // that contract; Portable's environment summary remains application-wide.
+  const contracts = ['root', 'session-maybe'].map(scope =>
+    `\t\t\t\t\t"conversation.hero.agentPreset": {\n\t\t\t\t\t\tkind: "single",\n\t\t\t\t\t\tscope: "${scope}"\n\t\t\t\t\t}`)
+  const matching = contracts.filter(contract => source.includes(contract))
+  if (matching.length !== 1) throw new Error('Hero context contract seam changed upstream: expected one supported scope')
+  const contractNeedle = matching[0]
   const contractReplacement = `${contractNeedle},\n\t\t\t\t\t"conversation.hero.portableContext": {\n\t\t\t\t\t\tkind: "list",\n\t\t\t\t\t\tscope: "root"\n\t\t\t\t\t}`
   output = replaceRequired(output, contractNeedle, contractReplacement, 'Hero context contract seam changed upstream')
   return output

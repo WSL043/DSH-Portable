@@ -49,3 +49,21 @@ without credentials. macOS uses /usr/bin/open; Linux uses xdg-open. Tests cover
 query separators and rejected remote/executable URLs. Native default-browser
 acceptance remains pending; this change is not a claim that all command alerts
 are resolved.
+
+## 0.7.0 Beta preparation
+
+Three independent evidence passes indexed all 858 alerts in the refreshed local
+snapshot (253 launcher paths/network, 150 market/bridge, 455 tools/native).
+Index coverage is not a finding resolution or a completed exploitability review.
+
+Package-declared bundle patches and client entries now reject absolute paths,
+drive-relative paths and parent traversal before filesystem reads. Regression
+fixtures cover valid internal files and both separator styles. This is lexical
+containment; package symlink policies and concurrent replacement remain separate
+review items. It does not sandbox executable plugins.
+
+The website build no longer inherits Pages deployment or OIDC write permissions.
+Those permissions are limited to the main-branch deployment job, which does not
+execute PR source. PR builds also cannot cancel a main-branch deployment through
+the shared concurrency key. This limits privilege exposure; it does not declare
+all build-code execution or cache findings resolved.

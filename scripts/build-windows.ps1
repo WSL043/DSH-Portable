@@ -203,8 +203,6 @@ try {
     if ($PreviewAppSource) {
         [System.IO.Directory]::Delete((Join-Path $Stage 'app'), $true)
         Copy-Item -Recurse -LiteralPath $PreviewAppSource -Destination (Join-Path $Stage 'app')
-        & $NodeExe (Join-Path $ProjectRoot 'scripts\stage-local-integrations.mjs') (Join-Path $Stage 'app')
-        if ($LASTEXITCODE -ne 0) { throw 'Local integration staging failed.' }
     }
     foreach ($DefaultPlugin in $DefaultPlugins) {
         $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
@@ -229,6 +227,8 @@ try {
             $env:PATH = $PriorPath
         }
     }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\stage-local-integrations.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Local integration staging failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-session-export-ui.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Session export UI adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-permission-localization.mjs') (Join-Path $Stage 'app')

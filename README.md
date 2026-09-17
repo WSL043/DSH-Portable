@@ -5,8 +5,8 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  <strong>免配环境、界面装插件，把 DSH 工作环境一起带走。</strong><br>
-  自带运行环境、桌面窗口和插件市场。会话、设置、插件与默认工作区集中保存，方便移动和备份。
+  <strong>把 Agent 和工作环境一起带走。</strong><br>
+  解压启动，免配 Node.js。会话、设置、插件与默认工作区集中保存；换电脑不用从头配置。
 </p>
 
 <p align="center">
@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/dsh-workspace-0.6.4.png" width="1040" alt="DSH-Portable 0.6.4 工作台实测截图">
+  <img src="assets/portable-layout-zh.svg" width="1040" alt="Windows 便携目录示意：程序组件、data 数据与 workspace 工作区集中保存，退出后复制到同平台新位置">
 </p>
 
 > [!NOTE]
@@ -46,10 +46,22 @@
 
 [查看官网与界面](https://wsl043.github.io/DSH-Portable/) · [直接下载](#下载)
 
-| 产品与内核分别管理 | 默认图片查看器 |
-| --- | --- |
-| ![0.6.5-rc.1 更新设置实机截图](assets/portable-updates.png) | ![图片查看器真实界面](assets/viewer-dark.png) |
-| 两套版本各自选择；内核需匹配当前 Portable。截图来自 0.6.5-rc.1；当前入口为设置 → 更新。 | 图集、缩放、原图下载与区域备注，可独立卸载。 |
+**装好能用，搬走能用，升级出问题也有恢复入口。** Portable 专注环境交付、独立内核更新、迁移和修复；Agent 能力由官方 DSH 提供。内置市场融入 [dsh-market](https://github.com/dsh-market/dsh-market)，无需自己输入安装命令。
+
+[反馈问题](https://github.com/WSL043/DSH-Portable/issues/new/choose) · [提出建议](https://github.com/WSL043/DSH-Portable/discussions/new) · 如果它帮你省下了配置时间，欢迎在[仓库首页点 Star](https://github.com/WSL043/DSH-Portable)。
+
+默认附带图片查看器和会话管理插件，可按需卸载。官方补齐的能力逐步交回官方，Portable 重点维护便携、更新与恢复。
+
+<details>
+<summary>查看历史实机界面（界面以当前版本为准）</summary>
+
+![DSH-Portable 0.6.4 工作台实测截图](assets/dsh-workspace-0.6.4.png)
+
+![0.6.5-rc.1 更新设置实机截图](assets/portable-updates.png)
+
+Portable 与内核分别选择；可用版本以应用内兼容检查为准。当前入口为设置 → 更新。
+
+</details>
 
 <details>
 <summary>展开：适合谁、运行环境与组件边界</summary>
@@ -73,7 +85,7 @@
 
 | 一个文件夹 | 换位置继续 | 更新不动数据 |
 | --- | --- | --- |
-| 会话、设置、插件、桌面数据和默认工作区放在一起。 | 退出后复制到另一块硬盘、U 盘或相同平台的电脑，重新打开即可。 | 更新替换可再生的程序组件，保留你的会话、凭据、插件和工作区。 |
+| 会话、设置、插件和默认工作区放在一起。 | 退出后复制到另一块硬盘、U 盘或相同平台的电脑，重新打开即可。 | 更新替换可再生的程序组件，保留你的会话、凭据、插件和工作区。 |
 
 运行环境和插件工具随产品放在自己的目录内，目标电脑无需预装 Node.js 或 pnpm，系统 `PATH` 也不会被修改。Portable 仍提供独立窗口、系统托盘、最近会话、任务通知、窗口位置恢复和更新流程。
 
@@ -274,9 +286,10 @@ dsh --profile web --dump-config
 | 路径 | 内容 |
 | --- | --- |
 | `data/dsh-home/` | 设置、模型凭据、会话和插件 |
-| `data/webview2/` | Windows 桌面窗口数据 |
 | `workspace/` | 默认工作区 |
 | `data/logs/` | 本地服务与启动日志 |
+
+Windows 压缩运行时保存在 `runtime/DSH-App.dshpack`，首次启动会在 `%LOCALAPPDATA%/DSH-Portable/runtime-cache/` 展开可重建缓存；根目录 `app/` 只保留包信息。WebView2 的浏览器数据位于 `%LOCALAPPDATA%/DSH-Portable/webview2/`，不随目录或迁移包搬走，网页登录可能需要重新完成。这与 `data/dsh-home/` 中可迁移的模型 API 配置不同。
 
 
 ## 安全

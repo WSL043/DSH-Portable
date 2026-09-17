@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs'
 import { Script } from 'node:vm'
 import { join } from 'node:path'
 import { listHotMounts, parseSimplePatch } from './hot.ts'
+import { isSafePackageRelativePath, resolvePackageRelativePath } from './package-path.ts'
 import { bundlePatchInsertedIds, hasDshManifest, hasLoadableEntry, profileDir, readInstalled } from './profile.ts'
 
 export type ActivationState = 'live' | 'restart' | 'inert' | 'broken' | 'missing' | 'disabled'
@@ -311,7 +312,9 @@ export function hasHostHalf(profile: string, name: string, explicitDir?: string)
 
 export function clientBundlePath(exportsField: unknown, depth = 0): string | null {
   if (depth > 4) return null
-  if (typeof exportsField === 'string') return exportsField.startsWith('./') ? exportsField : null
+  if (typeof exportsField === 'string') {
+    return exportsField.startsWith('./') && isSafePackageRelativePath(exportsField) ? exportsField : null
+  }
   if (exportsField === null || typeof exportsField !== 'object' || Array.isArray(exportsField)) return null
   const conditions = exportsField as Record<string, unknown>
   for (const key of ['browser', 'default']) {
@@ -359,9 +362,11 @@ export function checkClientBundle(profile: string, name: string, explicitDir?: s
     ? clientBundlePath((manifest.exports as Record<string, unknown>)['./client'])
     : null
   if (relative === null) return { ok: true, reason: null }
+  const bundlePath = resolvePackageRelativePath(root, relative)
+  if (bundlePath === null) return { ok: true, reason: null }
   let source: string
   try {
-    source = readFileSync(join(root, relative), 'utf8')
+    source = readFileSync(bundlePath, 'utf8')
   } catch {
     return { ok: true, reason: null }
   }

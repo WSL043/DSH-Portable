@@ -747,6 +747,10 @@ test('portable bridge fallback follows the moved product without entering a user
 test('Windows tray consumes official projected state in one bounded compact native menu', async () => {
   const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
   const build = await readFile(new URL('../scripts/build-windows.ps1', import.meta.url), 'utf8')
+  const desktopMenu = source.slice(
+    source.indexOf('private void InitializeDesktopMenu()'),
+    source.indexOf('private void AttachDesktopDropDownHandlers'),
+  )
   assert.match(source, /WebMessageReceived/)
   assert.match(source, /WebMessageAsJson/)
   assert.match(source, /PostWebMessageAsJson/)
@@ -807,8 +811,15 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /检查更新|Check for updates/)
   assert.match(source, /启动时检查更新|Check for updates at startup/)
   assert.match(source, /updateCheckEnabled/)
+  assert.match(desktopMenu, /CreateExternalLinkItem\(L\("项目仓库",\s*"Project repository"\)/)
+  assert.match(desktopMenu, /CreateExternalLinkItem\(L\("喜欢的话，点个 Star",\s*"If you like it, leave a Star"\)/)
+  assert.match(desktopMenu, /help\.DropDownItems\.Add\(CreateReportProblemItem\(\)\)/)
+  assert.match(desktopMenu, /CreateExternalLinkItem\(L\("提出建议",\s*"Suggest an idea"\)/)
   assert.match(source, /反馈问题|Report a problem/)
-  assert.match(source, /issues\/new\?template=bug-report\.yml/)
+  assert.match(source, /issues\/new\/choose/)
+  assert.match(source, /提出建议|Suggest an idea/)
+  assert.match(source, /discussions\/new/)
+  assert.doesNotMatch(source, /issues\/new\?template=bug-report\.yml/)
   assert.match(source, /check-update", "--scope", scope, "--json", "--force/)
   assert.match(source, /update", "--scope", scope, "--no-browser", "--json", "--progress-json/)
   assert.match(source, /hasRunningSession/)

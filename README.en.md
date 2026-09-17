@@ -32,7 +32,7 @@
 </p>
 
 <p align="center">
-  <img src="assets/dsh-workspace-0.6.4.png" width="1040" alt="DeepSeek Harness workspace in DSH-Portable">
+  <img src="assets/portable-layout-en.svg" width="1040" alt="Windows portable folder: program components, data and workspace together; exit and copy to a new location on the same platform">
 </p>
 
 > [!NOTE]
@@ -46,10 +46,22 @@
 
 [Explore the website and screenshots](https://wsl043.github.io/DSH-Portable/en/) · [Download](#downloads)
 
-| Separate product and core updates | Included Image Viewer |
-| --- | --- |
-| ![Actual 0.6.5-rc.1 settings in Chinese](assets/portable-updates.png) | ![Actual Image Viewer interface in Chinese](assets/viewer-dark.png) |
-| Versions are selected separately; cores must match Portable. Screenshot from 0.6.5-rc.1; the current entry is Settings → Updates. | Galleries, zoom, original downloads, and region notes. Independently removable. |
+**Start, move, update, and recover your Agent environment.** Portable focuses on delivery, independent core updates, migration, and repair; official DSH provides the Agent capabilities. The integrated [dsh-market](https://github.com/dsh-market/dsh-market) provides visual plugin installation without terminal commands.
+
+[Report a problem](https://github.com/WSL043/DSH-Portable/issues/new/choose) · [Suggest an improvement](https://github.com/WSL043/DSH-Portable/discussions/new) · If Portable saves you setup time, consider a [Star on GitHub](https://github.com/WSL043/DSH-Portable).
+
+Image Viewer and Session Manager are included and can be removed independently. As official features mature, Portable will retire overlapping functionality and focus on portability, updates, and recovery.
+
+<details>
+<summary>Historical product screenshots (the current interface may differ)</summary>
+
+![DSH-Portable 0.6.4 workspace in Chinese](assets/dsh-workspace-0.6.4.png)
+
+![Actual 0.6.5-rc.1 update settings in Chinese](assets/portable-updates.png)
+
+Product and core versions are selected separately, subject to compatibility checks. The current entry is Settings → Updates.
+
+</details>
 
 <details>
 <summary>Read more: who it is for, runtime, and component boundaries</summary>
@@ -73,7 +85,7 @@ Offline deployment requires a prepared local model server and model weights. The
 
 | One folder | Move and continue | Update without moving data |
 | --- | --- | --- |
-| Sessions, settings, plugins, desktop data, and the default workspace stay together. | Exit, copy to another drive, USB device, or a computer with the same OS and architecture, and open it again. | Updates replace reproducible app components while keeping sessions, credentials, plugins, and workspace. |
+| Sessions, settings, plugins, and the default workspace stay together. | Exit, copy to another drive, USB device, or a computer with the same OS and architecture, and open it again. | Updates replace reproducible app components while keeping sessions, credentials, plugins, and workspace. |
 
 The runtime and plugin tools live inside the product folder, so the destination computer does not need Node.js or pnpm and DSH-Portable never modifies the system `PATH`. Portable still provides a dedicated window, tray, recent sessions, task notifications, remembered placement, and its update flow.
 
@@ -269,9 +281,10 @@ Normal updates preserve `data` and `workspace` in place. To move data into a cle
 | Path | Contents |
 | --- | --- |
 | `data/dsh-home/` | Settings, model credentials, sessions, and plugins |
-| `data/webview2/` | Windows desktop web data |
 | `workspace/` | Default workspace |
 | `data/logs/` | Local service and launcher logs |
+
+On Windows, `runtime/DSH-App.dshpack` carries the compressed runtime. First launch expands a rebuildable cache under `%LOCALAPPDATA%/DSH-Portable/runtime-cache/`; the root `app/` contains package metadata only. WebView2 browser data lives under `%LOCALAPPDATA%/DSH-Portable/webview2/` and is not moved with the folder or migration package, so web sign-in may be required again. Model API configuration in `data/dsh-home/` is separate and can be migrated.
 
 ## Security
 

@@ -2,7 +2,29 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
-import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation } from '../scripts/patch-native-settings-command.mjs'
+import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, patchPluginManagerActions } from '../scripts/patch-native-settings-command.mjs'
+
+test('official plugin manager extension preserves actions and rejects changed seams', () => {
+  const source = '"plugins.bundle.config": { kind: "keyed" };\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [originalAction]'
+  const patched = patchPluginManagerActions(source)
+  assert.match(patched, /renderSlot\("plugins.portable.actions", \{ refresh: props.refresh \}\), originalAction/)
+  assert.match(patched, /"plugins.bundle.config": \{ kind: "keyed" \}/)
+  assert.equal(patchPluginManagerActions(patched), patched)
+  assert.throws(() => patchPluginManagerActions('changed'), /declaration changed upstream/)
+  assert.throws(() => patchPluginManagerActions(source + source), /expected 1 match/)
+  assert.throws(() => patchPluginManagerActions(source.replace('toolbar', 'changed')), /toolbar changed upstream/)
+})
+
+test('official plugin management retires only the recognized legacy installation copy', () => {
+  const modern = 'Inspect the plugins this deployment ships.\n查看内置部署的插件列表'
+  assert.equal(patchPluginInstallationGuidance(modern), modern)
+  const legacy = 'Configure and inspect the plugins installed in this deployment.\n配置和查看本部署已安装的插件。'
+  const patched = patchPluginInstallationGuidance(legacy)
+  assert.match(patched, /Install plugins in Plugin Market/)
+  assert.equal(patchPluginInstallationGuidance(patched), patched)
+  assert.throws(() => patchPluginInstallationGuidance('unexpected upstream change'), /expected 1 match/)
+  assert.throws(() => patchPluginInstallationGuidance(modern + modern), /expected 1 match/)
+})
 
 const upstream = `\t\tfunction SettingsRoot(props) {
 \t\t\tconst { wide, reconnect, useConnectionState, useSections, useOnboardingSteps, useSessions, renderSlot, t } = props;

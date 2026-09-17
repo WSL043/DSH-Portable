@@ -75,12 +75,14 @@ export function installMarketSettings(ctx: Context, resolved: { allowRestart?: b
   }
   const legacyInstall = Reflect.get(dshSettings, 'installSettingsSection')
   if (typeof legacyInstall === 'function') {
-    legacyInstall(ctx, MARKET_SETTINGS_NS, MarketSettings, entry, hooks)
+    Reflect.apply(legacyInstall, undefined, [ctx, MARKET_SETTINGS_NS, MarketSettings, entry, hooks])
     return
   }
   ctx.inject(['settings'], (settingsCtx) => {
-    const installSection = Reflect.get(settingsCtx.settings, 'installSection')
+    const service = Reflect.get(settingsCtx, 'settings')
+    if (service === null || (typeof service !== 'object' && typeof service !== 'function')) throw new Error('settings service is unavailable')
+    const installSection = Reflect.get(service, 'installSection')
     if (typeof installSection !== 'function') throw new Error('settings service has no installSection compatibility seam')
-    installSection.call(settingsCtx.settings, ctx, MARKET_SETTINGS_NS, MarketSettings, entry, hooks)
+    installSection.call(service, ctx, MARKET_SETTINGS_NS, MarketSettings, entry, hooks)
   })
 }

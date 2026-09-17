@@ -7,9 +7,10 @@ const root = new URL('../', import.meta.url)
 const marketRoot = new URL('app/vendor/dsh-portable-plugin-market/', root)
 
 test('market render failures are isolated, reported once, and manually retryable', async () => {
-  const [boundary, index, routes] = await Promise.all([
+  const [boundary, index, action, routes] = await Promise.all([
     readFile(new URL('src/client/MarketErrorBoundary.tsx', marketRoot), 'utf8'),
     readFile(new URL('src/client/index.ts', marketRoot), 'utf8'),
+    readFile(new URL('src/client/MarketAction.tsx', marketRoot), 'utf8'),
     readFile(new URL('src/routes.ts', marketRoot), 'utf8'),
   ])
 
@@ -26,6 +27,7 @@ test('market render failures are isolated, reported once, and manually retryable
   assert.equal((boundary.match(/<button\b/g) ?? []).length, 1)
   assert.match(index, /h\(MarketErrorBoundary, \{ view: 'discover' \}, h\(MarketSection/)
   assert.match(index, /h\(MarketErrorBoundary, \{ view: 'installed' \}, h\(MarketSection/)
+  assert.match(action, /<MarketErrorBoundary view="discover">/)
 
   const route = routes.slice(routes.indexOf("path: '/dsh-market/client-error'"))
   assert.match(route, /kind: 'exact'/)
