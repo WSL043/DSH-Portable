@@ -1,5 +1,11 @@
 # Beta 2 recovery gate (2026-09-18)
 
+Final qualification: all 35 jobs passed on source `7b089bbbfa4cdd99aedf82809638f411024ca4da`.
+The recovery and old-plugin-stack runtime checks passed. See
+[the Beta 2 acceptance record](release-0.7.0-beta.2-acceptance.md) for final evidence
+and the retained offline dependency limitation. The investigation steps below
+are historical, not additional pending release gates.
+
 Beta 1 was withdrawn after reports of an unusable composer and inability to
 return from the plugin page. Do not publish Beta 2 on the strength of the old
 green CI result. Website, Electron migration, storage pruning, and unrelated

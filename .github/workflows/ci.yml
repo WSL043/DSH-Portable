@@ -307,13 +307,29 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
+      - name: Restore the exact reviewed WebView2 download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/webview2.cab
+          key: webview2-cab-${{ runner.os }}-${{ hashFiles('config/webview2-runtime.lock.json') }}
       - name: Build the separate complete offline package
         shell: powershell
         run: |
           $Lock = Get-Content -Raw config/webview2-runtime.lock.json | ConvertFrom-Json
           $Cab = Join-Path $env:RUNNER_TEMP 'webview2.cab'
-          Invoke-WebRequest -UseBasicParsing -Uri $Lock.url -OutFile $Cab
+          $ProgressPreference = 'SilentlyContinue'
+          $Timer = [Diagnostics.Stopwatch]::StartNew()
+          if ((Test-Path -LiteralPath $Cab) -and (Get-FileHash -LiteralPath $Cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Lock.sha256) {
+            Remove-Item -LiteralPath $Cab -Force
+          }
+          if (-not (Test-Path -LiteralPath $Cab)) {
+            Invoke-WebRequest -UseBasicParsing -Uri $Lock.url -OutFile $Cab -TimeoutSec 300
+          }
+          if ((Get-FileHash -LiteralPath $Cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Lock.sha256) { throw 'WebView2 download integrity check failed' }
+          Write-Output ('WebView2 download seconds: ' + $Timer.Elapsed.TotalSeconds)
+          $Timer.Restart()
           ./scripts/build-windows-complete-offline.ps1 -BaseArchive artifacts/DSH-Portable-windows-x64-offline.zip -WebView2Cab $Cab -OutputArchive artifacts/DSH-Portable-windows-x64-complete-offline.zip
+          Write-Output ('Complete offline packaging seconds: ' + $Timer.Elapsed.TotalSeconds)
       - name: Verify the bundled runtime in a fresh native host
         shell: powershell
         run: |
@@ -341,6 +357,7 @@ jobs:
         with:
           name: windows-complete-offline
           path: artifacts/DSH-Portable-windows-x64-complete-offline.zip*
+          compression-level: 0
           if-no-files-found: error
       - uses: actions/upload-artifact@v7
         if: always()

@@ -19,9 +19,14 @@ permissions:
   contents: write
   id-token: write
 
+concurrency:
+  group: publish-tested-release
+  cancel-in-progress: false
+
 jobs:
   publish:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -88,17 +93,19 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
           PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
+          VERIFY_FLAGS=()
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || {
-              echo "Refusing to mutate an already published release: $RELEASE_TAG" >&2
-              exit 1
-            }
+            # Verify all immutable bytes below before resuming channel publication.
+            echo "Resume verified release assets: $RELEASE_TAG"
+            if [ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = false ]; then
+              VERIFY_FLAGS=(--verify-only)
+            fi
           else
             FLAGS=(--draft)
             if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
             gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file release-staging/RELEASE-NOTES.md "${FLAGS[@]}"
           fi
-          gh release upload "$RELEASE_TAG" release-staging/user-assets/* --clobber
+          node scripts/upload-release-assets.mjs "$RELEASE_TAG" "${VERIFY_FLAGS[@]}" release-staging/user-assets/*
           if [ "$PRERELEASE" = true ]; then
             gh release edit "$RELEASE_TAG" --draft=false --prerelease
           else
@@ -109,16 +116,23 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           UPDATE_CHANNEL_TAG: ${{ steps.version.outputs.updateChannelTag }}
           RELEASE_CHANNEL: ${{ steps.version.outputs.channel }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           gh release view "$UPDATE_CHANNEL_TAG" >/dev/null 2>&1 || \
             gh release create "$UPDATE_CHANNEL_TAG" --prerelease --title "DSH-Portable $RELEASE_CHANNEL update channel" --notes "Machine-readable update assets used by tested DSH-Portable builds."
-          gh release upload "$UPDATE_CHANNEL_TAG" release-staging/update-assets/* --clobber
-          # Versioned manifests and archives are immutable. Publish indexes last.
-          gh release upload "$UPDATE_CHANNEL_TAG" product-catalog/immutable/*
-          gh release upload "$UPDATE_CHANNEL_TAG" "product-catalog/$RELEASE_CHANNEL/"* --clobber
+          # Upload each component once; legacy latest manifests use immutable URLs.
+          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" product-catalog/immutable/*
+          mkdir -p product-catalog/latest
+          for file in product-catalog/immutable/portable-update-*.json; do
+            name="$(basename "$file")"
+            cp "$file" "product-catalog/latest/${name%-${RELEASE_TAG#v}.json}.json"
+          done
+          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json
+          # Advertise only after every component and manifest is verified.
+          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable "product-catalog/$RELEASE_CHANNEL/"*
           if [ "$RELEASE_CHANNEL" = stable ]; then
             gh release view update-channel-candidate >/dev/null 2>&1 || \
               gh release create update-channel-candidate --prerelease --title "DSH-Portable candidate update channel" --notes "Machine-readable candidate updates and stable promotion assets."
-            gh release upload update-channel-candidate release-staging/update-assets/* --clobber
-            gh release upload update-channel-candidate product-catalog/candidate/* --clobber
+            node scripts/upload-release-assets.mjs update-channel-candidate --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json
+            node scripts/upload-release-assets.mjs update-channel-candidate --mutable product-catalog/candidate/*
           fi
