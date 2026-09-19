@@ -848,6 +848,31 @@ try {
     pluginSettingsSurface: modernBuiltIns ? 'official-built-in-settings' : 'legacy-diagnostics',
     legacyOverrideContrast: modernBuiltIns ? 'not-applicable-upstream-surface-removed' : 'passed-light-and-dark',
   })}\n`)
+} catch (error) {
+  // Keep the actual UI and theme projection before closing the isolated host.
+  // A click acknowledgement alone does not establish that the setting changed.
+  if (client) {
+    try {
+      const evidence = await evaluate(client, `(() => ({
+        theme: document.documentElement.getAttribute('data-theme'),
+        colorScheme: getComputedStyle(document.documentElement).colorScheme,
+        states: (window.__dshTrayMessages || []).filter(item => item.type === 'dsh-portable/state').slice(-12),
+        controls: [...document.querySelectorAll('button,[role="button"]')].map(item => ({
+          label: (item.getAttribute('aria-label') || item.getAttribute('title') || item.textContent || '').trim().slice(0, 100),
+          visible: item.getBoundingClientRect().width > 0 && item.getBoundingClientRect().height > 0,
+          disabled: Boolean(item.disabled),
+          pressed: item.getAttribute('aria-pressed'),
+          selected: item.getAttribute('aria-selected'),
+        })),
+      }))()`)
+      await writeFile(path.join(root, 'data', 'tray-ui-failure.json'), redactSensitive(JSON.stringify({ error: String(error), evidence }, null, 2)))
+      const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
+      await writeFile(path.join(root, 'data', 'tray-ui-failure.png'), Buffer.from(screenshot.data, 'base64'))
+    } catch (captureError) {
+      process.stderr.write(`UI failure evidence unavailable: ${redactSensitive(String(captureError))}\n`)
+    }
+  }
+  throw error
 } finally {
   client?.close()
   if (chrome?.pid) {

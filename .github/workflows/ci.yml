@@ -465,6 +465,7 @@ jobs:
           path: |
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/tray-ui-failure.*
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-lifecycle-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable-moved/data/native-lifecycle-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
