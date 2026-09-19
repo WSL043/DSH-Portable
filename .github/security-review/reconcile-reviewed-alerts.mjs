@@ -50,6 +50,31 @@ export function dismissalComment(record, decision) {
   return `Review 2026-09-19; ${record.rule}; #${record.id}. Source: ${unique.join('; ') || 'see SARIF related locations'}. Sink: ${sink.file}:${sink.line}. ${decision.reason} Evidence: PR #139; pinned analysis at 11d2e3cb4459f51918de0217167b845489a72ab7. No global query/path exclusion.`
 }
 
+const shortReasons = {
+  'local-path': 'Caller-selected local root; no elevation or cross-principal input in this trace. Does not cover hostile co-writers or unrelated archive paths.',
+  'argument-array': 'Caller-owned executable with separate/quoted arguments. Trusted launch environment required; no inbound request command concatenation in this trace.',
+  'windows-cli-shim': 'Same-user argv/ComSpec selects the CLI. Resolved JS entry uses Node without a shell. This is not a general cmd.exe argument-safety claim.',
+  'object-id': 'Three.js scene/resource object ID, not a secret, authentication token or security capability.',
+  'local-test-code': 'Evaluates repository-owned test source or an explicit maintainer override. No lower-trust remote input; VM is not a security sandbox.',
+  'compile-only': 'new Script only compiles to check syntax; the compiled Script is never executed. Package-file containment is tracked separately.',
+  'cdp-literal': 'JSON.stringify builds a JS literal for CDP, not an HTML script element. Inputs are repository-owned button-name fixtures.',
+  'bounded-timer': 'boundedTimeout rejects non-finite/non-positive values, floors positives and caps at 60000 or 3600000 ms; overflow regression passes.',
+  'locked-sdk': 'URL and expected SHA256 come from the tracked upstream lock. SDK bytes are verified; no remote request parameter controls this download.',
+  'health-probe': 'Smoke test probes its own launched process origin with redirects disabled and a 2s timeout; it does not replay the one-time credential.',
+  'github-api': 'Fixed api.github.com origin; repository identifier comes from checked-out baseline metadata, not an inbound request.',
+  'cli-download': 'Explicit same-user CLI download, not a remote-principal request proxy. HTTP(S) recognition and archive limits remain.',
+  'configured-registry': 'Same-user DSHM_REGISTRY_URL selects an intentional private registry/proxy. No inbound HTTP parameter controls this flow.',
+  'git-worktree': 'Git commondir is local checkout metadata used to read repository identity. External common directories are intentional for worktrees.',
+  'pinned-upstream-build': 'Job excludes PR events; tracked lock selects a reviewed commit, verified by git rev-parse. Consumers use artifacts from the same run.',
+}
+export function apiDismissalComment(record, decision) {
+  const reason = shortReasons[decision.key]
+  assert.ok(reason, 'Only reviewed false-positive cases have API comments')
+  const result = `#${record.id} ${record.rule}: ${reason} Full trace/assumptions: PR #139, review receipt; source 11d2e3cb4459.`
+  assert.ok(result.length <= 280, 'GitHub dismissal comments are limited to 280 characters')
+  return result
+}
+
 async function main() {
   const args = process.argv.slice(2)
   const apply = args.includes('--apply')
@@ -74,6 +99,8 @@ async function main() {
     })
     if (!response.ok) {
       // Do not work around an authorization or rate-limit response.
+      const detail = await response.json().catch(() => ({}))
+      console.error(JSON.stringify({ status: response.status, message: detail.message, errors: detail.errors }).slice(0, 1500))
       throw new Error(`GitHub ${response.status} at ${endpoint}; retry-after=${response.headers.get('retry-after') || ''}; remaining=${response.headers.get('x-ratelimit-remaining') || ''}`)
     }
     return response.json()
@@ -121,7 +148,7 @@ async function main() {
         if (index % 50 === 0) await assertMain()
         const result = await api(`/code-scanning/alerts/${item.id}`, { body: {
           state: 'dismissed', dismissed_reason: 'false positive',
-          dismissed_comment: dismissalComment(item.record, item.decision), create_request: false,
+          dismissed_comment: apiDismissalComment(item.record, item.decision), create_request: false,
         } })
         assert.equal(result.number, item.id)
         assert.equal(result.state, 'dismissed')
