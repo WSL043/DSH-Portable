@@ -1,10 +1,11 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { lstat, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
 import { projectKey, relocateSessionHeaderBytes } from './portable-core.mjs'
+import { dataPathKey, lstatIfPresent, normalizeDataPath, safeDataTarget as safeTarget, writeDataFileAtomic } from './data-paths.mjs'
 
 const MAGIC_PLAIN = Buffer.from('DSHDAT1U')
 const MAGIC_ENCRYPTED = Buffer.from('DSHDAT1E')
@@ -24,7 +25,7 @@ function sha256(value) {
 
 function normalizedRelative(root, filename) {
   const value = path.relative(root, filename).split(path.sep).join('/')
-  if (value === '' || value.startsWith('../') || path.isAbsolute(value)) throw new Error(`Unsafe data path: ${filename}`)
+  if (value === '' || value === '..' || value.startsWith('../') || path.isAbsolute(value)) throw new Error(`Unsafe data path: ${filename}`)
   return value
 }
 
@@ -33,7 +34,7 @@ async function walkFiles(root, { skip = new Set(), filter = () => true } = {}) {
   const found = []
   async function visit(directory) {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
-      if (skip.has(entry.name)) continue
+      if (skip.has(entry.name.toLowerCase())) continue
       const filename = path.join(directory, entry.name)
       if (entry.isSymbolicLink()) continue
       if (entry.isDirectory()) await visit(filename)
@@ -146,12 +147,13 @@ function validateDocument(document) {
   const seen = new Set()
   for (const file of document.files) {
     if (!file || typeof file.path !== 'string' || typeof file.category !== 'string' || typeof file.data !== 'string' || typeof file.sha256 !== 'string') throw new Error('Invalid data package entry.')
-    const normalized = file.path.replaceAll('\\', '/')
-    if (normalized === '' || normalized.startsWith('/') || normalized.split('/').includes('..') || path.win32.isAbsolute(normalized)) throw new Error(`Unsafe data package path: ${file.path}`)
+    const normalized = normalizeDataPath(file.path)
+    const key = dataPathKey(normalized)
     if (!categories.includes(file.category) || !ALL_CATEGORIES.has(file.category)) throw new Error(`Invalid data category: ${file.category}`)
     if (!pathAllowedForCategory(normalized, file.category)) throw new Error(`Data path does not belong to ${file.category}: ${file.path}`)
-    if (seen.has(normalized)) throw new Error(`Duplicate data package path: ${file.path}`)
-    seen.add(normalized)
+    if (seen.has(key)) throw new Error(`Duplicate data package path: ${file.path}`)
+    seen.add(key)
+    file.path = normalized
     const bytes = Buffer.from(file.data, 'base64')
     if (!/^[0-9a-f]{64}$/i.test(file.sha256) || !timingSafeEqual(Buffer.from(sha256(bytes)), Buffer.from(file.sha256.toLowerCase()))) throw new Error(`Data package integrity check failed: ${file.path}`)
   }
@@ -163,9 +165,10 @@ function pathAllowedForCategory(value, category) {
   ].includes(value) || value.startsWith('data/dsh-home/.agent-presets/')
   if (category === 'sessions') return value.startsWith('data/dsh-home/sessions/') || value.startsWith('data/dsh-home/storages/')
   if (category === 'plugins') return value.startsWith('data/dsh-home/profiles/')
-    && !value.split('/').some(part => PROFILE_SKIP.has(part)) && !SECRET_NAME.test(value)
+    && !value.split('/').some(part => PROFILE_SKIP.has(part.toLowerCase())) && !SECRET_NAME.test(value)
   if (category === 'credentials') return value === 'data/dsh-home/.credentials.yaml'
-    || (value.startsWith('data/dsh-home/profiles/') && SECRET_NAME.test(value))
+    || (value.startsWith('data/dsh-home/profiles/')
+      && !value.split('/').some(part => PROFILE_SKIP.has(part.toLowerCase())) && SECRET_NAME.test(value))
   if (category === 'workspace') return value.startsWith('workspace/')
   return false
 }
@@ -180,6 +183,9 @@ export async function createDataArchive(layout, output, options = {}) {
   const files = []
   let sourceBytes = 0
   for (const spec of specs) {
+    if (normalizeDataPath(spec.archivePath) !== spec.archivePath) {
+      throw new Error(`Unsupported filename in data package: ${spec.archivePath}`)
+    }
     const bytes = await readFile(spec.filename)
     sourceBytes += bytes.length
     if (sourceBytes > MAX_ARCHIVE_BYTES) throw new Error('Selected user data is too large for one data package.')
@@ -193,12 +199,11 @@ export async function createDataArchive(layout, output, options = {}) {
     portableWorkspace: layout.workspace,
     files,
   }
+  validateDocument(document)
   const compressed = gzipSync(Buffer.from(JSON.stringify(document)), { level: 6 })
   const archive = options.password ? encrypt(compressed, String(options.password)) : Buffer.concat([MAGIC_PLAIN, compressed])
   await mkdir(path.dirname(path.resolve(output)), { recursive: true })
-  const temporary = `${path.resolve(output)}.part-${process.pid}`
-  await writeFile(temporary, archive, { mode: 0o600 })
-  await rename(temporary, path.resolve(output))
+  await writeDataFileAtomic(path.resolve(output), archive)
   return { output: path.resolve(output), categories, files: files.length, sourceBytes, archiveBytes: archive.length, encrypted: Boolean(options.password) }
 }
 
@@ -213,27 +218,6 @@ export async function inspectDataArchive(filename, options = {}) {
     files: document.files.map(file => file.path),
     bytes: document.files.reduce((total, file) => total + Number(file.bytes || Buffer.from(file.data, 'base64').length), 0),
   }
-}
-
-async function safeTarget(root, relativePath) {
-  await mkdir(root, { recursive: true })
-  const target = path.resolve(root, ...relativePath.split('/'))
-  if (!target.startsWith(path.resolve(root) + path.sep)) throw new Error(`Unsafe restore path: ${relativePath}`)
-  let current = path.resolve(root)
-  for (const part of relativePath.split('/').slice(0, -1)) {
-    current = path.join(current, part)
-    if (!existsSync(current)) {
-      await mkdir(current)
-      continue
-    }
-    const stat = await lstat(current)
-    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Unsafe restore path: ${relativePath}`)
-  }
-  if (existsSync(target)) {
-    const stat = await lstat(target)
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(`Unsafe restore path: ${relativePath}`)
-  }
-  return target
 }
 
 function replaceExactStrings(value, before, after) {
@@ -267,7 +251,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   const trace = typeof options.trace === 'function' ? options.trace : () => {}
   trace('archive-validated', { files: document.files.length, categories: document.categories.length, encrypted })
   const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
-  const rollbackDirectory = path.join(layout.dataDir, 'backups', `before-import-${stamp}-${randomBytes(6).toString('hex')}`)
+  let rollbackDirectory = null
   const conflicts = []
   const changed = []
   const generated = []
@@ -277,13 +261,23 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   let retainedGeneratedBackup = false
   const restorePaths = new Set()
 
+  async function rollbackTarget(relativePath, options) {
+    if (!rollbackDirectory) {
+      const prefix = path.join(layout.dataDir, 'backups', `before-import-${stamp}-`)
+      const safePrefix = await safeTarget(layout.stateRoot, normalizedRelative(layout.stateRoot, prefix))
+      rollbackDirectory = await mkdtemp(safePrefix)
+    }
+    const relative = normalizedRelative(layout.stateRoot, path.join(rollbackDirectory, ...relativePath.split('/')))
+    return safeTarget(layout.stateRoot, relative, options)
+  }
+
   async function prepareGeneratedPath(target) {
     const absolute = path.resolve(target)
     const relative = normalizedRelative(layout.stateRoot, absolute)
     if (generated.some(entry => entry.target === absolute)) return
-    const rollback = path.join(rollbackDirectory, 'generated', ...relative.split('/'))
-    if (existsSync(absolute)) {
-      await mkdir(path.dirname(rollback), { recursive: true })
+    await safeTarget(layout.stateRoot, relative, { leaf: 'any' })
+    if (await lstatIfPresent(absolute)) {
+      const rollback = await rollbackTarget(`generated/${relative}`, { leaf: 'any' })
       await rename(absolute, rollback)
       generated.push({ target: absolute, rollback })
       retainedGeneratedBackup = true
@@ -296,19 +290,19 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     trace('rollback-begin', { changed: changed.length, generated: generated.length })
     for (const entry of [...generated].reverse()) {
       await rm(entry.target, { recursive: true, force: true }).catch(() => {})
-      if (entry.rollback && existsSync(entry.rollback)) {
+      if (entry.rollback && await lstatIfPresent(entry.rollback)) {
         await mkdir(path.dirname(entry.target), { recursive: true })
         await rename(entry.rollback, entry.target)
       }
     }
     for (const entry of [...changed].reverse()) {
       await rm(entry.target, { force: true }).catch(() => {})
-      if (entry.rollback && existsSync(entry.rollback)) {
+      if (entry.rollback && await lstatIfPresent(entry.rollback)) {
         await mkdir(path.dirname(entry.target), { recursive: true })
         await rename(entry.rollback, entry.target)
       }
     }
-    await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
+    if (rollbackDirectory) await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
     trace('rollback-complete')
   }
 
@@ -321,23 +315,20 @@ export async function restoreDataArchive(layout, filename, options = {}) {
         layout.workspace,
       )
       const bytes = relocated.bytes
-      if (restorePaths.has(relocated.archivePath)) throw new Error(`Duplicate relocated data package path: ${relocated.archivePath}`)
-      restorePaths.add(relocated.archivePath)
+      const restoreKey = dataPathKey(relocated.archivePath)
+      if (restorePaths.has(restoreKey)) throw new Error(`Duplicate relocated data package path: ${relocated.archivePath}`)
+      restorePaths.add(restoreKey)
       const target = await safeTarget(layout.stateRoot, relocated.archivePath)
       let rollback = null
       if (existsSync(target)) {
         const previous = await readFile(target)
         if (sha256(previous) === sha256(bytes)) { unchanged += 1; continue }
         if (conflict === 'keep') { conflicts.push(relocated.archivePath); continue }
-        rollback = await safeTarget(rollbackDirectory, relocated.archivePath)
-        await mkdir(path.dirname(rollback), { recursive: true })
-        await writeFile(rollback, previous, { mode: 0o600 })
+        rollback = await rollbackTarget(relocated.archivePath)
+        await writeDataFileAtomic(rollback, previous)
         replaced += 1
       }
-      await mkdir(path.dirname(target), { recursive: true })
-      const temporary = `${target}.dsh-import-${process.pid}`
-      await writeFile(temporary, bytes, { mode: 0o600 })
-      await rename(temporary, target)
+      await writeDataFileAtomic(target, bytes)
       changed.push({ target, rollback, path: relocated.archivePath, category: file.category })
       imported += 1
     }
@@ -353,7 +344,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     await rollbackImport()
     throw error
   }
-  if (replaced === 0 && !retainedGeneratedBackup) await rm(rollbackDirectory, { recursive: true, force: true })
+  if (rollbackDirectory && replaced === 0 && !retainedGeneratedBackup) await rm(rollbackDirectory, { recursive: true, force: true })
   trace('complete', { imported, unchanged, conflicts: conflicts.length, replaced })
   return {
     status: 'restored', encrypted, categories: document.categories, imported, unchanged, conflicts, replaced,

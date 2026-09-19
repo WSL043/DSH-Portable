@@ -1,0 +1,36 @@
+name: Data transfer safety
+
+on:
+  pull_request:
+    paths:
+      - 'launcher/data-*.mjs'
+      - 'launcher/portable-core.mjs'
+      - 'tests/data-transfer*.test.mjs'
+      - '.github/workflows/data-transfer-safety.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-transfer-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  data-transfer:
+    name: Data transfer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Test archive round trips and filesystem boundaries
+        run: node --test tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs

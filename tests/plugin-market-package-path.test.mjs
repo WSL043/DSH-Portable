@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { buildBundleLayers } from '../app/vendor/dsh-portable-plugin-market/src/check.ts'
@@ -11,7 +11,7 @@ import { carrierDisableIds } from '../app/vendor/dsh-portable-plugin-market/src/
 import * as verify from '../app/vendor/dsh-portable-plugin-market/src/verify.ts'
 
 test('declared bundle patches stay inside the package directory', async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dshm-package-path-'))
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dshm-package-path-')))
   t.after(() => rm(root, { recursive: true, force: true }))
 
   const profile = root
@@ -49,7 +49,7 @@ test('declared bundle patches stay inside the package directory', async t => {
 })
 
 test('package entry checks reject absolute and parent paths while keeping internal entries', async t => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'dshm-entry-path-'))
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dshm-entry-path-')))
   t.after(() => rm(root, { recursive: true, force: true }))
 
   const packageDir = path.join(root, 'node_modules', 'fixture')

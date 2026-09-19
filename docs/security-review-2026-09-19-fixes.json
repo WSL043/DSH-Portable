@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "WSL043/DSH-Portable",
+  "snapshotCommit": "11d2e3cb4459f51918de0217167b845489a72ab7",
+  "codeAlertState": "Associated code changes are in PR #139. Default-branch scan closure and release-artifact qualification remain separate checks.",
+  "groups": [
+    {"key":"data-archive","ids":[216,217,218,219,220,221,222,227,235,236,241,253],"files":["launcher/data-transfer.mjs","launcher/data-paths.mjs"],"tests":["tests/data-transfer.test.mjs","tests/data-transfer-security.test.mjs"]},
+    {"key":"package-files","ids":[110,139,864,865,866,867],"files":["app/vendor/dsh-portable-plugin-market/src/package-path.ts","app/vendor/dsh-portable-plugin-market/lib/index.js","app/vendor/dsh-portable-plugin-market/lib/import-preflight.js"],"tests":["tests/plugin-market-package-path.test.mjs","tests/security-boundary-review.test.mjs"]},
+    {"key":"profile-backup","ids":[56,57,58,59,60,61],"files":["app/vendor/dsh-portable-plugin-market/src/backup.ts","app/vendor/dsh-portable-plugin-market/src/backup-files.ts","app/vendor/dsh-portable-plugin-market/lib/index.js"],"tests":["tests/backup-write-security.test.mjs","tests/plugin-market-install-webdav-hardening.test.mjs"]},
+    {"key":"shared-write","ids":[420,421,422],"files":["launcher/portable-core.mjs","launcher/data-paths.mjs"],"tests":["tests/backup-write-security.test.mjs","tests/atomic-write-order.test.mjs"]},
+    {"key":"native-updater","ids":[50,53],"files":["launcher/windows/DSH-Portable.cs","launcher/windows/PortableProcessJob.cs"],"tests":["tests/security-boundary-review.test.mjs","tests/security-native-process.test.mjs","tests/windows-launcher-contract.test.mjs"]}
+  ],
+  "dependabot": [{
+    "number":1,"ecosystem":"rust","package":"glib","advisory":"GHSA-wrw7-89jp-8q8g","alias":"RUSTSEC-2024-0429","lockedVersion":"0.18.5",
+    "resolution":"Checksum-verified 0.18.5 compatibility backport of upstream PR gtk-rs/gtk-rs-core#1343, selected using Cargo patch.crates-io. Not relabeled as 0.20.0.",
+    "state":"Patch in PR #139; default branch still uses the affected registry version.",
+    "files":["launcher/linux/Cargo.toml","launcher/linux/Cargo.lock","launcher/linux/vendor/glib-0.18.5/src/variant_iter.rs"],
+    "tests":["launcher/linux/vendor/glib-0.18.5/tests/portable_variant_str_iter.rs"]
+  }]
+}

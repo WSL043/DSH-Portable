@@ -1,0 +1,89 @@
+name: Security boundary regression
+
+on:
+  pull_request:
+    paths:
+      - 'launcher/**'
+      - 'desktop-bridge/**'
+      - 'app/**'
+      - 'tests/**'
+      - 'docs/security-review-2026-09-19*'
+      - '.github/workflows/security-review.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'launcher/**'
+      - 'desktop-bridge/**'
+      - 'app/**'
+      - 'tests/**'
+      - 'docs/security-review-2026-09-19*'
+      - '.github/workflows/security-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-boundary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundaries:
+    name: Security boundaries (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - run: npm ci --prefix app --ignore-scripts
+      - name: Exercise package consumers, filesystem boundaries and the complete review map
+        run: node --test tests/plugin-market-package-path.test.mjs tests/plugin-market-install-webdav-hardening.test.mjs tests/backup-write-security.test.mjs tests/atomic-write-order.test.mjs tests/security-boundary-review.test.mjs tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs tests/desktop-bridge-host.test.mjs tests/security-review-manifest.test.mjs
+      - name: Compile and exercise the changed Windows host and detached-process boundary
+        if: runner.os == 'Windows'
+        run: node --test --test-concurrency=1 tests/security-native-process.test.mjs tests/windows-launcher-contract.test.mjs
+
+  glib-backport:
+    name: Optimized glib compatibility backport
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: Verify the locked native graph selects the patched crate
+        run: |
+          mkdir -p "$RUNNER_TEMP/glib-evidence"
+          cargo metadata --locked --format-version 1 --manifest-path launcher/linux/Cargo.toml > "$RUNNER_TEMP/glib-evidence/cargo-metadata.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          data = json.loads((Path(os.environ['RUNNER_TEMP']) / 'glib-evidence/cargo-metadata.json').read_text())
+          packages = [p for p in data['packages'] if p['name'] == 'glib']
+          expected = Path('launcher/linux/vendor/glib-0.18.5/Cargo.toml').resolve()
+          assert len(packages) == 1 and packages[0]['source'] is None, packages
+          assert Path(packages[0]['manifest_path']).resolve() == expected, packages
+          assert packages[0]['version'] == '0.18.5', packages
+          PY
+          git diff --exit-code -- launcher/linux/Cargo.lock
+      - name: Exercise the advisory's iterator functions with optimizations enabled
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/glib-target
+        run: cargo test --release --manifest-path launcher/linux/vendor/glib-0.18.5/Cargo.toml --test portable_variant_str_iter 2>&1 | tee "$RUNNER_TEMP/glib-evidence/optimized-regression.log"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: glib-security-evidence
+          path: ${{ runner.temp }}/glib-evidence/
+          if-no-files-found: warn
+          retention-days: 30

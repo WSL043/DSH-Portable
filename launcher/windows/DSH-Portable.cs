@@ -4708,8 +4708,8 @@ namespace DshPortable
             if (!File.Exists(source)) throw new FileNotFoundException(L(
                 "完整更新组件缺失，请重新安装当前版本后再试。",
                 "The full update component is missing. Reinstall this version and try again."), source);
-            string helper = Path.Combine(Path.GetTempPath(), "DSH-FullUpdater-" + Process.GetCurrentProcess().Id + ".exe");
-            File.Copy(source, helper, true);
+            string helper = Path.Combine(Path.GetTempPath(), "DSH-FullUpdater-" + Guid.NewGuid().ToString("N") + ".exe");
+            File.Copy(source, helper, false);
             PortableProcessJob.StartDetachedUpdater(helper, new[]
             {
                 "--upgrade-existing",
