@@ -205,6 +205,19 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
   const deadline = Date.now() + timeoutMs
   let latest
   while (Date.now() < deadline) {
+    // The official first-run notice can mount after settings or locale changes.
+    // Deal only with that known onboarding dialog, never click through a modal.
+    await evaluate(client, `(() => {
+      const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
+        .find(item => item.getBoundingClientRect().width > 0
+          && /Internal Testing Notice|内测声明/.test(item.textContent || ''))
+      const button = [...(notice?.querySelectorAll('button') || [])]
+        .find(item => ['Continue', '继续'].includes((item.textContent || '').trim())
+          && !item.disabled && !item.closest('[inert],[aria-hidden="true"]'))
+      if (!button) return false
+      button.click()
+      return true
+    })()`)
     latest = await evaluate(client, expression)
     if (predicate(latest)) return latest
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -332,7 +345,10 @@ try {
   await client.send('Page.enable')
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: initScript })
   const navigation = await client.send('Page.navigate', { url: launch.url })
-  if (navigation.errorText) throw new Error(`Workspace navigation failed: ${navigation.errorText}`)
+  if (navigation.errorText && navigation.errorText !== 'net::ERR_ABORTED') {
+    throw new Error(`Workspace navigation failed: ${navigation.errorText}`)
+  }
+  if (navigation.errorText) rememberBrowserFailure({ type: 'Document', error: navigation.errorText })
 
   const expectedOrigin = new URL(launch.url).origin
   await waitForValue(client, `({ origin: location.origin, ready: document.readyState })`,
