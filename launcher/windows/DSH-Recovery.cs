@@ -6,8 +6,8 @@ using System.Reflection;
 
 [assembly: AssemblyTitle("DSH-Portable Recovery")]
 [assembly: AssemblyProduct("DSH-Portable")]
-[assembly: AssemblyVersion("0.7.0.30002")]
-[assembly: AssemblyFileVersion("0.7.0.30002")]
+[assembly: AssemblyVersion("0.7.0.30003")]
+[assembly: AssemblyFileVersion("0.7.0.30003")]
 
 // Independent of WebView2 and the DSH backend. Never starts the workspace.
 internal static class PortableRecovery

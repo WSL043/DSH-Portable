@@ -1,0 +1,41 @@
+{
+  "version": "0.7.0-beta.3",
+  "zh": {
+    "summary": "统一插件安装流程，减少不必要的依赖下载，并补充存储占用查看。",
+    "highlights": [
+      "从插件市场选择安装后，直接进入官方添加插件窗口，可检查包名并确认安装，减少重复确认。",
+      "批量更新跳过已禁用的插件；需要更新时仍可单独操作。",
+      "修复迁移和导入时强制重建依赖导致下载其他平台可选包的问题，减少插件存储的异常增长。",
+      "桌面与数据设置增加按需存储占用查询，分别显示插件依赖、导入备份、修复备份和日志。",
+      "加强插件包路径、备份文件写入和更新回滚的安全边界。"
+    ],
+    "knownIssues": [
+      "本版本仍为 Beta，内置官方 DSH 0.1.6-alpha.2；第三方插件兼容性需单独确认。",
+      "已有插件存储不会自动清空；尚不提供保证断网恢复的历史依赖一键回收。",
+      "已有第三方插件依赖不在离线缓存中时，默认插件自动升级仍可能需要联网。"
+    ],
+    "upgradeNotes": [
+      "升级前请退出 Portable 并备份数据。",
+      "会话、附件、设置及工作区不作为缓存清理；存储统计是文件逻辑大小，不等同可释放磁盘空间。"
+    ]
+  },
+  "en": {
+    "summary": "Unify plugin installation, avoid unnecessary dependency downloads, and add on-demand storage usage reporting.",
+    "highlights": [
+      "Selecting Install in the marketplace opens the official Add plugin dialog directly, where the package can be reviewed and confirmed.",
+      "Batch updates skip disabled plugins; individual updates remain available.",
+      "Avoid forced dependency reconstruction during migration and import, which could download optional packages for unrelated platforms.",
+      "Desktop & data now reports plugin dependencies, import backups, recovery backups, and logs on demand.",
+      "Strengthen package-path checks, backup writes, and update rollback boundaries."
+    ],
+    "knownIssues": [
+      "This remains a Beta and bundles official DSH 0.1.6-alpha.2. Third-party plugin compatibility must be checked separately.",
+      "Existing plugin storage is retained. One-click historical dependency cleanup with guaranteed offline recovery is not provided.",
+      "Automatic default-plugin upgrades may still require a connection when existing third-party dependencies are absent from the offline cache."
+    ],
+    "upgradeNotes": [
+      "Exit Portable and back up your data before upgrading.",
+      "Sessions, attachments, settings, and workspaces are not treated as caches. Storage reports show logical file sizes, not reclaimable disk space."
+    ]
+  }
+}
