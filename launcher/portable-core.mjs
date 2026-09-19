@@ -1,3 +1,4 @@
+import { writeDataFileAtomic } from './data-paths.mjs'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
@@ -1007,9 +1008,7 @@ export function projectKey(cwd) {
 }
 
 async function atomicWrite(filename, bytes) {
-  const temporary = `${filename}.portable-${process.pid}.tmp`
-  await writeFile(temporary, bytes, { mode: 0o600 })
-  await rename(temporary, filename)
+  await writeDataFileAtomic(filename, bytes)
 }
 
 async function readJson(filename, fallback = null) {

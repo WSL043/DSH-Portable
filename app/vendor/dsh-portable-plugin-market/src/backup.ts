@@ -8,13 +8,14 @@
  */
 
 import {
-  existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync,
+  existsSync, mkdirSync, readFileSync, readdirSync, rmSync,
 } from 'node:fs'
 import { lookup } from 'node:dns/promises'
 import { request as httpsRequest } from 'node:https'
 import { isIP } from 'node:net'
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
+import { relative, resolve, sep } from 'node:path'
 import { profileDir } from './profile.ts'
+import { backupFileTarget, canonicalBackupPath, writeBackupFileAtomic } from './backup-files.ts'
 
 export const BACKUP_FORMAT = 'dsh-profile-backup'
 export const MAX_BACKUP_BYTES = 2 * 1024 * 1024
@@ -49,7 +50,7 @@ export interface ProfileBackup {
 function profileFiles(root: string, dir = root): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (SKIP_NAMES.has(entry.name) || /\.bak\b/.test(entry.name)) continue
+    if (SKIP_NAMES.has(entry.name.toLowerCase()) || /\.bak\b/.test(entry.name)) continue
     const path = resolve(dir, entry.name)
     if (entry.isSymbolicLink()) continue
     if (entry.isDirectory()) files.push(...profileFiles(root, path))
@@ -143,13 +144,11 @@ export function validatedBackup(value: unknown): ProfileBackup {
   for (const value of backup.files as unknown[]) {
     if (value === null || typeof value !== 'object') throw new Error('invalid backup contents')
     const file = value as { path?: unknown; json?: unknown; lines?: unknown }
-    const path = file.path
-    if (typeof path !== 'string') throw new Error('invalid backup contents')
-    if (path === '' || isAbsolute(path) || path.split(/[\\/]/).includes('..')) throw new Error(`unsafe backup path: ${path}`)
-    const normalized = path.replaceAll('\\', '/')
-    if (normalized.split('/').some(part => SKIP_NAMES.has(part))) throw new Error(`excluded backup path: ${path}`)
-    if (paths.has(normalized)) throw new Error(`duplicate backup path: ${path}`)
-    paths.add(normalized)
+    if (typeof file.path !== 'string') throw new Error('invalid backup contents')
+    const path = canonicalBackupPath(file.path)
+    const key = process.platform === 'win32' ? path.toLowerCase() : path
+    if (paths.has(key)) throw new Error(`duplicate backup path: ${path}`)
+    paths.add(key)
     if (path === 'package.json') {
       if (file.json === null || typeof file.json !== 'object' || Array.isArray(file.json)) throw new Error('backup package.json is invalid')
       files.push({ path, json: file.json as Record<string, unknown> })
@@ -170,22 +169,19 @@ export function restoreProfileBackup(profile: string, value: unknown, explicitDi
   const previous = new Map<string, Buffer | null>()
   mkdirSync(root, { recursive: true })
   const rollback = (): void => {
-    for (const [target, content] of previous) {
+    for (const [target, content] of [...previous].reverse()) {
+      backupFileTarget(root, relative(root, target).split(sep).join('/'))
       if (content === null) rmSync(target, { force: true })
-      else writeFileSync(target, content)
+      else writeBackupFileAtomic(target, content)
     }
   }
   try {
     for (const file of backup.files) {
       const { path } = file
-      const target = resolve(root, path)
-      if (!target.startsWith(root + sep)) throw new Error(`unsafe backup path: ${path}`)
-      ensureSafeParent(root, dirname(target), path)
-      if (existsSync(target) && !lstatSync(target).isFile()) throw new Error(`backup path is not a file: ${path}`)
-      previous.set(target, existsSync(target) ? readFileSync(target) : null)
-      const temp = `${target}.dsh-restore-${String(process.pid)}`
-      writeFileSync(temp, 'json' in file ? `${JSON.stringify(file.json, null, 2)}\n` : file.lines.join('\n'), 'utf8')
-      renameSync(temp, target)
+      const target = backupFileTarget(root, path)
+      const original = existsSync(target) ? readFileSync(target) : null
+      writeBackupFileAtomic(target, 'json' in file ? `${JSON.stringify(file.json, null, 2)}\n` : file.lines.join('\n'))
+      previous.set(target, original)
     }
   } catch (error) {
     rollback()
@@ -194,22 +190,6 @@ export function restoreProfileBackup(profile: string, value: unknown, explicitDi
   return {
     files: previous.size,
     rollback,
-  }
-}
-
-/** Create missing parents one level at a time and refuse existing symlinks. */
-function ensureSafeParent(root: string, parent: string, backupPath: string): void {
-  const relativeParent = relative(root, parent)
-  if (relativeParent === '') return
-  let current = root
-  for (const part of relativeParent.split(sep)) {
-    current = resolve(current, part)
-    if (!existsSync(current)) {
-      mkdirSync(current)
-      continue
-    }
-    const stat = lstatSync(current)
-    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`unsafe backup path: ${backupPath}`)
   }
 }
 
