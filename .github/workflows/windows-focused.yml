@@ -116,7 +116,7 @@ jobs:
           name: focused-update-logs-${{ matrix.runner }}
           path: ${{ runner.temp }}/dsh-focused-update/DSH-Portable/data/logs/
       - name: Retain native structured failure evidence
-        if: always() && (inputs.scope == 'native' || inputs.scope == 'migration')
+        if: always() && (inputs.scope == 'native' || inputs.scope == 'migration' || inputs.scope == 'tray')
         uses: actions/upload-artifact@v7
         with:
           name: focused-native-${{ matrix.runner }}
