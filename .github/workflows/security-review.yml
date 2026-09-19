@@ -1,14 +1,24 @@
-name: Security boundary review
+name: Security boundary regression
 
 on:
   pull_request:
     paths:
       - 'launcher/**'
       - 'desktop-bridge/**'
-      - 'app/vendor/**'
+      - 'app/**'
       - 'tests/**'
-      - '.github/security-review/**'
+      - 'docs/security-review-2026-09-19*'
       - '.github/workflows/security-review.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'launcher/**'
+      - 'desktop-bridge/**'
+      - 'app/**'
+      - 'tests/**'
+      - 'docs/security-review-2026-09-19*'
+      - '.github/workflows/security-review.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,93 +28,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  prepare:
-    if: github.repository == 'WSL043/DSH-Portable' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/data-transfer-safety-20260919'
-    runs-on: ubuntu-22.04
-    timeout-minutes: 25
-    outputs:
-      patch_sha: ${{ steps.patch.outputs.sha }}
+  boundaries:
+    name: Security boundaries (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
-      - name: Apply the exact reviewed backup and shared-write source diff
-        run: python3 .github/security-review/finish-writes.py
-      - name: Complete the catalog fixture's shared module dependencies
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path('tests/desktop-bridge-host.test.mjs')
-          s = p.read_text()
-          old = "['update-core.mjs', 'portable-core.mjs']"
-          new = "['update-core.mjs', 'portable-core.mjs', 'data-paths.mjs']"
-          if old in s:
-              assert s.count(old) == 1
-              p.write_text(s.replace(old, new, 1))
-          else:
-              assert s.count(new) == 1
-          PY
-      - name: Rebuild the shipped market from its pinned toolchain
-        run: |
-          npm ci --prefix app --ignore-scripts
-          npm install --global pnpm@11.11.0
-          pnpm --dir app/vendor/dsh-portable-plugin-market install --frozen-lockfile --ignore-scripts
-          pnpm --dir app/vendor/dsh-portable-plugin-market run build:server
-      - name: Exercise the complete contract suite against the repaired source
-        run: npm test
-      - name: Assemble only the tested source and bundle changes
-        id: patch
-        run: |
-          mkdir -p "$RUNNER_TEMP/security-evidence"
-          git add -- launcher/portable-core.mjs app/vendor/dsh-portable-plugin-market/src/backup.ts app/vendor/dsh-portable-plugin-market/lib tests/desktop-bridge-host.test.mjs
-          git diff --cached --binary > "$RUNNER_TEMP/security-evidence/reviewed.patch"
-          git diff --cached --stat > "$RUNNER_TEMP/security-evidence/changes.txt"
-          echo "sha=$(sha256sum "$RUNNER_TEMP/security-evidence/reviewed.patch" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
-          git archive --format=tar "$(git write-tree)" | gzip -1 > "$RUNNER_TEMP/security-evidence/source.tar.gz"
-          git rev-parse HEAD > "$RUNNER_TEMP/security-evidence/base-commit.txt"
-          git write-tree > "$RUNNER_TEMP/security-evidence/tested-tree.txt"
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: reviewed-security-patch
-          path: ${{ runner.temp }}/security-evidence/
-          if-no-files-found: warn
-          retention-days: 7
+          package-manager-cache: false
+      - run: npm ci --prefix app --ignore-scripts
+      - name: Exercise package consumers, filesystem boundaries and the complete review map
+        run: node --test tests/plugin-market-package-path.test.mjs tests/plugin-market-install-webdav-hardening.test.mjs tests/backup-write-security.test.mjs tests/security-boundary-review.test.mjs tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs tests/desktop-bridge-host.test.mjs tests/security-review-manifest.test.mjs
+      - name: Compile and exercise the changed Windows host and detached-process boundary
+        if: runner.os == 'Windows'
+        run: node --test --test-concurrency=1 tests/security-native-process.test.mjs tests/windows-launcher-contract.test.mjs
 
-  commit:
-    needs: prepare
-    if: github.repository == 'WSL043/DSH-Portable' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/data-transfer-safety-20260919'
+  glib-backport:
+    name: Optimized glib compatibility backport
     runs-on: ubuntu-22.04
-    permissions:
-      contents: write
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: actions/download-artifact@v8
-        with:
-          name: reviewed-security-patch
-          path: ${{ runner.temp }}/reviewed-patch
-      - name: Commit the tested generated sources to the same review branch
-        env:
-          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
-          PATCH_SHA: ${{ needs.prepare.outputs.patch_sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: Verify the locked native graph selects the patched crate
         run: |
-          echo "$PATCH_SHA  $RUNNER_TEMP/reviewed-patch/reviewed.patch" | sha256sum --check
-          test "$(git ls-remote origin refs/heads/fix/data-transfer-safety-20260919 | cut -f 1)" = "$EXPECTED_HEAD"
-          if [ ! -s "$RUNNER_TEMP/reviewed-patch/reviewed.patch" ]; then exit 0; fi
-          git apply --index "$RUNNER_TEMP/reviewed-patch/reviewed.patch"
+          mkdir -p "$RUNNER_TEMP/glib-evidence"
+          cargo metadata --locked --format-version 1 --manifest-path launcher/linux/Cargo.toml > "$RUNNER_TEMP/glib-evidence/cargo-metadata.json"
           python3 - <<'PY'
-          import subprocess
-          paths = subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().split('\0')
-          exact = {'launcher/portable-core.mjs','app/vendor/dsh-portable-plugin-market/src/backup.ts','tests/desktop-bridge-host.test.mjs'}
-          assert all(not p or p in exact or p.startswith('app/vendor/dsh-portable-plugin-market/lib/') for p in paths), paths
+          import json, os
+          from pathlib import Path
+          data = json.loads((Path(os.environ['RUNNER_TEMP']) / 'glib-evidence/cargo-metadata.json').read_text())
+          packages = [p for p in data['packages'] if p['name'] == 'glib']
+          expected = Path('launcher/linux/vendor/glib-0.18.5/Cargo.toml').resolve()
+          assert len(packages) == 1 and packages[0]['source'] is None, packages
+          assert Path(packages[0]['manifest_path']).resolve() == expected, packages
+          assert packages[0]['version'] == '0.18.5', packages
           PY
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test(security): complete catalog fixture dependency closure'
-          git push origin HEAD:refs/heads/fix/data-transfer-safety-20260919
+          git diff --exit-code -- launcher/linux/Cargo.lock
+      - name: Exercise the advisory's iterator functions with optimizations enabled
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/glib-target
+        run: cargo test --release --manifest-path launcher/linux/vendor/glib-0.18.5/Cargo.toml --test portable_variant_str_iter 2>&1 | tee "$RUNNER_TEMP/glib-evidence/optimized-regression.log"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: glib-security-evidence
+          path: ${{ runner.temp }}/glib-evidence/
+          if-no-files-found: warn
+          retention-days: 30
