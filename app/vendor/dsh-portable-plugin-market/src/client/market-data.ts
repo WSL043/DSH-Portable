@@ -56,13 +56,6 @@ export type InstalledRepoIdentities = Record<string, string[]>
 /** Weak Git-origin hints used only to disambiguate multiple same-named entries. */
 export type InstalledRepoHints = Record<string, string[]>
 
-/** Response of the /dsh-market/gist export action. */
-export interface GistExportResult {
-  ok: boolean
-  gistId: string
-  gistUrl: string
-}
-
 /** Per-package update status from /dsh-market/updates. */
 export interface UpdateStatus {
   updateAvailable?: boolean

@@ -47,12 +47,9 @@ import {
   readUserPatchState, removeRowBlocks, rowIdsForPackage, userPatchPackageReferences,
 } from './patch.ts'
 import {
-  createProfileBackup, downloadWebdav, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, unportableDeps, uploadWebdav,
+  createProfileBackup, MAX_BACKUP_BYTES, mergeRestoreManifest, restoreProfileBackup, secretFileCount, unportableDeps,
   type ProfileBackup,
 } from './backup.ts'
-import {
-  createGist, fitsGistLimit, GistError, gistErrorCode, parseGistId, readGist, resolveGistTokenSource, updateGist, verifyGistToken,
-} from './gist.ts'
 
 type UpdateRollbackSource =
   | { kind: 'npm'; beforeVersion: string | null }
@@ -741,90 +738,6 @@ export function mountMarketRoutes(
           })
         } catch (error) {
           sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
-        }
-      },
-    }),
-
-    host.webServer.register({
-      kind: 'exact',
-      path: '/dsh-market/webdav',
-      handler: async (request, response) => {
-        if (request.method !== 'POST') {
-          response.writeHead(405, { allow: 'POST' })
-          response.end()
-          return
-        }
-        if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-        try {
-          const body = await readJsonBody(request) as { action?: unknown; url?: unknown; username?: unknown; password?: unknown }
-          const url = typeof body.url === 'string' ? body.url : ''
-          const username = typeof body.username === 'string' ? body.username : ''
-          const password = typeof body.password === 'string' ? body.password : ''
-          if (body.action === 'backup') {
-            await uploadWebdav(url, username, password, createProfileBackup(config.profile, activeProfileDir))
-            sendJson(response, 200, { ok: true })
-          } else if (body.action === 'restore') {
-            // The preview flow first returns the downloaded backup so the
-            // client can show what will be restored; the real restore then
-            // posts it to /dsh-market/restore, where downloadWebdav's strict
-            // validation guarantees the fetch result is never blindly echoed
-            // (review #63).
-            sendJson(response, 200, { ok: true, backup: await downloadWebdav(url, username, password) })
-          } else sendJson(response, 400, { error: 'invalid WebDAV action' })
-        } catch (error) {
-          sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
-        }
-      },
-    }),
-
-    host.webServer.register({
-      kind: 'exact',
-      path: '/dsh-market/gist',
-      handler: async (request, response) => {
-        if (request.method !== 'POST') {
-          response.writeHead(405, { allow: 'POST' })
-          response.end()
-          return
-        }
-        if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
-        // 25 s route-level ceiling: abort the underlying GitHub request too,
-        // so the client always gets a definite, structured answer and a
-        // wedged gh CLI / slow network can never leave a request running in
-        // the background (issue #89; the error carries a code for the UI).
-        const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(new GistError('Gist operation timed out', 'timeout')), 25_000)
-        try {
-          const body = await readJsonBody(request) as { action?: unknown; token?: unknown; gistId?: unknown; includeDeps?: unknown; includeConfig?: unknown }
-          const { token, source } = await resolveGistTokenSource(body.token)
-          if (body.action === 'export') {
-            const gistIdInput = typeof body.gistId === 'string' ? body.gistId.trim() : ''
-            const includeDeps = Array.isArray(body.includeDeps)
-              ? body.includeDeps.filter((name): name is string => typeof name === 'string' && name !== '')
-              : undefined
-            const backup = createProfileBackup(config.profile, activeProfileDir, includeDeps !== undefined
-              ? { includeDeps, includeConfig: body.includeConfig === true }
-              : undefined)
-            const content = JSON.stringify(backup, null, 2)
-            if (!fitsGistLimit(content)) throw new Error('backup exceeds the GitHub Gist 1 MB limit')
-            const ref = gistIdInput === ''
-              ? await createGist(token, content, controller.signal)
-              : await updateGist(token, parseGistId(gistIdInput), content, controller.signal)
-            sendJson(response, 200, { ok: true, gistId: ref.id, gistUrl: ref.htmlUrl })
-          } else if (body.action === 'import') {
-            if (typeof body.gistId !== 'string' || body.gistId.trim() === '') throw new Error('gist id is required')
-            const backup = await readGist(token, parseGistId(body.gistId), controller.signal)
-            // Preview flow, same as WebDAV: the client reviews the backup and
-            // posts it to /dsh-market/restore; readGist's strict validation
-            // guarantees the fetch result is never blindly echoed.
-            sendJson(response, 200, { ok: true, backup })
-          } else if (body.action === 'verify') {
-            await verifyGistToken(token, controller.signal)
-            sendJson(response, 200, { ok: true, source })
-          } else sendJson(response, 400, { error: 'invalid Gist action' })
-        } catch (error) {
-          sendJson(response, 400, { error: error instanceof Error ? error.message : String(error), code: gistErrorCode(error) })
-        } finally {
-          clearTimeout(timer)
         }
       },
     }),

@@ -46,7 +46,7 @@ jobs:
           package-manager-cache: false
       - run: npm ci --prefix app --ignore-scripts
       - name: Exercise package consumers, filesystem boundaries and the complete review map
-        run: node --test tests/plugin-market-package-path.test.mjs tests/plugin-market-install-webdav-hardening.test.mjs tests/backup-write-security.test.mjs tests/atomic-write-order.test.mjs tests/security-boundary-review.test.mjs tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs tests/desktop-bridge-host.test.mjs tests/security-review-manifest.test.mjs
+        run: node --test tests/plugin-market-package-path.test.mjs tests/plugin-market-install-hardening.test.mjs tests/backup-write-security.test.mjs tests/atomic-write-order.test.mjs tests/security-boundary-review.test.mjs tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs tests/desktop-bridge-host.test.mjs tests/security-review-manifest.test.mjs
       - name: Compile and exercise the changed Windows host and detached-process boundary
         if: runner.os == 'Windows'
         run: node --test --test-concurrency=1 tests/security-native-process.test.mjs tests/windows-launcher-contract.test.mjs

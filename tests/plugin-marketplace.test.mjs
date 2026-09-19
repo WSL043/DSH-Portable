@@ -9,6 +9,19 @@ import test from 'node:test'
 const root = path.resolve(import.meta.dirname, '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 
+test('retired cloud backup routes and credential discovery are absent from the shipped market', async () => {
+  const [routes, server] = await Promise.all([
+    read('app/vendor/dsh-portable-plugin-market/src/routes.ts'),
+    read('app/vendor/dsh-portable-plugin-market/lib/index.js'),
+  ])
+  for (const source of [routes, server]) {
+    assert.doesNotMatch(source, /\/dsh-market\/(?:webdav|gist)/)
+    assert.doesNotMatch(source, /DSH_GITHUB_TOKEN|api\.github\.com\/gists/)
+    assert.match(source, /\/dsh-market\/rollback/)
+    assert.match(source, /\/dsh-market\/restore/)
+  }
+})
+
 test('scheme-less proxy settings are normalized before the market creates its HTTP agent', async () => {
   const keys = ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY']
   const previous = Object.fromEntries(keys.map(key => [key, process.env[key]]))
