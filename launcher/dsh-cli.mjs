@@ -324,7 +324,9 @@ export function runMovedProfileRelinkWithFreshReleaseRecovery(spec, profile, ada
     stdio: ['inherit', 'pipe', 'pipe'],
     windowsHide: false,
   }
-  const args = [spec.layout.dshBin, 'plugin', '--profile', profile, 'install', '--force']
+  // node_modules was moved aside already. --force additionally fetches foreign
+  // platform optional packages, bloating portable stores and breaking offline rebuilds.
+  const args = [spec.layout.dshBin, 'plugin', '--profile', profile, 'install']
   const first = run(spec.command, args, options)
   const firstOutput = `${first?.stderr ?? ''}\n${first?.stdout ?? ''}`
   if (first?.error || first?.status === 0 || !firstOutput.includes(RELEASE_AGE_VIOLATION)) {
@@ -337,7 +339,7 @@ export function runMovedProfileRelinkWithFreshReleaseRecovery(spec, profile, ada
   const retryArgs = [
     spec.layout.dshBin,
     'plugin', '--profile', profile,
-    'install', RELEASE_AGE_REMOVAL_OVERRIDE, '--force',
+    'install', RELEASE_AGE_REMOVAL_OVERRIDE,
   ]
   const retry = run(spec.command, retryArgs, options)
   if (retry?.stdout) stdout.write(retry.stdout)

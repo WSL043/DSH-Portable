@@ -12,6 +12,8 @@ export interface MarketActionProps {
     getSnapshot(): { active: string }
   }
   refresh?: () => void
+  openInstall?: () => void
+  editInstallSpec?: (spec: string) => void
 }
 
 /** The modern manager toolbar entry contributed through the Portable adapter. */
@@ -40,7 +42,12 @@ export function MarketAction(props: MarketActionProps) {
         contentClassName={css.managerModalContent}
       >
         <MarketErrorBoundary view="discover">
-          <MarketSection t={props.t} locale={props.locale} view="discover" />
+          <MarketSection t={props.t} locale={props.locale} view="discover"
+            onOfficialInstall={props.openInstall && props.editInstallSpec ? spec => {
+              setOpen(false)
+              props.openInstall!()
+              props.editInstallSpec!(spec)
+            } : undefined} />
         </MarketErrorBoundary>
       </Modal>
     </>

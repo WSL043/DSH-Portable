@@ -79,8 +79,8 @@ export function apply(ctx: MarketClientContext): void {
       label: () => t('nav'),
       locale: NS,
     }, owner => {
-      const refresh = (owner as { refresh?: () => void } | undefined)?.refresh
-      return h(MarketAction, { t, locale: ctx.locale, refresh })
+      const manager = owner as { refresh?: () => void; openInstall?: () => void; editInstallSpec?: (spec: string) => void } | undefined
+      return h(MarketAction, { t, locale: ctx.locale, ...manager })
     }),
     legacy: [
       () => ctx.slots.register({

@@ -296,6 +296,17 @@ export function mountPortableRoutes(webServer, options = {}) {
     catch { sendJson(response, 200, { status: 'unknown' }) }
   } })
 
+  let storageProbe = null
+  register({ kind: 'exact', path: '/dsh-portable/storage', handler: async (request, response) => {
+    if (request.method !== 'GET') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try {
+      if (!storageProbe) storageProbe = import(pathToFileURL(path.join(root, 'launcher', 'storage-report.mjs')).href)
+        .then(module => module.inspectStorage(stateRoot)).finally(() => { storageProbe = null })
+      sendJson(response, 200, await storageProbe)
+    } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
+  } })
+
   register({ kind: 'exact', path: '/dsh-portable/repair', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })

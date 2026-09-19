@@ -61,3 +61,14 @@ passed at the reviewed head, including those symlink scenarios. Local failures
 are retained in `build/security139-local-review.log`; no assertion was disabled.
 The optimized glib compatibility job and native argument-handling regression
 also passed in the PR. Whole-product release qualification remains separate.
+
+Main-branch reconciliation at `7d20453`: analyses 1804062082 (JavaScript),
+1804061728 (C#) and 1804059822 were read back. Remaining paths 57-60, 110,
+139, 216, 218 and 913-916 still originate at the same-user state/profile root,
+not imported members. 50/912 use the OS-selected temporary directory for the
+unpredictable exclusive helper copy with native argument quoting and no shell.
+917/918 are repository-owned csc.exe regression invocations from WINDIR with
+execFile and literal arguments. Each was reviewed and dismissed with its own
+API record. GitHub then reported zero open main-branch CodeQL alerts and zero
+open Dependabot alerts; glib #1 was automatically marked fixed after merge.
+This is a scanner-state result, not a complete security audit or release claim.

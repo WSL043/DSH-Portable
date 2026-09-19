@@ -12,6 +12,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { hasPluginCategory, loadRegistry, readRegistrySnapshot, revalidateRegistry } from './registry.ts'
+import { classifyPnpmFailure } from './pnpm-compat.ts'
 import {
   cleanHotDir, hotMount, hotUnmount, listHotMounts,
   mountClientOnlyDeps, purgeMarketState, readMarketState, writeMarketState,
@@ -1518,7 +1519,14 @@ export function mountMarketRoutes(
             // manifest spelling; busy and user-cancelled runs do not own an
             // automatic recovery mutation.
             if ((result.exitCode !== 0 || result.timedOut) && !cancelled && result.busy !== true && !pnpmNeverStarted(result)) {
-              const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
+              const locked = classifyPnpmFailure(`${result.stderr}\n${result.stdout}`)?.code === 'windows-file-locked'
+              // A second pnpm mutation cannot unlock a native module held by
+              // this host. Preserve the durable declaration and report that
+              // file restoration is unverified; do not claim the old build is intact.
+              if (locked) restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
+              const rollback = locked
+                ? { ok: false, detail: 'files are held open; exit the host before retrying recovery' }
+                : await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
               rollbackOk = rollback.ok
               rollbackDetail = rollback.detail
               if (rollback.ok) {
@@ -1690,7 +1698,7 @@ export function mountMarketRoutes(
             // the bad artifact is cached under its integrity hash, so a plain
             // re-add reuses it — the package has to be removed first.
             const brokenEntryError = !brokenEntry ? null
-              : `${name} 更新后缺少入口文件（package.json 的 main/exports 指向的文件不存在），已自动回滚并重新安装原版本文件，下次启动不受影响。这通常是镜像源在新版本刚发布时同步不完整；若仍需这个版本，请先卸载再从官方源重装。 / ${name} arrived without the entry file its package.json points at; the previous build was restored, so the next boot is unaffected. A registry mirror serving an incomplete tarball for a just-published version is the usual cause — remove the package and reinstall from the official registry if you still want this version.${rollbackOk ? '' : ` Rollback could not restore the previous files: ${rollbackDetail ?? ''}`}`
+              : `${name} 更新后缺少入口文件。${rollbackOk ? '已验证恢复原版本文件。' : '未能确认恢复原版本；请退出后修复，不要假定下次启动正常。'} / ${name} arrived without its entry file. ${rollbackOk ? 'Restoration of the previous build was verified.' : `Restoration could not be verified; exit and repair before restarting. ${rollbackDetail ?? ''}`}`
 
             const cancelDiff = cancelled ? changedSince(beforeInstalled) : null
             // Build-script blocks hit updates too (#69): a leftover invalid

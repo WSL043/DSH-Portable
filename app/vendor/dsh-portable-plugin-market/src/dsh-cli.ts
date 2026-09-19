@@ -76,7 +76,7 @@ function spawnEnv(): NodeJS.ProcessEnv {
   for (const bin of candidates) {
     if (!parts.includes(bin)) parts.push(bin)
   }
-  return { ...process.env, CI: 'true', PATH: parts.join(separator) }
+  return { ...process.env, CI: 'true', GIT_TERMINAL_PROMPT: '0', GCM_INTERACTIVE: 'never', PATH: parts.join(separator) }
 }
 
 const INSTALL_TIMEOUT_MS = boundedTimeout(process.env.DSH_MARKET_INSTALL_TIMEOUT_MS, 15 * 60 * 1000, 60 * 60 * 1000)

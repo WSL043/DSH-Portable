@@ -7,7 +7,7 @@ import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettin
 test('official plugin manager extension preserves actions and rejects changed seams', () => {
   const source = '"plugins.bundle.config": { kind: "keyed" };\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [originalAction]'
   const patched = patchPluginManagerActions(source)
-  assert.match(patched, /renderSlot\("plugins.portable.actions", \{ refresh: props.refresh \}\), originalAction/)
+  assert.match(patched, /renderSlot\("plugins.portable.actions", \{ refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec \}\), originalAction/)
   assert.match(patched, /"plugins.bundle.config": \{ kind: "keyed" \}/)
   assert.equal(patchPluginManagerActions(patched), patched)
   assert.throws(() => patchPluginManagerActions('changed'), /declaration changed upstream/)

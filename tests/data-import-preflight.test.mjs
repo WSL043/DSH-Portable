@@ -41,7 +41,7 @@ test('data import restores exact profile dependencies before composing the impor
   assert.deepEqual(result, { status: 'passed', profiles: ['web'] })
   assert.deepEqual(prepared, [path.join(profileRoot, 'node_modules'), path.join(profileRoot, 'pnpm-lock.yaml')])
   assert.deepEqual(calls.map(call => call.args.slice(1)), [
-    ['plugin', '--profile', 'web', 'install', '--force'],
+    ['plugin', '--profile', 'web', 'install'],
     ['--profile', 'web', '--dump-config'],
   ])
   assert.ok(calls.every(call => call.options.windowsHide === true))

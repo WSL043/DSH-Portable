@@ -201,9 +201,11 @@ AppImage 的会话、设置、插件和工作区保存在旁边的 `DSH-Portable
 
 **常规安装不需要打开终端或输入代码。** 搜索插件，打开详情，再点击安装；需要刷新或重启时按页面提示操作即可。插件市场基于上游 [dsh-market](https://github.com/dsh-market/dsh-market) 融入 Portable。
 
+使用 DSH 0.1.6-alpha.2 的官方 **插件 → 添加插件** 时，输入的是**包名或地址，不是终端命令**。例如安装订阅插件填写 `dsh-codex-subscription`；指定候选版本填写 `dsh-codex-subscription@2.1.3-beta.1`。不要把 `dsh plugin --profile web add` 一起粘贴进去。确认来源后，由页面显示安装结果；只有明确提示需要重启时再重启。
+
 可选 Provider：[Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) 可通过现有插件市场或标准 DSH 命令连接 ChatGPT/Codex 订阅；不会默认安装。
 
-全新安装仅预装两个经过审核、可自行卸载的插件，当前稳定版本为：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) **0.1.0** 提供图集、缩放、拖动、下载和区域标注；[Chat Manager](https://github.com/WSL043/dsh-chat-manager) **1.3.3** 提供归档搜索、恢复及带确认的会话删除。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件；如果你卸载了任一默认插件，后续启动或升级不会自动装回。
+全新安装仅预装两个经过审核、可自行卸载的插件，当前稳定版本为：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) **0.1.1** 提供图集、缩放、拖动、下载和区域标注；[Chat Manager](https://github.com/WSL043/dsh-chat-manager) **1.3.5** 提供归档搜索、恢复及带确认的会话删除。其他社区插件仍按需从插件市场或通过标准 DSH 命令安装。普通升级会完整保留现有 Profile 及其中已安装或已移除的插件；如果你卸载了任一默认插件，后续启动或升级不会自动装回。
 
 <details>
 <summary>进阶：通过 DSH 终端管理插件</summary>

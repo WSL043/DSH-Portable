@@ -41,6 +41,8 @@ window.__ModuleLoader__.load({
         repair: '下次启动时安全修复', scheduled: '已安排，下次启动时执行', repaired: '上次修复已完成',
         fullPackage: '程序文件不完整，自动修复未改动用户数据。请使用完整版本覆盖安装。',
         clearWebCache: '清理网页缓存', webCacheCleared: '网页缓存已清理；登录状态和本地数据已保留。',
+        storageUsage: '查看存储占用', storagePartial: '部分统计，未扫描完或有不可读目录。',
+        storageNames: '插件依赖 / 导入备份 / 修复备份 / 日志', storageProtected: '依赖供运行及离线恢复使用；备份不是缓存，不自动删除。',
         report: '导出支持报告', more: '更多', cancel: '取消', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
         data: '数据', dataTitle: '迁移与备份', dataHint: '按所选范围导出；不包含缓存、运行环境和工作区文件。',
         dataScope: '迁移内容', dataFull: '全部配置与会话（含插件和凭据）', dataOnly: '仅会话与设置（不含插件和凭据）', dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。',
@@ -89,6 +91,8 @@ window.__ModuleLoader__.load({
         repair: 'Repair safely on next start', scheduled: 'Scheduled for the next start', repaired: 'The last repair completed',
         fullPackage: 'Program files are incomplete. Automatic repair preserved user data; reinstall the complete package.',
         clearWebCache: 'Clear web cache', webCacheCleared: 'Web cache cleared. Sign-in state and local data were preserved.',
+        storageUsage: 'View storage usage', storagePartial: 'Partial totals: scan limit or unreadable directories.',
+        storageNames: 'Plugin dependencies / Import backups / Recovery backups / Logs', storageProtected: 'Dependencies support running plugins and offline recovery. Backups are not caches and are retained.',
         report: 'Export support report', more: 'More', cancel: 'Cancel', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
         data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Exports the selected contents; caches, runtimes, and workspace files stay out.',
         dataScope: 'Migration contents', dataFull: 'Full migration (including plugins and credentials)', dataOnly: 'Sessions and settings only (no plugins or credentials)', dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.',
@@ -876,13 +880,22 @@ window.__ModuleLoader__.load({
         open: maintenanceMenuOpen,
         anchor: h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setMaintenanceMenuOpen(current => !current) }, t('more')),
         align: 'end', portal: true,
-        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') },
+        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') }, { id: 'storage', label: t('storageUsage') },
           ...(nativeHostTransport()?.capabilities.clearWebCache === true ? [{ id: 'web-cache', label: t('clearWebCache') }] : [])],
         onClose: () => setMaintenanceMenuOpen(false),
         onSelect: id => {
           setMaintenanceMenuOpen(false)
           if (id === 'repair') action('repair', '/dsh-portable/repair')
           else if (id === 'report') exportSupportReport()
+          else if (id === 'storage') {
+            setBusy('storage')
+            fetch('/dsh-portable/storage', { cache: 'no-store' }).then(async response => {
+              const body = await response.json()
+              if (!response.ok || !Array.isArray(body.categories)) throw new Error(body.error || t('invalidResult'))
+              const sizes = body.categories.map(item => `${(item.bytes / 1048576).toFixed(1)} MiB${item.complete ? '' : '+'}`)
+              setStatus('maintenance', `${t('storageNames')}: ${sizes.join(' / ')}. ${body.complete ? '' : t('storagePartial')} ${t('storageProtected')}`)
+            }).catch(error => setStatus('maintenance', format(t('failed'), error.message))).finally(() => setBusy(''))
+          }
           else if (id === 'web-cache') {
             setBusy('web-cache')
             clearWebCache().then(() => setStatus('maintenance', t('webCacheCleared')))

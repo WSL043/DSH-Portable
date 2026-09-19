@@ -74,7 +74,9 @@ export async function rehydrateImportedProfiles({
       trace('profile-dependencies-begin', { profile })
       await transaction.prepareGeneratedPath(path.join(profileRoot, 'node_modules'))
       await transaction.prepareGeneratedPath(path.join(profileRoot, 'pnpm-lock.yaml'))
-      const baseArgs = [layout.dshBin, 'plugin', '--profile', profile, 'install', '--force']
+      // Generated dependencies were moved into the transaction backup above;
+      // a normal install rebuilds them without forcing foreign-platform optional binaries.
+      const baseArgs = [layout.dshBin, 'plugin', '--profile', profile, 'install']
       try {
         await run(layout.nodeExe, baseArgs, {
           cwd: layout.workspace,
@@ -90,7 +92,7 @@ export async function rehydrateImportedProfiles({
         try {
           await run(layout.nodeExe, [
             layout.dshBin,
-            'plugin', '--profile', profile, 'install', '--config.minimumReleaseAge=0', '--force',
+            'plugin', '--profile', profile, 'install', '--config.minimumReleaseAge=0',
           ], {
             cwd: layout.workspace,
             env: environment,

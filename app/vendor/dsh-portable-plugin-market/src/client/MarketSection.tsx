@@ -445,6 +445,8 @@ const TIME_OPTIONS: ReadonlyArray<{ key: TimeRange; label: string }> = [
 export interface MarketSectionProps {
   t: Translate
   view: 'discover' | 'installed'
+  /** Modern hosts own install approval, cancellation and live activation. */
+  onOfficialInstall?: (spec: string) => void
   locale: {
     subscribe(callback: () => void): () => void
     getSnapshot(): { active: string }
@@ -1059,6 +1061,11 @@ export function MarketSection(props: MarketSectionProps) {
   }
 
   const doInstall = useCallback((plugin: RegistryPlugin) => {
+    if (props.onOfficialInstall) {
+      setConfirming(null)
+      props.onOfficialInstall(plugin.npm || plugin.tarball || plugin.url)
+      return
+    }
     setBuildsSkipped(null)
     setConfirming(null)
     setInstallError(null)
@@ -1166,7 +1173,7 @@ export function MarketSection(props: MarketSectionProps) {
         // success once the plugin lands (busy-aware since #91) and strikes
         // out genuinely dead installs (#32).
       })
-  }, [nextRecordId, refreshInstalled, t])
+  }, [nextRecordId, refreshInstalled, t, props.onOfficialInstall])
 
   /**
    * Resolve a loader-id clash the only way one profile allows: uninstall the

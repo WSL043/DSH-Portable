@@ -264,9 +264,9 @@ test('moved profile relink retries once only when an existing young package bloc
 
   assert.equal(result.status, 0)
   assert.equal(calls.length, 2)
-  assert.deepEqual(calls[0], ['dsh.js', 'plugin', '--profile', 'web', 'install', '--force'])
+  assert.deepEqual(calls[0], ['dsh.js', 'plugin', '--profile', 'web', 'install'])
   assert.deepEqual(calls[1], [
-    'dsh.js', 'plugin', '--profile', 'web', 'install', '--config.minimumReleaseAge=0', '--force',
+    'dsh.js', 'plugin', '--profile', 'web', 'install', '--config.minimumReleaseAge=0',
   ])
   assert.match(writes.map(([, value]) => value).join('\n'), /retrying once/i)
 })

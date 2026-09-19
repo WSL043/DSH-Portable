@@ -100,8 +100,14 @@ export function patchPluginInstallationGuidance(plugins) {
 }
 
 export function patchPluginManagerActions(source) {
-  const marker = 'dsh-portable-plugin-manager-actions-v1'
+  const marker = 'dsh-portable-plugin-manager-actions-v2'
   if (source.includes(marker)) return source
+  if (source.includes('dsh-portable-plugin-manager-actions-v1')) {
+    source = source.replace('dsh-portable-plugin-manager-actions-v1', marker)
+    return replaceRequired(source, 'renderSlot("plugins.portable.actions", { refresh: props.refresh })',
+      'renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec })',
+      'previous Portable plugin action adapter changed')
+  }
   // A bounded presentation extension: the official manager still owns its
   // inventory and every existing action. No profile or controller is replaced.
   source = replaceRequired(source, '"plugins.bundle.config": {',
@@ -109,7 +115,7 @@ export function patchPluginManagerActions(source) {
     'official plugin manager action declaration changed upstream')
   return replaceRequired(source,
     'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [',
-    'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [renderSlot("plugins.portable.actions", { refresh: props.refresh }), ',
+    'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec }), ',
     'official plugin manager toolbar changed upstream')
 }
 
