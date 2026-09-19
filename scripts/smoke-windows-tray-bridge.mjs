@@ -231,6 +231,12 @@ const initScript = String.raw`(() => {
 const clickButton = names => `(() => {
   const names = ${JSON.stringify(names)}
   const button = [...document.querySelectorAll('button,[role="button"]')].find(item => {
+    const rect = item.getBoundingClientRect()
+    const style = getComputedStyle(item)
+    if (rect.width <= 0 || rect.height <= 0 || item.disabled
+      || item.getAttribute('aria-disabled') === 'true'
+      || item.closest('[inert],[aria-hidden="true"]')
+      || style.visibility === 'hidden' || style.visibility === 'collapse') return false
     const label = item.getAttribute('aria-label') || item.getAttribute('title') || item.textContent || ''
     return names.includes(label.trim())
   })
