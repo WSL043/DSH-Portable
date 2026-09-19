@@ -43,7 +43,7 @@ test('missing bundled tools stay unavailable and request Portable repair', async
   const result = await provisionPnpm(async () => { attempts++; return false })
   assert.equal(attempts, 1)
   assert.equal(result.ok, false)
-  assert.match(result.hint, /Settings → Portable/)
+  assert.match(result.hint, /Settings → Desktop & data → Maintenance/)
   assert.deepEqual(await provisionPnpm(async () => true), { ok: true })
 })
 

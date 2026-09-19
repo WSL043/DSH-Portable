@@ -317,68 +317,7 @@ export function probePnpm(): Promise<boolean> {
 export async function provisionPnpm(probe: () => Promise<boolean> = probePnpm): Promise<{ ok: boolean; hint?: string }> {
   pnpmReady = false
   if (await probe()) return { ok: true }
-  return { ok: false, hint: 'Portable bundled pnpm is unavailable. Open Settings → Portable → Check and repair; no global tools were installed.' }
-}
-
-/** Executable suffixes a bare command name can carry on this platform. */
-const EXECUTABLE_SUFFIXES = process.platform === 'win32'
-  ? (process.env.PATHEXT ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(part => part !== '')
-  : ['']
-
-/**
- * Whether a bare command name resolves to a file on the PATH the market
- * hands its children.
- *
- * The market cannot read the reason a spawn failed out of the child's
- * message: cmd.exe reports a missing command in the console's ANSI codepage
- * ("'npm' 不是内部或外部命令" on a Chinese Windows), which is neither the
- * string `ENOENT` nor even valid UTF-8 — so the #32 hint, written against
- * Node's own ENOENT wording, could never fire on Windows and the user was
- * left with no guidance at all (#167). Looking on disk answers the same
- * question in every locale.
- */
-export function toolOnPath(name: string): boolean {
-  const separator = process.platform === 'win32' ? ';' : ':'
-  for (const dir of (spawnEnv().PATH ?? '').split(separator)) {
-    if (dir === '') continue
-    for (const suffix of EXECUTABLE_SUFFIXES) {
-      if (existsSync(join(dir, name + suffix))) return true
-    }
-  }
-  return false
-}
-
-/**
- * Why the one-click pnpm setup failed, in terms the user can act on.
- *
- * Every one of these was a real report where the market said only "自动准备
- * 没成功" while the log held the actual cause: EEXIST (#142 — corepack had
- * already placed a pnpm shim, so `npm -g` refused to overwrite it), EPERM
- * (#108 — Node installed somewhere the user cannot write), ENOENT (#32 —
- * a GUI launch with no Node on PATH at all).
- * @returns a bilingual, actionable hint, or undefined when unrecognized.
- */
-export function provisionHint(corepackOutput: string, npmOutput: string, npmFound = true): string | undefined {
-  // Node itself unreachable: pointing the user back at this same button
-  // would be a dead end (#32). `npmFound` answers this from disk, so it
-  // holds on a Windows console that reports the same thing in a codepage we
-  // cannot read (#167); the ENOENT match stays for callers without it.
-  if (!npmFound || (/ENOENT/.test(corepackOutput) && /ENOENT/.test(npmOutput))) {
-    return `这台机器的 dsh 进程找不到 npm/corepack（图形界面或桌面端启动时不继承终端 PATH）。已在 Node 自己的目录里找过（${nodeBinDir}）也没有——多半是宿主内置的 Node 运行时不带 npm。请改从终端启动 dsh，或单独装一个 pnpm：Windows 用 iwr https://get.pnpm.io/install.ps1 -useb | iex，macOS/Linux 用 brew install pnpm / This dsh process cannot find npm/corepack (GUI and desktop launches skip your shell PATH). The directory Node itself runs from (${nodeBinDir}) was searched too — a bundled Node runtime without npm is the usual cause. Start dsh from a terminal, or install pnpm on its own: \`iwr https://get.pnpm.io/install.ps1 -useb | iex\` (Windows) or \`brew install pnpm\` (macOS/Linux)`
-  }
-  if (/EEXIST|already exists|--force to overwrite/i.test(npmOutput)) {
-    return 'pnpm 的可执行文件已存在（通常是 corepack 先放好了同名 shim），npm 拒绝覆盖。在终端里执行其一即可：corepack prepare pnpm@latest --activate（推荐，直接激活已有 shim）或 npm i -g pnpm --force / A pnpm executable already exists (usually a corepack shim), so npm refused to overwrite it. Run one of these in a terminal: `corepack prepare pnpm@latest --activate` (preferred — activates the shim already there) or `npm i -g pnpm --force`'
-  }
-  if (/EPERM|EACCES|permission denied|as root\/Administrator/i.test(`${corepackOutput}\n${npmOutput}`)) {
-    return '没有权限写入 Node 的安装目录。请用管理员/sudo 执行一次 npm i -g pnpm，或改用无需写系统目录的安装方式：macOS/Linux 用 brew install pnpm，Windows 用 iwr https://get.pnpm.io/install.ps1 -useb | iex / No permission to write into the Node install directory. Run `npm i -g pnpm` once as Administrator/sudo, or install pnpm without touching system dirs: `brew install pnpm` (macOS/Linux) or `iwr https://get.pnpm.io/install.ps1 -useb | iex` (Windows)'
-  }
-  // Network-shaped failures: the corepack shim downloads pnpm on first run,
-  // so a blocked registry or proxy leaves a shim that never works. The
-  // button cannot fix that; a full install (or a mirror) can.
-  if (/ETIMEDOUT|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|network|proxy|certificate/i.test(`${corepackOutput}\n${npmOutput}`)) {
-    return '装 pnpm 时网络失败。若你在受限网络下，corepack 的 shim 也下载不到 pnpm 本体——请改用完整安装或指定镜像：brew install pnpm（macOS/Linux），或 npm i -g pnpm --registry <你的镜像> / Network failure while installing pnpm. On a restricted network the corepack shim cannot download pnpm either — install it fully or point at a mirror: `brew install pnpm`, or `npm i -g pnpm --registry <your mirror>`'
-  }
-  return undefined
+  return { ok: false, hint: 'Portable bundled pnpm is unavailable. Open Settings → Desktop & data → Maintenance; no global tools were installed.' }
 }
 
 /** Live progress of the running plugin command, for the status route. */

@@ -59,6 +59,13 @@ transfer remains intact; legacy server endpoints have not yet been retired.
 The rebuilt client fell from about 172.46 kB to 163.97 kB. This is client code
 size only, not a material reduction of the full runtime archive.
 
+Further isolated acceptance opened/closed the market 20 times, then reopened the
+official add dialog and edited its input: evidence `official-install-evidence-14206.json`
+in the same directory. No lingering dialog, legacy install/cloud-backup request,
+or runtime exception. This short exercise is not multi-day memory qualification.
+Unused global-pnpm provisioning hints were removed; the active bundled-tool
+recovery hint now names the real Desktop & data settings section.
+
 Storage prune experiment: `build/store-prune-offline-20260919-v4/result.json`.
 With pnpm 11.11.0, the local-registry integrity-pinned fixture could rebuild
 offline before pruning. Store prune retained linked payloads (zero files freed)
