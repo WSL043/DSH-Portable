@@ -274,6 +274,12 @@ let chrome = null
 let client = null
 let profile = ''
 let started = false
+const exceptions = []
+const browserFailures = []
+const rememberBrowserFailure = value => {
+  browserFailures.push(value)
+  if (browserFailures.length > 40) browserFailures.shift()
+}
 try {
   const before = await portable(['status', '--json'])
   if (before.status === 'running') throw new Error('refusing to test a product root that is already running')
@@ -310,14 +316,27 @@ try {
 
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
-  const exceptions = []
   client.on('Runtime.exceptionThrown', event => exceptions.push(event.exceptionDetails?.exception?.description || event.exceptionDetails?.text || 'runtime exception'))
+  client.on('Network.loadingFailed', event => rememberBrowserFailure({
+    type: event.type, error: event.errorText, canceled: event.canceled,
+    blockedReason: event.blockedReason,
+  }))
+  client.on('Network.responseReceived', event => {
+    if (event.response.status < 400) return
+    let resource = ''
+    try { const url = new URL(event.response.url); resource = url.origin + url.pathname } catch { /* no credentials or query strings */ }
+    rememberBrowserFailure({ type: event.type, status: event.response.status, resource })
+  })
   await client.send('Runtime.enable')
+  await client.send('Network.enable')
   await client.send('Page.enable')
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: initScript })
-  await client.send('Page.navigate', { url: launch.url })
+  const navigation = await client.send('Page.navigate', { url: launch.url })
+  if (navigation.errorText) throw new Error(`Workspace navigation failed: ${navigation.errorText}`)
 
-  await waitForValue(client, 'document.readyState', value => value === 'complete', 'DSH document readiness')
+  const expectedOrigin = new URL(launch.url).origin
+  await waitForValue(client, `({ origin: location.origin, ready: document.readyState })`,
+    value => value?.origin === expectedOrigin && value.ready === 'complete', 'DSH document readiness')
   const stateExpression = `window.__dshTrayMessages?.filter(item => item.type === 'dsh-portable/state').at(-1) || null`
   let state = await waitForValue(client, stateExpression, value => value?.schemaVersion === 1, 'initial tray bridge state')
   assert.ok(['en', 'zh'].includes(state.locale))
@@ -860,6 +879,9 @@ try {
   if (client) {
     try {
       const evidence = await evaluate(client, `(() => ({
+        page: location.origin + location.pathname,
+        ready: document.readyState,
+        bridgeInstalled: Boolean(window.chrome?.webview),
         theme: document.documentElement.getAttribute('data-theme'),
         colorScheme: getComputedStyle(document.documentElement).colorScheme,
         states: (window.__dshTrayMessages || []).filter(item => item.type === 'dsh-portable/state').slice(-12),
@@ -871,7 +893,7 @@ try {
           selected: item.getAttribute('aria-selected'),
         })),
       }))()`)
-      await writeFile(path.join(root, 'data', 'tray-ui-failure.json'), redactSensitive(JSON.stringify({ error: String(error), evidence }, null, 2)))
+      await writeFile(path.join(root, 'data', 'tray-ui-failure.json'), redactSensitive(JSON.stringify({ error: String(error), exceptions, browserFailures, evidence }, null, 2)))
       const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
       await writeFile(path.join(root, 'data', 'tray-ui-failure.png'), Buffer.from(screenshot.data, 'base64'))
     } catch (captureError) {
