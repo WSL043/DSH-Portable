@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/security-review/review-manifest.json'
       - '.github/security-review/reconcile-reviewed-alerts.mjs'
+      - '.github/security-review/api-errors.mjs'
       - '.github/workflows/reviewed-alert-dispositions.yml'
 
 permissions:
@@ -34,7 +35,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEW_OUTPUT_DIR: ${{ runner.temp }}/reviewed-alert-dispositions
-        run: node .github/security-review/reconcile-reviewed-alerts.mjs .github/security-review/review-manifest.json --apply
+        run: node --import ./.github/security-review/api-errors.mjs .github/security-review/reconcile-reviewed-alerts.mjs .github/security-review/review-manifest.json --apply
       - name: Preserve actual API receipts including partial failures
         if: always()
         uses: actions/upload-artifact@v7
