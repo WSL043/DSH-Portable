@@ -37,6 +37,7 @@ import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
 import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
+import { bundledUpdateTarget } from './bundled-updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.ts'
@@ -1273,7 +1274,13 @@ export function mountMarketRoutes(
               .filter(name => SELF_NAMES.has(name))
               .map(name => [name, channel] as const),
           )
-          sendJson(response, 200, { updates: await checkUpdates(config.profile, force, activeProfileDir, channelFor) })
+          const updates = { ...await checkUpdates(config.profile, force, activeProfileDir, channelFor) }
+          for (const [name, status] of Object.entries(updates)) {
+            if (status.kind !== 'npm') continue
+            const target = bundledUpdateTarget(name, status.version)
+            if (target) updates[name] = { ...status, latest: target, updateAvailable: true }
+          }
+          sendJson(response, 200, { updates })
         } catch (error) {
           sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
         }
@@ -1353,9 +1360,9 @@ export function mountMarketRoutes(
             // rather than `latest`, which is not the tag being installed.
             if (!isGit) {
               const installedVersion = readInstalledVersion(config.profile, name, activeProfileDir)
-              const registryLatest = selfChannel === null
+              const registryLatest = bundledUpdateTarget(name, installedVersion) ?? (selfChannel === null
                 ? await fetchNpmLatest(name)
-                : await versionOnChannel(name, selfChannel, await fetchNpmLatest(name))
+                : await versionOnChannel(name, selfChannel, await fetchNpmLatest(name)))
               expectedNpmVersion = registryLatest
               const refuse = selfChannel === null
                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
