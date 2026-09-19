@@ -7,8 +7,8 @@ on:
       - 'desktop-bridge/**'
       - 'app/vendor/**'
       - 'tests/**'
+      - '.github/security-review/**'
       - '.github/workflows/security-review.yml'
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -18,29 +18,87 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  boundary-review:
+  prepare:
+    if: github.repository == 'WSL043/DSH-Portable' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/data-transfer-safety-20260919'
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 25
+    outputs:
+      patch_sha: ${{ steps.patch.outputs.sha }}
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
-      - name: Run data boundary regressions
-        run: node --test tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs
-      - name: Assemble reproducible offline review inputs
-        shell: bash
+      - uses: dtolnay/rust-toolchain@1.88.0
+      - name: Prepare the checksum-pinned backport and reviewed native changes
+        run: python3 .github/security-review/prepare.py
+      - name: Restore pinned JavaScript dependencies and rebuild the shipped market
         run: |
-          mkdir -p "$RUNNER_TEMP/security-review"
-          git archive --format=tar HEAD | gzip -1 > "$RUNNER_TEMP/security-review/source.tar.gz"
-          cp "$(command -v node)" "$RUNNER_TEMP/security-review/node"
-          git rev-parse HEAD > "$RUNNER_TEMP/security-review/commit.txt"
-          node --version > "$RUNNER_TEMP/security-review/node-version.txt"
+          npm ci --prefix app --ignore-scripts
+          npm install --global pnpm@11.11.0
+          pnpm --dir app/vendor/dsh-portable-plugin-market install --frozen-lockfile --ignore-scripts
+          pnpm --dir app/vendor/dsh-portable-plugin-market run build:server
+      - name: Exercise the actual package consumers and archive boundary
+        run: node --test tests/plugin-market-package-path.test.mjs tests/security-boundary-review.test.mjs tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs
+      - name: Verify Cargo selects the local patched glib without changing the lock
+        run: |
+          mkdir -p "$RUNNER_TEMP/security-evidence"
+          cargo metadata --locked --format-version 1 --manifest-path launcher/linux/Cargo.toml > "$RUNNER_TEMP/security-evidence/cargo-metadata.json"
+          python3 -c 'import json,os; p=[x for x in json.load(open(os.environ["RUNNER_TEMP"]+"/security-evidence/cargo-metadata.json"))["packages"] if x["name"]=="glib"]; assert len(p)==1 and p[0]["source"] is None and "/vendor/glib-0.18.5/" in p[0]["manifest_path"], p'
+      - name: Run optimized glib string iterator regression
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/glib-target
+        run: cargo test --release --manifest-path launcher/linux/vendor/glib-0.18.5/Cargo.toml --test portable_variant_str_iter
+      - name: Assemble only reviewed source changes
+        id: patch
+        run: |
+          rm -f launcher/linux/vendor/glib-0.18.5/Cargo.lock
+          git add -- launcher/windows/DSH-Portable.cs launcher/windows/PortableProcessJob.cs launcher/linux/Cargo.toml launcher/linux/Cargo.lock launcher/linux/vendor/glib-0.18.5 app/vendor/dsh-portable-plugin-market/lib
+          git diff --cached --binary > "$RUNNER_TEMP/security-evidence/reviewed.patch"
+          git diff --cached --stat > "$RUNNER_TEMP/security-evidence/changes.txt"
+          echo "sha=$(sha256sum "$RUNNER_TEMP/security-evidence/reviewed.patch" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
-          name: security-review-inputs
-          path: ${{ runner.temp }}/security-review/
-          retention-days: 3
-          if-no-files-found: error
+          name: reviewed-security-patch
+          path: ${{ runner.temp }}/security-evidence/
+          if-no-files-found: warn
+          retention-days: 7
+
+  commit:
+    needs: prepare
+    if: github.repository == 'WSL043/DSH-Portable' && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/data-transfer-safety-20260919'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: reviewed-security-patch
+          path: ${{ runner.temp }}/reviewed-patch
+      - name: Commit the tested generated sources to the same review branch
+        env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          PATCH_SHA: ${{ needs.prepare.outputs.patch_sha }}
+        run: |
+          echo "$PATCH_SHA  $RUNNER_TEMP/reviewed-patch/reviewed.patch" | sha256sum --check
+          test "$(git ls-remote origin refs/heads/fix/data-transfer-safety-20260919 | cut -f 1)" = "$EXPECTED_HEAD"
+          if [ ! -s "$RUNNER_TEMP/reviewed-patch/reviewed.patch" ]; then exit 0; fi
+          git apply --index "$RUNNER_TEMP/reviewed-patch/reviewed.patch"
+          python3 - <<'PY'
+          import subprocess
+          paths = subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().split('\0')
+          exact = {'launcher/windows/DSH-Portable.cs','launcher/windows/PortableProcessJob.cs','launcher/linux/Cargo.toml','launcher/linux/Cargo.lock'}
+          prefixes = ('launcher/linux/vendor/glib-0.18.5/','app/vendor/dsh-portable-plugin-market/lib/')
+          assert all(not p or p in exact or p.startswith(prefixes) for p in paths), paths
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(security): ship reviewed native boundaries and glib backport'
+          git push origin HEAD:refs/heads/fix/data-transfer-safety-20260919
