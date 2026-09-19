@@ -246,3 +246,13 @@ macOS/Linux 按各自图形运行库说明前置条件，不套用 Windows WebVi
 若新的兼容层长期需要逐版本例外，停止扩展，重新审查上游接口与支持范围。
 
 交付后的判断标准是：同类问题是否更少、故障是否更容易说明和恢复、更新是否无需人工追版本、用户是否更容易带走环境。
+
+### Beta 3 release follow-up
+
+02d9f03 full qualification 35446676543 passed, including both Windows native hosts and bundled WebView2. Isolated official alpha.2 plugin lifecycle passed in build/market-official-install-acceptance-20260919/official-local-cycle-evidence-14220.json: cancel/install/enable/host restart/cancel uninstall/uninstall; no model send or external browser request. Earlier fixture locator and async-wait errors were corrected without product changes. Restart was explicit host restart, not an official restart-button claim.
+
+Publish run 35447892453 stopped before upload: the REST release-by-tag endpoint returned 404 for the newly created draft. The uploader now resolves draft/published releases through gh release view and uses its numeric API URL. Six upload regressions passed. The empty draft remains unpublished until exact-head qualification passes again.
+
+New CodeQL alerts 919/920 are same-user CLI-selected test output roots without elevation; 921 executes fixed repository-owned test source in a synthetic VM. Individual false-positive dispositions record these limited reasons; no exclusions added. Open CodeQL and Dependabot counts were zero after review.
+
+Subscription optional component settings handoff: 4f1aa12 follows a3a1198, still unpublished. Separate task reports real install/restart/uninstall/restart and 453 passing tests, three conditional skips. This is a separate plugin delivery, not a bundled Portable feature claim.

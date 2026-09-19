@@ -17,6 +17,7 @@ for (const mode of ['reuse', 'conflict', 'lost-response', 'incomplete', 'replace
       const calls = []
       const gh = (args, timeout) => {
         calls.push(args)
+        if (args[0] === 'release' && args[1] === 'view') return JSON.stringify({ apiUrl: 'https://api.github.com/repos/owner/repo/releases/1' })
         if (args.includes('--slurp')) return JSON.stringify([assets])
         if (args.includes('DELETE')) { assets = []; return '' }
         if (args[0] === 'release') {
@@ -25,14 +26,14 @@ for (const mode of ['reuse', 'conflict', 'lost-response', 'incomplete', 'replace
           if (mode === 'lost-response') throw new Error('Connection lost after upload')
           return ''
         }
-        return JSON.stringify({ id: 1 })
+        throw new Error(`Unexpected command: ${args.join(' ')}`)
       }
       const action = uploadAssets({ repository: 'owner/repo', tag: 'v1', files: [file], mutable: mode === 'replace', verifyOnly: mode === 'published-missing', gh })
       if (mode === 'conflict') await assert.rejects(action, /Immutable asset differs/)
       else if (mode === 'incomplete') await assert.rejects(action, /Upload not verified/)
       else if (mode === 'published-missing') await assert.rejects(action, /Published asset missing or different/)
       else await action
-      assert.equal(calls.filter(args => args[0] === 'release').length, ['reuse', 'conflict', 'published-missing'].includes(mode) ? 0 : 1)
+      assert.equal(calls.filter(args => args[0] === 'release' && args[1] === 'upload').length, ['reuse', 'conflict', 'published-missing'].includes(mode) ? 0 : 1)
       assert.equal(calls.filter(args => args.includes('DELETE')).length, mode === 'replace' ? 1 : 0)
     } finally { await rm(dir, { recursive: true, force: true }) }
   })

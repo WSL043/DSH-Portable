@@ -12,8 +12,12 @@ export function matchesAsset(asset, size, digest) {
 // Sequential, bounded uploads. A lost response is checked before any retry;
 // immutable names must never silently acquire different bytes.
 export async function uploadAssets({ repository, tag, files, mutable = false, verifyOnly = false, gh = runGh }) {
-  const release = JSON.parse(gh(['api', `repos/${repository}/releases/tags/${encodeURIComponent(tag)}`]))
-  const list = () => JSON.parse(gh(['api', '--paginate', '--slurp', `repos/${repository}/releases/${release.id}/assets?per_page=100`])).flat()
+  // The REST tag endpoint excludes drafts. gh resolves both draft and published
+  // releases; use its numeric API URL rather than the GraphQL node ID.
+  const release = JSON.parse(gh(['release', 'view', tag, '--repo', repository, '--json', 'apiUrl']))
+  const apiPath = new URL(release.apiUrl).pathname.replace(/^\//, '')
+  if (!apiPath.startsWith(`repos/${repository}/releases/`) || !/^\d+$/.test(apiPath.split('/').at(-1))) throw new Error('Invalid release API URL')
+  const list = () => JSON.parse(gh(['api', '--paginate', '--slurp', `${apiPath}/assets?per_page=100`])).flat()
   for (const file of files) {
     const name = path.basename(file)
     const size = (await stat(file)).size
