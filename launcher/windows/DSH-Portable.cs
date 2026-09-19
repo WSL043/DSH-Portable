@@ -1720,8 +1720,6 @@ namespace DshPortable
                 delegate { string directory = ResolveLauncherLogDirectory(); Directory.CreateDirectory(directory);
                     Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
             help.DropDownItems.Add(new ToolStripSeparator());
-            help.DropDownItems.Add(CreateExternalLinkItem(L("项目仓库", "Project repository"),
-                "https://github.com/WSL043/DSH-Portable"));
             help.DropDownItems.Add(CreateExternalLinkItem(L("喜欢的话，点个 Star", "If you like it, leave a Star"),
                 "https://github.com/WSL043/DSH-Portable"));
             help.DropDownItems.Add(CreateReportProblemItem());

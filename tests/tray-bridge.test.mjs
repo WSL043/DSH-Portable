@@ -868,7 +868,7 @@ test('Windows tray consumes official projected state in one bounded compact nati
   assert.match(source, /检查更新|Check for updates/)
   assert.match(source, /启动时检查更新|Check for updates at startup/)
   assert.match(source, /updateCheckEnabled/)
-  assert.match(desktopMenu, /CreateExternalLinkItem\(L\("项目仓库",\s*"Project repository"\)/)
+  assert.doesNotMatch(desktopMenu, /CreateExternalLinkItem\(L\("项目仓库",\s*"Project repository"\)/)
   assert.match(desktopMenu, /CreateExternalLinkItem\(L\("喜欢的话，点个 Star",\s*"If you like it, leave a Star"\)/)
   assert.match(desktopMenu, /help\.DropDownItems\.Add\(CreateReportProblemItem\(\)\)/)
   assert.match(desktopMenu, /CreateExternalLinkItem\(L\("提出建议",\s*"Suggest an idea"\)/)
