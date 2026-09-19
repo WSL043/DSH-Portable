@@ -125,7 +125,7 @@ jobs:
           mkdir -p product-catalog/latest
           for file in product-catalog/immutable/portable-update-*.json; do
             name="$(basename "$file")"
-            cp "$file" "product-catalog/latest/${name%-${RELEASE_TAG#v}.json}.json"
+            cp "$file" "product-catalog/latest/${name%-"${RELEASE_TAG#v}".json}.json"
           done
           node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json
           # Advertise only after every component and manifest is verified.
