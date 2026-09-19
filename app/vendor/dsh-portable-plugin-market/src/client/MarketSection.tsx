@@ -39,11 +39,11 @@ import { clearSettled, completionAction, drop, enqueue, patch as patchRecord, re
 import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
-  avatarColor, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
+  avatarColor, batchUpdateNames, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
   formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
-ActivationInfo, ActivationState, GistExportResult, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
+ActivationInfo, ActivationState, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
   SharedHostPackageDependencyFinding, SortDir, SortField, TimeRange, Translate, UpdateStatus,
 } from './market-data.ts'
 
@@ -353,43 +353,10 @@ let cachedRepoHints: InstalledRepoHints | null = null
 /** Discover grid page-size choices — the catalog grows daily, so cap each page. */
 const PAGE_SIZES = [24, 48, 96]
 const DEFAULT_PAGE_SIZE = 24
-const WEBDAV_STORAGE_KEY = 'dshm-webdav'
 const MARKET_VIEW_STORAGE_KEY = 'dshm-market-view'
 
 function savedMarketView(): 'cards' | 'compact' {
   try { return localStorage.getItem(MARKET_VIEW_STORAGE_KEY) === 'compact' ? 'compact' : 'cards' } catch { return 'cards' }
-}
-
-function savedWebdav(): { url: string; username: string; password: string; auto: boolean } {
-  try {
-    const value = JSON.parse(localStorage.getItem(WEBDAV_STORAGE_KEY) ?? '{}') as Record<string, unknown>
-    return {
-      url: typeof value.url === 'string' ? value.url : '',
-      username: typeof value.username === 'string' ? value.username : '',
-      // The password never persists in the browser: plugins run same-origin
-      // with dshmarket, so a stored password would be readable by any plugin
-      // client on this host and become the weakest credential in the profile
-      // (review #63). It lives in server config / memory only.
-      password: '',
-      auto: value.auto === true,
-    }
-  } catch {
-    return { url: '', username: '', password: '', auto: false }
-  }
-}
-
-function backupDependencies(value: unknown): InstalledMap {
-  if (value === null || typeof value !== 'object') throw new Error('invalid backup')
-  const backup = value as { format?: unknown; version?: unknown; files?: unknown }
-  if (backup.format !== 'dsh-profile-backup' || backup.version !== 0.2) throw new Error('unsupported backup format')
-  const files = backup.files
-  if (!Array.isArray(files)) throw new Error('unsupported backup format')
-  const manifest = files.find(file => file !== null && typeof file === 'object' && (file as { path?: unknown }).path === 'package.json') as { json?: unknown } | undefined
-  if (manifest?.json === null || typeof manifest?.json !== 'object' || Array.isArray(manifest.json)) throw new Error('backup package.json is invalid')
-  const dependencies = (manifest.json as { dependencies?: unknown }).dependencies
-  if (dependencies === null || typeof dependencies !== 'object' || Array.isArray(dependencies)) return {}
-  if (!Object.values(dependencies).every(spec => typeof spec === 'string')) throw new Error('backup dependencies are invalid')
-  return dependencies as InstalledMap
 }
 
 function installedRepoIdentities(value: unknown): InstalledRepoIdentities {
@@ -455,7 +422,6 @@ export interface MarketSectionProps {
 
 export function MarketSection(props: MarketSectionProps) {
   const t = props.t
-  const initialWebdav = useMemo(savedWebdav, [])
   const localeSnap = useSyncExternalStore(
     cb => props.locale.subscribe(cb),
     () => props.locale.getSnapshot(),
@@ -629,40 +595,7 @@ export function MarketSection(props: MarketSectionProps) {
   const [restartEnabled, setRestartEnabled] = useState(false)
   const [restarting, setRestarting] = useState(false)
   const [showTop, setShowTop] = useState(false)
-  const [backupBusy, setBackupBusy] = useState(false)
-  const [backupMessage, setBackupMessage] = useState<string | null>(null)
-  const [backupRestored, setBackupRestored] = useState(false)
-  const [pendingBackup, setPendingBackup] = useState<unknown>(null)
-  const [pendingDependencies, setPendingDependencies] = useState<InstalledMap>({})
-  const [webdavUrl, setWebdavUrl] = useState(initialWebdav.url)
-  const [webdavUser, setWebdavUser] = useState(initialWebdav.username)
-  const [webdavPassword, setWebdavPassword] = useState(initialWebdav.password)
-  const [autoBackup, setAutoBackup] = useState(initialWebdav.auto)
-  /** GitHub token — session memory only, never written to any storage. */
-  const [gistToken, setGistToken] = useState('')
-  /** Gist id — persisted across reloads (non-sensitive: the Gist itself is private). */
-  const [gistId, setGistId] = useState(() => {
-    try { return localStorage.getItem('dshm-gist-id') ?? '' } catch { return '' }
-  })
-  /** Export mode: 'update' PATCHes the Gist in the field, 'create' makes a new one. */
-  const [gistMode, setGistMode] = useState<'update' | 'create'>(() => {
-    try { return localStorage.getItem('dshm-gist-id') ? 'update' : 'create' } catch { return 'create' }
-  })
-  const [gistBusy, setGistBusy] = useState(false)
-  const [gistMessage, setGistMessage] = useState<string | null>(null)
-  const [gistOk, setGistOk] = useState(false)
-  const [gistResult, setGistResult] = useState<GistExportResult | null>(null)
-  /** Export picker: open state, selected plugin names, include-config flag. */
-  const [exportOpen, setExportOpen] = useState(false)
-  const [exportSelection, setExportSelection] = useState<Set<string>>(new Set())
-  const [exportIncludeConfig, setExportIncludeConfig] = useState(false)
-  /** Export failure shown INSIDE the picker so it is never hidden behind it. */
-  const [exportError, setExportError] = useState<string | null>(null)
-  /** Bundle-only plugin names from /dsh-market/installed (picker list). */
-  const [installedBundles, setInstalledBundles] = useState<string[]>([])
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  /** Hidden file input behind the Import button (a Button can't host an <input>). */
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [sortField, setSortField] = useState<SortField>('downloads')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   /** Direction labels adapt to the field: stars → asc/desc, added → oldest/newest. */
@@ -675,16 +608,10 @@ export function MarketSection(props: MarketSectionProps) {
   const [catsOpen, setCatsOpen] = useState(false)
   /** Page-size switcher dropdown (primitives Menu). */
   const [sizeOpen, setSizeOpen] = useState(false)
-  /** WebDAV provider-preset dropdown (primitives Menu). */
-  const [presetOpen, setPresetOpen] = useState(false)
   /** Install-command disclosure inside the confirm dialog. */
   const [cmdOpen, setCmdOpen] = useState(false)
   /** Per-row "why is it not live" disclosure (installed tab). */
   const [whyOpen, setWhyOpen] = useState<string | null>(null)
-  /** Restore-confirm dialog (replaces window.confirm). */
-  const [restoreConfirmOpen, setRestoreConfirmOpen] = useState(false)
-  /** Plugins that failed to install during a restore (replaces window.alert). */
-  const [restoreErrors, setRestoreErrors] = useState<string[]>([])
   // How many category pills fit in the two collapsed rows (measured once —
   // the settings panel width is fixed); null = measuring render with all
   // pills clamped, then slice so the chevron flows inline after the last one.
@@ -715,7 +642,6 @@ export function MarketSection(props: MarketSectionProps) {
         if (Array.isArray(body.patchDisabled)) setPatchDisabledNames(body.patchDisabled)
         if (body.groups && typeof body.groups === 'object') setGroups(body.groups)
         if (Array.isArray(body.groupOrder)) setGroupOrder(body.groupOrder)
-        setInstalledBundles(Array.isArray(body.bundles) ? body.bundles.filter((name: unknown): name is string => typeof name === 'string') : [])
         if (body.activation && typeof body.activation === 'object') setActivations(body.activation)
         const findings = body.diagnostics?.schema === 'dsh-market/diagnostics/v1'
           && Array.isArray(body.diagnostics.findings)
@@ -996,30 +922,6 @@ export function MarketSection(props: MarketSectionProps) {
     setPage(1)
     scrollToTop()
   }
-
-  /** Download a host endpoint as a file — primitives Button can't be an <a download>.
-   * Prefers the server's Content-Disposition filename (e.g. the timestamped
-   * backup export) and falls back to the caller's name. */
-  const downloadFile = useCallback((url: string, filename: string) => {
-    fetch(url)
-      .then(res => {
-        if (!res.ok) throw new Error('HTTP ' + res.status)
-        const disposition = res.headers.get('content-disposition')
-        if (disposition !== null) {
-          const match = /filename="?([^";]+)"?/.exec(disposition)
-          if (match !== null && match[1] !== undefined && match[1] !== '') filename = match[1]
-        }
-        return res.blob()
-      })
-      .then(blob => {
-        const a = document.createElement('a')
-        a.href = URL.createObjectURL(blob)
-        a.download = filename
-        a.click()
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000)
-      })
-      .catch(error => setInstallError(String(error)))
-  }, [])
 
   const doRollback = useCallback((rollbackId: string) => {
     setRollingBack(true)
@@ -1623,9 +1525,7 @@ export function MarketSection(props: MarketSectionProps) {
   // mid-run, which would strand the remaining items.
   const selfName = installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
   const installedCount = Object.keys(installed).filter(name => name !== selfName).length
-  const updatableNames = Object.keys(installed).filter(
-    name => name !== selfName && !updatedNames.includes(name) && updates[name] && updates[name].updateAvailable,
-  )
+  const updatableNames = batchUpdateNames(installed, updates, effectiveDisabledSet, updatedNames, selfName)
   // The market manages itself from its own settings card (Settings → Plugins
   // → Plugin configuration), not as a row here — listing it in both places
   // read as two different controls for the same thing.
@@ -1644,208 +1544,7 @@ export function MarketSection(props: MarketSectionProps) {
     next()
   }, [updatableNames, doUpdate])
 
-  const finishRestore = useCallback((body: { errors?: unknown; unportable?: unknown }) => {
-    const errors = Array.isArray(body.errors) ? body.errors as { name?: unknown; error?: unknown }[] : []
-    const unportable = Array.isArray(body.unportable) ? body.unportable as { name?: unknown; spec?: unknown }[] : []
-    // Partial failures surface inline in the Backup tab (previously a
-    // window.alert); the restore itself still completes.
-    setRestoreErrors([
-      ...errors.map(item => `${String(item.name)}: ${String(item.error)}`),
-      ...unportable.map(item => `${String(item.name)}: ${t('restoreUnportable')} (${String(item.spec)})`),
-    ])
-    setBackupRestored(true)
-    setBackupMessage(t('restoreDone'))
-    if (errors.length === 0) {
-      setPendingBackup(null)
-      setPendingDependencies({})
-    }
-    refreshInstalled(true)
-  }, [refreshInstalled, t])
-
-  const previewBackup = useCallback((backup: unknown) => {
-    const dependencies = backupDependencies(backup)
-    setPendingBackup(backup)
-    setPendingDependencies(dependencies)
-    setBackupMessage(t('restorePreviewDone'))
-    setRestoreErrors([])
-    setTab('installed')
-  }, [t])
-
-  /** Actually run the restore; the confirm dialog gates this (previously window.confirm). */
-  const doRestore = useCallback(() => {
-    if (pendingBackup === null) return Promise.resolve()
-    setRestoreConfirmOpen(false)
-    setBackupBusy(true)
-    setBackupMessage(null)
-    setRestoreErrors([])
-    return fetch('/dsh-market/restore', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ backup: pendingBackup }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(String(body.error || 'restore failed'))
-      finishRestore(body)
-    }).catch(error => setBackupMessage(String(error))).finally(() => setBackupBusy(false))
-  }, [finishRestore, pendingBackup])
-
-  const runWebdav = useCallback((action: 'backup' | 'restore') => {
-    if (webdavUrl.trim() === '') return
-    setBackupBusy(true)
-    setBackupMessage(null)
-    setRestoreErrors([])
-    fetch('/dsh-market/webdav', {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action, url: webdavUrl.trim(), username: webdavUser, password: webdavPassword }),
-    }).then(async response => {
-      const body = await response.json()
-      if (!response.ok) throw new Error(String(body.error || 'WebDAV failed'))
-      if (action === 'restore') {
-        previewBackup(body.backup)
-      }
-      if (action === 'backup') {
-        try { localStorage.setItem('dshm-webdav-last', String(Date.now())) } catch { /* storage unavailable */ }
-        setBackupMessage(t('backupDone'))
-      }
-    }).catch(error => setBackupMessage(String(error))).finally(() => setBackupBusy(false))
-  }, [previewBackup, t, webdavPassword, webdavUrl, webdavUser])
-
-  /** Map the server's token-source string to a localized label. */
-  const gistSourceLabel = (source: string): string => {
-    if (source === 'token') return t('gistSrcToken')
-    if (source === 'env') return t('gistSrcEnv')
-    if (source === 'gh') return t('gistSrcGh')
-    return source
-  }
-
-  /** Turn any failure (server error, network error, timeout) into a friendly message. */
-  const gistErrorMessage = (error: unknown): string => {
-    const err = error as { name?: unknown; code?: unknown }
-    const name = typeof err?.name === 'string' ? err.name : ''
-    const code = typeof err?.code === 'string' ? err.code : ''
-    if (code === 'timeout' || name === 'TimeoutError' || name === 'AbortError') return t('gistErrTimeout')
-    if (code === 'network') return t('gistErrNetwork')
-    if (code === 'auth') return t('gistErrAuth')
-    if (code === 'notfound') return t('gistErrNotFound')
-    if (code === 'rate-limit') return t('gistErrRateLimit')
-    if (code === 'invalid') return t('gistErrInvalid')
-    // Network-level fetch failures surface as TypeError("Failed to fetch").
-    if (error instanceof TypeError) return t('gistErrNetwork')
-    return String(error)
-  }
-
-  const runGist = useCallback((action: 'export' | 'import' | 'verify') => {
-    setGistBusy(true)
-    setGistMessage(null)
-    setGistOk(false)
-    setGistResult(null)
-    setRestoreErrors([])
-    setExportError(null)
-    const body: Record<string, unknown> = { action, token: gistToken.trim() }
-    // Import always targets the field; export targets it only in update mode
-    // (create mode deliberately ignores the field and makes a new Gist).
-    if (action === 'import') body.gistId = gistId.trim()
-    if (action === 'export' && gistMode === 'update') {
-      if (gistId.trim() === '') {
-        setGistBusy(false)
-        setGistMessage(t('gistErrNoId'))
-        setGistOk(false)
-        return
-      }
-      body.gistId = gistId.trim()
-    }
-    if (action === 'export') {
-      // All plugins selected → full backup (with config); partial → only
-      // the checked plugins, config optional via the picker flag.
-      const allNames = new Set([...Object.keys(installed), ...installedBundles])
-      const allSelected = exportSelection.size === allNames.size && exportSelection.size > 0
-      if (!allSelected) {
-        body.includeDeps = [...exportSelection]
-        if (exportIncludeConfig) body.includeConfig = true
-      }
-    }
-    fetch('/dsh-market/gist', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
-      // Fallback ceiling only — the server answers structured errors (with a
-      // code) within 25 s, so a wedged host cannot leave the user staring at
-      // "working…" forever.
-      signal: AbortSignal.timeout(30_000),
-    }).then(async response => {
-      let body: Record<string, unknown> = {}
-      try { body = await response.json() as Record<string, unknown> } catch { /* non-JSON response */ }
-      if (!response.ok) {
-        const error = new Error(String(body.error || 'Gist failed'))
-        if (typeof body.code === 'string') (error as { code?: string }).code = body.code
-        throw error
-      }
-      if (action === 'export') {
-        setGistResult(body as unknown as GistExportResult)
-        // Backfill the id so the next export updates this Gist instead of
-        // creating yet another one.
-        const ref = body as unknown as GistExportResult
-        if (typeof ref.gistId === 'string' && ref.gistId !== '') {
-          setGistId(ref.gistId)
-          // A fresh export flips the mode to update so the next export
-          // PATCHes the same Gist instead of creating yet another one.
-          setGistMode('update')
-          try { localStorage.setItem('dshm-gist-id', ref.gistId) } catch { /* storage unavailable */ }
-        }
-        setGistMessage(t('gistExportDone'))
-        setGistOk(true)
-        setExportOpen(false)
-      } else if (action === 'import') {
-        previewBackup(body.backup)
-      } else {
-        // verify: tell the user which token source actually served the request.
-        const source = typeof body.source === 'string' ? body.source : ''
-        setGistMessage(t('gistVerifySource').replace('{0}', gistSourceLabel(source)))
-        setGistOk(true)
-      }
-    }).catch(error => {
-      const message = gistErrorMessage(error)
-      setGistMessage(message)
-      setGistOk(false)
-      // Keep the picker open (selection preserved) and show the failure
-      // inside it — never hidden behind the dialog.
-      if (action === 'export') setExportError(message)
-    }).finally(() => setGistBusy(false))
-  }, [exportIncludeConfig, exportSelection, gistId, gistToken, installed, installedBundles, previewBackup, t])
-
-  /** The picker list: dependency plugins + bundle-only plugins, deduplicated. */
-  const exportOptions = useMemo(() => {
-    const names = new Set([...Object.keys(installed), ...installedBundles])
-    return [...names].sort()
-  }, [installed, installedBundles])
-
-  /** Classify an install spec for the export picker badge. */
-  const specKind = (spec: string | undefined): 'npm' | 'git' | 'file' | 'bundle' => {
-    if (spec === undefined) return 'bundle'
-    if (/^file:/i.test(spec)) return 'file'
-    if (/^(github:|git\+|git:)/i.test(spec)) return 'git'
-    return 'npm'
-  }
-
-  const openExportPicker = useCallback(() => {
-    const names = new Set([...Object.keys(installed), ...installedBundles])
-    setExportSelection(new Set(names))
-    setExportIncludeConfig(false)
-    setExportOpen(true)
-  }, [installed, installedBundles])
-
-  useEffect(() => {
-    // Persist only the non-secret WebDAV settings; the password stays
-    // server-side/in-memory (see savedWebdav). Storage itself may be
-    // unavailable (e.g. the client test env), so never let it crash the UI.
-    try {
-      localStorage.setItem(WEBDAV_STORAGE_KEY, JSON.stringify({ url: webdavUrl, username: webdavUser, auto: autoBackup }))
-    } catch { /* storage unavailable — config just won't survive reload */ }
-    if (!autoBackup || webdavUrl.trim() === '') return
-    let last = 0
-    try {
-      last = Number(localStorage.getItem('dshm-webdav-last')) || 0
-    } catch { /* ignore */ }
-    if (Date.now() - last >= 24 * 60 * 60 * 1000) runWebdav('backup')
-  }, [autoBackup, runWebdav, webdavUrl, webdavUser])
-
-  const sessionPendingRestart = doneUrls.length + updatedNames.length + removedCount + toggleRestart + (backupRestored ? 1 : 0)
+  const sessionPendingRestart = doneUrls.length + updatedNames.length + removedCount + toggleRestart
   /**
    * Plugins the HOST reports as restart-pending, independent of what this
    * browser session happens to remember. Installing and then reloading the
@@ -1859,8 +1558,7 @@ export function MarketSection(props: MarketSectionProps) {
   const hostPendingNames = Object.keys(activations).filter(name => activations[name]?.state === 'restart')
   const showHostPending = hostPendingNames.length > 0 && !restartNoticeDismissed && sessionPendingRestart === 0
   const pendingRestart = sessionPendingRestart > 0 ? sessionPendingRestart : (showHostPending ? hostPendingNames.length : 0)
-  const displayedInstalled = pendingBackup === null ? installed : { ...pendingDependencies, ...installed }
-  const missingRestoreCount = Object.keys(pendingDependencies).filter(name => !installedFiles.includes(name)).length
+  const displayedInstalled = installed
   /** Live status line: structured phase, or the human-line fallback. */
   const phasePart = progressPhase != null
     ? phaseLabel(progressPhase, t)
@@ -1953,8 +1651,8 @@ export function MarketSection(props: MarketSectionProps) {
                           variant="primary"
                           size="sm"
                           className={css.installBtn}
-                          disabled={busyUrl !== null || !envReady}
-                          onClick={() => setConfirming(p)}
+                          disabled={busyUrl !== null || (!props.onOfficialInstall && !envReady)}
+                          onClick={() => props.onOfficialInstall ? doInstall(p) : setConfirming(p)}
                         >{t('install')}</Button>
                       )}
           </div>
@@ -2133,7 +1831,7 @@ export function MarketSection(props: MarketSectionProps) {
         </div>
       )}
       <div className={css.notices}>
-        {!envReady && (
+        {!props.onOfficialInstall && !envReady && (
           <div className={css.banner}>
             <IconCordisPluginOutline14 size={14} className={css.bannerIcon} />
             <span className={css.grow}>{envFailed ? t('envFixFail') : t('envMissing')}</span>
@@ -2142,25 +1840,6 @@ export function MarketSection(props: MarketSectionProps) {
                 {envFixing ? t('envFixing') : t('envFix')}
               </Button>
             )}
-          </div>
-        )}
-        {backupMessage !== null && <div className={css.backupMessage}>{backupMessage}</div>}
-        {restoreErrors.length > 0 && (
-          <div className={css.banner}>
-            <IconWarningOutline16 size={14} className={css.bannerIcon} />
-            <span className={css.grow}>
-              <div><b>{t('restorePartial')}</b></div>
-              {restoreErrors.map(error => <div key={error} className={css.spec}>{error}</div>)}
-            </span>
-          </div>
-        )}
-        {tab === 'installed' && pendingBackup !== null && (
-          <div className={css.banner}>
-            <IconRefreshOutline14 size={14} className={css.bannerIcon} />
-            <span className={css.grow}>{t('restoreMissing').replace('{0}', String(missingRestoreCount))}</span>
-            <Button variant="primary" size="sm" disabled={backupBusy} onClick={() => setRestoreConfirmOpen(true)}>
-              {backupBusy ? t('backupWorking') : t('restoreStart')}
-            </Button>
           </div>
         )}
         {pendingRefreshNames.length > 0 && !recordHasRefreshAction && (
@@ -2278,130 +1957,7 @@ export function MarketSection(props: MarketSectionProps) {
         ref={bodyRef}
         onScroll={e => setShowTop(e.currentTarget.scrollTop > 400)}
       >
-        {false
-          ? (
-              <div className={css.backupGrid}>
-                <section className={css.backupCard}>
-                  <h3>{t('backupLocal')}</h3>
-                  <p>{t('backupHint')}</p>
-                  <p className={css.backupWarn}>{t('credsWarning')}</p>
-                  <div className={css.backupActions}>
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      icon={<IconDownloadOutline16 size={14} />}
-                      disabled={backupBusy}
-                      onClick={() => downloadFile('/dsh-market/backup', 'dsh-profile-backup.json')}
-                    >{backupBusy ? t('backupWorking') : t('backupDownload')}</Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      icon={<IconFolderOpen16 size={14} />}
-                      disabled={backupBusy}
-                      onClick={() => fileInputRef.current?.click()}
-                    >{backupBusy ? t('backupWorking') : t('backupImport')}</Button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="application/json,.json"
-                      className={css.hiddenFile}
-                      tabIndex={-1}
-                      aria-hidden="true"
-                      disabled={backupBusy}
-                      onChange={event => {
-                        const file = event.currentTarget.files?.[0]
-                        event.currentTarget.value = ''
-                        if (file !== undefined) file.text().then(text => previewBackup(JSON.parse(text))).catch(error => setBackupMessage(String(error)))
-                      }}
-                    />
-                  </div>
-                </section>
-                <section className={css.backupCard}>
-                  <h3>{t('webdav')}</h3>
-                  <Menu
-                    open={presetOpen}
-                    onClose={() => setPresetOpen(false)}
-                    onSelect={id => {
-                      const urls: Record<string, string> = {
-                        jianguoyun: 'https://dav.jianguoyun.com/dav/dsh-profile-backup.json',
-                        koofr: 'https://app.koofr.net/dav/Koofr/dsh-profile-backup.json',
-                        nextcloud: 'https://nextcloud.example/remote.php/dav/files/USERNAME/dsh-profile-backup.json',
-                      }
-                      if (urls[id] !== undefined) setWebdavUrl(urls[id]!)
-                    }}
-                    align="start"
-                    anchor={(
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        icon={<IconChevronDownOutline14 size={14} />}
-                        onClick={() => setPresetOpen(o => !o)}
-                      >{t('webdavPreset')}</Button>
-                    )}
-                    items={[
-                      { id: 'custom', label: t('webdavPreset') },
-                      { id: 'jianguoyun', label: '坚果云 / Nutstore' },
-                      { id: 'koofr', label: 'Koofr' },
-                      { id: 'nextcloud', label: 'Nextcloud' },
-                    ]}
-                  />
-                  <Input className={css.backupInput} icon={<IconLinkOutline14 size={14} />} type="url" value={webdavUrl} placeholder={t('webdavUrl')} onChange={e => setWebdavUrl(e.target.value)} />
-                  <Input className={css.backupInput} autoComplete="username" value={webdavUser} placeholder={t('webdavUser')} onChange={e => setWebdavUser(e.target.value)} />
-                  <Input className={css.backupInput} type="password" autoComplete="current-password" value={webdavPassword} placeholder={t('webdavPassword')} onChange={e => setWebdavPassword(e.target.value)} />
-                  <div className={css.backupActions}>
-                    <Button variant="primary" size="sm" disabled={backupBusy || webdavUrl.trim() === ''} onClick={() => runWebdav('backup')}>{backupBusy ? t('backupWorking') : t('webdavUpload')}</Button>
-                    <Button variant="outline" size="sm" disabled={backupBusy || webdavUrl.trim() === ''} onClick={() => runWebdav('restore')}>{t('webdavRestore')}</Button>
-                  </div>
-                  <label className={css.backupCheck}><input type="checkbox" checked={autoBackup} onChange={e => setAutoBackup(e.target.checked)} />{t('autoBackup')}</label>
-                  <p>{t('webdavNote')}</p>
-                  <p className={css.backupWarn}>{t('credsWarning')}</p>
-                </section>
-                <section className={css.backupCard}>
-                  <h3>{t('gist')}</h3>
-                  <Input
-                    className={css.backupInput}
-                    type="password"
-                    autoComplete="off"
-                    value={gistToken}
-                    placeholder={t('gistToken')}
-                    onChange={e => setGistToken(e.target.value)}
-                  />
-                  <Input
-                    className={css.backupInput}
-                    icon={<IconLinkOutline14 size={14} />}
-                    value={gistId}
-                    placeholder={t('gistId')}
-                    onChange={e => setGistId(e.target.value)}
-                  />
-                  <div className={css.backupActions}>
-                    <label className={css.backupCheck}>
-                      <input type="radio" name="gist-mode" checked={gistMode === 'update'} onChange={() => setGistMode('update')} />
-                      {t('gistModeUpdate')}
-                    </label>
-                    <label className={css.backupCheck}>
-                      <input type="radio" name="gist-mode" checked={gistMode === 'create'} onChange={() => setGistMode('create')} />
-                      {t('gistModeCreate')}
-                    </label>
-                  </div>
-                  <div className={css.backupActions}>
-                    <Button variant="outline" size="sm" disabled={gistBusy} onClick={() => runGist('verify')}>{gistBusy ? t('backupWorking') : t('gistVerify')}</Button>
-                    <Button variant="primary" size="sm" disabled={gistBusy || (gistMode === 'update' && gistId.trim() === '')} onClick={openExportPicker}>{gistBusy ? t('backupWorking') : t('gistExport')}</Button>
-                    <Button variant="outline" size="sm" disabled={gistBusy || gistId.trim() === ''} onClick={() => runGist('import')}>{t('gistImport')}</Button>
-                  </div>
-                  {gistResult !== null && (
-                    <p className={css.backupCheck}>
-                      <span>{t('gistCreated')}</span>{' '}
-                      <a className={css.src} href={gistResult.gistUrl} target="_blank" rel="noreferrer">{gistResult.gistUrl}</a>
-                    </p>
-                  )}
-                  {gistMessage !== null && (
-                    <div className={gistOk ? css.backupMessage : css.backupWarn}>{gistMessage}</div>
-                  )}
-                  <p>{t('gistNote')}</p>
-                </section>
-              </div>
-            )
-          : tab === 'discover'
+        {tab === 'discover'
           ? loadError !== null
             ? <div className={css.empty}>
                 <div>{t('loadFail')}</div>
@@ -2787,7 +2343,7 @@ export function MarketSection(props: MarketSectionProps) {
                               return false
                             })
                             .map(([name, spec]) => {
-                            const missing = pendingBackup !== null && !installedFiles.includes(name)
+                            const missing = !installedFiles.includes(name)
                             const entry = data === null ? undefined : entryForDep(data.plugins, name, String(spec), repoIdentities[name], repoHints[name])
                             const status = updates[name]
                             const act = activations[name]
@@ -2922,7 +2478,7 @@ export function MarketSection(props: MarketSectionProps) {
                                   return (
                                     <>
                                               {!isInstalled(replacement, installed, repoIdentities, data?.plugins, repoHints) && (
-                                        <Button variant="outline" size="sm" onClick={() => setConfirming(replacement)}>{t('installReplacement')}</Button>
+                                        <Button variant="outline" size="sm" onClick={() => props.onOfficialInstall ? doInstall(replacement) : setConfirming(replacement)}>{t('installReplacement')}</Button>
                                       )}
                                     </>
                                   )
@@ -3060,71 +2616,6 @@ export function MarketSection(props: MarketSectionProps) {
             </>
           )}
         />
-      )}
-      {restoreConfirmOpen && pendingBackup !== null && (
-        <Modal
-          open
-          onClose={() => setRestoreConfirmOpen(false)}
-          title={t('restoreConfirm')}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setRestoreConfirmOpen(false)}>{t('cancel')}</Button>
-              <Button variant="primary" disabled={backupBusy} onClick={doRestore}>{t('confirm')}</Button>
-            </>
-          )}
-        />
-      )}
-      {exportOpen && (
-        <Modal
-          open
-          onClose={() => setExportOpen(false)}
-          title={t('gistExportSelect')}
-          description={t('gistExportHint')}
-          footer={(
-            <>
-              <Button variant="ghost" onClick={() => setExportOpen(false)}>{t('cancel')}</Button>
-              <Button variant="primary" disabled={gistBusy || exportSelection.size === 0} onClick={() => runGist('export')}>
-                {gistBusy ? t('backupWorking') : t('gistExportGo')}
-              </Button>
-            </>
-          )}
-        >
-          {exportOptions.length === 0 && <p>{t('gistNoPlugins')}</p>}
-          {exportOptions.length > 0 && (
-            <>
-              <div className={css.backupActions}>
-                <Button size="sm" variant="outline" onClick={() => setExportSelection(new Set(exportOptions))}>{t('gistSelectAll')}</Button>
-                <Button size="sm" variant="outline" onClick={() => setExportSelection(new Set())}>{t('gistSelectNone')}</Button>
-              </div>
-              <div className={css.backupCheckList}>
-                {exportOptions.map(name => (
-                  <label key={name} className={css.backupCheck}>
-                    <input
-                      type="checkbox"
-                      checked={exportSelection.has(name)}
-                      onChange={e => {
-                        const next = new Set(exportSelection)
-                        if (e.currentTarget.checked) next.add(name)
-                        else next.delete(name)
-                        setExportSelection(next)
-                      }}
-                    />
-                    <span className={css.grow}>{name}</span>
-                    {specKind(installed[name]) === 'git' && <span className={`${css.specTag} ${css.specTagGit}`}>git</span>}
-                    {specKind(installed[name]) === 'file' && <span className={`${css.specTag} ${css.specTagFile}`}>{t('gistSpecLocal')}</span>}
-                    <span className={css.spec} title={installed[name]}>{installed[name] ?? t('bundleTag')}</span>
-                  </label>
-                ))}
-              </div>
-              <label className={css.backupCheck}>
-                <input type="checkbox" checked={exportIncludeConfig} onChange={e => setExportIncludeConfig(e.target.checked)} />
-                {t('gistIncludeConfig')}
-              </label>
-              {exportIncludeConfig && <p className={css.backupWarn}>{t('credsWarning')}</p>}
-              {exportError !== null && <p className={css.backupWarn}>{exportError}</p>}
-            </>
-          )}
-        </Modal>
       )}
     </div>
   )

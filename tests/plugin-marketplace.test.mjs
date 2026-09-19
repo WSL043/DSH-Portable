@@ -1065,3 +1065,21 @@ test('market loading requirements match the services its client entry uses', asy
   }).sort()
   assert.deepEqual(declared, used, 'unused requirements can block the whole client entry')
 })
+
+test('batch updates leave disabled and pending plugins untouched without hiding individual updates', async () => {
+  const { batchUpdateNames } = await import('../app/vendor/dsh-portable-plugin-market/src/client/market-data.ts')
+  const installed = { enabled: '1', disabled: '1', pending: '1', current: '1', 'dsh-market': '1' }
+  const updates = Object.fromEntries(['enabled', 'disabled', 'pending', 'dsh-market', 'not-installed'].map(name => [name, { updateAvailable: true }]))
+  assert.deepEqual(batchUpdateNames(installed, updates, new Set(['disabled']), ['pending'], 'dsh-market'), ['enabled'])
+  assert.deepEqual(batchUpdateNames(installed, updates, new Set(), ['pending'], 'dsh-market'), ['enabled', 'disabled'])
+  assert.equal(updates.disabled.updateAvailable, true)
+  const source = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  assert.match(source, /batchUpdateNames\(installed, updates, effectiveDisabledSet, updatedNames, selfName\)/)
+  assert.match(source, /: status && status\.updateAvailable\s*\? \([\s\S]*?onClick=\{\(\) => doUpdate\(name\)\}/)
+})
+
+test('market discovery does not retain hidden cloud-backup side effects', async () => {
+  const source = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
+  assert.doesNotMatch(source, /dshm-webdav|dshm-gist|\/dsh-market\/(?:webdav|gist|backup|restore)\b/)
+  assert.doesNotMatch(source, /\{false\s*\?\s*\(/)
+})

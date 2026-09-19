@@ -124,6 +124,8 @@ jobs:
             ${{ runner.temp }}/dsh-startup-transition-focused/
             ${{ runner.temp }}/dsh-native-migration-evidence-focused/
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-lifecycle-support.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable-moved/data/native-lifecycle-support.json
       - uses: actions/upload-artifact@v7
         if: always()
         with:

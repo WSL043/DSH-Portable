@@ -70,6 +70,12 @@ export interface UpdateStatus {
   kind?: string
 }
 
+/** Batch updates respect disabled state; individual updates remain explicit. */
+export function batchUpdateNames(installed: InstalledMap, updates: Record<string, UpdateStatus>, disabled: ReadonlySet<string>, pending: readonly string[], selfName: string): string[] {
+  return Object.keys(installed).filter(name => name !== selfName && !disabled.has(name)
+    && !pending.includes(name) && updates[name]?.updateAvailable === true)
+}
+
 /** Poll payload from /dsh-market/status. */
 export interface MarketStatus {
   /** The market's own version — rendered in the heading so screenshots carry it. */

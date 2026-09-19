@@ -392,6 +392,18 @@ try {
         CloseToExitSeconds = [Math]::Round($CloseToExitClock.Elapsed.TotalSeconds, 3)
         Status = 'passed'
     }
+} catch {
+    $LifecycleFailure = $_
+    try {
+        # Capture before stop removes process state. Use the existing redacted
+        # exporter; never upload credentials or the entire user profile.
+        $FailureReport = Join-Path $Root 'data\native-lifecycle-support.json'
+        & $PortableNode $RuntimeEntry 'portable-cli.mjs' support-report --output $FailureReport --json *> $null
+        if ($LASTEXITCODE -ne 0) { Write-Warning 'Native lifecycle support export failed.' }
+    } catch {
+        Write-Warning 'Native lifecycle support export could not complete.'
+    }
+    throw $LifecycleFailure
 } finally {
     $PreviousErrorActionPreference = $ErrorActionPreference
     try {

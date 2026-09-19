@@ -36,8 +36,38 @@ https://github.com/dsh-market/dsh-market/compare/v1.47.0...v1.48.0
   runtime pnpm 11.11.0 (the source-build toolchain is separate). Review alongside an actual package-manager upgrade.
 - #621: registry target pinning remains relevant for legacy installs, but modern
   installs now belong to the official manager's inspection/installation flow.
-- Later #642/#570 (disabled-plugin update-all/restart counts) still need legacy
-  flow review. This document does not claim full synchronization with 1.48.0.
+- #642: batch updates now exclude effectively disabled plugins. Individual
+  update controls remain available; regression covers the batch boundary.
+- #570: local code already adds updatedNames only when completionAction returns
+  restart, and counts it in the restart banner. Do not copy the upstream second
+  restartNames collection, whose updatedNames has different semantics.
+  This document does not claim full synchronization with 1.48.0.
+
+## Follow-up acceptance
+
+Modern catalog install now opens the official confirmation directly, without an
+extra market confirmation or gating on the legacy pnpm setup banner. Isolated
+alpha.2 evidence: `build/market-official-install-acceptance-20260919/official-install-evidence-14204.json`.
+Closing both windows and reopening the editable official input passed; no legacy
+install request or console error. No real package was installed in this UI test.
+
+Removed the unreachable cloud-backup UI and its state/effects (about 500 lines).
+Although hidden behind a literal false branch, its WebDAV effect could still act
+on old browser preferences. The same UI acceptance seeded the old auto-backup
+preference and observed zero backup/WebDAV/Gist/restore requests. Portable data
+transfer remains intact; legacy server endpoints have not yet been retired.
+The rebuilt client fell from about 172.46 kB to 163.97 kB. This is client code
+size only, not a material reduction of the full runtime archive.
+
+Storage prune experiment: `build/store-prune-offline-20260919-v4/result.json`.
+With pnpm 11.11.0, the local-registry integrity-pinned fixture could rebuild
+offline before pruning. Store prune retained linked payloads (zero files freed)
+but deleted cached metadata. The installed module still loaded; subsequent
+offline reconstruction attempted a registry policy check and failed to finish
+within the 45-second limit. A no-retry follow-up returned ERR_PNPM_META_FETCH_FAIL.
+Thus ordinary store prune is not qualified as transparent Portable maintenance.
+Earlier fixture failures (missing integrity and frozen lockfile) are retained
+separately and are not used as evidence against prune. No user store was changed.
 
 ## Remaining boundaries
 
