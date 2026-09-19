@@ -20,6 +20,8 @@ test('retired cloud backup routes and credential discovery are absent from the s
     assert.match(source, /\/dsh-market\/rollback/)
     assert.match(source, /\/dsh-market\/restore/)
   }
+  const client = await read('app/vendor/dsh-portable-plugin-market/client/client.js')
+  assert.doesNotMatch(client, /DSH_GITHUB_TOKEN|dshm-webdav|gistExport|webdavUpload/)
 })
 
 test('scheme-less proxy settings are normalized before the market creates its HTTP agent', async () => {
