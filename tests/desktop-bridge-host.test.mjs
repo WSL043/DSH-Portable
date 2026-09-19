@@ -486,3 +486,36 @@ test('local settings do not wait for the OS probe and simultaneous status querie
   assert.equal(b.json().status, 'disabled-system')
   assert.equal(legacy.json().notificationAvailability.status, 'disabled-system')
 })
+
+test('storage route rejects external requests and shares only an active scan', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-storage-route-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'launcher'))
+  await writeFile(path.join(root, 'launcher/storage-report.mjs'), `
+    let count = 0;
+    export async function inspectStorage() {
+      const scan = ++count;
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return { scan };
+    }
+  `)
+  const routes = new Map()
+  t.after(mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root }))
+  const handler = routes.get('/dsh-portable/storage').handler
+  const external = request('GET')
+  external.headers.origin = 'https://example.com'
+  const rejected = response()
+  await handler(external, rejected)
+  assert.equal(rejected.status, 403)
+  const invalid = response()
+  await handler(request('POST'), invalid)
+  assert.equal(invalid.status, 405)
+  const first = response(), second = response()
+  await Promise.all([handler(request('GET'), first), handler(request('GET'), second)])
+  assert.equal(first.status, 200)
+  assert.equal(first.json().scan, 1)
+  assert.equal(second.json().scan, 1)
+  const refreshed = response()
+  await handler(request('GET'), refreshed)
+  assert.equal(refreshed.json().scan, 2)
+})

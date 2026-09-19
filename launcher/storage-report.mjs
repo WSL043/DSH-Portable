@@ -1,4 +1,4 @@
-import { lstat, readdir } from 'node:fs/promises'
+import { lstat, opendir } from 'node:fs/promises'
 import path from 'node:path'
 
 // On-demand only. Never follow links or scan sessions/workspaces; bounded work
@@ -21,12 +21,14 @@ export async function inspectStorage(stateRoot, { maxEntries = 100000, timeoutMs
       if (info.isSymbolicLink()) { result.complete = false; return }
       if (info.isFile()) { result.bytes += info.size; result.files++; return }
       if (!info.isDirectory()) return
-      let names
-      try { names = await readdir(filename) } catch { result.complete = false; return }
-      for (const name of names) {
-        if (visited >= maxEntries || Date.now() >= deadline) { result.complete = false; break }
-        await visit(path.join(filename, name))
-      }
+      try {
+        // Stream large stores rather than allocating the entire directory listing.
+        const directory = await opendir(filename)
+        for await (const entry of directory) {
+          if (visited >= maxEntries || Date.now() >= deadline) { result.complete = false; break }
+          await visit(path.join(filename, entry.name))
+        }
+      } catch { result.complete = false }
     }
     const data = path.join(root, 'data')
     try {
