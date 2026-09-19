@@ -31,7 +31,7 @@ test('desktop catalogs work without a CLI executable and reread channel preferen
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-inprocess-catalog-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   for (const directory of ['launcher', 'licenses', 'data']) await mkdir(path.join(root, directory))
-  for (const filename of ['update-core.mjs', 'portable-core.mjs']) {
+  for (const filename of ['update-core.mjs', 'portable-core.mjs', 'data-paths.mjs']) {
     await copyFile(new URL(`../launcher/${filename}`, import.meta.url), path.join(root, 'launcher', filename))
   }
   await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.8', dshVersion: '0.1.5-rc.2' }))
