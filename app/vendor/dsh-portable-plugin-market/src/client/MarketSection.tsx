@@ -444,7 +444,6 @@ export function MarketSection(props: MarketSectionProps) {
     cachedRepoHints = value
     setRepoHintsState(value)
   }, [])
-  const [installedFiles, setInstalledFiles] = useState<string[]>([])
   const [skins, setSkins] = useState<string[]>([])
   const [tab, setTab] = useState<'discover' | 'installed' | 'diagnostics'>(props.view)
   useEffect(() => setTab(props.view), [props.view])
@@ -636,7 +635,6 @@ export function MarketSection(props: MarketSectionProps) {
         setInstalled(body.installed || {})
         setRepoIdentities(installedRepoIdentities(body.repoIdentities))
         setRepoHints(installedRepoHints(body.repoHints))
-        setInstalledFiles(Array.isArray(body.present) ? body.present : Object.keys(body.installed || {}))
         setSkins(body.live || [])
         if (Array.isArray(body.disabled)) setDisabledNames(body.disabled)
         if (Array.isArray(body.patchDisabled)) setPatchDisabledNames(body.patchDisabled)
@@ -2343,7 +2341,6 @@ export function MarketSection(props: MarketSectionProps) {
                               return false
                             })
                             .map(([name, spec]) => {
-                            const missing = !installedFiles.includes(name)
                             const entry = data === null ? undefined : entryForDep(data.plugins, name, String(spec), repoIdentities[name], repoHints[name])
                             const status = updates[name]
                             const act = activations[name]
@@ -2364,7 +2361,7 @@ export function MarketSection(props: MarketSectionProps) {
                             // without a misleading toggle (#60).
                             const toggleable = off || (act !== undefined && (act.state === 'live' || act.state === 'restart'))
                             return (
-                              <div key={name} className={missing ? `${css.irow} ${css.irowMissing}` : css.irow}>
+                              <div key={name} className={css.irow}>
                                 <div style={{ minWidth: 0 }}>
                                   <div className={css.nm}>
                                     {/* The name is the link to the README. A separate button
@@ -2448,12 +2445,10 @@ export function MarketSection(props: MarketSectionProps) {
                                 <div className={css.irowActions}>
                                 {/* Dot + tag, the pairing the host's own plugin
                                     inventory uses for exactly this state. */}
-                                {!missing && (
                                   <span className={css.stateTag} data-on={off ? 'false' : 'true'}>
                                     <span className={css.stateDot} data-on={off ? 'false' : 'true'} />
                                     {off ? t('disabledState') : t('switchOnLabel')}
                                   </span>
-                                )}
                                 {toggleable && (
                                   <button
                                     type="button"
@@ -2483,9 +2478,7 @@ export function MarketSection(props: MarketSectionProps) {
                                     </>
                                   )
                                 })()}
-                                {missing
-                                  ? <span className={css.metaTag}>{t('notInstalled')}</span>
-                                  : updatedNames.includes(name)
+                                {updatedNames.includes(name)
                                     ? <span className={`${css.metaTag} ${css.metaTagOk}`}>{act?.state === 'live' ? t('updatedLive') : t('updated')}</span>
                                     : updatingName === name
                                       ? <Button variant="primary" size="sm" className={css.warnBtn} disabled>{t('updating')}</Button>
@@ -2504,7 +2497,7 @@ export function MarketSection(props: MarketSectionProps) {
                                           : status && status.kind === 'external'
                                             ? <span className={css.metaTag} title={t('externalUpdateHelp')}>{t('externalUpdate')}</span>
                                           : <span className={css.metaTag}>{t('upToDate')}</span>}
-                                {!missing && name !== 'dsh-market' && name !== 'dshmarket' && (
+                                {name !== 'dsh-market' && name !== 'dshmarket' && (
                                   removingName === name
                                     ? <Button variant="outline" size="sm" className={css.dangerBtn} disabled>{t('uninstalling')}</Button>
                                     : (
