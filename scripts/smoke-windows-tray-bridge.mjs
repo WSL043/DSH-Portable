@@ -210,9 +210,9 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
     await evaluate(client, `(() => {
       const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
         .find(item => item.getBoundingClientRect().width > 0
-          && /Internal Testing Notice|内测声明/.test(item.textContent || ''))
+          && /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
       const button = [...(notice?.querySelectorAll('button') || [])]
-        .find(item => ['Continue', '继续'].includes((item.textContent || '').trim())
+        .find(item => ['Continue', '继续', 'Configure later', 'Set up later', '稍后配置'].includes((item.textContent || '').trim())
           && !item.disabled && !item.closest('[inert],[aria-hidden="true"]'))
       if (!button) return false
       button.click()
@@ -344,7 +344,16 @@ try {
   await client.send('Network.enable')
   await client.send('Page.enable')
   await client.send('Page.addScriptToEvaluateOnNewDocument', { source: initScript })
-  const navigation = await client.send('Page.navigate', { url: launch.url })
+  let navigation = await client.send('Page.navigate', { url: launch.url })
+  // Chrome's startup navigation can cancel this first command while the target
+  // is still about:blank. Retry only that pre-application state once; never
+  // reload a loaded DSH page or conceal an application initialization failure.
+  if (navigation.errorText === 'net::ERR_ABORTED'
+    && await evaluate(client, 'location.href') === 'about:blank') {
+    rememberBrowserFailure({ type: 'Document', error: navigation.errorText, recovery: 'initial-blank-only' })
+    await client.send('Page.stopLoading')
+    navigation = await client.send('Page.navigate', { url: launch.url })
+  }
   if (navigation.errorText && navigation.errorText !== 'net::ERR_ABORTED') {
     throw new Error(`Workspace navigation failed: ${navigation.errorText}`)
   }
