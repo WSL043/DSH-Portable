@@ -9,14 +9,23 @@ import { isAbsolute, join, posix, relative, resolve, win32 } from 'node:path'
  * separators and a parent segment is never accepted. Physical containment is
  * checked by resolvePackageRelativePath before any declared file is read.
  */
-export function isSafePackageRelativePath(value: unknown): value is string {
+export function isSafePackageRelativePath(value: unknown, platform: NodeJS.Platform = process.platform): value is string {
   if (typeof value !== 'string' || value === '' || value.includes('\0')) return false
   if (isAbsolute(value) || posix.isAbsolute(value) || win32.isAbsolute(value)) return false
   // A drive-relative Windows path (for example, `C:outside.js`) is not
   // absolute according to win32.isAbsolute(), but it is not package-relative
   // either. Reject drive prefixes on every platform for consistent manifests.
   if (/^[A-Za-z]:/u.test(value)) return false
-  return !value.split(/[\\/]/u).some(segment => segment === '..')
+  const segments = value.split(/[\\/]/u)
+  if (segments.some(segment => segment === '..')) return false
+  if (platform === 'win32' && segments.some(segment => {
+    // A leading ./ is normal package metadata, not a Windows trailing-dot name.
+    if (segment === '' || segment === '.') return false
+    const basename = segment.split('.')[0]!.trimEnd()
+    return /[<>:"|?*\x00-\x1f]/u.test(segment) || /[. ]$/u.test(segment)
+      || /^(?:con|prn|aux|nul|com[1-9¹²³]|lpt[1-9¹²³]|conin\$|conout\$)$/iu.test(basename)
+  })) return false
+  return true
 }
 
 /**
@@ -35,13 +44,16 @@ export function resolvePackageRelativePath(packageRoot: string, value: unknown):
   // pnpm and linked development packages may symlink the package root itself.
   // Their real root is the boundary; links inside it cannot escape that root.
   let canonicalRoot: string
-  try { canonicalRoot = realpathSync(root) } catch { return null }
+  try { canonicalRoot = realpathSync.native(root) } catch { return null }
   const parts = escaped.split(/[\\/]/u).filter(Boolean)
   let current = canonicalRoot
   for (let index = 0; index < parts.length; index += 1) {
     current = join(current, parts[index]!)
     try {
-      if (lstatSync(current).isSymbolicLink()) current = realpathSync(current)
+      lstatSync(current)
+      // Resolve ordinary components too: native path aliases must not bypass
+      // containment, and Windows short/long names must use one representation.
+      current = realpathSync.native(current)
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return null
       // A missing ordinary entry is still useful to callers that report a

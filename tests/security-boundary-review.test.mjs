@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { resolvePackageRelativePath } from '../app/vendor/dsh-portable-plugin-market/src/package-path.ts'
+import { isSafePackageRelativePath, resolvePackageRelativePath } from '../app/vendor/dsh-portable-plugin-market/src/package-path.ts'
 import { boundedTimeout } from '../app/vendor/dsh-portable-plugin-market/src/timeout.ts'
 
 async function fixture(t) {
@@ -102,4 +102,26 @@ test('detached native executables do not need the Windows shell resolver', async
   assert.match(method, /UseShellExecute = false/)
   assert.doesNotMatch(method, /UseShellExecute = true/)
   assert.match(method, /argumentList\.Select\(QuoteArgument\)/)
+})
+
+
+test('Windows package paths reject parent aliases, devices and alternate streams', () => {
+  for (const value of ['.. /private', '.. ./private', 'nested/../private', 'file:stream',
+    'con', 'aux.txt', 'nested/lpt¹.txt', 'conout$', 'file.', 'file ', 'nested/.. /private']) {
+    assert.equal(isSafePackageRelativePath(value, 'win32'), false, value)
+  }
+  for (const value of ['./client.js', '.\\client.js', 'nested/中文 file.js', 'nested/.hidden.js']) {
+    assert.equal(isSafePackageRelativePath(value, 'win32'), true, value)
+  }
+})
+
+test('Windows package resolution rejects trailing-space parent aliases before lookup', {
+  skip: process.platform !== 'win32',
+}, async t => {
+  const { root, pkg } = await fixture(t)
+  const outside = path.join(root, 'outside.js')
+  await writeFile(outside, 'private')
+  assert.equal(resolvePackageRelativePath(pkg, '.. /outside.js'), null)
+  assert.equal(resolvePackageRelativePath(pkg, '.. ./outside.js'), null)
+  assert.equal(await readFile(outside, 'utf8'), 'private')
 })

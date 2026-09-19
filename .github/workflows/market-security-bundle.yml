@@ -1,0 +1,78 @@
+name: Qualify updated market bundle
+on:
+  pull_request:
+    paths:
+      - 'app/vendor/dsh-portable-plugin-market/src/package-path.ts'
+      - '.github/workflows/market-security-bundle.yml'
+permissions:
+  contents: read
+concurrency:
+  group: market-security-bundle-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    if: github.repository == 'WSL043/DSH-Portable' && github.event.pull_request.number == 139 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/data-transfer-safety-20260919'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    outputs:
+      digest: ${{ steps.patch.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+          package-manager-cache: false
+      - run: |
+          npm ci --prefix app --ignore-scripts
+          npm install --global pnpm@11.11.0
+          pnpm --dir app/vendor/dsh-portable-plugin-market install --frozen-lockfile --ignore-scripts
+          pnpm --dir app/vendor/dsh-portable-plugin-market run build:server
+      - run: npm test
+      - id: patch
+        run: |
+          mkdir -p "$RUNNER_TEMP/market-bundle"
+          git add -- app/vendor/dsh-portable-plugin-market/lib
+          git diff --cached --binary > "$RUNNER_TEMP/market-bundle/bundle.patch"
+          git diff --cached --stat > "$RUNNER_TEMP/market-bundle/changes.txt"
+          git rev-parse HEAD > "$RUNNER_TEMP/market-bundle/base-commit.txt"
+          echo "digest=$(sha256sum "$RUNNER_TEMP/market-bundle/bundle.patch" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: qualified-market-bundle
+          path: ${{ runner.temp }}/market-bundle/
+          if-no-files-found: error
+          retention-days: 7
+  commit:
+    needs: build
+    if: github.repository == 'WSL043/DSH-Portable' && github.event.pull_request.number == 139 && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/data-transfer-safety-20260919'
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: qualified-market-bundle
+          path: ${{ runner.temp }}/market-bundle
+      - env:
+          EXPECTED_HEAD: ${{ github.event.pull_request.head.sha }}
+          PATCH_DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          echo "$PATCH_DIGEST  $RUNNER_TEMP/market-bundle/bundle.patch" | sha256sum --check
+          test "$(git ls-remote origin refs/heads/fix/data-transfer-safety-20260919 | cut -f 1)" = "$EXPECTED_HEAD"
+          if [ ! -s "$RUNNER_TEMP/market-bundle/bundle.patch" ]; then exit 0; fi
+          git apply --index "$RUNNER_TEMP/market-bundle/bundle.patch"
+          python3 - <<'PY'
+          import subprocess
+          files = subprocess.check_output(['git','diff','--cached','--name-only','-z']).decode().split('\0')
+          assert all(not p or p.startswith('app/vendor/dsh-portable-plugin-market/lib/') for p in files), files
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'build(security): rebuild canonical package path checks'
+          git push origin HEAD:refs/heads/fix/data-transfer-safety-20260919

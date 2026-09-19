@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { lstat, mkdir, open, rename, rm } from 'node:fs/promises'
+import { lstat, mkdir, open, realpath, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 
 export function normalizeDataPath(value, platform = process.platform) {
@@ -61,7 +61,27 @@ export async function safeDataTarget(root, relativePath, { leaf = 'file' } = {})
   return target
 }
 
+const pendingWrites = new Map()
+
 export async function writeDataFileAtomic(filename, bytes) {
+  const absolute = path.resolve(filename)
+  const parent = await realpath(path.dirname(absolute))
+  const canonical = path.join(parent, path.basename(absolute))
+  const key = process.platform === 'win32' ? canonical.toLowerCase() : canonical
+  // Windows can reject simultaneous replacements of the same destination.
+  // Serialize only this process's writes to that file; do not unlink the target
+  // or turn this into a cross-process transaction/parent-directory lock.
+  const previous = pendingWrites.get(key) ?? Promise.resolve()
+  const operation = previous.catch(() => {}).then(() => writeDataFileAtomicOnce(absolute, bytes))
+  pendingWrites.set(key, operation)
+  try {
+    await operation
+  } finally {
+    if (pendingWrites.get(key) === operation) pendingWrites.delete(key)
+  }
+}
+
+async function writeDataFileAtomicOnce(filename, bytes) {
   const temporary = path.join(path.dirname(filename), `.dsh-data-${randomBytes(16).toString('hex')}.tmp`)
   // Exclusive creation prevents following a pre-existing file, link or hard link.
   // Open before entering try/finally: a failed open does not own the path to unlink.
