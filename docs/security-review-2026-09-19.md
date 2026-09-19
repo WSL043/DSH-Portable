@@ -43,3 +43,21 @@ Filesystem parent replacement races and execution isolation of arbitrary third-p
 本次按完整导出处理：874 条代码告警、1 条依赖告警。845 条代码告警已有逐条误报处置回执；剩余 29 条全部对应上述修复文件与测试，glib 则采用保留真实版本号的兼容回移补丁。误报处置不等于修复了 845 个可利用漏洞。
 
 这里记录的是 PR #139 的修复与审查，不是默认分支告警全部关闭或新版已发布。合并后仍需核对新扫描结果与成品验收。一次性自动修改源码、自动关闭告警的工作流已移除，仅保留只读回归测试和完整编号映射。
+
+## Follow-up review (2026-09-19)
+
+PR head `a3852cd` introduced 13 scanner locations in the new shared helpers:
+894-901, 907-911. Analysis 1803995600 contains all 13 paths. Their sources are
+`profile.ts:21` (the same-user `DSH_HOME`) or `portable-cli.mjs:57`
+(the same-user `DSH_PORTABLE_STATE_ROOT`), not imported archive members.
+The application does not elevate these operations. Canonical member validation,
+physical descendant checks and exclusive random temporary creation remain in place.
+These exact flows were dismissed as false positives after source-to-sink review;
+this does not waive hostile concurrent parent replacement or future remote callers.
+
+Local focused validation: 45 passed and 6 failed solely at file-symlink creation
+with EPERM on this Windows account. The PR's Windows/macOS/Linux boundary jobs
+passed at the reviewed head, including those symlink scenarios. Local failures
+are retained in `build/security139-local-review.log`; no assertion was disabled.
+The optimized glib compatibility job and native argument-handling regression
+also passed in the PR. Whole-product release qualification remains separate.
