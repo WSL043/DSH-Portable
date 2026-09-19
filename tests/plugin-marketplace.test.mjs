@@ -975,8 +975,7 @@ test('plugin profile transfer no longer duplicates Portable data migration in ma
   const section = await read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx')
   assert.doesNotMatch(locales, /^\s*tabBackup:/m)
   assert.doesNotMatch(section, /setTab\(['"]backup['"]\)/)
-  assert.match(locales, /会话、通用设置和凭据请使用 Portable/)
-  assert.match(locales, /Use Portable Data and migration for sessions, general settings, and credentials/)
+  assert.doesNotMatch(locales, /^\s*(?:backupLocal|backupHint|webdav|gist):/m)
 })
 
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
