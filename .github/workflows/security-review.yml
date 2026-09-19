@@ -1,0 +1,46 @@
+name: Security boundary review
+
+on:
+  pull_request:
+    paths:
+      - 'launcher/**'
+      - 'desktop-bridge/**'
+      - 'app/vendor/**'
+      - 'tests/**'
+      - '.github/workflows/security-review.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-boundary-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  boundary-review:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Run data boundary regressions
+        run: node --test tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs
+      - name: Assemble reproducible offline review inputs
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/security-review"
+          git archive --format=tar HEAD | gzip -1 > "$RUNNER_TEMP/security-review/source.tar.gz"
+          cp "$(command -v node)" "$RUNNER_TEMP/security-review/node"
+          git rev-parse HEAD > "$RUNNER_TEMP/security-review/commit.txt"
+          node --version > "$RUNNER_TEMP/security-review/node-version.txt"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: security-review-inputs
+          path: ${{ runner.temp }}/security-review/
+          retention-days: 3
+          if-no-files-found: error
