@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -56,5 +56,5 @@ namespace DshPortable {
   }
   assert.ok(result, 'the detached native process must produce its own report')
   assert.deepEqual(result.arguments, payload)
-  assert.equal(path.resolve(result.workingDirectory).toLowerCase(), path.resolve(directory).toLowerCase())
+  assert.equal((await realpath(result.workingDirectory)).toLowerCase(), (await realpath(directory)).toLowerCase())
 })

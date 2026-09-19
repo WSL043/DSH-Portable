@@ -7,7 +7,7 @@
     {"key":"data-archive","ids":[216,217,218,219,220,221,222,227,235,236,241,253],"files":["launcher/data-transfer.mjs","launcher/data-paths.mjs"],"tests":["tests/data-transfer.test.mjs","tests/data-transfer-security.test.mjs"]},
     {"key":"package-files","ids":[110,139,864,865,866,867],"files":["app/vendor/dsh-portable-plugin-market/src/package-path.ts","app/vendor/dsh-portable-plugin-market/lib/index.js","app/vendor/dsh-portable-plugin-market/lib/import-preflight.js"],"tests":["tests/plugin-market-package-path.test.mjs","tests/security-boundary-review.test.mjs"]},
     {"key":"profile-backup","ids":[56,57,58,59,60,61],"files":["app/vendor/dsh-portable-plugin-market/src/backup.ts","app/vendor/dsh-portable-plugin-market/src/backup-files.ts","app/vendor/dsh-portable-plugin-market/lib/index.js"],"tests":["tests/backup-write-security.test.mjs","tests/plugin-market-install-webdav-hardening.test.mjs"]},
-    {"key":"shared-write","ids":[420,421,422],"files":["launcher/portable-core.mjs","launcher/data-paths.mjs"],"tests":["tests/backup-write-security.test.mjs"]},
+    {"key":"shared-write","ids":[420,421,422],"files":["launcher/portable-core.mjs","launcher/data-paths.mjs"],"tests":["tests/backup-write-security.test.mjs","tests/atomic-write-order.test.mjs"]},
     {"key":"native-updater","ids":[50,53],"files":["launcher/windows/DSH-Portable.cs","launcher/windows/PortableProcessJob.cs"],"tests":["tests/security-boundary-review.test.mjs","tests/security-native-process.test.mjs","tests/windows-launcher-contract.test.mjs"]}
   ],
   "dependabot": [{
