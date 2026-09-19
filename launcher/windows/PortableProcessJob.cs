@@ -198,8 +198,8 @@ namespace DshPortable
                 {
                     FileName = executable,
                     Arguments = String.Join(" ", argumentList.Select(QuoteArgument)),
-                    WorkingDirectory = System.IO.Path.GetTempPath(),
-                    UseShellExecute = true,
+                    WorkingDirectory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(executable)),
+                    UseShellExecute = false,
                 });
                 return;
             }
