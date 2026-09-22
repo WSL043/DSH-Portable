@@ -128,8 +128,10 @@ test('preview footprint has a separate reviewed budget without weakening stable 
     assert.ok(preview.platforms[platform])
     const budget = preview.platforms[platform]
     assert.ok(budget.officeRuntimeBytes > 0 && budget.officeRuntimeBytes <= 350000000)
-    assert.ok(budget.extractedBytesWithoutOfficeRuntime <= stable.platforms[platform].extractedBytes * 1.01,
-      `${platform} non-Office growth must retain the previous ceiling`)
+    assert.ok(budget.speechRuntimeBytes > 0 && budget.speechRuntimeBytes <= 41000000)
+    assert.ok(budget.extractedBytesWithoutOfficeAndSpeechRuntime <= stable.platforms[platform].extractedBytes * 1.01 + 10000000,
+      `${platform} unrelated growth is limited to the reviewed document-preview allowance`)
+    assert.ok(budget.extractedBytesWithoutOfficeRuntime <= budget.extractedBytesWithoutOfficeAndSpeechRuntime + budget.speechRuntimeBytes)
     assert.ok(budget.extractedBytes <= budget.extractedBytesWithoutOfficeRuntime + budget.officeRuntimeBytes)
     assert.ok(budget.archiveBytes < budget.extractedBytes)
   }

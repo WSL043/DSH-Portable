@@ -75,6 +75,9 @@ function metric(report, key) {
   const officeRuntimeBytes = report.packages
     .filter((item) => item.name.startsWith(OFFICE_RUNTIME_PACKAGE_PREFIX))
     .reduce((total, item) => total + item.bytes, 0)
+  const speechRuntimeBytes = report.packages
+    .filter((item) => /^sherpa-onnx-(?:win|darwin|linux)-/.test(item.name))
+    .reduce((total, item) => total + item.bytes, 0)
   const values = {
     archiveBytes: report.archiveBytes,
     extractedBytes: report.total.bytes,
@@ -90,6 +93,9 @@ function metric(report, key) {
     marketBytes: report.packages.find((item) => item.name === '@wsl043/dsh-portable-plugin-market')?.bytes ?? 0,
     marketFiles: report.packages.find((item) => item.name === '@wsl043/dsh-portable-plugin-market')?.files ?? 0,
     officeRuntimeBytes,
+    speechRuntimeBytes,
+    appBytesWithoutOfficeAndSpeechRuntime: Math.max(0, appBytes - officeRuntimeBytes - speechRuntimeBytes),
+    extractedBytesWithoutOfficeAndSpeechRuntime: Math.max(0, report.total.bytes - officeRuntimeBytes - speechRuntimeBytes),
     appBytesWithoutOfficeRuntime: Math.max(0, appBytes - officeRuntimeBytes),
     extractedBytesWithoutOfficeRuntime: Math.max(0, report.total.bytes - officeRuntimeBytes),
   }
@@ -108,7 +114,11 @@ async function verifyBudget(report, filename, platform) {
     if (actual > maximum) failures.push(`${key}=${actual} exceeds ${maximum}`)
   }
   report.budget = { file: path.resolve(filename), platform, passed: failures.length === 0, failures }
-  if (failures.length > 0) throw new Error(`footprint budget failed: ${failures.join('; ')}`)
+  if (failures.length > 0) {
+    const error = new Error(`footprint budget failed: ${failures.join('; ')}`)
+    error.report = report
+    throw error
+  }
 }
 
 function isRecord(value) {
@@ -243,7 +253,14 @@ export async function createFootprintReport(options) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const options = parseArgs(process.argv.slice(2))
-  const report = await createFootprintReport(options)
+  let report
+  try { report = await createFootprintReport(options) }
+  catch (error) {
+    if (!error.report) throw error
+    report = error.report
+    console.error(error.message)
+    process.exitCode = 1
+  }
   const serialized = `${JSON.stringify(report, null, 2)}\n`
   if (options.output) {
     await writeFile(path.resolve(options.output), serialized, 'utf8')

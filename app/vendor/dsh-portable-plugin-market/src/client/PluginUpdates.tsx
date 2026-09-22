@@ -3,6 +3,7 @@ import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UpdateStatus } from '../updates.ts'
 import css from './PluginUpdates.module.css'
 import { updateCompletion, updateCompletionLabel, type UpdateCompletion } from './update-completion.ts'
+import { restartApp } from './restart-app.ts'
 
 type Snapshot = { updates: Record<string, UpdateStatus>; checking: boolean; checked: boolean; error: string; busy: string; done: Record<string, UpdateCompletion>; failures: Record<string, string> }
 // Shared across cards and navigation; one request and one mutation at a time.
@@ -36,6 +37,17 @@ async function update(name: string) {
   } catch (error) { publish({ failures: { ...snapshot.failures, [name]: String(error) } }) }
   finally { publish({ busy: '' }) }
 }
+async function activate(name: string) {
+  if (snapshot.busy) return
+  const action = snapshot.done[name]
+  if (action !== 'restart' && action !== 'refresh') return
+  publish({ busy: name, failures: { ...snapshot.failures, [name]: '' } })
+  try {
+    if (action === 'restart') await restartApp()
+    else location.reload()
+  } catch (error) { publish({ failures: { ...snapshot.failures, [name]: String(error) } }) }
+  finally { publish({ busy: '' }) }
+}
 export function PluginUpdateStatus({ zh }: { zh: boolean }) {
   const state = useSyncExternalStore(subscribe, getSnapshot)
   useEffect(() => {
@@ -54,9 +66,13 @@ export function PluginUpdateRow({ zh, name, busy = false, view }: { zh: boolean;
   const done = state.done[name]
   if (!status?.updateAvailable && !done) return null
   const error = state.failures[name]
-  if (view === 'action') return done ? <span className={css.pending} role="status">{updateCompletionLabel(done, zh)}</span> : <Button variant="outline" size="sm" disabled={busy || state.checking || Boolean(state.busy)} onClick={() => void update(name)}>{state.busy === name ? (zh ? '正在更新…' : 'Updating…') : error ? (zh ? '重试' : 'Retry') : (zh ? '更新' : 'Update')}</Button>
+  if (view === 'action') {
+    if (done === 'restart' || done === 'refresh') return <Button variant="outline" size="sm" disabled={busy || Boolean(state.busy)} onClick={() => void activate(name)}>{state.busy === name ? (zh ? '正在处理…' : 'Applying…') : done === 'restart' ? (zh ? '重启应用' : 'Restart app') : (zh ? '刷新页面' : 'Reload page')}</Button>
+    return done ? <span className={css.pending} role="status">{updateCompletionLabel(done, zh)}</span> : <Button variant="outline" size="sm" disabled={busy || state.checking || Boolean(state.busy)} onClick={() => void update(name)}>{state.busy === name ? (zh ? '正在更新…' : 'Updating…') : error ? (zh ? '重试' : 'Retry') : (zh ? '更新' : 'Update')}</Button>
+  }
+  if (done && !error) return null
   return <span className={css.row} data-portable-update={name}>
-    <span className={css.version}>{done ? updateCompletionLabel(done, zh) : `${status.version ?? ''} → ${status.latest ?? ''}`}</span>
-    {error && <span className={css.failure} role="alert" title={error}>{zh ? '更新失败，可重试' : 'Update failed. Retry available.'}</span>}
+    {!done && <span className={css.version}>{`${status?.version ?? ''} → ${status?.latest ?? ''}`}</span>}
+    {error && <span className={css.failure} role="alert" title={error}>{done ? (zh ? '未完成，请重试' : 'Could not apply. Please retry.') : (zh ? '更新失败，可重试' : 'Update failed. Retry available.')}</span>}
   </span>
 }

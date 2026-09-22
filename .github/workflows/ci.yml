@@ -143,10 +143,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/compare-ci-footprint.mjs artifacts/footprint-windows-x64.json
       - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
         with:
           name: footprint-windows-x64
           path: artifacts/footprint-windows-x64*.json
-          if-no-files-found: error
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         with:
           name: windows-x64-build
@@ -685,10 +686,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/compare-ci-footprint.mjs artifacts/footprint-macos-${{ matrix.arch }}.json
       - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
         with:
           name: footprint-macos-${{ matrix.arch }}
           path: artifacts/footprint-macos-${{ matrix.arch }}*.json
-          if-no-files-found: error
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.arch }}-build
@@ -848,10 +850,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/compare-ci-footprint.mjs artifacts/footprint-linux-${{ matrix.arch }}.json
       - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
         with:
           name: footprint-linux-${{ matrix.arch }}
           path: artifacts/footprint-linux-${{ matrix.arch }}*.json
-          if-no-files-found: error
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v7
         with:
           name: linux-${{ matrix.arch }}-build

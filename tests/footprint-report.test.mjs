@@ -50,7 +50,28 @@ test('footprint budget blocks a regression and accepts a bounded product', async
   assert.equal(report.budget.passed, true)
   const strict = path.join(root, 'strict.json')
   await writeFile(strict, JSON.stringify({ platforms: { test: { extractedBytes: 9 } } }))
-  await assert.rejects(createFootprintReport({ root: product, platform: 'test', budget: strict }), /extractedBytes=10 exceeds 9/)
+  await assert.rejects(createFootprintReport({ root: product, platform: 'test', budget: strict }), error => {
+    assert.match(error.message, /extractedBytes=10 exceeds 9/)
+    assert.equal(error.report.budget.passed, false)
+    assert.equal(error.report.packages[0].bytes, 10)
+    return true
+  })
+})
+
+test('speech runtime has a separate ceiling and cannot hide other runtime growth', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-speech-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/sherpa-onnx-win-x64/onnx.dll', 20)
+  await fixtureFile(product, 'app/node_modules/sherpa-onnx-node/index.js', 5)
+  const budget = path.join(root, 'budget.json')
+  const check = async limits => {
+    await writeFile(budget, JSON.stringify({ platforms: { test: limits } }))
+    return createFootprintReport({ root: product, platform: 'test', budget })
+  }
+  assert.equal((await check({ speechRuntimeBytes: 20, appBytesWithoutOfficeAndSpeechRuntime: 5 })).budget.passed, true)
+  await assert.rejects(check({ speechRuntimeBytes: 19 }), /speechRuntimeBytes=20 exceeds 19/)
+  await assert.rejects(check({ extractedBytesWithoutOfficeAndSpeechRuntime: 4 }), /extractedBytesWithoutOfficeAndSpeechRuntime=5 exceeds 4/)
 })
 
 test('footprint budget isolates Office runtime growth and excludes the wrapper from its exemption', async (t) => {

@@ -1,3 +1,4 @@
+import { restartApp } from './restart-app.ts'
 /**
  * The Market settings section: Discover / Installed over the
  * /dsh-market/* host routes, with install/update/uninstall flows and the
@@ -1143,73 +1144,12 @@ export function MarketSection(props: MarketSectionProps) {
    */
   const doRestart = useCallback(() => {
     if (bootId === null || restarting) return
-    const previousBoot = bootId
-    // Installation reloads retain Settings; an explicit restart returns to chat.
-    try { sessionStorage.removeItem('dsh-portable-settings-view') } catch { /* storage unavailable */ }
     setRestarting(true)
     setInstallError(null)
-    const awaitNewBoot = (unconfirmedError?: unknown) => {
-      const deadline = Date.now() + 60000
-      const poll = () => {
-        fetch('/dsh-market/status', { cache: 'no-store' })
-          .then(res => res.json())
-          .then((next) => {
-            if (typeof next.boot === 'string' && next.boot !== previousBoot) {
-              try { sessionStorage.removeItem('dsh-portable-settings-view') } catch { /* storage unavailable */ }
-              location.reload()
-              return
-            }
-            retry()
-          })
-          .catch(retry)
-      }
-      const retry = () => {
-        if (Date.now() > deadline) {
-          setRestarting(false)
-          const detail = unconfirmedError instanceof Error ? unconfirmedError.message : ''
-          setInstallError(t('restartTimeout') + (detail ? ': ' + detail : ''))
-          return
-        }
-        setTimeout(poll, 1500)
-      }
-      poll()
-    }
-    const portableRestart = window.__DSH_PORTABLE_HOST__?.restart
-    if (typeof portableRestart === 'function') {
-      portableRestart()
-        .then(awaitNewBoot)
-        .catch(error => {
-          if ((error as { code?: unknown })?.code === 'DSH_PORTABLE_RESTART_UNCONFIRMED') {
-            awaitNewBoot(error)
-            return
-          }
-          setRestarting(false)
-          setInstallError(t('restartFail') + ': ' + String(error instanceof Error ? error.message : error))
-        })
-      return
-    }
-    const requestRestart = (attemptsLeft: number) => {
-      fetch('/dsh-market/restart', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })
-        .then(res => res.json().then(body => ({ status: res.status, body })))
-        .then(({ status, body }) => {
-          if (status === 202 && body.ok === true) {
-            awaitNewBoot()
-            return
-          }
-          // 409 = the install route still holds the operation lock for its
-          // post-processing (#91) — a short quiet retry beats surfacing
-          // "cannot restart while a plugin operation is running" to a user
-          // who just followed our own banner.
-          if (status === 409 && attemptsLeft > 0) {
-            setTimeout(() => requestRestart(attemptsLeft - 1), 1500)
-            return
-          }
-          setRestarting(false)
-          setInstallError(t('restartFail') + ': ' + String(body.error || ('HTTP ' + String(status))))
-        })
-        .catch(awaitNewBoot) // the host may die mid-response; keep polling
-    }
-    requestRestart(10)
+    void restartApp(bootId).catch(error => {
+      setRestarting(false)
+      setInstallError(t('restartFail') + ': ' + String(error instanceof Error ? error.message : error))
+    })
   }, [bootId, restarting, t])
 
   /** Cancel the running plugin command (#6 by @qichuang321). */

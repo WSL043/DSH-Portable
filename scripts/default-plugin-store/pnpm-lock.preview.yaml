@@ -22,8 +22,8 @@ packages:
     engines: {node: '>=6'}
 
   dsh-chat-manager@file:.dsh-portable-archives/dsh-chat-manager.tgz:
-    resolution: {integrity: sha512-r8w5qwLTNtV4iGaOkaB9l5tC0QcbzN4f5mDFqvZ3i9kQ3NfQ4rnxVrhaVZ2dCGileVP/7eZCEKbNQwRkHsvAjw==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
-    version: 1.5.0-beta.1
+    resolution: {integrity: sha512-7Dt5gsWMXhJ9pBtUpddQHUFQ6by+ZAgCGCRA5wFKWm+XWL792HAW0sxK8dUpUsMoYV6WjBMQ1bATh0CYxxl4EQ==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
+    version: 1.5.0
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
       '@deepseek-ai/cordis': 4.0.3
@@ -56,8 +56,8 @@ packages:
         optional: true
 
   dsh-image-viewer@file:.dsh-portable-archives/dsh-image-viewer.tgz:
-    resolution: {integrity: sha512-N+50UkqF/inmbWWSNGK9TdXB1LDDt2jRB2sHPRgf+fKUWG2FeO/L3FZc7LZN6XHjk6KCbv+rlZAT3fOv/tRp8g==, tarball: file:.dsh-portable-archives/dsh-image-viewer.tgz}
-    version: 0.1.2-beta.2
+    resolution: {integrity: sha512-9ilOoT/JmgHK06bDZjcfr2L7vSrinCmvaSFnB3RKl6nwKifrxK90n/WVRKOPuH7ggwuGwcjGqqcZOlgXefu7rQ==, tarball: file:.dsh-portable-archives/dsh-image-viewer.tgz}
+    version: 0.1.2
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
       '@deepseek-ai/cordis': 4.0.1 || 4.0.2 || 4.0.3
