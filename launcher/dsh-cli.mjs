@@ -1,4 +1,5 @@
 import { runCheckedPluginMutation } from './plugin-command-check.mjs'
+import { withPluginProfileTransaction } from './plugin-profile-transaction.mjs'
 import { spawn, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
@@ -374,7 +375,7 @@ async function relinkMovedProfileIfNeeded(spec, argv, adapters = {}) {
   const backupRoot = paths.join(profileRoot, `.node_modules.dsh-portable-backup-${process.pid}-${Date.now()}`)
   await rename(modulesRoot, backupRoot)
   try {
-    const repair = runMovedProfileRelinkWithFreshReleaseRecovery(spec, profile, {
+    const repair = adapters.repair ? await adapters.repair() : runMovedProfileRelinkWithFreshReleaseRecovery(spec, profile, {
       run: adapters.spawnSync,
       stdout: adapters.stdout,
       stderr: adapters.stderr,
@@ -484,22 +485,29 @@ export async function main(inputArgv = process.argv.slice(2), source = process.e
     const materializedArgv = await materializeRemotePluginArchives(argv, stateRoot, process.platform)
     const normalizedArgv = normalizeFreshReleaseRemovalArgv(materializedArgv)
     spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source, selected.environmentId)
-    await relinkMovedProfileIfNeeded(spec, normalizedArgv)
-
     const makeSpec = args => buildPluginCliSpec(root, stateRoot, args, process.platform, source, selected.environmentId)
-    const run = () => runPluginCommandWithFreshReleaseRecovery(spec, normalizedArgv, makeSpec)
     const profile = requestedProfile(argv)
     const profileRoot = path.resolve(spec.layout.dshHome, 'profiles', profile)
     const operation = argv[pluginOperationIndex(argv)]
     const guarded = profile && ['add', 'install', 'update', 'up'].includes(operation)
     if (guarded && !isInsidePath(profileRoot, path.join(spec.layout.dshHome, 'profiles'), process.platform)) throw new Error('Invalid plugin profile path.')
-    const result = guarded ? await runCheckedPluginMutation({
-      profileRoot, layout: spec.layout, run,
-      reinstall: () => {
+    const execute = async commandRunner => {
+      const adapters = commandRunner ? { run: commandRunner } : {}
+      const run = () => runPluginCommandWithFreshReleaseRecovery(spec, normalizedArgv, makeSpec, adapters)
+      const reinstall = () => {
         const args = ['plugin', '--profile', profile, 'install', '--no-frozen-lockfile', RELEASE_AGE_REMOVAL_OVERRIDE]
-        return runPluginCommandWithFreshReleaseRecovery(makeSpec(args), args, makeSpec)
-      },
-    }) : await run()
+        return runPluginCommandWithFreshReleaseRecovery(makeSpec(args), args, makeSpec, adapters)
+      }
+      await relinkMovedProfileIfNeeded(spec, normalizedArgv, commandRunner ? { repair: reinstall } : {})
+      return guarded ? runCheckedPluginMutation({ profileRoot, layout: spec.layout, run, reinstall }) : run()
+    }
+    // Other CLI commands and old cores retain their existing invocation path.
+    // A modern profile transaction must call the unlocked public operation,
+    // never the CLI that would try to acquire this same lock again.
+    const result = profile && normalizedArgv[0] === 'plugin' && normalizedArgv[1] === '--profile'
+      && pluginCliUsesStructuredArgv(spec.layout)
+      ? await withPluginProfileTransaction(spec, profile, execute)
+      : await execute()
     if (guarded && result.status !== 0 && result.stderr) process.stderr.write(result.stderr)
     const exitCode = Number.isInteger(result.status) ? result.status : 1
     if (exitCode === 0 && isMutatingPluginCommand(argv)) {
