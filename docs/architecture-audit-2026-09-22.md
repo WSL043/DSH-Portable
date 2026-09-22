@@ -41,7 +41,7 @@
 | ID | 优先级 / 状态 | 证据、影响 | 下一步与完成条件 |
 | --- | --- | --- | --- |
 | A01 | P0 / 已确认 | 本地预览直接改写 `runtime-cache/<原哈希>/app` 两个客户端文件；`readyRuntime()` 只核对 ready 身份与必需路径存在，不核对每个文件。修改后的字节仍挂在旧内容身份下，同哈希实例可能共享 | 改为独立候选运行时身份/受管预览覆盖，记录来源和哈希，提供撤回。验收两个同基线安装互不污染，重启和缓存修复行为明确；不能靠每次启动全量哈希扫描补救。当前预览不代表发布包损坏，暂不擅自撤去用户正在验收的界面 |
-| A02 | P0 / 已确认交付缺口 | chat-manager `53705ef` 已保留官方 workspace，但预览锁仍指向 `2af54bd`、1.4.0-beta.1；修复代码与锁定包并不相同 | 发布新的不可变插件版本后更新锁与摘要，验收旧用户升级、停用/启用、输入框、归档恢复/删除。不能原版本号覆盖重新打包 |
+| A02 | P0 / 插件已交付、产品锁已更新 | chat-manager `53705ef` 已保留官方 workspace，但预览锁仍指向 `2af54bd`、1.4.0-beta.1；修复代码与锁定包并不相同 | 发布新的不可变插件版本后更新锁与摘要，验收旧用户升级、停用/启用、输入框、归档恢复/删除。不能原版本号覆盖重新打包 |
 | A03 | P0 / 待复现并发风险 | `routes.ts` 有自己的 mutationBusy、disabled 集合和 internal/plugin 回写；Portable CLI 另有锁与快照；官方则锁 profile package.json | 绘出真实锁获取顺序和写入文件，三入口统一操作所有权。验收官方安装/启停与市场更新、CLI 同时操作时，拒绝/排队可解释，回滚不能覆盖另一成功操作；不能笼统声称当前没有任何锁 |
 | A04 | P0 / 已确认流程失败 | [35670402716](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/35670402716) 五个平台都报 `Portable plugin installation guidance: expected 1 match, found 0`。文案匹配阻断内核构建 | 将补丁分为数据/安全必需、桌面必需、可选呈现。可选文案不匹配应停用该适配并报告，必需补丁仍阻断。先输出本次内核/基线/脚本身份及失败组合；用同一组合验证。后续绿色检查不抹去此失败 |
 | A05 | P0 / 未甄别 | [CodeQL #922](https://github.com/WSL043/DSH-Portable/security/code-scanning/922) open/high，`bundled-updates.ts:9` 路径由 `DSH_PORTABLE_ROOT` 构造 | 追溯环境变量/根目录信任边界和所有调用，验证可否由远程输入影响。必要时只接受已验证安装根；若误报提交数据流证据。未甄别前不关闭，不等同已证实远程漏洞。Dependabot 本轮 open 为 0 |
@@ -93,7 +93,7 @@
 | A14 | P1 / 已确认边界 | update-core 的 journal 回滚程序/运行时/清单，不证明会话格式可降级 | 核心版本选择标出数据格式边界，升级前恢复点策略与程序回滚分开；V2/V3真实副本升级、降级拒绝/恢复验收 |
 | A15 | P1 / 待核查 | 产品/内核 feed 检查、桌面通知和页面任务多个消费者 | U01–U03 共用快照/事件、过期请求隔离；加载/失败/最新不同状态，版本列表升级后仍有适配历史；新基线要回读实际发布index |
 | A16 | P1 / 已确认保留缺口 | WebView2旧运行时缺乏覆盖原生使用的GC；浏览器数据混有登录；pnpm prune 会影响离线修复 | S01统一生命周期表与清理入口；运行租约/离线引用未明确前不自动删除。清理前后量化逻辑体积与实际可回收空间 |
-| A17 | P1 / 新发现需覆盖 | 官方 runProfilePnpm 每次创建 `.plugin-manager/logs/operation-*`；当前Portable日志轮转不覆盖该树，所读函数未见回收 | 查其他官方清理路径，统计实际增长；若无上限，按操作结束/活跃状态做有界保留。另列导入、修复、插件备份保留策略，不把恢复材料叫缓存 |
+| A17 | P1 / 已实现并定向验收，待产品发布 | 官方 runProfilePnpm 每次创建 `.plugin-manager/logs/operation-*`；当前Portable日志轮转不覆盖该树，所读函数未见回收 | 查其他官方清理路径，统计实际增长；若无上限，按操作结束/活跃状态做有界保留。另列导入、修复、插件备份保留策略，不把恢复材料叫缓存 |
 | A18 | P1 / 待长期验收 | 短时测试无法排除内存、监听、句柄和子进程随会话/插件切换增长 | 统一长稳脚本：空闲、流式、图片开关、百次导航、启停插件；记录基线/峰值/回落趋势及子进程。设可解释阈值，不只看最后一次内存 |
 | A19 | P1 / 已确认结构耦合 | Windows壳6537行、bridge client1551行、portable-core1347行，混合生命周期、菜单、更新、数据和平台操作 | 先按进程生命周期、窗口/命令、更新任务、数据权限抽模块；一次只换一个边界并保留行为验收，避免再加全局状态、全局DOM补丁或万能管理器 |
 | A20 | P1 / 待验收 | T01–T03与细边框、菜单外点/焦点、跨屏DPI仍有明确旧待办 | 接续原任务，不重复开单；Windows10/11及100–200%DPI、四边四角、菜单关闭、输入法/快捷键只触发一次 |
@@ -151,3 +151,12 @@ Chat Manager 1.4.0-beta.2 is published from 0eb3390698eaec92872e968d1af0ab88d00f
 The downloaded release package passed a separate synthetic profile on the actual Portable alpha.2 runtime: three enable/disable transitions preserve an editable composer; the sidebar archive icon opens the single Settings archive tab; body-only search, restore, red permanent deletion and cancellation pass without legacy dialogs or browser errors. Light/dark screenshots were inspected. This is real-host headless browser acceptance, not foreground WebView2 acceptance or a change to the current user profile. Official alpha.2 archive search only matches title/workspace; message-content search remains an extension.
 
 Default-plugin refresh now preserves explicitly disabled bundles after official plugin add. Twelve focused lifecycle tests passed before pin changes; final delivery test results are recorded separately. A02 source/registry/pin mismatch is resolved in source; distribution in the next Portable build remains pending.
+
+## 2026-09-22 后续闭环
+
+- A02：会话插件 1.4.0-beta.3 已发布（eebcd2e），Portable 预览锁在 46b2e4c 跟进。用户现用安装已启用 beta.3。beta.2 的归档按钮曾裁掉官方添加工作区入口，现保留四按钮并增加左右边缘命中验收，不能再以 DOM 中存在视为完整可见。
+- A17：新增 plugin-log-maintenance，采用运行时官方 withFileLock(package.json)，waitMs=0；官方安装/更新持锁时推迟，缺少官方锁能力时不清理。启动60秒后及每6小时执行，单次扫描时间预算1秒，每个profile最多扫描2000条，最多检查64个profile。超过预算保留并报告 limited，不宣称全部完成。
+- 每个profile仅清理 operation-XXXXXX/pnpm.log，保留最新一条、24小时内全部记录；其余按30份/14天/32MiB阈值保留。近期日志可超过容量阈值，不截断当前日志。含未知内容、符号链接的目录不递归删除；只 unlink 已检查日志并尝试 rmdir 空目录。历史清理可能使旧操作详情不再可读；最新及近期诊断证据保留。
+- 空间统计的“日志”现包含 profile 的插件操作日志，不扫描会话正文。定向68项通过；实际alpha.2锁占用实验保留0删除，锁释放后仅删除模拟过期记录；临时夹具自动清理。证据 build/plugin-log-maintenance-tests.log、build/plugin-log-lock-acceptance.jsonl。
+- 当前用户目录只读统计：pnpm约1,984,750,269逻辑字节（有链接跳过，非完整物理占用），日志约4,317,549字节。没有清理用户pnpm缓存、会话、备份或现用运行时。A16离线缓存引用保护仍未完成，不能默认 pnpm prune 安全。
+- 仍未关闭：A01共享缓存预览所有权、A03跨入口操作协调、A05安全告警甄别、A06真实行内更新及原生WebView验收，以及其余P1条目。本次不宣称达到全平台发版条件。

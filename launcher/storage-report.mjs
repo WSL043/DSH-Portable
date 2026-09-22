@@ -1,3 +1,4 @@
+import { profileLogDirectories } from './plugin-log-maintenance.mjs'
 import { lstat, opendir } from 'node:fs/promises'
 import path from 'node:path'
 
@@ -39,6 +40,18 @@ export async function inspectStorage(stateRoot, { maxEntries = 100000, timeoutMs
       continue
     }
     await visit(path.join(data, id))
+    if (id === 'logs') {
+      try {
+        const home = path.join(data, 'dsh-home')
+        const info = await lstat(home)
+        if (info.isSymbolicLink() || !info.isDirectory()) { result.complete = false; result.skippedLinks++; continue }
+        const discovery = await profileLogDirectories(home)
+        if (!discovery.complete) { result.complete = false; result.limited = true }
+        for (const { logs } of discovery.roots) await visit(logs)
+      } catch (error) {
+        if (error.code !== 'ENOENT') { result.complete = false; result.errors++ }
+      }
+    }
   }
   return { schemaVersion: 1, complete: categories.every(item => item.complete), categories }
 }

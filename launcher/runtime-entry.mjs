@@ -113,6 +113,23 @@ if (prepared.mode === 'capsule' && entryName === 'portable-host.mjs') {
     }).catch(error => appendStartupTrace(startupTrace, 'runtime-cache', 'maintenance-failed', { code: error?.code || 'unknown' }))
   }, 60_000).unref()
 }
+if (entryName === 'portable-host.mjs') {
+  const maintainProfileLogs = async () => {
+    try {
+      const { createRequire } = await import('node:module')
+      const requireRuntime = createRequire(path.join(prepared.runtimeRoot, 'app', 'package.json'))
+      const { withFileLock } = await import(pathToFileURL(requireRuntime.resolve('@deepseek-ai/dsh-atomic-write')).href)
+      const { maintainPluginLogs } = await import('./plugin-log-maintenance.mjs')
+      const result = await maintainPluginLogs(path.join(effectiveStateRoot, 'data', 'dsh-home'), withFileLock)
+      if (result.removed || result.deferred || result.limited) appendStartupTrace(startupTrace, 'plugin-logs', 'maintenance-complete', result)
+    } catch (error) {
+      appendStartupTrace(startupTrace, 'plugin-logs', 'maintenance-deferred', { code: error?.code || 'unsupported' })
+    }
+  }
+  // Off the startup path; one bounded pass after launch and during long-running use.
+  setTimeout(maintainProfileLogs, 60_000).unref()
+  setInterval(maintainProfileLogs, 6 * 60 * 60_000).unref()
+}
 try {
   await import(pathToFileURL(process.argv[1]).href)
 } finally {
