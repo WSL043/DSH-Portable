@@ -1,0 +1,29 @@
+{
+  "version": "0.7.1",
+  "zh": {
+    "summary": "修复已有插件配置异常导致其他插件更新失败，以及 GitHub 插件已是最新时重试仍报错的问题。",
+    "highlights": [
+      "更新检查区分原有异常与本次新增异常，避免无关插件层缺失时把成功的更新全部回滚。",
+      "保留更新目标加载检查和新增异常回滚；不会删除异常插件配置，也不会擅自启用已禁用插件。",
+      "GitHub 来源插件重复更新时核对远端提交，已是最新版本不再误报更新失败。"
+    ],
+    "knownIssues": [
+      "已有异常插件仍需单独处理；本次修复不会宣称这些异常已经恢复。",
+      "内置官方 DSH 为 0.1.7-alpha.1；候选内核通道另行提供通过兼容验证的新版本。"
+    ],
+    "upgradeNotes": ["退出 Portable 后再升级，保留原 data 和 workspace。"]
+  },
+  "en": {
+    "summary": "Fix unrelated existing profile faults rolling back successful plugin updates and false failures when retrying an already-current GitHub plugin.",
+    "highlights": [
+      "Compare profile validation before and after updates instead of attributing unchanged unrelated faults to the updated plugin.",
+      "Retain target loading checks and rollback for newly introduced faults. Preserve existing configuration and disabled plugins.",
+      "Verify the remote commit when a GitHub update leaves the revision unchanged; confirmed current builds no longer report a stale-update failure."
+    ],
+    "knownIssues": [
+      "Existing broken plugins still require separate attention; this fix does not claim to repair them.",
+      "The bundled official DSH is 0.1.7-alpha.1. The candidate core channel independently supplies newly qualified versions."
+    ],
+    "upgradeNotes": ["Exit Portable before upgrading and retain data and workspace."]
+  }
+}

@@ -34,12 +34,12 @@ import { preflightPluginImports } from './import-preflight.ts'
 import { runningAgentIds, type AgentsLookup } from './agents.ts'
 import { analyzeProfile, type DuplicateName } from './check.ts'
 import { applyBundleOrder, mergeOrder, readBundleRules, readBundleStack, validateOrder } from './order.ts'
-import { trialValidate } from './trial.ts'
-import { externalUpdateSource, findInstalledAlias, gitAllowBuildsKey, githubPinnedTarget, githubUpdateTarget, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
+import { introducedUpdateTrialErrors, trialValidate } from './trial.ts'
+import { externalUpdateSource, findInstalledAlias, gitAllowBuildsKey, githubPinnedTarget, githubRefOfTarget, githubUpdateTarget, installTargetFor, verifiedNpmTargetFor } from './sources.ts'
 import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
-import { checkUpdates, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
+import { checkUpdates, fetchGitHead, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
 import { bundledUpdateTarget } from './bundled-updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
@@ -1448,6 +1448,7 @@ export function mountMarketRoutes(
             const compatibilityBefore = assessProfile(config.profile, activeProfileDir)
             const bundlesBefore = brokenClientBundles(config.profile, activeProfileDir)
             const updateBootBefore = unresolvedProfileBundles()
+            const trialBefore = trialValidate(activeProfileDir, readBundleStack(activeProfileDir).community)
             const manifestBefore = readProfileManifestSnapshot(config.profile, activeProfileDir)
             const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
@@ -1492,6 +1493,13 @@ export function mountMarketRoutes(
                   ? readLockCommits(config.profile, activeProfileDir).get(repoKey) ?? null
                   : null,
               })
+              // A retry from an old card may already be at the remote commit.
+              // Only fresh remote evidence can distinguish that from pnpm
+              // silently retaining an outdated Git build; still run load checks.
+              if (stale && isGit && repoKey !== null && beforeCommit !== null) {
+                const head = await fetchGitHead(repoKey, githubRefOfTarget(spec) ?? undefined)
+                if (head === beforeCommit) stale = false
+              }
               if (stale) ok = false
               if (ok && !isGit) {
                 versionFailure = resolvedNpmUpdateFailure({
@@ -1539,12 +1547,18 @@ export function mountMarketRoutes(
             // see these because the entry file exists — the profile still
             // cannot boot until the next start.
             let trialError: string | null = null
+            let profileWarnings: Array<{ layer: string; message: string }> | undefined
             if (ok) {
               const stack = readBundleStack(activeProfileDir)
               const trial = trialValidate(activeProfileDir, stack.community)
-              if (!trial.ok) {
+              const introducedErrors = introducedUpdateTrialErrors(trialBefore.errors, trial.errors, name)
+              if (introducedErrors.length === 0 && trial.errors.length > 0) {
+                profileWarnings = trial.errors
+                logEvent('warn', 'update-existing-profile-fault', `${name}: unchanged unrelated faults: ${trial.errors.map(issue => `${issue.layer}: ${issue.message}`).join('; ')}`)
+              }
+              if (introducedErrors.length > 0) {
                 ok = false
-                const first = trial.errors[0]?.message ?? 'the composition would not boot'
+                const first = `${introducedErrors[0].layer}: ${introducedErrors[0].message}`
                 const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
                 rollbackOk = rollback.ok
                 rollbackDetail = rollback.detail
@@ -1669,6 +1683,7 @@ export function mountMarketRoutes(
               compatibility,
               ignoredBuilds,
               failureCode: versionFailure ?? undefined,
+              profileWarnings,
               staleReason: staleReason ?? undefined,
               error: versionFailureError ?? profileHealthError ?? trialError ?? brokenEntryError ?? hardFailureRollbackError ?? staleError ?? undefined,
               exitCode: result.exitCode,

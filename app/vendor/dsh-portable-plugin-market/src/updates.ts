@@ -151,7 +151,7 @@ export function parseGitRefAdvertisement(payload: string, ref?: string): string 
 }
 
 /** Read GitHub HEAD through the same endpoint `git clone` uses, without REST quota. */
-async function fetchGitHead(repo: string, ref?: string): Promise<string | null> {
+export async function fetchGitHead(repo: string, ref?: string): Promise<string | null> {
   try {
     const response = await marketFetch(`https://github.com/${repo}/info/refs?service=git-upload-pack`, {
       headers: { 'user-agent': 'git/2.40.0' },

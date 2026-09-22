@@ -38,6 +38,21 @@ export interface TrialIssue {
   message: string
 }
 
+/** Updates must not attribute an unchanged, unrelated profile fault to the new build. */
+export function introducedUpdateTrialErrors(before: TrialIssue[], after: TrialIssue[], target: string): TrialIssue[] {
+  const remaining = new Map<string, number>()
+  const key = (issue: TrialIssue) => JSON.stringify([issue.layer, issue.message])
+  for (const issue of before) remaining.set(key(issue), (remaining.get(key(issue)) ?? 0) + 1)
+  return after.filter(issue => {
+    // A broken target is never excused, even when it was broken before updating.
+    if (issue.layer.split(' / ').includes(target)) return true
+    const count = remaining.get(key(issue)) ?? 0
+    if (count === 0) return true
+    remaining.set(key(issue), count - 1)
+    return false
+  })
+}
+
 /** Current-vs-candidate composition diff (issue #125 review). */
 export interface TrialDiff {
   /** Override relationships introduced by the candidate (not present in the current composition). */

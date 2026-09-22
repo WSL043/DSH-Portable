@@ -8,6 +8,54 @@ import test from 'node:test'
 
 import { mountMarketRoutes } from '../app/vendor/dsh-portable-plugin-market/src/routes.ts'
 import { checkUpdates } from '../app/vendor/dsh-portable-plugin-market/src/updates.ts'
+import { introducedUpdateTrialErrors } from '../app/vendor/dsh-portable-plugin-market/src/trial.ts'
+
+test('update trial retains new, repeated and target faults but tolerates unchanged unrelated faults', () => {
+  const old = { layer: 'other', message: 'missing' }
+  const target = { layer: 'other / target', message: 'duplicate' }
+  const changed = { layer: 'other', message: 'invalid patch' }
+  assert.deepEqual(introducedUpdateTrialErrors([old, target], [old, old, target, changed], 'target'), [old, target, changed])
+})
+
+test('an existing unresolved official bundle does not roll back a valid unrelated update', async t => {
+  const bed = await updateTestbed(t, {
+    async onAdd({ manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.2.0')
+      return ok()
+    },
+  })
+  const manifest = JSON.parse(await readFile(bed.manifestFile, 'utf8'))
+  const missing = '@deepseek-ai/dsh-experimental-agent-team-web-profile'
+  manifest.dsh.profile.bundles.push(missing)
+  await writeFile(bed.manifestFile, JSON.stringify(manifest))
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 200, JSON.stringify(body))
+  assert.equal(body.ok, true)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '1.2.0')
+  assert.ok(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dsh.profile.bundles.includes(missing))
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 1)
+})
+
+test('a newly unresolved bundle still rolls back the update', async t => {
+  const bed = await updateTestbed(t, {
+    async onAdd({ target, manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      const version = target.endsWith('@1.0.0') ? '1.0.0' : '1.2.0'
+      manifest.dependencies['fixture-plugin'] = version
+      if (version === '1.2.0') manifest.dsh.profile.bundles.push('new-missing-layer')
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, version)
+      return ok()
+    },
+  })
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 502)
+  assert.match(body.error, /new-missing-layer/)
+  assert.equal(JSON.parse(await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8')).version, '1.0.0')
+})
 
 test('bad imports roll back installation and lockfile without changing user data', async t => {
   const lockfile = '# exact previous resolution\n'
@@ -149,6 +197,7 @@ async function updateTestbed(t, {
   installed = true,
   installedVersion = '1.0.0',
   loaderEntries = [],
+  gitHead = null,
 }) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
   t.after(() => rm(profile, { recursive: true, force: true }))
@@ -200,6 +249,9 @@ async function updateTestbed(t, {
   const previousProxy = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]))
   for (const key of proxyKeys) delete process.env[key]
   globalThis.fetch = async (url) => {
+    if (String(url) === 'https://github.com/owner/fixture-plugin/info/refs?service=git-upload-pack') {
+      return gitHead === null ? new Response('', { status: 503 }) : new Response(`${gitHead} HEAD\n`)
+    }
     if (String(url) === 'https://awesome-dsh-plugin.com/plugins.json') {
       return new Response(JSON.stringify({
         updated: '2026-09-05T00:00:00.000Z',
@@ -475,6 +527,22 @@ test('deferred rollback refuses to overwrite a subsequent external profile chang
   assert.equal(rolledBack.response.status, 409)
   assert.equal(await readFile(bed.manifestFile, 'utf8'), bytes)
   assert.equal(bed.calls.length, count)
+})
+
+test('unchanged Git builds succeed only when fresh remote evidence confirms they are current', async t => {
+  const commit = 'a'.repeat(40)
+  for (const gitHead of [commit, 'b'.repeat(40), null]) {
+    await t.test(gitHead ?? 'unavailable', async t => {
+      const bed = await updateTestbed(t, {
+        spec: 'github:owner/fixture-plugin', gitHead,
+        lockfile: `resolution: {tarball: https://codeload.github.com/owner/fixture-plugin/tar.gz/${commit}}\n`,
+        onAdd: async () => ok(),
+      })
+      const { body } = await bed.update()
+      assert.equal(body.ok, gitHead === commit)
+      assert.equal(body.stale === true, gitHead !== commit)
+    })
+  }
 })
 
 test('a hard-failed GitHub update restores the captured commit and floating source spelling', async (t) => {
