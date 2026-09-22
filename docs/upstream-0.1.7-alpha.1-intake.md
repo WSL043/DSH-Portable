@@ -30,3 +30,13 @@ No real user session migration, default-plugin publication, new-core delivery or
 - Market regression: 126 passed; server/client bundles built. Tests probe an actual failing import from the second patch, missing later files, order, empty arrays and unsafe members. Evidence: `build/alpha7-market-regression.log`, `build/alpha7-market-build.log`. These are source-boundary tests; full modern official installation/reconnect and native candidate qualification remain pending. Peer declarations and supported locks remain unchanged.
 
 Formal publication remains blocked on the uncompleted integration and product gates above and the architecture audit. Do not promote these targeted passes into full release readiness.
+
+## Further acceptance and packaging blocker
+
+Image Viewer initially failed to open on the real alpha.1 host: React error 130 was caught by the overlay boundary because the official sized icon names were removed. Source commit `3286adf` now uses official Regular icons with older-host fallbacks. Actual isolated-host acceptance passed navigation, zoom/pan, download, annotations and returning the annotated image/notes to the original draft. Screenshot inspected; 31 source tests passed. Not yet a published/default-pinned artifact.
+
+Portable full local regression: 769 tests, 756 passed, 6 failed during file-symlink fixture creation (EPERM), 7 skipped. Original log: build/alpha7-full-regression.log. Security CI 35706496568 on the exact 5681eb1 revision passed the affected filesystem checks in Windows/macOS/Linux jobs; it does not turn the local result into an all-pass result.
+
+Product CI 35706496652 failed all five packaging jobs because the preview offline dependency lock still referenced Chat Manager beta.1 while the reviewed release pins referenced beta.3. This is a real delivery mismatch, not a reason to bypass archive verification. The lock was regenerated from SHA-256-verified pinned archives; only the chat archive version/integrity changed. New stable/preview lock contracts check versions, integrity, importer specifiers and package sets before packaging. Actual prepare-default-plugin-store succeeded with the two reviewed preview archives. Original CI log: build/alpha7-product-ci-failure.log; correction evidence: build/default-plugin-store-lock-tests.log and build/default-store-preparation.log. Product CI must pass again before qualification.
+
+Cleanup: two obsolete v2 storage-test fixtures were moved to the Recycle Bin after validating their synthetic package identity. Their result/log files remain in build/cleanup-evidence-20260922. Current candidate runtimes and acceptance evidence are retained for the outstanding work.
