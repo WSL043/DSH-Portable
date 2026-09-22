@@ -1,3 +1,5 @@
+import { profileRevision } from './profile-revision.ts'
+import { createOfficialTransactionRuntime, type OfficialTransactionRuntime } from './official-transaction.ts'
 import { createLegacyDisableReplay } from './disable-replay.ts'
 /**
  * HTTP routes bridging the browser market UI to the host. This layer only
@@ -242,7 +244,17 @@ export function mountMarketRoutes(
   // here so DSH's own HMR re-composes the tree (no restart) and the loader
   // re-applies the same choice on every boot (ported from dsh-plugin-hub).
   const userPatchPath = findUserPatchPath(host, activeProfileDir)
-  const commands = commandRuntime ?? { runPlugin: runDshPlugin, probePnpm, provisionPnpm, cancelActive }
+  let officialRuntime: OfficialTransactionRuntime | null = null
+  // Services can arrive after route mounting; do not permanently select the
+  // legacy writer just because pluginManager had not been provided yet.
+  const official = () => commandRuntime ? null : (officialRuntime ??= createOfficialTransactionRuntime(host, activeProfileDir))
+  const legacyCommands = { runPlugin: runDshPlugin, probePnpm, provisionPnpm, cancelActive }
+  const commands = commandRuntime ?? {
+    runPlugin: (...args: Parameters<typeof runDshPlugin>) => (official() ?? legacyCommands).runPlugin(...args),
+    probePnpm: () => (official() ?? legacyCommands).probePnpm(),
+    provisionPnpm: () => (official() ?? legacyCommands).provisionPnpm(),
+    cancelActive: () => (official() ?? legacyCommands).cancelActive(),
+  }
   // Boot-time wipe: stale hot-mount inputs from a previous session must never
   // survive into a composition where the bundle layer already covers them.
   cleanHotDir(activeProfileDir)
@@ -316,7 +328,16 @@ export function mountMarketRoutes(
     if (kind === 'install') installing = true
     else writing = true
     try {
-      const run = mutationChain.then(async () => fn())
+      const run = mutationChain.then(async () => {
+        const runtime = official()
+        if (!runtime) return fn()
+        try { return await runtime.withMutation(fn) }
+        catch (error) {
+          if ((error as { code?: string }).code !== 'PROFILE_BUSY') throw error
+          sendJson(response, 409, { error: 'Another plugin operation is running. Retry when it finishes. / 其他插件操作正在进行，请完成后重试。' })
+          return null
+        }
+      })
       mutationChain = run.catch(() => undefined)
       return await run
     } finally {
@@ -487,6 +508,7 @@ export function mountMarketRoutes(
   }
 
   interface PendingRollback {
+    revision: string
     id: string
     kind: 'update' | 'install'
     names: string[]
@@ -498,9 +520,9 @@ export function mountMarketRoutes(
   const pendingRollbacks = new Map<string, PendingRollback>()
   let rollbackSequence = 0
 
-  function savePendingRollback(record: Omit<PendingRollback, 'id'>): string {
+  function savePendingRollback(record: Omit<PendingRollback, 'id' | 'revision'>): string {
     const id = `rollback-${String(rollbackSequence++)}`
-    pendingRollbacks.set(id, { ...record, id })
+    pendingRollbacks.set(id, { ...record, id, revision: profileRevision(activeProfileDir) })
     return id
   }
 
@@ -932,28 +954,30 @@ export function mountMarketRoutes(
                 return
               }
               backup = createProfileBackup(config.profile, activeProfileDir)
-              const applied = applyBundleOrder(activeProfileDir, order)
-              if (!applied.ok) {
-                sendJson(response, 400, { error: applied.error })
-                return
+              try {
+                const applied = applyBundleOrder(activeProfileDir, order)
+                if (!applied.ok) {
+                  sendJson(response, 400, { error: applied.error })
+                  return
+                }
+                invalidateUpdates()
+                logEvent('info', 'bundle-order', 'applied new community order')
+                sendJson(response, 200, { ok: true, bundles: applied.bundles })
+              } catch (error) {
+                // Restore before releasing the official profile lock. A failed
+                // restore must not mask the original write failure.
+                if (backup !== null) {
+                  try {
+                    restoreProfileBackup(config.profile, backup, activeProfileDir)
+                    logEvent('error', 'bundle-order', `write failed — profile restored from pre-write backup: ${error instanceof Error ? error.message : String(error)}`)
+                  } catch {
+                    logEvent('error', 'bundle-order', 'write failed AND automatic rollback failed')
+                  }
+                }
+                throw error
               }
-              invalidateUpdates()
-              logEvent('info', 'bundle-order', 'applied new community order')
-              sendJson(response, 200, { ok: true, bundles: applied.bundles })
           })
         } catch (error) {
-          // The write threw mid-flight: restore the pre-write profile so a
-          // broken manifest can never stop DSH from starting (issue #125,
-          // lesson from #122). Best-effort — a failing restore must not mask
-          // the original error.
-          if (backup !== null) {
-            try {
-              restoreProfileBackup(config.profile, backup, activeProfileDir)
-              logEvent('error', 'bundle-order', `write failed — profile restored from pre-write backup: ${error instanceof Error ? error.message : String(error)}`)
-            } catch {
-              logEvent('error', 'bundle-order', 'write failed AND automatic rollback failed')
-            }
-          }
           sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
         }
       },
@@ -973,17 +997,19 @@ export function mountMarketRoutes(
           return
         }
         try {
-          const body = (await readJsonBody(request)) as { name?: unknown }
-          const name = typeof body.name === 'string' ? body.name : ''
-          const installed = readInstalled(config.profile, activeProfileDir)
-          const themeNames = await themes.installedThemeNames()
-          if (installed[name] === undefined || !themeNames.has(name)) {
-            sendJson(response, 400, { error: 'not an installed theme' })
-            return
-          }
-          const activated = await themes.activateTheme(name)
-          logEvent(activated ? 'info' : 'error', 'use-skin', `${name}: ${activated ? 'active' : 'failed'}`)
-          sendJson(response, activated ? 200 : 502, { ok: activated, live: listHotMounts() })
+          await withMutationLock(response, 'write', async () => {
+            const body = (await readJsonBody(request)) as { name?: unknown }
+            const name = typeof body.name === 'string' ? body.name : ''
+            const installed = readInstalled(config.profile, activeProfileDir)
+            const themeNames = await themes.installedThemeNames()
+            if (installed[name] === undefined || !themeNames.has(name)) {
+              sendJson(response, 400, { error: 'not an installed theme' })
+              return
+            }
+            const activated = await themes.activateTheme(name)
+            logEvent(activated ? 'info' : 'error', 'use-skin', `${name}: ${activated ? 'active' : 'failed'}`)
+            sendJson(response, activated ? 200 : 502, { ok: activated, live: listHotMounts() })
+          })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           logEvent('error', 'use-skin', `route error: ${message}`)
@@ -1006,100 +1032,102 @@ export function mountMarketRoutes(
           return
         }
         try {
-          const body = (await readJsonBody(request)) as { name?: unknown; enabled?: unknown }
-          const name = typeof body.name === 'string' ? body.name : ''
-          const enabled = body.enabled === true
-          if (name === 'dsh-market' || name === 'dshmarket') {
-            sendJson(response, 400, { error: 'the market cannot be disabled from its own page; use the dsh CLI' })
-            return
-          }
-          if (readInstalled(config.profile, activeProfileDir)[name] === undefined) {
-            sendJson(response, 400, { error: 'plugin is not installed' })
-            return
-          }
-          // Host infrastructure (port of dsh-plugin-hub): switching off the
-          // timer/hmr/webserver/storage chain would break the very HMR the
-          // patch layer relies on, so those rows refuse to toggle.
-          if (isProtectedModule(name)) {
-            sendJson(response, 403, {
-              error: `${name} 属于宿主基础设施,禁止开关(会破坏热加载/传输/存储链) / ${name} is host infrastructure and cannot be toggled (it would break the hot-reload/transport/storage chain)`,
-            })
-            return
-          }
-          let ok: boolean
-          let reason: string | undefined
-          if (enabled && (await themes.installedThemeNames()).has(name)) {
-            // Theme exclusivity stays a Themes-page concern: enabling a theme
-            // deactivates the previously active one, so only the last-enabled
-            // theme is live (same semantics as use-skin).
-            ok = await themes.activateTheme(name)
-            if (!ok) reason = 'theme activation failed — restart required / 主题启用失败，需要重启'
-          } else {
-            const result = await setPluginEnabled(name, enabled)
-            ok = result.ok
-            reason = result.reason
-          }
-          // Durable patch-layer write (port of dsh-plugin-hub): the package's
-          // bundle rows get 'disabled: true|false' in the user patch layer,
-          // which DSH's HMR applies within ~1s AND the loader re-applies on
-          // every boot. Client-only packages have no bundle rows — the
-          // market's own state.json replay covers those.
-          const patchRows = rowIdsForPackage(host, activeProfileDir, name)
-          const carrier = carrierDisableIds(activeProfileDir, name)
-          const isCarrier = carrier.length > 0
-          let bundleSwitch: { ok: boolean; reason: string | null } = { ok: true, reason: null }
-          if (isCarrier) {
-            try {
-              if (enabled) addProfileBundle(activeProfileDir, name)
-              else removeProfileBundle(activeProfileDir, name)
-            } catch (error) {
-              bundleSwitch = { ok: false, reason: error instanceof Error ? error.message : String(error) }
-              ok = false
-              reason = bundleSwitch.reason ?? reason
+          await withMutationLock(response, 'write', async () => {
+            const body = (await readJsonBody(request)) as { name?: unknown; enabled?: unknown }
+            const name = typeof body.name === 'string' ? body.name : ''
+            const enabled = body.enabled === true
+            if (name === 'dsh-market' || name === 'dshmarket') {
+              sendJson(response, 400, { error: 'the market cannot be disabled from its own page; use the dsh CLI' })
+              return
             }
-          }
-          let patchWrite: { ok: boolean; reason: string | null } | null = null
-          if (patchRows.length > 0) {
-            for (const rowId of patchRows) {
-              const result = enabled ? await enableRow(userPatchPath, rowId) : await disableRow(userPatchPath, rowId)
-              if (!result.ok && patchWrite === null) patchWrite = result
+            if (readInstalled(config.profile, activeProfileDir)[name] === undefined) {
+              sendJson(response, 400, { error: 'plugin is not installed' })
+              return
             }
-            if (patchWrite === null) {
-              logEvent('info', 'toggle', `${name}: patch layer ${enabled ? 'enabled' : 'disabled'} rows ${patchRows.join(', ')}`)
+            // Host infrastructure (port of dsh-plugin-hub): switching off the
+            // timer/hmr/webserver/storage chain would break the very HMR the
+            // patch layer relies on, so those rows refuse to toggle.
+            if (isProtectedModule(name)) {
+              sendJson(response, 403, {
+                error: `${name} 属于宿主基础设施,禁止开关(会破坏热加载/传输/存储链) / ${name} is host infrastructure and cannot be toggled (it would break the hot-reload/transport/storage chain)`,
+              })
+              return
+            }
+            let ok: boolean
+            let reason: string | undefined
+            if (enabled && (await themes.installedThemeNames()).has(name)) {
+              // Theme exclusivity stays a Themes-page concern: enabling a theme
+              // deactivates the previously active one, so only the last-enabled
+              // theme is live (same semantics as use-skin).
+              ok = await themes.activateTheme(name)
+              if (!ok) reason = 'theme activation failed — restart required / 主题启用失败，需要重启'
             } else {
-              logEvent('warn', 'toggle', `${name}: patch layer write refused — ${patchWrite.reason}`)
+              const result = await setPluginEnabled(name, enabled)
+              ok = result.ok
+              reason = result.reason
             }
-          }
-          logEvent(ok ? 'info' : 'error', 'toggle', `${name}: ${enabled ? 'on' : 'off'} ok=${String(ok)}`)
-          // Activation reads the post-write truth: the switch state OR the
-          // patch layer, so a disabled plugin never reports "restart to
-          // apply".
-          const patchNow = readUserPatchState(userPatchPath)
-          const offNow = disabled.has(name) || patchRows.some(id => patchNow.disables.includes(id))
-          // When the live composition does not match the requested state
-          // (enable failed to hot-mount / disable left the fiber up), the
-          // change lands on the next boot via the patch layer + state.json —
-          // the client reuses the market's pending-restart banner for it.
-          const liveAfter = liveNames().has(name)
-          const restart = isCarrier ? true : enabled ? !liveAfter : liveAfter
-          // A client-part plugin's UI is in the page already — toggling it
-          // needs a browser refresh to show the change (same signal the
-          // install flow uses for the hot banner).
-          const refresh = packageHasClientPart(activeProfileDir, name)
-          sendJson(response, ok ? 200 : 502, {
-            ok,
-            name,
-            enabled,
-            disabled: [...disabled],
-            live: listHotMounts(),
-            activation: { [name]: verifyActivation(config.profile, name, liveNames(), activeProfileDir, offNow) },
-            reason,
-            patchRows,
-            patchWrite: patchWrite ?? { ok: true, reason: null },
-            carrier,
-            bundleSwitch,
-            restart,
-            refresh,
+            // Durable patch-layer write (port of dsh-plugin-hub): the package's
+            // bundle rows get 'disabled: true|false' in the user patch layer,
+            // which DSH's HMR applies within ~1s AND the loader re-applies on
+            // every boot. Client-only packages have no bundle rows — the
+            // market's own state.json replay covers those.
+            const patchRows = rowIdsForPackage(host, activeProfileDir, name)
+            const carrier = carrierDisableIds(activeProfileDir, name)
+            const isCarrier = carrier.length > 0
+            let bundleSwitch: { ok: boolean; reason: string | null } = { ok: true, reason: null }
+            if (isCarrier) {
+              try {
+                if (enabled) addProfileBundle(activeProfileDir, name)
+                else removeProfileBundle(activeProfileDir, name)
+              } catch (error) {
+                bundleSwitch = { ok: false, reason: error instanceof Error ? error.message : String(error) }
+                ok = false
+                reason = bundleSwitch.reason ?? reason
+              }
+            }
+            let patchWrite: { ok: boolean; reason: string | null } | null = null
+            if (patchRows.length > 0) {
+              for (const rowId of patchRows) {
+                const result = enabled ? await enableRow(userPatchPath, rowId) : await disableRow(userPatchPath, rowId)
+                if (!result.ok && patchWrite === null) patchWrite = result
+              }
+              if (patchWrite === null) {
+                logEvent('info', 'toggle', `${name}: patch layer ${enabled ? 'enabled' : 'disabled'} rows ${patchRows.join(', ')}`)
+              } else {
+                logEvent('warn', 'toggle', `${name}: patch layer write refused — ${patchWrite.reason}`)
+              }
+            }
+            logEvent(ok ? 'info' : 'error', 'toggle', `${name}: ${enabled ? 'on' : 'off'} ok=${String(ok)}`)
+            // Activation reads the post-write truth: the switch state OR the
+            // patch layer, so a disabled plugin never reports "restart to
+            // apply".
+            const patchNow = readUserPatchState(userPatchPath)
+            const offNow = disabled.has(name) || patchRows.some(id => patchNow.disables.includes(id))
+            // When the live composition does not match the requested state
+            // (enable failed to hot-mount / disable left the fiber up), the
+            // change lands on the next boot via the patch layer + state.json —
+            // the client reuses the market's pending-restart banner for it.
+            const liveAfter = liveNames().has(name)
+            const restart = isCarrier ? true : enabled ? !liveAfter : liveAfter
+            // A client-part plugin's UI is in the page already — toggling it
+            // needs a browser refresh to show the change (same signal the
+            // install flow uses for the hot banner).
+            const refresh = packageHasClientPart(activeProfileDir, name)
+            sendJson(response, ok ? 200 : 502, {
+              ok,
+              name,
+              enabled,
+              disabled: [...disabled],
+              live: listHotMounts(),
+              activation: { [name]: verifyActivation(config.profile, name, liveNames(), activeProfileDir, offNow) },
+              reason,
+              patchRows,
+              patchWrite: patchWrite ?? { ok: true, reason: null },
+              carrier,
+              bundleSwitch,
+              restart,
+              refresh,
+            })
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
@@ -1123,75 +1151,77 @@ export function mountMarketRoutes(
           return
         }
         try {
-          const body = (await readJsonBody(request)) as {
-            action?: unknown
-            name?: unknown
-            newName?: unknown
-            members?: unknown
-            enabled?: unknown
-          }
-          const action = typeof body.action === 'string' ? body.action : ''
-          const known = action === 'create' || action === 'rename' || action === 'delete'
-            || action === 'set-members' || action === 'toggle'
-          if (!known) {
-            sendJson(response, 400, { ok: false, error: 'unknown group action' })
-            return
-          }
-          const installed = new Set(Object.keys(readInstalled(config.profile, activeProfileDir)))
-          // Theme members follow the global one-active-theme rule: a group
-          // holds at most one, and enabling one deactivates every other.
-          const themeNames = await themes.installedThemeNames()
-          let ok = true
-          let error: string | undefined
-          let restartMembers: string[] = []
-          let refreshMembers: string[] = []
-          if (action === 'toggle') {
-            const name = typeof body.name === 'string' ? body.name : ''
-            const enabled = body.enabled === true
-            if (groups[name] === undefined) {
-              sendJson(response, 400, { ok: false, error: 'group not found / 分组不存在' })
+          await withMutationLock(response, 'write', async () => {
+            const body = (await readJsonBody(request)) as {
+              action?: unknown
+              name?: unknown
+              newName?: unknown
+              members?: unknown
+              enabled?: unknown
+            }
+            const action = typeof body.action === 'string' ? body.action : ''
+            const known = action === 'create' || action === 'rename' || action === 'delete'
+              || action === 'set-members' || action === 'toggle'
+            if (!known) {
+              sendJson(response, 400, { ok: false, error: 'unknown group action' })
               return
             }
-            // Batch toggle: on = every installed member enabled, off = every
-            // member disabled. Each member keeps its own persisted flag, so
-            // later individual toggles still work (the group switch itself is
-            // derived state and never stored).
-            const failures: string[] = []
-            for (const member of groups[name]) {
-              if (!installed.has(member)) continue
-              const result = enabled && themeNames.has(member)
-                ? { ok: await themes.activateTheme(member), reason: undefined }
-                : await setPluginEnabled(member, enabled)
-              if (!result.ok) failures.push(member)
-              // Same live-mismatch signal as the single toggle: a member
-              // whose fiber did not follow the switch needs a boot.
-              const liveAfter = liveNames().has(member)
-              if ((enabled && !liveAfter) || (!enabled && liveAfter)) restartMembers.push(member)
-              // Client-part members need a page refresh to show the change.
-              if (packageHasClientPart(activeProfileDir, member)) refreshMembers.push(member)
+            const installed = new Set(Object.keys(readInstalled(config.profile, activeProfileDir)))
+            // Theme members follow the global one-active-theme rule: a group
+            // holds at most one, and enabling one deactivates every other.
+            const themeNames = await themes.installedThemeNames()
+            let ok = true
+            let error: string | undefined
+            let restartMembers: string[] = []
+            let refreshMembers: string[] = []
+            if (action === 'toggle') {
+              const name = typeof body.name === 'string' ? body.name : ''
+              const enabled = body.enabled === true
+              if (groups[name] === undefined) {
+                sendJson(response, 400, { ok: false, error: 'group not found / 分组不存在' })
+                return
+              }
+              // Batch toggle: on = every installed member enabled, off = every
+              // member disabled. Each member keeps its own persisted flag, so
+              // later individual toggles still work (the group switch itself is
+              // derived state and never stored).
+              const failures: string[] = []
+              for (const member of groups[name]) {
+                if (!installed.has(member)) continue
+                const result = enabled && themeNames.has(member)
+                  ? { ok: await themes.activateTheme(member), reason: undefined }
+                  : await setPluginEnabled(member, enabled)
+                if (!result.ok) failures.push(member)
+                // Same live-mismatch signal as the single toggle: a member
+                // whose fiber did not follow the switch needs a boot.
+                const liveAfter = liveNames().has(member)
+                if ((enabled && !liveAfter) || (!enabled && liveAfter)) restartMembers.push(member)
+                // Client-part members need a page refresh to show the change.
+                if (packageHasClientPart(activeProfileDir, member)) refreshMembers.push(member)
+              }
+              ok = failures.length === 0
+              if (!ok) error = `failed to ${enabled ? 'enable' : 'disable'}: ${failures.join(', ')}`
+            } else {
+              const state = { groups, groupOrder }
+              const result = action === 'create' ? createGroup(state, body.name)
+                : action === 'rename' ? renameGroup(state, body.name, body.newName)
+                : action === 'delete' ? deleteGroup(state, body.name)
+                : setGroupMembers(state, body.name, body.members, installed, themeNames)
+              ok = result.ok
+              error = result.error
             }
-            ok = failures.length === 0
-            if (!ok) error = `failed to ${enabled ? 'enable' : 'disable'}: ${failures.join(', ')}`
-          } else {
-            const state = { groups, groupOrder }
-            const result = action === 'create' ? createGroup(state, body.name)
-              : action === 'rename' ? renameGroup(state, body.name, body.newName)
-              : action === 'delete' ? deleteGroup(state, body.name)
-              : setGroupMembers(state, body.name, body.members, installed, themeNames)
-            ok = result.ok
-            error = result.error
-          }
-          if (ok) writeMarketState(activeProfileDir, { disabled, groups, groupOrder })
-          logEvent(ok ? 'info' : 'warn', 'groups',
-            `${action}${typeof body.name === 'string' ? ' ' + body.name : ''}${ok ? '' : ` — ${error ?? ''}`}`)
-          sendJson(response, ok ? 200 : 400, {
-            ok,
-            error,
-            groups,
-            groupOrder,
-            disabled: [...disabled],
-            restartMembers,
-            refreshMembers,
+            if (ok) writeMarketState(activeProfileDir, { disabled, groups, groupOrder })
+            logEvent(ok ? 'info' : 'warn', 'groups',
+              `${action}${typeof body.name === 'string' ? ' ' + body.name : ''}${ok ? '' : ` — ${error ?? ''}`}`)
+            sendJson(response, ok ? 200 : 400, {
+              ok,
+              error,
+              groups,
+              groupOrder,
+              disabled: [...disabled],
+              restartMembers,
+              refreshMembers,
+            })
           })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
@@ -1713,23 +1743,25 @@ export function mountMarketRoutes(
           return
         }
         try {
-          const body = (await readJsonBody(request)) as { channel?: unknown }
-          const wanted = asChannel(body.channel)
-          if (wanted === null) {
-            sendJson(response, 400, { error: 'channel must be "stable", "beta" or "dev"' })
-            return
-          }
-          config.channel = wanted
-          // Persisted with the market's own durable state, so the choice
-          // survives a restart — a setting that forgets is a setting the
-          // user has to make again every boot.
-          marketState.channel = wanted
-          writeMarketState(activeProfileDir, marketState)
-          // The cached listing was computed for the old channel, so the very
-          // next check would answer for a setting that no longer applies.
-          invalidateUpdates()
-          logEvent('info', 'channel', `release channel set to ${wanted}`)
-          sendJson(response, 200, { ok: true, channel: wanted })
+          await withMutationLock(response, 'write', async () => {
+            const body = (await readJsonBody(request)) as { channel?: unknown }
+            const wanted = asChannel(body.channel)
+            if (wanted === null) {
+              sendJson(response, 400, { error: 'channel must be "stable", "beta" or "dev"' })
+              return
+            }
+            config.channel = wanted
+            // Persisted with the market's own durable state, so the choice
+            // survives a restart — a setting that forgets is a setting the
+            // user has to make again every boot.
+            marketState.channel = wanted
+            writeMarketState(activeProfileDir, marketState)
+            // The cached listing was computed for the old channel, so the very
+            // next check would answer for a setting that no longer applies.
+            invalidateUpdates()
+            logEvent('info', 'channel', `release channel set to ${wanted}`)
+            sendJson(response, 200, { ok: true, channel: wanted })
+          })
         } catch (error) {
           sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
         }
@@ -1896,73 +1928,75 @@ export function mountMarketRoutes(
           return
         }
         try {
-          // One-click build-script approval (#6 by @qichuang321): only
-          // packages physically present in the profile's installed tree can
-          // be allowed — the list is not free input. Presence is checked in
-          // node_modules, NOT the dependencies map: pnpm's blocked build
-          // scripts are usually TRANSITIVE deps (cloudflared, ssh2,
-          // cpu-features…), which never appear in package.json (#56 by
-          // @walnut1218).
-          // pnpm 11's ndjson `ignored-scripts` event reports version-qualified
-          // names (cloudflared@0.7.3); strip the @version suffix so the
-          // allowlist keys and node_modules lookups use bare package names.
-          const stripVersion = (name: string): string => {
-            const at = name.lastIndexOf('@')
-            return at > 0 ? name.slice(0, at) : name
-          }
-          const PKG_RE = /^(@[A-Za-z0-9-~][A-Za-z0-9._~-]*\/)?[A-Za-z0-9-~][A-Za-z0-9._~-]*$/
-          const body = (await readJsonBody(request)) as { packages?: unknown }
-          const requested = (Array.isArray(body.packages) ? body.packages.map(String).map(stripVersion) : [])
-            .filter(name => PKG_RE.test(name))
-          const installed = requested
-            .filter(name => existsSync(join(activeProfileDir, 'node_modules', name, 'package.json')))
-          // Git-hosted plugins rejected by pnpm's FETCHER (#68) exist in
-          // neither node_modules nor package.json — the only trusted anchor
-          // left is the curated registry itself: a name that resolves to a
-          // github-sourced catalog entry may be approved pre-materialization.
-          //
-          // pnpm only matches a git-hosted dep's allowBuilds entry under its
-          // stable `name@git+https://…` key (#68/#69) — a bare name entry is
-          // ignored (verified against pnpm 11.21). Derive that key wherever
-          // the github source is known: from the profile spec for installed
-          // deps, from the curated registry for pending ones. The bare name
-          // is kept alongside — it authorizes the npm-sourced case.
-          const specs = readInstalled(config.profile, activeProfileDir)
-          const packages: string[] = []
-          for (const name of requested) {
-            if (installed.includes(name)) {
-              packages.push(name)
-              const key = gitAllowBuildsKey(name, String(specs[name] ?? ''))
-              if (key !== null) packages.push(key)
-              continue
+          await withMutationLock(response, 'write', async () => {
+            // One-click build-script approval (#6 by @qichuang321): only
+            // packages physically present in the profile's installed tree can
+            // be allowed — the list is not free input. Presence is checked in
+            // node_modules, NOT the dependencies map: pnpm's blocked build
+            // scripts are usually TRANSITIVE deps (cloudflared, ssh2,
+            // cpu-features…), which never appear in package.json (#56 by
+            // @walnut1218).
+            // pnpm 11's ndjson `ignored-scripts` event reports version-qualified
+            // names (cloudflared@0.7.3); strip the @version suffix so the
+            // allowlist keys and node_modules lookups use bare package names.
+            const stripVersion = (name: string): string => {
+              const at = name.lastIndexOf('@')
+              return at > 0 ? name.slice(0, at) : name
             }
-            if (specs[name] !== undefined) continue
-            // The catalog can now FAIL rather than quietly serving a bundled
-            // copy, and this key is an optimisation, not a requirement: the
-            // bare name already authorizes the npm-sourced case, and a git
-            // source that misses its key simply prompts again. Losing the
-            // catalog must not turn "allow this build" into a 500.
-            let entry
-            try {
-              entry = (await loadRegistry({ cacheFile: registryCacheFile })).plugins.find(p => p.name === name || p.npm === name)
-            } catch (error) {
-              logEvent('warn', 'approve-builds', `catalog unavailable, authorizing ${name} by name only: ${error instanceof Error ? error.message : String(error)}`)
-              packages.push(name)
-              continue
+            const PKG_RE = /^(@[A-Za-z0-9-~][A-Za-z0-9._~-]*\/)?[A-Za-z0-9-~][A-Za-z0-9._~-]*$/
+            const body = (await readJsonBody(request)) as { packages?: unknown }
+            const requested = (Array.isArray(body.packages) ? body.packages.map(String).map(stripVersion) : [])
+              .filter(name => PKG_RE.test(name))
+            const installed = requested
+              .filter(name => existsSync(join(activeProfileDir, 'node_modules', name, 'package.json')))
+            // Git-hosted plugins rejected by pnpm's FETCHER (#68) exist in
+            // neither node_modules nor package.json — the only trusted anchor
+            // left is the curated registry itself: a name that resolves to a
+            // github-sourced catalog entry may be approved pre-materialization.
+            //
+            // pnpm only matches a git-hosted dep's allowBuilds entry under its
+            // stable `name@git+https://…` key (#68/#69) — a bare name entry is
+            // ignored (verified against pnpm 11.21). Derive that key wherever
+            // the github source is known: from the profile spec for installed
+            // deps, from the curated registry for pending ones. The bare name
+            // is kept alongside — it authorizes the npm-sourced case.
+            const specs = readInstalled(config.profile, activeProfileDir)
+            const packages: string[] = []
+            for (const name of requested) {
+              if (installed.includes(name)) {
+                packages.push(name)
+                const key = gitAllowBuildsKey(name, String(specs[name] ?? ''))
+                if (key !== null) packages.push(key)
+                continue
+              }
+              if (specs[name] !== undefined) continue
+              // The catalog can now FAIL rather than quietly serving a bundled
+              // copy, and this key is an optimisation, not a requirement: the
+              // bare name already authorizes the npm-sourced case, and a git
+              // source that misses its key simply prompts again. Losing the
+              // catalog must not turn "allow this build" into a 500.
+              let entry
+              try {
+                entry = (await loadRegistry({ cacheFile: registryCacheFile })).plugins.find(p => p.name === name || p.npm === name)
+              } catch (error) {
+                logEvent('warn', 'approve-builds', `catalog unavailable, authorizing ${name} by name only: ${error instanceof Error ? error.message : String(error)}`)
+                packages.push(name)
+                continue
+              }
+              const target = entry === undefined ? null : installTargetFor(entry)
+              const key = target === null ? null : gitAllowBuildsKey(name, target)
+              if (key !== null) {
+                packages.push(name, key)
+              }
             }
-            const target = entry === undefined ? null : installTargetFor(entry)
-            const key = target === null ? null : gitAllowBuildsKey(name, target)
-            if (key !== null) {
-              packages.push(name, key)
+            if (packages.length === 0) {
+              sendJson(response, 400, { error: 'no installed packages given' })
+              return
             }
-          }
-          if (packages.length === 0) {
-            sendJson(response, 400, { error: 'no installed packages given' })
-            return
-          }
-          const approved = setAllowBuilds(config.profile, packages, activeProfileDir)
-          logEvent('info', 'approve-builds', `allowed build scripts: ${approved.join(', ')}`)
-          sendJson(response, 200, { ok: true, approved })
+            const approved = setAllowBuilds(config.profile, packages, activeProfileDir)
+            logEvent('info', 'approve-builds', `allowed build scripts: ${approved.join(', ')}`)
+            sendJson(response, 200, { ok: true, approved })
+          })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
           logEvent('error', 'approve-builds', `route error: ${message}`)
@@ -2149,6 +2183,11 @@ export function mountMarketRoutes(
             const pending = pendingRollbacks.get(id)
             if (pending === undefined) {
               sendJson(response, 400, { error: 'rollback is not available (it may have been superseded by another operation) / 回滚已不可用（可能已被后续操作覆盖）' })
+              return
+            }
+            if (profileRevision(activeProfileDir) !== pending.revision) {
+              pendingRollbacks.delete(id)
+              sendJson(response, 409, { error: 'Profile changed after this rollback was offered; refresh before retrying. / 插件配置已变化，旧回滚已失效，请刷新后重试。' })
               return
             }
             let ok = true
@@ -2494,6 +2533,7 @@ export function mountMarketRoutes(
 
   return () => {
     disableReplay.dispose()
+    void officialRuntime?.dispose()
     for (const dispose of disposers) dispose()
   }
 }

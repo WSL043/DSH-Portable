@@ -453,6 +453,30 @@ test('manual disk rollback conservatively retains the live replacement restart v
   assert.equal(body.activation['fixture-plugin'].state, 'restart')
 })
 
+test('deferred rollback refuses to overwrite a subsequent external profile change', async t => {
+  const bed = await updateTestbed(t, {
+    async onAdd({ manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.2.0', { peerDependencies: { 'fixture-host': '^2.0.0' } })
+      return ok()
+    },
+  })
+  await writePeerHost(bed.profile)
+  const updated = await bed.update()
+  assert.equal(updated.body.compatibility.code, 'soft-incompatible')
+  const newer = JSON.parse(await readFile(bed.manifestFile, 'utf8'))
+  newer.dependencies['another-plugin'] = '2.0.0'
+  const bytes = JSON.stringify(newer)
+  await writeFile(bed.manifestFile, bytes)
+  const count = bed.calls.length
+  const rolledBack = await bed.rollback(updated.body.compatibility.rollbackId)
+  assert.equal(rolledBack.response.status, 409)
+  assert.equal(await readFile(bed.manifestFile, 'utf8'), bytes)
+  assert.equal(bed.calls.length, count)
+})
+
 test('a hard-failed GitHub update restores the captured commit and floating source spelling', async (t) => {
   const oldCommit = 'a'.repeat(40)
   const newCommit = 'b'.repeat(40)
