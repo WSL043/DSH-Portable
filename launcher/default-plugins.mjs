@@ -39,24 +39,24 @@ export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
 export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
   {
     "name": "dsh-image-viewer",
-    "version": "0.1.2-beta.1",
-    "spec": "0.1.2-beta.1",
-    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.2-beta.1.tgz",
-    "sha256": "6db62fab6981541e8f6322e55e2bf18f7d5d1e5a8b523322d1eb516e2f18a5a2",
-    "integrity": "sha512-RPOiONNKzrSSvCzGXiBFHb8cT8thwHaXkRDSxa5kOog0YmY+M3oXUaf6IYVjy4h6z3unzSFH2VbKmJ3SKslu6g==",
+    "version": "0.1.2-beta.2",
+    "spec": "0.1.2-beta.2",
+    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.2-beta.2.tgz",
+    "sha256": "6e6bd8618317f0cfb90e2ca016f3b5f4a385bdcc30ae25fef5dc2f2ccee8d3a3",
+    "integrity": "sha512-N+50UkqF/inmbWWSNGK9TdXB1LDDt2jRB2sHPRgf+fKUWG2FeO/L3FZc7LZN6XHjk6KCbv+rlZAT3fOv/tRp8g==",
     "license": "MIT",
-    "reviewedCommit": "9025825e91536e3cb2b13735946c4dcc37d2ce74",
+    "reviewedCommit": "a14cc5ba7b840d28907ae90957a8fc7b11843425",
     "filename": "dsh-image-viewer.tgz"
   },
   {
     "name": "dsh-chat-manager",
-    "version": "1.4.0-beta.3",
-    "spec": "1.4.0-beta.3",
-    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.4.0-beta.3.tgz",
-    "sha256": "9bf0c12dc3c0144045b81bd5d11ee7f1f58d7d92a4c7ea8585c4aacf37b70596",
-    "integrity": "sha512-BBtPrxZe7iK+4U1ETUU9enWy3gnIqUDI0sbpmPaY7VjK1fIn1zwZ7c4GtYnitHLId4SI6EOpFY/tEQTkqaZciA==",
+    "version": "1.5.0-beta.1",
+    "spec": "1.5.0-beta.1",
+    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.0-beta.1.tgz",
+    "sha256": "36b59411a03e36131a2c342bc977cc79ba6c2ad0cd7c7dcfd20859d7fd081aa7",
+    "integrity": "sha512-r8w5qwLTNtV4iGaOkaB9l5tC0QcbzN4f5mDFqvZ3i9kQ3NfQ4rnxVrhaVZ2dCGileVP/7eZCEKbNQwRkHsvAjw==",
     "license": "MIT",
-    "reviewedCommit": "eebcd2e6e648a11c6ccd41e949b1294b7b71b966",
+    "reviewedCommit": "5f43cc5ebd9b07de3bfaef242e5ac8688a4191d5",
     "filename": "dsh-chat-manager.tgz"
   }
 ].map(Object.freeze))
@@ -199,10 +199,11 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     const bundles = previous.dsh?.profile?.bundles
     const componentsPath = paths.join(layout.root, 'licenses', 'COMPONENTS.json')
     if (Array.isArray(bundles) && bundles.includes('dsh-chat-manager')
-      && installedChatVersion === '1.3.5'
       && (adapters.existsSync ?? existsSync)(componentsPath)) {
       const components = JSON.parse(await load(componentsPath, 'utf8'))
-      if (components.dshVersion === '0.1.6-alpha.2') {
+      const incompatible = (components.dshVersion === '0.1.6-alpha.2' && installedChatVersion === '1.3.5')
+        || (components.dshVersion === '0.1.7-alpha.1' && ['1.3.5', '1.4.0-beta.1', '1.4.0-beta.2', '1.4.0-beta.3'].includes(installedChatVersion))
+      if (incompatible) {
         previous.dsh.profile.bundles = bundles.filter(name => name !== 'dsh-chat-manager')
         disabledPlugins.push('dsh-chat-manager')
         restoredManifest = `${JSON.stringify(previous, null, 2)}\n`
@@ -214,7 +215,7 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     await move(temporary, manifestPath)
     return { status: 'warning', code: 'default_plugin_update_failed', profile,
       ...(disabledPlugins.length ? { disabledPlugins } : {}),
-      message: `${disabledPlugins.length ? 'Paused incompatible dsh-chat-manager 1.3.5; plugin files and session data are retained. Update the plugin before enabling it again. ' : ''}${error?.message ?? String(error)}` }
+      message: `${disabledPlugins.length ? `Paused incompatible dsh-chat-manager ${installedChatVersion}; plugin files and session data are retained. Update the plugin before enabling it again. ` : ''}${error?.message ?? String(error)}` }
   }
 }
 

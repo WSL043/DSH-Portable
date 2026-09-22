@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
-import { projectKey, relocateSessionHeaderBytes } from './portable-core.mjs'
+import { projectKey, relocateSessionHeaderBytes, SESSION_LOG_FILENAMES } from './portable-core.mjs'
 import { dataPathKey, lstatIfPresent, normalizeDataPath, safeDataTarget as safeTarget, writeDataFileAtomic } from './data-paths.mjs'
 
 const MAGIC_PLAIN = Buffer.from('DSHDAT1U')
@@ -238,7 +238,7 @@ function relocatePortableWorkspaceEntry(file, bytes, before, after) {
     const parsed = JSON.parse(bytes.toString('utf8'))
     return { archivePath, bytes: Buffer.from(`${JSON.stringify(replaceExactStrings(parsed, before, after), null, 2)}\n`, 'utf8') }
   }
-  if (file.path.startsWith(sourcePrefix) && /\/session(?:\.v[23])?\.jsonl(?:\.zstd)?$/.test(file.path)) {
+  if (file.path.startsWith(sourcePrefix) && SESSION_LOG_FILENAMES.includes(file.path.split('/').at(-1))) {
     return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, file.path.endsWith('.zstd')) }
   }
   return { archivePath, bytes }

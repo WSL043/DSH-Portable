@@ -1086,6 +1086,8 @@ function firstZstdFrameEnd(buffer) {
   return offset
 }
 
+export const SESSION_LOG_FILENAMES = Object.freeze(['session.jsonl.zstd', 'session.jsonl', 'session.v2.jsonl.zstd', 'session.v2.jsonl', 'session.v3.jsonl.zstd', 'session.v3.jsonl', 'session.v4.jsonl.zstd', 'session.v4.jsonl'])
+
 export function relocateSessionHeaderBytes(source, before, after, compressed) {
   const frameEnd = compressed ? firstZstdFrameEnd(source) : source.length
   const decoded = compressed ? zstdDecompressSync(source.subarray(0, frameEnd)) : source
@@ -1132,9 +1134,9 @@ async function migrateSessionDirectory(dshHome, before, after) {
     if (!entry.isDirectory()) continue
     const sessionDir = path.join(targetDir, entry.name)
     let migrated = false
-    // Preview cores can retain legacy logs alongside their v2/v3 session logs.
+    // Preview cores can retain legacy logs alongside their v2/v3/v4 session logs.
     // Update every existing header, without rewriting historical events.
-    for (const name of ['session.jsonl.zstd', 'session.jsonl', 'session.v2.jsonl.zstd', 'session.v2.jsonl', 'session.v3.jsonl.zstd', 'session.v3.jsonl']) {
+    for (const name of SESSION_LOG_FILENAMES) {
       const filename = path.join(sessionDir, name)
       if (existsSync(filename) && await migrateSessionHeader(filename, before, after, name.endsWith('.zstd'))) migrated = true
     }
