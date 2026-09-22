@@ -24,5 +24,7 @@
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>DSH uses the microphone for voice input when you choose to record. 点击录音时，DSH 使用麦克风进行语音输入。</string>
 </dict>
 </plist>
