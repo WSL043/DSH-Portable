@@ -449,6 +449,7 @@ test('the Portable market carries applicable upstream safety fixes as independen
   assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0', after: '1.9.0' }), 'DOWNGRADE_DETECTED')
   assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0', after: '2.0.5' }), 'RESOLVED_VERSION_MISMATCH')
   assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0', after: '2.1.0' }), null)
+  assert.equal(resolvedNpmUpdateFailure({ before: '2.0.0', target: '2.1.0-beta.1', after: '2.1.0', requireExactTarget: true }), 'RESOLVED_VERSION_MISMATCH')
   assert.equal(resolvedNpmUpdateFailure({ before: '2.1.0-beta.1', target: '2.0.0', after: '2.0.0', allowDowngrade: true }), null)
 
   assert.match(compatibilitySource, /export function introducedDuplicateNames/)

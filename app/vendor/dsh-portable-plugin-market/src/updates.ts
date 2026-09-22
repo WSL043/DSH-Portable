@@ -19,6 +19,8 @@ export interface UpdateStatus {
    * as "there is an upgrade" and labels a button accordingly.
    */
   updateAvailable: boolean
+  /** Newer prerelease available only by an explicit per-plugin choice. */
+  betaAvailable?: string
   /**
    * The version this package's channel points at, when it differs from what
    * is installed and is NOT newer.
@@ -118,6 +120,7 @@ export function resolvedNpmUpdateFailure(input: {
   target: string | null
   after: string | null
   allowDowngrade?: boolean
+  requireExactTarget?: boolean
 }): 'DOWNGRADE_DETECTED' | 'RESOLVED_VERSION_MISMATCH' | null {
   const direction = input.before !== null && input.after !== null
     ? compareVersions(input.after, input.before)
@@ -125,6 +128,7 @@ export function resolvedNpmUpdateFailure(input: {
   if (input.allowDowngrade !== true && direction !== null && direction < 0) return 'DOWNGRADE_DETECTED'
   if (input.target === null) return null
   if (input.after === null) return 'RESOLVED_VERSION_MISMATCH'
+  if (input.requireExactTarget && input.after !== input.target) return 'RESOLVED_VERSION_MISMATCH'
   const targetOrder = compareVersions(input.after, input.target)
   if (targetOrder !== null ? targetOrder < 0 : input.after !== input.target) return 'RESOLVED_VERSION_MISMATCH'
   return null
@@ -245,6 +249,16 @@ async function tagVersion(name: string, tag: string): Promise<string | null> {
   }
 }
 
+/** A beta install is an explicit choice only when it is newer than stable. */
+export async function installVersions(name: string): Promise<{ stable: string | null; beta: string | null }> {
+  const [stable, taggedBeta] = await Promise.all([fetchNpmLatest(name), tagVersion(name, DIST_TAG.beta)])
+  return {
+    stable,
+    beta: stable !== null && taggedBeta !== null && parseSemver(taggedBeta)?.pre.length && isUpgrade(stable, taggedBeta)
+      ? taggedBeta : null,
+  }
+}
+
 export async function fetchNpmLatest(name: string): Promise<string | null> {
   try {
     const meta = (await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`)) as { version?: string }
@@ -298,9 +312,9 @@ export async function checkUpdates(
           updateAvailable: current !== null && latest !== null && current !== latest,
         }
       } else {
-        const meta = (await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`)) as { version?: string }
-        const stable = typeof meta.version === 'string' ? meta.version : null
         const channel = channelFor.get(name)
+        const versions = channel === undefined ? await installVersions(name) : null
+        const stable = versions === null ? await fetchNpmLatest(name) : versions.stable
         const latest = channel === undefined ? stable : await versionOnChannel(name, channel, stable)
         // Forwards is an update; a difference in the other direction is a
         // channel switch and is reported as one, under its own field.
@@ -310,6 +324,8 @@ export async function checkUpdates(
         result[name] = {
           kind: 'npm', version, current: version, latest,
           updateAvailable: upgrade,
+          ...(versions?.beta !== null && versions?.beta !== undefined && isUpgrade(version, versions.beta)
+            ? { betaAvailable: versions.beta } : {}),
           ...(sideways ? { channelSwitch: latest } : {}),
         }
       }

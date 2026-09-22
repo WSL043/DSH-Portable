@@ -24,8 +24,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.7.2.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.7.2.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.7.3.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.7.3.65534")]
 
 namespace DshPortableBootstrap
 {
@@ -200,6 +200,8 @@ namespace DshPortableBootstrap
         internal bool AllowHttp;
         internal bool NoLaunch;
         internal bool UpgradeExisting;
+        internal Rectangle? HandoffBounds;
+        internal bool DarkTheme;
         internal bool DestinationExplicit;
         internal bool ShowHelp;
 
@@ -236,6 +238,22 @@ namespace DshPortableBootstrap
                 else if (argument == "--allow-http") options.AllowHttp = true;
                 else if (argument == "--no-launch") options.NoLaunch = true;
                 else if (argument == "--upgrade-existing") options.UpgradeExisting = true;
+                else if (argument == "--window-bounds")
+                {
+                    string[] parts = RequireValue(args, ref index, argument).Split(',');
+                    int x, y, width, height;
+                    if (parts.Length != 4 || !Int32.TryParse(parts[0], out x) || !Int32.TryParse(parts[1], out y)
+                        || !Int32.TryParse(parts[2], out width) || !Int32.TryParse(parts[3], out height)
+                        || width < 640 || height < 420 || width > 8192 || height > 8192)
+                        throw new ArgumentException("--window-bounds requires x,y,width,height.");
+                    options.HandoffBounds = new Rectangle(x, y, width, height);
+                }
+                else if (argument == "--theme")
+                {
+                    string theme = RequireValue(args, ref index, argument);
+                    if (theme != "dark" && theme != "light") throw new ArgumentException("--theme requires dark or light.");
+                    options.DarkTheme = theme == "dark";
+                }
                 else if (argument == "--manifest") options.ManifestUrl = RequireValue(args, ref index, argument);
                 else if (argument == "--destination")
                 {
@@ -1463,8 +1481,60 @@ namespace DshPortableBootstrap
             Controls.Add(activityRing);
             Controls.Add(actionButton);
             Controls.Add(offlineLink);
+            if (options.UpgradeExisting)
+            {
+                FormBorderStyle = FormBorderStyle.Sizable;
+                MaximizeBox = true;
+                MinimumSize = new Size(900, 620);
+                ClientSize = new Size(1024, 720);
+                titleLabel.Text = BootstrapText.L("正在更新 DSH-Portable", "Updating DSH-Portable");
+                locationLabel.Visible = false;
+                bool dark = options.DarkTheme;
+                BackColor = dark ? Color.FromArgb(24, 24, 26) : Color.FromArgb(248, 248, 248);
+                ForeColor = dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(35, 35, 35);
+                titleLabel.ForeColor = ForeColor;
+                statusLabel.ForeColor = dark ? Color.FromArgb(178, 178, 184) : Color.FromArgb(92, 95, 101);
+                progressPercentLabel.ForeColor = statusLabel.ForeColor;
+                actionButton.FlatStyle = FlatStyle.Flat;
+                actionButton.FlatAppearance.BorderColor = dark ? Color.FromArgb(77, 77, 81) : Color.FromArgb(202, 204, 208);
+                actionButton.BackColor = dark ? Color.FromArgb(48, 48, 51) : Color.White;
+                actionButton.ForeColor = ForeColor;
+                Resize += delegate { LayoutUpgrade(); };
+                Rectangle? handoff = options.HandoffBounds;
+                if (handoff.HasValue)
+                {
+                    Rectangle area = Screen.FromRectangle(handoff.Value).WorkingArea;
+                    Rectangle bounds = handoff.Value;
+                    bounds.Width = Math.Min(bounds.Width, area.Width);
+                    bounds.Height = Math.Min(bounds.Height, area.Height);
+                    bounds.X = Math.Max(area.Left, Math.Min(bounds.X, area.Right - bounds.Width));
+                    bounds.Y = Math.Max(area.Top, Math.Min(bounds.Y, area.Bottom - bounds.Height));
+                    StartPosition = FormStartPosition.Manual;
+                    Bounds = bounds;
+                }
+                LayoutUpgrade();
+            }
             Shown += async delegate { await RunAsync(); };
             FormClosing += OnFormClosing;
+        }
+
+        private void LayoutUpgrade()
+        {
+            int center = ClientSize.Width / 2;
+            int top = Math.Max(120, (ClientSize.Height - 215) / 2);
+            titleLabel.Location = new Point(center - 230, top);
+            titleLabel.Size = new Size(460, 32);
+            titleLabel.TextAlign = ContentAlignment.MiddleCenter;
+            statusLabel.Location = new Point(center - 270, top + 48);
+            statusLabel.Size = new Size(540, 48);
+            statusLabel.TextAlign = ContentAlignment.MiddleCenter;
+            activityRing.Location = new Point(center - 10, top + 110);
+            progressPercentLabel.Location = new Point(center - 270, top + 143);
+            progressPercentLabel.Size = new Size(540, 24);
+            actionButton.Location = new Point(center - 46, top + 185);
+            offlineLink.Location = new Point(center - 155, top + 229);
+            offlineLink.Size = new Size(310, 24);
+            offlineLink.TextAlign = ContentAlignment.MiddleCenter;
         }
 
         private async Task RunAsync()
@@ -1484,10 +1554,13 @@ namespace DshPortableBootstrap
                 running = false;
                 activityRing.Visible = false;
                 progressPercentLabel.Visible = false;
-                titleLabel.Text = BootstrapText.L("未能准备 DSH-Portable", "Could not prepare DSH-Portable");
+                titleLabel.Text = options.UpgradeExisting
+                    ? BootstrapText.L("DSH-Portable 更新失败", "DSH-Portable update failed")
+                    : BootstrapText.L("未能准备 DSH-Portable", "Could not prepare DSH-Portable");
                 statusLabel.Text = result.Message;
-                statusLabel.ForeColor = Color.FromArgb(176, 38, 38);
-                statusLabel.Size = new Size(464, 48);
+                statusLabel.ForeColor = options.UpgradeExisting && options.DarkTheme
+                    ? Color.FromArgb(255, 110, 110) : Color.FromArgb(176, 38, 38);
+                statusLabel.Size = options.UpgradeExisting ? new Size(540, 108) : new Size(464, 48);
                 offlineLink.Visible = true;
                 actionButton.Enabled = true;
                 actionButton.Text = BootstrapText.L("关闭", "Close");

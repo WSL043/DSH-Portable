@@ -292,6 +292,8 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     await withFixtureServer(fixture, async ({ manifestUrl }) => {
       await execBootstrap(executable, [
         '--upgrade-existing',
+        '--window-bounds', '40,60,1024,720',
+        '--theme', 'dark',
         '--manifest', manifestUrl,
         '--destination', destination,
         '--allow-http',

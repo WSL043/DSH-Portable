@@ -453,6 +453,24 @@ export function MarketSection(props: MarketSectionProps) {
   const [qInstalled, setQInstalled] = useState('')
   const [cat, setCat] = useState('all')
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
+  const [stableVersion, setStableVersion] = useState<string | null>(null)
+  const [previewVersion, setPreviewVersion] = useState<string | null>(null)
+  const officialInstallAvailable = Boolean(props.onOfficialInstall)
+  useEffect(() => {
+    let active = true
+    setStableVersion(null)
+    setPreviewVersion(null)
+    if (!officialInstallAvailable || !confirming?.npm) return () => { active = false }
+    fetch(`/dsh-market/install-versions?name=${encodeURIComponent(confirming.npm)}`, { cache: 'no-store' })
+      .then(response => response.ok ? response.json() : null)
+      .then(body => {
+        if (!active) return
+        if (typeof body?.stable === 'string') setStableVersion(body.stable)
+        if (typeof body?.beta === 'string') setPreviewVersion(body.beta)
+      })
+      .catch(() => {})
+    return () => { active = false }
+  }, [confirming?.npm, officialInstallAvailable])
   /** A rejected install and the installed plugins it clashed with, one entry
    * per owner as grouped by the host. */
   interface ConflictNotice {
@@ -961,10 +979,11 @@ export function MarketSection(props: MarketSectionProps) {
     return `${first.name} — ${first.layers.join(' / ')}${entries.length > 1 ? ` (+${entries.length - 1})` : ''}`
   }
 
-  const doInstall = useCallback((plugin: RegistryPlugin) => {
+  const doInstall = useCallback((plugin: RegistryPlugin, selectedVersion?: string) => {
     if (props.onOfficialInstall) {
       setConfirming(null)
-      props.onOfficialInstall(plugin.npm || plugin.tarball || plugin.url)
+      props.onOfficialInstall(selectedVersion && plugin.npm
+        ? `${plugin.npm}@${selectedVersion}` : plugin.npm || plugin.tarball || plugin.url)
       return
     }
     setBuildsSkipped(null)
@@ -1158,7 +1177,7 @@ export function MarketSection(props: MarketSectionProps) {
       .catch(() => {})
   }, [])
 
-  const doUpdate = useCallback((name: string) => {
+  const doUpdate = useCallback((name: string, betaVersion?: string) => {
     setInstallError(null)
     setActivationWarnings([])
     setStaleName(null)
@@ -1168,7 +1187,7 @@ export function MarketSection(props: MarketSectionProps) {
     return fetch('/dsh-market/update', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, ...(betaVersion ? { betaVersion } : {}) }),
     })
       .then(res => res.json().then(body => ({ status: res.status, body })))
       .then(({ status, body }) => {
@@ -1590,7 +1609,7 @@ export function MarketSection(props: MarketSectionProps) {
                           size="sm"
                           className={css.installBtn}
                           disabled={busyUrl !== null || (!props.onOfficialInstall && !envReady)}
-                          onClick={() => props.onOfficialInstall ? doInstall(p) : setConfirming(p)}
+                          onClick={() => setConfirming(p)}
                         >{t('install')}</Button>
                       )}
           </div>
@@ -2413,7 +2432,7 @@ export function MarketSection(props: MarketSectionProps) {
                                   return (
                                     <>
                                               {!isInstalled(replacement, installed, repoIdentities, data?.plugins, repoHints) && (
-                                        <Button variant="outline" size="sm" onClick={() => props.onOfficialInstall ? doInstall(replacement) : setConfirming(replacement)}>{t('installReplacement')}</Button>
+                                        <Button variant="outline" size="sm" onClick={() => setConfirming(replacement)}>{t('installReplacement')}</Button>
                                       )}
                                     </>
                                   )
@@ -2437,6 +2456,12 @@ export function MarketSection(props: MarketSectionProps) {
                                           : status && status.kind === 'external'
                                             ? <span className={css.metaTag} title={t('externalUpdateHelp')}>{t('externalUpdate')}</span>
                                           : <span className={css.metaTag}>{t('upToDate')}</span>}
+                                {status?.betaAvailable && !updatedNames.includes(name) && (
+                                  <Button variant="outline" size="sm" disabled={updatingName !== null}
+                                    onClick={() => doUpdate(name, status.betaAvailable)}>
+                                    {t('updatePreview').replace('{0}', status.betaAvailable)}
+                                  </Button>
+                                )}
                                 {name !== 'dsh-market' && name !== 'dshmarket' && (
                                   removingName === name
                                     ? <Button variant="outline" size="sm" className={css.dangerBtn} disabled>{t('uninstalling')}</Button>
@@ -2480,7 +2505,16 @@ export function MarketSection(props: MarketSectionProps) {
           footer={(
             <>
               <Button variant="ghost" onClick={() => { setConfirming(null); setCmdOpen(false) }}>{t('cancel')}</Button>
-              <Button variant="primary" onClick={() => doInstall(confirming)}>{t('confirmInstall')}</Button>
+              {props.onOfficialInstall && previewVersion && (
+                <Button variant="outline" onClick={() => doInstall(confirming, previewVersion)}>
+                  {t('installPreview').replace('{0}', previewVersion)}
+                </Button>
+              )}
+              <Button variant="primary" onClick={() => doInstall(confirming, previewVersion ? stableVersion ?? undefined : undefined)}>
+                {previewVersion && stableVersion
+                  ? t('installStableVersion').replace('{0}', stableVersion)
+                  : previewVersion ? t('installStable') : t('confirmInstall')}
+              </Button>
             </>
           )}
         >

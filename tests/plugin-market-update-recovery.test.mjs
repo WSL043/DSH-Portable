@@ -39,6 +39,50 @@ test('an existing unresolved official bundle does not roll back a valid unrelate
   assert.equal(bed.calls.filter(args => args[0] === 'add').length, 1)
 })
 
+test('Beta updates require an explicit current tag and install that exact build', async t => {
+  const betaVersion = '1.3.0-beta.1'
+  const bed = await updateTestbed(t, {
+    betaVersion,
+    async onAdd({ target, manifestFile, profile }) {
+      assert.equal(target, `fixture-plugin@${betaVersion}`)
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = betaVersion
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, betaVersion)
+      return ok()
+    },
+  })
+  const updates = await checkUpdates('web', true, bed.profile)
+  assert.equal(updates['fixture-plugin'].betaAvailable, betaVersion)
+  const stale = await bed.update({ betaVersion: '1.3.0-beta.0' })
+  assert.equal(stale.response.status, 409)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 0)
+  const chosen = await bed.update({ betaVersion })
+  assert.equal(chosen.response.status, 200, JSON.stringify(chosen.body))
+  assert.equal(chosen.body.ok, true)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], betaVersion)
+})
+
+test('a selected Beta rolls back when the package manager resolves another version', async t => {
+  const betaVersion = '1.3.0-beta.1'
+  const bed = await updateTestbed(t, {
+    betaVersion,
+    async onAdd({ target, manifestFile, profile }) {
+      const version = target === `fixture-plugin@${betaVersion}` ? '1.3.0' : '1.0.0'
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = version
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, version)
+      return ok()
+    },
+  })
+  const attempted = await bed.update({ betaVersion })
+  assert.equal(attempted.response.status, 502)
+  assert.match(attempted.body.error, /expected|预期/)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '^1.0.0')
+  assert.equal((await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8')).includes('"version":"1.0.0"'), true)
+})
+
 test('a newly unresolved bundle still rolls back the update', async t => {
   const bed = await updateTestbed(t, {
     async onAdd({ target, manifestFile, profile }) {
@@ -198,6 +242,7 @@ async function updateTestbed(t, {
   installedVersion = '1.0.0',
   loaderEntries = [],
   gitHead = null,
+  betaVersion = null,
 }) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
   t.after(() => rm(profile, { recursive: true, force: true }))
@@ -272,6 +317,11 @@ async function updateTestbed(t, {
     if (String(url).endsWith('/fixture-plugin/latest')) {
       return new Response(JSON.stringify({ version: '1.2.0' }), { status: 200 })
     }
+    if (String(url).endsWith('/fixture-plugin/beta')) {
+      return betaVersion === null
+        ? new Response('', { status: 404 })
+        : new Response(JSON.stringify({ version: betaVersion }), { status: 200 })
+    }
     if (String(url) === 'https://registry.npmjs.org/fixture-plugin') {
       return new Response(JSON.stringify({
         'dist-tags': { latest: '1.2.0' },
@@ -308,11 +358,11 @@ async function updateTestbed(t, {
     calls,
     manifestFile,
     profile,
-    async update() {
+    async update(options = {}) {
       const response = await originalFetch(`${origin}/dsh-market/update`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', origin },
-        body: JSON.stringify({ name: 'fixture-plugin' }),
+        body: JSON.stringify({ name: 'fixture-plugin', ...options }),
       })
       return { response, body: await response.json() }
     },

@@ -39,7 +39,7 @@ import { externalUpdateSource, findInstalledAlias, gitAllowBuildsKey, githubPinn
 import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
-import { checkUpdates, fetchGitHead, fetchNpmLatest, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
+import { checkUpdates, fetchGitHead, fetchNpmLatest, installVersions, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
 import { bundledUpdateTarget } from './bundled-updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
@@ -1275,6 +1275,29 @@ export function mountMarketRoutes(
 
     host.webServer.register({
       kind: 'exact',
+      path: '/dsh-market/install-versions',
+      handler: async (request, response) => {
+        if (request.method !== 'GET') {
+          response.writeHead(405, { allow: 'GET' })
+          response.end()
+          return
+        }
+        try {
+          const name = new URL(request.url ?? '/dsh-market/install-versions', 'http://localhost').searchParams.get('name')
+          if (!name || name.length > 214) return sendJson(response, 400, { error: 'invalid package name' })
+          const registry = await loadRegistry({ cacheFile: registryCacheFile })
+          if (!registry.plugins.some(plugin => plugin.npm === name)) {
+            return sendJson(response, 404, { error: 'package is not in the curated catalog' })
+          }
+          sendJson(response, 200, await installVersions(name))
+        } catch (error) {
+          sendJson(response, 502, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }),
+
+    host.webServer.register({
+      kind: 'exact',
       path: '/dsh-market/updates',
       handler: async (request, response) => {
         if (request.method !== 'GET') {
@@ -1322,8 +1345,13 @@ export function mountMarketRoutes(
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown; betaVersion?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
+            const requestedBeta = typeof body.betaVersion === 'string' ? body.betaVersion : null
+            if (body.betaVersion !== undefined && requestedBeta === null) {
+              sendJson(response, 400, { error: 'betaVersion must be a version string' })
+              return
+            }
             const spec = readInstalled(config.profile, activeProfileDir)[name]
             if (spec === undefined) {
               sendJson(response, 400, { error: 'plugin is not installed' })
@@ -1359,6 +1387,10 @@ export function mountMarketRoutes(
             // Re-running add re-resolves the source: git HEAD for github specs,
             // dist-tag latest for registry installs.
             const isGit = spec.startsWith('github:')
+            if (requestedBeta !== null && (isGit || SELF_NAMES.has(name))) {
+              sendJson(response, 400, { error: 'Beta selection is only available for registry plugins' })
+              return
+            }
             // `@latest` was hardcoded, so a beta subscriber would have been
             // told an update existed and then handed the stable build. The
             // dist-tag has to follow the same setting the offer came from.
@@ -1380,9 +1412,15 @@ export function mountMarketRoutes(
             // rather than `latest`, which is not the tag being installed.
             if (!isGit) {
               const installedVersion = readInstalledVersion(config.profile, name, activeProfileDir)
-              const registryLatest = bundledUpdateTarget(name, installedVersion) ?? (selfChannel === null
-                ? await fetchNpmLatest(name)
-                : await versionOnChannel(name, selfChannel, await fetchNpmLatest(name)))
+              const stable = await fetchNpmLatest(name)
+              const availableBeta = requestedBeta === null ? null : (await installVersions(name)).beta
+              if (requestedBeta !== null && (availableBeta !== requestedBeta || !isUpgrade(installedVersion, requestedBeta))) {
+                sendJson(response, 409, { error: 'The selected Beta is no longer a newer available release. Refresh and choose again.' })
+                return
+              }
+              const registryLatest = requestedBeta ?? bundledUpdateTarget(name, installedVersion) ?? (selfChannel === null
+                ? stable
+                : await versionOnChannel(name, selfChannel, stable))
               expectedNpmVersion = registryLatest
               const refuse = selfChannel === null
                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
@@ -1507,6 +1545,7 @@ export function mountMarketRoutes(
                   target: expectedNpmVersion,
                   after: afterVersion,
                   allowDowngrade: selfChannel !== null,
+                  requireExactTarget: requestedBeta !== null,
                 })
                 if (versionFailure !== null) {
                   ok = false

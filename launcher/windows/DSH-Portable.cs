@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.7.2.65534")]
-[assembly: AssemblyFileVersion("0.7.2.65534")]
+[assembly: AssemblyVersion("0.7.3.65534")]
+[assembly: AssemblyFileVersion("0.7.3.65534")]
 
 namespace DshPortable
 {
@@ -4602,7 +4602,7 @@ namespace DshPortable
                         return;
                     }
                     if (!EnsureNoOtherRunningEnvironmentHosts(manual)) return;
-                    int choice = ShowUpdateChoiceDialog(current, latest, engineCurrent, engineLatest, true);
+                    int choice = await ShowUpdateChoiceOverlayAsync(current, latest, engineCurrent, engineLatest, true);
                     if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl);
                     else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--scope", scope, "--json" }));
                     else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
@@ -4631,12 +4631,16 @@ namespace DshPortable
                 }
                 if (!EnsureNoOtherRunningEnvironmentHosts(manual)) return;
 
-                DialogResult accepted = MessageBox.Show(this,
-                    UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
-                        + L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
-                            "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later."),
-                    targetName + L(" 更新", " update"), MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (accepted != DialogResult.Yes)
+                bool accepted;
+                if (!engineScope)
+                    accepted = await ShowUpdateChoiceOverlayAsync(current, latest, engineCurrent, engineLatest, false) == 1;
+                else
+                    accepted = MessageBox.Show(this,
+                        UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
+                            + L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
+                                "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later."),
+                        targetName + L(" 更新", " update"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+                if (!accepted)
                 {
                     await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
                     return;
@@ -4735,6 +4739,8 @@ namespace DshPortable
                 "--upgrade-existing",
                 "--destination", root,
                 "--manifest", manifest.AbsoluteUri,
+                "--window-bounds", String.Join(",", new[] { Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+                "--theme", String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light",
             });
             ShowDesktopOperation(L(
                 "正在交给独立更新器，当前窗口将安全关闭…",
@@ -5994,61 +6000,82 @@ namespace DshPortable
             return product + "\r\n" + engine + "\r\n" + delivery;
         }
 
-        private int ShowUpdateChoiceDialog(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
+        private async Task<int> ShowUpdateChoiceOverlayAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
         {
-            using (Form dialog = new Form())
-            using (Label title = new Label())
-            using (Label description = new Label())
-            using (Button updateNow = new Button())
-            using (Button skip = new Button())
-            using (Button later = new Button())
+            RestoreFromTray();
+            webView.Enabled = false;
+            launchPanel.Visible = true;
+            launchPanel.BringToFront();
+            ConfigureDesktopLoadingSurface(L("发现 DSH-Portable 更新", "DSH-Portable update available"), true);
+            launchContent.Size = new Size(540, 260);
+            productIcon.Location = new Point(252, 0);
+            productLabel.Location = new Point(0, 43);
+            productLabel.Size = new Size(540, 28);
+            productLabel.Text = "DSH-Portable";
+            activityRing.Visible = false;
+            statusLabel.Location = new Point(0, 78);
+            statusLabel.Size = new Size(540, 22);
+            progressDetail.Location = new Point(20, 109);
+            progressDetail.Size = new Size(500, 75);
+            progressDetail.AutoEllipsis = false;
+            progressDetail.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage);
+            progressDetail.TextAlign = ContentAlignment.MiddleCenter;
+            CenterLaunchContent();
+
+            Button updateNow = new Button { Text = L("现在更新", "Update now"), Location = new Point(fullPackage ? 100 : 154, 208), Size = new Size(105, 36) };
+            Button skip = new Button { Text = L("跳过此版本", "Skip version"), Location = new Point(216, 208), Size = new Size(105, 36), Visible = fullPackage };
+            Button later = new Button { Text = L("稍后", "Later"), Location = new Point(fullPackage ? 332 : 281, 208), Size = new Size(105, 36) };
+            bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
+            foreach (Button button in new[] { updateNow, skip, later })
             {
-                dialog.Text = L("DSH-Portable 更新", "DSH-Portable update");
-                dialog.FormBorderStyle = FormBorderStyle.FixedDialog;
-                dialog.StartPosition = FormStartPosition.CenterParent;
-                dialog.ClientSize = new Size(520, 230);
-                dialog.MinimizeBox = false;
-                dialog.MaximizeBox = false;
-                dialog.ShowInTaskbar = false;
-                dialog.Font = Font;
-
-                title.AutoSize = false;
-                title.Font = new Font(dialog.Font, FontStyle.Bold);
-                title.Location = new Point(28, 24);
-                title.Size = new Size(464, 28);
-                title.Text = L("发现可用更新", "An update is available");
-
-                description.AutoSize = false;
-                description.Location = new Point(28, 64);
-                description.Size = new Size(464, 86);
-                description.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage);
-
-                updateNow.DialogResult = DialogResult.Yes;
-                updateNow.Location = new Point(160, 174);
-                updateNow.Size = new Size(104, 34);
-                updateNow.Text = L("现在更新", "Update now");
-
-                skip.DialogResult = DialogResult.No;
-                skip.Location = new Point(274, 174);
-                skip.Size = new Size(104, 34);
-                skip.Text = L("跳过此版本", "Skip version");
-
-                later.DialogResult = DialogResult.Cancel;
-                later.Location = new Point(388, 174);
-                later.Size = new Size(104, 34);
-                later.Text = L("稍后", "Later");
-
-                dialog.AcceptButton = updateNow;
-                dialog.CancelButton = later;
-                dialog.Controls.Add(title);
-                dialog.Controls.Add(description);
-                dialog.Controls.Add(updateNow);
-                dialog.Controls.Add(skip);
-                dialog.Controls.Add(later);
-                DialogResult result = dialog.ShowDialog(this);
-                if (result == DialogResult.Yes) return 1;
-                if (result == DialogResult.No) return -1;
-                return 0;
+                button.FlatStyle = FlatStyle.Flat;
+                button.FlatAppearance.BorderSize = 1;
+                button.FlatAppearance.BorderColor = dark ? Color.FromArgb(77, 77, 81) : Color.FromArgb(202, 204, 208);
+                button.BackColor = dark ? Color.FromArgb(48, 48, 51) : Color.FromArgb(255, 255, 255);
+                button.ForeColor = dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(35, 35, 35);
+            }
+            updateNow.FlatAppearance.BorderSize = 0;
+            updateNow.BackColor = dark ? Color.FromArgb(235, 235, 235) : Color.FromArgb(35, 35, 35);
+            updateNow.ForeColor = dark ? Color.FromArgb(24, 24, 26) : Color.White;
+            Button previousAccept = AcceptButton as Button;
+            Button previousCancel = CancelButton as Button;
+            TaskCompletionSource<int> selection = new TaskCompletionSource<int>();
+            updateNow.Click += delegate { selection.TrySetResult(1); };
+            skip.Click += delegate { selection.TrySetResult(-1); };
+            later.Click += delegate { selection.TrySetResult(0); };
+            FormClosedEventHandler closed = delegate { selection.TrySetResult(0); };
+            FormClosingEventHandler closing = delegate { selection.TrySetResult(0); };
+            FormClosed += closed;
+            FormClosing += closing;
+            launchContent.Controls.Add(updateNow);
+            launchContent.Controls.Add(skip);
+            launchContent.Controls.Add(later);
+            AcceptButton = updateNow;
+            CancelButton = later;
+            updateNow.Focus();
+            int choice = 0;
+            try
+            {
+                choice = await selection.Task;
+                return choice;
+            }
+            finally
+            {
+                FormClosed -= closed;
+                FormClosing -= closing;
+                AcceptButton = previousAccept;
+                CancelButton = previousCancel;
+                launchContent.Controls.Remove(updateNow);
+                launchContent.Controls.Remove(skip);
+                launchContent.Controls.Remove(later);
+                updateNow.Dispose();
+                skip.Dispose();
+                later.Dispose();
+                if (!IsDisposed)
+                {
+                    ConfigureDesktopLoadingSurface(L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"), true);
+                    if (choice != 1) HideDesktopOperation();
+                }
             }
         }
 
