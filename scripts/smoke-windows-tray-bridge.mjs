@@ -210,7 +210,7 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
     await evaluate(client, `(() => {
       const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
         .find(item => item.getBoundingClientRect().width > 0
-          && /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
+          && /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(item.textContent || ''))
       const button = [...(notice?.querySelectorAll('button') || [])]
         .find(item => ['Continue', '继续', 'Configure later', 'Set up later', '稍后配置'].includes((item.textContent || '').trim())
           && !item.disabled && !item.closest('[inert],[aria-hidden="true"]'))
@@ -407,12 +407,14 @@ try {
       htmlBytes: document.documentElement?.outerHTML?.length || 0,
     }
   })()`, value => value?.ready, 'DSH shell controls', 60000)
-  let settings = await evaluate(client, clickButton(['Settings', '设置']))
-  if (!settings?.clicked) {
-    const sidebar = await evaluate(client, clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar']))
-    if (!sidebar?.clicked) throw new Error(`Settings and sidebar controls are unavailable: ${redactSensitive(JSON.stringify(settings))}`)
-    settings = await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, 'Settings button')
-  }
+  // First-run provider onboarding can mount after the shell labels appear.
+  // Use the same bounded, known-dialog-aware wait instead of treating its inert
+  // background controls as a broken sidebar or clicking through the modal.
+  await waitForValue(client, `(() => {
+    const settings = ${clickButton(['Settings', '设置'])}
+    if (!settings.clicked) ${clickButton(['打开侧边栏', 'Open sidebar', 'Expand sidebar'])}
+    return settings
+  })()`, value => value?.clicked, 'Settings button')
   await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(item => /Settings|设置/.test(item.textContent || '')))`, Boolean, 'Settings dialog')
 
   if (state.locale !== targetLocale) {
