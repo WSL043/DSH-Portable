@@ -3,12 +3,24 @@ import assert from 'node:assert/strict'
 import { runWithReleaseAgeRecovery, installOfficialPnpmRecovery } from '../desktop-bridge/lib/pnpm-service.mjs'
 
 const violation = { exitCode: 1, output: 'ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION existing@1.0.0', signal: null }
+const missingPolicyCallback = { exitCode: 1, output: 'ERR_PNPM_RESOLUTION_POLICY_VIOLATIONS_UNHANDLED pnpm resolver callback missing', signal: null }
 for (const command of ['add', 'install', 'remove', 'rm', 'uninstall', 'update', 'up']) {
   test(`official ${command} recovers a lockfile age failure once`, async () => {
     const calls = []
     const result = await runWithReleaseAgeRecovery([command, 'fixture'], async args => {
       calls.push(args)
       return calls.length === 1 ? violation : { exitCode: 0, output: 'ok', signal: null }
+    })
+    assert.equal(result.exitCode, 0)
+    assert.deepEqual(calls, [[command, 'fixture'], [command, '--config.minimumReleaseAge=0', 'fixture']])
+  })
+}
+for (const command of ['remove', 'rm', 'uninstall']) {
+  test(`official ${command} recovers pnpm's missing release-age callback once`, async () => {
+    const calls = []
+    const result = await runWithReleaseAgeRecovery([command, 'fixture'], async args => {
+      calls.push(args)
+      return calls.length === 1 ? missingPolicyCallback : { exitCode: 0, output: 'ok' }
     })
     assert.equal(result.exitCode, 0)
     assert.deepEqual(calls, [[command, 'fixture'], [command, '--config.minimumReleaseAge=0', 'fixture']])
@@ -21,6 +33,8 @@ test('fresh target refusal, cancellation, explicit override and unrelated failur
     { args: ['remove', '--config.minimumReleaseAge=0', 'fixture'], output: violation.output },
     { args: ['view', 'fixture'], output: violation.output },
     { args: ['add', 'fixture'], output: 'ERR_PNPM_FETCH_404' },
+    { args: ['add', 'fixture'], output: missingPolicyCallback.output },
+    { args: ['update', 'fixture'], output: missingPolicyCallback.output },
   ]) {
     let calls = 0
     await runWithReleaseAgeRecovery(item.args, async () => { calls++; return { exitCode: 1, output: item.output } }, () => !!item.cancelled)
