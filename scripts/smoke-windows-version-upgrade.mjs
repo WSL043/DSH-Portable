@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { execFile, spawn } from 'node:child_process'
 import { readFile, mkdir, mkdtemp, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -7,6 +8,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
+import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
@@ -267,7 +269,22 @@ try {
   assert.ok((await stat(path.join(destination, 'runtime-capsule.json'))).isFile())
   assert.ok((await stat(path.join(destination, 'runtime', 'DSH-App.dshpack'))).isFile())
   await assert.rejects(stat(path.join(destination, 'app', 'node_modules')), { code: 'ENOENT' })
-  for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
+  for (const [filename, value] of markers) {
+    try { assert.equal(await readFile(filename, 'utf8'), value) }
+    catch (error) {
+      if (error.code !== 'ENOENT' || path.basename(filename) !== 'settings.yaml') throw error
+      // Official 0.1.7 imports legacy settings into the active profile and keeps
+      // the original as .imported. Require both retained bytes and effective config.
+      assert.equal(await readFile(`${filename}.imported`, 'utf8'), value)
+      const profile = path.join(destination, 'data', 'dsh-home', 'profiles', 'web')
+      const prepared = await ensureRuntimeCapsule(destination)
+      const { load } = createRequire(path.join(prepared.runtimeRoot, 'app', 'package.json'))('js-yaml')
+      await waitFor(async () => {
+        const patch = load(await readFile(path.join(profile, 'cordis.patch.yml'), 'utf8'))
+        return Array.isArray(patch) && patch.some(entry => entry.id === 'locale' && entry.config?.preference === 'zh')
+      }, 'official settings migration did not preserve the selected locale')
+    }
+  }
   assert.ok((await stat(path.join(destination, 'DeepSeek-Herness.exe'))).isFile())
 
   if (runningHostUpgrade && decision.delivery === 'full-package') {
