@@ -1177,7 +1177,7 @@ export function MarketSection(props: MarketSectionProps) {
       .catch(() => {})
   }, [])
 
-  const doUpdate = useCallback((name: string, betaVersion?: string) => {
+  const doUpdate = useCallback((name: string, selectedVersion?: { betaVersion?: string; stableVersion?: string }) => {
     setInstallError(null)
     setActivationWarnings([])
     setStaleName(null)
@@ -1187,7 +1187,7 @@ export function MarketSection(props: MarketSectionProps) {
     return fetch('/dsh-market/update', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, ...(betaVersion ? { betaVersion } : {}) }),
+      body: JSON.stringify({ name, ...selectedVersion }),
     })
       .then(res => res.json().then(body => ({ status: res.status, body })))
       .then(({ status, body }) => {
@@ -2458,8 +2458,14 @@ export function MarketSection(props: MarketSectionProps) {
                                           : <span className={css.metaTag}>{t('upToDate')}</span>}
                                 {status?.betaAvailable && !updatedNames.includes(name) && (
                                   <Button variant="outline" size="sm" disabled={updatingName !== null}
-                                    onClick={() => doUpdate(name, status.betaAvailable)}>
+                                    onClick={() => doUpdate(name, { betaVersion: status.betaAvailable })}>
                                     {t('updatePreview').replace('{0}', status.betaAvailable)}
+                                  </Button>
+                                )}
+                                {status?.stableAvailable && !updatedNames.includes(name) && (
+                                  <Button variant="outline" size="sm" disabled={updatingName !== null}
+                                    onClick={() => doUpdate(name, { stableVersion: status.stableAvailable })}>
+                                    {t('returnStable').replace('{0}', status.stableAvailable)}
                                   </Button>
                                 )}
                                 {name !== 'dsh-market' && name !== 'dshmarket' && (

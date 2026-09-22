@@ -83,6 +83,54 @@ test('a selected Beta rolls back when the package manager resolves another versi
   assert.equal((await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8')).includes('"version":"1.0.0"'), true)
 })
 
+test('an installed Beta can explicitly return to the current stable release', async t => {
+  const installedBeta = '1.3.0-beta.1'
+  const bed = await updateTestbed(t, {
+    spec: installedBeta,
+    installedVersion: installedBeta,
+    betaVersion: installedBeta,
+    async onAdd({ target, manifestFile, profile }) {
+      assert.equal(target, 'fixture-plugin@1.2.0')
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.2.0')
+      return ok()
+    },
+  })
+  const updates = await checkUpdates('web', true, bed.profile)
+  assert.equal(updates['fixture-plugin'].stableAvailable, '1.2.0')
+  assert.equal(updates['fixture-plugin'].updateAvailable, false)
+  assert.equal((await bed.update({ stableVersion: '1.1.0' })).response.status, 409)
+  assert.equal((await bed.update({ betaVersion: installedBeta, stableVersion: '1.2.0' })).response.status, 400)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 0)
+  const chosen = await bed.update({ stableVersion: '1.2.0' })
+  assert.equal(chosen.response.status, 200, JSON.stringify(chosen.body))
+  assert.equal(chosen.body.ok, true)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '1.2.0')
+})
+
+test('returning from Beta rolls back if pnpm resolves the wrong stable build', async t => {
+  const installedBeta = '1.3.0-beta.1'
+  const bed = await updateTestbed(t, {
+    spec: installedBeta,
+    installedVersion: installedBeta,
+    async onAdd({ target, manifestFile, profile }) {
+      const version = target === 'fixture-plugin@1.2.0' ? '1.1.0' : installedBeta
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = version
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, version)
+      return ok()
+    },
+  })
+  const attempted = await bed.update({ stableVersion: '1.2.0' })
+  assert.equal(attempted.response.status, 502)
+  assert.match(attempted.body.error, /expected|预期/)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], installedBeta)
+  assert.equal(JSON.parse(await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8')).version, installedBeta)
+})
+
 test('a newly unresolved bundle still rolls back the update', async t => {
   const bed = await updateTestbed(t, {
     async onAdd({ target, manifestFile, profile }) {

@@ -39,7 +39,7 @@ import { externalUpdateSource, findInstalledAlias, gitAllowBuildsKey, githubPinn
 import { marketFetch } from './net.ts'
 import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareNotAllowed, RELEASE_AGE_OVERRIDE, retargetCollections, validateAddedPlugins, withHoistRecovery } from './install.ts'
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
-import { checkUpdates, fetchGitHead, fetchNpmLatest, installVersions, invalidateUpdates, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
+import { checkUpdates, fetchGitHead, fetchNpmLatest, installVersions, invalidateUpdates, isPrereleaseVersion, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
 import { bundledUpdateTarget } from './bundled-updates.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
@@ -1345,11 +1345,14 @@ export function mountMarketRoutes(
         }
         try {
           await withMutationLock(response, 'install', async () => {
-            const body = (await readJsonBody(request)) as { name?: unknown; betaVersion?: unknown }
+            const body = (await readJsonBody(request)) as { name?: unknown; betaVersion?: unknown; stableVersion?: unknown }
             const name = typeof body.name === 'string' ? body.name : ''
             const requestedBeta = typeof body.betaVersion === 'string' ? body.betaVersion : null
-            if (body.betaVersion !== undefined && requestedBeta === null) {
-              sendJson(response, 400, { error: 'betaVersion must be a version string' })
+            const requestedStable = typeof body.stableVersion === 'string' ? body.stableVersion : null
+            if ((body.betaVersion !== undefined && requestedBeta === null)
+              || (body.stableVersion !== undefined && requestedStable === null)
+              || (requestedBeta !== null && requestedStable !== null)) {
+              sendJson(response, 400, { error: 'select either one Beta or stable version' })
               return
             }
             const spec = readInstalled(config.profile, activeProfileDir)[name]
@@ -1387,8 +1390,8 @@ export function mountMarketRoutes(
             // Re-running add re-resolves the source: git HEAD for github specs,
             // dist-tag latest for registry installs.
             const isGit = spec.startsWith('github:')
-            if (requestedBeta !== null && (isGit || SELF_NAMES.has(name))) {
-              sendJson(response, 400, { error: 'Beta selection is only available for registry plugins' })
+            if ((requestedBeta !== null || requestedStable !== null) && (isGit || SELF_NAMES.has(name))) {
+              sendJson(response, 400, { error: 'version selection is only available for registry plugins' })
               return
             }
             // `@latest` was hardcoded, so a beta subscriber would have been
@@ -1418,11 +1421,17 @@ export function mountMarketRoutes(
                 sendJson(response, 409, { error: 'The selected Beta is no longer a newer available release. Refresh and choose again.' })
                 return
               }
-              const registryLatest = requestedBeta ?? bundledUpdateTarget(name, installedVersion) ?? (selfChannel === null
+              if (requestedStable !== null && (stable !== requestedStable
+                || !isPrereleaseVersion(installedVersion) || isPrereleaseVersion(requestedStable)
+                || !isUpgrade(requestedStable, installedVersion))) {
+                sendJson(response, 409, { error: 'The selected stable release is no longer a valid return from this Beta. Refresh and choose again.' })
+                return
+              }
+              const registryLatest = requestedBeta ?? requestedStable ?? bundledUpdateTarget(name, installedVersion) ?? (selfChannel === null
                 ? stable
                 : await versionOnChannel(name, selfChannel, stable))
               expectedNpmVersion = registryLatest
-              const refuse = selfChannel === null
+              const refuse = selfChannel === null && requestedStable === null
                 ? installedVersion !== null && registryLatest !== null && !isUpgrade(installedVersion, registryLatest)
                 : installedVersion !== null && registryLatest !== null && installedVersion === registryLatest
               if (refuse && installedVersion === registryLatest) {
@@ -1544,8 +1553,8 @@ export function mountMarketRoutes(
                   before: beforeVersion,
                   target: expectedNpmVersion,
                   after: afterVersion,
-                  allowDowngrade: selfChannel !== null,
-                  requireExactTarget: requestedBeta !== null,
+                  allowDowngrade: selfChannel !== null || requestedStable !== null,
+                  requireExactTarget: requestedBeta !== null || requestedStable !== null,
                 })
                 if (versionFailure !== null) {
                   ok = false

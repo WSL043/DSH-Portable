@@ -21,6 +21,8 @@ export interface UpdateStatus {
   updateAvailable: boolean
   /** Newer prerelease available only by an explicit per-plugin choice. */
   betaAvailable?: string
+  /** Explicit return path when an installed prerelease is ahead of latest stable. */
+  stableAvailable?: string
   /**
    * The version this package's channel points at, when it differs from what
    * is installed and is NOT newer.
@@ -249,12 +251,16 @@ async function tagVersion(name: string, tag: string): Promise<string | null> {
   }
 }
 
+export function isPrereleaseVersion(version: string | null): boolean {
+  return version !== null && (parseSemver(version)?.pre.length ?? 0) > 0
+}
+
 /** A beta install is an explicit choice only when it is newer than stable. */
 export async function installVersions(name: string): Promise<{ stable: string | null; beta: string | null }> {
   const [stable, taggedBeta] = await Promise.all([fetchNpmLatest(name), tagVersion(name, DIST_TAG.beta)])
   return {
     stable,
-    beta: stable !== null && taggedBeta !== null && parseSemver(taggedBeta)?.pre.length && isUpgrade(stable, taggedBeta)
+    beta: stable !== null && taggedBeta !== null && isPrereleaseVersion(taggedBeta) && isUpgrade(stable, taggedBeta)
       ? taggedBeta : null,
   }
 }
@@ -326,6 +332,10 @@ export async function checkUpdates(
           updateAvailable: upgrade,
           ...(versions?.beta !== null && versions?.beta !== undefined && isUpgrade(version, versions.beta)
             ? { betaAvailable: versions.beta } : {}),
+          ...(versions?.stable !== null && versions?.stable !== undefined
+            && isPrereleaseVersion(version) && !isPrereleaseVersion(versions.stable)
+            && isUpgrade(versions.stable, version)
+            ? { stableAvailable: versions.stable } : {}),
           ...(sideways ? { channelSwitch: latest } : {}),
         }
       }

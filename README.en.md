@@ -197,7 +197,7 @@ Copying the complete folder is supported only between the same operating system 
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
-**Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Starting with Portable 0.7.3, stable is the default; a separate Install or Try Beta button appears only when npm's Beta tag points to a newer prerelease. The market draws on [dsh-market](https://github.com/dsh-market/dsh-market) and hands installation to the official DSH plugin manager.
+**Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Starting with Portable 0.7.3, stable is the default; a separate Install or Try Beta button appears only when npm's Beta tag points to a newer prerelease. An installed Beta can explicitly return to the current stable release; ordinary updates never silently downgrade it. The market draws on [dsh-market](https://github.com/dsh-market/dsh-market) and hands installation to the official DSH plugin manager.
 
 In the official **Plugins → Add plugin** dialog, enter a **package name or address, not a terminal command**. For example, enter `dsh-codex-subscription`, or `dsh-codex-subscription@2.1.3-beta.1` for that candidate. Do not include `dsh plugin --profile web add`. Review the source and follow the installation result; restart only when requested.
 
