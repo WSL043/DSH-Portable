@@ -1,47 +1,62 @@
-import { useEffect, useState } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { useEffect, useSyncExternalStore } from 'react'
+import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { UpdateStatus } from '../updates.ts'
+import css from './PluginUpdates.module.css'
+import { updateCompletion, updateCompletionLabel, type UpdateCompletion } from './update-completion.ts'
 
-/** Update-only supplement; the official page retains installation and enablement. */
-export function PluginUpdates({ zh, open, onClose, onChanged }: { zh: boolean; open: boolean; onClose: () => void; onChanged: () => void }) {
-  const [updates, setUpdates] = useState<Record<string, UpdateStatus>>({})
-  const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState('')
-  const [error, setError] = useState('')
-  const [done, setDone] = useState<string[]>([])
-  async function load() {
-    setLoading(true); setError('')
-    try {
-      const response = await fetch('/dsh-market/updates?force=1')
-      const body = await response.json()
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
-      setUpdates(body.updates || {})
-    } catch (reason) { setError(String(reason)) }
-    finally { setLoading(false) }
-  }
-  useEffect(() => { if (open && !busy) void load() }, [open])
-  async function update(name: string) {
-    setBusy(name); setError('')
-    try {
-      const response = await fetch('/dsh-market/update', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })
-      const body = await response.json()
-      if (!response.ok || !body.ok) throw new Error(body.error || body.output || `HTTP ${response.status}`)
-      setDone(previous => [...previous, name]); onChanged()
-    } catch (reason) { setError(String(reason)) }
-    finally { setBusy('') }
-  }
-  const entries = Object.entries(updates).filter(([, status]) => status.updateAvailable)
-  const unresolved = Object.values(updates).some(status => status.kind === 'npm' && status.latest === null)
-  return <Modal open={open} onClose={onClose} title={zh ? '插件更新' : 'Plugin updates'} closeLabel={zh ? '关闭' : 'Close'}><div aria-busy={loading || Boolean(busy)}>
-    <p>{zh ? '逐个更新已安装插件。更新不会自动启用已停用的插件；完成后请回到官方插件页检查启用状态。' : 'Update installed plugins individually. Disabled plugins stay disabled; check their enabled state on the official plugin page afterwards.'}</p>
-    <Button variant="outline" size="sm" disabled={loading || Boolean(busy)} onClick={() => void load()}>{zh ? '检查更新' : 'Check for updates'}</Button>
-    {loading && <p role="status">{zh ? '正在检查…' : 'Checking…'}</p>}
-    {error && <p role="alert" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{error}</p>}
-    {!loading && !error && entries.length === 0 && <p>{unresolved ? (zh ? '部分插件版本检查失败，请检查网络后重试。' : 'Some version checks failed. Check your connection and retry.') : (zh ? '没有发现可更新的版本。' : 'No updates found.')}</p>}
-    {entries.map(([name, status]) => <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 16, paddingBlock: 12 }}>
-      <div style={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}><strong>{name}</strong><div>{status.version} → {status.latest}</div></div>
-      <Button variant="outline" size="sm" disabled={Boolean(busy) || done.includes(name)} onClick={() => void update(name)}>{done.includes(name) ? (zh ? '已更新' : 'Updated') : busy === name ? (zh ? '正在更新…' : 'Updating…') : (zh ? '更新' : 'Update')}</Button>
-    </div>)}
-    {done.length > 0 && <p role="status">{zh ? '更新完成。请保存当前工作并重启 Portable，然后在插件页确认插件已启用。' : 'Updated. Save your work and restart Portable, then verify that the plugin is enabled.'}</p>}
-  </div></Modal>
+type Snapshot = { updates: Record<string, UpdateStatus>; checking: boolean; checked: boolean; error: string; busy: string; done: Record<string, UpdateCompletion>; failures: Record<string, string> }
+// Shared across cards and navigation; one request and one mutation at a time.
+let snapshot: Snapshot = { updates: {}, checking: false, checked: false, error: '', busy: '', done: {}, failures: {} }
+let checkedAt = 0
+const listeners = new Set<() => void>()
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener) } }
+const getSnapshot = () => snapshot
+function publish(change: Partial<Snapshot>) { snapshot = { ...snapshot, ...change }; listeners.forEach(listener => listener()) }
+async function check(force = false) {
+  if (snapshot.checking || snapshot.busy || (!force && Date.now() - checkedAt < 300_000)) return
+  publish({ checking: true, error: '' })
+  try {
+    const response = await fetch('/dsh-market/updates' + (force ? '?force=1' : ''), { signal: AbortSignal.timeout(30_000) })
+    const body = await response.json()
+    if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`)
+    checkedAt = Date.now()
+    publish({ updates: body.updates || {}, checked: true })
+  } catch (error) { publish({ error: String(error) }) }
+  finally { publish({ checking: false }) }
+}
+async function update(name: string) {
+  if (snapshot.busy || snapshot.checking || snapshot.done[name]) return
+  publish({ busy: name, failures: { ...snapshot.failures, [name]: '' } })
+  try {
+    const response = await fetch('/dsh-market/update', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })
+    const body = await response.json()
+    if (!response.ok || !body.ok) throw new Error(body.error || body.output || `HTTP ${response.status}`)
+    publish({ done: { ...snapshot.done, [name]: updateCompletion(body) } })
+    // Do not tear down the page during installation; report the server activation verdict.
+  } catch (error) { publish({ failures: { ...snapshot.failures, [name]: String(error) } }) }
+  finally { publish({ busy: '' }) }
+}
+export function PluginUpdateStatus({ zh }: { zh: boolean }) {
+  const state = useSyncExternalStore(subscribe, getSnapshot)
+  useEffect(() => {
+    const refresh = () => { void check(true) }
+    window.addEventListener('dsh-portable/refresh-plugins', refresh)
+    void check()
+    return () => window.removeEventListener('dsh-portable/refresh-plugins', refresh)
+  }, [])
+  const unresolved = Object.values(state.updates).some(status => (status.kind === 'npm' || status.kind === 'github') && status.latest === null)
+  if (state.checking || (!state.error && !unresolved)) return null
+  return <span className={css.hint} role="status" title={state.error}>{zh ? '部分版本检查失败，请刷新重试' : 'Some version checks failed. Refresh to retry.'}</span>
+}
+export function PluginUpdateRow({ zh, name, busy = false, view }: { zh: boolean; name: string; busy?: boolean; view: 'summary' | 'action' }) {
+  const state = useSyncExternalStore(subscribe, getSnapshot)
+  const status = state.updates[name]
+  const done = state.done[name]
+  if (!status?.updateAvailable && !done) return null
+  const error = state.failures[name]
+  if (view === 'action') return done ? <span className={css.pending} role="status">{updateCompletionLabel(done, zh)}</span> : <Button variant="outline" size="sm" disabled={busy || state.checking || Boolean(state.busy)} onClick={() => void update(name)}>{state.busy === name ? (zh ? '正在更新…' : 'Updating…') : error ? (zh ? '重试' : 'Retry') : (zh ? '更新' : 'Update')}</Button>
+  return <span className={css.row} data-portable-update={name}>
+    <span className={css.version}>{done ? updateCompletionLabel(done, zh) : `${status.version ?? ''} → ${status.latest ?? ''}`}</span>
+    {error && <span className={css.failure} role="alert" title={error}>{zh ? '更新失败，可重试' : 'Update failed. Retry available.'}</span>}
+  </span>
 }

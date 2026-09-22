@@ -5,10 +5,13 @@ import vm from 'node:vm'
 import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, patchPluginManagerActions } from '../scripts/patch-native-settings-command.mjs'
 
 test('official plugin manager extension preserves actions and rejects changed seams', () => {
-  const source = '"plugins.bundle.config": { kind: "keyed" };\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [originalAction]'
+  let source = '"plugins.bundle.config": { kind: "keyed" };\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [originalAction]'
+  source += '\nfunction PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled }) { return jsx("li", { children: (0, react_jsx_runtime.jsx)(CardHead, { tags: jsxs(Fragment, { children: [beta ? null : null] }), end: (0, react_jsx_runtime.jsx)(EnableSwitch, {\n\t\t\t\t\t})\n\t\t\t\t}) }); }\nfunction ItemCard() {}\nconst packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, {});'
+  source += '\ntitle: t("refresh"), disabled: !loaded, onClick: props.refresh,'
   const patched = patchPluginManagerActions(source)
   assert.match(patched, /renderSlot\("plugins.portable.actions", \{ refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec \}\), originalAction/)
   assert.match(patched, /"plugins.bundle.config": \{ kind: "keyed" \}/)
+  assert.match(patched, /dispatchEvent\(new Event\("dsh-portable\/refresh-plugins"\)\); props.refresh\(\)/)
   assert.equal(patchPluginManagerActions(patched), patched)
   assert.throws(() => patchPluginManagerActions('changed'), /declaration changed upstream/)
   assert.throws(() => patchPluginManagerActions(source + source), /expected 1 match/)
@@ -22,8 +25,11 @@ test('official plugin management retires only the recognized legacy installation
   const patched = patchPluginInstallationGuidance(legacy)
   assert.match(patched, /Install plugins in Plugin Market/)
   assert.equal(patchPluginInstallationGuidance(patched), patched)
-  assert.throws(() => patchPluginInstallationGuidance('unexpected upstream change'), /expected 1 match/)
-  assert.throws(() => patchPluginInstallationGuidance(modern + modern), /expected 1 match/)
+  for (const source of ['unexpected upstream change', modern + modern, legacy + legacy, legacy.split('\n')[0]]) {
+    const reports = []
+    assert.equal(patchPluginInstallationGuidance(source, status => reports.push(status)), source)
+    assert.deepEqual(reports, ['skipped-unrecognized-copy'])
+  }
 })
 
 const upstream = `\t\tfunction SettingsRoot(props) {

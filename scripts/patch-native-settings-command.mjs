@@ -83,23 +83,29 @@ export function patchPortableUpdatesIcon(source) {
             });`, 'Portable navigation icon seam changed upstream')
 }
 
-export function patchPluginInstallationGuidance(plugins) {
-  // Alpha 2 moved installation to the official plugin manager. The old
-  // settings page now only describes built-in plugins; preserve that copy.
+export function patchPluginInstallationGuidance(plugins, report = () => {}) {
+  // Copy is optional presentation, unlike the required interaction seams below.
+  // Never partially rewrite an unfamiliar locale pair or block a core release.
   const officialCopy = ['Inspect the plugins this deployment ships.', '查看内置部署的插件列表']
-  if (officialCopy.every(text => plugins.split(text).length === 2)) return plugins
-  for (const [before, after] of [
+  const pairs = [
     ['Configure and inspect the plugins installed in this deployment.',
       'Install plugins in Plugin Market; update or remove them in Installed. Plugin configuration changes their settings.'],
     ['配置和查看本部署已安装的插件。',
       '在「插件市场」安装插件，在「已安装」中更新或卸载；「插件配置」用于修改插件设置。'],
-  ]) {
-    if (!plugins.includes(after)) plugins = replaceRequired(plugins, before, after, 'Portable plugin installation guidance')
+  ]
+  const once = text => plugins.split(text).length === 2
+  if (officialCopy.every(once)) { report('upstream-owned'); return plugins }
+  if (pairs.every(([, after]) => once(after))) { report('already-applied'); return plugins }
+  if (!pairs.every(([before]) => once(before))) {
+    report('skipped-unrecognized-copy')
+    return plugins
   }
+  report('legacy-copy-updated')
+  for (const [before, after] of pairs) plugins = plugins.replace(before, after)
   return plugins
 }
 
-export function patchPluginManagerActions(source) {
+function patchPluginManagerToolbar(source) {
   const marker = 'dsh-portable-plugin-manager-actions-v2'
   if (source.includes(marker)) return source
   if (source.includes('dsh-portable-plugin-manager-actions-v1')) {
@@ -119,6 +125,39 @@ export function patchPluginManagerActions(source) {
     'official plugin manager toolbar changed upstream')
 }
 
+export function patchPluginManagerActions(source) {
+  source = patchPluginManagerToolbar(source)
+  const refreshMarker = 'dsh-portable-plugin-refresh-v1'
+  if (!source.includes(refreshMarker)) {
+    const start = source.indexOf('title: t("refresh"),')
+    const end = source.indexOf('onClick: props.refresh,', start)
+    if (start < 0 || end < start || end - start > 180) throw new Error('official plugin refresh action changed upstream')
+    source = source.slice(0, end) + source.slice(end).replace('onClick: props.refresh,',
+      `onClick: () => { /* ${refreshMarker} */ window.dispatchEvent(new Event("dsh-portable/refresh-plugins")); props.refresh(); },`)
+  }
+
+  const marker = 'dsh-portable-plugin-card-updates-v1'
+  if (source.includes(marker)) return source
+  source = replaceRequired(source, '"plugins.portable.actions": { kind: "list", scope: "root" },',
+    `"plugins.portable.actions": { kind: "list", scope: "root" },\n/* ${marker} */ "plugins.portable.update": { kind: "list", scope: "root" },`, 'plugin update slot declaration')
+  source = replaceRequired(source, 'function PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled })',
+    'function PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled, renderSlot })', 'plugin card signature')
+  source = replaceRequired(source, 'const packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, {',
+    'const packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, { renderSlot,', 'plugin card slot forwarding')
+  // Only extend the card footer; native identity, toggles and details stay owned by DSH.
+  const start = source.indexOf('function PackageCard(')
+  const end = source.indexOf('function ItemCard(', start)
+  if (start < 0 || end < start) throw new Error('plugin card boundaries changed upstream')
+  let card = source.slice(start, end)
+  card = replaceRequired(card, 'children: [beta ?',
+    'children: [renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "summary" }), beta ?', 'plugin version summary')
+  card = replaceRequired(card, 'end: (0, react_jsx_runtime.jsx)(EnableSwitch, {',
+    'end: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "action" }), (0, react_jsx_runtime.jsx)(EnableSwitch, {', 'plugin update action')
+  card = replaceRequired(card, '\n\t\t\t\t\t})\n\t\t\t\t})',
+    '\n\t\t\t\t\t})] })\n\t\t\t\t})', 'plugin update action end')
+  return source.slice(0, start) + card + source.slice(end)
+}
+
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-native-settings-command.mjs <app-root>')
   const appRoot = path.resolve(process.argv[2])
@@ -127,7 +166,10 @@ async function main() {
   await writeFile(filename, patchPortableUpdatesIcon(patchNativeSettingsCommand(source)), 'utf8')
   const pluginsFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-plugins', 'lib', 'client.js')
   let plugins = patchPluginSettingsNavigation(await readFile(pluginsFile, 'utf8'))
-  plugins = patchPluginInstallationGuidance(plugins)
+  plugins = patchPluginInstallationGuidance(plugins, status => {
+    console.log(JSON.stringify({ adapter: 'plugin-installation-guidance', required: false, status }))
+    if (status === 'skipped-unrecognized-copy') console.warn('Optional plugin installation copy changed upstream; original text retained. Required interaction checks remain enabled.')
+  })
   await writeFile(pluginsFile, plugins, 'utf8')
   const managerFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-plugin-manager', 'lib', 'client.js')
   let manager

@@ -13,6 +13,7 @@ import { InstallToast } from './InstallToast.tsx'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
 import { MarketAction } from './MarketAction.tsx'
+import { PluginUpdateRow } from './PluginUpdates.tsx'
 import { coordinateMarketSurfaces, LEGACY_PLUGIN_TAB_SLOT, PORTABLE_ACTIONS_SLOT } from './slot-compat.ts'
 import type { Translate } from './market-data.ts'
 
@@ -70,6 +71,15 @@ export function apply(ctx: MarketClientContext): void {
 
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-portable-plugin-market: dictionaries')
   const t = ctx.locale.bind(NS)
+
+  ctx.slots.inject('plugins.portable.update', () => ctx.slots.register({
+    name: 'plugins.portable.update', id: 'portable-update', order: 10,
+  }, owner => {
+    const item = owner as { name: string; busy?: boolean; view: 'summary' | 'action' }
+    return h(MarketErrorBoundary, { view: 'installed' }, h(PluginUpdateRow, {
+      ...item, zh: ctx.locale.getSnapshot().active.toLowerCase().startsWith('zh'),
+    }))
+  }))
 
   ctx.effect(() => coordinateMarketSurfaces(ctx.slots, {
     modern: () => ctx.slots.register({
