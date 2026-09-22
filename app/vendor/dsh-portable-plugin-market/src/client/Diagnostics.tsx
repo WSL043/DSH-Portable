@@ -14,7 +14,7 @@
  * host tree.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { Button, DisclosureRow, IconChevronDownOutline14, IconChevronRightOutline14, IconLoadingOutline16, IconRefreshOutline14, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, DisclosureRow, IconChevronDownOutline14, IconChevronRightOutline14, IconLoadingOutline16, IconRefreshOutline14, StateDot } from './primitives.ts'
 import css from './Market.module.css'
 import type { Translate } from './market-data.ts'
 import { buildAiFixPrompt } from './ai-fix.ts'

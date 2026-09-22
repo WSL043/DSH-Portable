@@ -15,7 +15,7 @@ import {
   IconWarningOutline16,
   IconChevronDownOutline14,
   IconChevronUpOutline14,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+} from './primitives.ts'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import css from './Market.module.css'

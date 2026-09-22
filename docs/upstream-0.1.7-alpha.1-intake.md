@@ -1,6 +1,6 @@
 # DSH 0.1.7-alpha.1 intake — 2026-09-22
 
-Status: discovered, blocked for qualification. Current supported locks and the user's installation are unchanged.
+Status: isolated alpha.1 native development acceptance passed; release-package qualification and delivery remain blocked. Current supported locks and the user's installation are unchanged.
 
 Official release: https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-alpha.1
 Immutable tag commit: `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`.
@@ -21,7 +21,7 @@ Manual dispatch 35701803158 discovered the new npm alpha/tag, then failed `the b
 
 Downloaded npm packages: workspace UI, plugin manager and session, each exactly 0.1.7-alpha.1. Local evidence: build/alpha7-packages, build/alpha7-intake.log, build/upstream-alpha7-candidate.lock.json, build/alpha7-intake-ci-failure.log and build/probe-alpha7-chat.mjs. The release comparison API returns a limited file list and is not a complete large-diff audit.
 
-No real user session migration, default-plugin publication, new-core delivery or native desktop acceptance has been performed. Candidate changes belong on the intake branch until the above gates pass.
+No real user session migration, alpha.1 default-plugin publication or new-core delivery has been performed. Subsequent sections distinguish the original host checks from the newer native development acceptance; neither qualifies a released archive.
 
 ## Candidate progress (not a compatibility declaration)
 
@@ -58,3 +58,22 @@ The SHA-256-verified Windows offline artifact was extracted into an isolated bui
 Evidence: build/native-default-plugin-ui-lifecycle-enabled.log and build/native-candidate-28c198d/product/DSH-Portable/acceptance/default-plugin-ui/. Updates 3c8c68e carries the repeatable native gate. Earlier fixture failures are retained: late new-session onboarding, reused session titles, and official title truncation were corrected in the harness rather than bypassing overlays. This does not qualify alpha.1, fresh plugin installation/update, or real user-data migration.
 
 Triggered alpha.1 core sync 35709898860 failed at the native-settings adapter on Linux x64 and macOS arm64: `native settings command seam changed upstream: expected 1 match, found 0`. Original Linux log: build/updates-alpha7-linux-failure.log. The existing published baseline cannot yet build this new core; selection and official source packaging succeeded, but core publication is blocked. Do not report it as delivered to the version list.
+
+## Alpha.1 native development acceptance and remaining delivery work
+
+The settings adapter now recognizes the official trigger-row focus effect, preserves the localized plugin-card signature, and limits explicit close-state cleanup to the official close callback. Portable settings and market icons resolve the new Regular artwork with legacy fallbacks. All nine packaging adapters execute successfully on copied, actual npm alpha.1 packages; market client rebuilt; 33 focused regression tests passed.
+
+An isolated expanded-layout development product was assembled from the verified Windows shell, current launcher/bridge/market source and npm DSH 0.1.7-alpha.1. It is explicitly marked qualificationOnly, does not carry a release package-set hash, and has no published default-plugin pins. The two candidate plugins were installed through the Portable CLI using local source specifications. This is native integration evidence, not an immutable release artifact or a replacement for cross-platform packaging.
+
+Native WebView2 light/dark acceptance passed annotation return, original draft preservation, delete cancellation, archive restoration, both plugins' disable/enable cycles and composer typing. Confirmed synthetic-session deletion passed in light mode. Initial native acceptance caught a missing archive shortcut in the new slot-based chat client. Portable now exposes one narrow workspace-header extension slot; Chat Manager uses it without replacing WorkspaceBrowser. Width is allocated for all original controls plus the archive shortcut. Four visible controls and the new core settings page were visually inspected. Evidence: build/alpha7-native-default-ui.log (original failure), build/alpha7-native-default-ui-header.log (corrected pass), build/alpha7-native-surfaces.log and build/alpha7-native-development/acceptance/default-plugin-ui/. The first market screenshot only covers loading and opening/closing; catalog completion is checked separately.
+
+Do not rerun the unchanged core publisher expecting this source fix to apply: it intentionally builds from the last published Portable baseline. Remaining delivery gates, in order:
+
+1. Package the two alpha.1-compatible plugin candidates, verify actual archives through official install/update, then publish and pin them with regenerated offline locks.
+2. Complete synthetic V3/V4 session import/export and rollback-boundary checks; no claim of lossless V4-to-V3 downgrade.
+3. Qualify the exact new Portable candidate across platforms, including default-plugin operations and native screenshot review. Preserve previous failures; old run 35710044353 was cancelled after a later push and is not a pass.
+4. Publish only the qualified product, trigger core sync against that baseline, and read back channel manifests and the in-product list. Discovery alone is not delivery.
+
+CI workflow refinement: docs/README-only main pushes no longer start the full product build matrix. Pull requests and explicit dispatch remain unchanged, and final release qualification still requires the exact candidate. This avoids documentation updates cancelling ongoing product qualification.
+
+Catalog follow-up: build/alpha7-native-surfaces-catalog.log passed both themes after waiting for the real catalog search field. The inspected native screenshot shows loaded categories, plugin cards and install actions; opening/closing market returns to an editable composer. This proves browsing/rendering, not installation. Chat Manager source 1f00e4e passed 105 tests; the initial full run's one stale README-copy assertion is retained in .artifacts/alpha7-shortcut-regression.log and was replaced with checks against the actual qualified target and official installation page.

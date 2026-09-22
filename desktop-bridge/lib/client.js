@@ -1214,7 +1214,13 @@ window.__ModuleLoader__.load({
       const host = nativeHostTransport()
       if (React?.createElement && React?.useState && React?.useEffect) {
         try {
-          const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
+          const hostPrimitives = require('@deepseek-ai/dsh-client-ui-primitives')
+          const primitives = {
+            ...hostPrimitives,
+            IconChevronDownOutline14: hostPrimitives.IconChevronDownOutlineRegular ?? hostPrimitives.IconChevronDownOutline14,
+            IconDownloadOutline16: hostPrimitives.IconDownloadOutlineRegular ?? hostPrimitives.IconDownloadOutline16,
+            IconFolderOpenOutline16: hostPrimitives.IconFolderOpenOutlineRegular ?? hostPrimitives.IconFolderOpenOutline16,
+          }
           if (primitives?.Button && primitives?.Input && primitives?.Menu && primitives?.Modal && primitives?.Tooltip
             && primitives?.IconChevronDownOutline14 && primitives?.IconDownloadOutline16 && primitives?.IconFolderOpenOutline16) {
             if (!document.getElementById('dsh-portable-settings-controls')) {

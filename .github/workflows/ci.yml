@@ -3,6 +3,10 @@ name: Build and smoke test
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'README.md'
+      - 'README.en.md'
   pull_request:
   workflow_dispatch:
 

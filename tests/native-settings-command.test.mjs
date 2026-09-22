@@ -2,7 +2,19 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
-import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, patchPluginManagerActions } from '../scripts/patch-native-settings-command.mjs'
+import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, patchPluginManagerActions, patchWorkspaceHeaderActions } from '../scripts/patch-native-settings-command.mjs'
+
+test('workspace header extension keeps official controls and allocates room without changing hidden state', () => {
+  const source = '"sidebar.workspaces.session.menu.item": { kind: "list" }; children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, { original: true })]; .abc_headerActions{opacity:1;max-width:60px;display:flex}.abc_headerActionsHidden{max-width:0}'
+  const result = patchWorkspaceHeaderActions(source)
+  assert.match(result, /renderSlot\("sidebar.workspaces.header.action", \{ className: WorkspaceBrowser_module_css_default.iconButton \}\), wide &&/)
+  assert.match(result, /ViewOptionsMenu, \{ original: true \}/)
+  assert.match(result, /max-width:92px/)
+  assert.match(result, /headerActionsHidden\{max-width:0\}/)
+  assert.equal(patchWorkspaceHeaderActions(result), result)
+  assert.equal(patchWorkspaceHeaderActions('old workspace'), 'old workspace')
+  assert.throws(() => patchWorkspaceHeaderActions(source.replace('max-width:60px', 'max-width:61px')), /width changed upstream/)
+})
 
 test('official plugin manager extension preserves actions and rejects changed seams', () => {
   let source = '"plugins.bundle.config": { kind: "keyed" };\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [originalAction]'
@@ -50,6 +62,16 @@ const upstream = `\t\tfunction SettingsRoot(props) {
 \t\t\t}, [open]);
 \t\t\treturn null;
 \t\t}`
+
+test('alpha7 settings preserve official launcher toggles and focus restoration', () => {
+  const modern = upstream.replace('triggerButton.current?.focus()', 'triggerRow.current?.querySelector("button")?.focus()') + '\nfunction launcherToggle() { setOpen(false); }'
+  const patched = patchNativeSettingsCommand(modern)
+  assert.match(patched, /triggerRow\.current\?\.querySelector\("button"\)\?\.focus\(\)/)
+  assert.ok(patched.endsWith('function launcherToggle() { setOpen(false); }'))
+  assert.equal(patched.split('removeItem("dsh-portable-settings-view")').length - 1, 1)
+  assert.equal(patchNativeSettingsCommand(patched), patched)
+  assert.throws(() => patchNativeSettingsCommand(modern + upstream), /expected one recognized focus effect/)
+})
 
 test('the native settings command opens Settings and removes its listener on cleanup', () => {
   const output = patchNativeSettingsCommand(upstream)

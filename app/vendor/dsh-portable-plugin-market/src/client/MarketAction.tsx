@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { Button, IconCordisPluginOutline14, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, IconCordisPluginOutline14, Modal } from './primitives.ts'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
 import { PluginUpdateStatus } from './PluginUpdates.tsx'

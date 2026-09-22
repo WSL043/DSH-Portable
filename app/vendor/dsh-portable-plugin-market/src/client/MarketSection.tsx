@@ -32,7 +32,7 @@ import {
   Toast,
   Tooltip,
   type MenuEntry,
-} from '@deepseek-ai/dsh-client-ui-primitives'
+} from './primitives.ts'
 import css from './Market.module.css'
 import { OperationsPanel } from './OperationsPanel.tsx'
 import { clearSettled, completionAction, drop, enqueue, patch as patchRecord, recordForUrl } from './operations.ts'

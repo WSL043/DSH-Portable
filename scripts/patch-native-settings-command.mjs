@@ -13,10 +13,14 @@ function replaceRequired(source, needle, replacement, label) {
 export function patchNativeSettingsCommand(source) {
   if (source.includes(MARKER)) return source
 
-  const seam = `\t\t\t(0, react.useEffect)(() => {
+  const legacySeam = `\t\t\t(0, react.useEffect)(() => {
 \t\t\t\tif (wasOpen.current && !open) triggerButton.current?.focus();
 \t\t\t\twasOpen.current = open;
 \t\t\t}, [open]);`
+  const modernSeam = legacySeam.replace('triggerButton.current?.focus()', 'triggerRow.current?.querySelector("button")?.focus()')
+  const seams = [legacySeam, modernSeam].filter(candidate => source.includes(candidate))
+  if (seams.length !== 1) throw new Error('native settings command seam changed upstream: expected one recognized focus effect')
+  const seam = seams[0]
   const replacement = `${seam}
 \t\t\t/* ${MARKER} */
 \t\t\t(0, react.useEffect)(() => {
@@ -46,7 +50,8 @@ export function patchNativeSettingsCommand(source) {
   // The slot ledger includes shadowed entries; the navigation must list each
   // effective page once, matching the slot renderer's priority selection.
   source = source.replace('ctx.slots.entries("settings.section").map(', 'ctx.slots.entries("settings.section").filter((entry, index, all) => all.findIndex((candidate) => candidate.options.id === entry.options.id) === index).map(')
-  return replaceRequired(source, 'setOpen(false);', 'setOpen(false);\n                try { sessionStorage.removeItem("dsh-portable-settings-view"); } catch {}', 'settings close seam changed upstream')
+  const close = 'const close = (0, react.useCallback)(() => {\n\t\t\t\tsetOpen(false);'
+  return replaceRequired(source, close, `${close}\n                try { sessionStorage.removeItem("dsh-portable-settings-view"); } catch {}`, 'settings close seam changed upstream')
 }
 
 export function patchPluginSettingsNavigation(source) {
@@ -67,7 +72,7 @@ export function patchPortableUpdatesIcon(source) {
   const seam = 'function navIcon(id) {'
   if (!source.includes(marker)) source = replaceRequired(source, seam, `${seam}
             /* ${marker} */
-            if (id === "portable-updates") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDownloadOutline16, {
+            if (id === "portable-updates") return (0, react_jsx_runtime.jsx)(_deepseek_ai_dsh_client_ui_primitives.IconDownloadOutlineRegular ?? _deepseek_ai_dsh_client_ui_primitives.IconDownloadOutline16, {
                 className: SettingsRoot_module_css_default.navIcon,
                 size: 16
             });`, 'settings navigation icon seam changed upstream')
@@ -140,8 +145,12 @@ export function patchPluginManagerActions(source) {
   if (source.includes(marker)) return source
   source = replaceRequired(source, '"plugins.portable.actions": { kind: "list", scope: "root" },',
     `"plugins.portable.actions": { kind: "list", scope: "root" },\n/* ${marker} */ "plugins.portable.update": { kind: "list", scope: "root" },`, 'plugin update slot declaration')
-  source = replaceRequired(source, 'function PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled })',
-    'function PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled, renderSlot })', 'plugin card signature')
+  const cardSignatures = [
+    'function PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled })',
+    'function PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnabled })',
+  ].filter(signature => source.includes(signature))
+  if (cardSignatures.length !== 1) throw new Error('plugin card signature changed upstream')
+  source = replaceRequired(source, cardSignatures[0], cardSignatures[0].replace('onSetEnabled })', 'onSetEnabled, renderSlot })'), 'plugin card signature')
   source = replaceRequired(source, 'const packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, {',
     'const packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, { renderSlot,', 'plugin card slot forwarding')
   // Only extend the card footer; native identity, toggles and details stay owned by DSH.
@@ -156,6 +165,21 @@ export function patchPluginManagerActions(source) {
   card = replaceRequired(card, '\n\t\t\t\t\t})\n\t\t\t\t})',
     '\n\t\t\t\t\t})] })\n\t\t\t\t})', 'plugin update action end')
   return source.slice(0, start) + card + source.slice(end)
+}
+
+export function patchWorkspaceHeaderActions(source) {
+  const marker = 'dsh-portable-workspace-header-actions-v1'
+  // Older cores use their existing qualified plugin view adapter.
+  if (!source.includes('"sidebar.workspaces.session.menu.item"') || source.includes(marker)) return source
+  source = replaceRequired(source, '"sidebar.workspaces.session.menu.item": {',
+    `/* ${marker} */ "sidebar.workspaces.header.action": { kind: "list", scope: "root" },\n"sidebar.workspaces.session.menu.item": {`, 'workspace header slot declaration')
+  source = replaceRequired(source, 'children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {',
+    'children: [wide && renderSlot("sidebar.workspaces.header.action", { className: WorkspaceBrowser_module_css_default.iconButton }), wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, {', 'workspace header action position')
+  // Three header actions need their real width; leave the separate search
+  // control and the collapsed/search-hidden state entirely official-owned.
+  const widths = [...source.matchAll(/\.\w+_headerActions\{[^}]*?max-width:60px/g)]
+  if (widths.length !== 1) throw new Error('workspace header action width changed upstream')
+  return source.replace(widths[0][0], widths[0][0].replace('max-width:60px', 'max-width:92px'))
 }
 
 async function main() {
@@ -177,6 +201,8 @@ async function main() {
     if (error.code !== 'ENOENT') throw error
   }
   if (manager !== undefined) await writeFile(managerFile, patchPluginManagerActions(manager), 'utf8')
+  const workspaceFile = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-ui-workspace', 'lib', 'client.js')
+  await writeFile(workspaceFile, patchWorkspaceHeaderActions(await readFile(workspaceFile, 'utf8')), 'utf8')
   console.log(filename)
 }
 

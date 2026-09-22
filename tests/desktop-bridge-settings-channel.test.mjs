@@ -133,7 +133,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null, webCacheHost = null } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -141,6 +141,12 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
     'Button', 'Input', 'Menu', 'Modal', 'Tooltip',
     'IconChevronDownOutline14', 'IconDownloadOutline16', 'IconFolderOpenOutline16',
   ].map(name => [name, function Primitive() {}]))
+  if (modernIcons) {
+    for (const name of ['IconChevronDownOutline14', 'IconDownloadOutline16', 'IconFolderOpenOutline16']) {
+      primitives[name.replace(/\d+$/, 'Regular')] = primitives[name]
+      delete primitives[name]
+    }
+  }
   let definition
   let productChannel = 'stable'
   const document = {
@@ -213,6 +219,17 @@ function settings(updateChannel = 'stable', overrides = {}) {
     ...overrides,
   }
 }
+
+test('alpha7 regular artwork still registers and renders Portable settings', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings(), versions: { portable: '0.7.0-beta.3', engine: '0.1.7-alpha.1' } }
+    : { schemaVersion: 1, releaseChannel: 'stable', versions: [], unavailable: [] }), { modernIcons: true })
+  const mounted = client.mount()
+  try {
+    await settle()
+    assert.match(textContent(mounted.tree), /0\.1\.7-alpha\.1/)
+  } finally { mounted.unmount() }
+})
 
 test('delayed product catalogs never insert empty-state text into the selector row', async () => {
   for (const additionalVersions of [[], [{ version: '0.6.8' }]]) {
