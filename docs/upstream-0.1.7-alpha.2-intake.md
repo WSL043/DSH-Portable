@@ -30,5 +30,14 @@ upgrade compatibility failure. Its original job log is retained at
 `build/alpha7-2-upgrade-job.log`; independent core success does not erase this
 product qualification failure. The next product must pass its own exact build.
 
+Investigation of that original log found successful workspace readiness followed
+by a five-second CIM process-query timeout during preflight shutdown. The 0.7.1
+candidate now closes its existing Windows kernel job when that query times out;
+without an active owned job it still fails closed. It neither treats unknown
+processes as gone nor kills processes by name. Native fault-injection acceptance
+confirmed a replacement WebView and new backend boot ID, with diagnostics
+exported; evidence `build/query-timeout-native.log`. This injected case is now
+part of both Windows native artifact jobs. Full artifact rerun remains required.
+
 The plugin-update validation fix is a Portable change, not part of the already
 published 0.7.0-based core component. See plugin-update-existing-profile-recovery.md.

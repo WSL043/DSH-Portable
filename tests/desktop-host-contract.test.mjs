@@ -148,6 +148,7 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.match(webViewExit, /if \(remaining\.Count == 0\)/)
   assert.match(webViewExit, /restart Windows/i)
   assert.match(webViewExit, /TryForceReleaseOwnedWebViewProcesses\(remaining\)/)
+  assert.match(webViewExit, /catch \(TimeoutException error\)[\s\S]*if \(!PortableProcessJob\.IsActive\) throw;[\s\S]*query-timeout-job-close[\s\S]*ExitOwnedTreeForShutdown\(\)/)
   const forceRelease = host.slice(host.indexOf('private bool TryForceReleaseOwnedWebViewProcesses'), host.indexOf('private void WriteLauncherLog'))
   assert.match(forceRelease, /ownedWebViewBrowserProcessId/)
   assert.match(forceRelease, /Process\.GetCurrentProcess\(\)\.Id/)

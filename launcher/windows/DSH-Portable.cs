@@ -3703,7 +3703,7 @@ namespace DshPortable
             List<string> remaining = new List<string>();
             while (DateTime.UtcNow < deadline)
             {
-                remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
+                remaining = await InspectWebViewForShutdownAsync();
                 if (remaining.Count == 0)
                 {
                     closingEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
@@ -3725,7 +3725,7 @@ namespace DshPortable
                         : "verified-owned-browser-force-refused");
 
                     await Task.Delay(250);
-                    remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
+                    remaining = await InspectWebViewForShutdownAsync();
                     if (remaining.Count > 0 && PortableProcessJob.IsActive)
                     {
                         WriteLauncherLog("shutdown-webview", "job-close-requested remaining="
@@ -4067,8 +4067,30 @@ namespace DshPortable
             catch { }
         }
 
+        private async Task<List<string>> InspectWebViewForShutdownAsync()
+        {
+            try
+            {
+                List<string> remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
+                return remaining;
+            }
+            catch (TimeoutException error)
+            {
+                // A slow CIM query is not evidence of a broken workspace. The
+                // active kernel job already owns this process tree; close that
+                // verified boundary rather than guessing PIDs or ignoring locks.
+                if (!PortableProcessJob.IsActive) throw;
+                WriteLauncherLog("shutdown-webview", "query-timeout-job-close " + error.Message);
+                ExitOwnedTreeForShutdown();
+                throw; // Environment.Exit above does not return; fail closed if it does.
+            }
+        }
+
         private List<string> OwnedWebViewProcessDiagnostics()
         {
+            if (Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION") == "1"
+                && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW_QUERY_TIMEOUT") == "1")
+                throw new TimeoutException("Injected owned WebView2 process query timeout.");
             string dataRoot = ResolveWebViewDataRoot();
             const string script =
                 "$root=$env:DSH_PORTABLE_WEBVIEW_ROOT; " +
