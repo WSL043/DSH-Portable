@@ -44,7 +44,7 @@
 | A02 | P0 / 插件已交付、产品锁已更新 | chat-manager `53705ef` 已保留官方 workspace，但预览锁仍指向 `2af54bd`、1.4.0-beta.1；修复代码与锁定包并不相同 | 发布新的不可变插件版本后更新锁与摘要，验收旧用户升级、停用/启用、输入框、归档恢复/删除。不能原版本号覆盖重新打包 |
 | A03 | P0 / 待复现并发风险 | `routes.ts` 有自己的 mutationBusy、disabled 集合和 internal/plugin 回写；Portable CLI 另有锁与快照；官方则锁 profile package.json | 绘出真实锁获取顺序和写入文件，三入口统一操作所有权。验收官方安装/启停与市场更新、CLI 同时操作时，拒绝/排队可解释，回滚不能覆盖另一成功操作；不能笼统声称当前没有任何锁 |
 | A04 | P0 / 已确认流程失败 | [35670402716](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/35670402716) 五个平台都报 `Portable plugin installation guidance: expected 1 match, found 0`。文案匹配阻断内核构建 | 将补丁分为数据/安全必需、桌面必需、可选呈现。可选文案不匹配应停用该适配并报告，必需补丁仍阻断。先输出本次内核/基线/脚本身份及失败组合；用同一组合验证。后续绿色检查不抹去此失败 |
-| A05 | P0 / 未甄别 | [CodeQL #922](https://github.com/WSL043/DSH-Portable/security/code-scanning/922) open/high，`bundled-updates.ts:9` 路径由 `DSH_PORTABLE_ROOT` 构造 | 追溯环境变量/根目录信任边界和所有调用，验证可否由远程输入影响。必要时只接受已验证安装根；若误报提交数据流证据。未甄别前不关闭，不等同已证实远程漏洞。Dependabot 本轮 open 为 0 |
+| A05 | P0 / 数据流已甄别为误报 | [CodeQL #922](https://github.com/WSL043/DSH-Portable/security/code-scanning/922) open/high，`bundled-updates.ts:9` 路径由 `DSH_PORTABLE_ROOT` 构造 | 追溯环境变量/根目录信任边界和所有调用，验证可否由远程输入影响。必要时只接受已验证安装根；若误报提交数据流证据。未甄别前不关闭，不等同已证实远程漏洞。Dependabot 本轮 open 为 0 |
 | A06 | P0 / 已确认验收缺口 | 新插件更新 UI 已进入本地缓存，但更新失败/重试/待重启使用浏览器响应模拟，未对该新 UI 做真实安装验收 | 隔离环境真更新，记录文件版本、启用状态、日志及任务结果；再做原生 WebView2。已有 mock 只证明视图状态，不证明安装事务 |
 
 ## 插件与页面：用官方能力替代重复实现
@@ -160,3 +160,7 @@ Default-plugin refresh now preserves explicitly disabled bundles after official 
 - 空间统计的“日志”现包含 profile 的插件操作日志，不扫描会话正文。定向68项通过；实际alpha.2锁占用实验保留0删除，锁释放后仅删除模拟过期记录；临时夹具自动清理。证据 build/plugin-log-maintenance-tests.log、build/plugin-log-lock-acceptance.jsonl。
 - 当前用户目录只读统计：pnpm约1,984,750,269逻辑字节（有链接跳过，非完整物理占用），日志约4,317,549字节。没有清理用户pnpm缓存、会话、备份或现用运行时。A16离线缓存引用保护仍未完成，不能默认 pnpm prune 安全。
 - 仍未关闭：A01共享缓存预览所有权、A03跨入口操作协调、A05安全告警甄别、A06真实行内更新及原生WebView验收，以及其余P1条目。本次不宣称达到全平台发版条件。
+
+### A05 / CodeQL 922 disposition
+
+Both production callers in routes.ts pass only package name/current version, not a root argument. buildDshEnv sets DSH_PORTABLE_ROOT from layout.root after inherited environment spreading. bundledUpdateTarget reads a fixed licenses/COMPONENTS.json suffix and exposes only an upgrade-version string for two allowlisted packages; no file contents or HTTP-controlled path reach the result. Changing the process environment or installed metadata requires same-user local authority. Marked this one alert false positive with a scoped explanation; no rule exclusions. This does not constitute a full security audit or guarantee future callers preserve that boundary.
