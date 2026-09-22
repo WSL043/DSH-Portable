@@ -48,8 +48,10 @@ manager's logs.
   The bounded removal-only retry then passed cancel, uninstall, reinstall,
   enable and composer on that fresh copy. That diagnostic overlay disabled the
   runtime source cache, which otherwise correctly reads the immutable shipped
-  capsule rather than modified extracted files. The corrected package must be
-  rebuilt and retested with its normal source cache before publication.
+  capsule rather than modified extracted files. Release qualification now
+  requires the exact Windows package to repeat the complete official plugin
+  page cycle with its normal source cache; the CI job retains UI screenshots,
+  result JSON and package-manager logs even on failure.
 
 The 0.7.2 default Chat Manager pin is the published 1.5.1 package. GitHub and npm
 tarballs were compared byte for byte; SHA-256:

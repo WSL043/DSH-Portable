@@ -1,0 +1,127 @@
+import assert from 'node:assert/strict'
+import { spawn, execFile } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { createServer } from 'node:net'
+import { cp, mkdir, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { promisify } from 'node:util'
+
+const [rootArg, driverPackage, evidenceArg, disposable] = process.argv.slice(2)
+if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable') {
+  throw new Error('Expected a disposable extracted product, Playwright driver package and evidence directory.')
+}
+const root = path.resolve(rootArg)
+const evidence = path.resolve(evidenceArg)
+await mkdir(evidence, { recursive: true })
+const { chromium } = createRequire(path.resolve(driverPackage))('playwright')
+const env = {
+  ...process.env,
+  DSH_PORTABLE_STATE_ROOT: root,
+  DSH_HOME: path.join(root, 'data', 'dsh-home'),
+  DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
+  DSH_PORTABLE_ENVIRONMENT: 'default',
+  DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+  DSH_TELEMETRY_MODE: 'DISABLED',
+}
+const listener = createServer()
+await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve))
+const debugPort = listener.address().port
+await new Promise(resolve => listener.close(resolve))
+const host = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], {
+  cwd: root,
+  windowsHide: true,
+  stdio: 'ignore',
+  env: {
+    ...env,
+    DSH_PORTABLE_TEST_HIDDEN: '1',
+    DSH_PORTABLE_TEST_AUTOMATION: '1',
+    DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
+  },
+})
+const report = { ok: false, pageErrors: [] }
+let browser
+let page
+try {
+  const deadline = Date.now() + 120_000
+  while (Date.now() < deadline && !browser) {
+    try { browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`, { timeout: 2_000 }) }
+    catch { await new Promise(resolve => setTimeout(resolve, 250)) }
+  }
+  assert.ok(browser, 'native WebView2 debugging endpoint did not appear')
+  page = browser.contexts()[0].pages()[0]
+  assert.ok(page, 'native WebView2 page did not appear')
+  page.setDefaultTimeout(30_000)
+  page.on('pageerror', error => report.pageErrors.push(error.message))
+  await page.waitForURL(/^http:\/\/127\.0\.0\.1:/, { timeout: 90_000 })
+  await page.waitForFunction(() => !document.querySelector('[data-dsh-boot]'))
+  const routeStatus = await page.evaluate(async () => (await fetch('/dsh-portable/settings')).status)
+  assert.equal(routeStatus, 200, 'Portable bridge route is unavailable')
+
+  // The first-run notice and model prompt are official DSH UI. No model key is
+  // needed for this disposable package-manager acceptance.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const continueButton = page.locator('button').filter({ hasText: /^(Continue|继续)$/i }).first()
+    const configureLater = page.locator('button').filter({ hasText: /^(Configure later|稍后配置)$/i }).first()
+    if (await continueButton.isVisible() && await continueButton.isEnabled()) {
+      await continueButton.click()
+      continue
+    }
+    if (await configureLater.isVisible()) {
+      await configureLater.click()
+      continue
+    }
+    await page.waitForTimeout(500)
+  }
+
+  await page.getByRole('button', { name: /^(Plugins|插件)$/ }).first().click()
+  const card = page.locator('[data-plugin-package="dsh-image-viewer"]')
+  await card.waitFor()
+  await card.getByRole('button').first().click()
+  await page.getByRole('button', { name: /^(卸载 |Uninstall )/ }).click()
+  let dialog = page.getByRole('dialog').last()
+  await dialog.getByRole('button', { name: /^(取消|Cancel)$/ }).click()
+  report.cancelUninstall = true
+  await page.getByRole('button', { name: /^(卸载 |Uninstall )/ }).click()
+  dialog = page.getByRole('dialog').last()
+  await dialog.getByRole('button', { name: /^(卸载|Uninstall)$/ }).click()
+  await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).waitFor({ timeout: 90_000 })
+  await page.waitForFunction(() => !document.querySelector('[data-plugin-package="dsh-image-viewer"]'), null, { timeout: 90_000 })
+  report.uninstalled = true
+  await page.screenshot({ path: path.join(evidence, 'after-uninstall.png') })
+
+  await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).click()
+  dialog = page.getByRole('dialog').last()
+  await dialog.getByRole('textbox').first().fill('dsh-image-viewer@0.1.2')
+  await dialog.getByRole('button', { name: /^(安装|Install)$/ }).click()
+  await page.getByRole('button', { name: /^(立即启用|Enable now)$/ }).waitFor({ timeout: 120_000 })
+  await page.getByRole('button', { name: /^(立即启用|Enable now)$/ }).click()
+  await page.getByRole('button', { name: /^(返回插件列表|Back to plugins)$/ }).click()
+  await card.waitFor()
+  await page.waitForFunction(() => document.querySelector('[data-plugin-package="dsh-image-viewer"] [role="switch"]')?.getAttribute('aria-checked') === 'true')
+  assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), 'true')
+  report.reinstalledAndEnabled = true
+  await page.screenshot({ path: path.join(evidence, 'after-install.png') })
+
+  await page.getByRole('button', { name: /^(新会话|新建会话|New session)$/ }).first().click()
+  const composer = page.locator('[contenteditable="true"][role="textbox"]').first()
+  await composer.fill('Disposable official plugin lifecycle check')
+  assert.equal(await composer.isEditable(), true)
+  assert.deepEqual(report.pageErrors, [])
+  report.composer = true
+  report.ok = true
+} catch (error) {
+  report.failure = String(error)
+  await page?.screenshot({ path: path.join(evidence, 'failure.png') }).catch(() => {})
+  throw error
+} finally {
+  await writeFile(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2))
+  await cp(path.join(root, 'data', 'dsh-home', 'profiles', 'web', '.plugin-manager', 'logs'),
+    path.join(evidence, 'plugin-manager-logs'), { recursive: true }).catch(() => {})
+  await browser?.close().catch(() => {})
+  const node = path.join(root, 'runtime', 'node', 'node.exe')
+  const launcher = path.join(root, 'launcher', 'runtime-entry.mjs')
+  await promisify(execFile)(node, [launcher, 'portable-cli.mjs', 'stop', '--json'], {
+    cwd: root, env, windowsHide: true, timeout: 120_000,
+  }).catch(() => {})
+  if (host.exitCode === null) host.kill()
+}

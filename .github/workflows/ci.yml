@@ -401,6 +401,42 @@ jobs:
             -Root (Join-Path $Root 'DSH-Portable') `
             -Fixture 'tests\fixtures\dsh-portable-smoke-plugin'
 
+  windows-official-plugin-cycle:
+    name: Windows official plugin page lifecycle
+    needs: windows-build
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
+      - name: Cancel uninstall, uninstall, reinstall, enable, and compose in native WebView2
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $FixtureRoot = Join-Path $env:RUNNER_TEMP 'dsh-official-plugin-cycle'
+          $DriverRoot = Join-Path $env:RUNNER_TEMP 'dsh-official-plugin-driver'
+          New-Item -ItemType Directory -Force -Path $FixtureRoot | Out-Null
+          tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $FixtureRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Official plugin fixture extraction failed.' }
+          npm install --prefix $DriverRoot --ignore-scripts --no-audit --no-fund playwright@1.63.0
+          if ($LASTEXITCODE -ne 0) { throw 'Official plugin driver installation failed.' }
+          $ProductRoot = Join-Path $FixtureRoot 'DSH-Portable'
+          node scripts/smoke-windows-official-plugin-cycle.mjs `
+            $ProductRoot (Join-Path $DriverRoot 'package.json') `
+            (Join-Path $ProductRoot 'acceptance/official-plugin-cycle') --disposable
+          if ($LASTEXITCODE -ne 0) { throw 'Official plugin page lifecycle failed.' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: windows-official-plugin-cycle-evidence
+          path: ${{ runner.temp }}/dsh-official-plugin-cycle/DSH-Portable/acceptance/official-plugin-cycle/
+
   windows-desktop-host:
     name: Windows native desktop identity and lifecycle (${{ matrix.label }})
     needs: windows-build
@@ -990,6 +1026,7 @@ jobs:
       - windows-portable-smoke
       - windows-complete-offline
       - windows-plugin-smoke
+      - windows-official-plugin-cycle
       - windows-desktop-host
       - windows-bootstrap-smoke
       - windows-version-upgrade-smoke
