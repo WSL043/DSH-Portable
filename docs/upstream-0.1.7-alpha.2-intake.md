@@ -41,3 +41,15 @@ part of both Windows native artifact jobs. Full artifact rerun remains required.
 
 The plugin-update validation fix is a Portable change, not part of the already
 published 0.7.0-based core component. See plugin-update-existing-profile-recovery.md.
+# Published Portable 0.7.1 baseline
+
+Run [35766664331](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/35766664331)
+completed all five platform builds and published the candidate channel. Public
+catalog readback confirms DSH 0.1.7-alpha.2, source
+`00102833dfaee1da9f48a3a8eae9d34005a75218`, for Portable 0.7.1.
+Windows shell fingerprint is
+`09a5c271e17aea3e6bee65c8739ecc36d36fe303b89caba4566e23cd811fffc3`;
+capsule SHA-256 is
+`b47655e898dbd086c09f9159436e406f755bdfde39394bfc8ba92ac34d261e31`.
+This is delivered evidence, not merely a dispatched run. Historical cores still
+require their own compatible-baseline qualification.
