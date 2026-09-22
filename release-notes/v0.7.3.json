@@ -1,9 +1,9 @@
 {
   "version": "0.7.3",
   "zh": {
-    "summary": "统一 Windows Portable 更新界面，并为插件安装和更新提供独立的 Beta 选择。",
+    "summary": "统一 Windows Portable 与内核的更新选择界面，并为插件安装和更新提供独立的 Beta 选择。",
     "highlights": [
-      "Portable 更新选择在主窗口内完成；整包更新由沿用窗口尺寸和主题的独立更新器接手。",
+      "Portable 与内核的更新选择都在主窗口内完成；整包更新由沿用窗口尺寸和主题的独立更新器接手。",
       "插件市场安装默认选择正式版，有更新的 Beta 时可明确选择具体 Beta 版本。",
       "已安装插件的正式版更新与 Beta 试用分开显示；Beta 更新复核版本并验证实际安装结果。"
     ],
@@ -11,9 +11,9 @@
     "upgradeNotes": ["退出后升级，保留 data 和 workspace。"]
   },
   "en": {
-    "summary": "Unify the Windows Portable update UI and offer an explicit Beta choice for plugin installs and updates.",
+    "summary": "Unify Windows Portable and core update choices and offer an explicit Beta choice for plugin installs and updates.",
     "highlights": [
-      "Choose Portable updates in the main window; a separate updater takes over full-package replacement with matching window size and theme.",
+      "Choose Portable and core updates in the main window; a separate updater takes over full-package replacement with matching window size and theme.",
       "The plugin market installs stable builds by default and offers a specific Beta version only when a newer tagged build exists.",
       "Installed plugins show stable updates and Beta trials separately; Beta updates recheck the tag and verify the resolved version."
     ],

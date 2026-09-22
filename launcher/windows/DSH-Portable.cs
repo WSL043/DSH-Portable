@@ -4631,15 +4631,7 @@ namespace DshPortable
                 }
                 if (!EnsureNoOtherRunningEnvironmentHosts(manual)) return;
 
-                bool accepted;
-                if (!engineScope)
-                    accepted = await ShowUpdateChoiceOverlayAsync(current, latest, engineCurrent, engineLatest, false) == 1;
-                else
-                    accepted = MessageBox.Show(this,
-                        UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
-                            + L("现在更新会短暂重启本地 DSH 服务。会话、设置、插件和工作区保持不变。\r\n\r\n现在更新吗？选择“否”可以稍后处理。",
-                                "Updating now briefly restarts the local DSH service. Sessions, settings, plugins, and workspace stay in place.\r\n\r\nUpdate now? Choose No to do it later."),
-                        targetName + L(" 更新", " update"), MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;
+                bool accepted = await ShowUpdateChoiceOverlayAsync(current, latest, engineCurrent, engineLatest, false, scope) == 1;
                 if (!accepted)
                 {
                     await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
@@ -6000,25 +5992,28 @@ namespace DshPortable
             return product + "\r\n" + engine + "\r\n" + delivery;
         }
 
-        private async Task<int> ShowUpdateChoiceOverlayAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage)
+        private async Task<int> ShowUpdateChoiceOverlayAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage, string scope = "product")
         {
+            bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
             RestoreFromTray();
             webView.Enabled = false;
             launchPanel.Visible = true;
             launchPanel.BringToFront();
-            ConfigureDesktopLoadingSurface(L("发现 DSH-Portable 更新", "DSH-Portable update available"), true);
+            ConfigureDesktopLoadingSurface(engineScope
+                ? L("发现 DeepSeek Harness 更新", "DeepSeek Harness update available")
+                : L("发现 DSH-Portable 更新", "DSH-Portable update available"), true);
             launchContent.Size = new Size(540, 260);
             productIcon.Location = new Point(252, 0);
             productLabel.Location = new Point(0, 43);
             productLabel.Size = new Size(540, 28);
-            productLabel.Text = "DSH-Portable";
+            productLabel.Text = engineScope ? "DeepSeek Harness" : "DSH-Portable";
             activityRing.Visible = false;
             statusLabel.Location = new Point(0, 78);
             statusLabel.Size = new Size(540, 22);
             progressDetail.Location = new Point(20, 109);
             progressDetail.Size = new Size(500, 75);
             progressDetail.AutoEllipsis = false;
-            progressDetail.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage);
+            progressDetail.Text = UpdateDescription(current, latest, engineCurrent, engineLatest, fullPackage, scope);
             progressDetail.TextAlign = ContentAlignment.MiddleCenter;
             CenterLaunchContent();
 
@@ -6073,7 +6068,9 @@ namespace DshPortable
                 later.Dispose();
                 if (!IsDisposed)
                 {
-                    ConfigureDesktopLoadingSurface(L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"), true);
+                    ConfigureDesktopLoadingSurface(engineScope
+                        ? L("正在准备内核更新…", "Preparing the engine update…")
+                        : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"), true);
                     if (choice != 1) HideDesktopOperation();
                 }
             }

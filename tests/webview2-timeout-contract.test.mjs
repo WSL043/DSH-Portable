@@ -158,7 +158,7 @@ test('Windows update checking and update interaction use separate states', async
   )
 })
 
-test('Windows complete-package update choice stays in the live workspace and restores it on cancel', async () => {
+test('Windows product and engine update choices share the live workspace and restore it on cancel', async () => {
   const source = await readFile(launcherSource, 'utf8')
   const updateCheck = source.slice(
     source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual, string scope)'),
@@ -170,7 +170,9 @@ test('Windows complete-package update choice stays in the live workspace and res
   )
 
   assert.match(updateCheck, /int choice = await ShowUpdateChoiceOverlayAsync\(/)
+  assert.match(updateCheck, /bool accepted = await ShowUpdateChoiceOverlayAsync\(current, latest, engineCurrent, engineLatest, false, scope\) == 1/)
   assert.match(choice, /launchPanel\.Visible = true/)
+  assert.match(choice, /UpdateDescription\(current, latest, engineCurrent, engineLatest, fullPackage, scope\)/)
   assert.match(choice, /if \(choice != 1\) HideDesktopOperation\(\)/)
   assert.doesNotMatch(choice, /ShowDialog\(/)
   assert.doesNotMatch(choice, /^\s*ClientSize\s*=/m)

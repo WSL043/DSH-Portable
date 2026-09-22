@@ -197,13 +197,13 @@ Copying the complete folder is supported only between the same operating system 
 
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
-**Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Portable integrates the upstream [dsh-market](https://github.com/dsh-market/dsh-market) project.
+**Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Starting with Portable 0.7.3, stable is the default; a separate Install or Try Beta button appears only when npm's Beta tag points to a newer prerelease. The market draws on [dsh-market](https://github.com/dsh-market/dsh-market) and hands installation to the official DSH plugin manager.
 
-In the official **Plugins → Add plugin** dialog on DSH 0.1.6-alpha.2, enter a **package name or address, not a terminal command**. For example, enter `dsh-codex-subscription`, or `dsh-codex-subscription@2.1.3-beta.1` for that candidate. Do not include `dsh plugin --profile web add`. Review the source and follow the installation result; restart only when requested.
+In the official **Plugins → Add plugin** dialog, enter a **package name or address, not a terminal command**. For example, enter `dsh-codex-subscription`, or `dsh-codex-subscription@2.1.3-beta.1` for that candidate. Do not include `dsh plugin --profile web add`. Review the source and follow the installation result; restart only when requested.
 
 Optional provider: [Codex Subscription](https://github.com/WSL043/dsh-codex-subscription) connects a ChatGPT/Codex subscription through the existing Plugin Market or standard DSH command; it is not installed by default.
 
-Fresh installs include only two reviewed, removable defaults, currently on the Stable channel: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) **0.1.1** provides galleries, zoom, pan, download and region notes; [Chat Manager](https://github.com/WSL043/dsh-chat-manager) **1.3.5** provides archive search, restoration and confirmed session deletion. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
+Fresh installs include only two reviewed, removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) provides galleries, zoom, pan, download and region notes; [Chat Manager](https://github.com/WSL043/dsh-chat-manager) provides archive search, restoration and confirmed session deletion. Each release pins their exact versions; see its Release notes. Other community plugins remain opt-in through the Plugin Market or standard DSH commands. Normal upgrades preserve the existing Profile and every installed or removed plugin; removing either default prevents later launches and updates from installing it again.
 
 <details>
 <summary>Advanced: manage plugins through DSH Terminal</summary>
