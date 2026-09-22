@@ -69,3 +69,17 @@ Windows 原生窗口已有 1 MiB 日志轮转，但 Node 入口（命令行启�
 5. 设置页分别展示网页缓存、旧运行时、插件依赖、恢复材料，清理结果只汇报实际完成量。不能承诺会话附件或用户备份自动变小。
 
 参考：[pnpm store 官方文档](https://pnpm.io/cli/store)。其 prune 后按需重新下载的前提不适用于 Portable 的完全断网恢复，因此不直接照搬自动 prune。
+
+
+### 2026-09-22：复制安装的离线修复反例
+
+本机随包 pnpm 11.11.0 源码 `storeController/prune` 先删除元数据，再按文件硬链接计数（nlink === 1）删除内容。因而只保留元数据不能保证复制安装的离线重建。用户 store 的只读索引仍记录 Codex 0.153.4 的六个平台包；不据此直接删除，因为便携移动、其他 profile 和回滚引用仍需验证。
+
+新增 `scripts/qualify-store-maintenance.mjs`：仅在 build 下创建独立随机目录和本地测试 registry，安装两个合成版本，关闭 registry，保留当前与回滚安装，然后通过临时 cache-dir 避免 prune 删除离线元数据。分别以 hardlink / copy 运行。
+
+- hardlink：整理后两个版本均断网重建成功；5 文件、12474 字节未减少。这证明这一组引用被保留，不代表收益。
+- copy：整理命令成功，但两个版本断网重建均失败；5 文件降为 1 文件。这是阻止上线自动整理的反例，不能把命令退出成功当作产品验收通过。
+- 证据：`build/store-maintenance-20260922-v3-hardlink/result.json` 与 `build/store-maintenance-20260922-v3-copy/result.json`。v1/v2 为 CLI 参数不被接受的测试装置错误，保留日志，不用于产品结论。
+- 复现：`node scripts/qualify-store-maintenance.mjs hardlink` 和 `node scripts/qualify-store-maintenance.mjs copy`。脚本目前断言已知成功/失败边界；copy 运行成功表示正确复现反例，绝不代表 copy 清理可发布。
+
+下一步设计必须以 profile/回滚/离线恢复的完整内容引用为准，不能仅按 nlink 判断。现阶段不对用户 store 执行 prune；清理功能仍未完成。
