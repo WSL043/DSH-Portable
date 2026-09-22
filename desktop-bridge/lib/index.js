@@ -4,6 +4,7 @@ import { closeSync, copyFileSync, mkdirSync, openSync, readFileSync, readSync, r
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
+import { installOfficialPnpmRecovery } from './pnpm-service.mjs'
 
 export const name = 'dsh-portable-desktop-bridge'
 export const inject = ['webServer']
@@ -380,4 +381,8 @@ export function mountPortableRoutes(webServer, options = {}) {
 
 export function apply(ctx) {
   ctx.effect(() => mountPortableRoutes(ctx.webServer), 'dsh-portable: settings and maintenance routes')
+  ctx.inject?.(['pluginManager'], child => {
+    child.effect(() => installOfficialPnpmRecovery(child.pluginManager),
+      'dsh-portable: official package manager release-age recovery')
+  })
 }

@@ -1,6 +1,6 @@
 {
   "name": "@wsl043/dsh-portable-desktop-bridge",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": true,
   "type": "module",
   "main": "lib/index.js",
@@ -25,6 +25,7 @@
   },
   "files": [
     "lib/index.js",
+    "lib/pnpm-service.mjs",
     "lib/client.js",
     "cordis.patch.yml"
   ],

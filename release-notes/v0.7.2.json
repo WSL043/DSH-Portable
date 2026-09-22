@@ -1,0 +1,23 @@
+{
+  "version": "0.7.2",
+  "zh": {
+    "summary": "修复官方插件页安装、卸载被已安装新版本的等待期检查阻断的问题，并更新会话管理修复版。",
+    "highlights": [
+      "官方插件管理遇到已安装依赖的发布时间等待检查失败时，仅为当前操作重试一次，不修改全局设置。",
+      "保留官方插件操作锁、取消操作、安装结果检查及页面流程；普通网络错误不会触发等待期绕过。",
+      "内置会话管理 1.5.1，修复会话记录已不存在时无法清理残留归档项的问题。"
+    ],
+    "knownIssues": ["不会自动修复无关异常插件；尚未安装的新包仍保留常规发布时间检查。"],
+    "upgradeNotes": ["退出后升级，保留 data 和 workspace。"]
+  },
+  "en": {
+    "summary": "Recover official plugin installs and removals blocked by the release-age check of already-installed dependencies, and include the session manager fix.",
+    "highlights": [
+      "Retry a release-age lockfile verification failure once for the current official plugin operation without changing global settings.",
+      "Preserve official mutation locks, cancellation, reconciliation and UI flow; unrelated network failures do not bypass release-age checks.",
+      "Bundle Chat Manager 1.5.1 to reconcile stale archive entries after verified transcript absence."
+    ],
+    "knownIssues": ["Unrelated broken plugins are not repaired automatically; new package selection retains its normal release-age checks."],
+    "upgradeNotes": ["Exit before upgrading and retain data and workspace."]
+  }
+}
