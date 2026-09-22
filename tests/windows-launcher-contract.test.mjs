@@ -108,6 +108,7 @@ test('Windows launcher preserves UTF-8 diagnostics from the DSH subprocess', { s
     await copyFile(new URL('../launcher/data-paths.mjs', import.meta.url), path.join(root, 'launcher', 'data-paths.mjs'))
     await copyFile(new URL('../launcher/startup-trace.mjs', import.meta.url), path.join(root, 'launcher', 'startup-trace.mjs'))
     await copyFile(new URL('../launcher/log-history.mjs', import.meta.url), path.join(root, 'launcher', 'log-history.mjs'))
+    await copyFile(new URL('../launcher/launcher-log.mjs', import.meta.url), path.join(root, 'launcher', 'launcher-log.mjs'))
     const webview2 = await prepareWebView2(root)
     const notifications = await prepareNotificationRuntime(root)
     await compileLauncher(executable, webview2, notifications)
