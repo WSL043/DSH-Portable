@@ -125,3 +125,33 @@ adapter cannot handle alpha.1. Qualification correctly prevented publication;
 main's correction does not modify previously published baseline bytes. A newly
 qualified product must be published before its independent core channel can use
 that adapter. Do not report source discovery as successful core delivery.
+
+## Published qualification result (2026-09-22)
+
+Portable 0.7.0 was published from `0923e303c3ef583a242f6551e478b9386d17ddee`.
+Product CI [35728158029](https://github.com/WSL043/DSH-Portable/actions/runs/35728158029)
+passed all 35 jobs. Publication [35731104260](https://github.com/WSL043/DSH-Portable/actions/runs/35731104260)
+succeeded, including stable and candidate product catalogs. This supersedes the
+pending final-product status above; it does not erase the retained local EPERM
+or previous migration assertion failures.
+
+Final packaged Windows native screenshots were inspected in both themes:
+archive settings and destructive controls, image annotations, deletion confirmation,
+and editable composer after plugin enable/disable. The sidebar contains search,
+archive, view options and add workspace. The native result records no unexpected
+UI errors and confirms annotation return, retained draft, archive/restore,
+delete cancellation and a confirmed synthetic deletion. Evidence:
+`build/0.7.0-final-plugin-ui/`. This is synthetic, keyless operation acceptance,
+not a paid-model or microphone recognition test.
+
+The independent updater now preflights published adapters before five-platform
+fan-out (Updates `bcd6a70`, 35 tests passed, actionlint passed). Real run 35728475950
+recorded the old Beta 3 / alpha.1 native-settings seam as blocked and skipped
+platform builds. A follow-up skipped that combination and reached a distinct
+upstream provenance gap: npm 0.1.5-rc.3 has no matching official Git tag (404).
+That version remains unqualified. A new baseline or pipeline can retry a blocked
+combination; ordinary failures retain bounded retry behavior.
+
+Post-publication core run 35731464185 was explicitly dispatched against the new
+published baseline. Independent core catalog delivery is separate from the
+successful product publication and remains pending at this checkpoint.
