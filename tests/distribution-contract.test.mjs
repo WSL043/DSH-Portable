@@ -44,7 +44,8 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
 test('upstream lock pins independently verifiable DSH and Node artifacts', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
   assert.equal(lock.dsh.package, '@deepseek-ai/dsh')
-  assert.match(lock.dsh.version, /^0\.\d+\.\d+(?:-rc\.\d+)?$/)
+  // Portable's release channel is independent of the official core's train.
+  assert.match(lock.dsh.version, /^0\.\d+\.\d+(?:-(?:alpha|beta|rc)\.\d+)?$/)
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
   assert.match(lock.dsh.noticesSha256, /^[0-9a-f]{64}$/)

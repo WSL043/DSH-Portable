@@ -97,3 +97,31 @@ Plugin cards now offer Restart app or Reload page according to the server activa
 Ownership: official voice input, models and permission flows remain upstream-owned. Portable preserves the matching speech runtime and verifies packaging/host boundaries; this checkpoint does not claim microphone or speech-recognition acceptance. No voice runtime was removed for size reduction.
 
 A failed offline default refresh on alpha.1 now pauses known incompatible 1.3.5/1.4 Beta chat clients without removing their files, dependencies or sessions. Thirteen default-plugin tests passed. The full local run has 768 passes, 6 EPERM failures creating file symlinks and 7 skips (build/alpha7-final-contracts.log); preserve those failures and use the cross-platform gate, not a green claim about this local run. Previous baseline build 35713201685 passed, but does not qualify these new changes. The Windows 2025 product gate now also runs the exact packaged defaults through the pinned shared native UI verifier used by core-update qualification.
+
+## 0.7.0 formal-release qualification checkpoint
+
+The stable product baseline now pins the same official 0.1.7-alpha.1 source and
+stable default plugins already exercised in the preview product. Portable's
+stable designation does not change the official core's Alpha designation.
+The fresh npm lock was generated in an isolated directory without forcing peer
+resolution; archive integrity matches the reviewed preview source. Stable
+offline plugin pins and measured footprint budgets were promoted together.
+Previous default-plugin identities remain recognized for recovery.
+
+CI 35719056893 passed all product checks except the running previous-release
+upgrade assertion: the official core migrated settings.yaml to settings.yaml.imported.
+The corrected gate checks both original bytes and the effective locale in the
+active profile, in addition to all other data markers. Original failure evidence
+is retained in build/release-qualification-failed.log.
+
+Local promotion suite: 773 passed, 7 failed, 6 skipped. Six failures are existing
+Windows file-symlink EPERM fixture restrictions. The seventh was the former
+RC-only core-version contract, corrected to distinguish Portable and upstream
+release channels. Targeted verification then passed 37 tests. Final exact-commit
+product CI, publication and core-channel delivery remain pending.
+
+Core sync 35715465695 used published baseline a16fbbd, whose native-settings
+adapter cannot handle alpha.1. Qualification correctly prevented publication;
+main's correction does not modify previously published baseline bytes. A newly
+qualified product must be published before its independent core channel can use
+that adapter. Do not report source discovery as successful core delivery.

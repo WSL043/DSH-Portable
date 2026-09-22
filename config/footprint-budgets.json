@@ -2,53 +2,75 @@
   "schemaVersion": 1,
   "platforms": {
     "windows-x64": {
-      "archiveBytes": 65000000,
-      "extractedBytes": 218000000,
-      "files": 9300,
+      "archiveBytes": 160000000,
+      "extractedBytes": 600000000,
+      "files": 11000,
       "directories": 2950,
-      "items": 12250,
-      "appBytes": 122000000,
-      "appFiles": 9200,
+      "items": 13500,
+      "appBytes": 505000000,
+      "appFiles": 10900,
       "appDirectories": 2900,
-      "appItems": 12100,
+      "appItems": 13200,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 350000000,
+      "extractedBytesWithoutOfficeRuntime": 252000000,
+      "appBytesWithoutOfficeRuntime": 156000000,
+      "speechRuntimeBytes": 24000000,
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 228000000,
+      "appBytesWithoutOfficeAndSpeechRuntime": 132000000
     },
     "macos-x64": {
-      "archiveBytes": 78000000,
-      "extractedBytes": 250000000,
-      "files": 9500,
+      "archiveBytes": 202000000,
+      "extractedBytes": 580000000,
+      "files": 11000,
       "directories": 2950,
-      "items": 12400,
+      "items": 13500,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 285000000,
+      "extractedBytesWithoutOfficeRuntime": 298000000,
+      "speechRuntimeBytes": 38000000,
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 260000000
     },
     "macos-arm64": {
-      "archiveBytes": 76000000,
-      "extractedBytes": 245000000,
-      "files": 9500,
+      "archiveBytes": 191000000,
+      "extractedBytes": 562000000,
+      "files": 11000,
       "directories": 2950,
-      "items": 12400,
+      "items": 13500,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 275000000,
+      "extractedBytesWithoutOfficeRuntime": 290000000,
+      "speechRuntimeBytes": 35000000,
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 255000000
     },
     "linux-x64": {
-      "archiveBytes": 91800000,
-      "extractedBytes": 330000000,
+      "archiveBytes": 169000000,
+      "extractedBytes": 574000000,
       "files": 14250,
       "directories": 3975,
       "items": 18250,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 200000000,
+      "extractedBytesWithoutOfficeRuntime": 374000000,
+      "speechRuntimeBytes": 34000000,
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 340000000
     },
     "linux-arm64": {
-      "archiveBytes": 91200000,
-      "extractedBytes": 325000000,
+      "archiveBytes": 171000000,
+      "extractedBytes": 576000000,
       "files": 14250,
       "directories": 3975,
       "items": 18250,
       "marketBytes": 2100000,
-      "marketFiles": 230
+      "marketFiles": 230,
+      "officeRuntimeBytes": 200000000,
+      "extractedBytesWithoutOfficeRuntime": 376000000,
+      "speechRuntimeBytes": 41000000,
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 335000000
     }
   }
 }

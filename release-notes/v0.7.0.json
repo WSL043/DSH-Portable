@@ -1,0 +1,41 @@
+{
+  "version": "0.7.0",
+  "zh": {
+    "summary": "跟进官方 DSH 0.1.7-alpha.1，统一插件管理与会话操作，完善升级恢复和存储维护。",
+    "highlights": [
+      "插件市场沿用官方添加插件流程，安装、更新完成后提供明确的重启或刷新按钮。",
+      "内置正式版会话管理 1.5.0 和图片查看器 0.1.2，适配新版官方界面与插件图标。",
+      "会话管理保留官方侧边栏功能，补充归档入口、会话内容搜索和永久删除；图片标注可返回原输入草稿。",
+      "改善插件依赖存储、缓存与备份的维护边界，保留会话、设置、附件和工作区。",
+      "兼容官方旧设置迁移，保留完整语音运行库，并补充 macOS 麦克风权限用途说明。"
+    ],
+    "knownIssues": [
+      "Portable 为正式发行版，内置官方 DSH 仍为 0.1.7-alpha.1；第三方插件需分别确认兼容性。",
+      "程序回滚不等于会话数据格式降级；升级前请保留独立备份。",
+      "完整离线包不包含模型；已有第三方插件依赖缺少离线缓存时，其更新仍可能需要联网。"
+    ],
+    "upgradeNotes": [
+      "退出 Portable 后再升级；保留原 data 和 workspace。",
+      "默认插件的用户禁用状态会保留，更新不会擅自重新启用。"
+    ]
+  },
+  "en": {
+    "summary": "Follow official DSH 0.1.7-alpha.1 with unified plugin management, updated session tools, and improved recovery and storage maintenance.",
+    "highlights": [
+      "Use the official Add plugin flow and offer explicit restart or reload actions after installation and updates.",
+      "Bundle stable Session Manager 1.5.0 and Image Viewer 0.1.2 with updated official UI integration and plugin icons.",
+      "Preserve official sidebar actions while adding archive navigation, content search and permanent deletion. Return image annotations to the original draft.",
+      "Improve dependency-store, cache and backup maintenance while preserving sessions, settings, attachments and workspaces.",
+      "Support official legacy-settings migration, retain the speech runtime, and declare microphone usage on macOS."
+    ],
+    "knownIssues": [
+      "Portable is a stable release; its bundled official DSH remains 0.1.7-alpha.1. Third-party plugins require separate compatibility checks.",
+      "Application rollback does not downgrade session data formats. Keep an independent backup before upgrading.",
+      "Complete offline packages do not include models. Updating existing third-party plugins may require a connection when dependencies are absent from the offline cache."
+    ],
+    "upgradeNotes": [
+      "Exit Portable before upgrading and retain data and workspace.",
+      "User-disabled default plugins remain disabled after updates."
+    ]
+  }
+}

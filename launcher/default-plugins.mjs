@@ -13,7 +13,7 @@ function pluginInstallError(result) {
   return new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.${detail ? `\n${detail}` : ''}`)
 }
 
-export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
+const PREVIOUS_DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-image-viewer',
   version: '0.1.1',
   spec: '0.1.1',
@@ -35,7 +35,7 @@ export const DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   reviewedCommit: '7fabd0a2f10b57632cfcbd25a36bd7d74828baea',
 })])
 
-// Candidate artifacts are reviewed separately; stable products keep their pins.
+// Keep previous package identities for recovery of existing component manifests.
 export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
   {
     "name": "dsh-image-viewer",
@@ -61,6 +61,8 @@ export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
   }
 ].map(Object.freeze))
 
+export const DEFAULT_PLUGINS = PREVIEW_DEFAULT_PLUGINS
+
 export function defaultsForProduct(layout, adapters = {}) {
   const exists = adapters.existsSync ?? existsSync
   const load = adapters.readFileSync ?? readFileSync
@@ -72,7 +74,7 @@ export function defaultsForProduct(layout, adapters = {}) {
     throw new Error('Portable component metadata contains duplicate default plugins.')
   }
   return Object.freeze(configured.map((entry) => {
-    const matched = [...DEFAULT_PLUGINS, ...PREVIEW_DEFAULT_PLUGINS].find(plugin => plugin.name === entry?.package && plugin.version === entry?.version)
+    const matched = [...DEFAULT_PLUGINS, ...PREVIEW_DEFAULT_PLUGINS, ...PREVIOUS_DEFAULT_PLUGINS].find(plugin => plugin.name === entry?.package && plugin.version === entry?.version)
     if (!matched || matched.sha256 !== entry?.sha256 || matched.integrity !== entry?.integrity) {
       throw new Error(`Portable component metadata contains an unrecognized default plugin: ${entry?.package ?? 'unknown'}`)
     }
