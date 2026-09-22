@@ -164,3 +164,13 @@ Default-plugin refresh now preserves explicitly disabled bundles after official 
 ### A05 / CodeQL 922 disposition
 
 Both production callers in routes.ts pass only package name/current version, not a root argument. buildDshEnv sets DSH_PORTABLE_ROOT from layout.root after inherited environment spreading. bundledUpdateTarget reads a fixed licenses/COMPONENTS.json suffix and exposes only an upgrade-version string for two allowlisted packages; no file contents or HTTP-controlled path reach the result. Changing the process environment or installed metadata requires same-user local authority. Marked this one alert false positive with a scoped explanation; no rule exclusions. This does not constitute a full security audit or guarantee future callers preserve that boundary.
+
+## A12 legacy disable replay correction
+
+The previous market mount always replayed its disabled set and registered internal/plugin to re-disable matching entries, even when official pluginManager owned live enablement. Its event disposer was not included in route teardown. This can overrule a newer choice made in the official manager.
+
+The new disable-replay boundary checks the official listPlugins/setPluginEnabled capability at each replay, including immediately before deferred execution. Modern ownership prevents legacy writes; older hosts retain replay. Pending events for the same package coalesce; route disposal unregisters the listener and prevents queued writes; failures are contained. Legacy client-only shim mounting and the broader market state format are unchanged.
+
+83 targeted tests passed, including actual mountMarketRoutes wiring against a synthetic host with persisted stale disable state. Server bundle rebuilt. Evidence: build/disable-replay-tests.log, build/disable-replay-build.log. This is source/service-boundary acceptance; the new server bundle has NOT been copied into the user's shared runtime cache or published in a Portable release. Original native WebView2 and cross-process install acceptance remain pending.
+
+A03 remains open: the market local mutation chain does not own the entire official package write-lock interval. Snapshot/lockfile rollback and legacy patch writes must be moved under a single official operation owner or qualified with conflict rejection before claiming three-entry concurrency safe. Simply nesting the same official lock around a CLI command that acquires it would deadlock and is not an accepted fix. A12 broader state-reporting/migration review also remains separate from this corrected listener.

@@ -1,3 +1,4 @@
+import { createLegacyDisableReplay } from './disable-replay.ts'
 /**
  * HTTP routes bridging the browser market UI to the host. This layer only
  * parses requests, calls the service modules, and serializes responses —
@@ -122,6 +123,7 @@ export interface WebServerService {
 }
 
 export interface MarketHost {
+  get?(name: string): unknown
   webServer: WebServerService
   loader: { entries(): Iterable<LoaderEntry> }
   plugin(plugin: unknown, config: unknown): { await(): Promise<unknown>; dispose(): Promise<unknown> | void }
@@ -269,27 +271,15 @@ export function mountMarketRoutes(
   const activeChannel = (): Channel => resolveChannel(config.channel, marketVersion())
   const themes = createThemeManager(host, config.profile, disabled, activeProfileDir, registryCacheFile)
 
-  // Client-only packages (dsh.client without dsh.bundle) are invisible to the
-  // bundle layer in every boot; the market shim-mounts them so their client
-  // bundles are actually served.
-  void mountClientOnlyDeps(host, activeProfileDir).then(async (mounted) => {
+  const disableReplay = createLegacyDisableReplay(host, disabled,
+    name => themes.setEntryDisabled(name, true),
+    error => host.logger?.warn(`[dsh-market] legacy disable replay failed: ${String(error)}`))
+  // Preserve older client-only packaging support, but official enabled state wins.
+  void mountClientOnlyDeps(host, activeProfileDir).then(async mounted => {
     if (mounted.length > 0) logEvent('info', 'boot', `client-only shims mounted: ${mounted.join(', ')}`)
-    // Replay the persisted disable list: bundle-layer plugins the user
-    // switched away from get live-disabled again (bundle trees are
-    // in-memory, so the disable never persists on its own). Client-only
-    // shims for disabled plugins were already skipped by mountClientOnlyDeps.
-    for (const name of disabled) {
-      if (await themes.setEntryDisabled(name, true)) logEvent('info', 'boot', `plugin kept off: ${name}`)
-    }
-  })
+    await disableReplay.replayAll()
+  }).catch(error => host.logger?.warn(`[dsh-market] client mount failed: ${String(error)}`))
 
-  // Self-healing guard: dsh's own patch overlay can re-update entries during
-  // activation and wipe the runtime disabled flag — whenever a fiber comes
-  // up for a plugin the user switched off, put it back down.
-  host.on?.('internal/plugin', (fiber) => {
-    const name = fiber.entry?.options?.name
-    if (name !== undefined && disabled.has(name)) void themes.setEntryDisabled(name, true)
-  })
   let installing = false
   let restarting = false
   // UI-state flags ONLY: mutual exclusion is enforced by withMutationLock
@@ -2503,6 +2493,7 @@ export function mountMarketRoutes(
   ]
 
   return () => {
+    disableReplay.dispose()
     for (const dispose of disposers) dispose()
   }
 }
