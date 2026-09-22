@@ -26,6 +26,7 @@ interface BundleLayer {
   kind: 'official' | 'community'
   directory: string | null
   patchPath: string | null
+  patchPaths?: string[]
   error: string | null
   entries: string[]
   parseError: string | null
@@ -547,7 +548,7 @@ export function Diagnostics(props: { t: Translate }) {
             {bundle.patchPath !== null && (
               <div className={css.diagMeta}>
                 <span className={css.diagKey}>{t('checkPatch')}</span>
-                <code className={css.spec}>{bundle.patchPath}</code>
+                <code className={css.spec}>{(bundle.patchPaths ?? [bundle.patchPath]).join(" → ")}</code>
               </div>
             )}
           </div>

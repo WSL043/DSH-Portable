@@ -10,6 +10,46 @@ import { bundlePatchTargets, entryArtifactExists } from '../app/vendor/dsh-porta
 import { carrierDisableIds } from '../app/vendor/dsh-portable-plugin-market/src/patch.ts'
 import * as verify from '../app/vendor/dsh-portable-plugin-market/src/verify.ts'
 
+test('ordered multi-file bundles are checked completely and unsafe lists are rejected together', async t => {
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dshm-multi-patch-')))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const dir = path.join(root, 'node_modules', 'fixture')
+  await mkdir(dir, { recursive: true })
+  await writeFile(path.join(root, 'package.json'), '{}')
+  const manifest = patch => writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'fixture', dsh: { bundle: { patch } } }))
+  await writeFile(path.join(dir, 'first.yml'), '- insert:\n    - id: first\n      name: fixture/one\n')
+  await writeFile(path.join(dir, 'second.yml'), '- id: foreign\n  disabled: true\n- insert:\n    - id: second\n      name: fixture/two\n')
+  await manifest(['./first.yml', './second.yml'])
+  const inspect = () => buildBundleLayers(root, ['fixture'], {}, null)
+  const result = inspect()
+  assert.equal(result.bundles[0].error, null)
+  assert.deepEqual(result.bundles[0].entries, ['first', 'second'])
+  assert.equal(result.layers[0].patches.length, 3)
+  assert.deepEqual(bundlePatchTargets(dir), ['fixture/one', 'fixture/two'])
+  assert.deepEqual(carrierDisableIds(root, 'fixture'), ['foreign'])
+  // The second target must be imported too, rather than declaring success
+  // after the first file alone. Synthetic modules contain no user content.
+  await writeFile(path.join(dir, 'one.js'), 'export default {}')
+  await writeFile(path.join(dir, 'two.js'), 'throw Error("SECOND_PATCH_PROBED")')
+  await writeFile(path.join(dir, 'package.json'), JSON.stringify({ name: 'fixture', type: 'module',
+    exports: { './one': './one.js', './two': './two.js' }, dsh: { bundle: { patch: ['./first.yml', './second.yml'] } } }))
+  const imports = await preflightPluginImports(root, ['fixture'], { dshInstallDir: null })
+  assert.equal(imports.ok, false)
+  assert.match(imports.detail, /SECOND_PATCH_PROBED/)
+  for (const declaration of [['./first.yml', '../outside.yml'], ['./first.yml', 3]]) {
+    await manifest(declaration)
+    assert.match(inspect().bundles[0].error, /package-relative/)
+    assert.deepEqual(inspect().layers[0].patches, [])
+    assert.deepEqual(bundlePatchTargets(dir), [])
+  }
+  await manifest(['./first.yml', './missing.yml'])
+  assert.match(inspect().bundles[0].error, /missing/)
+  assert.deepEqual(inspect().layers[0].patches, [])
+  await manifest([])
+  assert.equal(inspect().bundles[0].error, null)
+  assert.deepEqual(inspect().layers[0].patches, [])
+})
+
 test('declared bundle patches stay inside the package directory', async t => {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dshm-package-path-')))
   t.after(() => rm(root, { recursive: true, force: true }))

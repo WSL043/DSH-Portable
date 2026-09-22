@@ -30,7 +30,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { logEvent } from './log.ts'
 import { parsePatchFile } from './check.ts'
-import { resolvePackageRelativePath } from './package-path.ts'
+import { resolveBundlePatchPaths } from './package-path.ts'
 import { bundlePatchInsertedIds, parsePatchRows } from './profile.ts'
 
 /** The slice of the loader tree this module needs. */
@@ -475,8 +475,8 @@ export function carrierDisableIds(profileDirectory: string, packageName: string)
   try {
     const manifest = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8')) as { dsh?: { bundle?: { patch?: unknown } } }
     const declared = manifest.dsh?.bundle?.patch
-    const patchPath = resolvePackageRelativePath(packageDir, declared)
-    if (patchPath !== null) collect(patchPath)
+    const paths = resolveBundlePatchPaths(packageDir, declared)
+    if (paths !== null) for (const patchPath of paths) collect(patchPath)
   } catch { /* package absent */ }
   collect(join(packageDir, 'cordis.patch.yml'))
   return [...disabled]

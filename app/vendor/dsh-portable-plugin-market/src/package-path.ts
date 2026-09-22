@@ -1,6 +1,19 @@
 import { lstatSync, realpathSync } from 'node:fs'
 import { isAbsolute, join, posix, relative, resolve, win32 } from 'node:path'
 
+/** Ordered bundle patch declarations. Reject the entire list on any unsafe entry. */
+export function resolveBundlePatchPaths(packageRoot: string, value: unknown): string[] | null {
+  const declarations = typeof value === 'string' ? [value] : value
+  if (!Array.isArray(declarations)) return null
+  const paths: string[] = []
+  for (const entry of declarations) {
+    const path = resolvePackageRelativePath(packageRoot, entry)
+    if (path === null) return null
+    paths.push(path)
+  }
+  return paths
+}
+
 /**
  * Whether a package manifest value is a relative filesystem path.
  *

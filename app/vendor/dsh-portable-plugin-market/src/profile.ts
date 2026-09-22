@@ -8,7 +8,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, renameSync, statSy
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { resolvePackageRelativePath } from './package-path.ts'
+import { resolvePackageRelativePath, resolveBundlePatchPaths } from './package-path.ts'
 import { githubRemoteIdentities, githubRepoIdentities } from './sources.ts'
 
 /**
@@ -425,10 +425,16 @@ function readBundlePatchRows(dir: string): { names: string[]; ids: string[]; ins
       dsh?: { bundle?: { patch?: unknown } }
     }
     const declared = manifest.dsh?.bundle?.patch
-    if (typeof declared !== 'string' || declared === '') return empty
-    const patchPath = resolvePackageRelativePath(dir, declared)
-    if (patchPath === null) return empty
-    return parsePatchRows(readFileSync(patchPath, 'utf8'))
+    const paths = resolveBundlePatchPaths(dir, declared)
+    if (paths === null) return empty
+    const result: { names: string[]; ids: string[]; insertedIds: string[] } = { names: [], ids: [], insertedIds: [] }
+    for (const patchPath of paths) {
+      const rows = parsePatchRows(readFileSync(patchPath, 'utf8'))
+      for (const key of ['names', 'ids', 'insertedIds'] as const) {
+        for (const value of rows[key]) if (!result[key].includes(value)) result[key].push(value)
+      }
+    }
+    return result
   } catch {
     return empty
   }

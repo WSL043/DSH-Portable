@@ -30,7 +30,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { JSON_SCHEMA, Type, load } from 'js-yaml'
 import { INBOX_BUNDLES, readBundleRules, suggestOrder, validateOrder } from './order.ts'
-import { resolvePackageRelativePath } from './package-path.ts'
+import { resolveBundlePatchPaths } from './package-path.ts'
 
 /** js-yaml dialect for `!!js` scalars — identical to dsh-app-boot's entryListSchema. */
 const jsExpr = new Type('tag:yaml.org,2002:js', {
@@ -58,6 +58,8 @@ export interface BundleLayer {
   directory: string | null
   /** Absolute path of the layer's patch file; null when undeclared/missing. */
   patchPath: string | null
+  /** Ordered files declared by modern bundle manifests. */
+  patchPaths: string[]
   /** Why this layer cannot load at boot (missing dir / no dsh.bundle / …). */
   error: string | null
   /** The host owns this in-box layer, but its install anchor is unavailable. */
@@ -768,6 +770,7 @@ export function buildBundleLayers(
       kind: INBOX_BUNDLES.has(name) ? 'official' : 'community',
       directory,
       patchPath: null,
+      patchPaths: [],
       error: null,
       entries: [],
       parseError: null,
@@ -788,26 +791,29 @@ export function buildBundleLayers(
       return layer
     }
     const declared = bundleManifest.dsh?.bundle?.patch
-    if (typeof declared !== 'string') {
+    if (declared === undefined) {
       layer.error = 'bundle declares no dsh.bundle.patch — the profile will fail to boot'
       return layer
     }
-    const patchPath = resolvePackageRelativePath(directory, declared)
-    if (patchPath === null) {
-      layer.error = 'declared dsh.bundle.patch must be a package-relative path — the profile will fail to boot'
+    const paths = resolveBundlePatchPaths(directory, declared)
+    if (paths === null) {
+      layer.error = 'declared dsh.bundle.patch must be a package-relative path or list of paths — the profile will fail to boot'
       return layer
     }
-    if (!existsSync(patchPath)) {
-      layer.error = `declared patch ${declared} is missing — the profile will fail to boot`
-      return layer
+    for (const patchPath of paths) {
+      if (!existsSync(patchPath)) {
+        layer.error = `declared patch ${patchPath} is missing — the profile will fail to boot`
+        return layer
+      }
+      const patches = parsePatchFile(patchPath)
+      if (patches === null) {
+        layer.parseError = `patch file ${patchPath} is not a valid entry list`
+        return layer
+      }
+      layer.entries.push(...collectInsertIds(patches))
     }
-    layer.patchPath = patchPath
-    const patches = parsePatchFile(patchPath)
-    if (patches === null) {
-      layer.parseError = 'patch file is not a valid entry list'
-      return layer
-    }
-    layer.entries = collectInsertIds(patches)
+    layer.patchPaths = paths
+    layer.patchPath = paths[0] ?? null
     const order = bundleManifest.dsh?.bundle?.order
     if (order !== null && typeof order === 'object' && !Array.isArray(order)) {
       const listOf = (value: unknown): string[] | undefined => Array.isArray(value)
@@ -824,7 +830,7 @@ export function buildBundleLayers(
   const layers: LayerInput[] = bundles.map((bundle) => ({
     label: bundle.name,
     kind: 'bundle' as const,
-    patches: bundle.patchPath !== null && bundle.parseError === null ? parsePatchFile(bundle.patchPath) ?? [] : [],
+    patches: bundle.error === null && bundle.parseError === null ? bundle.patchPaths.flatMap(file => parsePatchFile(file) ?? []) : [],
     parseError: bundle.parseError,
   }))
   return { bundles, layers }

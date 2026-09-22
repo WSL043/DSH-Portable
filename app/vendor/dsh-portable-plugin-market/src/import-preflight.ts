@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { load } from 'js-yaml'
 import { findDshInstallDir } from './check.ts'
-import { resolvePackageRelativePath } from './package-path.ts'
+import { resolveBundlePatchPaths } from './package-path.ts'
 import { entryArtifactExists } from './profile.ts'
 
 export interface ImportPreflightResult {
@@ -42,7 +42,7 @@ try {
 
 /** Read loader rows, not arbitrary `name` fields inside a plugin's config. */
 function importTargets(dir: string): string[] {
-  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dsh?: { bundle?: { patch?: string } } }
+  const manifest = JSON.parse(readFileSync(join(dir, 'package.json'), 'utf8')) as { dsh?: { bundle?: { patch?: unknown } } }
   if (!manifest.dsh?.bundle?.patch) return []
   const targets: string[] = []
   const visit = (rows: unknown): void => {
@@ -55,9 +55,9 @@ function importTargets(dir: string): string[] {
       visit(value.children)
     }
   }
-  const patchPath = resolvePackageRelativePath(dir, manifest.dsh.bundle.patch)
-  if (patchPath === null) return []
-  visit(load(readFileSync(patchPath, 'utf8')))
+  const paths = resolveBundlePatchPaths(dir, manifest.dsh.bundle.patch)
+  if (paths === null) return []
+  for (const patchPath of paths) visit(load(readFileSync(patchPath, 'utf8')))
   return targets
 }
 

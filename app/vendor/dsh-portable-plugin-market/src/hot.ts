@@ -23,6 +23,7 @@ import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
 import { asChannel, type Channel } from './channels.ts'
 import { logEvent } from './log.ts'
+import { resolveBundlePatchPaths } from './package-path.ts'
 
 interface HotRow {
   id: string
@@ -364,14 +365,16 @@ export async function hotMount(ctx: HotContext, profileDir: string, packageName:
         reason: '宿主不支持热挂载(include 插件不可导入),需重启 / the host cannot hot-mount (include plugin unavailable); restart required',
       }
     }
-    let patchText: string | null
-    try {
-      patchText = readFileSync(
-        join(profileDir, 'node_modules', packageName, 'cordis.patch.yml'),
-        'utf8',
-      )
-    } catch {
-      patchText = null
+    const packageDir = join(profileDir, 'node_modules', packageName)
+    const declaration = (readPkgDsh(profileDir, packageName)?.bundle as { patch?: unknown } | undefined)?.patch
+    let patchText: string | null = null
+    if (declaration !== undefined) {
+      const paths = resolveBundlePatchPaths(packageDir, declaration)
+      if (paths === null) return { ok: false, reason: 'Invalid bundle patch paths; activation refused' }
+      // Do not silently mount only one file or fall back when a declared file is missing.
+      patchText = paths.map(file => readFileSync(file, 'utf8')).join('\n')
+    } else {
+      try { patchText = readFileSync(join(packageDir, 'cordis.patch.yml'), 'utf8') } catch { /* client-only */ }
     }
     let rows: HotRow[] | null
     if (patchText !== null) {

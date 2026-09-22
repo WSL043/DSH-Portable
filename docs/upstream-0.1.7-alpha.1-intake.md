@@ -22,3 +22,11 @@ Manual dispatch 35701803158 discovered the new npm alpha/tag, then failed `the b
 Downloaded npm packages: workspace UI, plugin manager and session, each exactly 0.1.7-alpha.1. Local evidence: build/alpha7-packages, build/alpha7-intake.log, build/upstream-alpha7-candidate.lock.json, build/alpha7-intake-ci-failure.log and build/probe-alpha7-chat.mjs. The release comparison API returns a limited file list and is not a complete large-diff audit.
 
 No real user session migration, default-plugin publication, new-core delivery or native desktop acceptance has been performed. Candidate changes belong on the intake branch until the above gates pass.
+
+## Candidate progress (not a compatibility declaration)
+
+- Chat Manager source now has an opt-in official session-menu-slot client, without copying the workspace. Actual alpha.1 host with synthetic V4 sessions passed archive content search, restore, confirmed deletion, active deletion followed by new-session typing, and three enable/disable transitions. Light/dark screenshots were inspected in headless Chrome; this is not native WebView2 acceptance. Plugin tests: 104 passed. Source commit `7b12118`; not published.
+- Market patch-path resolution now accepts ordered arrays as well as a single string, matching official `packages/boot/app-boot/src/profile.ts` at the immutable release commit. Empty arrays remain valid. Diagnostics, ownership discovery, import preflight and legacy hot mounting read the full list; unsafe members reject the whole declaration. Diagnostics displays every path. A missing later file cannot leave a partially accepted layer.
+- Market regression: 126 passed; server/client bundles built. Tests probe an actual failing import from the second patch, missing later files, order, empty arrays and unsafe members. Evidence: `build/alpha7-market-regression.log`, `build/alpha7-market-build.log`. These are source-boundary tests; full modern official installation/reconnect and native candidate qualification remain pending. Peer declarations and supported locks remain unchanged.
+
+Formal publication remains blocked on the uncompleted integration and product gates above and the architecture audit. Do not promote these targeted passes into full release readiness.
