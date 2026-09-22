@@ -35,13 +35,13 @@
       "package": "dsh-chat-manager",
       "repository": "WSL043/dsh-chat-manager",
       "releaseChannel": "prerelease",
-      "version": "1.4.0-beta.1",
-      "spec": "1.4.0-beta.1",
-      "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.4.0-beta.1.tgz",
-      "sha256": "9627b4443383617b0d5607b3230bceeaecd25755118ad85a25b024148725f7f6",
-      "integrity": "sha512-/qP6zvkuIq4bDtyUPMoSIsqIZmBEiaLlFQB68vDn9+RUeFgXnva9ephXq5fZfZnieHGEngED20HLTv00zt5JYA==",
+      "version": "1.4.0-beta.2",
+      "spec": "1.4.0-beta.2",
+      "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.4.0-beta.2.tgz",
+      "sha256": "8b11da326141b95a36d1112d281e2067802a77fa6b96faa2e371e8aa8ab19650",
+      "integrity": "sha512-iJYvdUmfh1GjhlecRQouPtCHVpN3eA5qap0PvWX691WLqN5/FhJpZpLMWi6AdUCRcwxh5HA0amIAVkJwtiuPwA==",
       "license": "MIT",
-      "reviewedCommit": "2af54bdf8d72dd0d46c5bab368c19e4a57bd0e28",
+      "reviewedCommit": "0eb3390698eaec92872e968d1af0ab88d00f1e33",
       "filename": "dsh-chat-manager.tgz"
     }
   }

@@ -143,3 +143,11 @@
 
 
 补充全量本机结果：748 项，734 通过、7 失败、7 跳过。6 项失败发生在测试准备阶段，Windows 文件 symlink 创建返回 EPERM；另1项原生 UTF-8 验收夹具漏复制新增 launcher-log.mjs，已补齐并定向重跑通过。保留原日志 build/maintenance-20260922-tests.log，不改称全量通过。A02 已在 chat-manager 仓库准备独立 beta.2 包并通过官方 alpha.2 删除与4次启停输入框实机验收；仍待发布流水线及 Portable 锁定，不关闭交付项。
+
+## A02 delivery update — 2026-09-22
+
+Chat Manager 1.4.0-beta.2 is published from 0eb3390698eaec92872e968d1af0ab88d00f1e33; release run 35689541443 passed official alpha.2 acceptance before publication. npm and GitHub tarballs share SHA-256 8b11da326141b95a36d1112d281e2067802a77fa6b96faa2e371e8aa8ab19650. Preview pins now reference that immutable release. Stable-core pins are unchanged.
+
+The downloaded release package passed a separate synthetic profile on the actual Portable alpha.2 runtime: three enable/disable transitions preserve an editable composer; the sidebar archive icon opens the single Settings archive tab; body-only search, restore, red permanent deletion and cancellation pass without legacy dialogs or browser errors. Light/dark screenshots were inspected. This is real-host headless browser acceptance, not foreground WebView2 acceptance or a change to the current user profile. Official alpha.2 archive search only matches title/workspace; message-content search remains an extension.
+
+Default-plugin refresh now preserves explicitly disabled bundles after official plugin add. Twelve focused lifecycle tests passed before pin changes; final delivery test results are recorded separately. A02 source/registry/pin mismatch is resolved in source; distribution in the next Portable build remains pending.

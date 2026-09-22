@@ -202,3 +202,29 @@ test('removing a default plugin is durable because every existing profile skips 
   assert.equal(spawned, false)
   assert.equal(await readFile(path.join(profileRoot, 'package.json'), 'utf8'), packageJson)
 })
+
+
+test('refreshing a disabled default never silently re-enables it through official add', async t => {
+  const layout = await fixture(t)
+  await writeReviewedArchives(layout)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  await mkdir(profileRoot, { recursive: true })
+  const filename = path.join(profileRoot, 'package.json')
+  const original = { dependencies: { 'dsh-image-viewer': '0.1.0-beta.7', 'user-plugin': '1.0.0' },
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'user-plugin'] } } }
+  await writeFile(filename, JSON.stringify(original))
+  const result = await seedDefaultPlugins(layout, {
+    verifyArchive: async () => true,
+    spawnSync() {
+      // Model the official add behavior, including enabling the updated bundle.
+      writeFileSync(filename, JSON.stringify({ ...original,
+        dsh: { profile: { bundles: [...original.dsh.profile.bundles, 'dsh-image-viewer'] } } }))
+      return { status: 0 }
+    },
+  })
+  assert.equal(result.status, 'updated')
+  const updated = JSON.parse(await readFile(filename, 'utf8'))
+  assert.deepEqual(updated.dsh.profile.bundles, original.dsh.profile.bundles)
+  assert.equal(updated.dependencies['dsh-image-viewer'], imageVersion)
+  assert.equal(updated.dependencies['user-plugin'], '1.0.0')
+})

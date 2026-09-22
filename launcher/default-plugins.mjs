@@ -50,13 +50,13 @@ export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
   },
   {
     "name": "dsh-chat-manager",
-    "version": "1.4.0-beta.1",
-    "spec": "1.4.0-beta.1",
-    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.4.0-beta.1.tgz",
-    "sha256": "9627b4443383617b0d5607b3230bceeaecd25755118ad85a25b024148725f7f6",
-    "integrity": "sha512-/qP6zvkuIq4bDtyUPMoSIsqIZmBEiaLlFQB68vDn9+RUeFgXnva9ephXq5fZfZnieHGEngED20HLTv00zt5JYA==",
+    "version": "1.4.0-beta.2",
+    "spec": "1.4.0-beta.2",
+    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.4.0-beta.2.tgz",
+    "sha256": "8b11da326141b95a36d1112d281e2067802a77fa6b96faa2e371e8aa8ab19650",
+    "integrity": "sha512-iJYvdUmfh1GjhlecRQouPtCHVpN3eA5qap0PvWX691WLqN5/FhJpZpLMWi6AdUCRcwxh5HA0amIAVkJwtiuPwA==",
     "license": "MIT",
-    "reviewedCommit": "2af54bdf8d72dd0d46c5bab368c19e4a57bd0e28",
+    "reviewedCommit": "0eb3390698eaec92872e968d1af0ab88d00f1e33",
     "filename": "dsh-chat-manager.tgz"
   }
 ].map(Object.freeze))
@@ -80,7 +80,7 @@ export function defaultsForProduct(layout, adapters = {}) {
   }))
 }
 
-async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}) {
+async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, adapters = {}, disabledNames = []) {
   const load = adapters.readFile ?? readFile
   const save = adapters.writeFile ?? writeFile
   const move = adapters.rename ?? rename
@@ -89,6 +89,11 @@ async function promoteBundledPluginsToRegistryLifecycle(profileRoot, plugins, ad
   const manifest = JSON.parse(await load(manifestPath, 'utf8'))
   manifest.dependencies ??= {}
   for (const plugin of plugins) manifest.dependencies[plugin.name] = plugin.spec ?? plugin.version
+  // Official add enables bundles. A product refresh must preserve the user's
+  // explicit disabled state, especially when they disabled a broken version.
+  if (Array.isArray(manifest.dsh?.profile?.bundles) && disabledNames.length) {
+    manifest.dsh.profile.bundles = manifest.dsh.profile.bundles.filter(name => !disabledNames.includes(name))
+  }
   await save(temporary, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
   await move(temporary, manifestPath)
 }
@@ -157,6 +162,10 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
   const run = adapters.spawnSync ?? spawnSync
   const manifestPath = paths.join(profileRoot, 'package.json')
   const manifestBefore = await load(manifestPath, 'utf8')
+  const previousBundles = JSON.parse(manifestBefore).dsh?.profile?.bundles
+  const disabledNames = Array.isArray(previousBundles)
+    ? candidates.filter(plugin => !previousBundles.includes(plugin.name)).map(plugin => plugin.name)
+    : []
   const installedChatVersion = installedDefaultVersion(profileRoot, { name: 'dsh-chat-manager' }, adapters)
   try {
     await makeDirectory(archiveRoot, { recursive: true })
@@ -178,7 +187,7 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     })
     if (result?.error) throw result.error
     if (result?.status !== 0) throw pluginInstallError(result)
-    await promoteBundledPluginsToRegistryLifecycle(profileRoot, candidates, adapters)
+    await promoteBundledPluginsToRegistryLifecycle(profileRoot, candidates, adapters, disabledNames)
     return { status: 'updated', profile, plugins: candidates.map(plugin => plugin.name) }
   } catch (error) {
     // Alpha 2 changed the workspace/session lifecycle. The old bundled
