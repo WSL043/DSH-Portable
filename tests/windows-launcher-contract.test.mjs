@@ -114,12 +114,15 @@ test('Windows launcher preserves UTF-8 diagnostics from the DSH subprocess', { s
     await compileLauncher(executable, webview2, notifications)
 
     await assert.rejects(execFileAsync(executable, ['--json'], {
+      windowsHide: true,
       env: { ...process.env, DSH_PORTABLE_LAUNCHER_DIAGNOSTIC: diagnostic },
     }), (error) => error.code === 17)
 
     const text = (await readFile(diagnostic, 'utf8')).replace(/^\uFEFF/, '')
     assert.equal(text, '启动失败：找不到运行模块 “测试”')
   } finally {
-    await rm(root, { recursive: true, force: true })
+    // Windows can retain the just-exited node image briefly (job teardown or
+    // scanner). Retry fixture cleanup only; never rerun the tested operation.
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })

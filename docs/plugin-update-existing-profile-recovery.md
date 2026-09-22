@@ -45,3 +45,9 @@ Local evidence: `build/existing-profile-update-acceptance`,
 and `build/plugin-update-fix-final-tests.log`.
 These prove the focused local fix, not publication or installation into the
 user's currently running product. Full 0.7.1 artifact qualification is separate.
+
+Full run 35762855915 stopped on Windows UTF-8 launcher test cleanup: its
+diagnostic assertions passed, but unlinking the exited fixture's node.exe returned
+EBUSY. `build/0.7.1-windows-contract-failure.log` retains the original failure.
+Bounded filesystem cleanup retries were added only to that fixture; the actual
+launcher operation is not retried. The targeted Windows test then passed.
