@@ -1,0 +1,24 @@
+# DSH 0.1.7-alpha.1 intake — 2026-09-22
+
+Status: discovered, blocked for qualification. Current supported locks and the user's installation are unchanged.
+
+Official release: https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.7-alpha.1
+Immutable tag commit: `c36a83ff6bb95e3f82cf79f9be7c724270a8aa61`.
+
+## Confirmed intake blocker
+
+Manual dispatch 35701803158 discovered the new npm alpha/tag, then failed `the bundled market peer ranges cover each verified official DSH channel`. Do not widen the peer range merely to silence the test. The previous workflow stopped before recording a review PR. Intake now records a draft review even when contracts fail, includes the run link and failure status, keeps the workflow failed, and does not dispatch product qualification in that case. It neither merges nor publishes candidates.
+
+## Required integration work
+
+1. **Session manager:** the published 1.4.0-beta.3 client adapter explicitly targets 0.1.6-alpha.2; invoking its build adapter with the real 0.1.7-alpha.1 workspace package refuses the unsupported version. The new official workspace exposes `sidebar.workspaces.session.menu.item` and `sidebar.workspaces.session.row.action`; its pin/rename/fork/archive entries register through these slots. Implement deletion through those public slots instead of copying WorkspaceBrowser or changing its header width. Official archive filtering, undo and running-session confirmation must remain official-owned. Permanent deletion is not among the observed official session menu registrations. Decide archive-settings retention only after testing official content search and deletion requirements.
+2. **Session data:** upstream upgrades logs to V4. Verify V3 import, export and backup using synthetic sessions and official APIs. Program rollback must not be described as a V4-to-V3 data downgrade. Custom-event attachments no longer automatically read/export; inspect image annotation attachment delivery against this boundary.
+3. **Market:** official installation adds registry choice, progress, dismiss/reopen and reconnect recovery. Reuse that lifecycle rather than duplicate it. Bundle patches now accept ordered multiple files; current market preflight/profile/stack helpers still assume one path and need a coordinated update. Do not claim compatibility after changing only the peer declaration. The public runProfilePnpm/withFileLock boundary still exists in the downloaded package, but new-version execution acceptance is pending.
+4. **File APIs:** workspace reads move to readBytes. Audit default image-viewer and Portable adapters before enabling the candidate.
+5. **Retire patches:** re-evaluate all packaging patches against actual built 0.1.7 artifacts, especially session export, client startup and subprocess hiding. Remove only behavior demonstrated upstream, retaining older-core qualification where still supported.
+
+## Evidence and remaining acceptance
+
+Downloaded npm packages: workspace UI, plugin manager and session, each exactly 0.1.7-alpha.1. Local evidence: build/alpha7-packages, build/alpha7-intake.log, build/upstream-alpha7-candidate.lock.json, build/alpha7-intake-ci-failure.log and build/probe-alpha7-chat.mjs. The release comparison API returns a limited file list and is not a complete large-diff audit.
+
+No real user session migration, default-plugin publication, new-core delivery or native desktop acceptance has been performed. Candidate changes belong on the intake branch until the above gates pass.

@@ -47,7 +47,9 @@ jobs:
           fi
           echo 'changed=true' >> "$GITHUB_OUTPUT"
       - name: Run repository contracts before opening the review
+        id: contracts
         if: steps.proposal.outputs.changed == 'true'
+        continue-on-error: true
         run: |
           npm ci --prefix app --ignore-scripts
           npm test
@@ -58,6 +60,7 @@ jobs:
           NPM_TAG: ${{ steps.preview.outputs.selectedTag }}
           VERSION: ${{ steps.preview.outputs.version }}
           COMMIT: ${{ steps.preview.outputs.commit }}
+          CONTRACT_RESULT: ${{ steps.contracts.outcome }}
         run: |
           set -euo pipefail
           BRANCH=automation/official-preview
@@ -71,12 +74,19 @@ jobs:
           cat > "$BODY" <<EOF
           Reviews official DeepSeek Harness candidate ${VERSION} (npm tag: ${NPM_TAG}) at immutable commit ${COMMIT} for the Portable candidate channel.
 
-          The full Windows, macOS, and Linux product qualification runs on this branch. Manual review and merge are required; this workflow never publishes or merges an upstream candidate automatically.
+          Repository contracts: ${CONTRACT_RESULT}. Evidence: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
+
+          Product qualification is dispatched only after repository contracts pass. A failed contract is an intake blocker, not a supported-version claim. Manual review and merge are required; this workflow never publishes or merges an upstream candidate automatically.
           EOF
           PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$PR" ]; then
             gh pr edit "$PR" --title "Review official DSH candidate ${VERSION}" --body-file "$BODY" --add-assignee WSL043
           else
-            gh pr create --base main --head "$BRANCH" --title "Review official DSH candidate ${VERSION}" --body-file "$BODY" --assignee WSL043
+            gh pr create --draft --base main --head "$BRANCH" --title "Review official DSH candidate ${VERSION}" --body-file "$BODY" --assignee WSL043
           fi
-          gh workflow run ci.yml --ref "$BRANCH"
+          if [ "$CONTRACT_RESULT" = success ]; then
+            gh workflow run ci.yml --ref "$BRANCH"
+          else
+            echo 'Candidate recorded for review; failed contracts block product qualification and publication.' >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
