@@ -1,4 +1,5 @@
-import { appendFile, mkdir } from 'node:fs/promises'
+import { appendLauncherLog } from './launcher-log.mjs'
+import { mkdir } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -55,7 +56,7 @@ if (cliOptions?.command === 'repair') {
     })
     const recovery = JSON.parse(stdout.trim())
     await mkdir(logDirectory, { recursive: true })
-    await appendFile(path.join(logDirectory, 'launcher.log'),
+    appendLauncherLog(logDirectory,
       `${new Date().toISOString()} [update-recovery] status=${recovery.status}\n`, 'utf8')
   }
 }
@@ -86,8 +87,8 @@ appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-capsule-ready', {
 })
 try {
   await mkdir(logDirectory, { recursive: true })
-  await appendFile(
-    path.join(logDirectory, 'launcher.log'),
+  appendLauncherLog(
+    logDirectory,
     `${new Date().toISOString()} [runtime-capsule] ${runtimePreparationDiagnostic(prepared, preparationElapsed)}\n`,
     'utf8',
   )

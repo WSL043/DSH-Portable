@@ -134,3 +134,6 @@
 本轮边界测试：119项，113通过，6跳过，0失败。四项为当前Windows账户无法创建文件symlink；两项仅适用POSIX。范围：update-core、runtime-capsule、repair-core、storage-report、data-transfer-security、plugin-command-lock、plugin-market-update-recovery。没有运行全量平台CI，也没有做断电、macOS/Linux原生、长稳或全数据恢复验收。
 
 本轮不进行大范围重构/发布，不删除历史内核兼容或用户数据，不再为审计新开一套常驻守护进程。清单接受新增证据调整优先级，不能把待核查风险写成已确认漏洞。
+
+
+2026-09-22 A16 部分推进：统一 Node 启动器日志轮转，补充存储不完整原因统计；32 项针对性测试通过。当前插件库普通文件约 1.85 GiB（跳过 5 个链接）。依赖引用回收、原生 WebView2 旧缓存 GC、断网整理验收仍未完成，A16 不关闭。见 [长期存储记录](long-term-storage.md)。

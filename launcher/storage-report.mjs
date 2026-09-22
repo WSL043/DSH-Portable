@@ -9,33 +9,33 @@ export async function inspectStorage(stateRoot, { maxEntries = 100000, timeoutMs
   let visited = 0
   const categories = []
   for (const id of ['pnpm-store', 'backups', 'recovery', 'logs']) {
-    const result = { id, bytes: 0, files: 0, complete: true }
+    const result = { id, bytes: 0, files: 0, complete: true, skippedLinks: 0, errors: 0, limited: false }
     categories.push(result)
     const visit = async filename => {
-      if (++visited > maxEntries || Date.now() >= deadline) { result.complete = false; return }
+      if (++visited > maxEntries || Date.now() >= deadline) { result.complete = false; result.limited = true; return }
       let info
       try { info = await lstat(filename) } catch (error) {
-        if (error.code !== 'ENOENT') result.complete = false
+        if (error.code !== 'ENOENT') { result.complete = false; result.errors++ }
         return
       }
-      if (info.isSymbolicLink()) { result.complete = false; return }
+      if (info.isSymbolicLink()) { result.complete = false; result.skippedLinks++; return }
       if (info.isFile()) { result.bytes += info.size; result.files++; return }
       if (!info.isDirectory()) return
       try {
         // Stream large stores rather than allocating the entire directory listing.
         const directory = await opendir(filename)
         for await (const entry of directory) {
-          if (visited >= maxEntries || Date.now() >= deadline) { result.complete = false; break }
+          if (visited >= maxEntries || Date.now() >= deadline) { result.complete = false; result.limited = true; break }
           await visit(path.join(filename, entry.name))
         }
-      } catch { result.complete = false }
+      } catch { result.complete = false; result.errors++ }
     }
     const data = path.join(root, 'data')
     try {
       const info = await lstat(data)
-      if (!info.isDirectory() || info.isSymbolicLink()) { result.complete = false; continue }
+      if (!info.isDirectory() || info.isSymbolicLink()) { result.complete = false; result.errors++; continue }
     } catch (error) {
-      if (error.code !== 'ENOENT') result.complete = false
+      if (error.code !== 'ENOENT') { result.complete = false; result.errors++ }
       continue
     }
     await visit(path.join(data, id))

@@ -1,4 +1,5 @@
-import { readFile, writeFile, rm, mkdir, appendFile } from 'node:fs/promises'
+import { appendLauncherLog } from './launcher-log.mjs'
+import { readFile, writeFile, rm, mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -16,7 +17,7 @@ export async function runCheckedPluginMutation({ profileRoot, layout, run, reins
   const log = async status => {
     try {
       await mkdir(layout.logsDir, { recursive: true })
-      await appendFile(path.join(layout.logsDir, 'launcher.log'), `${new Date().toISOString()} [plugin-cli] ${redactDiagnosticText(status)}\n`)
+      appendLauncherLog(layout.logsDir, `${new Date().toISOString()} [plugin-cli] ${redactDiagnosticText(status)}\n`)
     } catch { /* logging must not prevent recovery */ }
   }
   const result = await run()

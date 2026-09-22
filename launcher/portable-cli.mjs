@@ -1,7 +1,8 @@
+import { appendLauncherLog } from './launcher-log.mjs'
 import { defaultBrowserSpec } from './browser-fallback.mjs'
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from 'node:fs'
 import { mkdir, readFile, rm } from 'node:fs/promises'
 import http from 'node:http'
 import net from 'node:net'
@@ -83,8 +84,8 @@ function startupLog(startedAt, phase, fields = {}) {
       .filter(([, value]) => value !== undefined && value !== null && value !== '')
       .map(([key, value]) => `${key}=${String(value).replace(/[\r\n\s]+/g, '-')}`)
       .join(' ')
-    appendFileSync(
-      path.join(layout.logsDir, 'launcher.log'),
+    appendLauncherLog(
+      layout.logsDir,
       `${new Date().toISOString()} [startup-cli] phase=${phase} elapsedMs=${Date.now() - startedAt}${details ? ` ${details}` : ''}\n`,
       'utf8',
     )
