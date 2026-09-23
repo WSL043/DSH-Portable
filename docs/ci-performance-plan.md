@@ -84,3 +84,24 @@ and still fails if both attempts fail. Artifact transfers were secondary in the
 timing data, so splitting every build artifact was not promoted as the first
 optimization. Official-source package-set caching remains a separate measured
 follow-up.
+
+### Exact-commit acceptance, 2026-09-23
+
+[Run 35851853558](https://github.com/WSL043/DSH-Portable/actions/runs/35851853558)
+qualified commit `079867f` with all 37 jobs passing. On the cold cache path,
+the independent WebView2 capsule job completed in 9m18s and saved the verified
+283,213,948-byte capsule. The complete-offline job then restored that exact
+cache key, verified its pinned SHA-256 and composed the ZIP in **21.4s**
+(27s for the whole step), versus **548s** for the corresponding packaging step
+in run 35847051717. Both the system-WebView2 and bundled-WebView2 native
+startup checks passed. The final complete ZIP uploaded successfully.
+
+The full run took **26m20s**; the previous accepted run took **27m53s** but
+included a transient diagnostic-upload rerun, so their difference is not a
+controlled estimate of the cache's effect on total time. The current critical
+path was the locked official package set (5m41s), Windows base build (10m03s),
+then Windows 2025 native lifecycle (10m19s). The cached complete-offline job
+finished earlier and no longer determined completion time. Measure those three
+stages before changing their build or acceptance boundaries. The new cache key
+has not yet been observed as a hit in a separate workflow run; the same-run
+handoff and product acceptance are proven.
