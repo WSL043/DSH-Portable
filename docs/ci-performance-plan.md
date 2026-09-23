@@ -105,3 +105,27 @@ finished earlier and no longer determined completion time. Measure those three
 stages before changing their build or acceptance boundaries. The new cache key
 has not yet been observed as a hit in a separate workflow run; the same-run
 handoff and product acceptance are proven.
+
+### Windows base build and cold-runner evidence
+
+[Run 35855719210](https://github.com/WSL043/DSH-Portable/actions/runs/35855719210)
+measured the Windows base builder after adding phase markers: runtime staging
+and patches 63.0s, native host compilation 7.3s, component update packaging
+169.8s, product archive and manifest 181.4s. The two archives reported the
+same inner DSH capsule SHA-256, so the builder now prepares that capsule once
+per build, verifies its bytes against its manifest when copying it into each
+archive, and retains separate outer ZIP hashes and product smoke gates. The
+exact-run speedup remains to be measured.
+
+Splitting independent native UI checks from the Windows lifecycle shortened
+the serial gate, but exposed cold-runner timing assumptions. The Windows 2022
+UI fixture in run 35855719210 had not finished extracting its first
+10,615-file capsule before a 90s total script deadline. After separating cold
+extraction and post-extraction limits, both UI runners passed in
+[run 35857746239](https://github.com/WSL043/DSH-Portable/actions/runs/35857746239).
+That run's Windows 2022 lifecycle fixture then hit its 75s hosted-runner
+ceiling while still writing file 6,654 of 10,615; it had not crashed or
+reached the Host yet. The hosted functional ceiling is raised only for that
+runner, with distinct preparation and post-preparation bounds. The controlled
+machine's 20s first-start performance target is unchanged. A new exact-head
+product run must pass before claiming this CI split or capsule reuse accepted.
