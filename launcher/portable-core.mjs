@@ -676,6 +676,7 @@ export function parseCli(argv) {
   let conflict
   let allowUnencryptedCredentials = false
   let environment
+  let recoveryIndex
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     if (arg === '--diagnostic-root-json') {
@@ -693,6 +694,12 @@ export function parseCli(argv) {
     else if (arg === '--environment') {
       if (!argv[index + 1] || argv[index + 1].startsWith('--')) throw new Error('--environment requires a value.')
       environment = normalizeEnvironmentId(argv[index + 1])
+      index += 1
+    }
+    else if (arg === '--recovery-index') {
+      const value = Number(argv[index + 1])
+      if (!Number.isSafeInteger(value) || value < 1 || value > 1000) throw new Error('--recovery-index requires an integer from 1 to 1000.')
+      recoveryIndex = value
       index += 1
     }
     else if (arg === '--wait-for-lock-ms') {
@@ -743,7 +750,7 @@ export function parseCli(argv) {
       conflict = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recover-update', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recovery-plugins', 'recovery-pause-plugin', 'recovery-restore-plugin', 'recover-update', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
@@ -759,6 +766,7 @@ export function parseCli(argv) {
   if (conflict !== undefined) result.conflict = conflict
   if (allowUnencryptedCredentials) result.allowUnencryptedCredentials = true
   if (environment !== undefined) result.environment = environment
+  if (recoveryIndex !== undefined) result.recoveryIndex = recoveryIndex
   return result
 }
 

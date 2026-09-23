@@ -5359,6 +5359,7 @@ namespace DshPortable
         {
             StringBuilder details = new StringBuilder();
             details.AppendLine("diagnostic=workspace-navigation-v1");
+            details.AppendLine("portable=" + Assembly.GetExecutingAssembly().GetName().Version);
             details.AppendLine(ProbeWorkspaceDocument(url));
             details.AppendLine(webViewSnapshot);
             lock (webViewStartupTrace)

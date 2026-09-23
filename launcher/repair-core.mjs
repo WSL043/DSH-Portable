@@ -14,6 +14,7 @@ import {
 } from './portable-core.mjs'
 import { redactDiagnosticText, readLogTail } from './diagnostic-policy.mjs'
 import { summarizeStartupRun } from './startup-summary.mjs'
+import { inspectStartupProfile } from './startup-profile-recovery.mjs'
 
 const REPORT_SCHEMA = 1
 const LOG_TAIL_BYTES = 64 * 1024
@@ -108,11 +109,22 @@ export async function diagnosePortable(layout) {
     && !existsSync(layout.processState)
   const { runtime, profileResolver } = await inspectDshRuntimeState(layout, { inspectProfileResolver: !pendingStartup })
   const checks = [...runtimeChecks(layout, runtime), ...await generatedChecks(layout, profileResolver)]
+  const startupProfile = await inspectStartupProfile(layout)
+  const missingBundles = startupProfile.bundles.filter(item => item.status === 'missing' || item.status === 'invalid')
+  const invalidProfile = startupProfile.status === 'invalid-profile' || startupProfile.status === 'invalid-journal' || startupProfile.journalError
+  checks.push({
+    id: 'profile.activeBundles',
+    status: missingBundles.length || invalidProfile ? 'error' : 'ok',
+    repairable: false,
+    requiresPackage: false,
+    detail: invalidProfile ? 'web profile manifest or recovery journal is invalid' : missingBundles.length ? `missing active bundles: ${missingBundles.map(item => item.name).join(', ')}` : `${startupProfile.bundles.length} active bundles resolved`,
+  })
   const needsFullPackage = checks.some((check) => check.status === 'error' && !check.repairable && check.requiresPackage !== false)
   return {
     schemaVersion: REPORT_SCHEMA,
     ok: !checks.some((check) => check.status === 'error'),
     needsFullPackage,
+    startupProfile,
     checks,
   }
 }
@@ -131,7 +143,7 @@ export async function repairPortable(layout, { running = false } = {}) {
       checks: before.checks,
     }
   }
-  if (before.checks.some(check => check.status === 'error' && !check.repairable)) {
+  if (before.needsFullPackage) {
     return {
       schemaVersion: REPORT_SCHEMA,
       ok: false,

@@ -151,6 +151,23 @@ test('doctor detects a missing transitive DSH package before the profile fails t
   assert.equal(await readFile(path.join(layout.dshHome, 'sessions', 'keep', 'session.jsonl'), 'utf8'), 'private conversation')
 })
 
+test('doctor reports a missing active profile bundle without claiming generated repair fixed it', async t => {
+  const layout = await fixture(t)
+  const web = path.join(layout.dshHome, 'profiles', 'web')
+  await mkdir(web, { recursive: true })
+  await writeFile(path.join(web, 'package.json'), JSON.stringify({
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-experimental-agent-team-web-profile'] } },
+  }))
+  const diagnosis = await diagnosePortable(layout)
+  assert.equal(diagnosis.ok, false)
+  assert.equal(diagnosis.needsFullPackage, false)
+  assert.equal(diagnosis.checks.find(check => check.id === 'profile.activeBundles').detail.includes('dsh-experimental-agent-team-web-profile'), true)
+  const repair = await repairPortable(layout)
+  assert.equal(repair.ok, false)
+  assert.equal(repair.checks.find(check => check.id === 'profile.activeBundles').status, 'error')
+  assert.equal(await readFile(path.join(layout.dshHome, 'sessions', 'keep', 'session.jsonl'), 'utf8'), 'private conversation')
+})
+
 test('doctor detects and repair rebuilds a missing managed profile resolver without replacing the package', async (t) => {
   const layout = await fixture(t)
   const packageName = '@deepseek-ai/dsh-client-ui-jobs'

@@ -49,6 +49,7 @@ import { diagnosePortable, exportPortableSupportReport, repairPortable } from '.
 import { createDataArchive, inspectDataArchive, restoreDataArchiveAllowingPluginFailure } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
 import { pauseIncompatibleProfileBundles } from './profile-compatibility.mjs'
+import { inspectStartupProfile, pauseStartupProfileBundle, restoreStartupProfileBundle } from './startup-profile-recovery.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 import { preflightStagedDshProfiles } from './update-preflight.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
@@ -722,7 +723,8 @@ async function doctor() {
 
 async function repair() {
   const current = await status()
-  return repairPortable(layout, { running: current.status !== 'stopped' })
+  const activeEnvironments = await runningEnvironments()
+  return repairPortable(layout, { running: current.status !== 'stopped' || activeEnvironments.length > 0 })
 }
 
 async function supportReport(options) {
@@ -901,6 +903,14 @@ function preferredUpdateChannel(options) {
 
 function print(result, json) {
   if (json) console.log(JSON.stringify(result))
+  else if (Array.isArray(result.bundles)) {
+    console.log(`Web profile: ${result.status}`)
+    if (result.detail) console.log(result.detail)
+    if (result.journalError) console.log('Recovery journal is invalid; no plugin changes will be made until it is repaired manually from backup.')
+    for (const item of result.bundles) console.log(`${item.index}. ${item.name} [${item.kind}; ${item.status}${item.version ? `; ${item.version}` : ''}]`)
+    for (const item of result.paused) console.log(`Paused ${item.index}. ${item.name} (${item.pausedAt})`)
+    if (result.bundles.some(item => item.status === 'missing' || item.status === 'invalid')) console.log('An unavailable official bundle may be paused temporarily; installing its package is still required to use that feature. Isolation does not download packages.')
+  }
   else if (result.url) console.log(`DeepSeek Harness ${result.status}: ${result.url}`)
   else if (typeof result.status === 'string') console.log(`DeepSeek Harness: ${result.status}`)
   else if (typeof result.output === 'string') console.log(`DSH-Portable: ${result.output}`)
@@ -974,6 +984,15 @@ async function main() {
     else if (options.command === 'open') result = await openExisting()
     else if (options.command === 'doctor') result = await doctor()
     else if (options.command === 'repair') result = await repair()
+    else if (options.command === 'recovery-plugins') result = await inspectStartupProfile(layout)
+    else if (options.command === 'recovery-pause-plugin') {
+      await assertSharedComponentsIdle()
+      result = await pauseStartupProfileBundle(layout, options.recoveryIndex)
+    }
+    else if (options.command === 'recovery-restore-plugin') {
+      await assertSharedComponentsIdle()
+      result = await restoreStartupProfileBundle(layout, options.recoveryIndex)
+    }
     else if (options.command === 'support-report') result = await supportReport(options)
     else if (options.command === 'backup-data') result = await backupData(options)
     else if (options.command === 'inspect-data') result = await inspectData(options)

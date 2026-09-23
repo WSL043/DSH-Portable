@@ -26,12 +26,12 @@ internal static class PortableRecovery
         return missing == 0 ? 0 : 1;
     }
 
-    private static int Run(string root, string command)
+    private static int Run(string root, string command, bool json = true)
     {
         if (Check(root) != 0) return 1;
         var start = new ProcessStartInfo {
             FileName = Path.Combine(root, "runtime", "node", "node.exe"),
-            Arguments = "\"" + Path.Combine(root, "launcher", "runtime-entry.mjs") + "\" portable-cli.mjs " + command + " --json",
+            Arguments = "\"" + Path.Combine(root, "launcher", "runtime-entry.mjs") + "\" portable-cli.mjs " + command + (json ? " --json" : ""),
             WorkingDirectory = root, UseShellExecute = false, CreateNoWindow = true,
             RedirectStandardOutput = true, RedirectStandardError = true,
             StandardOutputEncoding = Encoding.UTF8, StandardErrorEncoding = Encoding.UTF8
@@ -50,6 +50,17 @@ internal static class PortableRecovery
         }
     }
 
+    private static int PluginIndex(bool restore)
+    {
+        Console.Write(restore ? "暂停项编号 / Paused bundle number (0 cancels): " : "启动项编号 / Active bundle number (0 cancels): ");
+        int index;
+        if (!Int32.TryParse(Console.ReadLine(), out index) || index < 0 || index > 1000) {
+            Console.WriteLine("请输入列表中的编号 / Enter a number from the list.");
+            return 0;
+        }
+        return index;
+    }
+
     private static int Main(string[] args)
     {
         Console.OutputEncoding = Encoding.UTF8;
@@ -57,13 +68,23 @@ internal static class PortableRecovery
         try {
             if (args.Length == 1 && args[0] == "--check") return Check(root);
             if (args.Length != 0) { Console.WriteLine("Usage: DSH-Recovery.exe [--check]"); return 2; }
-            Console.WriteLine("DSH-Portable 诊断与修复 / Diagnostics and recovery\n" + root);
+            Console.WriteLine("DSH-Portable 诊断与修复 / Diagnostics and recovery");
+            Console.WriteLine("Recovery version: " + Assembly.GetExecutingAssembly().GetName().Version + "\n" + root);
             Console.WriteLine("不需要打开主界面。修复前请退出 Portable 并保留备份。\nNo desktop UI required. Exit Portable and keep a backup before repair.");
             while (true) {
-                Console.WriteLine("\n1 检查运行文件 / Check files\n2 诊断 / Diagnose\n3 修复可重建组件 / Repair generated components\n4 导出支持报告 / Export support report\n0 退出 / Exit");
+                Console.WriteLine("\n1 检查运行文件 / Check files\n2 诊断 / Diagnose\n3 修复可重建组件 / Repair generated components\n4 导出支持报告 / Export support report\n5 检查启动插件 / Check startup plugins\n6 暂停故障启动项 / Pause a community or unavailable official bundle\n7 恢复暂停项 / Restore a paused bundle\n0 退出 / Exit");
                 string choice = Console.ReadLine();
                 if (choice == null || choice == "0") return 0;
                 if (choice == "1") { Check(root); continue; }
+                if (choice == "5" || choice == "6" || choice == "7") {
+                    if (Run(root, "recovery-plugins", false) != 0 || choice == "5") continue;
+                    int index = PluginIndex(choice == "7");
+                    if (index == 0) continue;
+                    string action = choice == "6" ? "recovery-pause-plugin" : "recovery-restore-plugin";
+                    int pluginCode = Run(root, action + " --recovery-index " + index);
+                    Console.WriteLine("Exit code: " + pluginCode + ". 仅修改启动列表，不卸载插件；重试前请完全退出 Portable。 / Only the startup list changes; quit Portable before retrying.");
+                    continue;
+                }
                 string command = choice == "2" ? "doctor" : choice == "3" ? "repair" : choice == "4" ? "support-report" : null;
                 if (command == null) continue;
                 int code = Run(root, command);
