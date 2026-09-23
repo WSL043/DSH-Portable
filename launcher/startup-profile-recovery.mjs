@@ -42,6 +42,18 @@ async function packageVersion(root, name) {
   }
 }
 
+async function resolveBundle(layout, profileRoot, name) {
+  for (const [status, root] of [
+    ['profile', profileRoot],
+    ['resolver', path.dirname(profileRoot)],
+    ['runtime', layout.appDir],
+  ]) {
+    const version = await packageVersion(root, name)
+    if (version !== null) return { status, version }
+  }
+  return { status: 'missing', version: null }
+}
+
 async function readJournal(layout) {
   const filename = await safeDataTarget(layout.stateRoot, RECOVERY_JOURNAL, { createParents: false })
   if (!filename) return { filename: null, pauses: [] }
@@ -78,14 +90,12 @@ export async function inspectStartupProfile(layout) {
       bundles.push({ index: position + 1, name, kind: 'unknown', status: 'invalid', version: null })
       continue
     }
-    const profileVersion = await packageVersion(root, name)
-    const runtimeVersion = profileVersion === null ? await packageVersion(layout.appDir, name) : null
+    const resolved = await resolveBundle(layout, root, name)
     bundles.push({
       index: position + 1,
       name,
       kind: kindOf(name),
-      status: profileVersion !== null ? 'profile' : runtimeVersion !== null ? 'runtime' : 'missing',
-      version: profileVersion ?? runtimeVersion,
+      ...resolved,
     })
   }
   return {
@@ -106,8 +116,7 @@ export async function pauseStartupProfileBundle(layout, index) {
   }
   const kind = kindOf(name)
   const missingOfficial = kind === 'official'
-    && await packageVersion(path.dirname(profile.filename), name) === null
-    && await packageVersion(layout.appDir, name) === null
+    && (await resolveBundle(layout, path.dirname(profile.filename), name)).status === 'missing'
   if (kind !== 'community' && !missingOfficial) {
     throw new Error('Only community plugins or an unavailable official bundle can be temporarily paused; Portable and installed official bundles are protected.')
   }
@@ -136,8 +145,7 @@ export async function restoreStartupProfileBundle(layout, index) {
   if (!profile) throw new Error('Web profile does not exist; no plugin was restored.')
   const name = record.name
   if (profile.bundles.includes(name)) throw new Error('Plugin is already active; inspect the profile before clearing its recovery record.')
-  if (await packageVersion(path.dirname(profile.filename), name) === null
-    && await packageVersion(layout.appDir, name) === null) {
+  if ((await resolveBundle(layout, path.dirname(profile.filename), name)).status === 'missing') {
     throw new Error(`Plugin ${name} is not installed in the web profile; restore its package before enabling it.`)
   }
   profile.manifest.dsh.profile.bundles.splice(Math.min(record.position, profile.bundles.length), 0, name)

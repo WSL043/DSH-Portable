@@ -68,6 +68,17 @@ test('an unavailable official bundle can be isolated and only restored after its
   assert.equal(JSON.parse(await readFile(manifestFile, 'utf8')).dsh.profile.bundles.at(-1), paused.name)
 })
 
+test('the generated parent resolver counts as an installed official bundle', async t => {
+  const { layout, profile } = await fixture(t)
+  const packageRoot = path.join(path.dirname(profile), 'node_modules', '@deepseek-ai', 'dsh-experimental-agent-team-web-profile')
+  await mkdir(packageRoot, { recursive: true })
+  await writeFile(path.join(packageRoot, 'package.json'), '{"version":"0.1.7-alpha.2"}')
+  const result = await inspectStartupProfile(layout)
+  assert.equal(result.status, 'ok')
+  assert.equal(result.bundles[3].status, 'resolver')
+  await assert.rejects(pauseStartupProfileBundle(layout, 4), /installed official bundles are protected/)
+})
+
 test('recovery refuses stale indices and unsafe profile manifest links', async t => {
   const { layout, manifestFile } = await fixture(t)
   await assert.rejects(pauseStartupProfileBundle(layout, 99), /active bundle/)
