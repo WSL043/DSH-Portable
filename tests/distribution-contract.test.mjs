@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
 const execFileAsync = promisify(execFile)
 
-test('runtime dependency boundary contains official DSH, the private desktop bridge, the visual market, and its pinned package manager only', async () => {
+test('runtime dependency boundary includes only reviewed host components and the pinned compatibility parser', async () => {
   const [runtime, upstream, lockfile] = await Promise.all([
     read('app/package.json').then(JSON.parse),
     read('upstream.lock.json').then(JSON.parse),
@@ -22,6 +22,7 @@ test('runtime dependency boundary contains official DSH, the private desktop bri
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
     pnpm: '11.11.0',
+    semver: '7.8.5',
   })
   const serialized = JSON.stringify(runtime)
   for (const forbidden of ['@yanxu', 'openai-codex', 'opencode-zen', 'GenericAgent']) {
@@ -79,6 +80,7 @@ test('committed npm lock resolves the exact reviewed DSH artifact', async () => 
     '@wsl043/dsh-portable-desktop-bridge': 'file:../desktop-bridge',
     '@wsl043/dsh-portable-plugin-market': 'file:vendor/dsh-portable-plugin-market',
     pnpm: upstream.pnpm.version,
+    semver: '7.8.5',
   })
   const dsh = lockfile.packages['node_modules/@deepseek-ai/dsh']
   assert.equal(dsh.version, upstream.dsh.version)

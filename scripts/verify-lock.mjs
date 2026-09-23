@@ -23,7 +23,11 @@ assert.deepEqual(root?.dependencies, {
   [desktopBridgePackage]: 'file:../desktop-bridge',
   [upstream.pluginMarket.package]: 'file:vendor/dsh-portable-plugin-market',
   [upstream.pnpm.package]: upstream.pnpm.version,
+  semver: '7.8.5',
 })
+const semver = lockfile.packages?.['node_modules/semver']
+assert.equal(semver?.version, '7.8.5', 'pinned profile compatibility parser')
+assert.equal(semver?.integrity, 'sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==', 'profile compatibility parser integrity')
 const installed = lockfile.packages?.[`node_modules/${upstream.dsh.package}`]
 assert.equal(installed?.version, upstream.dsh.version, 'pinned DSH version')
 assert.equal(installed?.integrity, upstream.dsh.integrity, 'pinned DSH integrity')

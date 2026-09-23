@@ -21,6 +21,17 @@ const document = paths => ({ format: 'dsh-profile-backup', version: 0.2, profile
   files: [{ path: 'package.json', json: { dependencies: { fixture: '2.0.0' } } }, ...paths.map(p => ({ path: p, lines: ['restored'] }))] })
 const dirLink = process.platform === 'win32' ? 'junction' : 'dir'
 
+async function linkIfSupported(t, target, filename, type) {
+  try { await symlink(target, filename, type) } catch (error) {
+    if (process.platform === 'win32' && ['EPERM', 'EACCES'].includes(error?.code)) {
+      t.skip('File symlink creation is unavailable for this Windows account')
+      return false
+    }
+    throw error
+  }
+  return true
+}
+
 for (const p of ['config/./key', 'config//key', 'config/', '../escape', 'C:escape', 'nul\0name', 'NODE_MODULES/a', '.GIT/config', 'PACKAGE.JSON']) {
   test(`backup rejects ambiguous or excluded path ${JSON.stringify(p)} before changing files`, async t => {
     const { profile } = await fixture(t)
@@ -50,7 +61,7 @@ test('backup rejects a dangling destination link and rolls back prior files', as
   const { root, profile } = await fixture(t)
   const target = path.join(profile, 'dangling.txt')
   const outside = path.join(root, 'outside.txt')
-  await symlink(outside, target, 'file')
+  if (!await linkIfSupported(t, outside, target, 'file')) return
   assert.throws(() => restoreProfileBackup('web', document(['dangling.txt']), profile), /not a file/)
   assert.equal((await lstat(target)).isSymbolicLink(), true)
   assert.equal(existsSync(outside), false)
@@ -71,7 +82,7 @@ test('backup staging cannot overwrite a predictable preplaced link', async t => 
   const external = path.join(root, 'private.txt')
   await writeFile(external, 'untouched')
   const trap = path.join(profile, `config.toml.dsh-restore-${process.pid}`)
-  await symlink(external, trap, 'file')
+  if (!await linkIfSupported(t, external, trap, 'file')) return
   const restore = restoreProfileBackup('web', document(['config.toml']), profile)
   assert.equal(await readFile(external, 'utf8'), 'untouched')
   assert.equal((await lstat(trap)).isSymbolicLink(), true)
@@ -106,7 +117,7 @@ test('shared JSON writes do not follow predictable temporary links', async t => 
   const external = path.join(root, 'private.txt')
   await writeFile(external, 'untouched')
   const trap = `${target}.portable-${process.pid}.tmp`
-  await symlink(external, trap, 'file')
+  if (!await linkIfSupported(t, external, trap, 'file')) return
   await writeJsonAtomic(target, { complete: true })
   assert.deepEqual(JSON.parse(await readFile(target)), { complete: true })
   assert.equal(await readFile(external, 'utf8'), 'untouched')

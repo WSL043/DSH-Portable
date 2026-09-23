@@ -20,9 +20,20 @@ async function fixture(t) {
 
 const directoryLink = process.platform === 'win32' ? 'junction' : 'dir'
 
+async function linkIfSupported(t, target, filename, type) {
+  try { await symlink(target, filename, type) } catch (error) {
+    if (process.platform === 'win32' && ['EPERM', 'EACCES'].includes(error?.code)) {
+      t.skip('File symlink creation is unavailable for this Windows account')
+      return false
+    }
+    throw error
+  }
+  return true
+}
+
 test('package-declared file symlinks cannot read outside the real package root', async t => {
   const { pkg, outside } = await fixture(t)
-  await symlink(path.join(outside, 'secret.js'), path.join(pkg, 'leak.js'), 'file')
+  if (!await linkIfSupported(t, path.join(outside, 'secret.js'), path.join(pkg, 'leak.js'), 'file')) return
   assert.equal(resolvePackageRelativePath(pkg, './leak.js'), null)
   assert.equal(await readFile(path.join(outside, 'secret.js'), 'utf8'), 'private fixture')
 })
@@ -36,13 +47,13 @@ test('package-declared directory links cannot lead to outside files', async t =>
 
 test('a dangling link is not mistaken for a missing ordinary bundle', async t => {
   const { pkg, outside } = await fixture(t)
-  await symlink(path.join(outside, 'absent.js'), path.join(pkg, 'dangling.js'), 'file')
+  if (!await linkIfSupported(t, path.join(outside, 'absent.js'), path.join(pkg, 'dangling.js'), 'file')) return
   assert.equal(resolvePackageRelativePath(pkg, './dangling.js'), null)
 })
 
 test('an internal link is resolved and remains usable', async t => {
   const { pkg } = await fixture(t)
-  await symlink(path.join(pkg, 'client.js'), path.join(pkg, 'alias.js'), 'file')
+  if (!await linkIfSupported(t, path.join(pkg, 'client.js'), path.join(pkg, 'alias.js'), 'file')) return
   assert.equal(resolvePackageRelativePath(pkg, './alias.js'), await realpath(path.join(pkg, 'client.js')))
 })
 
