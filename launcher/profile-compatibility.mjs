@@ -24,11 +24,9 @@ function isCommunityBundle(name) {
 }
 
 export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}) {
-  const candidate = path.join(layout.dshHome, 'profiles', 'web', 'package.json')
-  if (!existsSync(candidate)) return { status: 'skipped', paused: [] }
-  const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json')
+  const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json', { createParents: false })
+  if (!manifestFile) return { status: 'skipped', paused: [] }
   const profileRoot = path.dirname(manifestFile)
-  if (!existsSync(manifestFile)) return { status: 'skipped', paused: [] }
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   const bundles = manifest.dsh?.profile?.bundles
   if (!Array.isArray(bundles)) return { status: 'skipped', paused: [] }

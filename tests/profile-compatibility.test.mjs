@@ -8,6 +8,15 @@ import test from 'node:test'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 import { pauseIncompatibleProfileBundles } from '../launcher/profile-compatibility.mjs'
 
+test('compatibility scan leaves a missing profile untouched', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-compat-empty-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  const result = await pauseIncompatibleProfileBundles(layout)
+  assert.deepEqual(result, { status: 'skipped', paused: [] })
+  assert.equal(existsSync(path.join(layout.dshHome, 'profiles')), false)
+})
+
 test('startup pauses only active third-party bundles whose declared host peers exclude the current runtime', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-compat-'))
   t.after(() => rm(root, { recursive: true, force: true }))
