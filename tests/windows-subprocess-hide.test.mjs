@@ -39,11 +39,12 @@ test('official DSH subprocess patch hides every Windows child and taskkill helpe
   assert.equal(patchWindowsSubprocessHide(output), output)
 })
 
-test('Alpha shared runner keeps upstream-hidden helpers and rejects an unsafe changed helper', () => {
+test('official shared runner needs no Portable source rewrite and rejects an unsafe changed helper', () => {
   const alpha = fixture
     .replaceAll('{ stdio: "ignore" });', '{\n\t\tstdio: "ignore",\n\t\twindowsHide: true\n\t});')
     .replace('detached: platform !== "win32"', 'detached: platform !== "win32",\n\t\twindowsHide: platform === "win32"')
   const patched = patchWindowsSubprocessHide(alpha)
+  assert.equal(patched, alpha)
   assert.equal(patched.match(/windowsHide:/g)?.length, 3)
   assert.equal(patchWindowsSubprocessHide(patched), patched)
   assert.equal(subprocessHideModule('import { E as spawnSubprocess } from "./runner-launch-COYGu0Dl.js";'), 'runner-launch-COYGu0Dl.js')
@@ -103,9 +104,9 @@ function spawnInheritedJobProcess() {
 \t\t});
 }`
 
-test('official DSH Alpha shared process owner is recognized and requests SW_HIDE', () => {
+test('official shared process adapter is verified without a Portable marker', () => {
   const adapter = patchWindowsAclHide(alphaAclFixture)
-  assert.match(adapter, /dsh-portable-windows-acl-shared-process-v1/)
+  assert.equal(adapter, alphaAclFixture)
   assert.equal(patchWindowsAclHide(adapter), adapter)
 
   const output = patchWindowsWin32ProcessHide(alphaWin32ProcessFixture)
@@ -119,7 +120,7 @@ test('Alpha 2 shared process owner preserves its upstream SW_HIDE implementation
   const upstreamHidden = alphaWin32ProcessFixture
     .replaceAll('dwFlags: 256,', 'dwFlags: 257,\n\t\t\twShowWindow: 0,')
   const output = patchWindowsWin32ProcessHide(upstreamHidden)
-  assert.match(output, /dsh-portable-windows-process-hide-v1/)
+  assert.equal(output, upstreamHidden)
   assert.equal(output.match(/dwFlags: 257/g)?.length, 2)
   assert.equal(output.match(/wShowWindow: 0/g)?.length, 2)
   assert.equal(patchWindowsWin32ProcessHide(output), output)
@@ -141,9 +142,9 @@ test('finished-product smoke resolves the extracted runtime capsule instead of a
   assert.match(source, /ensureRuntimeCapsule\(root\)/)
   assert.match(source, /path\.join\(prepared\.runtimeRoot, 'app'\)/)
   assert.doesNotMatch(source, /const appRoot = path\.join\(root, 'app'\)/)
-  assert.match(source, /dsh-portable-windows-acl-hide-v1/)
-  assert.match(source, /dsh-portable-windows-acl-shared-process-v1/)
-  assert.match(source, /dsh-portable-windows-process-hide-v1/)
+  assert.match(source, /patchWindowsSubprocessHide\(subprocessSource\)/)
+  assert.match(source, /patchWindowsAclHide\(aclSource\)/)
+  assert.match(source, /patchWindowsWin32ProcessHide\(restrictedProcessSource\)/)
   assert.match(source, /dsh-win32-process/)
 })
 
