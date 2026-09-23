@@ -505,7 +505,7 @@ jobs:
             # Hosted runners include variable first-execution Defender scanning.
             # Keep a functional ceiling here; config/performance-budgets.json
             # remains the stricter controlled-machine performance contract.
-            firstColdStartSeconds: 75
+            firstColdStartSeconds: 150
           - runner: windows-2025
             label: windows-2025
             firstColdStartSeconds: 75

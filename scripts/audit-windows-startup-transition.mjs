@@ -19,8 +19,8 @@ const existingSessionProof = process.env.DSH_PORTABLE_AUDIT_EXISTING_SESSION_PRO
 const stopArgs = ['stop', '--no-browser', '--json', ...(environmentId ? ['--environment', environmentId] : [])]
 if (!root) throw new Error('usage: node audit-windows-startup-transition.mjs <DSH-Portable root> [output] [startup-timeout-seconds]')
 if (process.platform !== 'win32') throw new Error('the startup transition audit is Windows-only')
-if (!Number.isFinite(startupTimeoutSeconds) || startupTimeoutSeconds < 1 || startupTimeoutSeconds > 120) {
-  throw new Error('startup-timeout-seconds must be between 1 and 120')
+if (!Number.isFinite(startupTimeoutSeconds) || startupTimeoutSeconds < 1 || startupTimeoutSeconds > 180) {
+  throw new Error('startup-timeout-seconds must be between 1 and 180')
 }
 
 const executable = path.join(root, 'DeepSeek-Herness.exe')
@@ -310,6 +310,7 @@ try {
   // The per-start history is the authoritative, complete trace for this PID.
   const startupTrace = await readAuditedStartupTrace(launcher.pid)
   const nativeLoading = startupTrace.find(entry => entry.phase === 'native-loading-ready' && entry.pid === launcher.pid)
+  const capsuleReady = startupTrace.find(entry => entry.phase === 'runtime-capsule-ready')
   const nativeReady = startupTrace.find(entry => entry.phase === 'interactive-ready' && entry.pid === launcher.pid)
   const handoff = assessStartupHandoff({ samples, trace: startupTrace, pid: launcher.pid, deadline: startupDeadline })
   const { revealSample, workspaceSample } = handoff
@@ -318,12 +319,18 @@ try {
   await writeFile(path.join(output, 'handoff-result.json'), JSON.stringify({
     reason: handoff.reason, deadline: new Date(startupDeadline).toISOString(),
     nativeReadyAt: nativeReady?.timestamp, overdueMs: handoff.overdueMs,
+    capsulePreparationMs: capsuleReady?.elapsedMs,
+    postCapsuleHandoffMs: nativeReady && capsuleReady ? nativeReady.elapsedMs - capsuleReady.elapsedMs : undefined,
     observationGraceMs: 2000, samples: samples.length,
   }, null, 2))
   if (requireLoading) {
     assert.ok(capturedBoot && nativeLoading, 'the native loading surface was not captured and painted')
+    assert.ok(capsuleReady && capsuleReady.elapsedMs <= 130000,
+      'cold capsule preparation must finish within 130s on the hosted runner')
     assert.ok(nativeReady && nativeLoading.elapsedMs < nativeReady.elapsedMs,
       'native loading must precede the usable workspace handoff')
+    assert.ok(nativeReady.elapsedMs - capsuleReady.elapsedMs <= 30000,
+      'the workspace must become interactive within 30s after capsule preparation')
   }
   assert.equal(handoff.reason, 'ready', `startup handoff failed: ${handoff.reason}; see handoff-result.json`)
   assert.ok(startupTrace.some(entry => entry.pid === launcher.pid && entry.phase === 'surface-ready-message'))
