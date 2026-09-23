@@ -133,20 +133,26 @@ export function evaluateUpstream({ lock, registry, commit, packageCommit, reques
   if (!version || !integrity) {
     throw new Error(`official npm tag ${selectedTag} has no verifiable package integrity`)
   }
-  if (version === lock.dsh.version && integrity !== lock.dsh.integrity) {
-    throw new Error(`integrity changed for the pinned DSH version ${version}`)
+  const pinnedIntegrity = registry?.versions?.[lock.dsh.version]?.dist?.integrity
+  if ((pinnedIntegrity && pinnedIntegrity !== lock.dsh.integrity) ||
+      (version === lock.dsh.version && integrity !== lock.dsh.integrity)) {
+    throw new Error(`integrity changed for the pinned DSH version ${lock.dsh.version}`)
   }
 
-  const packageChanged = version !== lock.dsh.version
-  const reviewedCommit = packageCommit?.sha ?? commit.sha
+  // npm may leave latest/next on an older release train after a newer alpha
+  // has already been reviewed. Intake must never rewrite the product lock to
+  // that older package merely because a dist-tag moved backwards.
+  const selectedOlder = compareSemver(version, lock.dsh.version) < 0
+  const packageChanged = !selectedOlder && version !== lock.dsh.version
+  const reviewedCommit = selectedOlder ? lock.dsh.reviewedCommit : (packageCommit?.sha ?? commit.sha)
   const sourceChanged = commit.sha !== lock.dsh.reviewedCommit
   return {
     changed: packageChanged,
     packageChanged,
     sourceChanged,
     selectedTag,
-    version,
-    integrity,
+    version: selectedOlder ? lock.dsh.version : version,
+    integrity: selectedOlder ? lock.dsh.integrity : integrity,
     commit: reviewedCommit,
     sourceCommit: commit.sha,
   }

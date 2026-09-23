@@ -104,6 +104,29 @@ test('a newer stable release wins when next still points at an older preview', (
   assert.equal(result.changed, true)
 })
 
+test('older npm dist-tags never downgrade an already reviewed core', () => {
+  const reviewed = {
+    dsh: { version: '0.1.7-alpha.1', integrity: 'sha512-reviewed', reviewedCommit: 'a'.repeat(40) },
+  }
+  const older = {
+    'dist-tags': { latest: '0.1.5-rc.3', next: '0.1.5-rc.3' },
+    versions: {
+      '0.1.5-rc.3': { dist: { integrity: 'sha512-older' } },
+      '0.1.7-alpha.1': { dist: { integrity: 'sha512-reviewed' } },
+    },
+  }
+  const result = evaluateUpstream({ lock: reviewed, registry: older, commit: { sha: 'b'.repeat(40) } })
+  assert.equal(result.changed, false)
+  assert.equal(result.packageChanged, false)
+  assert.equal(result.sourceChanged, true)
+  assert.equal(result.version, reviewed.dsh.version)
+  assert.equal(result.integrity, reviewed.dsh.integrity)
+  assert.equal(result.commit, reviewed.dsh.reviewedCommit)
+  older.versions['0.1.7-alpha.1'].dist.integrity = 'sha512-changed'
+  assert.throws(() => evaluateUpstream({ lock: reviewed, registry: older, commit: { sha: 'b'.repeat(40) } }),
+    /integrity changed for the pinned DSH version/)
+})
+
 test('same-version integrity drift fails closed instead of silently replacing the lock', () => {
   assert.throws(() => evaluateUpstream({
     lock,
