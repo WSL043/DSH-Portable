@@ -6,7 +6,16 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { layoutForRoot } from '../launcher/portable-core.mjs'
-import { pauseIncompatibleProfileBundles } from '../launcher/profile-compatibility.mjs'
+import { incompatibleProfilePeers, pauseIncompatibleProfileBundles } from '../launcher/profile-compatibility.mjs'
+
+test('packaging and startup agree on the Cordis peer that would pause a default plugin', async () => {
+  const hostVersion = async name => name === '@deepseek-ai/cordis' ? '4.0.4' : null
+  const satisfies = (version, range) => range.split(' || ').includes(version)
+  const old = await incompatibleProfilePeers({ peerDependencies: { '@deepseek-ai/cordis': '4.0.3' } }, hostVersion, { satisfies })
+  assert.deepEqual(old, [{ peer: '@deepseek-ai/cordis', required: '4.0.3', installed: '4.0.4' }])
+  const updated = await incompatibleProfilePeers({ peerDependencies: { '@deepseek-ai/cordis': '4.0.3 || 4.0.4' } }, hostVersion, { satisfies })
+  assert.deepEqual(updated, [])
+})
 
 test('compatibility scan leaves a missing profile untouched', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-compat-empty-'))

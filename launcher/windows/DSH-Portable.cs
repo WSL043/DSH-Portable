@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.7.4.65534")]
-[assembly: AssemblyFileVersion("0.7.4.65534")]
+[assembly: AssemblyVersion("0.7.5.10001")]
+[assembly: AssemblyFileVersion("0.7.5.10001")]
 
 namespace DshPortable
 {

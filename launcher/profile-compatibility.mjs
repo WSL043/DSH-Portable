@@ -23,6 +23,21 @@ function isCommunityBundle(name) {
     && name !== '@wsl043/dsh-portable-plugin-market'
 }
 
+/** The same peer decision is used before packaging and on every launch. */
+export async function incompatibleProfilePeers(plugin, hostVersion, { satisfies, validRange } = {}) {
+  const incompatible = []
+  for (const [peer, range] of Object.entries(plugin.peerDependencies || {})) {
+    if (!peer.startsWith('@deepseek-ai/') || !PACKAGE_NAME.test(peer) || typeof range !== 'string') continue
+    const installed = await hostVersion(peer)
+    if (typeof installed !== 'string') continue
+    try {
+      if (validRange && !validRange(range)) continue
+      if (!satisfies(installed, range)) incompatible.push({ peer, required: range, installed })
+    } catch { /* An invalid peer declaration cannot prove incompatibility. */ }
+  }
+  return incompatible
+}
+
 export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}) {
   const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json', { createParents: false })
   if (!manifestFile) return { status: 'skipped', paused: [] }
@@ -43,18 +58,12 @@ export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}
     const filename = packageManifest(profileRoot, name)
     if (!filename || !existsSync(filename)) continue // DSH reports an unresolved bundle separately.
     const plugin = JSON.parse(await readFile(filename, 'utf8'))
-    const incompatiblePeers = []
-    for (const [peer, range] of Object.entries(plugin.peerDependencies || {})) {
-      if (!peer.startsWith('@deepseek-ai/') || !PACKAGE_NAME.test(peer) || typeof range !== 'string') continue
+    const incompatiblePeers = await incompatibleProfilePeers(plugin, async peer => {
       const hostFilename = packageManifest(layout.appDir, peer)
-      if (!hostFilename || !existsSync(hostFilename)) continue
+      if (!hostFilename || !existsSync(hostFilename)) return null
       const host = JSON.parse(await readFile(hostFilename, 'utf8'))
-      if (typeof host.version !== 'string') continue
-      try {
-        if (semver && !semver.validRange(range)) continue
-        if (!semverSatisfies(host.version, range)) incompatiblePeers.push({ peer, required: range, installed: host.version })
-      } catch { /* An invalid peer declaration cannot prove incompatibility. */ }
-    }
+      return host.version
+    }, { satisfies: semverSatisfies, validRange: semver?.validRange })
     if (incompatiblePeers.length) paused.push({ name, version: plugin.version || 'unknown', incompatiblePeers })
   }
   if (paused.length === 0) return { status: 'passed', paused }

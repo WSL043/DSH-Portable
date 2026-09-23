@@ -1,0 +1,23 @@
+{
+  "version": "0.7.5-alpha.1",
+  "zh": {
+    "summary": "预览通道跟进官方 DSH 0.1.7-alpha.2，并修复默认插件因运行时依赖范围不匹配而在首次启动时被暂停的问题。",
+    "highlights": [
+      "预览包锁定官方 DSH 0.1.7-alpha.2 与经过验收的会话管理、图片查看插件候选版。",
+      "打包时对照实际随包内核检查默认插件的依赖范围，避免成品启动后才发现插件被暂停。",
+      "Portable 版本选择器保留最近的合格版本；旧版发布包仍可下载。"
+    ],
+    "knownIssues": ["这是预览版；第三方插件仍须分别确认是否支持 DSH 0.1.7-alpha.2。"],
+    "upgradeNotes": ["退出后升级并保留 data 和 workspace；切换预览内核前备份重要会话。"]
+  },
+  "en": {
+    "summary": "Track official DSH 0.1.7-alpha.2 in the preview channel and fix default plugins being paused on first launch because their runtime peer ranges were too narrow.",
+    "highlights": [
+      "Pin official DSH 0.1.7-alpha.2 and reviewed preview builds of the session manager and image viewer.",
+      "Check default plugin peer ranges against the actual bundled core during packaging so incompatible bundles fail the build before users launch them.",
+      "Keep recent qualified versions in the Portable picker while leaving historical release downloads available."
+    ],
+    "knownIssues": ["This is a preview release; third-party plugins need separate compatibility checks for DSH 0.1.7-alpha.2."],
+    "upgradeNotes": ["Exit before upgrading and retain data and workspace; back up important sessions before switching preview cores."]
+  }
+}
