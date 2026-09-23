@@ -21,10 +21,11 @@ Export either package from Settings > General > Portable > Data and migration.
 Encrypted private packages require a password; lost passwords cannot be recovered.
 
 Restore keeps existing files by default and imports missing data. Explicit
-replacement creates a rollback copy under data/backups first. Portable restores
-plugin dependencies and verifies each profile before committing; a download or
-validation failure rolls the whole import back. Registry plugins may need network
-access the first time they are restored on a new computer.
+replacement creates a rollback copy under data/backups first. Portable tries to
+restore plugin dependencies and validate profiles. If that fails, it rolls back
+the attempt, then imports usable sessions and settings. Plugins and their own
+credentials remain in the original package for a later retry. Other import
+errors still roll back. Registry plugins may need network on a new computer.
 
 If a very old or damaged launcher cannot update in place, run the current small
 bootstrap against the existing Portable folder. If the launcher itself is damaged,

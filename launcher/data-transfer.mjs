@@ -19,6 +19,10 @@ const ALL_CATEGORIES = new Set([...DEFAULT_CATEGORIES, 'credentials', 'workspace
 const PROFILE_SKIP = new Set(['node_modules', '.git', 'pnpm-lock.yaml'])
 const SECRET_NAME = /(^|\/)(\.credentials\.yaml|config\.toml|\.env(?:\.[^/]+)?|credentials?\.(?:json|ya?ml)|secrets?\.(?:json|ya?ml))$/i
 
+function profileCredential(file) {
+  return file.category === 'credentials' && file.path.startsWith('data/dsh-home/profiles/')
+}
+
 function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -248,13 +252,21 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   const conflict = options.conflict ?? 'keep'
   if (!['keep', 'replace'].includes(conflict)) throw new Error('Conflict mode must be keep or replace.')
   const { document, encrypted } = decodeArchive(await readFile(path.resolve(filename)), options.password)
+  const includedCategories = options.includeCategories === undefined
+    ? document.categories
+    : normalizeCategories(options.includeCategories).filter(category => document.categories.includes(category))
+  const included = new Set(includedCategories)
+  if (options.includeCategories !== undefined && !document.files.some(file => included.has(file.category))) {
+    throw new Error('The data package has no entries in the selected categories.')
+  }
   const trace = typeof options.trace === 'function' ? options.trace : () => {}
-  trace('archive-validated', { files: document.files.length, categories: document.categories.length, encrypted })
+  trace('archive-validated', { files: document.files.length, categories: includedCategories.length, encrypted })
   const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
   let rollbackDirectory = null
   const conflicts = []
   const changed = []
   const generated = []
+  const createdProfileDirectories = new Set()
   let imported = 0
   let unchanged = 0
   let replaced = 0
@@ -302,12 +314,25 @@ export async function restoreDataArchive(layout, filename, options = {}) {
         await rename(entry.rollback, entry.target)
       }
     }
+    // DSH's plugin installer may have written operation logs in a profile
+    // created by this import. Remove that whole new profile on rollback so an
+    // empty shell does not suppress first-launch default plugin seeding.
+    for (const directory of createdProfileDirectories) await rm(directory, { recursive: true, force: true })
     if (rollbackDirectory) await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
     trace('rollback-complete')
   }
 
   try {
     for (const file of document.files) {
+      if (!included.has(file.category)) continue
+      if (options.excludeProfileCredentials === true && profileCredential(file)) continue
+      if (file.category === 'plugins') {
+        const match = /^data\/dsh-home\/profiles\/([^/]+)\//.exec(file.path)
+        if (match) {
+          const profileDirectory = path.join(layout.dshHome, 'profiles', match[1])
+          if (!await lstatIfPresent(profileDirectory)) createdProfileDirectories.add(profileDirectory)
+        }
+      }
       const relocated = relocatePortableWorkspaceEntry(
         file,
         Buffer.from(file.data, 'base64'),
@@ -347,7 +372,28 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   if (rollbackDirectory && replaced === 0 && !retainedGeneratedBackup) await rm(rollbackDirectory, { recursive: true, force: true })
   trace('complete', { imported, unchanged, conflicts: conflicts.length, replaced })
   return {
-    status: 'restored', encrypted, categories: document.categories, imported, unchanged, conflicts, replaced,
+    status: 'restored', encrypted, categories: includedCategories, imported, unchanged, conflicts, replaced,
     rollbackDirectory: replaced > 0 || retainedGeneratedBackup ? rollbackDirectory : null,
+  }
+}
+
+export async function restoreDataArchiveAllowingPluginFailure(layout, filename, options = {}) {
+  try {
+    return await restoreDataArchive(layout, filename, options)
+  } catch (error) {
+    if (error?.code !== 'DSH_DATA_IMPORT_PROFILE_FAILED') throw error
+    const { document } = decodeArchive(await readFile(path.resolve(filename)), options.password)
+    const nonPluginCategories = document.categories.filter(category => category !== 'plugins')
+    if (!document.files.some(file => nonPluginCategories.includes(file.category) && !profileCredential(file))) throw error
+    const trace = typeof options.trace === 'function' ? options.trace : () => {}
+    trace('plugin-import-deferred', { categories: nonPluginCategories.length, code: error.code })
+    const restored = await restoreDataArchive(layout, filename, {
+      ...options,
+      includeCategories: nonPluginCategories,
+      excludeProfileCredentials: true,
+      validate: undefined,
+    })
+    return { ...restored, status: 'restored-without-plugins',
+      deferredCategories: ['plugins', ...(document.files.some(profileCredential) ? ['plugin-credentials'] : [])] }
   }
 }

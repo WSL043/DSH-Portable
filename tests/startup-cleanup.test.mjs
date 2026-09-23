@@ -28,6 +28,7 @@ function fixture({ owned = true, details = 'host failed', cleanupError = null, q
     readProcessState: () => null,
     ownedState: state => { if (state?.pid === 123 && queryError) throw queryError; return Boolean(state?.pid === 123 && owned) },
     seedDefaultPlugins: async () => ({ status: 'unchanged' }),
+    pauseIncompatibleProfileBundles: async () => ({ status: 'passed', paused: [] }),
     repairIncompleteProfileDependencies: async () => ({ profiles: [] }),
     reservePort: async () => ({ port: 3080, release() {} }), logSize: () => 0,
     openSync: () => 1, writeSync() {}, closeSync() {}, startupTrace: null,

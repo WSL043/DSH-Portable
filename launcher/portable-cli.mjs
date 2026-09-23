@@ -46,8 +46,9 @@ import {
 import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
-import { createDataArchive, inspectDataArchive, restoreDataArchive } from './data-transfer.mjs'
+import { createDataArchive, inspectDataArchive, restoreDataArchiveAllowingPluginFailure } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
+import { pauseIncompatibleProfileBundles } from './profile-compatibility.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 import { preflightStagedDshProfiles } from './update-preflight.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
@@ -538,6 +539,18 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   if (defaultPlugins.status === 'warning') {
     process.stderr.write(`${JSON.stringify({ type: 'portable-warning', ...defaultPlugins })}\n`)
   }
+  const compatibility = await pauseIncompatibleProfileBundles(layout)
+  startupLog(startedAt, 'plugin-compatibility-ready', {
+    status: compatibility.status,
+    paused: compatibility.paused.length,
+    plugins: compatibility.paused.map(item => item.name).join(','),
+  })
+  if (compatibility.paused.length) {
+    process.stderr.write(`${JSON.stringify({
+      type: 'portable-warning', code: 'incompatible_plugins_paused',
+      plugins: compatibility.paused.map(item => ({ name: item.name, version: item.version })),
+    })}\n`)
+  }
   const repairedPluginProfiles = await repairIncompleteProfileDependencies({
     layout,
     trace: (phase, fields) => startupLog(startedAt, phase, fields),
@@ -747,7 +760,7 @@ async function restoreData(options) {
   const operationTrace = beginOperationTrace(layout.logsDir, 'data-import')
   const trace = (phase, fields) => appendOperationTrace(operationTrace, phase, fields)
   trace('begin')
-  return restoreDataArchive(layout, path.resolve(options.input), {
+  return restoreDataArchiveAllowingPluginFailure(layout, path.resolve(options.input), {
     password: dataPassword(options),
     conflict: options.conflict,
     trace,

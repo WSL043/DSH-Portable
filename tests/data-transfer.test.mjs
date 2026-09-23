@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
-import { createDataArchive, inspectDataArchive, restoreDataArchive } from '../launcher/data-transfer.mjs'
+import { createDataArchive, inspectDataArchive, restoreDataArchive, restoreDataArchiveAllowingPluginFailure } from '../launcher/data-transfer.mjs'
 import { layoutForRoot, projectKey } from '../launcher/portable-core.mjs'
 
 async function fixture() {
@@ -185,6 +185,48 @@ test('restore rolls back every imported file and validator-generated path when o
     readFile(path.join(layout.dshHome, 'sessions', 'workspace-a', 'session-one', 'session.jsonl.zstd')),
     error => error.code === 'ENOENT',
   )
+})
+
+test('unrestorable plugin dependencies do not block importing sessions and settings', async () => {
+  const source = await fixture()
+  const archive = path.join(source.root, 'backup.dshdata')
+  await createDataArchive(source.layout, archive)
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-data-transfer-fallback-'))
+  const target = layoutForRoot(targetRoot)
+  const result = await restoreDataArchiveAllowingPluginFailure(target, archive, {
+    validate: async () => {
+      const operationLogs = path.join(target.dshHome, 'profiles', 'web', '.plugin-manager', 'logs')
+      await mkdir(operationLogs, { recursive: true })
+      await writeFile(path.join(operationLogs, 'failed.log'), 'offline dependency unavailable')
+      const failure = new Error('profile dependency restoration failed')
+      failure.code = 'DSH_DATA_IMPORT_PROFILE_FAILED'
+      throw failure
+    },
+  })
+  assert.equal(result.status, 'restored-without-plugins')
+  assert.deepEqual(result.categories, ['settings', 'sessions'])
+  assert.deepEqual(result.deferredCategories, ['plugins'])
+  assert.equal(await readFile(path.join(target.dshHome, 'settings.yaml'), 'utf8'), 'locale: zh-CN\n')
+  assert.equal(await readFile(path.join(target.dshHome, 'sessions', 'workspace-a', 'session-one', 'session.jsonl.zstd'), 'utf8'), 'session-one')
+  await assert.rejects(readFile(path.join(target.dshHome, 'profiles', 'web', 'package.json')), { code: 'ENOENT' })
+  assert.equal(existsSync(path.join(target.dshHome, 'profiles', 'web')), false)
+})
+
+test('plugin import fallback keeps profile credentials in the encrypted archive while restoring core credentials', async () => {
+  const source = await fixture()
+  await writeFile(path.join(source.layout.dshHome, 'profiles', 'web', 'config.toml'), 'plugin_secret = "fixture"\n')
+  const archive = path.join(source.root, 'private.dshdata')
+  const password = 'correct horse battery staple'
+  await createDataArchive(source.layout, archive, { categories: ['settings', 'sessions', 'plugins', 'credentials'], password })
+  const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-data-transfer-private-fallback-'))
+  const target = layoutForRoot(targetRoot)
+  const result = await restoreDataArchiveAllowingPluginFailure(target, archive, {
+    password,
+    validate: async () => { throw Object.assign(new Error('offline plugin'), { code: 'DSH_DATA_IMPORT_PROFILE_FAILED' }) },
+  })
+  assert.deepEqual(result.deferredCategories, ['plugins', 'plugin-credentials'])
+  assert.equal(await readFile(path.join(target.dshHome, '.credentials.yaml'), 'utf8'), 'secret: test-only\n')
+  assert.equal(existsSync(path.join(target.dshHome, 'profiles', 'web')), false)
 })
 
 test('successful restore can replace generated plugin state while retaining its rollback snapshot', async () => {

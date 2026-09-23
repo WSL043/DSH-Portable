@@ -3319,6 +3319,11 @@ namespace DshPortable
                 }
                 Tuple<int, string> imported = await Task.Run(() => InvokePortableCli(args.ToArray()));
                 if (imported.Item1 != 0) throw new InvalidOperationException(imported.Item2);
+                if (String.Equals(JsonString(imported.Item2, "status"), "restored-without-plugins", StringComparison.Ordinal))
+                    MessageBox.Show(this, L(
+                        "会话、设置等数据已导入。插件依赖在此电脑无法重建，插件未导入；原数据包仍保留，可在插件页重新安装后再导入插件。",
+                        "Sessions and settings were imported. Plugin dependencies could not be rebuilt on this computer, so plugins were skipped. The original data package remains available for a later retry."),
+                        L("部分数据已导入", "Data partially imported"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                 RestartAfterDataImport();
             }
             catch (Exception error)
@@ -5277,7 +5282,10 @@ namespace DshPortable
             Stopwatch probeBudget = Stopwatch.StartNew();
             try
             {
-                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+                // The initial WebView navigation can consume a one-time DSH
+                // token. A timeout probe checks host liveness without replaying it.
+                UriBuilder probeUrl = new UriBuilder(url) { Query = String.Empty, Fragment = String.Empty };
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(probeUrl.Uri);
                 request.AllowAutoRedirect = true;
                 request.Proxy = null;
                 request.Timeout = 5000;
@@ -5300,6 +5308,17 @@ namespace DshPortable
                     }
                     return "host=" + (int)response.StatusCode + " " + response.ContentType + " bytes=" + total;
                 }
+            }
+            catch (WebException error)
+            {
+                HttpWebResponse response = error.Response as HttpWebResponse;
+                if (response != null && response.StatusCode == HttpStatusCode.Unauthorized)
+                {
+                    response.Dispose();
+                    return "host=401 auth-required (service reachable)";
+                }
+                if (response != null) response.Dispose();
+                return "host-probe-failed=" + error.GetType().Name + ": " + error.Message;
             }
             catch (Exception error)
             {
@@ -5348,7 +5367,7 @@ namespace DshPortable
             foreach (string name in new[] { "dsh.stderr.log", "dsh.stdout.log" })
             {
                 string tail = TailLog(Path.Combine(logDirectory, name), 2000).Trim();
-                if (!String.IsNullOrEmpty(tail)) details.AppendLine(name + ":\r\n" + tail);
+                if (!String.IsNullOrEmpty(tail)) details.AppendLine(name + ":\r\n" + RedactSensitiveText(tail));
             }
             return details.ToString().Trim();
         }
