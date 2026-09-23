@@ -13,6 +13,17 @@ const [lockfile, upstream] = await Promise.all([
   readFile(path.resolve(upstreamName), 'utf8').then(JSON.parse),
 ])
 
+const runtimePackage = JSON.parse(await readFile(path.join(path.dirname(path.resolve(lockfileName)), 'package.json'), 'utf8'))
+const officeZipVersion = runtimePackage.overrides?.['@deepseek-ai/libreoffice-kit@0.0.1']?.fflate
+if (lockfile.packages?.['node_modules/@deepseek-ai/libreoffice-kit']) {
+  assert.equal(officeZipVersion, '0.8.3', 'Office ZIP parser uses the reviewed denial-of-service fix')
+  for (const [name, entry] of Object.entries(lockfile.packages)) {
+    if (name.endsWith('node_modules/fflate')) {
+      assert.equal(entry.version, officeZipVersion, `Office ZIP parser is patched at ${name}`)
+    }
+  }
+}
+
 assert.equal(lockfile.lockfileVersion, 3, 'npm lockfile version must be 3')
 const root = lockfile.packages?.['']
 const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'

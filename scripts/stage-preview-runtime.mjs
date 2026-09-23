@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -110,6 +111,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     readFile(path.resolve(root, lockFile), 'utf8').then(JSON.parse),
     readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
   ])
+  const stableRuntimeManifest = JSON.parse(await readFile(path.join(root, 'app', 'package.json'), 'utf8'))
   const packages = await inventoryPackedRuntime({ packedRoot, lock })
   const runtimePackages = productionPackageClosure(packages, lock.dsh.package)
   await rm(output, { recursive: true, force: true })
@@ -136,6 +138,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     private: true,
     license: 'Apache-2.0',
     dependencies,
+    overrides: stableRuntimeManifest.overrides,
   }
   await writeFile(path.join(output, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
 
@@ -152,11 +155,18 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
 
   const installed = JSON.parse(await readFile(path.join(output, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8'))
   assert.equal(installed.version, lock.dsh.version, 'installed preview entry version')
+  const officeManifest = path.join(output, 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'package.json')
+  if (existsSync(officeManifest)) {
+    const fflate = createRequire(officeManifest)('fflate/package.json')
+    assert.equal(fflate.version, manifest.overrides?.['@deepseek-ai/libreoffice-kit@0.0.1']?.fflate,
+      'staged Office ZIP parser must use the reviewed patched version')
+  }
   const runtimeManifest = {
     name: manifest.name,
     version: manifest.version,
     private: true,
     license: manifest.license,
+    overrides: manifest.overrides,
     dependencies: {
       [lock.dsh.package]: lock.dsh.version,
       '@wsl043/dsh-portable-desktop-bridge': 'file:desktop-bridge',
