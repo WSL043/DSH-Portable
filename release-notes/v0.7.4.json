@@ -1,0 +1,23 @@
+{
+  "version": "0.7.4",
+  "zh": {
+    "summary": "修复旧插件阻塞新内核工作区启动，以及插件依赖重建失败导致整份数据导入撤销的问题。",
+    "highlights": [
+      "启动前核对已启用社区插件声明的 DSH 兼容范围；不兼容时暂停该插件，保留安装包和配置，让工作区继续打开。",
+      "数据导入中若插件依赖无法重建，先回滚失败的插件导入，再导入可用的会话、设置和主凭据；原数据包保留。",
+      "Windows 启动超时诊断区分本地服务需要认证与服务不可达，并清除日志中的一次性访问令牌。"
+    ],
+    "knownIssues": ["被暂停的旧插件不会自动升级；安装兼容版本后需重新启用。插件导入失败时，原加密数据包中的插件凭据不会导入目标环境。"],
+    "upgradeNotes": ["退出后升级，保留 data 和 workspace。若旧插件被暂停，可在插件页更新并重新启用。"]
+  },
+  "en": {
+    "summary": "Recover workspace startup blocked by an older plugin and preserve usable data when plugin dependency restoration fails during import.",
+    "highlights": [
+      "Check enabled community plugins against their declared DSH peer ranges before startup; pause incompatible bundles while retaining their packages and configuration.",
+      "If plugin dependencies cannot be rebuilt during data import, roll back that plugin attempt and import usable sessions, settings and core credentials; retain the original archive.",
+      "Distinguish an authenticated local host from an unreachable one in Windows startup diagnostics and redact one-time access tokens."
+    ],
+    "knownIssues": ["Paused older plugins are not upgraded automatically; install a compatible version and re-enable them. Plugin credentials in the original encrypted archive are not imported if plugin restoration is deferred."],
+    "upgradeNotes": ["Exit before upgrading and retain data and workspace. Update and re-enable any older plugin paused for incompatibility."]
+  }
+}
