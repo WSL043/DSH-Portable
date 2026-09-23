@@ -363,8 +363,9 @@ export function mountMarketRoutes(
    * through setEntryDisabled. Enabling a THEME goes through the caller's
    * activateTheme instead so the Themes tab's exclusivity stays intact.
    */
-  async function setPluginEnabled(name: string, enabled: boolean): Promise<{ ok: boolean; reason?: string }> {
+  async function setPluginEnabled(name: string, enabled: boolean): Promise<{ ok: boolean; reason?: string; restart?: boolean }> {
     const dir = activeProfileDir
+    const wasDisabled = disabled.has(name)
     if (enabled) disabled.delete(name)
     else disabled.add(name)
     let ok: boolean
@@ -376,8 +377,17 @@ export function mountMarketRoutes(
         ok = true
       } else {
         const result = await hotMount(host, dir, name)
-        ok = result.ok
+        ok = result.ok || result.restartRequired === true
         reason = result.reason ?? undefined
+        if (!ok) {
+          if (wasDisabled) disabled.add(name)
+          else disabled.delete(name)
+          return { ok: false, reason }
+        }
+        if (result.restartRequired === true) {
+          writeMarketState(dir, { disabled, groups, groupOrder })
+          return { ok: true, reason, restart: true }
+        }
       }
     } else {
       ok = await hotUnmount(name) || await themes.setEntryDisabled(name, true)
@@ -1065,6 +1075,10 @@ export function mountMarketRoutes(
               const result = await setPluginEnabled(name, enabled)
               ok = result.ok
               reason = result.reason
+              if (!ok) {
+                sendJson(response, 502, { ok: false, name, enabled, reason, disabled: [...disabled], restart: false, refresh: false })
+                return
+              }
             }
             // Durable patch-layer write (port of dsh-plugin-hub): the package's
             // bundle rows get 'disabled: true|false' in the user patch layer,
@@ -1103,12 +1117,10 @@ export function mountMarketRoutes(
             // apply".
             const patchNow = readUserPatchState(userPatchPath)
             const offNow = disabled.has(name) || patchRows.some(id => patchNow.disables.includes(id))
-            // When the live composition does not match the requested state
-            // (enable failed to hot-mount / disable left the fiber up), the
-            // change lands on the next boot via the patch layer + state.json —
-            // the client reuses the market's pending-restart banner for it.
+            // Known loader limitations may need a restart. Activation errors
+            // already returned above without changing the durable profile.
             const liveAfter = liveNames().has(name)
-            const restart = isCarrier ? true : enabled ? !liveAfter : liveAfter
+            const restart = isCarrier || (enabled ? !liveAfter : liveAfter)
             // A client-part plugin's UI is in the page already — toggling it
             // needs a browser refresh to show the change (same signal the
             // install flow uses for the hot banner).
@@ -1195,9 +1207,9 @@ export function mountMarketRoutes(
                 // Same live-mismatch signal as the single toggle: a member
                 // whose fiber did not follow the switch needs a boot.
                 const liveAfter = liveNames().has(member)
-                if ((enabled && !liveAfter) || (!enabled && liveAfter)) restartMembers.push(member)
+                if (result.ok && ((enabled && !liveAfter) || (!enabled && liveAfter))) restartMembers.push(member)
                 // Client-part members need a page refresh to show the change.
-                if (packageHasClientPart(activeProfileDir, member)) refreshMembers.push(member)
+                if (result.ok && packageHasClientPart(activeProfileDir, member)) refreshMembers.push(member)
               }
               ok = failures.length === 0
               if (!ok) error = `failed to ${enabled ? 'enable' : 'disable'}: ${failures.join(', ')}`

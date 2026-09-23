@@ -323,6 +323,8 @@ export interface HotMountResult {
   ok: boolean
   /** Bilingual reason shown to the user instead of a bare restart banner. */
   reason: string | null
+  /** Only a known loader limitation may be completed by restarting. */
+  restartRequired?: boolean
 }
 
 /**
@@ -357,12 +359,16 @@ export async function hotUnmount(packageName: string): Promise<boolean> {
  * "this package can never hot-mount").
  */
 export async function hotMount(ctx: HotContext, profileDir: string, packageName: string): Promise<HotMountResult> {
+  let pendingFile: string | undefined
+  let pendingHandle: PluginHandle | undefined
+  let addedShim = false
   try {
     const HotTree = await loadHotTreeClass()
     if (HotTree === null) {
       return {
         ok: false,
         reason: '宿主不支持热挂载(include 插件不可导入),需重启 / the host cannot hot-mount (include plugin unavailable); restart required',
+        restartRequired: true,
       }
     }
     const packageDir = join(profileDir, 'node_modules', packageName)
@@ -383,6 +389,7 @@ export async function hotMount(ctx: HotContext, profileDir: string, packageName:
         return {
           ok: false,
           reason: 'bundle patch 含配置行/表达式,热挂载仅支持纯 insert,重启后生效 / the bundle patch contains config/expression rows; hot-mount only supports plain inserts — it activates on restart',
+          restartRequired: true,
         }
       }
     } else {
@@ -398,27 +405,35 @@ export async function hotMount(ctx: HotContext, profileDir: string, packageName:
         }
       }
       shimNames.add(packageName)
+      addedShim = true
       rows = [{ id: `client-${packageName.replace(/[^A-Za-z0-9_.-]/g, '-')}`, name: packageName }]
     }
     const dir = join(profileDir, HOT_DIR)
     mkdirSync(dir, { recursive: true, mode: 0o700 })
     hotSequence += 1
     const file = join(dir, `hot-${String(hotSequence)}.yml`)
+    pendingFile = file
     const yml = rows
       .map(row => `- id: 'mkt-${row.id}'\n  name: '${shimNames.has(row.name) ? row.name : resolveProfileEntry(profileDir, row.name)}'\n`)
       .join('')
     writeFileSync(file, yml)
     const handle = ctx.plugin(HotTree, { path: pathToFileURL(file).href })
+    pendingHandle = handle
     await awaitHotActivation(handle)
     hotHandles.set(packageName, handle)
+    pendingHandle = undefined
+    pendingFile = undefined
     ctx.logger?.info?.(`[dsh-market] hot-mounted ${packageName}`)
     logEvent('info', 'hot-mount', `${packageName}: live${shimNames.has(packageName) ? ' (client-only shim)' : ''}`)
     return { ok: true, reason: null }
   } catch (error) {
+    try { await pendingHandle?.dispose() } catch { /* preserve the activation error */ }
+    if (pendingFile) try { rmSync(pendingFile, { force: true }) } catch { /* preserve the activation error */ }
+    if (addedShim) shimNames.delete(packageName)
     const message = error instanceof Error ? error.message : String(error)
-    ctx.logger?.warn(`[dsh-market] hot mount of ${packageName} failed, restart required: ${message}`)
-    logEvent('warn', 'hot-mount', `${packageName}: fell back to restart — ${message}`)
-    return { ok: false, reason: `热挂载失败,重启后生效 — ${message} / hot-mount failed — restart required: ${message}` }
+    ctx.logger?.warn(`[dsh-market] hot mount of ${packageName} failed: ${message}`)
+    logEvent('warn', 'hot-mount', `${packageName}: activation failed — ${message}`)
+    return { ok: false, reason: `插件启用失败；请检查插件与内核兼容性。重启不保证修复：${message} / plugin activation failed; check plugin and core compatibility. Restart may not fix this: ${message}` }
   }
 }
 

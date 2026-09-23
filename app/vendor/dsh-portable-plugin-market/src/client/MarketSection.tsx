@@ -1360,11 +1360,9 @@ export function MarketSection(props: MarketSectionProps) {
           }
         } else {
           const text = (v: unknown) => typeof v === 'string' ? v : v == null ? '' : JSON.stringify(v)
-          // The server's bilingual reason (e.g. host cannot hot-mount —
-          // restart required) beats the generic failure line.
+          if (Array.isArray(body.disabled)) setDisabledNames(body.disabled)
+          // Show the activation error without claiming a restart will repair it.
           setInstallError(text(body.reason) || text(body.error) || t('toggleFail'))
-          // The durable state (state.json + patch layer) was still written,
-          // so a restart applies it even though the live drive failed.
           if (body.restart === true) setToggleRestart(n => n + 1)
           if (body.refresh === true) setRefreshNames(names => names.includes(name) ? names : names.concat(name))
         }
