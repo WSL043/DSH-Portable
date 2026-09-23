@@ -266,7 +266,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   const conflicts = []
   const changed = []
   const generated = []
-  const createdProfileDirectories = new Set()
+  const createdProfileNames = new Set()
   let imported = 0
   let unchanged = 0
   let replaced = 0
@@ -317,7 +317,10 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     // DSH's plugin installer may have written operation logs in a profile
     // created by this import. Remove that whole new profile on rollback so an
     // empty shell does not suppress first-launch default plugin seeding.
-    for (const directory of createdProfileDirectories) await rm(directory, { recursive: true, force: true })
+    for (const name of createdProfileNames) {
+      const directory = await safeTarget(layout.stateRoot, `data/dsh-home/profiles/${name}`, { leaf: 'any' })
+      if (await lstatIfPresent(directory)) await rm(directory, { recursive: true, force: true })
+    }
     if (rollbackDirectory) await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
     trace('rollback-complete')
   }
@@ -330,7 +333,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
         const match = /^data\/dsh-home\/profiles\/([^/]+)\//.exec(file.path)
         if (match) {
           const profileDirectory = path.join(layout.dshHome, 'profiles', match[1])
-          if (!await lstatIfPresent(profileDirectory)) createdProfileDirectories.add(profileDirectory)
+          if (!await lstatIfPresent(profileDirectory)) createdProfileNames.add(match[1])
         }
       }
       const relocated = relocatePortableWorkspaceEntry(

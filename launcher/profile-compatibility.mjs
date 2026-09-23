@@ -1,23 +1,33 @@
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { readFile } from 'node:fs/promises'
 import path from 'node:path'
+import { safeDataTarget, writeDataFileAtomic } from './data-paths.mjs'
+
+const PACKAGE_NAME = /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/
 
 function packageManifest(root, name) {
-  return path.join(root, 'node_modules', ...name.split('/'), 'package.json')
+  if (typeof name !== 'string' || !PACKAGE_NAME.test(name)) return null
+  const modules = path.resolve(root, 'node_modules')
+  const filename = path.resolve(modules, ...name.split('/'), 'package.json')
+  const relative = path.relative(modules, filename)
+  if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) return null
+  return filename
 }
 
 function isCommunityBundle(name) {
   return typeof name === 'string'
-    && /^(?:@[^/]+\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)
+    && PACKAGE_NAME.test(name)
     && !name.startsWith('@deepseek-ai/')
     && name !== '@wsl043/dsh-portable-desktop-bridge'
     && name !== '@wsl043/dsh-portable-plugin-market'
 }
 
 export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}) {
-  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
-  const manifestFile = path.join(profileRoot, 'package.json')
+  const candidate = path.join(layout.dshHome, 'profiles', 'web', 'package.json')
+  if (!existsSync(candidate)) return { status: 'skipped', paused: [] }
+  const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json')
+  const profileRoot = path.dirname(manifestFile)
   if (!existsSync(manifestFile)) return { status: 'skipped', paused: [] }
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   const bundles = manifest.dsh?.profile?.bundles
@@ -33,13 +43,13 @@ export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}
   const paused = []
   for (const name of active) {
     const filename = packageManifest(profileRoot, name)
-    if (!existsSync(filename)) continue // DSH reports an unresolved bundle separately.
+    if (!filename || !existsSync(filename)) continue // DSH reports an unresolved bundle separately.
     const plugin = JSON.parse(await readFile(filename, 'utf8'))
     const incompatiblePeers = []
     for (const [peer, range] of Object.entries(plugin.peerDependencies || {})) {
-      if (!peer.startsWith('@deepseek-ai/') || typeof range !== 'string') continue
+      if (!peer.startsWith('@deepseek-ai/') || !PACKAGE_NAME.test(peer) || typeof range !== 'string') continue
       const hostFilename = packageManifest(layout.appDir, peer)
-      if (!existsSync(hostFilename)) continue
+      if (!hostFilename || !existsSync(hostFilename)) continue
       const host = JSON.parse(await readFile(hostFilename, 'utf8'))
       if (typeof host.version !== 'string') continue
       try {
@@ -52,8 +62,6 @@ export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}
   if (paused.length === 0) return { status: 'passed', paused }
   const names = new Set(paused.map(item => item.name))
   manifest.dsh.profile.bundles = bundles.filter(name => !names.has(name))
-  const temporary = `${manifestFile}.${process.pid}.compat.tmp`
-  await writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
-  await rename(temporary, manifestFile)
+  await writeDataFileAtomic(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
   return { status: 'paused', paused }
 }
