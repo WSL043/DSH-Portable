@@ -81,15 +81,24 @@ test('market release comparison distinguishes newer, equal, and older tags', () 
   )
 })
 
-test('unchanged open intake proposals do not force-push and rerun product qualification every poll', async () => {
-  for (const file of ['upstream-watch.yml', 'official-preview-watch.yml']) {
-    const workflow = await read(`.github/workflows/${file}`)
-    assert.match(workflow, /gh pr list --state open --head/)
-    assert.match(workflow, /git fetch --no-tags origin/)
-    assert.match(workflow, /git diff --quiet "origin\/\$BRANCH"/)
-    assert.match(workflow, /echo 'changed=false' >> "\$GITHUB_OUTPUT"/)
-    assert.equal((workflow.match(/if: steps\.proposal\.outputs\.changed == 'true'/g) ?? []).length, 2)
-  }
+test('unchanged stable intake proposals do not rerun product qualification every poll', async () => {
+  const workflow = await read('.github/workflows/upstream-watch.yml')
+  assert.match(workflow, /gh pr list --state open --head/)
+  assert.match(workflow, /git fetch --no-tags origin/)
+  assert.match(workflow, /git diff --quiet "origin\/\$BRANCH"/)
+  assert.match(workflow, /echo 'changed=false' >> "\$GITHUB_OUTPUT"/)
+  assert.equal((workflow.match(/if: steps\.proposal\.outputs\.changed == 'true'/g) ?? []).length, 2)
+})
+
+test('candidate intake checks the open review head and never replaces manual fixes', async () => {
+  const workflow = await read('.github/workflows/official-preview-watch.yml')
+  assert.match(workflow, /gh pr list --state open --head/)
+  assert.match(workflow, /git fetch --no-tags origin "\$BRANCH"/)
+  assert.match(workflow, /git checkout -B "\$BRANCH" FETCH_HEAD/)
+  assert.match(workflow, /git push origin "\$BRANCH"/)
+  assert.doesNotMatch(workflow, /git push --force/)
+  assert.ok(workflow.indexOf('git checkout -B "$BRANCH" FETCH_HEAD') < workflow.indexOf('node scripts/update-preview-upstream.mjs'))
+  assert.equal((workflow.match(/if: steps\.preview\.outputs\.changed == 'true'/g) ?? []).length, 2)
 })
 
 test('pull requests use one contract runner while main retains full product qualification', async () => {

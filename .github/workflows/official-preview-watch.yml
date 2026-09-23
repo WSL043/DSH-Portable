@@ -23,14 +23,8 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
-      - id: preview
-        name: Discover a newer official DSH candidate package and immutable source tag
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/update-preview-upstream.mjs
-      - id: proposal
-        name: Skip an identical official candidate awaiting review
-        if: steps.preview.outputs.changed == 'true'
+      - id: review-branch
+        name: Continue an open candidate review without replacing its commits
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -38,23 +32,30 @@ jobs:
           BRANCH=automation/official-preview
           PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$PR" ]; then
-            git fetch --no-tags origin "$BRANCH:refs/remotes/origin/$BRANCH"
-            if git diff --quiet "origin/$BRANCH" -- upstream.preview.lock.json; then
-              echo 'changed=false' >> "$GITHUB_OUTPUT"
-              echo 'This official candidate is already awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
-              exit 0
-            fi
+            git fetch --no-tags origin "$BRANCH"
+            git checkout -B "$BRANCH" FETCH_HEAD
+          else
+            git checkout -B "$BRANCH"
           fi
-          echo 'changed=true' >> "$GITHUB_OUTPUT"
+          echo "pr=$PR" >> "$GITHUB_OUTPUT"
+      - id: preview
+        name: Discover a newer official DSH candidate package and immutable source tag
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/update-preview-upstream.mjs
+      - name: Keep an identical candidate review unchanged
+        if: steps.preview.outputs.changed == 'false'
+        run: |
+          echo 'This official candidate is already awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run repository contracts before opening the review
         id: contracts
-        if: steps.proposal.outputs.changed == 'true'
+        if: steps.preview.outputs.changed == 'true'
         continue-on-error: true
         run: |
           npm ci --prefix app --ignore-scripts
           npm test
       - name: Open or refresh the official candidate review pull request
-        if: steps.proposal.outputs.changed == 'true'
+        if: steps.preview.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           NPM_TAG: ${{ steps.preview.outputs.selectedTag }}
@@ -66,10 +67,9 @@ jobs:
           BRANCH=automation/official-preview
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git checkout -B "$BRANCH"
           git add upstream.preview.lock.json
           git commit -m "chore: review official DSH candidate ${VERSION}"
-          git push --force origin "$BRANCH"
+          git push origin "$BRANCH"
           BODY=$(mktemp)
           cat > "$BODY" <<EOF
           Reviews official DeepSeek Harness candidate ${VERSION} (npm tag: ${NPM_TAG}) at immutable commit ${COMMIT} for the Portable candidate channel.
