@@ -127,5 +127,53 @@ That run's Windows 2022 lifecycle fixture then hit its 75s hosted-runner
 ceiling while still writing file 6,654 of 10,615; it had not crashed or
 reached the Host yet. The hosted functional ceiling is raised only for that
 runner, with distinct preparation and post-preparation bounds. The controlled
-machine's 20s first-start performance target is unchanged. A new exact-head
-product run must pass before claiming this CI split or capsule reuse accepted.
+machine's 20s first-start performance target is unchanged. The exact-head
+qualification resolving this gate is recorded below.
+
+### Exact-head product qualification after capsule reuse
+
+[Run 35860110706](https://github.com/WSL043/DSH-Portable/actions/runs/35860110706)
+qualified commit `4b1572f` with all **39 jobs passing** across Windows,
+macOS and Linux, including Windows 2022/2025 native UI and lifecycle, the
+complete-offline WebView2 bundle, previous-release upgrade and component
+update. The run took **18m37s** from creation to its final gate. This is an
+observed run duration, not a controlled estimate of one optimization: runner
+load, the parallel job graph and a cold WebView2 capsule cache all differ from
+the earlier 26m20s run.
+
+The Windows base builder's own measured phases fell from **424.7s** in run
+35855719210 to **254.4s** here. Its one DSH capsule preparation took 171.8s;
+the component update package then took 4.1s and the outer product archive and
+manifest 11.8s, instead of 169.8s and 181.4s for the corresponding two
+packaging phases in the earlier run. The base-build job finished in 6m10s
+versus 10m03s in run 35851853558. Both output manifests record the same
+inner capsule SHA-256
+`459b5dd3a7f440687e6f52212452bb85d43c6810d077448d6fc8f850b7d85d0c`;
+their outer archives retain independent hashes. The archive size comparison
+changed by only 290 bytes. This is build-time work elimination, not a package
+size reduction or a claim that a user's first extraction is faster.
+
+The reviewed WebView2 capsule cache missed on this run because the common
+capsule-builder script changed the exact cache key. The CAB cache hit, the
+capsule was rebuilt and verified, and the new cache entry was saved. Do not
+count this run as a cross-run capsule cache hit.
+
+The Windows 2022 cold-runner trace in 35857746239 showed about 0.52s for
+the 10,615-entry index and hashes, 24.56s for 2,164 ancestor directories,
+and file writes still active at its former 75s deadline. A separate local
+directory-only A/B used a real 10,257-entry capsule with 2,070 directories:
+four alternating trials of the current level barrier and a bounded
+parent-ready DAG took 198–218ms, with no useful difference. That local disk
+does not reproduce the hosted runner's 24.56s directory stage. The DAG change
+was therefore not promoted; the shipped extraction algorithm, per-entry
+verification and atomic ready marker remain unchanged. Hosted functional
+limits were separated by phase; the controlled-machine first-start target
+remains 20s.
+
+A follow-up workflow audit found no redundant platform build or product gate.
+The unrelated glib security regression took 69s on the same commit even
+without Linux-native changes; a path-scoped trigger could save runner work,
+but does not explain this product run's critical path. Duplicate footprint
+artifact uploads cost about one second per builder. Neither small workflow
+change was made just to improve a counter without a meaningful gate or
+user-facing benefit.
