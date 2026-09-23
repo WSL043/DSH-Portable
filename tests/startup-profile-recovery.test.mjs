@@ -105,6 +105,17 @@ test('a damaged recovery journal is diagnosed read-only and blocks further edits
   await assert.rejects(pauseStartupProfileBundle(layout, 2), /JSON/)
 })
 
+test('restore clears an interrupted pause record when the bundle was never removed', async t => {
+  const { layout, manifestFile } = await fixture(t)
+  await pauseStartupProfileBundle(layout, 2)
+  const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+  manifest.dsh.profile.bundles.splice(1, 0, 'community-a')
+  await writeFile(manifestFile, JSON.stringify(manifest))
+  assert.equal((await restoreStartupProfileBundle(layout, 1)).status, 'already-active')
+  assert.deepEqual((await inspectStartupProfile(layout)).paused, [])
+  assert.equal(JSON.parse(await readFile(manifestFile, 'utf8')).dsh.profile.bundles.filter(name => name === 'community-a').length, 1)
+})
+
 test('recovery commands require explicit bounded plugin index', () => {
   assert.equal(parseCli(['recovery-plugins']).command, 'recovery-plugins')
   assert.deepEqual(parseCli(['recovery-pause-plugin', '--recovery-index', '2']), {

@@ -124,14 +124,16 @@ export async function pauseStartupProfileBundle(layout, index) {
   if (journal.pauses.some(item => item.name === name)) throw new Error('This plugin already has a pending recovery record.')
   const backup = await safeDataTarget(layout.stateRoot, `data/runtime/startup-profile-backup-${randomUUID()}.json`)
   await writeDataFileAtomic(backup, profile.source)
-  profile.manifest.dsh.profile.bundles = profile.bundles.filter(item => item !== name)
-  await writeDataFileAtomic(profile.filename, `${JSON.stringify(profile.manifest, null, 2)}\n`)
   const pauses = [...journal.pauses, {
     name, position, pausedAt: new Date().toISOString(),
     backup: path.relative(layout.stateRoot, backup).replaceAll('\\', '/'),
   }]
-  try { await saveJournal(layout, pauses) } catch (error) {
-    await writeDataFileAtomic(profile.filename, profile.source)
+  // The undo record precedes the manifest change. A crash between these writes
+  // leaves a harmless active bundle plus a record that restore can clear.
+  await saveJournal(layout, pauses)
+  profile.manifest.dsh.profile.bundles = profile.bundles.filter(item => item !== name)
+  try { await writeDataFileAtomic(profile.filename, `${JSON.stringify(profile.manifest, null, 2)}\n`) } catch (error) {
+    await saveJournal(layout, journal.pauses)
     throw error
   }
   return { status: 'paused', name, backup, preserved: ['dependencies', 'plugin files', 'settings', 'sessions', 'workspace'] }
@@ -144,7 +146,10 @@ export async function restoreStartupProfileBundle(layout, index) {
   const profile = await readProfile(layout)
   if (!profile) throw new Error('Web profile does not exist; no plugin was restored.')
   const name = record.name
-  if (profile.bundles.includes(name)) throw new Error('Plugin is already active; inspect the profile before clearing its recovery record.')
+  if (profile.bundles.includes(name)) {
+    await saveJournal(layout, journal.pauses.filter((_, position) => position !== index - 1))
+    return { status: 'already-active', name }
+  }
   if ((await resolveBundle(layout, path.dirname(profile.filename), name)).status === 'missing') {
     throw new Error(`Plugin ${name} is not installed in the web profile; restore its package before enabling it.`)
   }
