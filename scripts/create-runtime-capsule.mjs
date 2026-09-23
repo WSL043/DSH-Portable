@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
-import { mkdir, open, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, open, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pipeline } from 'node:stream/promises'
 import { Readable } from 'node:stream'
@@ -63,15 +63,17 @@ export async function createRuntimeCapsule(appDir, capsuleFile, manifestFile, op
     await rm(rawFile, { force: true })
   }
 
-  const compressed = await readFile(capsuleFile)
+  const compressedBytes = (await stat(capsuleFile)).size
+  const compressedHash = createHash('sha256')
+  for await (const chunk of createReadStream(capsuleFile)) compressedHash.update(chunk)
   const manifest = {
     schemaVersion: 1,
     format: 'dshpack-zstd-v1',
     filename: path.relative(path.dirname(manifestFile), capsuleFile).replaceAll('\\', '/'),
     platform: options.platform ?? process.platform,
     arch: options.arch ?? process.arch,
-    sha256: sha256(compressed),
-    bytes: compressed.length,
+    sha256: compressedHash.digest('hex'),
+    bytes: compressedBytes,
     rawBytes,
     fileCount: entries.length,
     required: options.required ?? [
@@ -83,6 +85,34 @@ export async function createRuntimeCapsule(appDir, capsuleFile, manifestFile, op
     ],
   }
   await writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  return manifest
+}
+
+export async function reuseRuntimeCapsule(preparedRoot, capsuleFile, manifestFile) {
+  const sourceManifest = path.join(preparedRoot, 'runtime-capsule.json')
+  const manifest = JSON.parse(await readFile(sourceManifest, 'utf8'))
+  const expectedFilename = 'runtime/DSH-App.dshpack'
+  const targetFilename = path.relative(path.dirname(manifestFile), capsuleFile).replaceAll('\\', '/')
+  if (manifest.schemaVersion !== 1 || manifest.format !== 'dshpack-zstd-v1' ||
+      manifest.filename !== expectedFilename || targetFilename !== expectedFilename ||
+      manifest.platform !== 'win32' || manifest.arch !== 'x64' ||
+      !/^[a-f0-9]{64}$/.test(manifest.sha256) || !Number.isSafeInteger(manifest.bytes) ||
+      manifest.bytes <= 0 || !Number.isSafeInteger(manifest.fileCount) || manifest.fileCount <= 0) {
+    throw new Error('Prepared Windows runtime capsule manifest is invalid.')
+  }
+  const sourceCapsule = path.join(preparedRoot, 'runtime', 'DSH-App.dshpack')
+  if ((await stat(sourceCapsule)).size !== manifest.bytes) {
+    throw new Error('Prepared Windows runtime capsule length does not match its manifest.')
+  }
+  await mkdir(path.dirname(capsuleFile), { recursive: true })
+  await copyFile(sourceCapsule, capsuleFile)
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(capsuleFile)) hash.update(chunk)
+  if (hash.digest('hex') !== manifest.sha256) {
+    await rm(capsuleFile, { force: true })
+    throw new Error('Prepared Windows runtime capsule hash does not match its manifest.')
+  }
+  await copyFile(sourceManifest, manifestFile)
   return manifest
 }
 

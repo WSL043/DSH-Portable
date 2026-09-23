@@ -5,7 +5,7 @@ import { cp, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promi
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { createRuntimeCapsule } from './create-runtime-capsule.mjs'
+import { createRuntimeCapsule, reuseRuntimeCapsule } from './create-runtime-capsule.mjs'
 
 export async function copyCapsuleShell(source, target) {
   await mkdir(target, { recursive: true })
@@ -60,12 +60,14 @@ export async function packageWindowsRuntimeCapsule(sourceStage, outputZip, optio
     await copyCapsuleShell(source, stage)
     const capsuleFile = path.join(stage, 'runtime', 'DSH-App.dshpack')
     const manifestFile = path.join(stage, 'runtime-capsule.json')
-    const manifest = await createRuntimeCapsule(
-      path.join(source, 'app'),
-      capsuleFile,
-      manifestFile,
-      { platform: 'win32', arch: 'x64', level: options.level },
-    )
+    const manifest = options.preparedCapsuleRoot
+      ? await reuseRuntimeCapsule(options.preparedCapsuleRoot, capsuleFile, manifestFile)
+      : await createRuntimeCapsule(
+        path.join(source, 'app'),
+        capsuleFile,
+        manifestFile,
+        { platform: 'win32', arch: 'x64', level: options.level },
+      )
     await mkdir(path.dirname(output), { recursive: true })
     const tar = spawnSync('tar.exe', ['-a', '-c', '-f', output, '-C', temporaryParent, 'DSH-Portable'], {
       stdio: 'inherit',
@@ -90,11 +92,11 @@ export async function packageWindowsRuntimeCapsule(sourceStage, outputZip, optio
 }
 
 async function main() {
-  const [sourceStage, outputZip] = process.argv.slice(2)
+  const [sourceStage, outputZip, preparedCapsuleRoot] = process.argv.slice(2)
   if (!sourceStage || !outputZip) {
     throw new Error('Usage: node package-windows-runtime-capsule.mjs <finished-windows-stage> <output-zip>')
   }
-  process.stdout.write(`${JSON.stringify(await packageWindowsRuntimeCapsule(sourceStage, outputZip), null, 2)}\n`)
+  process.stdout.write(`${JSON.stringify(await packageWindowsRuntimeCapsule(sourceStage, outputZip, { preparedCapsuleRoot }), null, 2)}\n`)
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) await main()

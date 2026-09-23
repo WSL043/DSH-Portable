@@ -44,6 +44,7 @@ $PortableVersion = (Get-Content -Raw (Join-Path $ProjectRoot 'package.json') | C
 $BuildId = [Guid]::NewGuid().ToString('N')
 $StageParent = Join-Path ([System.IO.Path]::GetTempPath()) ("dsh-portable-win-" + $BuildId)
 $Stage = Join-Path $StageParent 'DSH-Portable'
+$PreparedCapsuleRoot = Join-Path $StageParent 'prepared-runtime-capsule'
 $Downloads = Join-Path $CacheDir 'downloads'
 $Archive = Join-Path $Downloads $Runtime.archive
 $Extracted = Join-Path $CacheDir ("node-$($Lock.node.version)-win-x64")
@@ -416,10 +417,20 @@ try {
     if ($UnexpectedData) { throw "Portable data is not clean: $($UnexpectedData.FullName -join ', ')" }
     Write-BuildPhase 'native-host-compilation'
 
+    New-Item -ItemType Directory -Force -Path (Join-Path $PreparedCapsuleRoot 'runtime') | Out-Null
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\create-runtime-capsule.mjs') `
+        (Join-Path $Stage 'app') `
+        (Join-Path $PreparedCapsuleRoot 'runtime\DSH-App.dshpack') `
+        (Join-Path $PreparedCapsuleRoot 'runtime-capsule.json')
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath (Join-Path $PreparedCapsuleRoot 'runtime-capsule.json'))) {
+        throw "prepared runtime capsule creation failed with exit code $LASTEXITCODE"
+    }
+    Write-BuildPhase 'runtime-capsule-prepared'
+
     $UpdateComponent = Join-Path $OutputDir 'DSH-Portable-update-windows-x64.zip'
     $UpdateComponentCandidate = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.zip")
     $UpdateComponentBackup = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.previous.zip")
-    & $NodeExe (Join-Path $ProjectRoot 'scripts\create-windows-capsule-update.mjs') $Stage $UpdateComponentCandidate
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\create-windows-capsule-update.mjs') $Stage $UpdateComponentCandidate $PreparedCapsuleRoot
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $UpdateComponentCandidate)) {
         throw "compact runtime update creation failed with exit code $LASTEXITCODE"
     }
@@ -503,7 +514,7 @@ try {
     $Sha = $Zip + '.sha256'
     $ShaCandidate = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.sha256")
     $ShaBackup = Join-Path $OutputDir (".DSH-Portable-windows-x64-$BuildId.previous.sha256")
-    & $NodeExe (Join-Path $ProjectRoot 'scripts\package-windows-runtime-capsule.mjs') $Stage $ZipCandidate
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\package-windows-runtime-capsule.mjs') $Stage $ZipCandidate $PreparedCapsuleRoot
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $ZipCandidate)) {
         throw "runtime capsule archive creation failed with exit code $LASTEXITCODE"
     }
@@ -605,5 +616,33 @@ try {
         DshVersion = $DshLock.version
     }
 } finally {
-    $BuildLock.Dispose()
+    try {
+        $ResolvedPreparedCapsule = [System.IO.Path]::GetFullPath($PreparedCapsuleRoot)
+        $ResolvedStageParent = [System.IO.Path]::GetFullPath($StageParent)
+        if (-not $ResolvedPreparedCapsule.StartsWith(
+            ($ResolvedStageParent + [System.IO.Path]::DirectorySeparatorChar),
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Prepared runtime capsule cleanup path escaped the build stage.'
+        }
+        if (Test-Path -LiteralPath $ResolvedPreparedCapsule) {
+            foreach ($PreparedFile in @(
+                (Join-Path $ResolvedPreparedCapsule 'runtime\DSH-App.dshpack'),
+                (Join-Path $ResolvedPreparedCapsule 'runtime-capsule.json')
+            )) {
+                if (Test-Path -LiteralPath $PreparedFile) { Remove-Item -LiteralPath $PreparedFile -Force }
+            }
+            foreach ($PreparedDirectory in @(
+                (Join-Path $ResolvedPreparedCapsule 'runtime'),
+                $ResolvedPreparedCapsule
+            )) {
+                if (-not (Test-Path -LiteralPath $PreparedDirectory)) { continue }
+                if (Get-ChildItem -LiteralPath $PreparedDirectory -Force | Select-Object -First 1) {
+                    throw "Prepared runtime capsule contains unexpected files: $PreparedDirectory"
+                }
+                Remove-Item -LiteralPath $PreparedDirectory -Force
+            }
+        }
+    } finally {
+        $BuildLock.Dispose()
+    }
 }

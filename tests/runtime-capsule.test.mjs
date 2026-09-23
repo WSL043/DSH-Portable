@@ -8,8 +8,10 @@ import path from 'node:path'
 import test from 'node:test'
 import { zstdDecompressSync } from 'node:zlib'
 
-import { createRuntimeCapsule } from '../scripts/create-runtime-capsule.mjs'
+import { createRuntimeCapsule, reuseRuntimeCapsule } from '../scripts/create-runtime-capsule.mjs'
+import { createWindowsCapsuleUpdate } from '../scripts/create-windows-capsule-update.mjs'
 import { copyCapsuleShell } from '../scripts/package-windows-runtime-capsule.mjs'
+import { packageWindowsRuntimeCapsule } from '../scripts/package-windows-runtime-capsule.mjs'
 import {
   acquireRuntimeLease,
   capsulePaths,
@@ -334,6 +336,69 @@ test('cache cleanup removes only unused old runtimes and never an active lease o
   } finally {
     await rm(parent, { recursive: true, force: true })
   }
+})
+
+test('one verified Windows capsule can feed component and product packages without recompression', async () => {
+  const { parent, app } = await fixture()
+  try {
+    const prepared = path.join(parent, 'prepared')
+    const original = path.join(prepared, 'runtime', 'DSH-App.dshpack')
+    const originalManifest = path.join(prepared, 'runtime-capsule.json')
+    await createRuntimeCapsule(app, original, originalManifest, { platform: 'win32', arch: 'x64', level: 1 })
+    for (const name of ['component', 'product']) {
+      const target = path.join(parent, name)
+      const capsule = path.join(target, 'runtime', 'DSH-App.dshpack')
+      const manifest = await reuseRuntimeCapsule(prepared, capsule, path.join(target, 'runtime-capsule.json'))
+      assert.equal(manifest.filename, 'runtime/DSH-App.dshpack')
+      assert.deepEqual(await readFile(capsule), await readFile(original))
+    }
+    const rejected = path.join(parent, 'rejected')
+    await writeFile(original, Buffer.alloc((await stat(original)).size))
+    await assert.rejects(
+      reuseRuntimeCapsule(prepared, path.join(rejected, 'runtime', 'DSH-App.dshpack'),
+        path.join(rejected, 'runtime-capsule.json')),
+      /hash does not match/,
+    )
+    await writeFile(original, 'corrupt capsule')
+    await assert.rejects(
+      reuseRuntimeCapsule(prepared, path.join(rejected, 'runtime', 'DSH-App.dshpack'),
+        path.join(rejected, 'runtime-capsule.json')),
+      /length does not match/,
+    )
+  } finally { await rm(parent, { recursive: true, force: true }) }
+})
+
+test('Windows component and product archives contain the identical prepared capsule', { skip: process.platform !== 'win32' }, async () => {
+  const { parent, root, app } = await fixture()
+  try {
+    const licenses = path.join(root, 'licenses')
+    await mkdir(licenses)
+    await writeFile(path.join(licenses, 'COMPONENTS.json'), '{"portableVersion":"0.1.0","releaseChannel":"candidate","dshVersion":"0.1.7-alpha.2","dshCommit":"fixture"}\n')
+    for (const name of ['DeepSeek-Harness-LICENSE.txt', 'DeepSeek-Harness-THIRD_PARTY_NOTICES.md',
+      'dsh-market-LICENSE.txt', 'pnpm-LICENSE.txt']) await writeFile(path.join(licenses, name), 'fixture\n')
+    const prepared = path.join(parent, 'prepared')
+    await createRuntimeCapsule(app, path.join(prepared, 'runtime', 'DSH-App.dshpack'),
+      path.join(prepared, 'runtime-capsule.json'), { platform: 'win32', arch: 'x64', level: 1 })
+    const component = path.join(parent, 'component.zip')
+    const product = path.join(parent, 'product.zip')
+    const componentResult = await createWindowsCapsuleUpdate(root, component, { preparedCapsuleRoot: prepared })
+    const productResult = await packageWindowsRuntimeCapsule(root, product, { preparedCapsuleRoot: prepared })
+    assert.equal(componentResult.runtimeSha256, productResult.runtimeSha256)
+    const extractedComponent = path.join(parent, 'component-extracted')
+    const extractedProduct = path.join(parent, 'product-extracted')
+    await mkdir(extractedComponent)
+    await mkdir(extractedProduct)
+    execFileSync('tar.exe', ['-x', '-f', component, '-C', extractedComponent], { windowsHide: true })
+    execFileSync('tar.exe', ['-x', '-f', product, '-C', extractedProduct], { windowsHide: true })
+    assert.deepEqual(
+      await readFile(path.join(extractedComponent, 'runtime', 'DSH-App.dshpack')),
+      await readFile(path.join(extractedProduct, 'DSH-Portable', 'runtime', 'DSH-App.dshpack')),
+    )
+    assert.deepEqual(
+      JSON.parse(await readFile(path.join(extractedComponent, 'runtime-capsule.json'), 'utf8')),
+      JSON.parse(await readFile(path.join(extractedProduct, 'DSH-Portable', 'runtime-capsule.json'), 'utf8')),
+    )
+  } finally { await rm(parent, { recursive: true, force: true }) }
 })
 
 test('cache cleanup reclaims abandoned extraction directories but preserves recent, live, unknown and linked entries', async () => {
