@@ -48,8 +48,12 @@ try {
     catch { await new Promise(resolve => setTimeout(resolve, 250)) }
   }
   assert.ok(browser, 'native WebView2 debugging endpoint did not appear')
-  page = browser.contexts()[0].pages()[0]
-  assert.ok(page, 'native WebView2 page did not appear')
+  const pageDeadline = Date.now() + 30_000
+  while (Date.now() < pageDeadline && !page) {
+    page = browser.contexts().flatMap(context => context.pages())[0]
+    if (!page) await new Promise(resolve => setTimeout(resolve, 250))
+  }
+  assert.ok(page, `native WebView2 page did not appear (host exit: ${host.exitCode ?? 'running'}, contexts: ${browser.contexts().length})`)
   page.setDefaultTimeout(30_000)
   page.on('pageerror', error => report.pageErrors.push(error.message))
   await page.waitForURL(/^http:\/\/127\.0\.0\.1:/, { timeout: 90_000 })

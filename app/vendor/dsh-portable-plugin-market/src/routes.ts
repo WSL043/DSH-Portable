@@ -2534,8 +2534,8 @@ export function mountMarketRoutes(
                   writeMarketState(activeProfileDir, { disabled, groups, groupOrder })
                   ok = false
                   profileHealthError = rollback.ok
-                    ? `插件 ${activationFailure.name} 启用失败，已撤销安装：${activationFailure.reason} / plugin activation failed; installation rolled back: ${activationFailure.reason}`
-                    : `插件 ${activationFailure.name} 启用失败，自动恢复未完成：${rollback.detail ?? 'unknown'} / plugin activation failed and rollback is incomplete: ${rollback.detail ?? 'unknown'}`
+                    ? `已撤销 ${activationFailure.name} 的安装 / Installation rolled back for ${activationFailure.name}. ${activationFailure.reason}`
+                    : `插件 ${activationFailure.name} 自动恢复未完成：${rollback.detail ?? 'unknown'} / Plugin rollback is incomplete: ${rollback.detail ?? 'unknown'}. ${activationFailure.reason}`
                   logEvent('error', 'install-activation', profileHealthError)
                 }
                 if (ok) {
