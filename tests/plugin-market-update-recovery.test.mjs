@@ -186,6 +186,39 @@ test('bad imports roll back installation and lockfile without changing user data
   for (const [name, bytes] of Object.entries(data)) assert.equal(await readFile(path.join(bed.profile, name), 'utf8'), bytes)
 })
 
+test('runtime activation failure rolls back a fresh install instead of suggesting a restart', async t => {
+  const lockfile = '# before activation\n'
+  const bed = await updateTestbed(t, {
+    installed: false,
+    lockfile,
+    hotPlugin() { throw new TypeError('ctx.settings.register is not a function') },
+    async onAdd({ manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      manifest.dsh.profile.bundles.push('fixture-plugin')
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeFile(path.join(profile, 'pnpm-lock.yaml'), '# changed\n')
+      await writeInstalledPlugin(profile, '1.2.0')
+      await writeFile(path.join(profile, 'node_modules', 'fixture-plugin', 'cordis.patch.yml'), '- insert:\n  - id: fixture-plugin\n    name: fixture-plugin\n')
+      return ok()
+    },
+    async onInstall({ manifestFile, profile }) {
+      assert.deepEqual(JSON.parse(await readFile(manifestFile, 'utf8')).dependencies, {})
+      assert.equal(await readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'), lockfile)
+      await rm(path.join(profile, 'node_modules', 'fixture-plugin'), { recursive: true })
+      return ok()
+    },
+  })
+  const { response, body } = await bed.install()
+  assert.equal(response.status, 502)
+  assert.equal(body.ok, false)
+  assert.equal(body.activationAction, undefined)
+  assert.match(body.error, /settings\.register/)
+  assert.match(body.error, /rolled back/)
+  assert.deepEqual(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies, {})
+  assert.deepEqual(body.installed, {})
+})
+
 test('failed dependency recovery is reported instead of claiming a successful rollback', async t => {
   const bed = await updateTestbed(t, {
     installed: false,
@@ -291,6 +324,7 @@ async function updateTestbed(t, {
   loaderEntries = [],
   gitHead = null,
   betaVersion = null,
+  hotPlugin,
 }) {
   const profile = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-update-recovery-'))
   t.after(() => rm(profile, { recursive: true, force: true }))
@@ -326,7 +360,7 @@ async function updateTestbed(t, {
       },
     },
     loader: { entries: () => loaderEntries },
-    plugin: () => ({ await: async () => undefined, dispose: async () => undefined }),
+    plugin: hotPlugin ?? (() => ({ await: async () => undefined, dispose: async () => undefined })),
     on: () => () => undefined,
     logger: { warn: () => undefined },
   }

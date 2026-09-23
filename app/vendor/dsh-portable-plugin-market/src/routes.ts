@@ -2503,6 +2503,7 @@ export function mountMarketRoutes(
               const added = Object.keys(installed).filter(name => !before.has(name))
               addedPackages = added
               if (added.length > 0) {
+                const disabledBefore = new Set(disabled)
                 // Fresh installs start enabled: drop any stale disable flag
                 // (e.g. reinstall after an uninstall while this process kept
                 // running) and persist before the activation loop.
@@ -2511,16 +2512,38 @@ export function mountMarketRoutes(
                 // Theme installs auto-activate (and deactivate the previous
                 // theme) so the result is visible right after the refresh.
                 hot = true
+                let activationFailure: { name: string; reason: string } | null = null
                 for (const name of added) {
-                  const live = hasPluginCategory(entry, 'theme')
-                    ? await themes.activateTheme(name)
-                    : (await hotMount(host, activeProfileDir, name)).ok
+                  const theme = hasPluginCategory(entry, 'theme')
+                  const mounted = theme ? null : await hotMount(host, activeProfileDir, name)
+                  const live = theme ? await themes.activateTheme(name) : mounted?.ok === true
                   if (!live) hot = false
+                  if (mounted && !mounted.ok && mounted.restartRequired !== true) {
+                    activationFailure = { name, reason: mounted.reason ?? 'unknown activation error' }
+                    break
+                  }
                 }
-                activation = {}
-                const live = liveNames()
-                for (const name of added) {
-                  activation[name] = verifyActivation(config.profile, name, live, activeProfileDir, disabled.has(name))
+                if (activationFailure) {
+                  // A runtime exception is not a deferred activation. Undo
+                  // the new package so the next boot cannot repeat the crash.
+                  for (const name of added) await hotUnmount(name)
+                  const rollback = await rollbackUpdateBuild(entry.name, manifestBefore, installLockBefore)
+                  disabled.clear()
+                  for (const name of disabledBefore) disabled.add(name)
+                  if (!rollback.ok) for (const name of added) disabled.add(name)
+                  writeMarketState(activeProfileDir, { disabled, groups, groupOrder })
+                  ok = false
+                  profileHealthError = rollback.ok
+                    ? `插件 ${activationFailure.name} 启用失败，已撤销安装：${activationFailure.reason} / plugin activation failed; installation rolled back: ${activationFailure.reason}`
+                    : `插件 ${activationFailure.name} 启用失败，自动恢复未完成：${rollback.detail ?? 'unknown'} / plugin activation failed and rollback is incomplete: ${rollback.detail ?? 'unknown'}`
+                  logEvent('error', 'install-activation', profileHealthError)
+                }
+                if (ok) {
+                  activation = {}
+                  const live = liveNames()
+                  for (const name of added) {
+                    activation[name] = verifyActivation(config.profile, name, live, activeProfileDir, disabled.has(name))
+                  }
                 }
               }
             }
@@ -2593,7 +2616,7 @@ export function mountMarketRoutes(
               timedOut: result.timedOut,
               stdout: result.stdout,
               stderr: result.stderr,
-              installed,
+              installed: readInstalled(config.profile, activeProfileDir),
             })
           })
         } catch (error) {
