@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$BaseArchive,
     [Parameter(Mandatory=$true)][string]$WebView2Cab,
-    [Parameter(Mandatory=$true)][string]$OutputArchive
+    [Parameter(Mandatory=$true)][string]$OutputArchive,
+    [string]$CapsuleCache
 )
 $ErrorActionPreference = 'Stop'
 $OutputArchive = [IO.Path]::GetFullPath($OutputArchive)
@@ -22,7 +23,25 @@ try {
     if ($Components.portableVersion -ne $Product.version -or $Components.dshVersion -ne $CoreLock.dsh.version -or $Components.dshCommit -ne $CoreLock.dsh.reviewedCommit) {
         throw 'Base package does not match the current product and reviewed kernel. Refusing a stale offline bundle.'
     }
-    & (Join-Path $PSScriptRoot 'stage-webview2-runtime.ps1') -Stage $Stage -CabPath $WebView2Cab
+    $LockFile = Join-Path $PSScriptRoot '../config/webview2-runtime.lock.json'
+    $Capsule = Join-Path $Stage 'runtime/webview2'
+    $Cache = if ($CapsuleCache) { [IO.Path]::GetFullPath($CapsuleCache) } else { $null }
+    if ($Cache -and (Test-Path -LiteralPath (Join-Path $Cache 'WebView2.dshpack'))) {
+        & (Join-Path $PSScriptRoot 'verify-webview2-capsule.ps1') -Root $Cache -LockFile $LockFile
+        New-Item -ItemType Directory -Path $Capsule | Out-Null
+        Get-ChildItem -LiteralPath $Cache -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $Capsule }
+    } else {
+        if ($Cache -and (Test-Path -LiteralPath $Cache) -and @(Get-ChildItem -LiteralPath $Cache -Force).Count -ne 0) {
+            throw 'WebView2 capsule cache is incomplete; refusing to use it.'
+        }
+        & (Join-Path $PSScriptRoot 'stage-webview2-runtime.ps1') -Stage $Stage -CabPath $WebView2Cab
+        & (Join-Path $PSScriptRoot 'verify-webview2-capsule.ps1') -Root $Capsule -LockFile $LockFile
+        if ($Cache) {
+            New-Item -ItemType Directory -Force -Path $Cache | Out-Null
+            Get-ChildItem -LiteralPath $Capsule -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $Cache }
+        }
+    }
+    & (Join-Path $PSScriptRoot 'verify-webview2-capsule.ps1') -Root $Capsule -LockFile $LockFile
     $Candidate = $OutputArchive + '.new.zip'
     if (Test-Path -LiteralPath $Candidate) { throw 'An unfinished output exists; inspect it before rebuilding.' }
     Add-Type -AssemblyName System.IO.Compression.FileSystem

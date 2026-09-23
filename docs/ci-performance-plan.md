@@ -59,3 +59,28 @@ Implemented after qualification:
 Capsule compression caching, upstream package-set caching and job parallelization
 remain follow-up work. No measured timing reduction is claimed before a new CI run.
 Product qualification has not been rerun or weakened for these workflow changes.
+
+## 2026-09-23 follow-up
+
+Run 35847051717 reached qualification in about 28 minutes. The Windows complete
+offline packaging step took 548 seconds; the CAB download took about one second.
+Repacking an already extracted complete bundle locally took 9 seconds with the
+existing ZIP writer. A selective ZIP experiment saved only about four seconds,
+so it was discarded. The expensive work is the independently versioned,
+level-22 WebView2 capsule created from about 837 MiB of signed runtime files.
+
+The reviewed WebView2 lock now pins the exact capsule digest, byte count and
+file inventory from the published 0.7.5-alpha.1 package. A separate CI job
+prepares or restores this product-independent capsule in parallel with the
+official DSH build. The complete-offline job reuses it only after checking the
+pin, manifest and lock identity; on a cache miss it builds and verifies the
+same capsule. Both system-WebView and bundled-WebView native startup gates stay
+in place. A local build using the pinned cache took 11 seconds to compose the
+complete ZIP; the new CI cold and warm paths still require exact-commit runs.
+
+The prior CI's macOS x64 native smoke passed, but its diagnostic artifact
+upload failed with a GitHub endpoint DNS error. CI now retries that upload once
+and still fails if both attempts fail. Artifact transfers were secondary in the
+timing data, so splitting every build artifact was not promoted as the first
+optimization. Official-source package-set caching remains a separate measured
+follow-up.

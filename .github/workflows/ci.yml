@@ -293,10 +293,61 @@ jobs:
             (Join-Path $FirstRoot 'DSH-Portable') `
             (Join-Path $SecondRoot 'DSH-Portable')
 
+  webview2-capsule:
+    name: Prepare reviewed WebView2 capsule
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Restore the exact reviewed WebView2 download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/webview2.cab
+          key: webview2-cab-${{ runner.os }}-${{ hashFiles('config/webview2-runtime.lock.json') }}
+      - name: Restore the verified WebView2 capsule
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/webview2-capsule-cache
+          key: webview2-capsule-v1-${{ hashFiles('config/webview2-runtime.lock.json', 'scripts/create-webview2-capsule.mjs', 'scripts/create-runtime-capsule.mjs') }}
+      - name: Prepare once independently of the Portable base build
+        shell: powershell
+        run: |
+          $LockFile = 'config/webview2-runtime.lock.json'
+          $Lock = Get-Content -Raw $LockFile | ConvertFrom-Json
+          $Cache = Join-Path $env:RUNNER_TEMP 'webview2-capsule-cache'
+          if (Test-Path -LiteralPath (Join-Path $Cache 'WebView2.dshpack')) {
+            ./scripts/verify-webview2-capsule.ps1 -Root $Cache -LockFile $LockFile
+            exit 0
+          }
+          if ((Test-Path -LiteralPath $Cache) -and @(Get-ChildItem -LiteralPath $Cache -Force).Count -ne 0) {
+            throw 'Cached WebView2 capsule is incomplete.'
+          }
+          $Cab = Join-Path $env:RUNNER_TEMP 'webview2.cab'
+          $ProgressPreference = 'SilentlyContinue'
+          if ((Test-Path -LiteralPath $Cab) -and (Get-FileHash -LiteralPath $Cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Lock.sha256) {
+            Remove-Item -LiteralPath $Cab -Force
+          }
+          if (-not (Test-Path -LiteralPath $Cab)) {
+            Invoke-WebRequest -UseBasicParsing -Uri $Lock.url -OutFile $Cab -TimeoutSec 300
+          }
+          if ((Get-FileHash -LiteralPath $Cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Lock.sha256) { throw 'WebView2 CAB integrity mismatch.' }
+          $Stage = Join-Path $env:RUNNER_TEMP 'webview2-capsule-stage'
+          New-Item -ItemType Directory -Path $Stage | Out-Null
+          ./scripts/stage-webview2-runtime.ps1 -Stage $Stage -CabPath $Cab -NodeExe (Get-Command node).Source
+          $Created = Join-Path $Stage 'runtime/webview2'
+          ./scripts/verify-webview2-capsule.ps1 -Root $Created -LockFile $LockFile
+          New-Item -ItemType Directory -Force -Path $Cache | Out-Null
+          Get-ChildItem -LiteralPath $Created -File | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination $Cache }
+          ./scripts/verify-webview2-capsule.ps1 -Root $Cache -LockFile $LockFile
+
   windows-complete-offline:
     name: Windows complete offline bundle with WebView2
     if: ${{ github.event_name != 'pull_request' }}
-    needs: windows-build
+    needs: [windows-build, webview2-capsule]
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
@@ -317,6 +368,11 @@ jobs:
         with:
           path: ${{ runner.temp }}/webview2.cab
           key: webview2-cab-${{ runner.os }}-${{ hashFiles('config/webview2-runtime.lock.json') }}
+      - name: Restore the verified WebView2 capsule
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/webview2-capsule-cache
+          key: webview2-capsule-v1-${{ hashFiles('config/webview2-runtime.lock.json', 'scripts/create-webview2-capsule.mjs', 'scripts/create-runtime-capsule.mjs') }}
       - name: Build the separate complete offline package
         shell: powershell
         run: |
@@ -333,7 +389,7 @@ jobs:
           if ((Get-FileHash -LiteralPath $Cab -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Lock.sha256) { throw 'WebView2 download integrity check failed' }
           Write-Output ('WebView2 download seconds: ' + $Timer.Elapsed.TotalSeconds)
           $Timer.Restart()
-          ./scripts/build-windows-complete-offline.ps1 -BaseArchive artifacts/DSH-Portable-windows-x64-offline.zip -WebView2Cab $Cab -OutputArchive artifacts/DSH-Portable-windows-x64-complete-offline.zip
+          ./scripts/build-windows-complete-offline.ps1 -BaseArchive artifacts/DSH-Portable-windows-x64-offline.zip -WebView2Cab $Cab -OutputArchive artifacts/DSH-Portable-windows-x64-complete-offline.zip -CapsuleCache (Join-Path $env:RUNNER_TEMP 'webview2-capsule-cache')
           Write-Output ('Complete offline packaging seconds: ' + $Timer.Elapsed.TotalSeconds)
       - name: Verify the bundled runtime in a fresh native host
         shell: powershell
@@ -801,12 +857,22 @@ jobs:
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
           bash scripts/smoke-macos-desktop-host.sh "$ROOT/DSH-Portable"
       - name: Upload macOS native diagnostics
+        id: native_diagnostics_upload
         if: always()
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: macos-native-diagnostics-${{ matrix.arch }}
           path: ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/native-smoke-diagnostics
           if-no-files-found: ignore
+      - name: Retry macOS diagnostics upload once after a transport failure
+        if: always() && steps.native_diagnostics_upload.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-native-diagnostics-${{ matrix.arch }}
+          path: ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/native-smoke-diagnostics
+          if-no-files-found: ignore
+          overwrite: true
 
   macos-plugin-smoke:
     name: macOS plugin portability (${{ matrix.arch }})

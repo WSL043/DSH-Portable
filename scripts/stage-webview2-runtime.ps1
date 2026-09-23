@@ -1,10 +1,12 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Stage,
-    [Parameter(Mandatory=$true)][string]$CabPath
+    [Parameter(Mandatory=$true)][string]$CabPath,
+    [string]$NodeExe
 )
 $ErrorActionPreference = 'Stop'
 $Stage = [IO.Path]::GetFullPath($Stage)
+$NodeExe = if ($NodeExe) { [IO.Path]::GetFullPath($NodeExe) } else { Join-Path $Stage 'runtime/node/node.exe' }
 $Lock = Get-Content -Raw (Join-Path $PSScriptRoot '../config/webview2-runtime.lock.json') | ConvertFrom-Json
 if ((Get-FileHash -LiteralPath $CabPath -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Lock.sha256) {
     throw 'WebView2 CAB does not match the reviewed runtime lock.'
@@ -22,7 +24,7 @@ try {
     if ($Signature.Status -ne 'Valid' -or $Signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') {
         throw 'WebView2 executable has no valid Microsoft signature.'
     }
-    & (Join-Path $Stage 'runtime/node/node.exe') (Join-Path $PSScriptRoot 'create-webview2-capsule.mjs') $Runtime $Destination
+    & $NodeExe (Join-Path $PSScriptRoot 'create-webview2-capsule.mjs') $Runtime $Destination
     if ($LASTEXITCODE -ne 0) { throw 'WebView2 capsule creation failed.' }
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot '../config/webview2-runtime.lock.json') -Destination (Join-Path $Destination 'portable-runtime.json')
 } finally {
