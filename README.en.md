@@ -120,11 +120,11 @@ The Plugin Market and the two default plugins are Portable integration component
 
 | Platform | Stable channel | Candidate channel |
 | --- | --- | --- |
-| Windows x64 | — | — |
-| macOS arm64 | — | — |
-| macOS x64 | — | — |
-| Linux x64 | — | — |
-| Linux arm64 | — | — |
+| Windows x64 | — | [0.1.7-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json) |
+| macOS arm64 | — | [0.1.7-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json) |
+| macOS x64 | — | [0.1.7-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json) |
+| Linux x64 | — | [0.1.7-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json) |
+| Linux arm64 | — | [0.1.7-alpha.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json) |
 
 Synced hourly from qualified catalogs. Older and RC builds depend on in-app compatibility checks; — means no matching version.
 
