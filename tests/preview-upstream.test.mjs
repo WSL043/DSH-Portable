@@ -15,6 +15,8 @@ test('stable and candidate cores have independently pinned official source locks
     readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8').then(JSON.parse),
   ])
   const app = JSON.parse(await readFile(path.join(root, 'app/package.json'), 'utf8'))
+  assert.equal(app.overrides['@deepseek-ai/libreoffice-kit@0.1.0']?.fflate, '0.8.3',
+    'the RC Office kit must retain the reviewed ZIP parser fix')
   assert.equal(stable.dsh.version, app.dependencies['@deepseek-ai/dsh'])
   assert.match(stable.dsh.integrity, /^sha512-/)
   assert.match(stable.dsh.reviewedCommit, /^[0-9a-f]{40}$/)

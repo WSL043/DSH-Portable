@@ -177,8 +177,11 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
   assert.equal(installed.version, lock.dsh.version, 'installed preview entry version')
   const officeManifest = path.join(output, 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'package.json')
   if (existsSync(officeManifest)) {
+    const office = JSON.parse(await readFile(officeManifest, 'utf8'))
+    const reviewedParser = manifest.overrides?.[`@deepseek-ai/libreoffice-kit@${office.version}`]?.fflate
+    assert.equal(reviewedParser, '0.8.3', `Office ZIP parser override for ${office.version} must be reviewed`)
     const fflate = await installedDependencyManifest(officeManifest, 'fflate')
-    assert.equal(fflate.version, manifest.overrides?.['@deepseek-ai/libreoffice-kit@0.0.1']?.fflate,
+    assert.equal(fflate.version, reviewedParser,
       'staged Office ZIP parser must use the reviewed patched version')
   }
   const runtimeManifest = {
