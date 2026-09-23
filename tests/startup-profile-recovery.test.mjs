@@ -124,7 +124,7 @@ test('recovery commands require explicit bounded plugin index', () => {
   assert.throws(() => parseCli(['recovery-restore-plugin', '--recovery-index', '0']), /integer from 1/)
 })
 
-test('the recovery CLI refuses to change startup bundles while its backend is running', async t => {
+test('the Windows recovery CLI refuses to change startup bundles while its backend is running', { skip: process.platform !== 'win32' }, async t => {
   const { layout, manifestFile } = await fixture(t)
   await cp(new URL('../launcher/', import.meta.url), path.join(layout.root, 'launcher'), { recursive: true })
   await mkdir(path.dirname(layout.nodeExe), { recursive: true })
