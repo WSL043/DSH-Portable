@@ -36,7 +36,7 @@ const PREVIOUS_DEFAULT_PLUGINS = Object.freeze([Object.freeze({
 })])
 
 // Keep previous package identities for recovery of existing component manifests.
-export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
+export const DEFAULT_PLUGINS = Object.freeze([
   {
     "name": "dsh-image-viewer",
     "version": "0.1.2",
@@ -61,7 +61,32 @@ export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
   }
 ].map(Object.freeze))
 
-export const DEFAULT_PLUGINS = PREVIEW_DEFAULT_PLUGINS
+// Candidate builds may pin newer reviewed plugin versions without changing
+// the released stable package identities above.
+export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
+  {
+    name: 'dsh-image-viewer',
+    version: '0.1.3-beta.0',
+    spec: '0.1.3-beta.0',
+    url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.3-beta.0.tgz',
+    sha256: '55ac0dd5e6273709b88132488bb4f039ea0218c0f7c0c281b5ca5abb31c2695a',
+    integrity: 'sha512-ldtMnVeTHC1nApuoSEdzo24QtVqSqwdQiBpkmMOc9+qHIRzDlF17Le3UAhvFNdNYmEP0+XJcwT4XH53uVltajg==',
+    license: 'MIT',
+    reviewedCommit: 'e69f639c8483fa2256c7766aa6dcbcfdec309779',
+    filename: 'dsh-image-viewer.tgz',
+  },
+  {
+    name: 'dsh-chat-manager',
+    version: '1.5.2-beta.0',
+    spec: '1.5.2-beta.0',
+    url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.2-beta.0.tgz',
+    sha256: '2bab3a4cabf183f796f4a999fbbba3e09b2ec8adde20452bc347dee277dd8f8a',
+    integrity: 'sha512-6vmNJx1lvKihfon99Jv2sXJpMgZzI1AM7Fec1s9Gk8aIuwzQw12JwZoCNMlXtsoyAkJmSFOte48EtGHqIXZhKw==',
+    license: 'MIT',
+    reviewedCommit: '58529349d9d687ce9fa5999a9ac905ea0b0e7fe4',
+    filename: 'dsh-chat-manager.tgz',
+  },
+].map(Object.freeze))
 
 export function defaultsForProduct(layout, adapters = {}) {
   const exists = adapters.existsSync ?? existsSync
