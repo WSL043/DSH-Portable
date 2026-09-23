@@ -22,8 +22,8 @@ packages:
     engines: {node: '>=6'}
 
   dsh-chat-manager@file:.dsh-portable-archives/dsh-chat-manager.tgz:
-    resolution: {integrity: sha512-6vmNJx1lvKihfon99Jv2sXJpMgZzI1AM7Fec1s9Gk8aIuwzQw12JwZoCNMlXtsoyAkJmSFOte48EtGHqIXZhKw==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
-    version: 1.5.2-beta.0
+    resolution: {integrity: sha512-MbP/KOJP9AEfe6tH6CCY+EuGbMfJy9fldx2pP4nQvN1jybIVBR8elHVrlUJmAmtQplxP4naUCAwrIu0R1yJkQA==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
+    version: 1.5.2-beta.1
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
       '@deepseek-ai/cordis': 4.0.3
