@@ -34,7 +34,9 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
   })
   try {
     let page
-    const deadline = Date.now() + 90000
+    // An isolated native UI job starts with an empty runtime cache. On the
+    // slower Windows 2022 runner, verified capsule extraction can exceed 90s.
+    const deadline = Date.now() + 240000
     while (Date.now() < deadline && !page) {
       try { page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find(p => p.type === 'page' && p.webSocketDebuggerUrl) } catch {}
       if (!page) await delay(100)
@@ -90,7 +92,13 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       if (trace.some(entry => entry.phase === 'interactive-ready')) break
       await delay(200)
     }
-    assert.ok(trace.some(entry => entry.phase === 'interactive-ready'), 'workspace becomes interactive')
+    const capsuleReady = trace.find(entry => entry.phase === 'runtime-capsule-ready')
+    const interactive = trace.find(entry => entry.phase === 'interactive-ready')
+    assert.ok(capsuleReady, 'verified runtime capsule becomes available')
+    assert.ok(interactive, 'workspace becomes interactive')
+    assert.ok(capsuleReady.elapsedMs <= 150000, 'cold capsule extraction remains bounded')
+    assert.ok(interactive.elapsedMs - capsuleReady.elapsedMs <= 60000,
+      'workspace becomes interactive within 60s after runtime extraction')
     await delay(2000)
     const final = await evaluate(`({dark:matchMedia('(prefers-color-scheme:dark)').matches,background:getComputedStyle(document.body).backgroundColor,url:location.origin,loadingNodes:document.querySelectorAll('[data-dsh-boot]').length})`)
     await writeFile(path.join(root, 'acceptance', `theme-probe-${results.length}.json`), JSON.stringify({ theme, expectedTheme, loading, final, colors: await evaluate('window.__startupColors') }, null, 2))
