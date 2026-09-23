@@ -1,6 +1,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const SUBPROCESS_MARKER = 'dsh-portable-windows-subprocess-hide-v1'
 const ACL_MARKER = 'dsh-portable-windows-acl-hide-v1'
@@ -100,14 +101,14 @@ export function patchWindowsWin32ProcessHide(source) {
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-windows-subprocess-hide.mjs <app-root>')
   const appRoot = path.resolve(process.argv[2])
-  const subprocessLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib')
-  const subprocessFilename = path.join(subprocessLib, subprocessHideModule(await readFile(path.join(subprocessLib, 'index.js'), 'utf8')))
+  const subprocessIndex = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib', 'index.js')
+  const subprocessFilename = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib', subprocessHideModule(await readFile(subprocessIndex, 'utf8')))
   const aclLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib')
   const aclCandidates = (await readdir(aclLib)).filter(name => /^types-[A-Za-z0-9_-]+\.js$/.test(name))
   if (aclCandidates.length !== 1) {
     throw new Error(`Windows ACL runtime seam changed upstream: expected 1 compiled types module, found ${aclCandidates.length}`)
   }
-  const aclFilename = path.join(aclLib, aclCandidates[0])
+  const aclFilename = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib', aclCandidates[0])
   const [subprocessSource, aclSource] = await Promise.all([
     readFile(subprocessFilename, 'utf8'),
     readFile(aclFilename, 'utf8'),
@@ -119,7 +120,7 @@ async function main() {
   if (patchedAcl !== aclSource) writes.push(writeFile(aclFilename, patchedAcl, 'utf8'))
   let win32ProcessFilename
   if (patchedAcl.includes(ACL_ADAPTER_MARKER) || patchedAcl.includes('from "@deepseek-ai/dsh-win32-process";')) {
-    win32ProcessFilename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-win32-process', 'lib', 'index.js')
+    win32ProcessFilename = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-win32-process', 'lib', 'index.js')
     const win32ProcessSource = await readFile(win32ProcessFilename, 'utf8')
     const patchedWin32Process = patchWindowsWin32ProcessHide(win32ProcessSource)
     if (patchedWin32Process !== win32ProcessSource) writes.push(writeFile(win32ProcessFilename, patchedWin32Process, 'utf8'))

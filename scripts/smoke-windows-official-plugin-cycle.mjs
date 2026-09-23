@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const [rootArg, driverPackage, evidenceArg, disposable] = process.argv.slice(2)
 if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable') {
@@ -13,7 +14,7 @@ if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable')
 const root = path.resolve(rootArg)
 const evidence = path.resolve(evidenceArg)
 await mkdir(evidence, { recursive: true })
-const components = JSON.parse(await readFile(path.join(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+const components = JSON.parse(await readFile(await verifiedPackageFile(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
 const reviewedImage = components.defaultPlugins?.find(plugin => plugin.package === 'dsh-image-viewer')
 assert.match(reviewedImage?.version ?? '', /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/, 'reviewed image viewer version')
 const { chromium } = createRequire(path.resolve(driverPackage))('playwright')
