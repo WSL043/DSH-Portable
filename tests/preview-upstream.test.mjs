@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { npmCliCandidates, productionPackageClosure } from '../scripts/stage-preview-runtime.mjs'
+import { installedDependencyManifest, npmCliCandidates, productionPackageClosure } from '../scripts/stage-preview-runtime.mjs'
 import { DEFAULT_PLUGINS, PREVIEW_DEFAULT_PLUGINS, defaultsForProduct } from '../launcher/default-plugins.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -73,6 +74,21 @@ test('preview staging resolves npm from standard Windows and Unix Node layouts',
   const candidates = npmCliCandidates(process.execPath, undefined)
   assert.ok(candidates.some((candidate) => candidate.endsWith(path.join('node_modules', 'npm', 'bin', 'npm-cli.js'))))
   assert.ok(candidates.some((candidate) => candidate.endsWith(path.join('lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'))))
+})
+
+test('preview staging reads the installed Office parser version when its package manifest is not exported', async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-export-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const owner = path.join(fixture, 'office')
+  const parser = path.join(owner, 'node_modules', 'fflate')
+  await mkdir(parser, { recursive: true })
+  const ownerManifest = path.join(owner, 'package.json')
+  await writeFile(ownerManifest, JSON.stringify({ name: 'office' }))
+  await writeFile(path.join(parser, 'package.json'), JSON.stringify({
+    name: 'fflate', version: '0.8.3', exports: { '.': './index.cjs' },
+  }))
+  await writeFile(path.join(parser, 'index.cjs'), 'module.exports = {}\n')
+  assert.equal((await installedDependencyManifest(ownerManifest, 'fflate')).version, '0.8.3')
 })
 
 test('Windows packaging consumes preview runtime only through an explicit receipt', async () => {

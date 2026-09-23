@@ -51,6 +51,26 @@ function npmCliFromRuntime(explicit) {
   return candidate
 }
 
+export async function installedDependencyManifest(ownerManifest, packageName) {
+  // Resolve the public entry point first. Packages may deliberately omit
+  // ./package.json from exports, so requiring that private subpath is invalid.
+  const entry = createRequire(ownerManifest).resolve(packageName)
+  for (let directory = path.dirname(entry); ; directory = path.dirname(directory)) {
+    const manifestPath = path.join(directory, 'package.json')
+    let manifest
+    try {
+      manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error
+    }
+    if (manifest?.name) {
+      assert.equal(manifest.name, packageName, `resolved ${packageName} entry belongs to the expected package`)
+      return manifest
+    }
+    if (directory === path.dirname(directory)) throw new Error(`package manifest not found for ${packageName}`)
+  }
+}
+
 export async function inventoryPackedRuntime({ packedRoot, lock }) {
   const families = [
     ['dsh', 'npm'],
@@ -157,7 +177,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
   assert.equal(installed.version, lock.dsh.version, 'installed preview entry version')
   const officeManifest = path.join(output, 'node_modules', '@deepseek-ai', 'libreoffice-kit', 'package.json')
   if (existsSync(officeManifest)) {
-    const fflate = createRequire(officeManifest)('fflate/package.json')
+    const fflate = await installedDependencyManifest(officeManifest, 'fflate')
     assert.equal(fflate.version, manifest.overrides?.['@deepseek-ai/libreoffice-kit@0.0.1']?.fflate,
       'staged Office ZIP parser must use the reviewed patched version')
   }
