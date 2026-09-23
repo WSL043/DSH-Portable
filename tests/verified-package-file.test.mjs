@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -14,7 +14,7 @@ test('package file lookup rejects traversal and symlinks outside the package', a
     await mkdir(outside)
     await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), '{}')
     await writeFile(path.join(outside, 'secret'), 'outside')
-    assert.equal(await verifiedPackageFile(root, 'licenses', 'COMPONENTS.json'), path.join(root, 'licenses', 'COMPONENTS.json'))
+    assert.equal(await verifiedPackageFile(root, 'licenses', 'COMPONENTS.json'), await realpath(path.join(root, 'licenses', 'COMPONENTS.json')))
     await assert.rejects(verifiedPackageFile(root, '..', 'package-other', 'secret'), /escapes its root/)
     if (process.platform !== 'win32') {
       await symlink(path.join(outside, 'secret'), path.join(root, 'licenses', 'redirect'))
