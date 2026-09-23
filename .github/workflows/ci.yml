@@ -529,6 +529,47 @@ jobs:
           name: windows-native-migration-${{ matrix.label }}
           path: ${{ runner.temp }}/dsh-native-migration-evidence-${{ matrix.label }}
           if-no-files-found: warn
+      - name: Upload native lifecycle support reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-native-support-${{ matrix.label }}
+          path: |
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/tray-ui-failure.*
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-lifecycle-support.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable-moved/data/native-lifecycle-support.json
+            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
+          if-no-files-found: warn
+      - name: Upload startup transition evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-startup-transition-${{ matrix.label }}
+          path: ${{ runner.temp }}/dsh-startup-transition-${{ matrix.label }}
+          if-no-files-found: warn
+
+  windows-native-ui:
+    name: Windows native UI (${{ matrix.label }})
+    needs: windows-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2022
+            label: windows-2022
+          - runner: windows-2025
+            label: windows-2025
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-test-chrome
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-x64-build
+          path: artifacts
       - name: Verify startup loading, saved themes, and multi-run history
         shell: powershell
         run: |
@@ -581,29 +622,16 @@ jobs:
         with:
           name: windows-default-plugin-ui
           path: ${{ runner.temp }}/dsh-default-plugin-ui/DSH-Portable/acceptance/default-plugin-ui/
-      - name: Upload native lifecycle support reports
+      - name: Upload native UI support reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: windows-native-support-${{ matrix.label }}
+          name: windows-native-ui-support-${{ matrix.label }}
           path: |
-            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-restart-support.json
-            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/health-evidence.json
-            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/tray-ui-failure.*
-            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-lifecycle-support.json
-            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable-moved/data/native-lifecycle-support.json
-            ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
             ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/acceptance/
             ${{ runner.temp }}/dsh-startup-theme/DSH-Portable/data/logs/history/
             ${{ runner.temp }}/dsh-market-layout/evidence/
             ${{ runner.temp }}/dsh-market-layout/DSH-Portable/data/logs/history/
-          if-no-files-found: warn
-      - name: Upload startup transition evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: windows-startup-transition-${{ matrix.label }}
-          path: ${{ runner.temp }}/dsh-startup-transition-${{ matrix.label }}
           if-no-files-found: warn
 
   windows-bootstrap-smoke:
@@ -1094,6 +1122,7 @@ jobs:
       - windows-plugin-smoke
       - windows-official-plugin-cycle
       - windows-desktop-host
+      - windows-native-ui
       - windows-bootstrap-smoke
       - windows-version-upgrade-smoke
       - windows-extractor-smoke

@@ -107,6 +107,16 @@ try {
     throw "Another Windows package build is writing to $OutputDir"
 }
 
+$script:BuildPhaseTimer = [System.Diagnostics.Stopwatch]::StartNew()
+$script:BuildPhaseLast = [TimeSpan]::Zero
+function Write-BuildPhase([string]$Name) {
+    $Elapsed = $script:BuildPhaseTimer.Elapsed
+    $Seconds = ($Elapsed - $script:BuildPhaseLast).TotalSeconds.ToString('F3', [System.Globalization.CultureInfo]::InvariantCulture)
+    $TotalSeconds = $Elapsed.TotalSeconds.ToString('F3', [System.Globalization.CultureInfo]::InvariantCulture)
+    Write-Host "[windows-build-phase] $Name seconds=$Seconds totalSeconds=$TotalSeconds"
+    $script:BuildPhaseLast = $Elapsed
+}
+
 try {
     foreach ($DefaultPlugin in $DefaultPlugins) {
         $DefaultPluginArchive = Join-Path $Downloads ("$($DefaultPlugin.version)-$($DefaultPlugin.filename)")
@@ -175,6 +185,7 @@ try {
     $PackageLock = if ($PreviewAppSource) { $null } else { Join-Path $ProjectRoot 'app\package-lock.json' }
     if (-not (Test-Path -LiteralPath $NpmCli)) { throw "Pinned Node archive contains no npm CLI: $NpmCli" }
     if (-not $PreviewAppSource -and -not (Test-Path -LiteralPath $PackageLock)) { throw 'app/package-lock.json is required.' }
+    Write-BuildPhase 'pinned-dependencies'
 
     $ReleasePolicy = @{}
     & $NodeExe (Join-Path $ProjectRoot 'scripts\version-policy.mjs') $PortableVersion | ForEach-Object {
@@ -257,6 +268,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "runtime pruning failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-runtime.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "runtime verification failed with exit code $LASTEXITCODE" }
+    Write-BuildPhase 'runtime-stage-and-patches'
 
     Copy-Item (Join-Path $Stage 'app\node_modules\@deepseek-ai\dsh\LICENSE') (Join-Path $Stage 'licenses\DeepSeek-Harness-LICENSE.txt')
     Copy-Item (Join-Path $Stage 'app\node_modules\@wsl043\dsh-portable-plugin-market\LICENSE') (Join-Path $Stage 'licenses\dsh-market-LICENSE.txt')
@@ -402,6 +414,7 @@ try {
 
     $UnexpectedData = Get-ChildItem -Recurse -Force -File (Join-Path $Stage 'data') | Where-Object Name -ne 'README.txt'
     if ($UnexpectedData) { throw "Portable data is not clean: $($UnexpectedData.FullName -join ', ')" }
+    Write-BuildPhase 'native-host-compilation'
 
     $UpdateComponent = Join-Path $OutputDir 'DSH-Portable-update-windows-x64.zip'
     $UpdateComponentCandidate = Join-Path $OutputDir (".DSH-Portable-update-windows-x64-$BuildId.zip")
@@ -471,6 +484,7 @@ try {
         } | ConvertTo-Json -Depth 8) + [Environment]::NewLine),
         [System.Text.UTF8Encoding]::new($false)
     )
+    Write-BuildPhase 'component-update-package'
 
     if ($CoreOnly) {
         [pscustomobject]@{
@@ -574,6 +588,7 @@ try {
     }
     $BootstrapHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $Bootstrap).Hash.ToLowerInvariant()
     "$BootstrapHash  DSH-Portable-windows-x64.exe" | Set-Content -LiteralPath ($Bootstrap + '.sha256') -Encoding ascii -NoNewline
+    Write-BuildPhase 'product-archive-and-manifest'
 
     [pscustomobject]@{
         Archive = $Zip

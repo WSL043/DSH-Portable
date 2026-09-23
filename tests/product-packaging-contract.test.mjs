@@ -939,6 +939,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
     'windows-portable-smoke:',
     'windows-plugin-smoke:',
     'windows-desktop-host:',
+    'windows-native-ui:',
     'windows-extractor-smoke:',
     'macos-build:',
     'macos-portable-smoke:',
@@ -951,6 +952,12 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(workflow, /smoke-windows-desktop-move\.ps1/)
   assert.match(workflow, /windows-2022[\s\S]+firstColdStartSeconds:\s*75/)
   assert.match(workflow, /windows-2025[\s\S]+firstColdStartSeconds:\s*75/)
+  const windowsUiJob = workflow.match(/\n  windows-native-ui:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
+  const qualificationJob = workflow.match(/\n  product-qualification:[\s\S]+/)?.[0] || ''
+  assert.match(windowsUiJob, /needs:\s*windows-build/)
+  assert.match(windowsUiJob, /runner:\s*windows-2022[\s\S]+runner:\s*windows-2025/)
+  assert.match(windowsUiJob, /smoke-windows-startup-theme\.mjs[\s\S]+smoke-windows-market-categories\.mjs[\s\S]+verify-default-plugin-ui\.mjs/)
+  assert.match(qualificationJob, /- windows-native-ui/)
   const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   assert.doesNotMatch(windowsBaseJob, /BuildInstaller|ISCC|Inno Setup/)
