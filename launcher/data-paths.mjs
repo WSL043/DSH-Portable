@@ -32,7 +32,7 @@ export async function lstatIfPresent(filename) {
 
 // The selected state root is trusted. Check every existing descendant, including
 // dangling links. This does not lock parent directories against concurrent writers.
-export async function safeDataTarget(root, relativePath, { leaf = 'file' } = {}) {
+export async function safeDataTarget(root, relativePath, { leaf = 'file', createParents = true } = {}) {
   const normalized = normalizeDataPath(relativePath)
   const base = path.resolve(root)
   const target = path.resolve(base, ...normalized.split('/'))
@@ -40,12 +40,14 @@ export async function safeDataTarget(root, relativePath, { leaf = 'file' } = {})
   if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
     throw new Error(`Unsafe restore path: ${relativePath}`)
   }
+  if (!createParents && !await lstatIfPresent(base)) return null
   await mkdir(base, { recursive: true })
   let current = base
   for (const part of normalized.split('/').slice(0, -1)) {
     current = path.join(current, part)
     let stat = await lstatIfPresent(current)
     if (!stat) {
+      if (!createParents) return null
       try { await mkdir(current) } catch (error) {
         if (error?.code !== 'EEXIST') throw error
       }
@@ -54,6 +56,7 @@ export async function safeDataTarget(root, relativePath, { leaf = 'file' } = {})
     if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Unsafe restore path: ${relativePath}`)
   }
   const stat = await lstatIfPresent(target)
+  if (!stat && !createParents) return null
   // 'any' is for moving a generated entry itself, never for following its link.
   if (stat && leaf !== 'any' && (!stat.isFile() || stat.isSymbolicLink())) {
     throw new Error(`Unsafe restore path: ${relativePath}`)

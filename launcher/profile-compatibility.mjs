@@ -24,11 +24,8 @@ function isCommunityBundle(name) {
 }
 
 export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}) {
-  const candidate = path.join(layout.dshHome, 'profiles', 'web', 'package.json')
-  // The selected state root is trusted; the following safeDataTarget call
-  // rejects linked parents before any read or write reaches this file.
-  if (!existsSync(candidate)) return { status: 'skipped', paused: [] } // lgtm[js/path-injection]
-  const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json')
+  const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json', { createParents: false })
+  if (!manifestFile) return { status: 'skipped', paused: [] }
   const profileRoot = path.dirname(manifestFile)
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   const bundles = manifest.dsh?.profile?.bundles
