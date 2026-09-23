@@ -54,9 +54,10 @@ function entry(version, channel = 'candidate', overrides = {}) {
   }
 }
 
-test('mergeProductCatalog sorts descending, replaces the current version, and caps at 20', () => {
+test('candidate catalog keeps two previews, replaces the current version, and keeps the newest stable baseline', () => {
   const oldEntries = []
   for (let index = 1; index <= 22; index += 1) oldEntries.push(entry(`0.6.5-rc.${index}`))
+  oldEntries.push(entry('0.6.5', 'stable'))
   oldEntries.push(entry('0.6.5-rc.23', 'candidate', { manifest: manifest('0.6.5-rc.23', 'candidate', platform, { component: { ...manifest('0.6.5-rc.23').component, dshVersion: 'old' } }) }))
   const current = entry('0.6.5-rc.23', 'candidate', { manifest: manifest('0.6.5-rc.23') })
   const result = mergeProductCatalog({
@@ -66,12 +67,23 @@ test('mergeProductCatalog sorts descending, replaces the current version, and ca
     policy: { ...policy, blockedVersions: [] },
     platform,
   })
-  assert.equal(result.length, 20)
-  assert.equal(result[0].version, '0.6.5-rc.23')
-  assert.equal(result[0].manifest.component.dshVersion, '0.1.0')
+  assert.equal(result.length, 3)
+  assert.deepEqual(result.map(({ version }) => version), ['0.6.5', '0.6.5-rc.23', '0.6.5-rc.22'])
+  assert.equal(result[1].manifest.component.dshVersion, '0.1.0')
   for (let index = 1; index < result.length; index += 1) {
     assert.ok(comparePortableVersions(result[index - 1].version, result[index].version) > 0)
   }
+})
+
+test('stable catalog keeps the latest three supported releases', () => {
+  const result = mergeProductCatalog({
+    existingEntries: ['0.6.5', '0.6.6', '0.6.7', '0.6.8'].map(version => entry(version, 'stable')),
+    currentEntry: entry('0.6.9', 'stable'),
+    releaseChannel: 'stable',
+    policy: { ...policy, blockedVersions: [] },
+    platform,
+  })
+  assert.deepEqual(result.map(({ version }) => version), ['0.6.9', '0.6.8', '0.6.7'])
 })
 
 test('mergeProductCatalog removes below-minimum and blocked versions', () => {

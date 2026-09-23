@@ -14,7 +14,8 @@ const PRODUCT_PLATFORMS = [
   'linux-x64',
 ]
 const PRODUCT_CATALOG_SCHEMA_VERSION = 1
-const PRODUCT_CATALOG_MAX_VERSIONS = 20
+const STABLE_RETAINED_VERSIONS = 3
+const CANDIDATE_RETAINED_PRERELEASES = 2
 const PRODUCT_CATALOG_MAX_BYTES = 256 * 1024
 const PRODUCT_CATALOG_TIMEOUT_MS = 5000
 const PRODUCT_REPOSITORY = 'WSL043/DSH-Portable'
@@ -154,9 +155,18 @@ export function mergeProductCatalog({ existingEntries, currentEntry, releaseChan
   const current = validateCatalogEntry(currentEntry, selectedPlatform, { current: true })
   if (shouldKeepVersion(current.version, channel, configuredPolicy)) entries.set(current.version, cloneJson(currentEntry))
 
-  return [...entries.values()]
+  const sorted = [...entries.values()]
     .sort((left, right) => comparePortableVersions(right.version, left.version))
-    .slice(0, PRODUCT_CATALOG_MAX_VERSIONS)
+  if (channel === 'stable') return sorted.slice(0, STABLE_RETAINED_VERSIONS)
+
+  // Keep one known stable escape hatch beside the two most recent previews.
+  // A preview superseded by a newer one remains in its immutable Release,
+  // but no longer occupies a slot in the in-app version picker.
+  const previews = sorted.filter(entry => hasPrerelease(entry.version))
+    .slice(0, CANDIDATE_RETAINED_PRERELEASES)
+  const stable = sorted.find(entry => !hasPrerelease(entry.version))
+  return [...previews, ...(stable === undefined ? [] : [stable])]
+    .sort((left, right) => comparePortableVersions(right.version, left.version))
 }
 
 async function sha256File(filename) {
