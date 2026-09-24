@@ -8,6 +8,14 @@ import { fileURLToPath } from 'node:url'
 import { incompatibleProfilePeers } from '../launcher/profile-compatibility.mjs'
 
 const REQUIRED = ['dsh-chat-manager', 'dsh-image-viewer']
+const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9._~-]*\/)?[a-z0-9-~][a-z0-9._~-]*$/i
+
+export function peerManifestPath(appDir, peer) {
+  if (typeof peer !== 'string' || !PACKAGE_NAME.test(peer)) {
+    throw new Error(`Invalid peer package name in reviewed default plugin: ${String(peer)}`)
+  }
+  return path.join(appDir, 'node_modules', ...peer.split('/'), 'package.json')
+}
 
 /** Fail before packaging when a default bundle would be paused on first boot. */
 export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage, 'app') } = {}) {
@@ -23,7 +31,7 @@ export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage
     const plugin = JSON.parse(content.toString('utf8'))
     assert.equal(plugin.name, name, `${name} packaged identity`)
     const incompatible = await incompatibleProfilePeers(plugin, async peer => {
-      const filename = path.join(appDir, 'node_modules', ...peer.split('/'), 'package.json')
+      const filename = peerManifestPath(appDir, peer)
       const host = await readFile(filename, 'utf8').then(JSON.parse, error => {
         if (error?.code === 'ENOENT') return null
         throw error
