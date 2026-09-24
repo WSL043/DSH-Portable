@@ -40,9 +40,9 @@ async function refreshInstalled(afterPending = false): Promise<void> {
 
 const noteCopy: Record<PluginStateNote, { zh: string; en: string; zhTitle: string; enTitle: string }> = {
   'running-outside-switch': {
-    zh: '关闭后仍在运行', en: 'Running outside switch',
-    zhTitle: '该插件还被自定义配置加载。要真正停用，请到配置文件移除额外的加载项。',
-    enTitle: 'A custom configuration still loads this plugin. Remove the extra mount in the configuration file to stop it.',
+    zh: '关闭后仍在运行', en: 'Still running after disable',
+    zhTitle: '当前进程仍加载此插件。重启后确认；若仍在运行，再检查配置文件是否额外加载。',
+    enTitle: 'This process still has the plugin loaded. Restart to verify; if it remains active, check for another mount in the configuration file.',
   },
   'stopped-despite-switch': {
     zh: '开启但未运行', en: 'Enabled but inactive',
@@ -91,6 +91,13 @@ async function activate(name: string) {
   } catch (error) { publish({ failures: { ...snapshot.failures, [name]: String(error) } }) }
   finally { publish({ busy: '' }) }
 }
+async function restartForState(name: string) {
+  if (snapshot.busy) return
+  publish({ busy: name, failures: { ...snapshot.failures, [name]: '' } })
+  try { await restartApp() }
+  catch (error) { publish({ failures: { ...snapshot.failures, [name]: String(error) } }) }
+  finally { publish({ busy: '' }) }
+}
 export function PluginUpdateStatus({ zh }: { zh: boolean }) {
   const state = useSyncExternalStore(subscribe, getSnapshot)
   useEffect(() => {
@@ -136,6 +143,7 @@ export function PluginUpdateRow({ zh, name, busy = false, view }: { zh: boolean;
     {!done && status?.betaAvailable && <span className={css.version}>{`Beta ${status.betaAvailable}`}</span>}
     {!done && status?.stableAvailable && <span className={css.version}>{`Stable ${status.stableAvailable}`}</span>}
     {note && <span className={css.effectiveNote} role="status" title={zh ? noteCopy[note].zhTitle : noteCopy[note].enTitle}>{zh ? noteCopy[note].zh : noteCopy[note].en}</span>}
+    {(note === 'running-outside-switch' || note === 'pending-stop') && <button type="button" className={css.verifyAction} disabled={busy || Boolean(state.busy)} onClick={() => void restartForState(name)}>{state.busy === name ? (zh ? '正在重启…' : 'Restarting…') : (zh ? '重启后确认' : 'Restart to verify')}</button>}
     {error && <span className={css.failure} role="alert" title={error}>{done ? (zh ? '未完成，请重试' : 'Could not apply. Please retry.') : (zh ? '更新失败，可重试' : 'Update failed. Retry available.')}</span>}
   </span>
 }

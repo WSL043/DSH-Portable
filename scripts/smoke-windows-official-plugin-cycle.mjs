@@ -115,6 +115,34 @@ try {
   report.reinstalledAndEnabled = true
   await page.screenshot({ path: path.join(evidence, 'after-install.png') })
 
+  // The official switch may hot-unload immediately. Supply a loader mismatch
+  // only for this view-layer check, then verify the Portable recovery action
+  // is actually clickable and confirms a new native boot.
+  await page.route('**/dsh-market/installed', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    body.bundles = body.bundles.filter(name => name !== 'dsh-image-viewer')
+    body.activation['dsh-image-viewer'] = { state: 'live' }
+    await route.fulfill({ response, json: body })
+  })
+  await page.evaluate(() => window.dispatchEvent(new Event('dsh-portable/refresh-plugins')))
+  const restartToVerify = card.getByRole('button', { name: /^(重启后确认|Restart to verify)$/ })
+  await restartToVerify.waitFor({ state: 'visible', timeout: 15_000 })
+  const clickTargetIsButton = await restartToVerify.evaluate(button => {
+    const bounds = button.getBoundingClientRect()
+    return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === button
+  })
+  assert.equal(clickTargetIsButton, true, 'plugin card title intercepts the Portable restart action')
+  const previousBoot = await page.evaluate(async () => (await (await fetch('/dsh-market/status')).json()).boot)
+  await restartToVerify.click()
+  await page.waitForFunction(async boot => {
+    try {
+      const response = await fetch('/dsh-market/status', { cache: 'no-store' })
+      return response.ok && (await response.json()).boot !== boot
+    } catch { return false }
+  }, previousBoot, { timeout: 90_000 })
+  report.pluginMismatchRestart = true
+
   await page.getByRole('button', { name: /^(新会话|新建会话|New session)$/ }).first().click()
   const composer = page.locator('[contenteditable="true"][role="textbox"]').first()
   await composer.fill('Disposable official plugin lifecycle check')

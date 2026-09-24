@@ -1,6 +1,10 @@
-.row{display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:0;font-size:12px;line-height:1.5}
+.row{position:relative;z-index:2;display:inline-flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:0;font-size:12px;line-height:1.5}
 .version{color:var(--dsw-alias-label-secondary,inherit);font-variant-numeric:tabular-nums;opacity:.8}
 .effectiveNote{color:var(--dsw-alias-state-warn-primary,#b45309);background:var(--dsw-alias-bg-layer-2,transparent);border:1px solid var(--dsw-alias-border-default,#d9dce1);border-radius:5px;padding:0 5px;white-space:nowrap}
+.verifyAction{border:0;background:transparent;color:var(--dsw-alias-label-primary,inherit);font:inherit;text-decoration:underline;text-underline-offset:2px;cursor:pointer;padding:0}
+.verifyAction:hover{opacity:.72}
+.verifyAction:focus-visible{outline:2px solid currentColor;outline-offset:2px;border-radius:2px}
+.verifyAction:disabled{opacity:.5;cursor:default}
 .pending,.hint{font-size:12px;color:var(--dsw-alias-label-secondary,inherit);white-space:nowrap}
 .failure{color:var(--dsw-alias-label-danger,#d74646)}
 .actions{display:inline-flex;align-items:center;gap:6px}
