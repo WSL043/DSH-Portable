@@ -447,6 +447,17 @@ try {
   }
   assert.equal(state.theme, 'light')
 
+  // Newer DSH closes Settings when provider onboarding appears after a locale
+  // change. Continue through the real sidebar entry instead of assuming the
+  // old dialog remained mounted throughout the language transition.
+  const settingsStillOpen = await evaluate(client,
+    `Boolean([...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0 && /Settings|设置/.test(item.textContent || '')))`)
+  if (!settingsStillOpen) {
+    await waitForValue(client, clickButton(['Settings', '设置']), value => value?.clicked, 'reopen Settings after locale change')
+    await waitForValue(client,
+      `Boolean([...document.querySelectorAll('[role="dialog"]')].some(item => item.getBoundingClientRect().width > 0 && /Settings|设置/.test(item.textContent || '')))`,
+      Boolean, 'Settings dialog after locale change')
+  }
   await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, 'General settings tab')
   const permissionLabels = await waitForValue(client, `(() => {
     const text = document.body?.innerText || ''
