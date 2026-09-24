@@ -36,19 +36,27 @@ async function officialTagCommit(version) {
 }
 
 const lockPath = path.join(root, 'upstream.preview.lock.json')
-const [registry, lock] = await Promise.all([
+const [registry, lock, rejected] = await Promise.all([
   json('https://registry.npmjs.org/@deepseek-ai%2Fdsh'),
   readFile(lockPath, 'utf8').then(JSON.parse),
+  readFile(path.join(root, 'rejected-official-candidates.json'), 'utf8').then(JSON.parse),
 ])
+if (rejected.schemaVersion !== 1 || !Array.isArray(rejected.candidates)
+  || rejected.candidates.some(candidate => !/^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/.test(candidate.version ?? '')
+    || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(candidate.integrity ?? '')
+    || typeof candidate.reason !== 'string' || !candidate.reason.trim())) {
+  throw new Error('invalid rejected official candidate policy')
+}
 const provisional = evaluatePreviewUpstream({
   lock,
   registry,
   packageCommit: { sha: lock.dsh.reviewedCommit },
+  rejectedCandidates: rejected.candidates,
 })
 const packageCommit = provisional.changed
   ? await officialTagCommit(provisional.version)
   : { sha: lock.dsh.reviewedCommit }
-const state = evaluatePreviewUpstream({ lock, registry, packageCommit })
+const state = evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates: rejected.candidates })
 
 if (state.changed) {
   const sourceMetadata = await readOfficialSourceMetadata(state.commit, { json, text })
@@ -77,6 +85,8 @@ console.log(JSON.stringify(state, null, 2))
 if (process.env.GITHUB_OUTPUT) {
   await appendFile(process.env.GITHUB_OUTPUT, [
     `changed=${state.changed}`,
+    `blocked=${state.blocked === true}`,
+    `rejectedVersion=${state.rejectedVersion ?? ''}`,
     `selectedTag=${state.selectedTag ?? ''}`,
     `version=${state.version}`,
     `commit=${state.commit}`,

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "candidates": [
+    {
+      "version": "0.1.7-rc.2",
+      "integrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
+      "reason": "Released descriptor-v2 historical sessions fail read-time migration; see deepseek-ai/deepseek-harness discussion 7576."
+    }
+  ]
+}

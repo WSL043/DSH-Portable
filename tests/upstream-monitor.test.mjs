@@ -184,6 +184,24 @@ test('a newer official alpha becomes a review-only candidate', () => {
   assert.equal(result.commit, 'e'.repeat(40))
 })
 
+test('rejected immutable candidate is not reopened, while a newer release remains eligible', () => {
+  const rejectedCandidates = [{ version: '0.1.2-rc.1', integrity: 'sha512-0.1.2-rc.1', reason: 'historical migration failure' }]
+  const registry = previewRegistry({ alpha: '0.1.2-alpha.5', next: '0.1.2-rc.1' })
+  const blocked = evaluatePreviewUpstream({ lock: previewLock, registry, rejectedCandidates })
+  assert.equal(blocked.changed, false)
+  assert.equal(blocked.blocked, true)
+  assert.equal(blocked.rejectedVersion, '0.1.2-rc.1')
+  assert.equal(blocked.version, previewLock.dsh.version)
+  assert.throws(() => evaluatePreviewUpstream({ lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2-alpha.5', next: '0.1.2-rc.1', integrities: { '0.1.2-rc.1': 'sha512-changed' } }),
+    rejectedCandidates }), /integrity changed for the rejected/)
+  const next = evaluatePreviewUpstream({ lock: previewLock,
+    registry: previewRegistry({ alpha: '0.1.2-alpha.5', next: '0.1.2-rc.2' }),
+    packageCommit: { sha: 'f'.repeat(40) }, rejectedCandidates })
+  assert.equal(next.changed, true)
+  assert.equal(next.version, '0.1.2-rc.2')
+})
+
 test('a newer release candidate on next outranks the alpha train', () => {
   const result = evaluatePreviewUpstream({
     lock: previewLock,

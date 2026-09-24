@@ -43,8 +43,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/update-preview-upstream.mjs
+      - name: Keep a rejected candidate quarantined
+        if: steps.preview.outputs.blocked == 'true'
+        run: |
+          echo 'Official DSH ${{ steps.preview.outputs.rejectedVersion }} was previously rejected by historical-session qualification. Waiting for a new immutable upstream release.' >> "$GITHUB_STEP_SUMMARY"
       - name: Keep an identical candidate review unchanged
-        if: steps.preview.outputs.changed == 'false'
+        if: steps.preview.outputs.changed == 'false' && steps.preview.outputs.blocked != 'true'
         run: |
           echo 'This official candidate is already awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run repository contracts before opening the review

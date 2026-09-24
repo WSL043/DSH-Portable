@@ -78,7 +78,7 @@ export function selectPreviewCandidate(registry) {
   return selected
 }
 
-export function evaluatePreviewUpstream({ lock, registry, packageCommit }) {
+export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates = [] }) {
   const currentVersion = lock.dsh.version
   const currentIntegrity = registry?.versions?.[currentVersion]?.dist?.integrity
   if (currentIntegrity && currentIntegrity !== lock.dsh.npmIntegrity) {
@@ -89,6 +89,22 @@ export function evaluatePreviewUpstream({ lock, registry, packageCommit }) {
   if (selected === null) {
     return {
       changed: false,
+      version: currentVersion,
+      integrity: lock.dsh.npmIntegrity,
+      commit: lock.dsh.reviewedCommit,
+    }
+  }
+
+  const rejected = rejectedCandidates.find(candidate => candidate.version === selected.version)
+  if (rejected) {
+    if (selected.integrity !== rejected.integrity) {
+      throw new Error(`integrity changed for the rejected official candidate ${selected.version}`)
+    }
+    return {
+      changed: false,
+      blocked: true,
+      rejectedVersion: selected.version,
+      reason: rejected.reason,
       version: currentVersion,
       integrity: lock.dsh.npmIntegrity,
       commit: lock.dsh.reviewedCommit,
