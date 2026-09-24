@@ -18,6 +18,7 @@
     "site:build": "node scripts/build-site.mjs",
     "check:upstream": "node scripts/check-upstream.mjs",
     "preview:stage-runtime": "node scripts/stage-preview-runtime.mjs",
+    "preview:isolated": "node scripts/prepare-isolated-runtime-preview.mjs",
     "icons": "node scripts/render-icons.mjs app assets/DSH-Portable.svg assets",
     "version:set": "node scripts/set-product-version.mjs"
   }
