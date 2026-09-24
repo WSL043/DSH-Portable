@@ -278,8 +278,11 @@ try {
     # the native host and running task alive until the user explicitly exits.
     $DesktopHandle = $Process.MainWindowHandle
     if (-not $Process.CloseMainWindow()) { throw 'CloseMainWindow could not request the default tray close.' }
-    Start-Sleep -Seconds 2
-    $Process.Refresh()
+    $TrayCloseDeadline = [DateTime]::UtcNow.AddSeconds(10)
+    do {
+        Start-Sleep -Milliseconds 100
+        $Process.Refresh()
+    } while (-not $Process.HasExited -and [WindowAppIdentity]::IsWindowVisible($DesktopHandle) -and [DateTime]::UtcNow -lt $TrayCloseDeadline)
     if ($Process.HasExited) { throw 'Default window close exited instead of minimizing to tray.' }
     if ([WindowAppIdentity]::IsWindowVisible($DesktopHandle)) { throw 'Default window close left the desktop window visible.' }
     $WindowStateFile = Join-Path $Root 'data\window-state.json'
@@ -311,7 +314,12 @@ try {
     )
     if ($OwnedHosts.Count -ne 1) { throw "Second launch left $($OwnedHosts.Count) owned desktop hosts running." }
     if (-not $Process.CloseMainWindow()) { throw 'Restored window could not return to the tray.' }
-    Start-Sleep -Milliseconds 500
+    $TrayCloseDeadline = [DateTime]::UtcNow.AddSeconds(10)
+    do {
+        Start-Sleep -Milliseconds 100
+        $Process.Refresh()
+    } while (-not $Process.HasExited -and [WindowAppIdentity]::IsWindowVisible($RestoredHandle) -and [DateTime]::UtcNow -lt $TrayCloseDeadline)
+    if ($Process.HasExited) { throw 'Restored window close exited instead of minimizing to tray.' }
     if ([WindowAppIdentity]::IsWindowVisible($RestoredHandle)) { throw 'Restored window remained visible after closing to tray.' }
 
     # The same executable owns explicit exit; there is no redundant Stop EXE.
