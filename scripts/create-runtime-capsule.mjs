@@ -14,10 +14,22 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex')
 }
 
+// A source tree can contain literal backslashes on POSIX. Treating them as
+// separators on the next recursive step would change which file is read, and
+// the finished capsule must use unambiguous POSIX entry names on every host.
+export function portableCapsuleEntryName(name) {
+  if (typeof name !== 'string' || name === '' || name === '.' || name === '..'
+    || /[\\/\0-\x1f]/.test(name)) {
+    throw new Error('Runtime capsule source contains an unsafe entry name.')
+  }
+  return name
+}
+
 async function listFiles(root, relative = '') {
   const result = []
   for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
-    const child = relative ? path.posix.join(relative.replaceAll('\\', '/'), entry.name) : entry.name
+    const segment = portableCapsuleEntryName(entry.name)
+    const child = relative ? path.posix.join(relative, segment) : segment
     if (entry.isDirectory()) result.push(...await listFiles(root, child))
     else if (entry.isFile()) result.push(child)
     else throw new Error(`Runtime capsule does not support links or special files: ${child}`)

@@ -8,7 +8,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { zstdDecompressSync } from 'node:zlib'
 
-import { createRuntimeCapsule, reuseRuntimeCapsule } from '../scripts/create-runtime-capsule.mjs'
+import { createRuntimeCapsule, portableCapsuleEntryName, reuseRuntimeCapsule } from '../scripts/create-runtime-capsule.mjs'
 import { createWindowsCapsuleUpdate } from '../scripts/create-windows-capsule-update.mjs'
 import { copyCapsuleShell } from '../scripts/package-windows-runtime-capsule.mjs'
 import { packageWindowsRuntimeCapsule } from '../scripts/package-windows-runtime-capsule.mjs'
@@ -42,6 +42,21 @@ async function fixture() {
   }
   return { parent, root, app }
 }
+
+test('capsule source names cannot change path meaning across platforms', async () => {
+  for (const name of ['..', '.', 'nested\\outside', 'nested/outside', 'zero\0byte', 'line\nbreak']) {
+    assert.throws(() => portableCapsuleEntryName(name), /unsafe entry name/)
+  }
+  assert.equal(portableCapsuleEntryName('@deepseek-ai'), '@deepseek-ai')
+  if (process.platform === 'win32') return
+  const { parent, root, app } = await fixture()
+  try {
+    await writeFile(path.join(app, 'nested\\..\\outside'), 'must not be packed')
+    await assert.rejects(createRuntimeCapsule(app, path.join(root, 'bad.dshpack'), path.join(root, 'bad.json')), /unsafe entry name/)
+  } finally {
+    await rm(parent, { recursive: true, force: true })
+  }
+})
 
 test('Windows runtime directory commit retries transient rename failures with bounded delays', async () => {
   const calls = []
