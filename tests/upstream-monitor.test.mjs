@@ -200,6 +200,10 @@ test('rejected immutable candidate is not reopened, while a newer release remain
     packageCommit: { sha: 'f'.repeat(40) }, rejectedCandidates })
   assert.equal(next.changed, true)
   assert.equal(next.version, '0.1.2-rc.2')
+  const laterLock = { dsh: { version: '0.1.2-rc.2', npmIntegrity: 'sha512-0.1.2-rc.2', reviewedCommit: 'f'.repeat(40) } }
+  const olderTag = evaluatePreviewUpstream({ lock: laterLock, registry, rejectedCandidates })
+  assert.equal(olderTag.changed, false)
+  assert.notEqual(olderTag.blocked, true)
 })
 
 test('a newer release candidate on next outranks the alpha train', () => {

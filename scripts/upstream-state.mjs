@@ -95,6 +95,17 @@ export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejecte
     }
   }
 
+  const comparison = compareSemver(selected.version, currentVersion)
+  if (comparison <= 0) {
+    return {
+      changed: false,
+      selectedTag: selected.tag,
+      version: currentVersion,
+      integrity: lock.dsh.npmIntegrity,
+      commit: lock.dsh.reviewedCommit,
+    }
+  }
+
   const rejected = rejectedCandidates.find(candidate => candidate.version === selected.version)
   if (rejected) {
     if (selected.integrity !== rejected.integrity) {
@@ -105,17 +116,6 @@ export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejecte
       blocked: true,
       rejectedVersion: selected.version,
       reason: rejected.reason,
-      version: currentVersion,
-      integrity: lock.dsh.npmIntegrity,
-      commit: lock.dsh.reviewedCommit,
-    }
-  }
-
-  const comparison = compareSemver(selected.version, currentVersion)
-  if (comparison <= 0) {
-    return {
-      changed: false,
-      selectedTag: selected.tag,
       version: currentVersion,
       integrity: lock.dsh.npmIntegrity,
       commit: lock.dsh.reviewedCommit,
