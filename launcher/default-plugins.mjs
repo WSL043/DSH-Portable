@@ -192,11 +192,28 @@ function installedDefaultVersion(profileRoot, plugin, adapters = {}) {
   return exactVersionFromSpec(spec)
 }
 
+function declaredDefaultVersion(profileRoot, plugin, adapters = {}) {
+  try {
+    const manifest = JSON.parse((adapters.readFileSync ?? readFileSync)(path.join(profileRoot, 'package.json'), 'utf8'))
+    return exactVersionFromSpec(manifest.dependencies?.[plugin.name])
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw error
+  }
+}
+
 async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, adapters = {}) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const candidates = plugins.filter((plugin) => {
     const installed = installedDefaultVersion(profileRoot, plugin, adapters)
-    return installed !== null && comparePortableVersions(installed, plugin.version) < 0
+    if (installed === null) return false
+    const compared = comparePortableVersions(installed, plugin.version)
+    if (compared < 0) return true
+    // An interrupted update can leave the actual reviewed package current
+    // while package.json still pins an older version. The next pnpm operation
+    // would otherwise downgrade it, so reconcile that exact-version drift.
+    const declared = declaredDefaultVersion(profileRoot, plugin, adapters)
+    return compared === 0 && declared !== null && comparePortableVersions(declared, plugin.version) < 0
   })
   if (candidates.length === 0) return { status: 'skipped', profile, reason: 'defaults-current' }
 

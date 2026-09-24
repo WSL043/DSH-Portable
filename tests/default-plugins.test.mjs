@@ -102,6 +102,48 @@ test('a product upgrade refreshes installed defaults from reviewed archives with
   assert.equal(manifest.dependencies['user-selected-plugin'], '3.1.4')
 })
 
+test('startup repairs an older exact dependency pin without downgrading the installed default', async t => {
+  const layout = await fixture(t)
+  await writeReviewedArchives(layout)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  const packageDir = path.join(profileRoot, 'node_modules', 'dsh-image-viewer')
+  await mkdir(packageDir, { recursive: true })
+  await writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ version: imageVersion }))
+  const original = { dependencies: { 'dsh-image-viewer': '0.1.0-beta.7', 'user-plugin': '1.0.0' },
+    dsh: { profile: { bundles: ['@deepseek-ai/dsh-base'] } } }
+  const manifestPath = path.join(profileRoot, 'package.json')
+  await writeFile(manifestPath, JSON.stringify(original))
+  let calls = 0
+  const result = await seedDefaultPlugins(layout, {
+    verifyArchive: async () => true,
+    spawnSync() {
+      calls++
+      writeFileSync(manifestPath, JSON.stringify({ ...original,
+        dsh: { profile: { bundles: [...original.dsh.profile.bundles, 'dsh-image-viewer'] } } }))
+      return { status: 0 }
+    },
+  })
+  assert.equal(result.status, 'updated')
+  assert.equal(calls, 1)
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  assert.equal(manifest.dependencies['dsh-image-viewer'], imageVersion)
+  assert.equal(manifest.dependencies['user-plugin'], '1.0.0')
+  assert.deepEqual(manifest.dsh.profile.bundles, original.dsh.profile.bundles)
+})
+
+test('startup preserves a user-selected plugin source even when its installed version matches a default', async t => {
+  const layout = await fixture(t)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  const packageDir = path.join(profileRoot, 'node_modules', 'dsh-image-viewer')
+  await mkdir(packageDir, { recursive: true })
+  await writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ version: imageVersion }))
+  const manifest = JSON.stringify({ dependencies: { 'dsh-image-viewer': 'github:user/custom-image-viewer#main' } })
+  await writeFile(path.join(profileRoot, 'package.json'), manifest)
+  const result = await seedDefaultPlugins(layout, { spawnSync() { assert.fail('must preserve the user source') } })
+  assert.equal(result.status, 'skipped')
+  assert.equal(await readFile(path.join(profileRoot, 'package.json'), 'utf8'), manifest)
+})
+
 test('a failed reviewed-default refresh restores the original profile manifest', async (t) => {
   const layout = await fixture(t)
   await writeReviewedArchives(layout)
