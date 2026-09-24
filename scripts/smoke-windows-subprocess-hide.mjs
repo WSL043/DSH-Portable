@@ -6,7 +6,12 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
-import { subprocessHideModule } from './patch-windows-subprocess-hide.mjs'
+import {
+  patchWindowsAclHide,
+  patchWindowsSubprocessHide,
+  patchWindowsWin32ProcessHide,
+  subprocessHideModule,
+} from './patch-windows-subprocess-hide.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -83,22 +88,23 @@ async function runParent() {
   const subprocessLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib')
   const subprocessSource = await readFile(path.join(subprocessLib, subprocessHideModule(await readFile(path.join(subprocessLib, 'index.js'), 'utf8'))), 'utf8')
   const aclLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib')
-  assert.match(subprocessSource, /dsh-portable-windows-subprocess-hide-v1/)
+  assert.equal(patchWindowsSubprocessHide(subprocessSource), subprocessSource,
+    'the packaged subprocess runner must already hide its Windows children')
   const { readdir } = await import('node:fs/promises')
   const aclFile = (await readdir(aclLib)).find(name => /^types-[A-Za-z0-9_-]+\.js$/.test(name))
   assert.ok(aclFile, 'compiled Windows ACL module was not found')
   const aclSource = await readFile(path.join(aclLib, aclFile), 'utf8')
+  assert.equal(patchWindowsAclHide(aclSource), aclSource,
+    'the packaged ACL adapter must already use a hidden process owner')
   let restrictedProcessSource
-  if (/dsh-portable-windows-acl-hide-v1/.test(aclSource)) {
-    restrictedProcessSource = aclSource
-  } else {
-    assert.match(aclSource, /dsh-portable-windows-acl-shared-process-v1/)
+  if (aclSource.includes('from "@deepseek-ai/dsh-win32-process";')) {
     restrictedProcessSource = await readFile(
       path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-win32-process', 'lib', 'index.js'),
       'utf8',
     )
-    assert.match(restrictedProcessSource, /dsh-portable-windows-process-hide-v1/)
-  }
+    assert.equal(patchWindowsWin32ProcessHide(restrictedProcessSource), restrictedProcessSource,
+      'the packaged shared process owner must already request SW_HIDE')
+  } else restrictedProcessSource = aclSource
   assert.equal(restrictedProcessSource.match(/dwFlags: 257/g)?.length, 2)
   assert.equal(restrictedProcessSource.match(/wShowWindow: 0/g)?.length, 2)
 

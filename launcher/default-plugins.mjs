@@ -13,6 +13,7 @@ function pluginInstallError(result) {
   return new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.${detail ? `\n${detail}` : ''}`)
 }
 
+// Keep previous package identities for recovery of existing component manifests.
 const PREVIOUS_DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   name: 'dsh-image-viewer',
   version: '0.1.1',
@@ -33,9 +34,28 @@ const PREVIOUS_DEFAULT_PLUGINS = Object.freeze([Object.freeze({
   integrity: 'sha512-25Kzz5ulHvXpRthShMveesuIkaF0p0n5XCT8PPeKykDSwByGsTri6Kvp0J+5asCFNGSPkGPw/vtgNL/sy+P6XA==',
   license: 'MIT',
   reviewedCommit: '7fabd0a2f10b57632cfcbd25a36bd7d74828baea',
+}), Object.freeze({
+  name: 'dsh-image-viewer',
+  version: '0.1.3-beta.1',
+  spec: '0.1.3-beta.1',
+  filename: 'dsh-image-viewer.tgz',
+  url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.3-beta.1.tgz',
+  sha256: '31770b60d9996b8cde8833e24c7c153c222dfa59e01d14ed97e0bb277da64d1f',
+  integrity: 'sha512-mw/nOix6wPb0e8V4AdPE8lts8w9c7o6xGLMJk/i2ShyPJgVIE0YkZ0sMKJbTnJqwTaN4W/I+X20WNwvearQe4Q==',
+  license: 'MIT',
+  reviewedCommit: 'fa68a961ae2a23e53ef6554ca338ee771d79f647',
+}), Object.freeze({
+  name: 'dsh-chat-manager',
+  version: '1.5.2-beta.3',
+  spec: '1.5.2-beta.3',
+  filename: 'dsh-chat-manager.tgz',
+  url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.2-beta.3.tgz',
+  sha256: '93ec7f95d72be129d035ffe55ba666d2936d23ea4752a96b54cf2655088fbd90',
+  integrity: 'sha512-1+VATIBbVhgsk++55PgZQHff1/KyG8wRkF8pmoZNKfj2v1CbO6MpR6GW+CN/DmPFQ3wfnx5Nf8aE/Z3zjz3Lyw==',
+  license: 'MIT',
+  reviewedCommit: '720579ecc27abfd21450312058af7e454cd465a5',
 })])
 
-// Keep previous package identities for recovery of existing component manifests.
 export const DEFAULT_PLUGINS = Object.freeze([
   {
     "name": "dsh-image-viewer",
@@ -66,24 +86,24 @@ export const DEFAULT_PLUGINS = Object.freeze([
 export const PREVIEW_DEFAULT_PLUGINS = Object.freeze([
   {
     name: 'dsh-image-viewer',
-    version: '0.1.3-beta.1',
-    spec: '0.1.3-beta.1',
-    url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.3-beta.1.tgz',
-    sha256: '31770b60d9996b8cde8833e24c7c153c222dfa59e01d14ed97e0bb277da64d1f',
-    integrity: 'sha512-mw/nOix6wPb0e8V4AdPE8lts8w9c7o6xGLMJk/i2ShyPJgVIE0YkZ0sMKJbTnJqwTaN4W/I+X20WNwvearQe4Q==',
+    version: '0.1.3-beta.2',
+    spec: '0.1.3-beta.2',
+    url: 'https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.3-beta.2.tgz',
+    sha256: '37e5a12a515df1c5fd6145b6b835655db1e904e98d91fa2a7ae7efe71e769b55',
+    integrity: 'sha512-f89Q4LiYellhc/3NkTUT/xl1bJjirqdoUadGWnvXOkHuEmjIeq7vcV0oiR7N6j255vaWVSe9tviBTztCaxc34g==',
     license: 'MIT',
-    reviewedCommit: 'fa68a961ae2a23e53ef6554ca338ee771d79f647',
+    reviewedCommit: '1e145dcbebe6ff474b8be206eefab28e2570d981',
     filename: 'dsh-image-viewer.tgz',
   },
   {
     name: 'dsh-chat-manager',
-    version: '1.5.2-beta.3',
-    spec: '1.5.2-beta.3',
-    url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.2-beta.3.tgz',
-    sha256: '93ec7f95d72be129d035ffe55ba666d2936d23ea4752a96b54cf2655088fbd90',
-    integrity: 'sha512-1+VATIBbVhgsk++55PgZQHff1/KyG8wRkF8pmoZNKfj2v1CbO6MpR6GW+CN/DmPFQ3wfnx5Nf8aE/Z3zjz3Lyw==',
+    version: '1.5.2-beta.4',
+    spec: '1.5.2-beta.4',
+    url: 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.2-beta.4.tgz',
+    sha256: 'ca72ca19f0c254e5725498f87220d47077a3ec703e2def9ce5d82249da992b8c',
+    integrity: 'sha512-GqLXznpMiQiFw8kkY25PQLs1MzwwbCb88zthbyszBYPK2R6e+2QMiFOWOb2FbfXFo5h1XkAy8pg7rasbbbrF6w==',
     license: 'MIT',
-    reviewedCommit: '720579ecc27abfd21450312058af7e454cd465a5',
+    reviewedCommit: '7ecdf6ed70a27c69a620248554168b6628daeb36',
     filename: 'dsh-chat-manager.tgz',
   },
 ].map(Object.freeze))

@@ -1,6 +1,7 @@
 import { readFile, readdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const SUBPROCESS_MARKER = 'dsh-portable-windows-subprocess-hide-v1'
 const ACL_MARKER = 'dsh-portable-windows-acl-hide-v1'
@@ -20,10 +21,10 @@ export function patchWindowsSubprocessHide(source) {
     `\t\t"/F"\n\t], {\n\t\tstdio: "ignore",\n\t\twindowsHide: true\n\t});`,
     `\t\tdetached: platform !== "win32",\n\t\twindowsHide: platform === "win32"\n\t});`,
   ]
-  // Alpha owns these helpers in a shared runner chunk and already hides them.
-  // Keep the exact three verified seams; an unknown shape still fails below.
+  // The official runner already hides these helpers. Verify all three seams
+  // without changing its code; an unknown shape still fails below.
   if (upstreamHidden.every(needle => source.split(needle).length === 2)) {
-    return `/* ${SUBPROCESS_MARKER} */\n${source}`
+    return source
   }
   let output = replaceRequired(
     source,
@@ -75,7 +76,7 @@ export function patchWindowsAclHide(source) {
       throw new Error(`Windows ACL CreateProcessAsUserW seams changed upstream: unrecognized shared-process adapter (${seamMatches} matches)`)
     }
   }
-  return `/* ${ACL_ADAPTER_MARKER} */\n${source}`
+  return source
 }
 
 export function patchWindowsWin32ProcessHide(source) {
@@ -88,11 +89,8 @@ export function patchWindowsWin32ProcessHide(source) {
   const hiddenFlags = source.match(/dwFlags: 257/g)?.length ?? 0
   const hiddenWindows = source.match(/wShowWindow: 0/g)?.length ?? 0
   if (legacyMatches === 0 && upstreamHiddenMatches === 2 && hiddenFlags === 2 && hiddenWindows === 2) {
-    // Alpha 2's shared owner already requests STARTF_USESHOWWINDOW/SW_HIDE
-    // on both CreateProcessAsUserW paths. Preserve the official implementation
-    // and mark it so the build remains idempotent and the smoke can distinguish
-    // verified upstream behavior from the legacy source rewrite.
-    return `/* ${WIN32_PROCESS_MARKER} */\n${source}`
+    // The official shared owner already requests STARTF_USESHOWWINDOW/SW_HIDE.
+    return source
   }
   if (legacyMatches !== 2 || upstreamHiddenMatches !== 0) {
     throw new Error(`Windows shared process CreateProcessAsUserW seams changed upstream: expected 2 legacy matches or 2 upstream hidden matches, found legacy ${legacyMatches}, upstream ${upstreamHiddenMatches}`)
@@ -103,28 +101,29 @@ export function patchWindowsWin32ProcessHide(source) {
 async function main() {
   if (!process.argv[2]) throw new Error('usage: node patch-windows-subprocess-hide.mjs <app-root>')
   const appRoot = path.resolve(process.argv[2])
-  const subprocessLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib')
-  const subprocessFilename = path.join(subprocessLib, subprocessHideModule(await readFile(path.join(subprocessLib, 'index.js'), 'utf8')))
+  const subprocessIndex = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib', 'index.js')
+  const subprocessFilename = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-subprocess-local', 'lib', subprocessHideModule(await readFile(subprocessIndex, 'utf8')))
   const aclLib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib')
   const aclCandidates = (await readdir(aclLib)).filter(name => /^types-[A-Za-z0-9_-]+\.js$/.test(name))
   if (aclCandidates.length !== 1) {
     throw new Error(`Windows ACL runtime seam changed upstream: expected 1 compiled types module, found ${aclCandidates.length}`)
   }
-  const aclFilename = path.join(aclLib, aclCandidates[0])
+  const aclFilename = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-sandbox-windows-acl', 'lib', aclCandidates[0])
   const [subprocessSource, aclSource] = await Promise.all([
     readFile(subprocessFilename, 'utf8'),
     readFile(aclFilename, 'utf8'),
   ])
   const patchedAcl = patchWindowsAclHide(aclSource)
-  const writes = [
-    writeFile(subprocessFilename, patchWindowsSubprocessHide(subprocessSource), 'utf8'),
-    writeFile(aclFilename, patchedAcl, 'utf8'),
-  ]
+  const patchedSubprocess = patchWindowsSubprocessHide(subprocessSource)
+  const writes = []
+  if (patchedSubprocess !== subprocessSource) writes.push(writeFile(subprocessFilename, patchedSubprocess, 'utf8'))
+  if (patchedAcl !== aclSource) writes.push(writeFile(aclFilename, patchedAcl, 'utf8'))
   let win32ProcessFilename
-  if (patchedAcl.includes(ACL_ADAPTER_MARKER)) {
-    win32ProcessFilename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-win32-process', 'lib', 'index.js')
+  if (patchedAcl.includes(ACL_ADAPTER_MARKER) || patchedAcl.includes('from "@deepseek-ai/dsh-win32-process";')) {
+    win32ProcessFilename = await verifiedPackageFile(appRoot, 'node_modules', '@deepseek-ai', 'dsh-win32-process', 'lib', 'index.js')
     const win32ProcessSource = await readFile(win32ProcessFilename, 'utf8')
-    writes.push(writeFile(win32ProcessFilename, patchWindowsWin32ProcessHide(win32ProcessSource), 'utf8'))
+    const patchedWin32Process = patchWindowsWin32ProcessHide(win32ProcessSource)
+    if (patchedWin32Process !== win32ProcessSource) writes.push(writeFile(win32ProcessFilename, patchedWin32Process, 'utf8'))
   }
   await Promise.all(writes)
   console.log(subprocessFilename)

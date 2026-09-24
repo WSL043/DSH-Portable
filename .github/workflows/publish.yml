@@ -37,6 +37,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+      - name: Require historical-session acceptance for the exact candidate core
+        run: node scripts/assert-publish-readiness.mjs
       - name: Require a successful main build for this commit and version
         env:
           GH_TOKEN: ${{ github.token }}

@@ -2,9 +2,10 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
-import { cp, mkdir, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const [rootArg, driverPackage, evidenceArg, disposable] = process.argv.slice(2)
 if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable') {
@@ -13,6 +14,9 @@ if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable')
 const root = path.resolve(rootArg)
 const evidence = path.resolve(evidenceArg)
 await mkdir(evidence, { recursive: true })
+const components = JSON.parse(await readFile(await verifiedPackageFile(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+const reviewedImage = components.defaultPlugins?.find(plugin => plugin.package === 'dsh-image-viewer')
+assert.match(reviewedImage?.version ?? '', /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/, 'reviewed image viewer version')
 const { chromium } = createRequire(path.resolve(driverPackage))('playwright')
 const env = {
   ...process.env,
@@ -95,10 +99,15 @@ try {
 
   await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).click()
   dialog = page.getByRole('dialog').last()
-  await dialog.getByRole('textbox').first().fill('dsh-image-viewer@0.1.2')
+  await dialog.getByRole('textbox').first().fill(`dsh-image-viewer@${reviewedImage.version}`)
   await dialog.getByRole('button', { name: /^(安装|Install)$/ }).click()
-  await page.getByRole('button', { name: /^(立即启用|Enable now)$/ }).waitFor({ timeout: 120_000 })
-  await page.getByRole('button', { name: /^(立即启用|Enable now)$/ }).click()
+  const enableNow = page.getByRole('button', { name: /^(立即启用|Enable now)$/ })
+  const installResult = await Promise.race([
+    enableNow.waitFor({ timeout: 120_000 }).then(() => 'ready'),
+    page.getByText(/(?:could not be installed|无法安装)/i).waitFor({ timeout: 120_000 }).then(() => 'failed'),
+  ])
+  assert.equal(installResult, 'ready', `Official plugin installation failed: ${await page.getByRole('dialog').last().innerText()}`)
+  await enableNow.click()
   await page.getByRole('button', { name: /^(返回插件列表|Back to plugins)$/ }).click()
   await card.waitFor()
   await page.waitForFunction(() => document.querySelector('[data-plugin-package="dsh-image-viewer"] [role="switch"]')?.getAttribute('aria-checked') === 'true')

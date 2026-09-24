@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "dshReviewedCommit": "46a7f68b0922371ce7144b668b90e377d8e799f4",
+  "historicalSessionMigration": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "Official 0.1.7-rc.1 rejects released subagent descriptor v2 sessions; see https://github.com/deepseek-ai/deepseek-harness/discussions/7576"
+  }
+}
