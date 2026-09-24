@@ -8,13 +8,18 @@ test('the explicit Beta install choice never offers a stale tag', async () => {
   const proxyValues = Object.fromEntries(proxyKeys.map(key => [key, process.env[key]]))
   let stable = '1.3.0'
   let beta = '1.4.0-beta.2'
+  let next = ''
   try {
     for (const key of proxyKeys) delete process.env[key]
     globalThis.fetch = async url => {
       const tag = new URL(url).pathname.split('/').at(-1)
-      const version = tag === 'latest' ? stable : beta
+      const version = tag === 'latest' ? stable : tag === 'beta' ? beta : next
       return version ? Response.json({ version }) : new Response('missing', { status: 404 })
     }
+    assert.deepEqual(await installVersions('dsh-example'), { stable, beta })
+    next = '1.4.0-beta.3'
+    assert.deepEqual(await installVersions('dsh-example'), { stable, beta: next })
+    next = '1.4.0-beta.1'
     assert.deepEqual(await installVersions('dsh-example'), { stable, beta })
     stable = '1.4.0'
     assert.deepEqual(await installVersions('dsh-example'), { stable, beta: null })

@@ -255,13 +255,17 @@ export function isPrereleaseVersion(version: string | null): boolean {
   return version !== null && (parseSemver(version)?.pre.length ?? 0) > 0
 }
 
-/** A beta install is an explicit choice only when it is newer than stable. */
+/** A preview install is an explicit choice only when it is newer than stable. */
 export async function installVersions(name: string): Promise<{ stable: string | null; beta: string | null }> {
-  const [stable, taggedBeta] = await Promise.all([fetchNpmLatest(name), tagVersion(name, DIST_TAG.beta)])
+  const [stable, taggedBeta, taggedNext] = await Promise.all([
+    fetchNpmLatest(name), tagVersion(name, DIST_TAG.beta), tagVersion(name, 'next'),
+  ])
+  const preview = [taggedBeta, taggedNext].reduce<string | null>((best, candidate) =>
+    candidate !== null && isPrereleaseVersion(candidate)
+      && (best === null || isUpgrade(best, candidate)) ? candidate : best, null)
   return {
     stable,
-    beta: stable !== null && taggedBeta !== null && isPrereleaseVersion(taggedBeta) && isUpgrade(stable, taggedBeta)
-      ? taggedBeta : null,
+    beta: stable !== null && preview !== null && isUpgrade(stable, preview) ? preview : null,
   }
 }
 
