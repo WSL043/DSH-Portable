@@ -14,11 +14,11 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 350000000,
-      "extractedBytesWithoutOfficeRuntime": 252000000,
-      "appBytesWithoutOfficeRuntime": 156000000,
+      "extractedBytesWithoutOfficeRuntime": 260000000,
+      "appBytesWithoutOfficeRuntime": 165000000,
       "speechRuntimeBytes": 24000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 228000000,
-      "appBytesWithoutOfficeAndSpeechRuntime": 132000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 237000000,
+      "appBytesWithoutOfficeAndSpeechRuntime": 141000000
     },
     "macos-x64": {
       "archiveBytes": 202000000,
@@ -29,9 +29,9 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 285000000,
-      "extractedBytesWithoutOfficeRuntime": 298000000,
+      "extractedBytesWithoutOfficeRuntime": 304000000,
       "speechRuntimeBytes": 38000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 260000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 266000000
     },
     "macos-arm64": {
       "archiveBytes": 191000000,
@@ -42,9 +42,9 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 275000000,
-      "extractedBytesWithoutOfficeRuntime": 290000000,
+      "extractedBytesWithoutOfficeRuntime": 296000000,
       "speechRuntimeBytes": 35000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 255000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 261000000
     },
     "linux-x64": {
       "archiveBytes": 169000000,
@@ -55,9 +55,9 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 200000000,
-      "extractedBytesWithoutOfficeRuntime": 374000000,
+      "extractedBytesWithoutOfficeRuntime": 380000000,
       "speechRuntimeBytes": 34000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 340000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 346000000
     },
     "linux-arm64": {
       "archiveBytes": 171000000,
@@ -68,9 +68,9 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 200000000,
-      "extractedBytesWithoutOfficeRuntime": 376000000,
+      "extractedBytesWithoutOfficeRuntime": 382000000,
       "speechRuntimeBytes": 41000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 335000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 341000000
     }
   }
 }
