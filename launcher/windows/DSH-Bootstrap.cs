@@ -39,9 +39,14 @@ namespace DshPortableBootstrap
         internal BootstrapActivityRing()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint, true);
+            TrackColor = Color.FromArgb(226, 228, 232);
+            IndicatorColor = Color.FromArgb(27, 28, 30);
             animationTimer = new System.Windows.Forms.Timer { Interval = 16, Enabled = true };
             animationTimer.Tick += delegate { rotation = (rotation + 7) % 360; Invalidate(); };
         }
+
+        internal Color TrackColor { get; set; }
+        internal Color IndicatorColor { get; set; }
 
         internal bool Indeterminate
         {
@@ -62,11 +67,11 @@ namespace DshPortableBootstrap
             float stroke = 2F;
             float diameter = Math.Max(2F, Math.Min(Width, Height) - stroke - 1F);
             RectangleF bounds = new RectangleF((Width - diameter) / 2F, (Height - diameter) / 2F, diameter, diameter);
-            using (Pen track = new Pen(Color.FromArgb(226, 228, 232), stroke)) eventArgs.Graphics.DrawEllipse(track, bounds);
+            using (Pen track = new Pen(TrackColor, stroke)) eventArgs.Graphics.DrawEllipse(track, bounds);
             float sweep = indeterminate ? 72F : value >= 100 ? 359.9F : Math.Max(0F, 360F * value / 100F);
             if (sweep > 0F)
             {
-                using (Pen indicator = new Pen(Color.FromArgb(27, 28, 30), stroke))
+                using (Pen indicator = new Pen(IndicatorColor, stroke))
                 {
                     indicator.StartCap = LineCap.Round;
                     indicator.EndCap = LineCap.Round;
@@ -1495,6 +1500,8 @@ namespace DshPortableBootstrap
                 titleLabel.ForeColor = ForeColor;
                 statusLabel.ForeColor = dark ? Color.FromArgb(178, 178, 184) : Color.FromArgb(92, 95, 101);
                 progressPercentLabel.ForeColor = statusLabel.ForeColor;
+                activityRing.TrackColor = dark ? Color.FromArgb(77, 77, 81) : Color.FromArgb(226, 228, 232);
+                activityRing.IndicatorColor = ForeColor;
                 actionButton.FlatStyle = FlatStyle.Flat;
                 actionButton.FlatAppearance.BorderColor = dark ? Color.FromArgb(77, 77, 81) : Color.FromArgb(202, 204, 208);
                 actionButton.BackColor = dark ? Color.FromArgb(48, 48, 51) : Color.White;

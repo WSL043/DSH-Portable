@@ -90,6 +90,62 @@ async function compileBootstrap(output) {
   ])
 }
 
+test('bootstrap update ring stays legible in both light and dark themes', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-ring-theme-'))
+  try {
+    const probe = path.join(root, 'theme-probe.cs')
+    const executable = path.join(root, 'theme-probe.exe')
+    await writeFile(probe, `
+using System;
+using System.Drawing;
+using System.IO;
+using System.Windows.Forms;
+namespace DshPortableBootstrap {
+  internal static class BootstrapThemeProbe {
+    [STAThread] private static void Main() {
+      Application.EnableVisualStyles();
+      Check(false);
+      Check(true);
+    }
+    private static void Check(bool dark) {
+      using (BootstrapWindow window = new BootstrapWindow(new BootstrapOptions {
+        Destination = Path.GetTempPath(), UpgradeExisting = true, DarkTheme = dark
+      })) {
+        BootstrapActivityRing ring = null;
+        foreach (Control control in window.Controls)
+          if (control is BootstrapActivityRing) ring = (BootstrapActivityRing)control;
+        if (ring == null) throw new Exception("Update ring is missing.");
+        ring.Indeterminate = false;
+        ring.Value = 46;
+        using (Bitmap bitmap = new Bitmap(20, 20)) {
+          ring.DrawToBitmap(bitmap, new Rectangle(0, 0, 20, 20));
+          Color foreground = bitmap.GetPixel(10, 2);
+          Color track = bitmap.GetPixel(2, 10);
+          int difference = Brightness(foreground) - Brightness(track);
+          if (dark ? difference < 200 : difference > -200)
+            throw new Exception("Update ring contrast is inverted for " + (dark ? "dark" : "light") + " theme: " + difference);
+        }
+      }
+    }
+    private static int Brightness(Color color) { return color.R + color.G + color.B; }
+  }
+}
+`)
+    await execFileAsync(cscPath(), [
+      '/nologo', '/target:exe', '/platform:x64', '/optimize+',
+      '/main:DshPortableBootstrap.BootstrapThemeProbe',
+      '/reference:System.dll', '/reference:System.Core.dll',
+      '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+      '/reference:System.Net.Http.dll', '/reference:System.Runtime.Serialization.dll',
+      '/reference:System.IO.Compression.dll',
+      `/out:${executable}`, source, probe,
+    ])
+    await execFileAsync(executable)
+  } finally {
+    await removeTestRoot(root)
+  }
+})
+
 async function compileHealthFixture(output, mode = 'ready') {
   const sourceFile = `${output}.cs`
   await writeFile(sourceFile, `
