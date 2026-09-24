@@ -70,3 +70,50 @@ test('market route lifecycle respects official enablement despite persisted lega
   assert.equal(writes, 0)
   dispose(); assert.equal(removed, 1)
 })
+
+test('modern inventory ignores stale market flags and rejects legacy enablement writes', async t => {
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises')
+  const { Readable } = await import('node:stream')
+  const { default: path } = await import('node:path')
+  const { default: os } = await import('node:os')
+  const { mountMarketRoutes } = await import('../app/vendor/dsh-portable-plugin-market/src/routes.ts')
+  const { writeMarketState } = await import('../app/vendor/dsh-portable-plugin-market/src/hot.ts')
+  const root = await mkdtemp(path.join(os.tmpdir(), 'market-modern-inventory-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'node_modules', 'example'), { recursive: true })
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({
+    dependencies: { example: '1.0.0' }, dsh: { profile: { bundles: [] } },
+  }))
+  await writeFile(path.join(root, 'node_modules', 'example', 'package.json'), JSON.stringify({
+    name: 'example', version: '1.0.0', dsh: {},
+  }))
+  writeMarketState(root, { disabled: new Set(['example']), groups: {}, groupOrder: [] })
+  const handlers = new Map()
+  const host = {
+    get: () => modern,
+    loader: { entries: () => [{ options: { name: 'example', id: 'example' }, fiber: {} }] },
+    plugin() { throw Error('unexpected hot mount') },
+    webServer: { register(route) { handlers.set(route.path, route.handler); return () => {} } },
+  }
+  const dispose = mountMarketRoutes(host, { profile: 'web', profileDirectory: root })
+  t.after(dispose)
+  function response() {
+    return { status: null, body: null, writeHead(status) { this.status = status },
+      end(body) { this.body = body ? JSON.parse(body) : null } }
+  }
+  const inventory = response()
+  await handlers.get('/dsh-market/installed')({ method: 'GET' }, inventory)
+  assert.equal(inventory.status, 200)
+  assert.deepEqual(inventory.body.disabled, [])
+  assert.equal(inventory.body.activation.example.state, 'live')
+
+  const headers = { origin: 'http://localhost:3080', host: 'localhost:3080' }
+  const toggle = response()
+  await handlers.get('/dsh-market/toggle')({ method: 'POST', headers }, toggle)
+  assert.equal(toggle.status, 409)
+  const groupToggle = response()
+  const request = Object.assign(Readable.from([JSON.stringify({ action: 'toggle', name: 'sample' })]),
+    { method: 'POST', headers })
+  await handlers.get('/dsh-market/groups')(request, groupToggle)
+  assert.equal(groupToggle.status, 409)
+})

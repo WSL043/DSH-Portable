@@ -101,6 +101,7 @@ function activationMeta(state: ActivationState, t: Translate): { label: string; 
   if (state === 'inert') return { label: t('stateInert'), dot: 'warning' }
   if (state === 'broken') return { label: t('stateBroken'), dot: 'error' }
   if (state === 'disabled') return { label: t('stateDisabled'), dot: 'warning' }
+  if (state === 'pending-disable') return { label: t('statePendingDisable'), dot: 'warning' }
   return { label: '—', dot: 'warning' }
 }
 

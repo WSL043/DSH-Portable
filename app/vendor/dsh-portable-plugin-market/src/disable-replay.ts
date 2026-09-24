@@ -4,17 +4,19 @@ export interface DisableReplayHost {
   on?(event: string, callback: (fiber: { entry?: { options?: { name?: string } } }) => void): () => void
 }
 
+/** Legacy market flags only own enablement when the official manager does not. */
+export function legacyOwnsPluginState(host: DisableReplayHost): boolean {
+  try {
+    const manager = host.get?.('pluginManager') as { listPlugins?: unknown; setPluginEnabled?: unknown } | undefined
+    return !(typeof manager?.listPlugins === 'function' && typeof manager?.setPluginEnabled === 'function')
+  } catch { return false } // Unknown ownership is not permission to overwrite it.
+}
+
 export function createLegacyDisableReplay(host: DisableReplayHost, disabled: Set<string>,
   setDisabled: (name: string) => Promise<unknown>, warn: (error: unknown) => void) {
   let disposed = false
   const pending = new Map<string, Promise<void>>()
-  const legacyOwnsState = () => {
-    if (disposed) return false
-    try {
-      const manager = host.get?.('pluginManager') as { listPlugins?: unknown; setPluginEnabled?: unknown } | undefined
-      return !(typeof manager?.listPlugins === 'function' && typeof manager?.setPluginEnabled === 'function')
-    } catch { return false } // Unknown ownership is not permission to overwrite it.
-  }
+  const legacyOwnsState = () => !disposed && legacyOwnsPluginState(host)
   const replay = (name: string): Promise<void> => {
     if (!legacyOwnsState() || !disabled.has(name)) return Promise.resolve()
     const current = pending.get(name)

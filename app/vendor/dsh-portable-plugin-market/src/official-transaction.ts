@@ -20,10 +20,16 @@ export interface OfficialTransactionRuntime extends PluginCommandRuntime {
   dispose(): Promise<void>
 }
 const loadOperations = async (): Promise<Operations> => {
+  // This host-owned package is absent from older DSH installations and from
+  // the market's standalone development dependencies. Resolve it only after
+  // the official manager has advertised the capability.
+  const operationsSpecifier: string = '@deepseek-ai/dsh-plugin-manager/operations'
   const [atomic, operations] = await Promise.all([
-    import('@deepseek-ai/dsh-atomic-write'), import('@deepseek-ai/dsh-plugin-manager/operations'),
+    import('@deepseek-ai/dsh-atomic-write'),
+    import(operationsSpecifier) as Promise<{ runProfilePnpm?: unknown }>,
   ])
-  return { withFileLock: atomic.withFileLock, runProfilePnpm: operations.runProfilePnpm }
+  if (typeof operations.runProfilePnpm !== 'function') throw new Error('Official plugin operations are unavailable')
+  return { withFileLock: atomic.withFileLock, runProfilePnpm: operations.runProfilePnpm as Operations['runProfilePnpm'] }
 }
 
 /** One official profile lock spans snapshots, pnpm, validation and rollback. */

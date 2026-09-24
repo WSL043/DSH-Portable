@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { awaitHotActivation, resolveProfileEntry } from '../app/vendor/dsh-portable-plugin-market/src/hot.ts'
+import { verifyActivation } from '../app/vendor/dsh-portable-plugin-market/src/verify.ts'
 import { mkdtemp, mkdir, writeFile, rm, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -39,4 +40,19 @@ test('rejected activation does not wait forever for teardown; successful mounts 
   }), /failed/)
   await awaitHotActivation({ async await() {}, dispose() { disposals++ } })
   assert.equal(disposals, 1)
+})
+
+test('a disabled plugin still running in the loader is reported as pending disable', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'market-pending-disable-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const packageDir = join(root, 'node_modules', 'sample-plugin')
+  await mkdir(packageDir, { recursive: true })
+  await writeFile(join(root, 'package.json'), JSON.stringify({ dsh: { profile: { bundles: [] } } }))
+  await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'sample-plugin', version: '1.0.0', dsh: {} }))
+  const pending = verifyActivation('web', 'sample-plugin', new Set(['sample-plugin']), root, true)
+  assert.equal(pending.state, 'pending-disable')
+  assert.equal(pending.hot, true)
+  const stopped = verifyActivation('web', 'sample-plugin', new Set(), root, true)
+  assert.equal(stopped.state, 'disabled')
+  assert.equal(stopped.hot, false)
 })

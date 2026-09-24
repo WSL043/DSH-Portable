@@ -31,7 +31,7 @@ import { listHotMounts, parseSimplePatch } from './hot.ts'
 import { isSafePackageRelativePath, resolvePackageRelativePath } from './package-path.ts'
 import { bundlePatchInsertedIds, hasDshManifest, hasLoadableEntry, profileDir, readInstalled } from './profile.ts'
 
-export type ActivationState = 'live' | 'restart' | 'inert' | 'broken' | 'missing' | 'disabled'
+export type ActivationState = 'live' | 'restart' | 'inert' | 'broken' | 'missing' | 'disabled' | 'pending-disable'
 
 export interface ActivationResult {
   state: ActivationState
@@ -141,26 +141,28 @@ export function verifyActivation(
     return { state: 'missing', reasons: ['未安装 / not installed'], bundle: inBundles, hot: false }
   }
 
-  // A user-disabled plugin reads as disabled, never as "restart to apply":
-  // the switch state (market disable list or the user patch layer) is the
-  // dominant fact, and the loader keeps it off on every boot.
+  const dir = join(activeProfileDir, 'node_modules', name)
+  const loaderLive = liveIncludes(live, name) || carriedRowLive(live, activeProfileDir, name)
+
+  // Persisted intent does not erase an entry that is still running in this
+  // process. The client or loader may need a refresh or restart to unload it.
   if (isDisabled) {
     return {
-      state: 'disabled',
-      reasons: ['已停用(市场开关或补丁层),重启后保持关闭 / disabled (market toggle or the patch layer) — stays off across restarts'],
+      state: loaderLive ? 'pending-disable' : 'disabled',
+      reasons: [loaderLive
+        ? '已请求停用，但当前进程仍在运行；请重启后确认 / disable requested, but still running in this process; restart and verify'
+        : '已停用(市场开关或补丁层),重启后保持关闭 / disabled (market toggle or the patch layer) — stays off across restarts'],
       bundle: inBundles,
-      hot: false,
+      hot: loaderLive,
     }
   }
 
-  const dir = join(activeProfileDir, 'node_modules', name)
   // OBSERVED beats INFERRED (#135): the loader inventory is ground truth, so
   // a package the loader is running is live no matter what its manifest says.
   // Plain library packages legitimately carry no `dsh` field and are still
   // loaded by name from a bundle patch — @deepseek-ai/dsh-tools is loaded by
   // the official dsh-base patch and has no `dsh` field at all — so this check
   // has to come before any manifest-based verdict.
-  const loaderLive = liveIncludes(live, name) || carriedRowLive(live, activeProfileDir, name)
   if (!hasDshManifest(dir)) {
     if (loaderLive) {
       return {

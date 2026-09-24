@@ -1,6 +1,6 @@
 import { profileRevision } from './profile-revision.ts'
 import { createOfficialTransactionRuntime, type OfficialTransactionRuntime } from './official-transaction.ts'
-import { createLegacyDisableReplay } from './disable-replay.ts'
+import { createLegacyDisableReplay, legacyOwnsPluginState } from './disable-replay.ts'
 /**
  * HTTP routes bridging the browser market UI to the host. This layer only
  * parses requests, calls the service modules, and serializes responses —
@@ -258,11 +258,12 @@ export function mountMarketRoutes(
   // Boot-time wipe: stale hot-mount inputs from a previous session must never
   // survive into a composition where the bundle layer already covers them.
   cleanHotDir(activeProfileDir)
-  // The user's persisted choices: the generic disable list (legacy
-  // disabledSkins loads transparently) plus custom groups. Every toggle,
-  // group, install and uninstall mutates this shared state and persists it.
+  // Keep legacy disable choices for older hosts and the user's custom groups.
+  // The official manager owns enablement on newer hosts; its inventory must
+  // not inherit a stale market disable flag.
   const marketState = readMarketState(activeProfileDir)
   const disabled = marketState.disabled
+  const marketDisabled = (name: string) => legacyOwnsPluginState(host) && disabled.has(name)
   /**
    * Packages whose host module was already running when its files were
    * replaced. This is process state: a real restart clears the stale module.
@@ -839,6 +840,10 @@ export function mountMarketRoutes(
         // the dsh CLI) that state.json never sees.
         const patch = readUserPatchState(userPatchPath)
         const patchFlags = packagePatchFlags(host, activeProfileDir, Object.keys(installed), patch)
+        // On newer DSH versions the official manager owns enablement. The
+        // market's old state.json is retained for rollback, not applied to
+        // the live inventory or exposed as the current switch position.
+        const legacyDisabled = legacyOwnsPluginState(host) ? disabled : new Set<string>()
         const activation: Record<string, ReturnType<typeof verifyActivation>> = {}
         const live = liveNames()
         for (const name of Object.keys(installed)) {
@@ -846,7 +851,7 @@ export function mountMarketRoutes(
             hasHostHalf(config.profile, name, activeProfileDir))) replacedWhileLive.add(name)
           activation[name] = activationAfterReplace(
             verifyActivation(config.profile, name, live, activeProfileDir,
-              disabled.has(name) || patchFlags.disabled.includes(name)),
+              legacyDisabled.has(name) || patchFlags.disabled.includes(name)),
             replacedWhileLive.has(name),
           )
         }
@@ -863,7 +868,7 @@ export function mountMarketRoutes(
           activation,
           diagnostics,
           live: listHotMounts(),
-          disabled: [...disabled],
+          disabled: [...legacyDisabled],
           groups,
           groupOrder,
           patch: { disables: patch.disables, forced: patch.forced, inserts: patch.inserts },
@@ -1041,6 +1046,10 @@ export function mountMarketRoutes(
           sendJson(response, 403, { error: 'untrusted origin' })
           return
         }
+        if (!legacyOwnsPluginState(host)) {
+          sendJson(response, 409, { error: '请在 DSH 官方插件页启用或停用插件 / Use the official DSH plugin manager to enable or disable plugins.' })
+          return
+        }
         try {
           await withMutationLock(response, 'write', async () => {
             const body = (await readJsonBody(request)) as { name?: unknown; enabled?: unknown }
@@ -1163,14 +1172,18 @@ export function mountMarketRoutes(
           return
         }
         try {
+          const body = (await readJsonBody(request)) as {
+            action?: unknown
+            name?: unknown
+            newName?: unknown
+            members?: unknown
+            enabled?: unknown
+          }
+          if (body.action === 'toggle' && !legacyOwnsPluginState(host)) {
+            sendJson(response, 409, { ok: false, error: '请在 DSH 官方插件页启用或停用插件 / Use the official DSH plugin manager to enable or disable plugins.' })
+            return
+          }
           await withMutationLock(response, 'write', async () => {
-            const body = (await readJsonBody(request)) as {
-              action?: unknown
-              name?: unknown
-              newName?: unknown
-              members?: unknown
-              enabled?: unknown
-            }
             const action = typeof body.action === 'string' ? body.action : ''
             const known = action === 'create' || action === 'rename' || action === 'delete'
               || action === 'set-members' || action === 'toggle'
@@ -1486,7 +1499,7 @@ export function mountMarketRoutes(
             // A client-only package has no host half to go stale: its bundle
             // is re-fetched from disk on the next page load, so an update to
             // one needs a refresh, not a restart.
-            const wasLive = verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)).state === 'live'
+            const wasLive = verifyActivation(config.profile, name, liveNames(), activeProfileDir, marketDisabled(name)).state === 'live'
               && hasHostHalf(config.profile, name, activeProfileDir)
             const beforeVersion = readInstalledVersion(config.profile, name, activeProfileDir)
             const beforeCommit = repoKey !== null
@@ -1664,7 +1677,7 @@ export function mountMarketRoutes(
               if (wasLive) replacedWhileLive.add(name)
               activation = {
                 [name]: activationAfterReplace(
-                  verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)),
+                  verifyActivation(config.profile, name, liveNames(), activeProfileDir, marketDisabled(name)),
                   wasLive,
                 ),
               }
@@ -2168,7 +2181,7 @@ export function mountMarketRoutes(
             // isDisabled comes from the patch layer (#130) — keep it while the
             // lock moves into withMutationLock (#125).
             const activation = {
-              [name]: verifyActivation(config.profile, name, liveNames(), activeProfileDir, disabled.has(name)),
+              [name]: verifyActivation(config.profile, name, liveNames(), activeProfileDir, marketDisabled(name)),
             }
             // Native addon libraries cannot be unloaded from this Node
             // process once required. Capture the evidence before removal so a
@@ -2542,7 +2555,7 @@ export function mountMarketRoutes(
                   activation = {}
                   const live = liveNames()
                   for (const name of added) {
-                    activation[name] = verifyActivation(config.profile, name, live, activeProfileDir, disabled.has(name))
+                    activation[name] = verifyActivation(config.profile, name, live, activeProfileDir, marketDisabled(name))
                   }
                 }
               }
