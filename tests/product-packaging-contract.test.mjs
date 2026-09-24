@@ -403,7 +403,7 @@ test('installable official updates use a short-lived PR, full product gates, and
   assert.match(workflow, /dependency-released/)
   assert.match(workflow, /cron:\s*['"]23 \*\/6 \* \* \*['"]/, 'official installable releases must be discovered without a weekly blind spot')
   assert.match(workflow, /workflow_dispatch:/)
-  assert.match(workflow, /node scripts\/update-upstream\.mjs/)
+  assert.match(workflow, /node scripts\/update-upstream\.mjs --latest/)
   assert.match(workflow, /npm ci --prefix app --ignore-scripts[\s\S]*npm test/)
   assert.match(workflow, /npm test/)
   assert.match(workflow, /automation\/verified-dependencies/)

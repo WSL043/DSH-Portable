@@ -80,7 +80,9 @@ jobs:
       - id: upstream
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: node scripts/update-upstream.mjs
+        # Stable dependency intake follows npm latest. Candidate releases use
+        # official-preview-watch.yml and must pass the candidate gate first.
+        run: node scripts/update-upstream.mjs --latest
       - name: Inspect default plugin releases without replacing reviewed pins
         run: node scripts/check-default-plugin-upstream.mjs --output default-plugin-intake.json
       - name: Retain default plugin intake evidence
