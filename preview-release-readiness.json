@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "46a7f68b0922371ce7144b668b90e377d8e799f4",
-  "dshNpmIntegrity": "sha512-O1K076aCmqE+h4fB5J+mi3twNSAnh26OqHepaqvS5f1tccFnxhVyGpUmjcncVM5x1SX4niznmvsGrsRo9p733A==",
+  "dshReviewedCommit": "477b4f420553e8a52c2fbccc464d7561b239c443",
+  "dshNpmIntegrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
   "historicalSessionMigration": {
     "status": "blocked",
     "evidence": null,
-    "reason": "Official 0.1.7-rc.1 rejects released subagent descriptor v2 sessions; see https://github.com/deepseek-ai/deepseek-harness/discussions/7576"
+    "reason": "Official 0.1.7-rc.2 still rejects released subagent descriptor v2 sessions; see https://github.com/deepseek-ai/deepseek-harness/discussions/7576"
   }
 }
