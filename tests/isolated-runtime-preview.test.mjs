@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
@@ -59,6 +59,26 @@ test('two previews receive independent identities and survive cache re-materiali
     await assert.rejects(prepareIsolatedRuntimePreview({ baseRoot: base,
       outputParent: path.join(base, 'bad-output'), replacements: [{ target, source: path.join(temporary, 'one.js') }],
     }), /disjoint/)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('a linked output parent cannot redirect preview writes into the source product', async t => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-link-boundary-'))
+  try {
+    const base = path.join(temporary, 'base')
+    const alias = path.join(temporary, 'alias')
+    await mkdir(base)
+    try { await symlink(base, alias, process.platform === 'win32' ? 'junction' : 'dir') }
+    catch (error) {
+      if (['EPERM', 'EACCES', 'ENOTSUP'].includes(error.code)) { t.skip('directory links are unavailable'); return }
+      throw error
+    }
+    await assert.rejects(prepareIsolatedRuntimePreview({ baseRoot: base,
+      outputParent: path.join(alias, 'nested'), replacements: [{ target: 'example.js', source: 'unused' }],
+    }), /disjoint/)
+    await assert.rejects(readFile(path.join(base, 'nested', 'anything')), { code: 'ENOENT' })
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

@@ -18,6 +18,21 @@ function isWithin(parent, child) {
   return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
 }
 
+async function canonicalFuturePath(requested) {
+  let existing = requested
+  const missing = []
+  while (true) {
+    try { return path.join(await realpath(existing), ...missing) }
+    catch (error) {
+      if (error.code !== 'ENOENT') throw error
+      const parent = path.dirname(existing)
+      if (parent === existing) throw error
+      missing.unshift(path.basename(existing))
+      existing = parent
+    }
+  }
+}
+
 function replacementPath(value) {
   if (typeof value !== 'string' || !/^[\w@.-][\w@./-]*$/.test(value)
     || value.split('/').some(segment => segment === '.' || segment === '..' || segment === '')) {
@@ -56,7 +71,8 @@ async function optionalCopy(source, target) {
 export async function prepareIsolatedRuntimePreview({ baseRoot, outputParent, replacements }) {
   const base = await realpath(path.resolve(baseRoot))
   const requestedParent = path.resolve(outputParent)
-  if (isWithin(base, requestedParent) || isWithin(requestedParent, base)) {
+  const prospectiveParent = await canonicalFuturePath(requestedParent)
+  if (isWithin(base, prospectiveParent) || isWithin(prospectiveParent, base)) {
     throw new Error('Preview output and source installation must be disjoint.')
   }
   await mkdir(requestedParent, { recursive: true })
