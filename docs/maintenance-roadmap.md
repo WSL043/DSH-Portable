@@ -7,10 +7,10 @@
 ## 2026-09-25 默认插件发布通道
 
 - 已发布的正式 Portable 0.7.4 使用独立的稳定锁：会话插件 1.5.1、图片插件 0.1.2，均为正式 npm 版本。候选产品锁中的 beta 是针对特定 DSH 候选内核的适配，不能当成正式用户的默认更新。
-- DSH 0.1.7-rc.2 的两款插件已在隔离官方宿主完成操作验收；会话插件 1.5.2-beta.5 已发布，图片插件 0.1.3-beta.3 按独立预览通道验收。不能因插件通过而绕过内核的历史会话迁移门槛。
+- DSH 0.1.7-rc.2 的两款插件已在隔离官方宿主完成操作验收，分别发布为[会话插件 1.5.2-beta.5](https://github.com/WSL043/dsh-chat-manager/releases/tag/v1.5.2-beta.5) 和[图片插件 0.1.3-beta.3](https://github.com/WSL043/dsh-image-viewer/releases/tag/v0.1.3-beta.3)，均保留在 npm 预览通道；正式版标签不变。图片插件的[发布验收](https://github.com/WSL043/dsh-image-viewer/actions/runs/36047381906)与[定时目标验收](https://github.com/WSL043/dsh-image-viewer/actions/runs/36048540671)通过；不能因插件通过而绕过内核的历史会话迁移门槛。
 - 正式插件晋级条件：确定要交付的正式 Portable 内核组合、对该组合的不可变插件包执行安装/更新/启停/卸载和核心交互验收、确认历史会话可读，再发布无预发布后缀的插件并更新稳定锁。正式 Portable 发布脚本现拒绝锁中含 beta 或缺失的默认插件，不依赖人工记忆。
 - `@deepseek-ai/dsh@0.1.7-alpha.1` 的公开 npm 包使用 `^0.1.7-alpha.1` 依赖范围；今天新装该包可解析到较新的 rc 子包。跨版本验收必须用锁定的实际产品包或精确依赖闭包，不能用这种漂移的 `pnpm dlx` 结果冒充原正式产品基线。
-- 官方 rc.2 的 [候选 PR #146](https://github.com/WSL043/DSH-Portable/pull/146) 已因历史会话迁移失败关闭。`rejected-official-candidates.json` 仅隔离这一份不可变 npm 包及其完整性摘要；定时发现仍会接收新的 rc/正式版本，同版本摘要若异常变化则报错，避免每轮重开被拒的 PR。
+- 官方 rc.2 的 [候选 PR #146](https://github.com/WSL043/DSH-Portable/pull/146) 已因历史会话迁移失败关闭。`rejected-official-candidates.json` 仅隔离这一份不可变 npm 包及其完整性摘要；[定时发现实跑](https://github.com/WSL043/DSH-Portable/actions/runs/36049263142)没有重开 PR。新的 rc/正式版本仍会进入审查，同版本摘要若异常变化则报错。
 
 ## 2026-09-24 维护检查点
 
