@@ -128,6 +128,10 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event('dsh-portable/refresh-plugins')))
   const restartToVerify = card.getByRole('button', { name: /^(重启后确认|Restart to verify)$/ })
   await restartToVerify.waitFor({ state: 'visible', timeout: 15_000 })
+  // Playwright's visible state includes elements below the viewport. Bring
+  // the action into view before hit-testing so a tall plugin list does not
+  // turn an offscreen button into a false overlay failure.
+  await restartToVerify.scrollIntoViewIfNeeded()
   const clickTargetIsButton = await restartToVerify.evaluate(button => {
     const bounds = button.getBoundingClientRect()
     return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === button
