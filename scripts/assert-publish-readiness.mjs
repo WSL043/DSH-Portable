@@ -3,34 +3,35 @@ import { pathToFileURL } from 'node:url'
 import { classifyProductVersion } from './version-policy.mjs'
 
 export function assertPublishReadiness({ productVersion, stableLock, previewLock, readiness }) {
-  if (!classifyProductVersion(productVersion).prerelease) {
+  const prerelease = classifyProductVersion(productVersion).prerelease
+  if (!prerelease) {
     const plugins = Object.values(stableLock?.defaultPlugins ?? {})
     if (plugins.length === 0 || plugins.some(plugin => plugin?.releaseChannel !== 'stable'
       || !/^\d+\.\d+\.\d+$/.test(plugin?.version ?? ''))) {
       throw new Error('Stable Portable publication requires reviewed stable versions of every default plugin.')
     }
-    return
   }
-  const commit = previewLock?.dsh?.reviewedCommit
+  const selectedLock = prerelease ? previewLock : stableLock
+  const commit = selectedLock?.dsh?.reviewedCommit
+  const integrity = selectedLock?.dsh?.npmIntegrity ?? selectedLock?.dsh?.integrity
   const migration = readiness?.historicalSessionMigration
-  if (!/^[a-f0-9]{40}$/.test(commit ?? '') || readiness?.schemaVersion !== 1
+  if (!/^[a-f0-9]{40}$/.test(commit ?? '') || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(integrity ?? '')
+    || readiness?.schemaVersion !== 1
     || readiness?.dshReviewedCommit !== commit
+    || readiness?.dshNpmIntegrity !== integrity
     || migration?.status !== 'passed'
     || typeof migration.evidence !== 'string' || !migration.evidence.trim()) {
-    throw new Error(`Candidate DSH ${previewLock?.dsh?.version ?? '<unknown>'} is not ready for publication: historical-session migration needs passing evidence tied to the exact reviewed core commit. ${migration?.reason ?? ''}`.trim())
+    throw new Error(`${prerelease ? 'Candidate' : 'Stable'} DSH ${selectedLock?.dsh?.version ?? '<unknown>'} is not ready for publication: historical-session migration needs passing evidence tied to the exact reviewed core commit and package. ${migration?.reason ?? ''}`.trim())
   }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const product = JSON.parse(await readFile(new URL('../package.json', import.meta.url)))
   const stableLock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url)))
-  if (classifyProductVersion(product.version).prerelease) {
-    const [previewLock, readiness] = await Promise.all([
-      readFile(new URL('../upstream.preview.lock.json', import.meta.url)).then(JSON.parse),
-      readFile(new URL('../preview-release-readiness.json', import.meta.url)).then(JSON.parse),
-    ])
-    assertPublishReadiness({ productVersion: product.version, stableLock, previewLock, readiness })
-  } else {
-    assertPublishReadiness({ productVersion: product.version, stableLock })
-  }
+  const prerelease = classifyProductVersion(product.version).prerelease
+  const [previewLock, readiness] = await Promise.all([
+    prerelease ? readFile(new URL('../upstream.preview.lock.json', import.meta.url)).then(JSON.parse) : null,
+    readFile(new URL(prerelease ? '../preview-release-readiness.json' : '../stable-release-readiness.json', import.meta.url)).then(JSON.parse),
+  ])
+  assertPublishReadiness({ productVersion: product.version, stableLock, previewLock, readiness })
 }

@@ -4,14 +4,16 @@ import test from 'node:test'
 import { assertPublishReadiness } from '../scripts/assert-publish-readiness.mjs'
 
 const commit = 'a'.repeat(40)
-const previewLock = { dsh: { version: '0.1.7-rc.1', reviewedCommit: commit } }
-const stableLock = { defaultPlugins: {
+const integrity = 'sha512-' + 'a'.repeat(86) + '=='
+const previewLock = { dsh: { version: '0.1.7-rc.1', reviewedCommit: commit, npmIntegrity: integrity } }
+const stableLock = { dsh: { version: '0.1.7-alpha.1', reviewedCommit: commit, integrity }, defaultPlugins: {
   imageViewer: { package: 'dsh-image-viewer', version: '0.1.2', releaseChannel: 'stable' },
   chatManager: { package: 'dsh-chat-manager', version: '1.5.1', releaseChannel: 'stable' },
 } }
 const passed = {
   schemaVersion: 1,
   dshReviewedCommit: commit,
+  dshNpmIntegrity: integrity,
   historicalSessionMigration: { status: 'passed', evidence: 'documented historical-data acceptance' },
 }
 
@@ -24,8 +26,13 @@ test('candidate publication requires historical-session evidence for its exact D
     ...passed,
     dshReviewedCommit: 'b'.repeat(40),
   } }), /exact reviewed core commit/)
+  assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5-alpha.1', previewLock, readiness: {
+    ...passed,
+    dshNpmIntegrity: 'sha512-' + 'b'.repeat(86) + '==',
+  } }), /exact reviewed core commit and package/)
   assert.doesNotThrow(() => assertPublishReadiness({ productVersion: '0.7.5-alpha.1', previewLock, readiness: passed }))
-  assert.doesNotThrow(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock, previewLock, readiness: null }))
+  assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock, readiness: null }), /historical-session migration/)
+  assert.doesNotThrow(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock, readiness: passed }))
 })
 
 test('stable Portable never publishes a beta default plugin', () => {
