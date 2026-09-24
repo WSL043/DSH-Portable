@@ -14,7 +14,7 @@ test('the explicit Beta install choice never offers a stale tag', async () => {
     globalThis.fetch = async url => {
       const tag = new URL(url).pathname.split('/').at(-1)
       const version = tag === 'latest' ? stable : tag === 'beta' ? beta : next
-      return version ? Response.json({ version }) : new Response('missing', { status: 404 })
+      return version ? Response.json({ name: 'dsh-example', version }) : new Response('missing', { status: 404 })
     }
     assert.deepEqual(await installVersions('dsh-example'), { stable, beta })
     next = '1.4.0-beta.3'
@@ -27,6 +27,18 @@ test('the explicit Beta install choice never offers a stale tag', async () => {
     assert.deepEqual(await installVersions('dsh-example'), { stable, beta: null })
     beta = ''
     assert.deepEqual(await installVersions('dsh-example'), { stable, beta: null })
+    beta = '1.5.0-beta.1'
+    const incompatible = new Set(['1.4.0'])
+    const preflight = (_name, version) => ({
+      status: incompatible.has(version) ? 'incompatible' : 'checked', mismatches: [],
+    })
+    assert.deepEqual(await installVersions('dsh-example', preflight), {
+      stable: null, beta, blockedStable: stable,
+    })
+    incompatible.add(beta)
+    assert.deepEqual(await installVersions('dsh-example', preflight), {
+      stable: null, beta: null, blockedStable: stable,
+    })
   } finally {
     globalThis.fetch = originalFetch
     for (const key of proxyKeys) {

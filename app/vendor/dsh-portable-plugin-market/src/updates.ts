@@ -8,6 +8,7 @@ import { DIST_TAG, type Channel } from './channels.ts'
 import { marketFetch } from './net.ts'
 import { profileDir, readInstalled, readInstalledVersion, readLockCommits } from './profile.ts'
 import { externalUpdateSource, githubRefOfTarget } from './sources.ts'
+import { assessPublishedManifest, preflightNpmUpdate, type Manifest } from './update-preflight.ts'
 
 export interface UpdateStatus {
   kind: 'github' | 'npm' | 'linked' | 'external'
@@ -238,11 +239,13 @@ const EXTRA_TAGS: Record<Channel, string[]> = {
   dev: [DIST_TAG.beta, DIST_TAG.dev],
 }
 
-/** One dist-tag's version, or null when it isn't published or can't be read. */
-async function tagVersion(name: string, tag: string): Promise<string | null> {
+/** One dist-tag's manifest, or null when it isn't published or can't be read. */
+async function tagManifest(name: string, tag: string): Promise<Manifest | null> {
   try {
-    const meta = (await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/${tag}`)) as { version?: string }
-    return typeof meta.version === 'string' ? meta.version : null
+    const meta = (await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/${tag}`)) as Manifest
+    // The version-only fallback preserves existing registry-mirror behavior;
+    // host compatibility stays unknown unless the full named manifest exists.
+    return typeof meta?.version === 'string' && (meta.name === undefined || meta.name === name) ? meta : null
   } catch {
     // An unpublished tag is the ordinary case for a channel nobody has cut
     // a build on yet, and a registry hiccup must not take the whole update
@@ -251,31 +254,40 @@ async function tagVersion(name: string, tag: string): Promise<string | null> {
   }
 }
 
+async function tagVersion(name: string, tag: string): Promise<string | null> {
+  return (await tagManifest(name, tag))?.version ?? null
+}
+
 export function isPrereleaseVersion(version: string | null): boolean {
   return version !== null && (parseSemver(version)?.pre.length ?? 0) > 0
 }
 
-/** A preview install is an explicit choice only when it is newer than stable. */
-export async function installVersions(name: string): Promise<{ stable: string | null; beta: string | null }> {
-  const [stable, taggedBeta, taggedNext] = await Promise.all([
-    fetchNpmLatest(name), tagVersion(name, DIST_TAG.beta), tagVersion(name, 'next'),
+/** Only offer releases whose declared host requirements this capsule can meet. */
+export async function installVersions(
+  name: string,
+  assess = assessPublishedManifest,
+): Promise<{ stable: string | null; beta: string | null; blockedStable?: string }> {
+  const [stableManifest, betaManifest, nextManifest] = await Promise.all([
+    tagManifest(name, DIST_TAG.stable), tagManifest(name, DIST_TAG.beta), tagManifest(name, 'next'),
   ])
-  const preview = [taggedBeta, taggedNext].reduce<string | null>((best, candidate) =>
-    candidate !== null && isPrereleaseVersion(candidate)
-      && (best === null || isUpgrade(best, candidate)) ? candidate : best, null)
+  const stable = stableManifest?.version ?? null
+  const previewManifest = [betaManifest, nextManifest].reduce<Manifest | null>((best, candidate) =>
+    candidate?.version && isPrereleaseVersion(candidate.version)
+      && (!best?.version || isUpgrade(best.version, candidate.version)) ? candidate : best, null)
+  const preview = previewManifest?.version ?? null
+  const stableCheck = stableManifest && stable ? assess(name, stable, stableManifest) : null
+  const previewCheck = previewManifest && preview ? assess(name, preview, previewManifest) : null
+  const compatibleStable = stableCheck?.status === 'incompatible' ? null : stable
   return {
-    stable,
-    beta: stable !== null && preview !== null && isUpgrade(stable, preview) ? preview : null,
+    stable: compatibleStable,
+    beta: stable !== null && preview !== null && isUpgrade(stable, preview)
+      && previewCheck?.status !== 'incompatible' ? preview : null,
+    ...(stableCheck?.status === 'incompatible' && stable !== null ? { blockedStable: stable } : {}),
   }
 }
 
 export async function fetchNpmLatest(name: string): Promise<string | null> {
-  try {
-    const meta = (await fetchJson(`https://registry.npmjs.org/${encodeURIComponent(name)}/latest`)) as { version?: string }
-    return typeof meta.version === 'string' ? meta.version : null
-  } catch {
-    return null
-  }
+  return tagVersion(name, DIST_TAG.stable)
 }
 
 /**
@@ -325,7 +337,10 @@ export async function checkUpdates(
         const channel = channelFor.get(name)
         const versions = channel === undefined ? await installVersions(name) : null
         const stable = versions === null ? await fetchNpmLatest(name) : versions.stable
-        const latest = channel === undefined ? stable : await versionOnChannel(name, channel, stable)
+        const channelLatest = channel === undefined ? stable : await versionOnChannel(name, channel, stable)
+        const latest = channelLatest !== null && channel !== undefined
+          && (await preflightNpmUpdate(name, channelLatest)).status === 'incompatible'
+          ? null : channelLatest
         // Forwards is an update; a difference in the other direction is a
         // channel switch and is reported as one, under its own field.
         const upgrade = isUpgrade(version, latest)

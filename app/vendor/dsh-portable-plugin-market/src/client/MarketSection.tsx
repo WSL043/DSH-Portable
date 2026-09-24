@@ -456,11 +456,13 @@ export function MarketSection(props: MarketSectionProps) {
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
   const [stableVersion, setStableVersion] = useState<string | null>(null)
   const [previewVersion, setPreviewVersion] = useState<string | null>(null)
+  const [blockedStableVersion, setBlockedStableVersion] = useState<string | null>(null)
   const officialInstallAvailable = Boolean(props.onOfficialInstall)
   useEffect(() => {
     let active = true
     setStableVersion(null)
     setPreviewVersion(null)
+    setBlockedStableVersion(null)
     if (!officialInstallAvailable || !confirming?.npm) return () => { active = false }
     fetch(`/dsh-market/install-versions?name=${encodeURIComponent(confirming.npm)}`, { cache: 'no-store' })
       .then(response => response.ok ? response.json() : null)
@@ -468,6 +470,7 @@ export function MarketSection(props: MarketSectionProps) {
         if (!active) return
         if (typeof body?.stable === 'string') setStableVersion(body.stable)
         if (typeof body?.beta === 'string') setPreviewVersion(body.beta)
+        if (typeof body?.blockedStable === 'string') setBlockedStableVersion(body.blockedStable)
       })
       .catch(() => {})
     return () => { active = false }
@@ -2515,14 +2518,18 @@ export function MarketSection(props: MarketSectionProps) {
                   {t('installPreview').replace('{0}', previewVersion)}
                 </Button>
               )}
-              <Button variant="primary" onClick={() => doInstall(confirming, previewVersion ? stableVersion ?? undefined : undefined)}>
-                {previewVersion && stableVersion
+              <Button variant="primary" disabled={blockedStableVersion !== null}
+                onClick={() => doInstall(confirming, previewVersion ? stableVersion ?? undefined : undefined)}>
+                {blockedStableVersion ? t('installStableBlocked') : previewVersion && stableVersion
                   ? t('installStableVersion').replace('{0}', stableVersion)
                   : previewVersion ? t('installStable') : t('confirmInstall')}
               </Button>
             </>
           )}
         >
+          {blockedStableVersion && (
+            <div className={css.banner}>{t('installStableHostMismatch').replace('{0}', blockedStableVersion)}</div>
+          )}
           {/* The detail dialog has to show at LEAST what the card already
               does — owner, downloads, stars, published date, category — a
               "detail" view that shows less than the summary it opened from

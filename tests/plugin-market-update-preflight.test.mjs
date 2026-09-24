@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { readFile } from 'node:fs/promises'
-import { assessUpdateRequirements, preflightNpmUpdate } from '../app/vendor/dsh-portable-plugin-market/src/update-preflight.ts'
+import { assessPublishedManifest, assessUpdateRequirements, preflightNpmUpdate } from '../app/vendor/dsh-portable-plugin-market/src/update-preflight.ts'
 
 test('confirmed target requirements use actual host and peer versions', () => {
   const manifest = { engines: { dsh: '>=2.0.0' }, peerDependencies: { '@deepseek-ai/dsh-settings': '^3.0.0', '@deepseek-ai/dsh-web': '^1.0.0' } }
@@ -14,6 +14,22 @@ test('unknown and optional requirements do not invent incompatibility', () => {
   assert.deepEqual(assessUpdateRequirements({ engines: { dsh: 'unknown-range' } }, '1.0.0', {}), [])
   assert.deepEqual(assessUpdateRequirements({ engines: { dsh: '>=2.0.0' } }, null, {}), [])
   assert.deepEqual(assessUpdateRequirements({ peerDependencies: { '@deepseek-ai/dsh-settings': '^9.0.0' }, peerDependenciesMeta: { '@deepseek-ai/dsh-settings': { optional: true } } }, '1.0.0', { '@deepseek-ai/dsh-settings': '1.0.0' }), [])
+})
+
+test('a DSH-injected client peer is required even when npm marks it optional', () => {
+  const manifest = {
+    name: 'dsh-chat-manager', version: '1.5.2-beta.5',
+    dsh: { client: { inject: ['@deepseek-ai/dsh-client-locale'] } },
+    peerDependencies: { '@deepseek-ai/dsh-client-locale': '0.1.7-rc.2' },
+    peerDependenciesMeta: { '@deepseek-ai/dsh-client-locale': { optional: true } },
+  }
+  const failures = assessUpdateRequirements(manifest, '0.1.7-alpha.1', {
+    '@deepseek-ai/dsh-client-locale': '0.1.7-alpha.1',
+  })
+  assert.deepEqual(failures.map(failure => failure.name), ['@deepseek-ai/dsh-client-locale'])
+  const host = version => ({ findHost: () => '/isolated/dsh', versionAt: () => version })
+  assert.equal(assessPublishedManifest(manifest.name, manifest.version, manifest, host('0.1.7-alpha.1')).status, 'incompatible')
+  assert.equal(assessPublishedManifest(manifest.name, manifest.version, manifest, host('0.1.7-rc.2')).status, 'checked')
 })
 
 test('metadata check requests the exact target and ignores mismatched registry responses', async () => {
