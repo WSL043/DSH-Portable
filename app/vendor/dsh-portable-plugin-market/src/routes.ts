@@ -295,23 +295,17 @@ export function mountMarketRoutes(
 
   let installing = false
   let restarting = false
-  // UI-state flags ONLY: mutual exclusion is enforced by withMutationLock
-  // below (one promise chain every mutating route appends to), never by
-  // these booleans — a promise-chain serialization cannot be raced by
-  // interleaved awaits, and a second mutating request answers 409
-  // immediately instead of queueing (issue #125 review).
+  // One synchronous reservation rejects a second route before either body
+  // is read. Modern hosts also acquire the official cross-process profile
+  // lock inside that interval; these flags expose the operation to the UI.
   let writing = false
   let mutationBusy = false
-  /** The shared mutation chain: every mutating operation appends to it. */
-  let mutationChain: Promise<unknown> = Promise.resolve()
 
   /**
    * Run a mutating operation under the shared mutation lock. `kind` selects
    * the UI busy flag (`install` = pnpm operation, `write` = direct profile
-   * write) and the 409 message. The operation runs only after every earlier
-   * mutation settled (promise chain); while one is in flight a second
-   * mutating request answers 409 immediately — the UI polls /status for the
-   * busy flag instead of queueing (issue #125 review).
+   * write) and the 409 message. A second request gets 409 immediately;
+   * there is no queue of hidden operations after a browser disconnects.
    * @returns the operation's value, or null when the lock was busy (409 sent).
    */
   async function withMutationLock<T>(
@@ -329,18 +323,14 @@ export function mountMarketRoutes(
     if (kind === 'install') installing = true
     else writing = true
     try {
-      const run = mutationChain.then(async () => {
-        const runtime = official()
-        if (!runtime) return fn()
-        try { return await runtime.withMutation(fn) }
-        catch (error) {
-          if ((error as { code?: string }).code !== 'PROFILE_BUSY') throw error
-          sendJson(response, 409, { error: 'Another plugin operation is running. Retry when it finishes. / 其他插件操作正在进行，请完成后重试。' })
-          return null
-        }
-      })
-      mutationChain = run.catch(() => undefined)
-      return await run
+      const runtime = official()
+      if (!runtime) return await fn()
+      try { return await runtime.withMutation(fn) }
+      catch (error) {
+        if ((error as { code?: string }).code !== 'PROFILE_BUSY') throw error
+        sendJson(response, 409, { error: 'Another plugin operation is running. Retry when it finishes. / 其他插件操作正在进行，请完成后重试。' })
+        return null
+      }
     } finally {
       mutationBusy = false
       if (kind === 'install') installing = false

@@ -491,6 +491,35 @@ test('an explicit npm update applies a fresh latest release in one request', asy
   assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], '^1.2.0')
 })
 
+test('a concurrent market mutation is rejected immediately and does not run later', async t => {
+  let entered, release
+  const inPackageWrite = new Promise(resolve => { entered = resolve })
+  const packageGate = new Promise(resolve => { release = resolve })
+  const bed = await updateTestbed(t, {
+    async onAdd({ manifestFile, profile }) {
+      entered()
+      await packageGate
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = '^1.2.0'
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.2.0')
+      return ok()
+    },
+  })
+  const first = bed.update()
+  await inPackageWrite
+  const rejected = await bed.update()
+  assert.equal(rejected.response.status, 409)
+  assert.match(rejected.body.error, /another install/)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 1)
+  release()
+  const applied = await first
+  assert.equal(applied.response.status, 200, JSON.stringify(applied.body))
+  assert.equal((await bed.update()).response.status, 200)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 1,
+    'the rejected request must not resume after the lock is released')
+})
+
 test('a fresh npm install applies the latest release in one request', async (t) => {
   const bed = await updateTestbed(t, {
     installed: false,
