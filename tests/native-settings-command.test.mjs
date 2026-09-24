@@ -73,6 +73,62 @@ test('alpha7 settings preserve official launcher toggles and focus restoration',
   assert.throws(() => patchNativeSettingsCommand(modern + upstream), /expected one recognized focus effect/)
 })
 
+test('rc2 settings bridge uses the official store and clears only a real close', () => {
+  const source = `function SettingsRoot(props) {
+\t\t\tconst { actions, open, activeId } = props;
+\t\t\tconst { close, openSection } = actions;
+            return null;
+          }`
+  const patched = patchNativeSettingsCommand(source)
+  assert.equal(patchNativeSettingsCommand(patched), patched)
+  assert.match(patched, /openSection\(event\.detail\.section\)/)
+  assert.ok(!patched.includes('setOpen('))
+  const saved = JSON.stringify({ open: true, section: 'plugins' })
+  const data = new Map([['dsh-portable-settings-view', saved]])
+  const events = new Map()
+  const calls = []
+  const effects = []
+  const ref = { current: false }
+  const window = {
+    addEventListener: (name, callback) => events.set(name, callback),
+    removeEventListener: (name, callback) => { if (events.get(name) === callback) events.delete(name) },
+    dispatchEvent: event => events.get(event.type)?.(event),
+  }
+  const context = {
+    react: { useRef: () => ref, useEffect: effect => effects.push(effect) },
+    sessionStorage: {
+      getItem: key => data.get(key) ?? null,
+      setItem: (key, value) => data.set(key, value),
+      removeItem: key => data.delete(key),
+    },
+    window,
+    Event,
+  }
+  vm.runInNewContext(`${patched}\nthis.SettingsRoot = SettingsRoot`, context)
+  const actions = { open: () => calls.push('open'), openSection: section => calls.push(section), close: () => calls.push('close') }
+  context.SettingsRoot({ actions, open: false, activeId: undefined })
+  assert.equal(effects.length, 2)
+  const cleanup = effects[0]()
+  effects[1]()
+  assert.deepEqual(calls, ['plugins'])
+  assert.equal(data.get('dsh-portable-settings-view'), saved)
+  window.dispatchEvent({ type: 'dsh-portable/open-settings', detail: { probe: true } })
+  assert.deepEqual(calls, ['plugins'])
+  window.__DSH_PORTABLE_SETTINGS__.open('portable-updates')
+  assert.deepEqual(calls, ['plugins', 'portable-updates'])
+  effects.length = 0
+  context.SettingsRoot({ actions, open: true, activeId: 'portable-updates' })
+  effects[1]()
+  assert.deepEqual(JSON.parse(data.get('dsh-portable-settings-view')), { open: true, section: 'portable-updates' })
+  effects.length = 0
+  context.SettingsRoot({ actions, open: false, activeId: undefined })
+  effects[1]()
+  assert.equal(data.has('dsh-portable-settings-view'), false)
+  cleanup()
+  assert.equal(window.__DSH_PORTABLE_SETTINGS__, undefined)
+  assert.equal(events.has('dsh-portable/open-settings'), false)
+})
+
 test('the native settings command opens Settings and removes its listener on cleanup', () => {
   const output = patchNativeSettingsCommand(upstream)
   const listeners = new Map()

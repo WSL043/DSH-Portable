@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "dshReviewedCommit": "c36a83ff6bb95e3f82cf79f9be7c724270a8aa61",
+  "dshNpmIntegrity": "sha512-fim76775kLyal0lLNmpktZfOiOwU0P9qdluknL5Sm3F6ax9I5PcLD0W0WzqH9tMOOY8yHya5VShuEzSSh223sw==",
+  "historicalSessionMigration": {
+    "status": "blocked",
+    "evidence": null,
+    "reason": "No exact-core historical descriptor-v2 migration acceptance is recorded for the next stable Portable release. Earlier published releases are unchanged."
+  }
+}

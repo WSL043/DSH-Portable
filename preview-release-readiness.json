@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "dshReviewedCommit": "46a7f68b0922371ce7144b668b90e377d8e799f4",
+  "dshNpmIntegrity": "sha512-O1K076aCmqE+h4fB5J+mi3twNSAnh26OqHepaqvS5f1tccFnxhVyGpUmjcncVM5x1SX4niznmvsGrsRo9p733A==",
   "historicalSessionMigration": {
     "status": "blocked",
     "evidence": null,
