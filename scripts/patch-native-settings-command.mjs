@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const MARKER = 'dsh-portable-native-settings-command-v3'
+const STORE_MARKER = 'dsh-portable-native-settings-store-command-v1'
 
 function replaceRequired(source, needle, replacement, label) {
   const matches = source.split(needle).length - 1
@@ -11,7 +12,49 @@ function replaceRequired(source, needle, replacement, label) {
 }
 
 export function patchNativeSettingsCommand(source) {
-  if (source.includes(MARKER)) return source
+  if (source.includes(MARKER) || source.includes(STORE_MARKER)) return source
+
+  // DSH rc.2 moved Settings state into a shared store. Use its public actions
+  // instead of rebuilding the removed local state/focus effect in Portable.
+  const storeSeam = '\t\t\tconst { close, openSection } = actions;'
+  if (source.includes(storeSeam)) {
+    const replacement = `${storeSeam}
+            /* ${STORE_MARKER} */
+            const portableRestoring = (0, react.useRef)(false);
+            (0, react.useEffect)(() => {
+                const openSettings = (event) => {
+                    if (event?.detail?.probe) return;
+                    if (typeof event?.detail?.section === "string") openSection(event.detail.section);
+                    else actions.open();
+                };
+                const api = { open: (section) => openSettings({ detail: { section } }) };
+                window.__DSH_PORTABLE_SETTINGS__ = api;
+                try {
+                    const saved = JSON.parse(sessionStorage.getItem("dsh-portable-settings-view") || "null");
+                    if (saved?.open === true) {
+                        portableRestoring.current = true;
+                        openSettings({ detail: { section: saved.section } });
+                    }
+                } catch {}
+                window.dispatchEvent(new Event("dsh-portable/settings-ready"));
+                window.addEventListener("dsh-portable/open-settings", openSettings);
+                return () => {
+                    if (window.__DSH_PORTABLE_SETTINGS__ === api) delete window.__DSH_PORTABLE_SETTINGS__;
+                    window.removeEventListener("dsh-portable/open-settings", openSettings);
+                };
+            }, [actions, openSection]);
+            (0, react.useEffect)(() => {
+                if (portableRestoring.current && !open) return;
+                portableRestoring.current = false;
+                try {
+                    if (open) sessionStorage.setItem("dsh-portable-settings-view", JSON.stringify({ open: true, section: activeId }));
+                    else sessionStorage.removeItem("dsh-portable-settings-view");
+                } catch {}
+            }, [open, activeId]);`
+    source = replaceRequired(source, storeSeam, replacement, 'official settings store seam changed upstream')
+    return source.replace('ctx.slots.entries("settings.section").map(',
+      'ctx.slots.entries("settings.section").filter((entry, index, all) => all.findIndex((candidate) => candidate.options.id === entry.options.id) === index).map(')
+  }
 
   const legacySeam = `\t\t\t(0, react.useEffect)(() => {
 \t\t\t\tif (wasOpen.current && !open) triggerButton.current?.focus();
