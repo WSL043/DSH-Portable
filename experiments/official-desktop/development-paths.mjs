@@ -1,5 +1,17 @@
-import { mkdirSync } from 'node:fs';
-import { isAbsolute, join, parse, resolve } from 'node:path';
+import { lstatSync, mkdirSync } from 'node:fs';
+import { dirname, isAbsolute, join, parse, resolve } from 'node:path';
+
+function assertUnredirectedDirectory(target) {
+  for (let current = target; ; current = dirname(current)) {
+    try {
+      const stat = lstatSync(current);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Development storage must be an unredirected directory: ${current}`);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+    if (dirname(current) === current) break;
+  }
+}
 
 // Development builds require an explicit, separate root. Never default to ~/.dsh.
 export function configureDevelopmentPaths(app, env = process.env) {
@@ -13,7 +25,11 @@ export function configureDevelopmentPaths(app, env = process.env) {
     userData: join(data, 'electron'), sessionData: join(data, 'electron'),
     logs: join(data, 'logs'), crashDumps: join(data, 'crash-dumps'),
   };
-  for (const path of new Set([...Object.values(paths), join(data, 'dsh-home')])) mkdirSync(path, { recursive: true });
+  const directories = new Set([...Object.values(paths), join(data, 'dsh-home')]);
+  // Check all existing ancestors before creating anything or changing Electron state.
+  // This is accidental-redirection protection, not a sandbox against concurrent local writers.
+  for (const path of directories) assertUnredirectedDirectory(path);
+  for (const path of directories) mkdirSync(path, { recursive: true });
   env.DSH_HOME = join(data, 'dsh-home');
   for (const [name, path] of Object.entries(paths)) app.setPath(name, path);
   app.setAppLogsPath(paths.logs);

@@ -62,7 +62,8 @@ export async function prepareDevelopment(inputs, output, profileName = 'alpha2')
   for (const name of Object.keys(profile.hashes)) files[name] = adaptDevelopmentSource(name, await readFile(join(inputs, name)), profileName);
   const helper = await readFile(new URL('./development-paths.mjs', import.meta.url), 'utf8');
   files['portable-development.ts'] = helper
-    .replace("import { mkdirSync }", "import type { App } from 'electron';\nimport { mkdirSync }")
+    .replace("import { lstatSync, mkdirSync }", "import type { App } from 'electron';\nimport { lstatSync, mkdirSync }")
+    .replace('assertUnredirectedDirectory(target)', 'assertUnredirectedDirectory(target: string)')
     .replace('configureDevelopmentPaths(app, env = process.env)', 'configureDevelopmentPaths(app: App, env: NodeJS.ProcessEnv = process.env)')
     .replace('app.setPath(name, path)', 'app.setPath(name as "userData" | "sessionData" | "logs" | "crashDumps", path)');
   await mkdir(output, { recursive: true });

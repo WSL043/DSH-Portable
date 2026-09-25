@@ -2,7 +2,7 @@
 
 ## RC.2 development line — 2026-09-26
 
-The same fail-closed adapter now accepts official commit `477b4f420553e8a52c2fbccc464d7561b239c443` with an explicit `rc2` profile. In an isolated checkout of that exact commit, copy only `apps/desktop/src/main.ts` and `update-coordinator.ts` into a new input directory, then run:
+The same fail-closed adapter now accepts official commit `477b4f420553e8a52c2fbccc464d7561b239c443` with an explicit `rc2` profile. In an isolated checkout of that exact commit, copy `apps/desktop/src/main.ts`, `apps/desktop/src/update-coordinator.ts`, and `apps/desktop/scripts/dev.ts` into a new flat input directory, then run:
 
 ```powershell
 node experiments/official-desktop/prepare-development.mjs <inputs> <new-output> rc2
