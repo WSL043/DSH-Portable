@@ -5,7 +5,7 @@ import { classifyProductVersion } from './version-policy.mjs'
 export function assertPublishReadiness({ productVersion, stableLock, previewLock, readiness }) {
   const policy = classifyProductVersion(productVersion)
   if (/^1\.0\.0-alpha\./.test(policy.version)) {
-    throw new Error('Portable 1.0.0 alpha is development-only: GitHub Releases and public update catalogs are disabled.')
+    throw new Error('Portable 1.0.0 alpha requires separate clean-install qualification; Native publication and public update catalogs are disabled.')
   }
   const prerelease = policy.prerelease
   if (!prerelease) {

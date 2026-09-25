@@ -1,4 +1,4 @@
-// Internal Windows sample: reviewed official runtime + separately compiled community shell.
+// Windows clean-install alpha: reviewed runtime + compiled community shell.
 // No official executable or updater feed is redistributed as our application identity.
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
@@ -27,12 +27,23 @@ const manifest = JSON.parse(await readFile(join(desktop, 'package.json'), 'utf8'
 if (manifest.version !== '0.1.7-rc.2') throw new Error('This internal sample requires the reviewed RC2 shell');
 const builtMain = await readFile(join(desktop, 'lib', 'main.js'));
 if (!builtMain.includes(Buffer.from('DSH_PORTABLE_DEVELOPMENT_ROOT'))) throw new Error('Portable path adapter was not compiled');
+const builtHost = await readFile(join(desktop, '..', 'desktop-host', 'lib', 'index.js'));
+if (!/args:\s*\[\s*"--no-open",\s*"--port",\s*"0"\s*\]/.test(builtHost.toString())) throw new Error('Portable ephemeral-port host adapter was not compiled');
 const require = createRequire(await realpath(join(desktop, 'node_modules', 'electron-builder', 'package.json')));
 const asar = createRequire(require.resolve('app-builder-lib'))('@electron/asar');
 // Both destinations must be fresh. Never consume or overwrite a user's existing installation.
 await mkdir(staging);
 await mkdir(output);
 asar.extractAll(sourceAsar, staging);
+const descriptorPath = join(staging, 'dsh', 'desktop-runtime.json');
+const descriptor = JSON.parse(await readFile(descriptorPath));
+const hostPath = 'node_modules/@deepseek-ai/dsh-desktop-host/lib/index.js';
+const hostRecord = descriptor.files.find(file => file.path === hostPath);
+if (!hostRecord || hostRecord.sha256 !== hash(await readFile(join(staging, 'dsh', hostPath)))) throw new Error('Original Desktop host does not match its runtime descriptor');
+await writeFile(join(staging, 'dsh', hostPath), builtHost);
+hostRecord.sha256 = hash(builtHost);
+hostRecord.bytes = builtHost.length;
+await writeFile(descriptorPath, JSON.stringify(descriptor, null, 2) + '\n');
 const unpackPackages = new Set();
 function collectUnpacked(node, prefix = '') {
   for (const [entry, child] of Object.entries(node.files ?? {})) {
@@ -69,9 +80,9 @@ await asar.createPackageWithOptions(staging, join(output, 'resources', 'app.asar
   unpackDir: `{${[...unpackPackages].sort().join(',')}}`,
 });
 const evidence = { ...development, coreVersion: manifest.version, sourceArchiveSha256: sourceHash,
-  compiledMainSha256: hash(builtMain), appArchiveSha256: hash(await readFile(join(output, 'resources', 'app.asar'))),
+  compiledMainSha256: hash(builtMain), compiledHostSha256: hash(builtHost), hostAdaptation: 'OS-assigned loopback port', appArchiveSha256: hash(await readFile(join(output, 'resources', 'app.asar'))),
   executableSha256: hash(await readFile(join(output, 'DSH-Portable-Alpha.exe'))),
-  buildIdentity: 'community-development', acceptance: 'pending', publicRelease: false };
+  buildIdentity: 'community-development', acceptance: 'requires-release-qualification', publicRelease: development.publicRelease };
 await writeFile(join(output, 'development.json'), JSON.stringify(evidence, null, 2) + '\n');
-await writeFile(join(output, 'README.txt'), `DSH-Portable ${development.version} — 内部开发版\r\n\r\n双击 DSH-Portable-Alpha.exe。数据保存在本目录 data 下，移动时请先退出整个应用。\r\n这是独立社区实验构建，内核与桌面代码基于官方 ${manifest.version}；不是官方签名发行版。\r\n公开更新已关闭。不导入原有重要数据；旧会话迁移与完整更新恢复仍未完成。\r\n模型权重不随包提供；账号登录和联网模型仍需要网络。\r\n\r\n验收结果见同目录的验收说明；development.json 记录程序来源及摘要。\r\n`);
+await writeFile(join(output, 'README.txt'), `DSH-Portable ${development.version} — Windows x64 Alpha\r\n\r\n解压到全新文件夹，双击 DSH-Portable-Alpha.exe。未配置账号时可选“稍后配置”。\r\n不要覆盖旧 Portable，也不要复制旧 data：本 Alpha 不支持旧数据迁移。\r\n数据保存在本目录 data 下；搬动文件夹前请从“应用”菜单退出整个程序。\r\n这是独立社区实验构建，内核与桌面代码基于官方 ${manifest.version}；不是官方签名发行版。\r\n自动更新关闭：后续版本请按对应发行说明手动安装，勿运行官方安装器覆盖本目录。\r\n未承诺跨机器保留登录态，换机器可能需重新登录。模型权重不随包提供，联网服务仍需要网络。\r\n使用官方插件页面；原 Native 版的 Portable 增强、完整更新恢复、存储清理和体积优化尚在开发。\r\n账号登录、默认插件完整功能和跨机器场景未完成验收。不要用于唯一一份重要数据。\r\n\r\nExtract into a NEW folder. Do not overwrite an older Portable installation or import its data.\r\nCommunity alpha; automatic updates and legacy migration are not supported.\r\n\r\n验收范围与已知限制见发行说明。development.json 记录来源摘要。\r\n`);
 console.log(JSON.stringify({ output, ...evidence }));

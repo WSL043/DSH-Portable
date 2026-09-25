@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { configureDevelopmentPaths } from '../experiments/official-desktop/development-paths.mjs';
@@ -22,6 +22,7 @@ test('each development launch derives Electron and DSH storage from its current 
     const env = { DSH_PORTABLE_DEVELOPMENT_ROOT: join(temporary, name), DSH_HOME: 'do-not-reuse-production' };
     configureDevelopmentPaths(app, env);
     assert.equal(env.DSH_HOME, join(temporary, name, 'data', 'dsh-home'));
+    assert.equal(env.pnpm_config_store_dir, join(temporary, name, 'data', 'pnpm-store'));
     assert.equal(paths.userData, join(temporary, name, 'data', 'electron'));
     assert.equal(paths.sessionData, paths.userData);
     assert.equal(paths.logs, paths.appLogs);
@@ -33,6 +34,34 @@ test('source adapter refuses unknown or modified official files before writing',
   assert.throws(() => adaptDevelopmentSource('unknown.ts', Buffer.from('')), /Unreviewed/);
   assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream'), 'rc2'), /Unreviewed/);
   assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream'), 'future'), /Unknown official desktop profile/);
+});
+
+test('alpha rejects foreign data without mutating it and resumes its own moved data', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-alpha-layout-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = { isReady: () => false, setPath: () => {}, setAppLogsPath: () => {} };
+  const old = join(root, 'old');
+  mkdirSync(join(old, 'data'), { recursive: true });
+  writeFileSync(join(old, 'data', 'important.txt'), 'keep');
+  assert.throws(() => configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: old }), /fresh folder/);
+  assert.equal(readFileSync(join(old, 'data', 'important.txt'), 'utf8'), 'keep');
+  assert.equal(existsSync(join(old, 'data', 'electron')), false);
+  const first = join(root, 'first');
+  configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: first });
+  const modules = join(first, 'data', 'dsh-home', 'profiles', 'desktop', 'node_modules');
+  mkdirSync(modules, { recursive: true });
+  writeFileSync(join(modules, '.modules.yaml'), JSON.stringify({
+    packageManager: 'pnpm@11.7.0', nodeLinker: 'hoisted',
+    storeDir: join(first, 'data', 'pnpm-store', 'v11'), virtualStoreDir: join(modules, '.pnpm'),
+  }));
+  const moved = join(root, 'moved');
+  renameSync(first, moved);
+  assert.equal(configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: moved }).root, moved);
+  const relocated = JSON.parse(readFileSync(join(moved, 'data', 'dsh-home', 'profiles', 'desktop', 'node_modules', '.modules.yaml')));
+  assert.equal(relocated.storeDir, join(moved, 'data', 'pnpm-store', 'v11'));
+  assert.equal(relocated.virtualStoreDir, join(moved, 'data', 'dsh-home', 'profiles', 'desktop', 'node_modules', '.pnpm'));
+  writeFileSync(join(moved, 'data', 'portable-alpha.json'), '{"schemaVersion":999}');
+  assert.throws(() => configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: moved }), /Unsupported/);
 });
 
 test('standalone alpha derives its data root from the executable instead of the working directory', t => {
@@ -47,6 +76,22 @@ test('standalone alpha derives its data root from the executable instead of the 
   assert.equal(result.root, root);
   assert.equal(paths.userData, join(root, 'data', 'electron'));
   assert.equal(env.DSH_HOME, join(root, 'data', 'dsh-home'));
+});
+
+test('moving refuses an unmanaged dependency store without rewriting metadata', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-alpha-foreign-store-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = { isReady: () => false, setPath: () => {}, setAppLogsPath: () => {} };
+  const first = join(root, 'first');
+  configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: first });
+  const modules = join(first, 'data', 'dsh-home', 'profiles', 'desktop', 'node_modules');
+  mkdirSync(modules, { recursive: true });
+  const before = JSON.stringify({ packageManager: 'pnpm@11.7.0', nodeLinker: 'hoisted', storeDir: join(root, 'external') });
+  writeFileSync(join(modules, '.modules.yaml'), before);
+  const moved = join(root, 'moved');
+  renameSync(first, moved);
+  assert.throws(() => configureDevelopmentPaths(app, { DSH_PORTABLE_DEVELOPMENT_ROOT: moved }), /outside the managed/);
+  assert.equal(readFileSync(join(moved, 'data', 'dsh-home', 'profiles', 'desktop', 'node_modules', '.modules.yaml'), 'utf8'), before);
 });
 
 test('redirected storage is rejected before any directories or application state change', t => {

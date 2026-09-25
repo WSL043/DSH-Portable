@@ -1,6 +1,6 @@
 {
   "version": "1.0.0-alpha.1",
-  "distribution": "development-only",
-  "publicRelease": false,
+  "distribution": "clean-install-alpha",
+  "publicRelease": true,
   "publicUpdates": false
 }

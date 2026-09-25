@@ -35,7 +35,8 @@ export function adaptDevelopmentSource(name, input, profileName = 'alpha2') {
   if (sha(input) !== profile.hashes[name]) throw new Error(`Unreviewed official desktop source: ${name}`);
   let source = input.toString();
   if (name === 'main.ts') {
-    source = replaceOnce(source, "let focusPrimaryWindow = (): void => {}", "import { configureDevelopmentPaths } from './portable-development.ts'\nconfigureDevelopmentPaths(app)\n\nlet focusPrimaryWindow = (): void => {}");
+    source = replaceOnce(source, "let focusPrimaryWindow = (): void => {}", "import { configureDevelopmentPaths } from './portable-development.ts'\ntry { configureDevelopmentPaths(app) } catch (error) {\n  dialog.showErrorBox('DSH-Portable Alpha', error instanceof Error ? error.message : String(error))\n  app.exit(1)\n  throw error\n}\n\nlet focusPrimaryWindow = (): void => {}");
+    source = replaceOnce(source, 'app.setAppLogsPath()', '// Portable has already configured its log directory.');
     source = replaceOnce(source,
       "  const developmentPolicy = app.isPackaged ? undefined : process.env.DSH_DESKTOP_MANDATORY_UPDATE_CONFIG\n  const policyInput: unknown = app.isPackaged\n    ? ('dshMandatoryUpdatePolicy' in manifest ? manifest.dshMandatoryUpdatePolicy : undefined)\n    : developmentPolicy === undefined ? undefined : JSON.parse(developmentPolicy) as unknown\n  const policyConfig = resolveDesktopPolicyConfig(policyInput, !app.isPackaged)",
       "  // Portable development has no official installer or mandatory-update owner.\n  const policyConfig = resolveDesktopPolicyConfig(undefined, !app.isPackaged)");
@@ -62,14 +63,14 @@ export async function prepareDevelopment(inputs, output, profileName = 'alpha2')
   for (const name of Object.keys(profile.hashes)) files[name] = adaptDevelopmentSource(name, await readFile(join(inputs, name)), profileName);
   const helper = await readFile(new URL('./development-paths.mjs', import.meta.url), 'utf8');
   files['portable-development.ts'] = helper
-    .replace("import { lstatSync, mkdirSync }", "import type { App } from 'electron';\nimport { lstatSync, mkdirSync }")
+    .replace("import { lstatSync,", "import type { App } from 'electron';\nimport { lstatSync,")
     .replace('assertUnredirectedDirectory(target)', 'assertUnredirectedDirectory(target: string)')
     .replace('configureDevelopmentPaths(app, env = process.env)', 'configureDevelopmentPaths(app: App, env: NodeJS.ProcessEnv = process.env)')
     .replace('app.setPath(name, path)', 'app.setPath(name as "userData" | "sessionData" | "logs" | "crashDumps", path)');
   await mkdir(output, { recursive: true });
   for (const [name, source] of Object.entries(files)) await writeFile(join(output, name), source);
   const development = JSON.parse(await readFile(new URL('./development-channel.json', import.meta.url), 'utf8'));
-  const report = { commit: profile.commit, channel: 'development-only', development, qualified: false,
+  const report = { commit: profile.commit, channel: development.distribution, development, qualified: false,
     inputs: profile.hashes, outputs: Object.fromEntries(Object.entries(files).map(([name, source]) => [name, sha(source)])),
     limits: ['Not a distributable product', 'Full host and plugin acceptance pending', 'Cross-machine encrypted state not qualified'] };
   await writeFile(join(output, 'provenance.json'), JSON.stringify(report, null, 2) + '\n');

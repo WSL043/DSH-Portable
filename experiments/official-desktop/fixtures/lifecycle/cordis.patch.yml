@@ -1,0 +1,3 @@
+- insert:
+    - id: portable-acceptance-fixture
+      name: dsh-portable-acceptance-fixture

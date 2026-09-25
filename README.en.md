@@ -142,6 +142,8 @@ The close button sends the app to the system tray by default, so an active task 
 
 ## Downloads
 
+[Try 1.0.0-alpha.1 · Electron (Windows x64)](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.1): fresh-folder preview only, without legacy migration or automatic updates. Use the stable downloads below for everyday work.
+
 ### Windows
 
 | Choose this when… | Download |
