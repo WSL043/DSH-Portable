@@ -1,7 +1,8 @@
 param(
   [Parameter(Mandatory=$true)][string]$Exe,
   [Parameter(Mandatory=$true)][string]$Arguments,
-  [int]$Milliseconds = 30000
+  [int]$Milliseconds = 30000,
+  [int]$CloseAfterMilliseconds = 0
 )
 
 # Keep native Desktop probes on a private Windows desktop and in disposable data roots.
@@ -18,6 +19,7 @@ foreach ($name in @('APPDATA', 'LOCALAPPDATA')) {
 }
 if ($Exe -notmatch '^[A-Za-z]:[\\/]' -or -not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw 'The executable must be an existing absolute path on a fixed drive' }
 if ($Milliseconds -lt 1000 -or $Milliseconds -gt 120000) { throw 'Milliseconds must be between 1000 and 120000' }
+if ($CloseAfterMilliseconds -lt 0 -or $CloseAfterMilliseconds -ge $Milliseconds) { throw 'CloseAfterMilliseconds must be zero or less than Milliseconds' }
 
 Add-Type -TypeDefinition @'
 using System;
@@ -26,6 +28,29 @@ using System.Runtime.InteropServices;
 using System.Text;
 
 public static class HiddenDesktopProcess {
+  public delegate bool EnumWindow(IntPtr window, IntPtr parameter);
+  [DllImport("user32.dll", SetLastError=true)] public static extern bool EnumDesktopWindows(IntPtr desktop, EnumWindow callback, IntPtr parameter);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr window, out uint process);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+  [DllImport("user32.dll", SetLastError=true)] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+  public static int RequestWindowClose(IntPtr desktop, uint process) {
+    int sent = 0;
+    int error = 0;
+    EnumWindow callback = (window, parameter) => {
+      uint owner;
+      GetWindowThreadProcessId(window, out owner);
+      if (owner == process && IsWindowVisible(window)) {
+        if (!PostMessage(window, 0x0010, IntPtr.Zero, IntPtr.Zero)) { error = Marshal.GetLastWin32Error(); return false; }
+        sent++;
+      }
+      return true;
+    };
+    bool enumerated = EnumDesktopWindows(desktop, callback, IntPtr.Zero);
+    GC.KeepAlive(callback);
+    if (error != 0) throw new Win32Exception(error);
+    if (!enumerated) throw new Win32Exception(Marshal.GetLastWin32Error());
+    return sent;
+  }
   [StructLayout(LayoutKind.Sequential, CharSet=CharSet.Unicode)]
   public struct STARTUPINFO {
     public int cb;
@@ -74,10 +99,20 @@ try {
   if (-not [HiddenDesktopProcess]::AssignProcessToJobObject($job, $pi.hProcess)) { throw "AssignProcessToJobObject failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
   if ([HiddenDesktopProcess]::ResumeThread($pi.hThread) -eq [uint32]::MaxValue) { throw "ResumeThread failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
   Write-Output "hidden-desktop pid=$($pi.dwProcessId) name=$desktopName"
-  $wait = [HiddenDesktopProcess]::WaitForSingleObject($pi.hProcess, [uint32]$Milliseconds)
+  $closeRequests = 0
+  if ($CloseAfterMilliseconds -gt 0) {
+    $wait = [HiddenDesktopProcess]::WaitForSingleObject($pi.hProcess, [uint32]$CloseAfterMilliseconds)
+    if ($wait -eq 258) {
+      $closeRequests = [HiddenDesktopProcess]::RequestWindowClose($desktop, [uint32]$pi.dwProcessId)
+      $wait = [HiddenDesktopProcess]::WaitForSingleObject($pi.hProcess, [uint32]($Milliseconds - $CloseAfterMilliseconds))
+    }
+  } else {
+    $wait = [HiddenDesktopProcess]::WaitForSingleObject($pi.hProcess, [uint32]$Milliseconds)
+  }
   [uint32]$exitCode = 0
   [HiddenDesktopProcess]::GetExitCodeProcess($pi.hProcess, [ref]$exitCode) | Out-Null
   Write-Output "wait=$wait exit=$exitCode"
+  [pscustomobject]@{ processId=$pi.dwProcessId; closeRequests=$closeRequests; exitedBeforeCleanup=($wait -eq 0); exitCode=$exitCode; forcedCleanup=($wait -ne 0) } | ConvertTo-Json -Compress
 } finally {
   [HiddenDesktopProcess]::TerminateJobObject($job, 0) | Out-Null
   if ($pi.hThread -ne [IntPtr]::Zero) { [HiddenDesktopProcess]::CloseHandle($pi.hThread) | Out-Null }
