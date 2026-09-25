@@ -1,5 +1,18 @@
 # Official desktop boundary prototype
 
+## RC.2 development line — 2026-09-26
+
+The same fail-closed adapter now accepts official commit `477b4f420553e8a52c2fbccc464d7561b239c443` with an explicit `rc2` profile. In an isolated checkout of that exact commit, copy only `apps/desktop/src/main.ts` and `update-coordinator.ts` into a new input directory, then run:
+
+```powershell
+node experiments/official-desktop/prepare-development.mjs <inputs> <new-output> rc2
+node experiments/official-desktop/verify-development.mjs <new-output>
+```
+
+The generated `main.ts`, `update-coordinator.ts`, `portable-development.ts`, and `dev.ts` can be applied only to that disposable upstream checkout (`dev.ts` belongs in `apps/desktop/scripts`, the others in `apps/desktop/src`). Full source and desktop builds passed on Windows. With the official Electron 44 runtime, the adapted real development host launched on a separate Windows desktop, rendered Welcome, and retained a synthetic localStorage marker after its isolated data directory moved. Signed packaged launch, offline tasks, account credentials and plugin operations remain open. The signed official installer was inspected separately and was not modified. Evidence and updater ownership limits: [rc.2 probe](../../docs/official-desktop-rc2-probe.md).
+
+`launch-hidden-windows.ps1` runs a disposable executable on a private Windows desktop, starts it suspended, assigns it to a job, and terminates that job after a bounded interval. It requires `DSH_PORTABLE_DEVELOPMENT_ROOT`, `APPDATA`, and `LOCALAPPDATA` to point inside one isolated root. Use a unique local CDP port and `probe-welcome.mjs <port> readiness|set-marker|get-marker` while the process runs; the probe also requires `DSH_OFFICIAL_DESKTOP_APP_ROOT` and only accepts that checkout's exact Welcome URL. Never point these probes at an existing Portable or Desktop profile. The helper does not exercise graceful application shutdown.
+
 ## Alpha.2 development adapter — 2026-09-18
 
 `prepare-development.mjs` now generates source overlays for the reviewed official commit `ddefc45fbc7f8e46dd73185e68295696d1297887`. It checks the exact SHA-256 of both upstream inputs before writing and refuses a nonempty output directory. This is a development implementation, not a downloadable or qualified desktop edition.

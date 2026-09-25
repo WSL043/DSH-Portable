@@ -31,4 +31,6 @@ test('each development launch derives Electron and DSH storage from its current 
 test('source adapter refuses unknown or modified official files before writing', () => {
   assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream')), /Unreviewed/);
   assert.throws(() => adaptDevelopmentSource('unknown.ts', Buffer.from('')), /Unreviewed/);
+  assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream'), 'rc2'), /Unreviewed/);
+  assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream'), 'future'), /Unknown official desktop profile/);
 });
