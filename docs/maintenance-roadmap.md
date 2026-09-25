@@ -4,6 +4,8 @@
 这是实施建议，不代表下面的能力均已实现，也不授权自动发布。
 历史验收记录继续保留；后续计划以本文件为入口，完成项附实际提交与证据。
 
+2026-09-26：后续投入与退出原则统一到[Portable 长期架构](portable-long-term-architecture.md)。该设计承接本清单的 A/T/U/S/Q 任务，不把研究结论标为功能完成；优先旧环境安全升级，再推进隔离 Electron 原型、官方能力接管和空间回收。
+
 当前产品路线以 [2026-09-25 官方桌面决策](official-desktop-readiness.md#2026-09-25产品路线决定)为准：Windows/macOS 的下一代目标是官方 Desktop 底座的便携化；[Electron rc.2 开发线](official-desktop-rc2-probe.md)已并行启动。旧会话迁移与插件操作仍阻断当前产品发布，现有 Native 宿主继续交付正式版及 Linux。
 
 ## 2026-09-25 默认插件发布通道
