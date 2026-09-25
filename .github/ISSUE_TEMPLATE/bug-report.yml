@@ -17,10 +17,17 @@ body:
   - type: input
     id: version
     attributes:
-      label: DSH-Portable 版本 / Version
-      placeholder: 例如 / e.g. 0.2.2
+      label: DSH-Portable 产品版本 / Product version
+      description: 在设置 → Portable 的更新页查看；请勿填写 DSH 内核版本。 / Find it in Settings → Portable → Updates; do not enter the DSH core version here.
+      placeholder: 例如 / e.g. 0.7.4
     validations:
       required: true
+  - type: input
+    id: core-version
+    attributes:
+      label: DSH 内核版本 / Core version
+      description: 在同一更新页的 DeepSeek Harness 区域查看。 / Find it under DeepSeek Harness on the same Updates page.
+      placeholder: 例如 / e.g. 0.1.7-alpha.1
   - type: textarea
     id: problem
     attributes:
@@ -32,6 +39,7 @@ body:
     id: steps
     attributes:
       label: 复现步骤 / Steps to reproduce
+      description: 请说明问题发生在启动时还是执行任务时，以及出现前刚安装、更新或启停了哪些插件。 / State whether this happens at startup or during a task, and which plugins were just installed, updated, enabled, or disabled.
       placeholder: "1. ...\n2. ...\n3. ..."
     validations:
       required: true
@@ -39,7 +47,7 @@ body:
     id: details
     attributes:
       label: 日志或截图 / Logs or screenshots
-      description: 可选。请先删除私人信息。 / Optional. Remove private information first.
+      description: 可选。主界面打不开时，完全退出后运行根目录 DSH-Recovery.exe，选 4 导出支持报告。上传前检查并删除私人信息；不要上传原始会话或凭据。 / Optional. If the workspace will not open, quit fully and use option 4 in DSH-Recovery.exe at the package root. Review and remove private information before attaching the support report; do not upload raw sessions or credentials.
   - type: checkboxes
     id: privacy
     attributes:
