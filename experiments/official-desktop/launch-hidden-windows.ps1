@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory=$true)][string]$Exe,
   [Parameter(Mandatory=$true)][string]$Arguments,
   [int]$Milliseconds = 30000,
-  [int]$CloseAfterMilliseconds = 0
+  [int]$CloseAfterMilliseconds = 0,
+  [switch]$UseExecutableRoot
 )
 
 # Keep native Desktop probes on a private Windows desktop and in disposable data roots.
@@ -18,7 +19,10 @@ foreach ($name in @('APPDATA', 'LOCALAPPDATA')) {
   if (-not $path.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "$name must stay inside the probe root" }
 }
 if ($Exe -notmatch '^[A-Za-z]:[\\/]' -or -not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw 'The executable must be an existing absolute path on a fixed drive' }
-if ($Milliseconds -lt 1000 -or $Milliseconds -gt 120000) { throw 'Milliseconds must be between 1000 and 120000' }
+if ($UseExecutableRoot) {
+  if ([IO.Path]::GetFullPath((Split-Path -Parent $Exe)) -ne $root) { throw 'Packaged probe root must equal the executable directory' }
+}
+if ($Milliseconds -lt 1000 -or $Milliseconds -gt 600000) { throw 'Milliseconds must be between 1000 and 600000' }
 if ($CloseAfterMilliseconds -lt 0 -or $CloseAfterMilliseconds -ge $Milliseconds) { throw 'CloseAfterMilliseconds must be zero or less than Milliseconds' }
 
 Add-Type -TypeDefinition @'
@@ -93,6 +97,8 @@ $si.lpDesktop = 'WinSta0\' + $desktopName
 $pi = New-Object HiddenDesktopProcess+PROCESS_INFORMATION
 $command = New-Object Text.StringBuilder ('"' + $Exe + '" ' + $Arguments)
 try {
+  # Child exercises the actual double-click path fallback, without a root override.
+  if ($UseExecutableRoot) { Remove-Item Env:DSH_PORTABLE_DEVELOPMENT_ROOT }
   # Start suspended so no child process can escape before job ownership is assigned.
   $started = [HiddenDesktopProcess]::CreateProcess($Exe, $command, [IntPtr]::Zero, [IntPtr]::Zero, $false, 0x00000204, [IntPtr]::Zero, (Split-Path -Parent $Exe), [ref]$si, [ref]$pi)
   if (-not $started) { throw "CreateProcess failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
@@ -114,6 +120,7 @@ try {
   Write-Output "wait=$wait exit=$exitCode"
   [pscustomobject]@{ processId=$pi.dwProcessId; closeRequests=$closeRequests; exitedBeforeCleanup=($wait -eq 0); exitCode=$exitCode; forcedCleanup=($wait -ne 0) } | ConvertTo-Json -Compress
 } finally {
+  if ($UseExecutableRoot) { $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $rootValue }
   [HiddenDesktopProcess]::TerminateJobObject($job, 0) | Out-Null
   if ($pi.hThread -ne [IntPtr]::Zero) { [HiddenDesktopProcess]::CloseHandle($pi.hThread) | Out-Null }
   if ($pi.hProcess -ne [IntPtr]::Zero) { [HiddenDesktopProcess]::CloseHandle($pi.hProcess) | Out-Null }

@@ -13,9 +13,11 @@ function assertUnredirectedDirectory(target) {
   }
 }
 
-// Development builds require an explicit, separate root. Never default to ~/.dsh.
+// Source launches require an explicit root; standalone samples use the executable
+// directory. Neither path falls back to the user's existing ~/.dsh.
 export function configureDevelopmentPaths(app, env = process.env) {
-  const supplied = env.DSH_PORTABLE_DEVELOPMENT_ROOT;
+  const supplied = env.DSH_PORTABLE_DEVELOPMENT_ROOT
+    ?? (app.isPackaged ? dirname(app.getPath('exe')) : undefined);
   if (!supplied || !isAbsolute(supplied)) throw new Error('An absolute DSH_PORTABLE_DEVELOPMENT_ROOT is required');
   const root = resolve(supplied);
   if (root === parse(root).root) throw new Error('The development root cannot be a filesystem root');

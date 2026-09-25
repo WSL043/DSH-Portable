@@ -37,6 +37,14 @@ Verified: generated TypeScript parses; the actual adapted update coordinator rej
 
 Experimental engineering fixtures only. Nothing here is installed into Portable or enabled in product builds. Requires Node 24.19 and, for the native substrate probe, Electron 44.0.0 Windows x64. No visible window or foreground input is used.
 
+## Standalone internal sample — 2026-09-26
+
+The Windows RC2 alpha now has a standalone packager, `package-alpha.mjs`. Its five arguments are the extracted reviewed official installer directory, verified Electron runtime directory, compiled adapted `apps/desktop`, a fresh ASAR staging directory, and a fresh output directory. Inputs and outputs must not overlap. It rejects an unknown original ASAR or core version, reuses the official production DSH closure and external runtime, replaces the shell with the compiled community shell, and omits official updater configuration and the official application executable. Preserve the installer and Electron archive checksums in the input audit; the ASAR check alone does not authenticate all external files.
+
+The packaged app derives its data root from its executable directory; source launches still require an explicit development root. `launch-hidden-windows.ps1 -UseExecutableRoot` tests the packaged fallback and confines the test process tree to a private desktop. `probe-packaged.mjs` uses native CDP input events rather than DOM `.click()` for user controls, which is necessary for the upstream button implementation. Inspect resulting state after every action; a sent click is not a passing assertion. `close-app` requires independent process exit evidence from the private harness.
+
+Actual Windows input, plugin-page navigation, a local synthetic bundle's install/toggle/uninstall, directory relocation and a no-task CDP-requested exit have been observed in the standalone sample. Screenshots of the light workspace and plugin list were inspected. Official native payload tests passed on that executable. Full acceptance and remaining limitations are recorded in `docs/release-1.0.0-plan.md`; this is not a public release or a complete migration/update implementation.
+
 ## Observed results — 2026-09-14
 
 - Executed upstream `home-paths`, `paths` and `update-coordinator` modules from reviewed commit `c291e7961a515f6d7af9304e7fd1d257929aef26`, stripping TypeScript with Node. Electron and update I/O were test doubles; this is not an actual update installation.

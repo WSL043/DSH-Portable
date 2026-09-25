@@ -35,6 +35,20 @@ test('source adapter refuses unknown or modified official files before writing',
   assert.throws(() => adaptDevelopmentSource('main.ts', Buffer.from('new upstream'), 'future'), /Unknown official desktop profile/);
 });
 
+test('standalone alpha derives its data root from the executable instead of the working directory', t => {
+  const root = mkdtempSync(join(tmpdir(), 'dsh-standalone-paths-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const paths = {};
+  const app = { isPackaged: true, isReady: () => false, getPath: name => {
+    assert.equal(name, 'exe'); return join(root, 'DSH-Portable-Alpha.exe');
+  }, setPath: (key, value) => { paths[key] = value; }, setAppLogsPath: () => {} };
+  const env = { DSH_HOME: 'do-not-use' };
+  const result = configureDevelopmentPaths(app, env);
+  assert.equal(result.root, root);
+  assert.equal(paths.userData, join(root, 'data', 'electron'));
+  assert.equal(env.DSH_HOME, join(root, 'data', 'dsh-home'));
+});
+
 test('redirected storage is rejected before any directories or application state change', t => {
   const temporary = mkdtempSync(join(tmpdir(), 'dsh-desktop-redirection-'));
   t.after(() => rmSync(temporary, { recursive: true, force: true }));
