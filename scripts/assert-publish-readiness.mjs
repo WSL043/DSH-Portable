@@ -3,7 +3,11 @@ import { pathToFileURL } from 'node:url'
 import { classifyProductVersion } from './version-policy.mjs'
 
 export function assertPublishReadiness({ productVersion, stableLock, previewLock, readiness }) {
-  const prerelease = classifyProductVersion(productVersion).prerelease
+  const policy = classifyProductVersion(productVersion)
+  if (/^1\.0\.0-alpha\./.test(policy.version)) {
+    throw new Error('Portable 1.0.0 alpha is development-only: GitHub Releases and public update catalogs are disabled.')
+  }
+  const prerelease = policy.prerelease
   if (!prerelease) {
     const plugins = Object.values(stableLock?.defaultPlugins ?? {})
     if (plugins.length === 0 || plugins.some(plugin => plugin?.releaseChannel !== 'stable'

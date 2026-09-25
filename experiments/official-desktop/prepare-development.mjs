@@ -68,7 +68,8 @@ export async function prepareDevelopment(inputs, output, profileName = 'alpha2')
     .replace('app.setPath(name, path)', 'app.setPath(name as "userData" | "sessionData" | "logs" | "crashDumps", path)');
   await mkdir(output, { recursive: true });
   for (const [name, source] of Object.entries(files)) await writeFile(join(output, name), source);
-  const report = { commit: profile.commit, channel: 'development-only', qualified: false,
+  const development = JSON.parse(await readFile(new URL('./development-channel.json', import.meta.url), 'utf8'));
+  const report = { commit: profile.commit, channel: 'development-only', development, qualified: false,
     inputs: profile.hashes, outputs: Object.fromEntries(Object.entries(files).map(([name, source]) => [name, sha(source)])),
     limits: ['Not a distributable product', 'Full host and plugin acceptance pending', 'Cross-machine encrypted state not qualified'] };
   await writeFile(join(output, 'provenance.json'), JSON.stringify(report, null, 2) + '\n');

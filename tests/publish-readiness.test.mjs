@@ -17,6 +17,12 @@ const passed = {
   historicalSessionMigration: { status: 'passed', evidence: 'documented historical-data acceptance' },
 }
 
+test('1.0.0 alpha cannot publish even with passing core acceptance', () => {
+  for (const productVersion of ['1.0.0-alpha.1', '1.0.0-alpha.199']) {
+    assert.throws(() => assertPublishReadiness({ productVersion, previewLock, readiness: passed }), /development-only/)
+  }
+})
+
 test('candidate publication requires historical-session evidence for its exact DSH commit', () => {
   assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5-alpha.1', previewLock, readiness: {
     ...passed,
