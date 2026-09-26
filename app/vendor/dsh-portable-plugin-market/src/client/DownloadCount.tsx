@@ -20,6 +20,6 @@ export function DownloadCount({ name, chinese, className }: { name: string; chin
     ? `${label}: ${state.downloads}\n${state.start} – ${state.end}${state.complete ? '' : (chinese ? '（可用历史范围）' : ' (available history)')}\n${chinese ? '下载次数，不是用户数；按日结算' : 'Downloads, not unique users; settled daily'}`
     : failed ? (chinese ? '累计下载暂不可用' : 'Total downloads unavailable') : (chinese ? '正在查询累计下载' : 'Loading total downloads')
   return <span className={className} title={title} aria-label={title}>
-    {(chinese ? '· 累计↓ ' : '· Total ↓ ') + (state ? formatCount(state.downloads) + (state.complete ? '' : '+') : failed ? '—' : '…')}
+    {'↓ ' + (state ? formatCount(state.downloads) + (state.complete ? '' : '+') : failed ? '—' : '…')}
   </span>
 }

@@ -232,6 +232,36 @@ try {
     await sample('settled')
     await writeFile(path.join(output, 'market-current.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
   }
+  if (process.argv.includes('--layout')) {
+    const captureLayout = async label => {
+      for (const width of [1200, 580]) {
+        await send('Emulation.setDeviceMetricsOverride', { width, height:900, deviceScaleFactor:1, mobile:false })
+        await delay(600)
+        const bounds = await evaluate(`(() => {
+          const cards=[...document.querySelectorAll('[class*="cardAction"]')].map(x=>x.parentElement.parentElement);
+          return {count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
+        })()`)
+        assert.ok(bounds.count > 0)
+        assert.equal(bounds.overflow, false, 'plugin card overflow')
+        assert.equal(bounds.inlineImages, false, 'discovery cards should not fetch preview screenshots')
+        await writeFile(path.join(output, `market-${label}-${width}.png`), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
+      }
+    }
+    await captureLayout('light')
+    await evaluate(`document.querySelector('[class*="nameButton"]')?.click()`)
+    await until(`document.querySelectorAll('[role="dialog"]').length > 1`, Boolean, 'plugin details open from name')
+    const closeDialog = `(() => {const dialog=[...document.querySelectorAll('[role="dialog"]')].at(-1);const button=[...dialog.querySelectorAll('button')].find(b=>['Close','关闭','Cancel','取消'].includes(b.getAttribute('aria-label')||b.textContent.trim()));button?.click();return Boolean(button)})()`
+    await until(closeDialog, Boolean, 'close plugin details')
+    await until(closeDialog, Boolean, 'close plugin market')
+    await nativeState(131260)
+    await until(click(['General', 'General settings', '通用设置']), Boolean, 'general appearance')
+    await until(click(['Dark', '深色']), Boolean, 'official dark appearance')
+    await until(closeDialog, Boolean, 'close appearance settings')
+    await until(click(['Plugins', '插件']), Boolean, 'plugins in dark theme')
+    await until(click(['Plugin Market', '插件市场']), Boolean, 'market in dark theme')
+    await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'dark market ready')
+    await captureLayout('dark')
+  }
   assert.deepEqual(exceptions,[]);
   await writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
   console.log(JSON.stringify(checks));

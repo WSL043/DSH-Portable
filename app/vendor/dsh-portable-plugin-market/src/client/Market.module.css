@@ -57,16 +57,6 @@
    collapses to zero width until the image loads, so the strip snaps wider
    the instant each one arrives instead of holding its place from the start. */
 .shot{width:220px;height:150px;flex:0 0 auto;object-fit:cover;border-radius:8px;border:1px solid var(--dsw-alias-border-default,#e5e7eb);background:var(--dsw-alias-bg-layer-2,#f3f4f6);cursor:pointer}
-.cardShots{display:flex;gap:6px;overflow-x:auto;padding:0 0 2px;margin:0 0 6px;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
-/* A fixed box so the strip holds its place: with width:auto the browser had
-   no aspect ratio until the bytes arrived, so each thumbnail rendered at its
-   min-width and jumped to height x natural-ratio once decoded.
-   `contain`, not `cover`: reserving the space is what fixes the jump, and
-   cropping to fill would throw away the uncropped thumbnail this strip was
-   built for. The letterbox shows through as the tile's own background. */
-.cardShot{width:240px;height:150px;flex:0 0 auto;object-fit:contain;border-radius:8px;
-          border:1px solid var(--dsw-alias-border-default,#e5e7eb);
-          background:var(--dsw-alias-bg-layer-2,#f3f4f6);cursor:pointer;display:block}
 /* Full-bleed overlay, not the Modal primitive — Modal is sized chrome
    (title/description/footer) for making a decision, this is just an image
    the user came to look at, no decision to make. */
@@ -93,10 +83,9 @@
    squeezed into a vertical stack instead of dropping to its own line. */
 .warnLine{color:var(--dsw-alias-state-warn-primary,#b45309);font-weight:600;font-size:12px;line-height:18px;margin:0;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .modalNote{font-size:12px;color:var(--dsw-alias-label-tertiary,#8b93a1);line-height:18px;margin:12px 0 0;display:flex;align-items:center;gap:4px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr);align-items:start;gap:10px}
-.compactGrid{gap:6px}
-.compactCard{gap:6px;padding:10px 12px}
-.compactCard .cardShots{display:none}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));align-items:stretch;gap:12px}
+.compactGrid{grid-template-columns:minmax(0,1fr);gap:6px}
+.card.compactCard{gap:6px;padding:10px 12px}
 .compactCard .desc{min-height:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .compactCard .foot{row-gap:4px}
 /* The Installed list is the same two-up grid: one list that reads as rows and
@@ -115,7 +104,7 @@
    footer, reading as a layout bug rather than "this one's row-mate had a
    longer description". Un-stretched, any leftover row height sits outside
    the card as ordinary grid gutter instead. */
-.card{background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:12px;align-self:start}
+.card{background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;align-self:stretch;min-width:0}
 .row1{display:flex;align-items:flex-start;gap:10px;min-width:0}
 .cardAction{flex-shrink:0;display:inline-flex;align-items:center}
 .installBtn.installBtn{min-width:64px}
@@ -125,7 +114,7 @@
    header — you take in who wrote it in one glance and spend the rest on
    what it is. */
 .nm{font-weight:600;font-size:15px;line-height:22px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.byline{display:flex;align-items:center;gap:6px;min-width:0;margin-top:2px}
+.byline{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;min-width:0;margin-top:5px}
 /* Second line under the byline: the publish date, moved off the crowded
    owner/downloads/stars row for visual balance (reported once downloads
    joined stars on that line). */
@@ -135,8 +124,8 @@
    that shrinks; the counts stay whole because a truncated one is not a fact. */
 .owner{font-size:11px;color:var(--dsw-alias-label-secondary,#9ca3af);flex:0 1 auto;min-width:0;
        overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.desc{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary,#8b93a1);min-height:36px;margin:0}
-.foot{display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:8px}
+.desc{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,#6b7280);min-height:36px;margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.foot{margin-top:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;row-gap:8px}
 .foot .metaInline,.foot .src{white-space:nowrap}
 .grow{flex:1}
 /* Sits beside the heading so a screenshot of the page carries the
@@ -443,3 +432,8 @@
    text block, so the user can still copy it by hand. */
 .fixFallback{display:flex;flex-direction:column;gap:6px;margin:8px 0}
 .fixFallbackText{width:100%;box-sizing:border-box;font-family:ui-monospace,Menlo,monospace;font-size:11px;line-height:16px;color:var(--dsw-alias-label-primary,#1f2328);background:var(--dsw-alias-bg-layer-2,#f3f4f6);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:6px;padding:8px 10px;resize:vertical;white-space:pre-wrap;word-break:break-all}
+
+.nameButton{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;max-width:calc(100% - 24px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;vertical-align:middle}
+.nameButton:hover{text-decoration:underline}
+.nameButton:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4f6ef7);outline-offset:2px}
+.nm>.projectLinkIcon{display:inline-flex;margin-left:6px;vertical-align:middle}

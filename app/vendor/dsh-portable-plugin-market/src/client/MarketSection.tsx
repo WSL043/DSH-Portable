@@ -42,7 +42,7 @@ import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
   avatarColor, batchUpdateNames, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
-  formatCount, pageItems, pluginName, pluginScreenshots, readSession, safeScreenshots, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
+  formatCount, pageItems, pluginName, pluginScreenshots, readSession, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
 ActivationInfo, ActivationState, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
@@ -196,51 +196,6 @@ function useAutoCarousel(count: number, initial: number, intervalMs = 3500): [nu
     setResetTick(t => t + 1)
   }
   return [index, setIndex]
-}
-
-/**
- * A card's own thumbnail strip — curated screenshots only (#61 supplement):
- * this data already rode along with the catalog fetch that drew the grid,
- * so showing it costs nothing extra. README-scraped fallback images stay
- * dialog-only, where fetching one repo's README on click is a single
- * request instead of one per visible card.
- *
- * Horizontal scroll at each image's own aspect ratio, not an auto-cycling
- * single crop: cropping every shot into one fixed box hid most of a tall
- * screenshot, and cycling on a timer meant the card you were looking at
- * kept changing under you. Scrolling is a gesture the user drives.
- */
-/** Thumbnails per card. The dialog shows every screenshot; a grid of cards
- * pulling six full-size PNGs each is what makes the first paint crawl. */
-const CARD_SHOT_LIMIT = 3
-
-function CardShot({ plugin, onOpen }: { plugin: RegistryPlugin; onOpen: (shots: string[], index: number) => void }) {
-  // The card and the lightbox share one asset: the allowlist is GitHub's own
-  // image hosts, none of which resize, so there is no smaller variant to ask
-  // for. What the card can do is want fewer of them and want them late — the
-  // dialog strip still offers the full set.
-  const shots = safeScreenshots(plugin.screenshots)
-  const [broken, setBroken] = useState<string[]>([])
-  const visible = shots.filter(src => !broken.includes(src)).slice(0, CARD_SHOT_LIMIT)
-  if (visible.length === 0) return null
-  return (
-    <div className={css.cardShots}>
-      {visible.map((src, i) => (
-        <img
-          key={src}
-          className={css.cardShot}
-          src={src}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          fetchPriority="low"
-          referrerPolicy="no-referrer"
-          onClick={(e) => { e.stopPropagation(); onOpen(visible, i) }}
-          onError={() => setBroken(prev => prev.includes(src) ? prev : prev.concat(src))}
-        />
-      ))}
-    </div>
-  )
 }
 
 /**
@@ -1577,12 +1532,10 @@ export function MarketSection(props: MarketSectionProps) {
               name it reads as one signature, which is what frees the title
               to be just the plugin — and lets two authors ship a plugin of
               the same name without either card needing a qualifier. */}
-          <div style={{ minWidth: 0 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div className={css.nm} title={p.name}>
-              <a className={css.nameLink} href={p.url} target="_blank" rel="noreferrer" title={t('openProject')}>
-                {pluginName(p.name)}
-                <IconLinkOutline14 size={13} className={css.projectLinkIcon} />
-              </a>
+              <button type="button" className={css.nameButton} onClick={() => setConfirming(p)}>{pluginName(p.name)}</button>
+              <a className={css.projectLinkIcon} href={p.url} target="_blank" rel="noreferrer" aria-label={t('openProject')} title={t('openProject')}><IconLinkOutline14 size={13} /></a>
               {p.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
             </div>
             <div className={css.byline}>
@@ -1595,7 +1548,6 @@ export function MarketSection(props: MarketSectionProps) {
           {/* Top right, at its natural size: in the footer it needed a row of
               its own once the cards went two-up, which cost every card that
               height whether or not it had anything else to say. */}
-          <span className={css.grow} />
           <div className={css.cardAction}>
             {done
               ? <span className={css.okState}>{t('installedBadge')}</span>
@@ -1622,7 +1574,7 @@ export function MarketSection(props: MarketSectionProps) {
           </div>
         </div>
         <div className={css.desc}>{desc}</div>
-        <CardShot plugin={p} onOpen={openLightbox} />
+
         {p.deprecated === true && (
           <div className={css.deprecate}>
             <div className={css.depLine}>
@@ -1639,7 +1591,7 @@ export function MarketSection(props: MarketSectionProps) {
           <span className={css.tag}>
             {(data!.categories[p.category] && (data!.categories[p.category]![lang] || data!.categories[p.category]!.en)) || p.category}
           </span>
-          {p.added && <span className={css.metaInline}>{t('published') + ' ' + p.added}</span>}
+
           <span className={css.grow} />
         </div>
         {busy && (
@@ -2513,19 +2465,19 @@ export function MarketSection(props: MarketSectionProps) {
         <Modal
           open
           onClose={() => { setConfirming(null); setCmdOpen(false) }}
-          title={t('confirmTitle') + ' ' + confirming.name + '?'}
+          title={pluginName(confirming.name)}
           description={(confirming.description && (confirming.description[lang] || confirming.description.en)) || ''}
           footer={(
             <>
               <Button variant="ghost" onClick={() => { setConfirming(null); setCmdOpen(false) }}>{t('cancel')}</Button>
-              {props.onOfficialInstall && previewVersion && (
+              {props.onOfficialInstall && previewVersion && !isInstalled(confirming, installed, repoIdentities, data?.plugins, repoHints) && (
                 <Button variant="outline" onClick={() => doInstall(confirming, previewVersion)}>
                   {t('installPreview').replace('{0}', previewVersion)}
                 </Button>
               )}
-              <Button variant="primary" disabled={blockedStableVersion !== null}
+              <Button variant="primary" disabled={blockedStableVersion !== null || isInstalled(confirming, installed, repoIdentities, data?.plugins, repoHints)}
                 onClick={() => doInstall(confirming, previewVersion ? stableVersion ?? undefined : undefined)}>
-                {blockedStableVersion ? t('installStableBlocked') : previewVersion && stableVersion
+                {isInstalled(confirming, installed, repoIdentities, data?.plugins, repoHints) ? t('alreadyInstalled') : blockedStableVersion ? t('installStableBlocked') : previewVersion && stableVersion
                   ? t('installStableVersion').replace('{0}', stableVersion)
                   : previewVersion ? t('installStable') : t('confirmInstall')}
               </Button>
