@@ -6,7 +6,7 @@
  * primitive (progress bar, banners, tabs, swatches). */
 
 .root{height:100%;display:flex;flex-direction:column;min-width:0;color:var(--dsw-alias-label-primary,#1f2328);position:relative;container-type:inline-size}
-.managerModal{width:min(840px,calc(100vw - 48px));max-width:calc(100vw - 48px)}
+.managerModal{width:min(960px,calc(100vw - 48px));max-width:calc(100vw - 48px)}
 .managerModalContent{height:min(78vh,720px);max-height:calc(100vh - 96px);min-height:min(320px,calc(100vh - 96px))}
 .managerModalContent>div:last-child{flex:1;min-height:0;overflow:auto}
 .tabs{display:flex;gap:2px;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);align-items:flex-end}
@@ -83,8 +83,8 @@
    squeezed into a vertical stack instead of dropping to its own line. */
 .warnLine{color:var(--dsw-alias-state-warn-primary,#b45309);font-weight:600;font-size:12px;line-height:18px;margin:0;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .modalNote{font-size:12px;color:var(--dsw-alias-label-tertiary,#8b93a1);line-height:18px;margin:12px 0 0;display:flex;align-items:center;gap:4px}
-.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:0;container-type:inline-size}
-.compactGrid{grid-template-columns:minmax(0,1fr);gap:0}
+.grid{column-count:2;column-gap:14px;container-type:inline-size}
+.compactGrid{column-count:1}
 .card.compactCard{gap:6px;padding:10px 12px}
 .compactCard .desc{min-height:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .compactCard .foot{row-gap:4px}
@@ -97,15 +97,17 @@
 .swatches{display:flex;gap:0;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--dsw-alias-border-l2,#e5e7eb)}
 .themesGrid{margin-bottom:12px}
 .swatches i{flex:1}
-/* Each plugin owns its row: optional media never reserves a neighbor's height. */
-.card{background:transparent;border:0;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:0;padding:18px 2px;display:flex;flex-wrap:wrap;align-items:center;gap:14px;min-width:0}
-.card:last-child{border-bottom:0}
-.cardContent{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-.card .desc{min-height:0;line-height:19px;font-size:12px}
-.card .foot{margin-top:0}
-.card .tag{border:0;padding:0;color:var(--dsw-alias-label-tertiary,#8b93a1);font-size:11px}
-.card > .progress{flex-basis:100%}
-.card > .cardAction{width:64px;justify-content:flex-end}
+/* Natural-height gallery; DOM/focus order stays top-to-bottom within each column. */
+.card{box-sizing:border-box;width:100%;display:inline-flex;vertical-align:top;break-inside:avoid;flex-direction:column;gap:12px;margin:0 0 14px;padding:16px;min-width:0;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff)}
+.cardContent{width:100%;min-width:0;display:flex;flex-direction:column;gap:9px}
+.card .desc{min-height:0;line-height:20px;font-size:13px;-webkit-line-clamp:3}
+.cardFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-width:0}
+.cardFooter .tag{border:0;padding:0;color:var(--dsw-alias-label-tertiary,#8b93a1);font-size:11px;white-space:normal}
+.card > .progress{width:100%}
+.card.compactCard{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:0;padding:16px 2px;border:0;border-bottom:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:0;background:transparent}
+.compactCard .cardContent{flex:1;min-width:0}
+.compactCard .cardFooter{width:64px;flex-shrink:0;justify-content:flex-end}
+.compactCard .cardFooter .tag{display:none}
 .row1{display:flex;align-items:flex-start;gap:10px;min-width:0}
 .cardAction{flex-shrink:0;display:inline-flex;align-items:center}
 .installBtn.installBtn{min-width:64px}
@@ -440,18 +442,20 @@
 .nm>.projectLinkIcon{display:inline-flex;margin-left:6px;vertical-align:middle}
 
 /* Stable preview height keeps browsing predictable; never crop UI screenshots. */
-.cardPreviews{display:flex;width:156px;flex-shrink:0;gap:8px;min-width:0}
-.cardPreview{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-width:0;height:88px;padding:0;overflow:hidden;cursor:zoom-in;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f3f4f6)}
+.cardPreviews{display:flex;width:100%;flex-shrink:0;gap:8px;min-width:0}
+.cardPreview{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-width:0;height:auto;aspect-ratio:16/10;padding:0;overflow:hidden;cursor:zoom-in;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f3f4f6)}
 .cardPreview img{width:100%;height:100%;object-fit:contain}
 .cardPreview:hover{border-color:var(--dsw-alias-label-secondary,#6b7280)}
 .cardPreview:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4f6ef7);outline-offset:2px}
 .previewMore{position:absolute;bottom:6px;right:6px;border-radius:5px;padding:2px 5px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#111);font-size:11px}
-.compactCard .cardPreviews{width:156px}
-.compactCard .cardPreview{height:88px}
+.compactCard .cardPreviews{width:144px}
+.compactCard .cardPreview{height:90px;aspect-ratio:auto}
+@container (max-width:640px){
+  .grid{column-count:1}
+}
 @container (max-width:620px){
-  .card{gap:12px}
-  .cardContent{flex-basis:calc(100% - 80px);order:0}
-  .card > .cardAction{order:1}
-  .cardPreviews,.compactCard .cardPreviews{order:2;width:100%;max-width:300px}
-  .cardPreview{height:148px}
+  .compactCard .cardContent{flex-basis:calc(100% - 80px);order:0}
+  .compactCard .cardFooter{order:1}
+  .compactCard .cardPreviews{order:2;width:100%;max-width:300px}
+  .compactCard .cardPreview{height:148px}
 }

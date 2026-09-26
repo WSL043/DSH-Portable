@@ -25,9 +25,18 @@ Pending upstream policy/peer-resolution investigations above remain separate mai
 
 ## Design acceptance rules
 
-Judge actual mixed content, not only uniform cards: screenshots absent/present/broken, long translated titles/descriptions, multiple categories, wide/narrow containers, both themes and both host languages. Preserve package identity, installation ownership and cumulative-stat provenance. Do not declare a visual change accepted solely because nothing overflows; reject unused media slots and excessive gaps visible in the captured product. Keep the reading order stable instead of reordering items into a masonry layout.
+Judge actual mixed content, not only uniform cards: screenshots absent/present/broken, long translated titles/descriptions, multiple categories, wide/narrow containers, both themes and both host languages. Preserve package identity, installation ownership and cumulative-stat provenance. Do not declare a visual change accepted solely because nothing overflows; reject unused media slots and excessive gaps visible in the captured product. Never reorder the catalog to promote entries merely because they have screenshots. The gallery keeps DOM order down each column; the compact mode keeps a single full-width ordered list.
 
 
 ## Visual revision after user review
 
 The bordered full-width rows were rejected visually. The next development revision narrows the market to 840px, replaces repeated card boxes with subtle row dividers, separates the action into a consistently aligned trailing column, and uses smaller inline screenshot previews. Missing screenshots reserve no media column. Narrow containers keep actions alongside text and put previews below. Current evidence supersedes v5: `build/native-market-refined-v6`; actual English light, Chinese dark, narrow/wide, image open/close and detail navigation passed, as did 58 focused tests. These results establish operation/layout checks, not user approval of the visual direction. The installed user product remains unchanged.
+
+
+## Image-rich category review
+
+The 2026-09-27 catalog inspection found 152 theme entries (66 with declared screenshots) and 211 model/provider entries (53 with screenshots). These counts are a time-specific observation, not a product constant. Reviewed the actual Themes & Appearance and Models & Providers pages before changing the design; the former has landscape previews while the latter includes long portrait screenshots. The tiny right-hand preview did not communicate those interfaces well.
+
+Current design: the existing explicit Cards/Compact preference owns the choice. Cards uses natural-height two-column CSS layout (one column at narrow widths), a larger uncropped 16:10 preview, three lines of localized description, and a consistent footer for category/install. Entries without screenshots have no media slot. Compact retains a single ordered row list for scanning. CSS columns preserve DOM order down each column; they do not promise row-major ranking. No JavaScript positioning engine, image-priority sorting, or per-category automatic mode switch was introduced. Screenshot source validation, lazy loading, keyboard-openable preview and host-owned installation remain shared.
+
+Final current native evidence: `build/native-market-gallery-v8`, including actual theme/model categories, gallery/compact switching, English light/Chinese dark, narrow/wide layout, preview close and detail navigation. Passed with no page exceptions. Focused source tests: 58 passed. This remains an isolated development preview, not a replacement of the current user installation or a released artifact. Earlier screenshots in this note are superseded for visual review.

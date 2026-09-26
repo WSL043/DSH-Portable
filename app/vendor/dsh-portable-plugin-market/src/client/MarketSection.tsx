@@ -1568,15 +1568,10 @@ export function MarketSection(props: MarketSectionProps) {
               </div>
             </div>
           )}
-          <div className={css.foot}>
-            <span className={css.tag}>
-              {categoryText(p.category, data!.categories, lang)}
-            </span>
-
-            <span className={css.grow} />
-          </div>
         </div>
         <CardPreview plugin={p} t={t} onOpen={openLightbox} />
+        <div className={css.cardFooter}>
+          <span className={css.tag}>{categoryText(p.category, data!.categories, lang)}</span>
             <div className={css.cardAction}>
               {done
                 ? <span className={css.okState}>{t('installedBadge')}</span>
@@ -1601,7 +1596,7 @@ export function MarketSection(props: MarketSectionProps) {
                           >{t('install')}</Button>
                         )}
             </div>
-
+        </div>
         {busy && (
           <div className={css.progress}>
             <span className={css.spin}><IconLoadingOutline16 size={14} /></span>

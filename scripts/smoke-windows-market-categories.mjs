@@ -247,7 +247,7 @@ try {
           return {maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-100), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
         })()`)
         assert.ok(bounds.count > 0)
-        assert.ok(bounds.maxGap <= 12, 'mixed screenshot rows must not reserve blank grid space')
+        assert.ok(bounds.maxGap <= 18, 'mixed screenshot rows must not reserve blank grid space')
         assert.equal(bounds.noImageWidths, true, 'no-image content owns the available row width')
         assert.equal(bounds.overflow, false, 'plugin card overflow')
         assert.equal(bounds.inlineImages, true, 'catalog screenshots appear in discovery cards')
@@ -285,6 +285,20 @@ try {
     assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label^="预览 "]'))`), true, 'localized preview label')
     await captureLayout('zh-dark')
     await writeFile(path.join(output, 'chinese-market.txt'), await evaluate('document.body.innerText'))
+    for (const [name, label] of [['themes','主题与外观'], ['models','模型与账号接入']]) {
+      if (!await evaluate(click([label]))) {
+        await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`)
+        await until(click([label]), Boolean, 'category '+label)
+      }
+      await evaluate(`document.querySelector('[class*="catsToggle"][aria-label="收起"]')?.click()`)
+      await delay(1200)
+      await captureLayout('zh-'+name)
+      await writeFile(path.join(output, name+'-content.txt'), await evaluate('document.body.innerText'))
+    }
+
+    await until(click(['紧凑']), Boolean, 'compact discovery view')
+    await captureLayout('zh-compact')
+    await until(click(['图文']), Boolean, 'restore gallery view')
     // Leave the disposable fixture in English for subsequent independent probes.
     await until(closeDialog, Boolean, 'close Chinese market')
     await nativeState(131260)
