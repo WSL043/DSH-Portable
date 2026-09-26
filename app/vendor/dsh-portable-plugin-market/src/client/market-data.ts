@@ -599,6 +599,7 @@ export function extractReadmeImages(markdown: string, owner: string, repo: strin
 }
 
 const readmeShotsCache = new Map<string, Promise<string[]>>()
+const MAX_README_CACHE_ENTRIES = 64
 let screenshotsGeneration: string | undefined
 
 export function syncScreenshotsGeneration(generation: string | undefined): void {
@@ -630,7 +631,7 @@ export function pluginScreenshots(plugin: RegistryPlugin): Promise<string[]> {
   if (cached !== undefined) return cached
   const fetchReadme = async (path: string | null): Promise<string | null> => {
     try {
-      const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${path === null ? '' : path + '/'}README.md`)
+      const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${path === null ? '' : path + '/'}README.md`, { signal: AbortSignal.timeout(8000) })
       return res.ok ? await res.text() : null
     } catch {
       return null
@@ -644,6 +645,9 @@ export function pluginScreenshots(plugin: RegistryPlugin): Promise<string[]> {
     const root = await fetchReadme(null)
     return root === null ? [] : extractReadmeImages(root, owner!, repo!, null)
   })().catch(() => [] as string[])
+  if (readmeShotsCache.size >= MAX_README_CACHE_ENTRIES) {
+    readmeShotsCache.delete(readmeShotsCache.keys().next().value!)
+  }
   readmeShotsCache.set(cacheKey, task)
   return task
 }

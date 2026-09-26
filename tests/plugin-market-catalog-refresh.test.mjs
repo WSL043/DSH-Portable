@@ -3,6 +3,28 @@ import test from 'node:test'
 import { readFile } from 'node:fs/promises'
 import * as market from '../app/vendor/dsh-portable-plugin-market/src/client/market-data.ts'
 
+test('browsing many plugin details evicts old screenshot lookups and bounds requests', async () => {
+  const previousFetch = globalThis.fetch
+  const requests = []
+  globalThis.fetch = async (url, options) => {
+    assert.ok(options.signal instanceof AbortSignal)
+    requests.push(url)
+    return new Response('![preview](https://example.com/preview.png)')
+  }
+  const plugin = i => ({ name: `plugin-${i}`, url: `https://github.com/example/plugin-${i}`, category: 'tools', owner: 'example' })
+  try {
+    market.resetScreenshotsCache()
+    for (let i = 0; i < 65; i++) await market.pluginScreenshots(plugin(i))
+    await market.pluginScreenshots(plugin(64))
+    assert.equal(requests.length, 65, 'recent entries remain reusable')
+    await market.pluginScreenshots(plugin(0))
+    assert.equal(requests.length, 66, 'old entries are no longer retained indefinitely')
+  } finally {
+    globalThis.fetch = previousFetch
+    market.resetScreenshotsCache()
+  }
+})
+
 test('a new catalog generation drops failed README lookups while an unchanged generation reuses them', async () => {
   const previousFetch = globalThis.fetch
   let requests = 0

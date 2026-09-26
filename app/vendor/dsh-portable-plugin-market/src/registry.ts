@@ -80,9 +80,9 @@ const FETCH_TIMEOUT_MS = 15_000
  * every call either way, so `data` below is only ever returned when the
  * server has just confirmed it is current.
  *
- * In memory rather than on disk: a restart is rare enough that paying one
- * full download for it costs nothing, and a file would be one more thing
- * that can be found on a machine and mistaken for the catalog itself.
+ * A verified snapshot is also persisted per profile for immediate/offline
+ * display. The UI labels failed revalidation as stale; fetching a current
+ * catalog does not imply its upstream GitHub/npm metrics are real-time.
  *
  * Measured against the live origin (GitHub Pages behind Fastly, which
  * serves both `etag` and `last-modified`): 295 KB and 1.3s unconditional,

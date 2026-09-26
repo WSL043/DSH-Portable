@@ -430,6 +430,9 @@ export function MarketSection(props: MarketSectionProps) {
   )
   const lang = String(localeSnap.active).toLowerCase().startsWith('zh') ? 'zh' : 'en'
   const [data, setData] = useState<Registry | null>(cachedRegistry)
+  const metricTitle = (kind: 'metricDownloads' | 'metricStars', value: number) =>
+    t(kind).replace('{0}', String(value)) + (data?.updated
+      ? '\n' + t('metricSnapshot').replace('{0}', data.updated) : '')
   const [loadError, setLoadError] = useState<string | null>(null)
   const [catalogRefreshing, setCatalogRefreshing] = useState(false)
   const [catalogStale, setCatalogStale] = useState<string | null>(null)
@@ -1583,8 +1586,8 @@ export function MarketSection(props: MarketSectionProps) {
             <div className={css.byline}>
               <OwnerAvatar name={p.name} owner={p.owner || ''} />
               <span className={css.owner}>{p.owner}</span>
-              {typeof p.downloads === 'number' && <span className={css.star} title={String(p.downloads)}>{'· ↓ ' + formatCount(p.downloads)}</span>}
-              {typeof p.stars === 'number' && <span className={css.star} title={String(p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
+              {typeof p.downloads === 'number' && <span className={css.star} title={metricTitle('metricDownloads', p.downloads)}>{'· ↓ ' + formatCount(p.downloads)}</span>}
+              {typeof p.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
             </div>
           </div>
           {/* Top right, at its natural size: in the footer it needed a row of
@@ -2537,8 +2540,8 @@ export function MarketSection(props: MarketSectionProps) {
           <div className={css.byline}>
             <OwnerAvatar name={confirming.name} owner={confirming.owner || ''} />
             <span className={css.owner}>{confirming.owner}</span>
-            {typeof confirming.downloads === 'number' && <span className={css.star} title={String(confirming.downloads)}>{'· ↓ ' + formatCount(confirming.downloads)}</span>}
-            {typeof confirming.stars === 'number' && <span className={css.star} title={String(confirming.stars)}>{'· ★ ' + formatCount(confirming.stars)}</span>}
+            {typeof confirming.downloads === 'number' && <span className={css.star} title={metricTitle('metricDownloads', confirming.downloads)}>{'· ↓ ' + formatCount(confirming.downloads)}</span>}
+            {typeof confirming.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', confirming.stars)}>{'· ★ ' + formatCount(confirming.stars)}</span>}
             <span className={css.grow} />
             <span className={css.tag}>
               {(data!.categories[confirming.category] && (data!.categories[confirming.category]![lang] || data!.categories[confirming.category]!.en)) || confirming.category}
