@@ -1296,6 +1296,14 @@ window.__ModuleLoader__.load({
         const originalPickDirectory = ctx.workspaces?.pickDirectory
         let nativePickDirectory = null
         let workspacePickerPromise = null
+        const cancelWorkspacePicker = () => {
+          for (const pending of pendingWorkspaceRequests.values()) pending.resolve(null)
+          pendingWorkspaceRequests.clear()
+          workspacePickerPromise = null
+        }
+        // A page can enter the back/forward cache without disposing its plugins.
+        // Do not leave its picker promise waiting for a reply to the old page.
+        window.addEventListener?.('pagehide', cancelWorkspacePicker)
         if (host.capabilities.pickDirectory === true && ctx.workspaces && typeof originalPickDirectory === 'function') {
           nativePickDirectory = () => {
             if (!active) return Promise.resolve(null)
@@ -1535,8 +1543,8 @@ window.__ModuleLoader__.load({
           if (ctx.workspaces?.pickDirectory === nativePickDirectory && typeof originalPickDirectory === 'function') {
             ctx.workspaces.pickDirectory = originalPickDirectory
           }
-          for (const pending of pendingWorkspaceRequests.values()) pending.resolve(null)
-          pendingWorkspaceRequests.clear()
+          window.removeEventListener?.('pagehide', cancelWorkspacePicker)
+          cancelWorkspacePicker()
           for (const pending of pendingDataExportRequests.values()) pending.resolve(null)
           pendingDataExportRequests.clear()
           for (const pending of pendingDataImportRequests.values()) pending.resolve(null)

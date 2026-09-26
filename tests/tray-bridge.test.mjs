@@ -12,6 +12,7 @@ async function loadBridgeClient(options = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const posted = []
   const webMessageListeners = new Set()
+  const pageListeners = new Map()
   let definition
   const nativeListeners = new Set()
   const native = options.native === true ? {
@@ -33,6 +34,11 @@ async function loadBridgeClient(options = {}) {
     postMessage(value) { posted.push(structuredClone(value)) },
   } : undefined
   const window = {
+    addEventListener(name, listener) {
+      if (!pageListeners.has(name)) pageListeners.set(name, new Set())
+      pageListeners.get(name).add(listener)
+    },
+    removeEventListener(name, listener) { pageListeners.get(name)?.delete(listener) },
     __ModuleLoader__: {
       load(value) { definition = value },
     },
@@ -62,6 +68,8 @@ async function loadBridgeClient(options = {}) {
     exports,
     window,
     posted,
+    pageListeners,
+    pageEvent(name) { for (const listener of pageListeners.get(name) ?? []) listener() },
     send(value) {
       for (const listener of webMessageListeners) listener({ data: structuredClone(value) })
       for (const listener of nativeListeners) listener({ data: structuredClone(value) })
@@ -364,6 +372,29 @@ test('Portable desktop bridge owns workspace picking through the WebView host an
   runtime.dispose()
   assert.equal(await pendingAtDispose, null)
   assert.equal(runtime.ctx.workspaces.pickDirectory, original)
+})
+
+for (const native of [false, true]) test(`workspace picker cancels on page exit and ignores stale replies (native=${native})`, async () => {
+  const client = await loadBridgeClient({ native })
+  const runtime = fakeContext(sessionList(1))
+  client.exports.apply(runtime.ctx)
+  const first = runtime.ctx.workspaces.pickDirectory()
+  const oldRequest = client.posted.at(-1)
+  client.pageEvent('pagehide')
+  const second = runtime.ctx.workspaces.pickDirectory()
+  const newRequest = client.posted.at(-1)
+  assert.notEqual(oldRequest.requestId, newRequest.requestId)
+  assert.equal(await first, null)
+  assert.equal(runtime.ctx.workspaces.pickDirectory(), second, 'old promise cleanup must not clear the new request')
+  client.send({ type: 'dsh-portable/pick-directory-result', schemaVersion: 1, requestId: oldRequest.requestId, path: 'C:\\Old' })
+  let settled = false
+  second.then(() => { settled = true })
+  await Promise.resolve()
+  assert.equal(settled, false, 'late reply from the old page must not settle the current picker')
+  client.send({ type: 'dsh-portable/pick-directory-result', schemaVersion: 1, requestId: newRequest.requestId, path: 'C:\\New' })
+  assert.equal(await second, 'C:\\New')
+  runtime.dispose()
+  assert.equal(client.pageListeners.get('pagehide').size, 0)
 })
 
 test('Portable exposes a native restart contract and returns the host decision', async () => {
