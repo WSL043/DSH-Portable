@@ -3,8 +3,14 @@
   "dshReviewedCommit": "c36a83ff6bb95e3f82cf79f9be7c724270a8aa61",
   "dshNpmIntegrity": "sha512-fim76775kLyal0lLNmpktZfOiOwU0P9qdluknL5Sm3F6ax9I5PcLD0W0WzqH9tMOOY8yHya5VShuEzSSh223sw==",
   "historicalSessionMigration": {
-    "status": "blocked",
-    "evidence": null,
-    "reason": "The exact 0.7.4 published runtime (DSH 0.1.7-alpha.1) rejects a synthetic descriptor-v2 fixture while empty and descriptor-v3 controls pass. See docs/release-0.7.5-plan.md. Real historical-session acceptance remains required; earlier published releases are unchanged."
+    "status": "passed",
+    "evidence": "docs/release-0.7.5-plan.md#2026-09-27-执行清单; scripts/verify-historical-session.mjs: locked writer, official AgentLoop continuation, JSONL reopen and interrupted-journal recovery",
+    "compatibilityPatch": {
+      "id": "released-v0-descriptor-v2-read-v1",
+      "dshVersion": "0.1.7-alpha.1",
+      "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
+      "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
+    },
+    "reason": "Historical data checks passed on the exact reviewed alpha.1 compatibility adaptation. Every platform builder repeats them; final product CI, upgrade and native acceptance remain independent mandatory gates."
   }
 }

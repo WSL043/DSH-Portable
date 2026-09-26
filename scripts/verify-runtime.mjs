@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { prepareHistoricalDescriptor } from './patch-historical-descriptor.mjs'
 import {
   patchConversationPermissions,
   hasPermissionSettingsLocalization,
@@ -14,6 +15,7 @@ if (!appDir || !existsSync(path.join(appDir, 'package.json'))) {
 }
 
 const requireFromApp = createRequire(path.join(appDir, 'package.json'))
+await prepareHistoricalDescriptor(appDir, { verifyOnly: true })
 const loaded = []
 for (const dependency of ['node-pty', 'koffi', 'protobufjs']) {
   assert.ok(requireFromApp(dependency), `${dependency} did not load`)

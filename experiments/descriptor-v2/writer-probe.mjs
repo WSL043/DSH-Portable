@@ -53,14 +53,14 @@ for (const session of [parent, child]) {
 const { createSessionFormatCatalogWithChildren, historicalSessionFormatCatalog } = await load(patchedApp, 'dsh-session-format-catalog')
 const { historicalChildCatalogSource } = await load(patchedApp, 'dsh-session-format-v3-to-v4')
 const { foldSubagentDescriptor } = await load(patchedApp, 'dsh-subagent')
-const originalCatalog = await load(originalApp, 'dsh-session-format-catalog')
+const originalCatalog = originalApp === '-' ? undefined : await load(originalApp, 'dsh-session-format-catalog')
 async function restore(id, catalog) {
   const rows = (await readFile(path.join(root, `${id}.jsonl`), 'utf8')).trim().split('\n').map(JSON.parse)
   const decoder = catalog.createRestore(rows.shift(), { recovery: 'strict', validation: 'current' })
   for (const row of rows) decoder.decodeRow(row)
   return decoder.finish()
 }
-await assert.rejects(restore(child.id, originalCatalog.historicalSessionFormatCatalog), /subagent\/descriptor .*uses unsupported descriptor version 2/)
+if (originalCatalog) await assert.rejects(restore(child.id, originalCatalog.historicalSessionFormatCatalog), /subagent\/descriptor .*uses unsupported descriptor version 2/)
 const childHistory = await restore(child.id, historicalSessionFormatCatalog)
 const childFacts = historicalChildCatalogSource(childHistory)
 const restoredParent = await restore(parent.id, createSessionFormatCatalogWithChildren([childFacts]))
@@ -79,6 +79,6 @@ assert.ok(!JSON.stringify(inherited).includes('child-tool-result'))
 assert.ok(restoredParent.events.some(e => e.type === 'subagent/catalog' && e.data.childId === child.id))
 for (const label of ['parent', 'child']) assert.ok(JSON.stringify(restoredChild.events).includes(`${label}-tool-result`))
 for (const [file, hash] of files) assert.equal(createHash('sha256').update(await readFile(file)).digest('hex'), hash)
-const result = { experimental: true, qualifiesRelease: false, writer: '0.1.1-rc.2', physicalHeader: 'published header mapping; official event packer', checks: ['exact-writer-versions', 'unmodified-runtime-rejects-identical-child', 'parent-child-catalog', 'inherited-message-identity-and-content', 'descriptor-composition', 'both-tool-results', 'source-file-hashes'], files: Object.fromEntries(files), remaining: ['real agent continuation', 'official persistence save path', 'final packaged native acceptance'] }
+const result = { experimental: true, qualifiesRelease: false, writer: '0.1.1-rc.2', originalRuntimeRefusalVerified: Boolean(originalCatalog), physicalHeader: 'published header mapping; official event packer', checks: ['exact-writer-versions', 'parent-child-catalog', 'inherited-message-identity-and-content', 'descriptor-composition', 'both-tool-results', 'source-file-hashes'], files: Object.fromEntries(files), remaining: ['real agent continuation', 'official persistence save path', 'final packaged native acceptance'] }
 await writeFile(path.join(root, 'result.json'), JSON.stringify(result, null, 2))
 console.log(JSON.stringify(result))

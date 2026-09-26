@@ -1,6 +1,6 @@
 # Descriptor v2 read compatibility experiment
 
-Not a production patch. No builder or launcher imports this directory. Stable publication remains blocked.
+The reviewed transform is now a candidate build adaptation in `scripts/patch-historical-descriptor.mjs`; this directory contains its research and acceptance harness. Stable publication still requires final product qualification. The read-time launcher does not mutate the installed runtime.
 
 ## Source evidence
 
@@ -23,6 +23,12 @@ These are synthetic schema/composition probes, not full historical recovery evid
 - Remove the adapter once an official release provides the equivalent migration, after running the same fixtures against that release.
 
 Do not set historicalSessionMigration to passed based on this experiment.
+
+## Candidate continuation and packaging
+
+`continuation-probe.mjs` mounts the actual current Cordis services, JSONL persistence and AgentLoop. A local deterministic LlmAdapter receives the inherited parent and child tool results, produces a new response, and the official storage backend saves it. Reopening checks the response is durable; a persisted unclosed turn is closed as interrupted on resume and another model turn succeeds. Original historical files retain their hashes. This exercises official storage and agent execution; it is not a physical power-loss test or full subagent-manager UI test.
+
+Local result: `build/descriptor-v2-continuation-4/result.json`. `scripts/verify-historical-session.mjs` now repeats the writer and continuation checks against each staged alpha.1 app. Old writer dependencies live in an isolated temporary directory outside the entire product stage, removed after the probe; structured evidence is printed to the build log. The output bundle SHA-256 and immutable patch identity are verified before packaging and required by the publication evidence check. The old source/unknown-input refusal remains strict. No RC2 runtime is adapted by this alpha.1 patch.
 
 ## Published writer probe (2026-09-27)
 

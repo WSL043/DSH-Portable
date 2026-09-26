@@ -253,6 +253,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Native settings command adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-loopback-connection.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Loopback connection adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-historical-descriptor.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Historical descriptor compatibility adaptation failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Portable Hero context adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-client-module-startup.mjs') (Join-Path $Stage 'app')
@@ -268,6 +270,9 @@ try {
     & $NodeExe (Join-Path $ProjectRoot 'scripts\prune-runtime.mjs') (Join-Path $Stage 'app') win32 x64
     if ($LASTEXITCODE -ne 0) { throw "runtime pruning failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-runtime.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw 'Runtime verification failed.' }
+    $HistoricalLock = Join-Path $ProjectRoot $(if ($UsePreviewLock) { 'upstream.preview.lock.json' } else { 'upstream.lock.json' })
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\verify-historical-session.mjs') (Join-Path $Stage 'app') $HistoricalLock
     if ($LASTEXITCODE -ne 0) { throw "runtime verification failed with exit code $LASTEXITCODE" }
     Write-BuildPhase 'runtime-stage-and-patches'
 
