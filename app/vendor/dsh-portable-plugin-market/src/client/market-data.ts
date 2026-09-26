@@ -9,6 +9,17 @@ export type { SharedHostPackageDependencyFinding } from '../diagnostics.ts'
 /** Localized text keyed by language ('zh' / 'en'). */
 export type LocalizedText = Record<string, string | undefined>
 
+/** Prefer the active catalog language; never erase text when one translation is missing. */
+export function localizedText(value: LocalizedText | undefined, language: string): string {
+  const primary = language.toLowerCase().startsWith('zh') ? 'zh' : 'en'
+  return value?.[primary]?.trim() || value?.[primary === 'zh' ? 'en' : 'zh']?.trim() || ''
+}
+
+export function categoryText(category: string | string[], categories: Record<string, LocalizedText>, language: string): string {
+  return (Array.isArray(category) ? category : [category])
+    .map(id => localizedText(categories[id], language) || id).join(language.startsWith('zh') ? ' · ' : ' / ')
+}
+
 /** One registry entry from /dsh-market/registry. */
 export interface RegistryPlugin {
   name: string
@@ -257,7 +268,7 @@ export function visiblePlugins(plugins: RegistryPlugin[], options: ListQuery): R
     if (options.category !== 'all' && !hasCategory(p, options.category)) return false
     if (options.sinceDays !== undefined && !withinDays(p.added, options.sinceDays)) return false
     if (query === '') return true
-    const desc = (p.description && (p.description[options.lang] || p.description.en)) || ''
+    const desc = localizedText(p.description, options.lang)
     return searchText(p.name).includes(query)
       || searchText(p.owner).includes(query)
       || searchText(desc).includes(query)

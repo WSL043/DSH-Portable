@@ -7,6 +7,7 @@ import { restartApp } from './restart-app.ts'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { DownloadCount } from './DownloadCount.tsx'
+import { CardPreview } from './CardPreview.tsx'
 import {
   Button,
   DisclosureRow,
@@ -42,7 +43,7 @@ import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
   avatarColor, batchUpdateNames, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
-  formatCount, pageItems, pluginName, pluginScreenshots, readSession, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
+  formatCount, localizedText, categoryText, pageItems, pluginName, pluginScreenshots, readSession, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
 ActivationInfo, ActivationState, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
@@ -208,6 +209,12 @@ function useAutoCarousel(count: number, initial: number, intervalMs = 3500): [nu
 function ScreenshotLightbox({ shots, startIndex, onClose, t }: { shots: string[]; startIndex: number; onClose: () => void; t: Translate }) {
   const [index, setIndex] = useAutoCarousel(shots.length, startIndex, 0)
   const host = useMarketPortalHost()
+  const closeButton = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null
+    closeButton.current?.focus()
+    return () => { if (previous?.isConnected) previous.focus() }
+  }, [])
   useEffect(() => {
     // Capture phase + stopPropagation: the Settings dialog underneath is a
     // Modal with its own Escape-to-close handling, also on window/document.
@@ -234,7 +241,7 @@ function ScreenshotLightbox({ shots, startIndex, onClose, t }: { shots: string[]
           version's public type surface doesn't resolve it — `tsc` reports
           "no exported member" even though icons/index.d.ts declares it.
           Not worth a type-check suppression for one close glyph. */}
-      <button className={css.lightboxClose} aria-label={t('lightboxClose')} onClick={onClose}>×</button>
+      <button ref={closeButton} className={css.lightboxClose} aria-label={t('lightboxClose')} onClick={onClose}>×</button>
       <img className={css.lightboxImg} src={shots[index]} alt="" onClick={e => e.stopPropagation()} />
       {shots.length > 1 && (
         <>
@@ -1515,7 +1522,7 @@ export function MarketSection(props: MarketSectionProps) {
       : undefined
 
   const pluginCard = (p: RegistryPlugin) => {
-    const desc = (p.description && (p.description[lang] || p.description.en)) || ''
+    const desc = localizedText(p.description, lang)
     const done = doneUrls.includes(p.url) || hotUrls.includes(p.url)
     const already = isInstalled(p, installed, repoIdentities, data?.plugins, repoHints)
     const busy = busyUrl === p.url
@@ -1574,6 +1581,7 @@ export function MarketSection(props: MarketSectionProps) {
           </div>
         </div>
         <div className={css.desc}>{desc}</div>
+        <CardPreview plugin={p} t={t} onOpen={openLightbox} />
 
         {p.deprecated === true && (
           <div className={css.deprecate}>
@@ -1589,7 +1597,7 @@ export function MarketSection(props: MarketSectionProps) {
         )}
         <div className={css.foot}>
           <span className={css.tag}>
-            {(data!.categories[p.category] && (data!.categories[p.category]![lang] || data!.categories[p.category]!.en)) || p.category}
+            {categoryText(p.category, data!.categories, lang)}
           </span>
 
           <span className={css.grow} />
@@ -1929,7 +1937,7 @@ export function MarketSection(props: MarketSectionProps) {
                                   data-chip="1"
                                   active={cat === id}
                                   onClick={() => setCat(id)}
-                                >{(data.categories[id] && (data.categories[id]![lang] || data.categories[id]!.en)) || id}</Pill>
+                                >{localizedText(data.categories[id], lang) || id}</Pill>
                               ))}
                               <Button
                                 variant="ghost"
@@ -2252,7 +2260,7 @@ export function MarketSection(props: MarketSectionProps) {
                               if (String(spec).toLowerCase().includes(needle)) return true
                               const entry = data === null ? undefined : entryForDep(data.plugins, name, String(spec), repoIdentities[name], repoHints[name])
                               if (entry !== undefined) {
-                                const desc = (entry.description && (entry.description[lang] || entry.description.en)) || ''
+                                const desc = localizedText(entry.description, lang)
                                 if (desc.toLowerCase().includes(needle)) return true
                                 if ((entry.owner || '').toLowerCase().includes(needle)) return true
                               }
@@ -2297,7 +2305,7 @@ export function MarketSection(props: MarketSectionProps) {
                                       : <div className={css.spec}>{specText}</div>}
                                   {entry !== undefined && (
                                     <div className={`${css.desc} ${css.descTight}`}>
-                                      {(entry.description && (entry.description[lang] || entry.description.en)) || ''}
+                                      {localizedText(entry.description, lang)}
                                     </div>
                                   )}
                                   {!off && act !== undefined && meta !== null && (
@@ -2466,7 +2474,7 @@ export function MarketSection(props: MarketSectionProps) {
           open
           onClose={() => { setConfirming(null); setCmdOpen(false) }}
           title={pluginName(confirming.name)}
-          description={(confirming.description && (confirming.description[lang] || confirming.description.en)) || ''}
+          description={localizedText(confirming.description, lang)}
           footer={(
             <>
               <Button variant="ghost" onClick={() => { setConfirming(null); setCmdOpen(false) }}>{t('cancel')}</Button>
@@ -2498,7 +2506,7 @@ export function MarketSection(props: MarketSectionProps) {
             {typeof confirming.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', confirming.stars)}>{'· ★ ' + formatCount(confirming.stars)}</span>}
             <span className={css.grow} />
             <span className={css.tag}>
-              {(data!.categories[confirming.category] && (data!.categories[confirming.category]![lang] || data!.categories[confirming.category]!.en)) || confirming.category}
+              {categoryText(confirming.category, data!.categories, lang)}
             </span>
           </div>
           {confirming.added && <div className={css.metaInline}>{t('published') + ' ' + confirming.added}</div>}

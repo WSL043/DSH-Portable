@@ -2,6 +2,8 @@
 
 This is a scoped intake, not a declaration that Portable has synchronized the market or passed product acceptance. Latest published release reviewed: [1.66.1](https://github.com/dsh-market/dsh-market/releases/tag/v1.66.1). Upstream main also contains follow-up changes after that release.
 
+> Follow-up (2026-09-27): the upstream union-based release-age repair was retracted. See [the newer intake](market-upstream-review-2026-09-27.md) before implementing the policy-repair candidate below.
+
 ## Findings and decisions
 
 - **Plugin command capabilities and rollback (priority):** upstream commit `78de8d3d` fixes extra pnpm options rejected by the official desktop command bridge. Audit Portable's actual native and Electron adapters separately. Do not copy recovery flags across hosts or report unsupported operations when only an option is unsupported. Acceptance must include a failed update followed by verification of the actual restored version on disk.

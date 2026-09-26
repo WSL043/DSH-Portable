@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useState, useSyncExternalStore } from 'react'
 import { Button, IconCordisPluginOutline14, Modal } from './primitives.ts'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
@@ -20,7 +20,11 @@ export interface MarketActionProps {
 /** The modern manager toolbar entry contributed through the Portable adapter. */
 export function MarketAction(props: MarketActionProps) {
   const [open, setOpen] = useState(false)
-  const zh = props.locale.getSnapshot().active.toLowerCase().startsWith('zh')
+  const locale = useSyncExternalStore(
+    callback => props.locale.subscribe(callback),
+    () => props.locale.getSnapshot(),
+  )
+  const zh = locale.active.toLowerCase().startsWith('zh')
   const close = useCallback(() => {
     setOpen(false)
     props.refresh?.()

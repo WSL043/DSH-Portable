@@ -184,7 +184,7 @@ test('the Portable market reaches the modern manager and retains an old-host fal
   assert.doesNotMatch(registration, /ctx\.slots\.inject\('settings\.section'/)
   assert.match(styles, /\.grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/s)
   assert.doesNotMatch(styles, /\.grid\s*\{[^}]*repeat\(2/s)
-  assert.doesNotMatch(section, /<CardShot/)
+  assert.match(section, /<CardPreview/)
   assert.match(section, /dshm-market-view/)
   assert.match(section, /localStorage\.setItem\('dshm-market-view'/)
   assert.match(section, /aria-pressed=\{marketView === 'cards'\}/)

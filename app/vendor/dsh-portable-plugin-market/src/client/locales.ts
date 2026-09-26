@@ -2,6 +2,7 @@
 
 export const zh = {
   nav: '插件市场',
+  previewScreenshot: '预览 {0} 的第 {1} 张截图',
   searchPh: '搜索插件，比如：通知、终端、记忆…',
   tabDiscover: '发现',
   tabInstalled: '已安装',
@@ -304,6 +305,7 @@ export type MarketKey = keyof typeof zh
 
 export const en: Record<MarketKey, string> = {
   nav: 'Plugin Market',
+  previewScreenshot: 'Preview {0} screenshot {1}',
   searchPh: 'Search plugins: notify, terminal, memory…',
   tabDiscover: 'Discover',
   tabInstalled: 'Installed',

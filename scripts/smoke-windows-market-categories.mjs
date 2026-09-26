@@ -101,6 +101,10 @@ try {
     return false
   })()`, Boolean, 'native settings command opens after onboarding')
 
+  if (process.argv.includes('--layout')) {
+    await until(click(['General', 'General settings', '通用设置']), Boolean, 'general theme baseline')
+    await until(click(['Light', '浅色']), Boolean, 'explicit light theme baseline')
+  }
   await writeFile(path.join(output, 'general-page.txt'), await evaluate('document.body.innerText'))
   await until(click(['Desktop & data', '桌面与数据', 'Portable']), Boolean, 'dedicated Portable settings navigation')
   await until(`document.body.innerText.includes('Check and repair') || document.body.innerText.includes('检查与修复')`, Boolean, 'Portable maintenance without update controls')
@@ -243,11 +247,16 @@ try {
         })()`)
         assert.ok(bounds.count > 0)
         assert.equal(bounds.overflow, false, 'plugin card overflow')
-        assert.equal(bounds.inlineImages, false, 'discovery cards should not fetch preview screenshots')
+        assert.equal(bounds.inlineImages, true, 'catalog screenshots appear in discovery cards')
         await writeFile(path.join(output, `market-${label}-${width}.png`), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
       }
     }
     await captureLayout('light')
+    const preview = await until(`(() => {const image=document.querySelector('button[class*="cardPreview"] img'); image?.scrollIntoView({block:'center'});return Boolean(image?.complete && image.naturalWidth > 0)})()`, Boolean, 'actual catalog preview loaded')
+    await evaluate(`document.querySelector('button[class*="cardPreview"]')?.click()`)
+    await until(`Boolean(document.querySelector('[class*="lightboxImg"]'))`, Boolean, 'preview opens lightbox')
+    await send('Input.dispatchKeyEvent', {type:'keyDown', key:'Escape', code:'Escape', windowsVirtualKeyCode:27})
+    await until(`!document.querySelector('[class*="lightboxImg"]') && Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Escape closes only preview')
     await evaluate(`document.querySelector('[class*="nameButton"]')?.click()`)
     await until(`document.querySelectorAll('[role="dialog"]').length > 1`, Boolean, 'plugin details open from name')
     const closeDialog = `(() => {const dialog=[...document.querySelectorAll('[role="dialog"]')].at(-1);const button=[...dialog.querySelectorAll('button')].find(b=>['Close','关闭','Cancel','取消'].includes(b.getAttribute('aria-label')||b.textContent.trim()));button?.click();return Boolean(button)})()`
@@ -261,6 +270,25 @@ try {
     await until(click(['Plugin Market', '插件市场']), Boolean, 'market in dark theme')
     await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'dark market ready')
     await captureLayout('dark')
+    await until(closeDialog, Boolean, 'close dark market')
+    await nativeState(131260)
+    await until(click(['General', 'General settings', '通用设置']), Boolean, 'general language')
+    await until(click(['English']), Boolean, 'language selector')
+    await until(click(['简体中文', '中文', '中文（简体）', 'Chinese', 'Simplified Chinese']), Boolean, 'choose Chinese')
+    await until(closeDialog, Boolean, 'close Chinese settings')
+    await until(click(['插件']), Boolean, 'Chinese plugins')
+    await until(click(['插件市场']), Boolean, 'Chinese market entry')
+    await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Chinese market ready')
+    assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label^="预览 "]'))`), true, 'localized preview label')
+    await captureLayout('zh-dark')
+    await writeFile(path.join(output, 'chinese-market.txt'), await evaluate('document.body.innerText'))
+    // Leave the disposable fixture in English for subsequent independent probes.
+    await until(closeDialog, Boolean, 'close Chinese market')
+    await nativeState(131260)
+    await until(click(['通用设置']), Boolean, 'restore language settings')
+    await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
+    await until(click(['English']), Boolean, 'restore English')
+
   }
   assert.deepEqual(exceptions,[]);
   await writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
