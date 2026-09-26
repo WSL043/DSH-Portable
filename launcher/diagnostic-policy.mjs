@@ -33,11 +33,17 @@ export function redactDiagnosticText(source) {
 }
 
 export function classifyPortableError(error) {
-  if (error?.code === 'DSH_PROFILE_PREFLIGHT_FAILED') return 'DSH_PROFILE_COMPATIBILITY_FAILED'
   if (error?.code === 'DSH_DATA_IMPORT_PROFILE_FAILED') return 'DATA_IMPORT_ROLLED_BACK'
   const source = String(error?.stack ?? error?.message ?? error ?? '')
   if (/restored but could not restart|previous version could not be restarted/i.test(source)) return 'UPDATE_RECOVERY_FAILED'
   if (/rolled back[\s\S]*previous version was restored and restarted/i.test(source)) return 'UPDATE_ROLLED_BACK'
+  let cause = error
+  for (let depth = 0; depth < 3 && cause != null; depth += 1, cause = cause?.cause) {
+    if (/subagent\/descriptor\b[^\r\n]*uses unsupported descriptor version 2\b/.test(String(cause?.stack ?? cause?.message ?? cause))) {
+      return 'DSH_HISTORICAL_SESSION_UNSUPPORTED'
+    }
+  }
+  if (error?.code === 'DSH_PROFILE_PREFLIGHT_FAILED') return 'DSH_PROFILE_COMPATIBILITY_FAILED'
   if (/Another portable launcher is already starting or stopping DSH/i.test(source)) return 'LAUNCH_IN_PROGRESS'
   if (/Close the other Portable environment/i.test(source)) return 'SHARED_COMPONENTS_BUSY'
   if (/EADDRINUSE|address already in use/i.test(source)) return 'PORT_IN_USE'
@@ -53,6 +59,7 @@ export function portablePublicError(error) {
     UPDATE_RECOVERY_FAILED: 'The update failed and the previous version could not be restarted. Reopen DSH-Portable and export a support report.',
     PORT_IN_USE: 'The local DSH service port is already in use. Close the other DSH instance and try again.',
     DSH_START_FAILED: 'DeepSeek Harness did not become ready. Reopen DSH-Portable and export a support report.',
+    DSH_HISTORICAL_SESSION_UNSUPPORTED: 'This DeepSeek Harness version cannot read a historical subagent session format. Reinstalling plugins or clearing caches will not fix this format mismatch. Keep the original session files and export a support report.',
     LAUNCH_IN_PROGRESS: 'DSH-Portable is already starting or stopping. Try again in a moment.',
     SHARED_COMPONENTS_BUSY: 'Close the other running DSH-Portable environments before changing shared components.',
     DSH_PROFILE_COMPATIBILITY_FAILED: 'The new DeepSeek Harness version is incompatible with an existing plugin profile. The installed version was not changed; export a support report for details.',

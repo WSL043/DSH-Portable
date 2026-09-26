@@ -7,6 +7,8 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'README.en.md'
+      # Read-only schema experiments are not imported by product builders.
+      - 'experiments/descriptor-v2/**'
   pull_request:
   workflow_dispatch:
 

@@ -54,3 +54,13 @@ test('full diagnostics are stored redacted and bounded outside the user-facing e
   assert.doesNotMatch(source, /cause-secret/)
   assert.ok(Buffer.byteLength(source) < 256 * 1024)
 })
+
+test('historical descriptor failure is diagnosed through a cause without hiding rollback outcome', () => {
+  const historical = new Error('subagent/descriptor 42 uses unsupported descriptor version 2')
+  assert.equal(classifyPortableError(new Error('DeepSeek Harness failed to start', { cause: historical })), 'DSH_HISTORICAL_SESSION_UNSUPPORTED')
+  assert.equal(classifyPortableError(Object.assign(new Error('profile preflight failed', { cause: historical }), { code: 'DSH_PROFILE_PREFLIGHT_FAILED' })), 'DSH_HISTORICAL_SESSION_UNSUPPORTED')
+  assert.match(portablePublicError(historical).message, /Keep the original session files/)
+  assert.equal(classifyPortableError(new Error('Update failed and was rolled back: previous version was restored and restarted', { cause: historical })), 'UPDATE_ROLLED_BACK')
+  assert.notEqual(classifyPortableError(new Error('unsupported descriptor version 2')), 'DSH_HISTORICAL_SESSION_UNSUPPORTED')
+  assert.notEqual(classifyPortableError(new Error('subagent/descriptor 42 uses unsupported descriptor version 20')), 'DSH_HISTORICAL_SESSION_UNSUPPORTED')
+})
