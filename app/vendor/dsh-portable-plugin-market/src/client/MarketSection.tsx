@@ -6,6 +6,7 @@ import { restartApp } from './restart-app.ts'
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
+import { DownloadCount } from './DownloadCount.tsx'
 import {
   Button,
   DisclosureRow,
@@ -392,7 +393,6 @@ function sameInstalledMap(left: InstalledMap, right: InstalledMap): boolean {
 
 /** Sort field choices in the filter panel. */
 const SORT_FIELD_OPTIONS: ReadonlyArray<{ key: SortField; label: string }> = [
-  { key: 'downloads', label: 'sortDownloads' },
   { key: 'stars', label: 'sortStars' },
   { key: 'added', label: 'sortAdded' },
 ]
@@ -621,7 +621,9 @@ export function MarketSection(props: MarketSectionProps) {
   const [restarting, setRestarting] = useState(false)
   const [showTop, setShowTop] = useState(false)
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  const [sortField, setSortField] = useState<SortField>('downloads')
+  // Lifetime counts load only for visible cards. Do not pretend a monthly
+  // catalog ranking is a total-download ranking, or rank a partially loaded set.
+  const [sortField, setSortField] = useState<SortField>('stars')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   /** Direction labels adapt to the field: stars → asc/desc, added → oldest/newest. */
   const sortDirLabel = (dir: SortDir): string =>
@@ -1586,7 +1588,7 @@ export function MarketSection(props: MarketSectionProps) {
             <div className={css.byline}>
               <OwnerAvatar name={p.name} owner={p.owner || ''} />
               <span className={css.owner}>{p.owner}</span>
-              {typeof p.downloads === 'number' && <span className={css.star} title={metricTitle('metricDownloads', p.downloads)}>{'· ↓ ' + formatCount(p.downloads)}</span>}
+              {p.npm && <DownloadCount key={p.npm} name={p.npm} chinese={lang === 'zh'} className={css.star} />}
               {typeof p.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
             </div>
           </div>
@@ -2540,7 +2542,7 @@ export function MarketSection(props: MarketSectionProps) {
           <div className={css.byline}>
             <OwnerAvatar name={confirming.name} owner={confirming.owner || ''} />
             <span className={css.owner}>{confirming.owner}</span>
-            {typeof confirming.downloads === 'number' && <span className={css.star} title={metricTitle('metricDownloads', confirming.downloads)}>{'· ↓ ' + formatCount(confirming.downloads)}</span>}
+            {confirming.npm && <DownloadCount key={confirming.npm} name={confirming.npm} chinese={lang === 'zh'} className={css.star} />}
             {typeof confirming.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', confirming.stars)}>{'· ★ ' + formatCount(confirming.stars)}</span>}
             <span className={css.grow} />
             <span className={css.tag}>

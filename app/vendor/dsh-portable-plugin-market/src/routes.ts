@@ -1,4 +1,5 @@
 import { profileRevision } from './profile-revision.ts'
+import { getDownloadTotal } from './download-totals.ts'
 import { createOfficialTransactionRuntime, type OfficialTransactionRuntime } from './official-transaction.ts'
 import { createLegacyDisableReplay, legacyOwnsPluginState } from './disable-replay.ts'
 /**
@@ -753,6 +754,21 @@ export function mountMarketRoutes(
         } catch (error) {
           sendJson(response, 400, { error: error instanceof Error ? error.message : String(error) })
         }
+      },
+    }),
+
+    host.webServer.register({
+      kind: 'exact',
+      path: '/dsh-market/download-total',
+      handler: async (request, response) => {
+        if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return }
+        const name = new URL(request.url ?? '/', 'http://localhost').searchParams.get('name') ?? ''
+        const snapshot = await readRegistrySnapshot(registryCacheFile)
+        if (!snapshot?.registry.plugins.some(plugin => plugin.npm === name)) {
+          sendJson(response, 404, { error: 'Package not in current catalog' }); return
+        }
+        try { sendJson(response, 200, await getDownloadTotal(name)) }
+        catch { sendJson(response, 503, { error: 'npm total temporarily unavailable' }) }
       },
     }),
 
