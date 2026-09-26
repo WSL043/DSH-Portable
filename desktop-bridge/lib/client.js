@@ -1295,16 +1295,28 @@ window.__ModuleLoader__.load({
         const pendingWorkspaceRequests = new Map()
         const originalPickDirectory = ctx.workspaces?.pickDirectory
         let nativePickDirectory = null
+        let workspacePickerPromise = null
         if (host.capabilities.pickDirectory === true && ctx.workspaces && typeof originalPickDirectory === 'function') {
-          nativePickDirectory = () => new Promise((resolve, reject) => {
-            const requestId = `workspace-${Date.now().toString(36)}-${++workspaceRequestSequence}`
-            pendingWorkspaceRequests.set(requestId, { resolve, reject })
-            webview.postMessage({
-              type: 'dsh-portable/pick-directory',
-              schemaVersion: 1,
-              requestId,
+          nativePickDirectory = () => {
+            if (!active) return Promise.resolve(null)
+            if (workspacePickerPromise) return workspacePickerPromise
+            const request = new Promise((resolve, reject) => {
+              const requestId = `workspace-${Date.now().toString(36)}-${++workspaceRequestSequence}`
+              pendingWorkspaceRequests.set(requestId, { resolve, reject })
+              try { webview.postMessage({
+                type: 'dsh-portable/pick-directory',
+                schemaVersion: 1,
+                requestId,
+              }) } catch (error) {
+                pendingWorkspaceRequests.delete(requestId)
+                reject(error)
+              }
             })
-          })
+            workspacePickerPromise = request
+            const clear = () => { if (workspacePickerPromise === request) workspacePickerPromise = null }
+            request.then(clear, clear)
+            return request
+          }
           ctx.workspaces.pickDirectory = nativePickDirectory
         }
         const syncSessionEventSubscriptions = () => {

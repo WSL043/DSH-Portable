@@ -12,6 +12,21 @@
 
 当前产品路线以 [2026-09-25 官方桌面决策](official-desktop-readiness.md#2026-09-25产品路线决定)为准：Windows/macOS 的下一代目标是官方 Desktop 底座的便携化；[Electron rc.2 开发线](official-desktop-rc2-probe.md)已并行启动。旧会话迁移与插件操作仍阻断当前产品发布，现有 Native 宿主继续交付正式版及 Linux。
 
+## 2026-09-27 Native 后续执行状态
+
+0.7.5 已正式发布，精确成品 CI `36265359810` 和发布 `36266467065` 均通过。上面的 2026-09-26 阻断描述及下面按日期记录的状态属于历史；最新基线见 [0.7.5 验收](release-0.7.5-plan.md)。当前优先完成 Native 长期维护，暂不扩展 Electron 功能。
+
+| 任务 | 当前事实 | 下一验收 |
+| --- | --- | --- |
+| A16 / S01 依赖存储 | 直接 prune 的 copy 安装断网重建反例仍成立；不能开放无保护清空 | 跨 profile、回滚与离线引用分析，隔离整理后断网重建 |
+| A17 插件日志 | 修复扫描超限整批退出；2100 条过期合成日志两轮回收 1999+101，最新日志保留 | 当前源码尚未发布；相关成品维护调用验收 |
+| A16 存储报告 | 四类扫描分配条目预算，避免大 store 使备份/日志无法统计；仍不跟随链接 | 当前源码尚未发布；桥接集成测试 |
+| A18 长稳 | 短时通过不代替长期稳定性 | 当前候选重复导航、图片、插件操作的内存/句柄/进程趋势 |
+| A20 窗口 | 0.7.5 最大化/F11 已有最终 CI；跨屏/DPI 不能借此勾选 | 可用原生环境分别记录，缺失环境明确保留 |
+| A21–A23 恢复/迁移 | 保留已有入口与事务实现，按具体故障补缺 | 选择器关闭/取消、导入中断/磁盘满、不同平台数据链接 |
+
+不将发布清单完成等同长期维护完成。每项继续按实现、定向验证、成品证据、交付四个阶段记录。
+
 ## 2026-09-25 默认插件发布通道
 
 - 官方 DSH rc.2 的隔离候选已在[接入记录](upstream-0.1.7-rc.2-intake.md)中完成 39/39 项精确成品验收；历史 descriptor-v2 会话迁移仍是独立发布阻断，不能因此晋级正式产品或内核通道。
@@ -314,3 +329,11 @@ Publish run 35447892453 stopped before upload: the REST release-by-tag endpoint 
 New CodeQL alerts 919/920 are same-user CLI-selected test output roots without elevation; 921 executes fixed repository-owned test source in a synthetic VM. Individual false-positive dispositions record these limited reasons; no exclusions added. Open CodeQL and Dependabot counts were zero after review.
 
 Subscription optional component settings handoff: 4f1aa12 follows a3a1198, still unpublished. Separate task reports real install/restart/uninstall/restart and 453 passing tests, three conditional skips. This is a separate plugin delivery, not a bundled Portable feature claim.
+
+### 2026-09-27 本批源码与验收
+
+- A17：超量日志分批回收；A16：四类占用扫描公平预算。定向与桥接测试 24 项通过，2100 条过期日志实测两轮回收，最新保留。
+- A21：连续工作区选择共用一个原生请求；发送失败回收请求，dispose 结清未完成选择。桥接 22 项通过；宿主异常退出的成品验证仍未关闭。
+- A22：Recovery 诊断/修复使用明确的人类可读状态，JSON 接口不变。以发布 0.7.5 标准 ZIP（SHA `8c39ccfa5dce19fa6c4ac34dd1a7ee8c27643673a6588fc26d447a79e2ac4d53`）新目录加本轮源文件/恢复程序覆盖验证：诊断通过、首次修复、重复两次无需修复、运行中拒绝（exit 2）、后端优雅退出均通过。这是源码覆盖集成检查，不是新版本不可变成品。日志在 `build/native-maintenance-product/recovery-*.log`。
+- A23：导入的回滚也失败时保留备份、原始异常和回滚异常，发出明确 `DSH_DATA_IMPORT_ROLLBACK_FAILED`，不继续插件失败降级导入。实际文件目标被目录阻挡的故障用例通过；迁移专项 36 通过、6 条 Windows 文件链接权限条件跳过，磁盘满/断电仍未完成。
+- 本批全仓 870 项：856 通过、14 平台条件跳过、0 失败（`build/native-maintenance-full-tests.log`）。这些改动尚未发布，不以 0.7.5 的发布证据替代。

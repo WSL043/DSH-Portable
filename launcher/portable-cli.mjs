@@ -46,6 +46,7 @@ import {
 import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
+import { formatRecoveryResult } from './recovery-presentation.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchiveAllowingPluginFailure } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
 import { pauseIncompatibleProfileBundles } from './profile-compatibility.mjs'
@@ -901,8 +902,9 @@ function preferredUpdateChannel(options) {
   }
 }
 
-function print(result, json) {
+function print(result, json, command) {
   if (json) console.log(JSON.stringify(result))
+  else if (formatRecoveryResult(result, command) !== null) console.log(formatRecoveryResult(result, command))
   else if (Array.isArray(result.bundles)) {
     console.log(`Web profile: ${result.status}`)
     if (result.detail) console.log(result.detail)
@@ -1004,7 +1006,7 @@ async function main() {
     }
     else if (options.command === 'update') result = await update(options)
     else throw new Error(`Unsupported command: ${options.command}`)
-    print(result, options.json)
+    print(result, options.json, options.command)
     if (['doctor', 'repair'].includes(options.command) && result.ok === false) {
       process.exitCode = result.deferred ? 2 : 1
     }

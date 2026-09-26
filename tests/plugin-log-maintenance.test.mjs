@@ -60,7 +60,7 @@ test('contended or unavailable official lock leaves all logs intact', async t =>
   }
 })
 
-test('links and unexpected trees survive; work budget stops rather than partially ranking history', async t => {
+test('links and unexpected trees survive; exhausted work budget makes no changes', async t => {
   const f = await fixture(t)
   const external = path.join(f.root, 'external')
   await mkdir(external)
@@ -74,4 +74,24 @@ test('links and unexpected trees survive; work budget stops rather than partiall
   const result = await maintainPluginLogs(f.home, lock, { now })
   assert.equal(result.removed, 1)
   assert.equal(await readFile(path.join(external, 'pnpm.log'), 'utf8'), 'external')
+})
+
+test('oversized managed history makes bounded progress across maintenance runs', async t => {
+  const f = await fixture(t)
+  const newest = await f.add('operation-ZZZZZZ', 100)
+  for (let i = 0; i < 12; i++) await f.add(`operation-${String(i).padStart(6, '0')}`, day * 30 + i)
+  const lock = async (_file, fn) => fn()
+  let removed = 0
+  for (let i = 0; i < 12; i++) {
+    const result = await maintainPluginLogs(f.home, lock, { now, maxEntries: 4, budgetMs: 5000 })
+    if (i === 0) {
+      assert.equal(result.limited, true)
+      assert.ok(result.removed > 0, 'hitting the discovery cap must not starve all cleanup')
+    }
+    removed += result.removed
+    await access(newest)
+    if (!result.limited) break
+  }
+  assert.equal(removed, 12)
+  assert.equal((await maintainPluginLogs(f.home, lock, { now })).removed, 0)
 })

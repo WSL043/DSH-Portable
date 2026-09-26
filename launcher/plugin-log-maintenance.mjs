@@ -38,11 +38,15 @@ export async function profileLogDirectories(dshHome) {
 // No fallback lock: unsupported runtimes retain their logs rather than race writers.
 export async function maintainPluginLogs(dshHome, withFileLock, {
   now = Date.now(), maxRuns = 30, maxAgeMs = 14 * 86400000,
-  maxBytes = 32 * 1024 * 1024, graceMs = 86400000, budgetMs = 1000,
+  maxBytes = 32 * 1024 * 1024, graceMs = 86400000, budgetMs = 1000, maxEntries = 2000,
 } = {}) {
   const result = { removed: 0, bytes: 0, deferred: 0, protected: 0, limited: false }
   if (typeof withFileLock !== 'function') return { ...result, deferred: 1 }
   const deadline = Date.now() + budgetMs
+  // Reserve time to reclaim a bounded batch even when discovery hits its limit.
+  // Ranking a subset is conservative: its retained newest entries are a superset
+  // of the globally newest entries that occur in that subset.
+  const scanDeadline = deadline - Math.max(1, Math.floor(budgetMs / 4))
   const discovery = await profileLogDirectories(dshHome)
   result.limited = !discovery.complete
   for (const { profile, logs } of discovery.roots) {
@@ -53,7 +57,7 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
         const runs = []
         let inspected = 0
         for await (const entry of await opendir(logs)) {
-          if (++inspected > 2000 || Date.now() >= deadline) { result.limited = true; return }
+          if (++inspected > maxEntries || Date.now() >= scanDeadline) { result.limited = true; break }
           if (!/^operation-[A-Za-z0-9]{6}$/.test(entry.name) || !entry.isDirectory() || entry.isSymbolicLink()) { result.protected++; continue }
           const dir = path.join(logs, entry.name)
           const children = await readdir(dir)

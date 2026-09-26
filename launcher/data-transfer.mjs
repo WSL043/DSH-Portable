@@ -369,7 +369,15 @@ export async function restoreDataArchive(layout, filename, options = {}) {
       trace('operability-validation-complete')
     }
   } catch (error) {
-    await rollbackImport()
+    try { await rollbackImport() }
+    catch (rollbackError) {
+      const failure = new Error('Data import failed and automatic rollback could not finish. Keep the current folder and recovery backups; export a support report before retrying.', { cause: error })
+      failure.code = 'DSH_DATA_IMPORT_ROLLBACK_FAILED'
+      failure.rollbackError = rollbackError
+      failure.rollbackDirectory = rollbackDirectory
+      trace('rollback-failed', { code: rollbackError?.code || 'UNKNOWN', retainedBackup: Boolean(rollbackDirectory) })
+      throw failure
+    }
     throw error
   }
   if (rollbackDirectory && replaced === 0 && !retainedGeneratedBackup) await rm(rollbackDirectory, { recursive: true, force: true })

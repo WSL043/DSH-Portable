@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -29,6 +29,39 @@ async function fixture() {
   await writeFile(path.join(layout.workspace, 'project.txt'), 'workspace')
   return { root, layout }
 }
+
+test('failed rollback retains backups and cannot fall through to plugin-free import', async t => {
+  const source = await fixture()
+  const target = await fixture()
+  t.after(() => Promise.all([source, target].map(item => rm(item.root, { recursive: true, force: true }))))
+  const archive = path.join(source.root, 'backup.dshdata')
+  await createDataArchive(source.layout, archive)
+  const settings = path.join(target.layout.dshHome, 'settings.yaml')
+  await writeFile(settings, 'locale: en-US\n')
+  let validationCalls = 0
+  let failure
+  const phases = []
+  await assert.rejects(restoreDataArchiveAllowingPluginFailure(target.layout, archive, {
+    conflict: 'replace',
+    trace: phase => phases.push(phase),
+    validate: async () => {
+      validationCalls++
+      // Actual filesystem obstruction: a file target becomes a directory.
+      await rm(settings)
+      await mkdir(settings)
+      throw Object.assign(new Error('plugin validation failed'), { code: 'DSH_DATA_IMPORT_PROFILE_FAILED' })
+    },
+  }), error => {
+    failure = error
+    return error.code === 'DSH_DATA_IMPORT_ROLLBACK_FAILED'
+  })
+  assert.equal(validationCalls, 1)
+  assert.equal(failure.cause.code, 'DSH_DATA_IMPORT_PROFILE_FAILED')
+  assert.ok(failure.rollbackError)
+  assert.ok(phases.includes('rollback-failed'))
+  assert.equal(phases.includes('rollback-complete'), false)
+  assert.equal(await readFile(path.join(failure.rollbackDirectory, 'data/dsh-home/settings.yaml'), 'utf8'), 'locale: en-US\n')
+})
 
 test('data archive defaults to durable settings, sessions and reproducible plugin metadata', async () => {
   const { layout } = await fixture()

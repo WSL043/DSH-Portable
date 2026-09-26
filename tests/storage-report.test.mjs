@@ -27,3 +27,18 @@ test('storage inventory separates retained backups, skips links and reports part
   assert.equal(await readFile(path.join(root, 'workspace/private'), 'utf8'), 'do not scan or delete')
   assert.equal(await readFile(path.join(root, 'data/backups/saved'), 'utf8'), '123')
 })
+
+test('a large dependency store cannot starve backup and log measurements', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'portable-storage-fair-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  for (const dir of ['pnpm-store', 'backups', 'recovery', 'logs']) await mkdir(path.join(root, 'data', dir), { recursive: true })
+  for (let i = 0; i < 30; i++) await writeFile(path.join(root, 'data/pnpm-store', String(i)), 'x')
+  await writeFile(path.join(root, 'data/backups/saved'), 'backup')
+  await writeFile(path.join(root, 'data/logs/log'), 'log')
+  const report = await inspectStorage(root, { maxEntries: 16 })
+  assert.equal(report.categories[0].limited, true)
+  assert.equal(report.categories[1].complete, true)
+  assert.equal(report.categories[1].bytes, 6)
+  assert.equal(report.categories[3].complete, true)
+  assert.equal(report.categories[3].bytes, 3)
+})

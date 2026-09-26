@@ -337,6 +337,8 @@ test('Portable desktop bridge owns workspace picking through the WebView host an
 
   const picked = runtime.ctx.workspaces.pickDirectory()
   const request = client.posted.at(-1)
+  assert.equal(runtime.ctx.workspaces.pickDirectory(), picked, 'repeated clicks reuse the active native dialog')
+  assert.equal(client.posted.at(-1), request, 'a second native dialog must not be queued')
   assert.equal(request.type, 'dsh-portable/pick-directory')
   assert.equal(request.schemaVersion, 1)
   assert.match(request.requestId, /^workspace-/)
@@ -358,7 +360,9 @@ test('Portable desktop bridge owns workspace picking through the WebView host an
   })
   assert.equal(await cancelled, null)
 
+  const pendingAtDispose = runtime.ctx.workspaces.pickDirectory()
   runtime.dispose()
+  assert.equal(await pendingAtDispose, null)
   assert.equal(runtime.ctx.workspaces.pickDirectory, original)
 })
 
