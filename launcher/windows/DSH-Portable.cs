@@ -28,8 +28,8 @@ using Windows.UI.Notifications;
 [assembly: AssemblyCompany("WSL043")]
 [assembly: AssemblyProduct("DeepSeek-Herness")]
 [assembly: AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: AssemblyVersion("0.7.5.10001")]
-[assembly: AssemblyFileVersion("0.7.5.10001")]
+[assembly: AssemblyVersion("0.7.5.65534")]
+[assembly: AssemblyFileVersion("0.7.5.65534")]
 
 namespace DshPortable
 {
@@ -1611,7 +1611,17 @@ namespace DshPortable
                 int[] bounds = new int[4];
                 Marshal.Copy(message.LParam, bounds, 0, bounds.Length);
                 base.WndProc(ref message);
-                if (WindowState == FormWindowState.Normal)
+                if (IsZoomed(Handle))
+                {
+                    // The maximized outer rectangle includes invisible resize borders.
+                    // Keep our captionless client inside the target monitor work area.
+                    Rectangle proposed = Rectangle.FromLTRB(bounds[0], bounds[1], bounds[2], bounds[3]);
+                    Rectangle workArea = Screen.FromRectangle(proposed).WorkingArea;
+                    int[] client = new int[] { workArea.Left, workArea.Top, workArea.Right, workArea.Bottom };
+                    Marshal.Copy(client, 0, message.LParam, client.Length);
+                    message.Result = IntPtr.Zero;
+                }
+                else if (WindowState == FormWindowState.Normal)
                 {
                     Marshal.Copy(bounds, 0, message.LParam, bounds.Length);
                     message.Result = IntPtr.Zero;
@@ -2797,9 +2807,17 @@ namespace DshPortable
                 {
                     object key;
                     if (message.TryGetValue("key", out key)) QueueDesktopShortcut((Keys)Convert.ToInt32(key));
+                    object command;
+                    if (message.TryGetValue("command", out command) && Convert.ToString(command) == "maximize")
+                        BeginInvoke(new Action(delegate {
+                            RefreshDesktopCommands();
+                            ((ToolStripMenuItem)desktopMenu.Items["menu-view"]).DropDownItems["maximize"].PerformClick();
+                        }));
                     BeginInvoke(new Action(delegate
                     {
                         RefreshDesktopCommands();
+                        Rectangle clientScreen = RectangleToScreen(ClientRectangle);
+                        Rectangle workArea = Screen.FromControl(this).WorkingArea;
                         webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(new {
                             type = "dsh-portable/test-desktop-result", fullscreen = fullscreen,
                             menuVisible = desktopMenu.Visible, nativeLoadingVisible = launchPanel.Visible,
@@ -2807,6 +2825,8 @@ namespace DshPortable
                                 .Where(menu => menu.HasDropDownItems && menu.DropDown.Visible).Select(menu => menu.Name).ToArray(),
                             paintedFrames = activityRing.PaintedFrames, rotation = activityRing.Rotation,
                             bounds = new { x = Bounds.X, y = Bounds.Y, width = Bounds.Width, height = Bounds.Height },
+                            clientScreen = new { x = clientScreen.X, y = clientScreen.Y, width = clientScreen.Width, height = clientScreen.Height },
+                            workArea = new { x = workArea.X, y = workArea.Y, width = workArea.Width, height = workArea.Height },
                             windowState = WindowState.ToString(), chrome = FormBorderStyle.ToString(),
                             menuBottom = desktopMenu.Bottom, contentTop = desktopContent.Top + webView.Top,
                             zoom = webView.ZoomFactor, theme = trayTheme
@@ -4331,6 +4351,9 @@ namespace DshPortable
 
         [DllImport("user32.dll")]
         private static extern bool IsWindowVisible(IntPtr window);
+
+        [DllImport("user32.dll")]
+        private static extern bool IsZoomed(IntPtr window);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassName(IntPtr window, StringBuilder className, int maximum);

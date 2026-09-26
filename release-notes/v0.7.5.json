@@ -1,0 +1,23 @@
+{
+  "version": "0.7.5",
+  "zh": {
+    "summary": "完善插件运行状态、独立恢复入口和 Windows 窗口模式选择。",
+    "highlights": [
+      "插件开关与实际运行状态不一致时显示原因，并提供重启后确认入口。",
+      "独立恢复程序可以检查、暂停及恢复故障启动插件，保留插件文件、配置与会话。",
+      "Windows 视图菜单增加保留任务栏的最大化或还原入口，并明确区分 F11 全屏。"
+    ],
+    "knownIssues": ["当前内核仍拒绝读取部分历史 subagent descriptor v2 会话，本版尚未解除发布阻断。"],
+    "upgradeNotes": ["这是尚未发布的验收基线。正式发布前需完成历史会话、插件操作和各平台成品验收。"]
+  },
+  "en": {
+    "summary": "Improve plugin runtime status, independent recovery and Windows window-mode choices.",
+    "highlights": [
+      "Explain mismatches between a plugin switch and its runtime state, with an action to restart and check again.",
+      "Inspect, pause and restore faulty startup plugins from the independent recovery program while retaining plugin files, settings and sessions.",
+      "Add a maximize-or-restore action to the Windows View menu and distinguish it from F11 fullscreen."
+    ],
+    "knownIssues": ["The current core still refuses some historical subagent descriptor-v2 sessions. Publication remains blocked."],
+    "upgradeNotes": ["This is an unpublished qualification baseline. Historical sessions, plugin operations and platform artifacts still require release acceptance."]
+  }
+}

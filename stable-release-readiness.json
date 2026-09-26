@@ -5,6 +5,6 @@
   "historicalSessionMigration": {
     "status": "blocked",
     "evidence": null,
-    "reason": "No exact-core historical descriptor-v2 migration acceptance is recorded for the next stable Portable release. Earlier published releases are unchanged."
+    "reason": "The exact 0.7.4 published runtime (DSH 0.1.7-alpha.1) rejects a synthetic descriptor-v2 fixture while empty and descriptor-v3 controls pass. See docs/release-0.7.5-plan.md. Real historical-session acceptance remains required; earlier published releases are unchanged."
   }
 }

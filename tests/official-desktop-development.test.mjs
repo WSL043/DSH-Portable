@@ -1,10 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { configureDevelopmentPaths } from '../experiments/official-desktop/development-paths.mjs';
 import { adaptDevelopmentSource } from '../experiments/official-desktop/prepare-development.mjs';
+
+// macOS exposes its temporary directory through /var -> /private/var. Positive
+// fixtures use the physical path so they do not trip the redirection guard.
+const temporaryRoot = realpathSync(tmpdir());
 
 test('development refuses missing, relative, filesystem-root and late path configuration', () => {
   const app = { isReady: () => false };
@@ -14,7 +18,7 @@ test('development refuses missing, relative, filesystem-root and late path confi
   assert.throws(() => configureDevelopmentPaths({ isReady: () => true }, { DSH_PORTABLE_DEVELOPMENT_ROOT: tmpdir() }), /before Electron/);
 });
 test('each development launch derives Electron and DSH storage from its current root', t => {
-  const temporary = mkdtempSync(join(tmpdir(), 'dsh-desktop-development-'));
+  const temporary = mkdtempSync(join(temporaryRoot, 'dsh-desktop-development-'));
   t.after(() => rmSync(temporary, { recursive: true, force: true }));
   for (const name of ['A', 'B']) {
     const paths = {};
@@ -37,7 +41,7 @@ test('source adapter refuses unknown or modified official files before writing',
 });
 
 test('alpha rejects foreign data without mutating it and resumes its own moved data', t => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-alpha-layout-'));
+  const root = mkdtempSync(join(temporaryRoot, 'dsh-alpha-layout-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const app = { isReady: () => false, setPath: () => {}, setAppLogsPath: () => {} };
   const old = join(root, 'old');
@@ -65,7 +69,7 @@ test('alpha rejects foreign data without mutating it and resumes its own moved d
 });
 
 test('standalone alpha derives its data root from the executable instead of the working directory', t => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-standalone-paths-'));
+  const root = mkdtempSync(join(temporaryRoot, 'dsh-standalone-paths-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const paths = {};
   const app = { isPackaged: true, isReady: () => false, getPath: name => {
@@ -79,7 +83,7 @@ test('standalone alpha derives its data root from the executable instead of the 
 });
 
 test('moving refuses an unmanaged dependency store without rewriting metadata', t => {
-  const root = mkdtempSync(join(tmpdir(), 'dsh-alpha-foreign-store-'));
+  const root = mkdtempSync(join(temporaryRoot, 'dsh-alpha-foreign-store-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const app = { isReady: () => false, setPath: () => {}, setAppLogsPath: () => {} };
   const first = join(root, 'first');
@@ -95,7 +99,7 @@ test('moving refuses an unmanaged dependency store without rewriting metadata', 
 });
 
 test('redirected storage is rejected before any directories or application state change', t => {
-  const temporary = mkdtempSync(join(tmpdir(), 'dsh-desktop-redirection-'));
+  const temporary = mkdtempSync(join(temporaryRoot, 'dsh-desktop-redirection-'));
   t.after(() => rmSync(temporary, { recursive: true, force: true }));
   const outside = join(temporary, 'outside');
   mkdirSync(outside);
@@ -111,7 +115,7 @@ test('redirected storage is rejected before any directories or application state
 });
 
 test('a file at a managed directory rejects the entire path setup', t => {
-  const temporary = mkdtempSync(join(tmpdir(), 'dsh-desktop-file-'));
+  const temporary = mkdtempSync(join(temporaryRoot, 'dsh-desktop-file-'));
   t.after(() => rmSync(temporary, { recursive: true, force: true }));
   mkdirSync(join(temporary, 'data'));
   writeFileSync(join(temporary, 'data', 'logs'), 'preserve');

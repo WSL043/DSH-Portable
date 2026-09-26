@@ -117,7 +117,7 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     const nativeStates = []
     const native = async key => {
       const count = await evaluate('window.__desktopReplies.length')
-      await evaluate(`chrome.webview.postMessage(${JSON.stringify({ type: 'dsh-portable/test-desktop', ...(key === undefined ? {} : { key }) })})`)
+      await evaluate(`chrome.webview.postMessage(${JSON.stringify({ type: 'dsh-portable/test-desktop', ...(key === undefined ? {} : typeof key === 'string' ? { command: key } : { key }) })})`)
       for (let attempt=0; attempt<100; attempt++) {
         const reply = await evaluate(`window.__desktopReplies[${count}]`)
         if (reply) { nativeStates.push({ key, ...reply }); return reply }
@@ -125,11 +125,25 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       }
       throw new Error('Native desktop command timed out')
     }
+    if ((await native()).windowState === 'Maximized') await native('maximize')
     const normal = await native()
     await writeFile(path.join(root, 'acceptance', `native-state-${results.length}.json`), JSON.stringify(normal, null, 2))
     assert.equal(normal.nativeLoadingVisible, false)
     assert.equal(normal.menuVisible, true)
     assert.ok(normal.contentTop >= normal.menuBottom, 'menu never overlaps the workspace')
+    const maximized = await native('maximize')
+    assert.equal(maximized.windowState, 'Maximized')
+    assert.equal(maximized.fullscreen, false)
+    assert.equal(maximized.menuVisible, true)
+    assert.ok(maximized.clientScreen.x >= maximized.workArea.x && maximized.clientScreen.y >= maximized.workArea.y
+      && maximized.clientScreen.x + maximized.clientScreen.width <= maximized.workArea.x + maximized.workArea.width
+      && maximized.clientScreen.y + maximized.clientScreen.height <= maximized.workArea.y + maximized.workArea.height,
+    'maximized content respects the Windows working area')
+    assert.equal((await native(122)).fullscreen, true, 'F11 still enters true fullscreen from maximized')
+    assert.equal((await native(27)).windowState, 'Maximized', 'Escape restores the previous maximized state')
+    const unmaximized = await native('maximize')
+    assert.equal(unmaximized.windowState, 'Normal')
+    assert.deepEqual(unmaximized.bounds, normal.bounds, 'the menu restores the original window bounds')
     const sendWebViewKey = async (key, expectedFullscreen) => {
       await exec('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
         path.join(import.meta.dirname, 'send-windows-webview-key.ps1'),
