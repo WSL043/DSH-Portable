@@ -244,7 +244,7 @@ try {
         const bounds = await evaluate(`(() => {
           const cards=[...document.querySelectorAll('[data-market-card]')];
           const gaps=cards.slice(1).map((card,i)=>card.getBoundingClientRect().top-cards[i].getBoundingClientRect().bottom);
-          return {maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-40), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
+          return {maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-100), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
         })()`)
         assert.ok(bounds.count > 0)
         assert.ok(bounds.maxGap <= 12, 'mixed screenshot rows must not reserve blank grid space')

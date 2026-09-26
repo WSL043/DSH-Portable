@@ -1553,33 +1553,6 @@ export function MarketSection(props: MarketSectionProps) {
                 {typeof p.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
               </div>
             </div>
-            {/* Top right, at its natural size: in the footer it needed a row of
-                its own once the cards went two-up, which cost every card that
-                height whether or not it had anything else to say. */}
-            <div className={css.cardAction}>
-              {done
-                ? <span className={css.okState}>{t('installedBadge')}</span>
-                : already
-                  ? <span className={css.okState}>{t('alreadyInstalled')}</span>
-                  : busy
-                    ? <Button variant="primary" size="sm" className={css.installBtn} disabled>{t('installing')}</Button>
-                    : blocked
-                      ? (
-                          <button type="button" className={css.cardBlockedMark} onClick={openOperations}>
-                            <IconWarningOutline16 size={13} />
-                            {t('opBlockedCard')}
-                          </button>
-                        )
-                      : (
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            className={css.installBtn}
-                            disabled={busyUrl !== null || (!props.onOfficialInstall && !envReady)}
-                            onClick={() => setConfirming(p)}
-                          >{t('install')}</Button>
-                        )}
-            </div>
           </div>
           <div className={css.desc}>{desc}</div>
 
@@ -1604,6 +1577,31 @@ export function MarketSection(props: MarketSectionProps) {
           </div>
         </div>
         <CardPreview plugin={p} t={t} onOpen={openLightbox} />
+            <div className={css.cardAction}>
+              {done
+                ? <span className={css.okState}>{t('installedBadge')}</span>
+                : already
+                  ? <span className={css.okState}>{t('alreadyInstalled')}</span>
+                  : busy
+                    ? <Button variant="primary" size="sm" className={css.installBtn} disabled>{t('installing')}</Button>
+                    : blocked
+                      ? (
+                          <button type="button" className={css.cardBlockedMark} onClick={openOperations}>
+                            <IconWarningOutline16 size={13} />
+                            {t('opBlockedCard')}
+                          </button>
+                        )
+                      : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className={css.installBtn}
+                            disabled={busyUrl !== null || (!props.onOfficialInstall && !envReady)}
+                            onClick={() => setConfirming(p)}
+                          >{t('install')}</Button>
+                        )}
+            </div>
+
         {busy && (
           <div className={css.progress}>
             <span className={css.spin}><IconLoadingOutline16 size={14} /></span>

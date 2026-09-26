@@ -26,3 +26,8 @@ Pending upstream policy/peer-resolution investigations above remain separate mai
 ## Design acceptance rules
 
 Judge actual mixed content, not only uniform cards: screenshots absent/present/broken, long translated titles/descriptions, multiple categories, wide/narrow containers, both themes and both host languages. Preserve package identity, installation ownership and cumulative-stat provenance. Do not declare a visual change accepted solely because nothing overflows; reject unused media slots and excessive gaps visible in the captured product. Keep the reading order stable instead of reordering items into a masonry layout.
+
+
+## Visual revision after user review
+
+The bordered full-width rows were rejected visually. The next development revision narrows the market to 840px, replaces repeated card boxes with subtle row dividers, separates the action into a consistently aligned trailing column, and uses smaller inline screenshot previews. Missing screenshots reserve no media column. Narrow containers keep actions alongside text and put previews below. Current evidence supersedes v5: `build/native-market-refined-v6`; actual English light, Chinese dark, narrow/wide, image open/close and detail navigation passed, as did 58 focused tests. These results establish operation/layout checks, not user approval of the visual direction. The installed user product remains unchanged.
