@@ -594,6 +594,20 @@ export function MarketSection(props: MarketSectionProps) {
       : dir === 'desc' ? 'sortDesc' : 'sortAsc'
   const [timeRange, setTimeRange] = useState<TimeRange>('all')
   const [filterOpen, setFilterOpen] = useState(false)
+  useEffect(() => {
+    if (!filterOpen) return
+    // The host Modal also handles Escape. A menu dismiss must not escape
+    // this surface and close the market underneath it.
+    const dismissFilter = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+      setFilterOpen(false)
+      bodyRef.current?.querySelector<HTMLButtonElement>('[data-market-filter]')?.focus()
+    }
+    window.addEventListener('keydown', dismissFilter, true)
+    return () => window.removeEventListener('keydown', dismissFilter, true)
+  }, [filterOpen])
   const [catsOpen, setCatsOpen] = useState(false)
   /** Page-size switcher dropdown (primitives Menu). */
   const [sizeOpen, setSizeOpen] = useState(false)
@@ -1494,8 +1508,8 @@ export function MarketSection(props: MarketSectionProps) {
   const progressText = cancelling ? t('cancelling') + ' · ' + phasePart : phasePart
 
   // Filter dropdown (primitives Menu): three independent option groups, ids
-  // namespaced so one onSelect routes by prefix. The menu stays open across
-  // selections — outside click / Escape close it (Menu's own behavior).
+  // namespaced so one onSelect routes by prefix. The host Menu closes on
+  // selection; Escape is contained here so it does not dismiss the market.
   const filterItems = useMemo<MenuEntry[]>(() => [
     { type: 'label', id: 'f-sort', text: t('filterSort') },
     ...SORT_FIELD_OPTIONS.map(opt => ({ id: 'field:' + opt.key, label: t(opt.label) })),
@@ -1505,7 +1519,7 @@ export function MarketSection(props: MarketSectionProps) {
     { type: 'separator', id: 'f-sep2' },
     { type: 'label', id: 'f-time', text: t('filterTime') },
     ...TIME_OPTIONS.map(opt => ({ id: 'time:' + opt.key, label: t(opt.label) })),
-  ], [t, sortField])
+  ], [t, sortField, lang])
   const filterSelectedIds = useMemo(
     () => ['field:' + sortField, 'dir:' + sortDir, 'time:' + timeRange],
     [sortField, sortDir, timeRange])
@@ -1514,6 +1528,11 @@ export function MarketSection(props: MarketSectionProps) {
     else if (id.startsWith('dir:')) setSortDir(id.slice(4) as SortDir)
     else if (id.startsWith('time:')) setTimeRange(id.slice(5) as TimeRange)
   }
+
+  const filterCount = Number(sortField !== 'stars') + Number(sortDir !== 'desc') + Number(timeRange !== 'all')
+  const hasConditions = filterCount > 0 || cat !== 'all' || q.trim() !== ''
+  const sortSummary = t(sortField === 'stars' ? 'sortStars' : 'sortAdded') + ' · ' + t(sortDirLabel(sortDir))
+  const resetConditions = () => { setQ(''); setCat('all'); setSortField('stars'); setSortDir('desc'); setTimeRange('all'); setFilterOpen(false) }
 
   /** The catalog entry a deprecated plugin's `replacement` names, if any. */
   const replacementOf = (p: RegistryPlugin): RegistryPlugin | undefined =>
@@ -1901,7 +1920,34 @@ export function MarketSection(props: MarketSectionProps) {
                     <div ref={setCatsSentinel} />
                     <div className={css.stickyHead}>
                     <div className={css.tabSearchRow}>
-                      <Input className={css.tabSearch} icon={<IconSearchOutline16 size={14} />} placeholder={t('searchPh')} value={q} onChange={e => setQ(e.target.value)} />
+                      <div className={css.discoveryToolbar}>
+                      <Input className={css.tabSearch} icon={<IconSearchOutline16 size={14} />} aria-label={t('searchPh')} placeholder={t('searchPh')} value={q} onChange={e => setQ(e.target.value)} />
+                      <div className={`${css.viewBar} ${css.viewBarInline}`} role="group" aria-label={t('viewMode')}>
+                        <button type="button" aria-pressed={marketView === 'cards'} className={marketView === 'cards' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setMarketView('cards')}>{t('viewCards')}</button>
+                        <button type="button" aria-pressed={marketView === 'compact'} className={marketView === 'compact' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setMarketView('compact')}>{t('viewCompact')}</button>
+                      </div>
+                      <Menu
+                        open={filterOpen}
+                        onClose={() => setFilterOpen(false)}
+                        onSelect={onFilterSelect}
+                        selectedIds={filterSelectedIds}
+                        align="end"
+                        portal
+                        anchor={(
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            icon={filterOpen ? <IconChevronUpOutline14 size={14} /> : <IconChevronDownOutline14 size={14} />}
+                            aria-expanded={filterOpen}
+                            data-market-filter
+                            aria-haspopup="menu"
+                            title={sortSummary}
+                            onClick={() => setFilterOpen(o => !o)}
+                          >{t('filter') + (filterCount ? ' · ' + filterCount : '')}</Button>
+                        )}
+                        items={filterItems}
+                      />
+                      </div>
                     </div>
                     <div className={css.cats}>
                       <div className={css.catsRow}>
@@ -1951,29 +1997,13 @@ export function MarketSection(props: MarketSectionProps) {
                           )
                         })()}
                       </div>
-                      <div className={`${css.viewBar} ${css.viewBarInline}`} role="group" aria-label={t('viewMode')}>
-                        <button type="button" aria-pressed={marketView === 'cards'} className={marketView === 'cards' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setMarketView('cards')}>{t('viewCards')}</button>
-                        <button type="button" aria-pressed={marketView === 'compact'} className={marketView === 'compact' ? `${css.viewBtn} ${css.viewOn}` : css.viewBtn} onClick={() => setMarketView('compact')}>{t('viewCompact')}</button>
-                      </div>
-                      <Menu
-                        open={filterOpen}
-                        onClose={() => setFilterOpen(false)}
-                        onSelect={onFilterSelect}
-                        selectedIds={filterSelectedIds}
-                        align="end"
-                        portal
-                        anchor={(
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            icon={filterOpen ? <IconChevronUpOutline14 size={14} /> : <IconChevronDownOutline14 size={14} />}
-                            onClick={() => setFilterOpen(o => !o)}
-                          >{t('filter')}</Button>
-                        )}
-                        items={filterItems}
-                      />
                       </div>
                     </div>
+                      <div className={css.discoverySummary} aria-live="polite">
+                        <span>{t('resultCount').replace('{0}', String(plugins.length))}</span>
+                        <span className={css.summaryOrder}>{sortSummary}{timeRange !== 'all' ? ' · ' + t(TIME_OPTIONS.find(option => option.key === timeRange)!.label) : ''}</span>
+                        {hasConditions && <button type="button" className={css.resetConditions} onClick={resetConditions}>{t('resetConditions')}</button>}
+                      </div>
                     </div>
                     {plugins.length === 0
                       ? <div className={css.empty}>{t('empty')}</div>

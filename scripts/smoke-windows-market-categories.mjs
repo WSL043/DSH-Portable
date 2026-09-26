@@ -18,6 +18,8 @@ const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'accep
 const sourceOverlay = process.argv.includes('--source-overlay')
 if (sourceOverlay) env.DSH_PORTABLE_STARTUP_SOURCE_CACHE = '0'
 const soak = process.argv.includes('--soak')
+// Live npm availability is a separate integration check, not a layout prerequisite.
+const verifyTotal = process.argv.includes('--verify-total')
 const samples = []
 const sampler = fileURLToPath(new URL('./sample-portable-processes.ps1', import.meta.url))
 async function sample(phase) {
@@ -210,7 +212,7 @@ try {
     await until(click(['Plugin Market','插件市场']), Boolean, 'market');
   }
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
-  if (sourceOverlay) {
+  if (verifyTotal) {
     const total = await evaluate(`fetch('/dsh-market/download-total?name=dsh-codex-subscription').then(async r => ({status:r.status,body:await r.json()}))`)
     await writeFile(path.join(output, 'download-total.json'), JSON.stringify(total, null, 2))
     assert.equal(total.status, 200, 'packaged market total route')
@@ -244,9 +246,12 @@ try {
         const bounds = await evaluate(`(() => {
           const cards=[...document.querySelectorAll('[data-market-card]')];
           const gaps=cards.slice(1).map((card,i)=>card.getBoundingClientRect().top-cards[i].getBoundingClientRect().bottom);
-          return {maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-100), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
+          const toolbar=document.querySelector('[class*="discoveryToolbar"]');
+          const toolsFit=[...toolbar.children].every(node=>node.getBoundingClientRect().right<=toolbar.getBoundingClientRect().right+1);
+          return {toolsFit,maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-100), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
         })()`)
         assert.ok(bounds.count > 0)
+        assert.equal(bounds.toolsFit, true, 'toolbar controls remain inside available width')
         assert.ok(bounds.maxGap <= 18, 'mixed screenshot rows must not reserve blank grid space')
         assert.equal(bounds.noImageWidths, true, 'no-image content owns the available row width')
         assert.equal(bounds.overflow, false, 'plugin card overflow')
@@ -254,6 +259,24 @@ try {
         await writeFile(path.join(output, `market-${label}-${width}.png`), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
       }
     }
+    await until(click(['Filter']), Boolean, 'open discovery filters')
+    await until(click(['Date added']), Boolean, 'choose catalog date sorting')
+    if (!await evaluate(`Boolean(document.querySelector('[role="menu"]'))`)) await until(click(['Filter · 1']), Boolean, 'reopen filters')
+    await until(click(['Last 7 days']), Boolean, 'choose recent catalog range')
+    await until(`document.querySelector('[class*="discoverySummary"]')?.textContent.includes('Last 7 days')`, Boolean, 'active filter summary')
+    if (!await evaluate(`document.querySelector('[data-market-filter]')?.getAttribute('aria-expanded') === 'true'`)) await until(click(['Filter · 2']), Boolean, 'reopen active filter menu')
+    await until(`document.querySelector('[data-market-filter]')?.getAttribute('aria-expanded') === 'true'`, Boolean, 'filter menu is actually open')
+    await delay(100)
+    await writeFile(path.join(output, 'filter-menu-en.png'), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
+    await send('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27})
+    await until(`Boolean(document.querySelector('[class*="discoverySummary"]')) && !document.querySelector('[role="menu"]')`, Boolean, 'Escape dismisses only filter menu')
+    await until(click(['Reset conditions']), Boolean, 'reset discovery conditions')
+    await until(`!document.querySelector('[class*="resetConditions"]')`, Boolean, 'filter reset clears state')
+    await evaluate(`document.querySelector('input[aria-label]')?.focus()`)
+    await send('Input.insertText', {text:'portable-no-match-acceptance-847291'})
+    await until(`document.querySelector('[class*="discoverySummary"]')?.textContent.includes('0 plugins')`, Boolean, 'search empty result count')
+    await until(click(['Reset conditions']), Boolean, 'reset empty search')
+    await until(`document.querySelectorAll('[data-market-card]').length > 0`, Boolean, 'reset restores catalog')
     await captureLayout('light')
     const preview = await until(`(() => {const image=document.querySelector('button[class*="cardPreview"] img'); image?.scrollIntoView({block:'center'});return Boolean(image?.complete && image.naturalWidth > 0)})()`, Boolean, 'actual catalog preview loaded')
     await evaluate(`document.querySelector('button[class*="cardPreview"]')?.click()`)
@@ -283,6 +306,11 @@ try {
     await until(click(['插件市场']), Boolean, 'Chinese market entry')
     await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Chinese market ready')
     assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label^="预览 "]'))`), true, 'localized preview label')
+    await until(click(['筛选']), Boolean, 'Chinese filter trigger')
+    await until(`document.body.innerText.includes('收录时间范围') && document.body.innerText.includes('排序字段')`, Boolean, 'filter options follow Chinese locale')
+    await writeFile(path.join(output, 'filter-menu-zh.png'), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
+    await send('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27})
+    await until(`Boolean(document.querySelector('[class*="discoverySummary"]')) && !document.querySelector('[role="menu"]')`, Boolean, 'Chinese menu Escape preserves market')
     await captureLayout('zh-dark')
     await writeFile(path.join(output, 'chinese-market.txt'), await evaluate('document.body.innerText'))
     for (const [name, label] of [['themes','主题与外观'], ['models','模型与账号接入']]) {
@@ -333,7 +361,7 @@ try {
           assert.equal(samples.at(-1).processes.length, 0, 'isolated Portable processes remain after exit')
         }
       } catch (error) { passed = false; throw error }
-      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay }, null, 2)) }
+      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, verifiedLiveTotal: verifyTotal && passed }, null, 2)) }
     }
   }
 }

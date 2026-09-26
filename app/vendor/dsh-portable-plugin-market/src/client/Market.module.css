@@ -459,3 +459,15 @@
   .compactCard .cardPreviews{order:2;width:100%;max-width:300px}
   .compactCard .cardPreview{height:148px}
 }
+
+.discoveryToolbar{width:100%;display:flex;align-items:center;gap:10px;min-width:0}
+.discoveryToolbar .tabSearch{flex:1;min-width:140px;margin:0}
+.discoverySummary{display:flex;align-items:center;flex-wrap:wrap;gap:6px 12px;padding:8px 0 12px;font-size:11px;color:var(--dsw-alias-label-secondary,#6b7280)}
+.summaryOrder{color:var(--dsw-alias-label-tertiary,#8b93a1)}
+.resetConditions{margin-left:auto;padding:0;border:0;background:none;font:inherit;color:var(--dsw-alias-label-secondary,#6b7280);cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.resetConditions:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4f6ef7);outline-offset:3px}
+@container (max-width:560px){
+ .discoveryToolbar{flex-wrap:wrap;gap:8px}
+ .discoveryToolbar .tabSearch{flex-basis:100%}
+ .discoveryToolbar .viewBar{margin-left:auto}
+}

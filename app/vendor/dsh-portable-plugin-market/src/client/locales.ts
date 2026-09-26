@@ -2,6 +2,8 @@
 
 export const zh = {
   nav: '插件市场',
+  resultCount: '{0} 个插件',
+  resetConditions: '重置条件',
   previewScreenshot: '预览 {0} 的第 {1} 张截图',
   searchPh: '搜索插件，比如：通知、终端、记忆…',
   tabDiscover: '发现',
@@ -134,10 +136,10 @@ export const zh = {
   viewCompact: '紧凑',
   filterSort: '排序字段',
   filterDir: '排序方向',
-  filterTime: '发布时间范围',
+  filterTime: '收录时间范围',
   sortDownloads: 'npm 下载量(近 30 天)',
   sortStars: 'Star 数',
-  sortAdded: '发布时间',
+  sortAdded: '收录时间',
   sortDesc: '降序',
   sortAsc: '升序',
   sortNewest: '最新',
@@ -305,6 +307,8 @@ export type MarketKey = keyof typeof zh
 
 export const en: Record<MarketKey, string> = {
   nav: 'Plugin Market',
+  resultCount: '{0} plugins',
+  resetConditions: 'Reset conditions',
   previewScreenshot: 'Preview {0} screenshot {1}',
   searchPh: 'Search plugins: notify, terminal, memory…',
   tabDiscover: 'Discover',
@@ -437,10 +441,10 @@ export const en: Record<MarketKey, string> = {
   viewCompact: 'Compact',
   filterSort: 'Sort field',
   filterDir: 'Order',
-  filterTime: 'Released within',
+  filterTime: 'Added to catalog',
   sortDownloads: 'npm downloads (30d)',
   sortStars: 'Stars',
-  sortAdded: 'Release date',
+  sortAdded: 'Date added',
   sortDesc: 'Descending',
   sortAsc: 'Ascending',
   sortNewest: 'Newest',
