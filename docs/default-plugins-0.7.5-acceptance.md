@@ -1,6 +1,6 @@
 # Default plugin qualification for 0.7.5
 
-Status: pending final product acceptance, 2026-09-26. Registry integrity check via `scripts/check-default-plugin-upstream.mjs` succeeded. No plugin channel or user profile was changed.
+Status: final stable product acceptance passed, 2026-09-27. See the final evidence section below; earlier entries retain their original scope. Registry integrity check via `scripts/check-default-plugin-upstream.mjs` succeeded. No plugin channel or user profile was changed.
 
 | Track | DSH | Chat manager | Image viewer |
 | --- | --- | --- | --- |
@@ -49,3 +49,9 @@ The next exact candidate must execute the updated verifier and the installed-ver
 - Keep real-user data untouched. Use dedicated synthetic sessions and generated images in the isolated acceptance installation.
 
 Release remains blocked until the exact stable product combination passes. Existing RC2 plugin evidence cannot remove Portable's independent historical-data blocker.
+
+## Final stable product evidence
+
+Commit `c82b979f1a000013ef8837dd30c02b34da9ce3da`, full CI `36265359810`: all product jobs passed. The official native plugin-page runner separately cancels uninstall, verifies unchanged installed versions, uninstalls, reinstalls and enables **both** image 0.1.2 and chat 1.5.1. Its restart-confirmation action and editable composer passed with no page errors. The runtime mismatch used to expose that action remains an injected view-layer fixture.
+
+The final native default-plugin interaction report passes both themes for image annotation intake, draft preservation, cancellation, archive restoration and plugin toggles; light mode additionally confirms archive deletion and stale-record cleanup. Final light archive and dark composer screenshots were visually inspected. Local copies: `build/native075-final-c82b979/plugin-cycle/` and `build/native075-final-c82b979/native-ui/`; durable copies are the corresponding CI artifacts. Older screenshots were moved to the Recycle Bin at the user request and are not final acceptance references.
