@@ -4,6 +4,7 @@ import { promisify } from 'node:util'
 import { createServer } from 'node:net'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const root = process.argv[2] && path.resolve(process.argv[2])
 const output = process.argv[3] && path.resolve(process.argv[3])
@@ -11,7 +12,20 @@ assert.ok(process.argv.includes('--disposable'), 'use an isolated test installat
 assert.ok(root && output)
 await mkdir(output, { recursive: true })
 const exec = promisify(execFile)
-const env = { ...process.env, DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
+const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'), DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
+// A source-overlay probe must not load immutable server sources from the old
+// release capsule while serving new client files off disk.
+const sourceOverlay = process.argv.includes('--source-overlay')
+if (sourceOverlay) env.DSH_PORTABLE_STARTUP_SOURCE_CACHE = '0'
+const soak = process.argv.includes('--soak')
+const samples = []
+const sampler = fileURLToPath(new URL('./sample-portable-processes.ps1', import.meta.url))
+async function sample(phase) {
+  if (!soak) return
+  const { stdout } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', sampler, '-Root', root], { windowsHide: true, timeout: 15000 })
+  samples.push({ phase, ...JSON.parse(stdout) })
+  await writeFile(path.join(output, 'resources.json'), JSON.stringify(samples, null, 2))
+}
 const cli = (...args) => exec(path.join(root, 'runtime/node/node.exe'), [path.join(root, 'launcher/runtime-entry.mjs'), 'portable-cli.mjs', ...args, '--json'], { cwd: root, env, windowsHide: true, timeout: 60000 })
 assert.equal(JSON.parse((await cli('status')).stdout).status, 'stopped')
 const server = createServer()
@@ -192,8 +206,16 @@ try {
     await until(click(['Plugin Market','插件市场']), Boolean, 'market');
   }
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
+  if (sourceOverlay) {
+    const total = await evaluate(`fetch('/dsh-market/download-total?name=dsh-codex-subscription').then(async r => ({status:r.status,body:await r.json()}))`)
+    await writeFile(path.join(output, 'download-total.json'), JSON.stringify(total, null, 2))
+    assert.equal(total.status, 200, 'packaged market total route')
+    assert.ok(Number.isSafeInteger(total.body.downloads) && total.body.downloads > 0)
+    assert.equal(total.body.complete, true)
+  }
+  await sample('market-ready')
   const checks=[];
-  for(const width of [580,1200,580]){
+  for(const width of (soak ? Array.from({length: 30}, (_, i) => i % 2 ? 1200 : 580) : [580,1200,580])){
     await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
     await delay(400);
     const count=()=>evaluate(`document.querySelector('[class*="catsWrap"]')?.querySelectorAll('[data-chip="1"]').length`);
@@ -203,6 +225,12 @@ try {
     await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`);await delay(300);
     assert.equal(await count(),collapsed,'collapse must restore measured budget');
     checks.push({width,collapsed,expanded});
+    if (checks.length % 5 === 0) await sample(`cycle-${checks.length}`)
+  }
+  if (soak) {
+    await delay(10000)
+    await sample('settled')
+    await writeFile(path.join(output, 'market-current.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
   }
   assert.deepEqual(exceptions,[]);
   await writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
@@ -223,7 +251,14 @@ try {
       throw error
     } finally {
       if (child.exitCode === null) child.kill()
-      await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions }, null, 2))
+      try {
+        if (soak) {
+          await delay(3000)
+          await sample('after-exit')
+          assert.equal(samples.at(-1).processes.length, 0, 'isolated Portable processes remain after exit')
+        }
+      } catch (error) { passed = false; throw error }
+      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay }, null, 2)) }
     }
   }
 }
