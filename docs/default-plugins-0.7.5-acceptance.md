@@ -24,6 +24,14 @@ The screenshot's `Beta 1.5.2-beta.5` and `Beta 0.1.3-beta.3` strings were **avai
 
 ## Final product acceptance required
 
+### Fresh-profile follow-up
+
+Run `36255382365` completed 37 jobs successfully; the Windows 2025 native UI job and its aggregate gate failed. The added stale-archive fixture tried reading `storages/workspace.json` before the first web launch had created it. This was a fixture failure before UI operations, not a passed product gate.
+
+The shared verifier now inserts the stale record only between the first and second web launches, after the host has created its workspace and exited. Creating a partial workspace file in advance was rejected after a clean-folder experiment showed that it suppresses the initial headless-session import. Regression coverage requires a host-created file, preserves existing fields and rejects corrupt JSON. Shared tool tests: 40 passed. Fixed verifier: `b5845fa22a6761a9e2b236f04e50820e617ca00a`.
+
+A second entirely fresh extraction of the verified public 0.7.4 ZIP passed both themes with the fixed verifier: archive restore, archive-settings confirmed deletion in light mode, stale-record reconciliation in light mode, annotation/draft preservation and plugin toggles. No executable overlay was used in this follow-up; the isolated runtime cache remained separate from user data. Evidence: `build/native075-baseline/fresh-archive-v2.log`. This validates the fixture correction on the same stable core/plugin combination; the updated 0.7.5 CI pin still needs a complete product run.
+
 ### Native interaction evidence reviewed on 2026-09-27
 
 The separate `windows-default-plugin-ui` artifact from run `36253765356` identifies Portable 0.7.5, DSH 0.1.7-alpha.1, chat 1.5.1 and image 0.1.2. Both themes passed annotation intake with draft preservation, cancelled deletion, archive restoration and plugin enable/disable with an editable composer. Light mode also passed confirmed session deletion. Reviewed screenshots show readable controls, distinct red destructive actions, four sidebar header actions and the image plus annotation text in the composer. The missing-credential model error shown in the synthetic session is intentional: no external model credentials were supplied.

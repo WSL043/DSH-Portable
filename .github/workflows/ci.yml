@@ -599,7 +599,7 @@ jobs:
         if: matrix.label == 'windows-2025'
         with:
           repository: WSL043/DSH-Portable-Updates
-          ref: c2405ee4c530e7839cd1c24c5c9f49c55ba287cc
+          ref: b5845fa22a6761a9e2b236f04e50820e617ca00a
           path: qualification-tools
           persist-credentials: false
       - name: Verify packaged default plugins in native WebView2
