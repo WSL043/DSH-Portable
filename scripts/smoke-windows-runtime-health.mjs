@@ -28,6 +28,8 @@ const desktop = spawn(executable, ['--desktop'], {
 })
 let desktopExit
 let backendProbeCompletedAt = 0
+let backendProbeStartedAt = 0
+let delayedObservedAt = 0
 desktop.once('exit', code => { desktopExit = code })
 try {
   const deadline = Date.now() + 120000
@@ -35,9 +37,11 @@ try {
   while (Date.now() < deadline) {
     native = (await entries('desktop-health.jsonl')).filter(entry => entry.pid === desktop.pid)
     if (!backendProbeCompletedAt && native.some(entry => entry.observation === 'ui-heartbeat-delayed')) {
+      delayedObservedAt = Date.now()
       const state = JSON.parse(await readFile(path.join(root, 'data', 'runtime', 'process.json'), 'utf8'))
       // The desktop already consumed the one-time login URL. Probe the server's
       // unauthenticated handler without replaying that credential.
+      backendProbeStartedAt = Date.now()
       const response = await fetch(new URL(state.url).origin, { signal: AbortSignal.timeout(2000), redirect: 'manual' })
       assert.equal(response.status, 401, 'DSH must answer the unauthenticated request while the native UI is stalled')
       await response.arrayBuffer()
@@ -51,7 +55,9 @@ try {
   assert.ok(native.some(entry => entry.observation === 'ui-heartbeat-recovered'))
   const launcherLog = await readFile(path.join(logDirectory, 'launcher.log'), 'utf8')
   const ended = launcherLog.split(/\r?\n/).find(line => line.includes('[health-test] ui-stall-end') && line.includes(native[0].startupId))
-  assert.ok(backendProbeCompletedAt > 0 && backendProbeCompletedAt <= Date.parse(ended?.split(' ')[0]), 'the HTTP probe must complete before the native stall ends')
+  const stallEndedAt = Date.parse(ended?.split(' ')[0])
+  console.log(JSON.stringify({ phase: 'native-stall-http-probe', delayedObservedAt, backendProbeStartedAt, backendProbeCompletedAt, stallEndedAt, probeDurationMs: backendProbeCompletedAt - backendProbeStartedAt }))
+  assert.ok(backendProbeCompletedAt > 0 && backendProbeCompletedAt <= stallEndedAt, 'the HTTP probe must complete before the native stall ends')
   const running = await cli('status')
   assert.equal(running.status, 'running')
   const backend = (await entries('runtime-health.jsonl')).filter(entry => entry.pid === running.pid)

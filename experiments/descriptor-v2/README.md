@@ -23,3 +23,17 @@ These are synthetic schema/composition probes, not full historical recovery evid
 - Remove the adapter once an official release provides the equivalent migration, after running the same fixtures against that release.
 
 Do not set historicalSessionMigration to passed based on this experiment.
+
+## Published writer probe (2026-09-27)
+
+`writer/` pins the published 0.1.1-rc.2 writer packages and dependency lock. Install with pnpm 11.7.0 using `--frozen-lockfile --ignore-scripts`; automatic peers are disabled to avoid silently mixing current DSH packages. This is a writer-only closure, not a complete old DSH host.
+
+`node experiments/descriptor-v2/writer-probe.mjs <writer-root> <patched-app> <unmodified-app> <new-output>`
+
+The probe invokes the released Session, descriptor snapshot, seed builder and event packer. Physical header mapping follows the published JSONL backend; it does not invoke that backend's flush method. Turn/step numbering and message ordering follow the published agent-loop. The fixture is generated test data, not a recovered user transcript or an old full-agent execution.
+
+Pinned execution passed seven checks: exact writer versions; original runtime rejects the identical child; migrated parent catalog discovers the child; inherited message identities and migrated contents agree; descriptor route/persona/tool filter survive; parent/child tool results survive; both source-file hashes remain unchanged. Evidence: `build/descriptor-v2-writer-probe-pinned-2/result.json`.
+
+Early fixture attempts exposed mistakes in the test harness (message before step, zero-based turn, incorrect tool-call member names), corrected against the released agent-loop/types. Another assertion incorrectly expected unchanged raw event counts and payload shape: official migration adds the system head and converts tool-result representation. The final checks compare original message identities, exact tool content/call identity, and independently migrated parent contents. No production validator was relaxed to make these fixtures pass.
+
+Actual agent continuation, official persistence write/reopen, interruption behavior and final product/native acceptance remain open. This result does not qualify a release.
