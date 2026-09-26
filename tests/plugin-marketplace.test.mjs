@@ -182,7 +182,7 @@ test('the Portable market reaches the modern manager and retains an old-host fal
   assert.match(action, /view="discover"/)
   assert.doesNotMatch(registration, /plugins\.item/)
   assert.doesNotMatch(registration, /ctx\.slots\.inject\('settings\.section'/)
-  assert.match(styles, /\.grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fit/s)
+  assert.match(styles, /\.grid\s*\{[^}]*grid-template-columns:\s*minmax\(0,1fr\)/s)
   assert.doesNotMatch(styles, /\.grid\s*\{[^}]*repeat\(2/s)
   assert.match(section, /<CardPreview/)
   assert.match(section, /dshm-market-view/)

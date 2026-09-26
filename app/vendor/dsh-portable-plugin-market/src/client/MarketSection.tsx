@@ -1533,75 +1533,77 @@ export function MarketSection(props: MarketSectionProps) {
     const record = recordForUrl(records, p.url)
     const blocked = record !== null && (record.state === 'input' || record.state === 'failed')
     return (
-      <div key={p.url} className={`${blocked ? `${css.card} ${css.cardBlocked}` : css.card}${marketView === 'compact' ? ` ${css.compactCard}` : ''}`}>
-        <div className={css.row1}>
-          {/* The avatar belongs to the AUTHOR, not to the title. Beside the
-              name it reads as one signature, which is what frees the title
-              to be just the plugin — and lets two authors ship a plugin of
-              the same name without either card needing a qualifier. */}
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div className={css.nm} title={p.name}>
-              <button type="button" className={css.nameButton} onClick={() => setConfirming(p)}>{pluginName(p.name)}</button>
-              <a className={css.projectLinkIcon} href={p.url} target="_blank" rel="noreferrer" aria-label={t('openProject')} title={t('openProject')}><IconLinkOutline14 size={13} /></a>
-              {p.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
+      <div key={p.url} data-market-card className={`${blocked ? `${css.card} ${css.cardBlocked}` : css.card}${marketView === 'compact' ? ` ${css.compactCard}` : ''}`}>
+        <div className={css.cardContent}>
+          <div className={css.row1}>
+            {/* The avatar belongs to the AUTHOR, not to the title. Beside the
+                name it reads as one signature, which is what frees the title
+                to be just the plugin — and lets two authors ship a plugin of
+                the same name without either card needing a qualifier. */}
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div className={css.nm} title={p.name}>
+                <button type="button" className={css.nameButton} onClick={() => setConfirming(p)}>{pluginName(p.name)}</button>
+                <a className={css.projectLinkIcon} href={p.url} target="_blank" rel="noreferrer" aria-label={t('openProject')} title={t('openProject')}><IconLinkOutline14 size={13} /></a>
+                {p.deprecated === true && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
+              </div>
+              <div className={css.byline}>
+                <OwnerAvatar name={p.name} owner={p.owner || ''} />
+                <span className={css.owner}>{p.owner}</span>
+                {p.npm && <DownloadCount key={p.npm} name={p.npm} chinese={lang === 'zh'} className={css.star} />}
+                {typeof p.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
+              </div>
             </div>
-            <div className={css.byline}>
-              <OwnerAvatar name={p.name} owner={p.owner || ''} />
-              <span className={css.owner}>{p.owner}</span>
-              {p.npm && <DownloadCount key={p.npm} name={p.npm} chinese={lang === 'zh'} className={css.star} />}
-              {typeof p.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
+            {/* Top right, at its natural size: in the footer it needed a row of
+                its own once the cards went two-up, which cost every card that
+                height whether or not it had anything else to say. */}
+            <div className={css.cardAction}>
+              {done
+                ? <span className={css.okState}>{t('installedBadge')}</span>
+                : already
+                  ? <span className={css.okState}>{t('alreadyInstalled')}</span>
+                  : busy
+                    ? <Button variant="primary" size="sm" className={css.installBtn} disabled>{t('installing')}</Button>
+                    : blocked
+                      ? (
+                          <button type="button" className={css.cardBlockedMark} onClick={openOperations}>
+                            <IconWarningOutline16 size={13} />
+                            {t('opBlockedCard')}
+                          </button>
+                        )
+                      : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            className={css.installBtn}
+                            disabled={busyUrl !== null || (!props.onOfficialInstall && !envReady)}
+                            onClick={() => setConfirming(p)}
+                          >{t('install')}</Button>
+                        )}
             </div>
           </div>
-          {/* Top right, at its natural size: in the footer it needed a row of
-              its own once the cards went two-up, which cost every card that
-              height whether or not it had anything else to say. */}
-          <div className={css.cardAction}>
-            {done
-              ? <span className={css.okState}>{t('installedBadge')}</span>
-              : already
-                ? <span className={css.okState}>{t('alreadyInstalled')}</span>
-                : busy
-                  ? <Button variant="primary" size="sm" className={css.installBtn} disabled>{t('installing')}</Button>
-                  : blocked
-                    ? (
-                        <button type="button" className={css.cardBlockedMark} onClick={openOperations}>
-                          <IconWarningOutline16 size={13} />
-                          {t('opBlockedCard')}
-                        </button>
-                      )
-                    : (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          className={css.installBtn}
-                          disabled={busyUrl !== null || (!props.onOfficialInstall && !envReady)}
-                          onClick={() => setConfirming(p)}
-                        >{t('install')}</Button>
-                      )}
+          <div className={css.desc}>{desc}</div>
+
+          {p.deprecated === true && (
+            <div className={css.deprecate}>
+              <div className={css.depLine}>
+                <span>⚠️ {t('deprecatedWarn')}</span>
+                {replacement !== undefined && (
+                  <a className={css.src} href={replacement.url} target="_blank" rel="noreferrer">
+                    {t('replacementHint') + ' ' + replacement.name}
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+          <div className={css.foot}>
+            <span className={css.tag}>
+              {categoryText(p.category, data!.categories, lang)}
+            </span>
+
+            <span className={css.grow} />
           </div>
         </div>
-        <div className={css.desc}>{desc}</div>
         <CardPreview plugin={p} t={t} onOpen={openLightbox} />
-
-        {p.deprecated === true && (
-          <div className={css.deprecate}>
-            <div className={css.depLine}>
-              <span>⚠️ {t('deprecatedWarn')}</span>
-              {replacement !== undefined && (
-                <a className={css.src} href={replacement.url} target="_blank" rel="noreferrer">
-                  {t('replacementHint') + ' ' + replacement.name}
-                </a>
-              )}
-            </div>
-          </div>
-        )}
-        <div className={css.foot}>
-          <span className={css.tag}>
-            {categoryText(p.category, data!.categories, lang)}
-          </span>
-
-          <span className={css.grow} />
-        </div>
         {busy && (
           <div className={css.progress}>
             <span className={css.spin}><IconLoadingOutline16 size={14} /></span>

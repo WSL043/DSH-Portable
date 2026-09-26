@@ -10,7 +10,7 @@ Live GitHub API: latest stable is [v1.66.2](https://github.com/dsh-market/dsh-ma
 
 ## Implemented discovery design
 
-- Keep the responsive two-column/one-column layout and cumulative download number without Total text.
+- Use one continuous list with natural row heights and a cumulative download number without Total text. A wide row puts catalog screenshots beside the content; a narrow container stacks them. No-image rows consume the full content width. This supersedes the earlier two-column experiment: mixed media left unacceptable blank grid areas, which the prior visual review failed to reject.
 - One bounded, uncropped catalog screenshot per card; additional image count opens the existing image viewer. No carousel timer or per-card README fetch. Offscreen images use native lazy loading; broken images advance to the next approved screenshot or remove the preview if none remains.
 - README-only fallback remains in details: registry-provided screenshots display directly in the list; missing catalog screenshots are not replaced with logos or invented previews.
 - Screenshot buttons have localized accessible names. Opening/closing the viewer transfers/restores keyboard focus; Escape leaves the market open.
@@ -19,6 +19,10 @@ Live GitHub API: latest stable is [v1.66.2](https://github.com/dsh-market/dsh-ma
 
 ## Acceptance
 
-Full repository tests: 881 total, 867 passed, 14 skipped, zero failures. Isolated Native WebView2 source-overlay checks include real catalog image load, preview open/Escape, detail open/close, explicit light/dark appearance, English/Chinese through official settings, and 1200/580-width overflow checks. Final evidence: `build/native-market-preview-v4`. This is development-source acceptance, not a new immutable release package or an update to the user's current installation.
+Full repository tests: 881 total, 867 passed, 14 skipped, zero failures. Isolated Native WebView2 source-overlay checks include real catalog image load, preview open/Escape, detail open/close, explicit light/dark appearance, English/Chinese through official settings, and 1200/580-width overflow checks. Mixed-media layout assertions require inter-row gaps of at most 12px and full-width text for no-image entries. Focused tests after the row restructure: 58 passed. Final evidence: `build/native-market-rows-v5`. This is development-source acceptance, not a new immutable release package or an update to the user's current installation.
 
 Pending upstream policy/peer-resolution investigations above remain separate maintenance work; no update engine or pnpm policy change is included in this visual delivery.
+
+## Design acceptance rules
+
+Judge actual mixed content, not only uniform cards: screenshots absent/present/broken, long translated titles/descriptions, multiple categories, wide/narrow containers, both themes and both host languages. Preserve package identity, installation ownership and cumulative-stat provenance. Do not declare a visual change accepted solely because nothing overflows; reject unused media slots and excessive gaps visible in the captured product. Keep the reading order stable instead of reordering items into a masonry layout.

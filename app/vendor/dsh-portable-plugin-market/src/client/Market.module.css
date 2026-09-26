@@ -83,7 +83,7 @@
    squeezed into a vertical stack instead of dropping to its own line. */
 .warnLine{color:var(--dsw-alias-state-warn-primary,#b45309);font-weight:600;font-size:12px;line-height:18px;margin:0;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .modalNote{font-size:12px;color:var(--dsw-alias-label-tertiary,#8b93a1);line-height:18px;margin:12px 0 0;display:flex;align-items:center;gap:4px}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));align-items:stretch;gap:12px}
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;container-type:inline-size}
 .compactGrid{grid-template-columns:minmax(0,1fr);gap:6px}
 .card.compactCard{gap:6px;padding:10px 12px}
 .compactCard .desc{min-height:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -97,14 +97,12 @@
 .swatches{display:flex;gap:0;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--dsw-alias-border-l2,#e5e7eb)}
 .themesGrid{margin-bottom:12px}
 .swatches i{flex:1}
-/* align-self:start so a short card doesn't stretch to match a tall
-   row-mate — CSS grid rows are equal-height by default, and a stretched
-   card with margin-top:auto on its footer used to fill that leftover
-   height as a blank band INSIDE the card, between the description and the
-   footer, reading as a layout bug rather than "this one's row-mate had a
-   longer description". Un-stretched, any leftover row height sits outside
-   the card as ordinary grid gutter instead. */
-.card{background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:10px;align-self:start;min-width:0}
+/* Each plugin owns its row: optional media never reserves a neighbor's height. */
+.card{background:var(--dsw-alias-bg-layer-1,#fff);border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;padding:12px 14px;display:flex;flex-wrap:wrap;align-items:flex-start;gap:16px;min-width:0}
+.cardContent{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.card .desc{min-height:0}
+.card .foot{margin-top:0}
+.card > .progress{flex-basis:100%}
 .row1{display:flex;align-items:flex-start;gap:10px;min-width:0}
 .cardAction{flex-shrink:0;display:inline-flex;align-items:center}
 .installBtn.installBtn{min-width:64px}
@@ -439,10 +437,17 @@
 .nm>.projectLinkIcon{display:inline-flex;margin-left:6px;vertical-align:middle}
 
 /* Stable preview height keeps browsing predictable; never crop UI screenshots. */
-.cardPreviews{display:flex;gap:8px;min-width:0}
-.cardPreview{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-width:0;height:132px;padding:0;overflow:hidden;cursor:zoom-in;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f3f4f6)}
+.cardPreviews{display:flex;width:200px;flex-shrink:0;gap:8px;min-width:0}
+.cardPreview{position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-width:0;height:112px;padding:0;overflow:hidden;cursor:zoom-in;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f3f4f6)}
 .cardPreview img{width:100%;height:100%;object-fit:contain}
 .cardPreview:hover{border-color:var(--dsw-alias-label-secondary,#6b7280)}
 .cardPreview:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#4f6ef7);outline-offset:2px}
 .previewMore{position:absolute;bottom:6px;right:6px;border-radius:5px;padding:2px 5px;background:var(--dsw-alias-bg-layer-1,#fff);color:var(--dsw-alias-label-primary,#111);font-size:11px}
-.compactCard .cardPreview{height:88px;max-width:180px}
+.compactCard .cardPreviews{width:156px}
+.compactCard .cardPreview{height:88px}
+@container (max-width:620px){
+  .card{flex-direction:column;gap:10px}
+  .cardContent{width:100%}
+  .cardPreviews,.compactCard .cardPreviews{width:100%}
+  .cardPreview{height:148px}
+}

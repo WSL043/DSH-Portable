@@ -242,10 +242,13 @@ try {
         await send('Emulation.setDeviceMetricsOverride', { width, height:900, deviceScaleFactor:1, mobile:false })
         await delay(600)
         const bounds = await evaluate(`(() => {
-          const cards=[...document.querySelectorAll('[class*="cardAction"]')].map(x=>x.parentElement.parentElement);
-          return {count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
+          const cards=[...document.querySelectorAll('[data-market-card]')];
+          const gaps=cards.slice(1).map((card,i)=>card.getBoundingClientRect().top-cards[i].getBoundingClientRect().bottom);
+          return {maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-40), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
         })()`)
         assert.ok(bounds.count > 0)
+        assert.ok(bounds.maxGap <= 12, 'mixed screenshot rows must not reserve blank grid space')
+        assert.equal(bounds.noImageWidths, true, 'no-image content owns the available row width')
         assert.equal(bounds.overflow, false, 'plugin card overflow')
         assert.equal(bounds.inlineImages, true, 'catalog screenshots appear in discovery cards')
         await writeFile(path.join(output, `market-${label}-${width}.png`), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
