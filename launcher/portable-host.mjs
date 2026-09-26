@@ -8,6 +8,7 @@ import { acquireRuntimeLease } from './runtime-capsule.mjs'
 import { appendStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { startRuntimeHealth, startStartupProfile } from './runtime-health.mjs'
 import { startSourceCache } from './startup-source-cache.mjs'
+import { scheduleHostMaintenance } from './host-maintenance.mjs'
 
 const [dshBin, ...dshArgs] = process.argv.slice(2)
 const controlPipe = process.env.DSH_PORTABLE_CONTROL_PIPE
@@ -25,6 +26,10 @@ if (!dshBin) throw new Error('portable host requires the official DSH bin path')
 if (!controlPipe || !controlToken) throw new Error('portable host control channel is not configured')
 
 const releaseRuntimeLease = runtimeRoot ? await acquireRuntimeLease(runtimeRoot) : async () => {}
+const stopMaintenance = scheduleHostMaintenance({
+  root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+  runtimeRoot, stateRoot, trace: startupTrace,
+})
 
 function tokenMatches(header) {
   const supplied = Buffer.from(String(header ?? '').replace(/^Bearer\s+/i, ''), 'utf8')
@@ -49,6 +54,7 @@ const control = http.createServer((request, response) => {
   response.writeHead(202).end()
   if (shutdownAccepted) return
   shutdownAccepted = true
+  stopMaintenance()
   healthPhase('shutdown-accepted')
   appendStartupTrace(startupTrace, 'portable-host', 'shutdown-accepted', { pid: process.pid })
   control.close()
@@ -60,6 +66,7 @@ control.on('clientError', (_error, socket) => socket.destroy())
 control.on('close', cleanupControlSocket)
 process.on('beforeExit', releaseRuntimeLease)
 process.on('exit', code => {
+  stopMaintenance()
   appendStartupTrace(startupTrace, 'portable-host', 'process-exit', { pid: process.pid, exitCode: code })
   cleanupControlSocket()
   if (releaseRuntimeLease.filename) rmSync(releaseRuntimeLease.filename, { force: true })
@@ -104,6 +111,7 @@ try {
     cpuUserMs: Math.round(cpu.user / 1000), cpuSystemMs: Math.round(cpu.system / 1000),
   })
 } catch (error) {
+  stopMaintenance()
   startupOutcome = 'startup-failed'
   healthPhase('official-dsh-import-failed')
   appendStartupTrace(startupTrace, 'portable-host', 'official-dsh-import-failed', {

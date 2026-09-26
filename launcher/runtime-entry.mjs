@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
+import { acquireRuntimeLease, ensureRuntimeCapsule, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
 import { pruneLogHistory } from './log-history.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { environmentStateRoot, layoutForRoot, parseCli } from './portable-core.mjs'
@@ -96,40 +96,7 @@ try {
 process.env.DSH_PORTABLE_RUNTIME_ROOT = prepared.runtimeRoot
 process.argv = [process.execPath, path.join(root, 'launcher', entryName), ...forwarded]
 const release = prepared.mode === 'capsule' ? await acquireRuntimeLease(prepared.runtimeRoot) : async () => {}
-if (prepared.mode === 'capsule' && entryName === 'portable-host.mjs') {
-  // Cleanup is delayed until the desktop has had ample time to become usable.
-  // Current and live old runtimes are protected by their leases.
-  setTimeout(() => {
-    cleanUnusedRuntimeCaches(root).then(result => {
-      const failed = result.retained.filter(entry => entry.reason === 'cleanup-failed')
-      if (result.removed.length || failed.length) appendStartupTrace(startupTrace, 'runtime-cache', 'maintenance-complete', {
-        removed: result.removed.length,
-        removedIncomplete: result.removed.filter(entry => entry.incomplete).length,
-        reclaimedBytes: result.removed.reduce((total, entry) => total + entry.bytes, 0),
-        retained: result.retained.length,
-        failureCount: failed.length,
-        failures: failed.slice(0, 8).map(({ hash, code }) => ({ hash, code })),
-      })
-    }).catch(error => appendStartupTrace(startupTrace, 'runtime-cache', 'maintenance-failed', { code: error?.code || 'unknown' }))
-  }, 60_000).unref()
-}
-if (entryName === 'portable-host.mjs') {
-  const maintainProfileLogs = async () => {
-    try {
-      const { createRequire } = await import('node:module')
-      const requireRuntime = createRequire(path.join(prepared.runtimeRoot, 'app', 'package.json'))
-      const { withFileLock } = await import(pathToFileURL(requireRuntime.resolve('@deepseek-ai/dsh-atomic-write')).href)
-      const { maintainPluginLogs } = await import('./plugin-log-maintenance.mjs')
-      const result = await maintainPluginLogs(path.join(effectiveStateRoot, 'data', 'dsh-home'), withFileLock)
-      if (result.removed || result.deferred || result.limited) appendStartupTrace(startupTrace, 'plugin-logs', 'maintenance-complete', result)
-    } catch (error) {
-      appendStartupTrace(startupTrace, 'plugin-logs', 'maintenance-deferred', { code: error?.code || 'unsupported' })
-    }
-  }
-  // Off the startup path; one bounded pass after launch and during long-running use.
-  setTimeout(maintainProfileLogs, 60_000).unref()
-  setInterval(maintainProfileLogs, 6 * 60 * 60_000).unref()
-}
+
 try {
   await import(pathToFileURL(process.argv[1]).href)
 } finally {

@@ -7,13 +7,13 @@ import { execFileSync, spawn } from 'node:child_process'
 import path from 'node:path'
 import { once } from 'node:events'
 const mode = process.argv[2] || 'hardlink'
-if (!['hardlink', 'copy'].includes(mode)) throw new Error('Expected hardlink or copy')
+if (!['hardlink', 'copy', 'referenced-copy'].includes(mode)) throw new Error('Expected hardlink, copy or referenced-copy')
 await mkdir(path.resolve('build'), { recursive: true })
 const root = await mkdtemp(path.resolve('build/store-maintenance-' + mode + '-'))
 const pnpm = path.resolve('app/node_modules/pnpm/bin/pnpm.cjs')
 await mkdir(root,{recursive:true})
 const tarballs = {}
-for (const version of ['1.0.0','2.0.0']) {
+for (const version of ['1.0.0','2.0.0','3.0.0']) {
  const dir=path.join(root,version,'package'); await mkdir(dir,{recursive:true})
  await writeFile(path.join(dir,'package.json'),JSON.stringify({name:'portable-storage-fixture',version,main:'index.js'}))
  await writeFile(path.join(dir,'index.js'),`module.exports='${version}'`)
@@ -22,15 +22,15 @@ for (const version of ['1.0.0','2.0.0']) {
 let registry
 const server=createServer((req,res)=>{
  if(req.url.endsWith('.tgz')) {const version=req.url.split('/').pop().slice(0,-4);res.end(tarballs[version]);return}
- const versions=Object.fromEntries(['1.0.0','2.0.0'].map(version=>[version,{name:'portable-storage-fixture',version,dist:{integrity:'sha512-'+createHash('sha512').update(tarballs[version]).digest('base64'),tarball:`${registry}/${version}.tgz`}}]))
+ const versions=Object.fromEntries(['1.0.0','2.0.0','3.0.0'].map(version=>[version,{name:'portable-storage-fixture',version,dist:{integrity:'sha512-'+createHash('sha512').update(tarballs[version]).digest('base64'),tarball:`${registry}/${version}.tgz`}}]))
  res.setHeader('content-type','application/json');res.end(JSON.stringify({name:'portable-storage-fixture','dist-tags':{latest:'2.0.0'},versions}))
 })
 server.listen(0,'127.0.0.1');await once(server,'listening');registry=`http://127.0.0.1:${server.address().port}`
 const store=path.join(root,'store'),profile=path.join(root,'profile');await mkdir(profile,{recursive:true})
-const results=[]; const importMethod=mode
-async function run(label,args){const child=spawn(process.execPath,[pnpm,...args,'--store-dir',store,'--config.cache-dir='+path.join(root,args[0]==='store'?'maintenance-cache':'cache'),'--registry',registry,...(args[0]==='store'?[]:['--package-import-method='+importMethod])],{cwd:profile,windowsHide:true,env:{...process.env,CI:'true',npm_config_fetch_retries:'0'},stdio:['ignore','pipe','pipe']});let log='';child.stdout.on('data',d=>log+=d);child.stderr.on('data',d=>log+=d);const timer=setTimeout(()=>child.kill(),45000);const [code]=await once(child,'close');clearTimeout(timer);await writeFile(path.join(root,label+'.log'),log);results.push({label,code});return code}
+const results=[]; const importMethod=mode === 'hardlink' ? 'hardlink' : 'copy'
+async function run(label,args,method=importMethod){const child=spawn(process.execPath,[pnpm,...args,'--store-dir',store,'--config.cache-dir='+path.join(root,args[0]==='store'?'maintenance-cache':'cache'),'--registry',registry,...(args[0]==='store'?[]:['--package-import-method='+method])],{cwd:profile,windowsHide:true,env:{...process.env,CI:'true',npm_config_fetch_retries:'0'},stdio:['ignore','pipe','pipe']});let log='';child.stdout.on('data',d=>log+=d);child.stderr.on('data',d=>log+=d);const timer=setTimeout(()=>child.kill(),45000);const [code]=await once(child,'close');clearTimeout(timer);await writeFile(path.join(root,label+'.log'),log);results.push({label,code});return code}
 try {
- for(const version of ['1.0.0','2.0.0']) {
+ for(const version of (mode === 'referenced-copy' ? ['3.0.0','1.0.0','2.0.0'] : ['1.0.0','2.0.0'])) {
   await writeFile(path.join(profile,'package.json'),JSON.stringify({name:'probe',private:true,dependencies:{'portable-storage-fixture':version}}))
   if(await run('install-'+version,['install','--ignore-scripts','--no-frozen-lockfile'])!==0)throw Error('fixture install failed')
  }
@@ -41,14 +41,24 @@ try {
  await rename(path.join(profile,'node_modules'),path.join(profile,'node_modules-current'));
  await writeFile(path.join(profile,'package.json'),JSON.stringify({name:'probe',private:true,dependencies:{'portable-storage-fixture':'1.0.0'}}));
  if(await run('prepare-rollback',['install','--offline','--ignore-scripts','--no-frozen-lockfile'])!==0)throw Error('rollback setup failed');
- if(await run('prune-preserve-metadata',['store','prune'])!==0)throw Error('prune failed');
  await rename(path.join(profile,'node_modules'),path.join(profile,'node_modules-rollback'));
+ if(mode === 'referenced-copy') {
+  // Reference materialization is experimental and runs only in this disposable
+  // store. Production must first collect every profile and recovery reference.
+  for(const version of ['1.0.0','2.0.0']) {
+   await writeFile(path.join(profile,'package.json'),JSON.stringify({name:'probe',private:true,dependencies:{'portable-storage-fixture':version}}));
+   if(await run('retain-reference-'+version,['install','--offline','--ignore-scripts','--no-frozen-lockfile'],'hardlink')!==0)throw Error('offline reference materialization failed');
+   await rename(path.join(profile,'node_modules'),path.join(profile,'retained-reference-'+version));
+  }
+ }
+ if(await run('prune-preserve-metadata',['store','prune'])!==0)throw Error('prune failed');
  for(const version of ['2.0.0','1.0.0']) {
   await writeFile(path.join(profile,'package.json'),JSON.stringify({name:'probe',private:true,dependencies:{'portable-storage-fixture':version}}));
   const code=await run('offline-rebuild-'+version,['install','--offline','--ignore-scripts','--no-frozen-lockfile','--fetch-retries=0']);
-  assert.equal(code, mode === 'hardlink' ? 0 : 1, 'Retention behavior changed; investigate before enabling cleanup');
+  assert.equal(code, mode === 'copy' ? 1 : 0, 'Retention behavior changed; investigate before enabling cleanup');
   if(code===0) await rename(path.join(profile,'node_modules'),path.join(profile,'verified-'+version));
  }
  results.push({label:'final-store',store:await measure(store)});
+ if(mode === 'referenced-copy') assert.ok(results.at(-1).store.files < results.find(item=>item.label==='baseline').store.files, 'unreferenced third version should be reclaimed');
 } finally {server.close();await writeFile(path.join(root,'result.json'),JSON.stringify(results,null,2));console.log(JSON.stringify({mode, output:root, results}))}
 

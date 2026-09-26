@@ -2,10 +2,11 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, writeFile, utimes, access } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { verifiedPackageFile } from './verified-package-file.mjs'
+import { randomBytes } from 'node:crypto'
 
 const [rootArg, driverPackage, evidenceArg, disposable] = process.argv.slice(2)
 if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable') {
@@ -170,10 +171,44 @@ try {
   }, previousBoot, { timeout: 90_000 })
   report.pluginMismatchRestart = true
 
+  // Exercise maintenance through the actual long-lived host, not a helper call.
+  // The native restart above gives the deferred maintenance a fresh 60s window.
+  const managedLogs = path.join(root, 'data/dsh-home/profiles/web/.plugin-manager/logs')
+  const oldLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
+  const recentLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
+  for (const file of [oldLog, recentLog]) {
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, 'Disposable maintenance acceptance\n', { flag: 'wx' })
+  }
+  const expired = new Date(Date.now() - 30 * 86400000)
+  await utimes(oldLog, expired, expired)
+  const maintenanceDeadline = Date.now() + 80000
+  let removed = false
+  while (Date.now() < maintenanceDeadline) {
+    try { await access(oldLog) }
+    catch (error) { if (error.code !== 'ENOENT') throw error; removed = true; break }
+    await new Promise(resolve => setTimeout(resolve, 500))
+  }
+  assert.ok(removed, 'real host did not run deferred plugin log maintenance')
+  await access(recentLog)
+  report.deferredLogMaintenance = true
+
+  if (page.isClosed() || !browser.isConnected()) {
+    browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`, { timeout: 30000 })
+    page = browser.contexts().flatMap(context => context.pages())[0]
+    assert.ok(page, 'restarted native host has no workspace page')
+    page.on('pageerror', error => report.pageErrors.push(error.message))
+    await page.waitForURL(/^http:\/\/127\.0\.0\.1:/, { timeout: 30000 })
+    await page.waitForFunction(() => !document.querySelector('[data-dsh-boot]'))
+  }
+
+  const configureAfterRestart = page.getByRole('button', { name: /^(Configure later|稍后配置)$/i })
+  if (await configureAfterRestart.isVisible()) await configureAfterRestart.click()
   await page.getByRole('button', { name: /^(新会话|新建会话|New session)$/ }).first().click()
   const composer = page.locator('[contenteditable="true"][role="textbox"]').first()
   await composer.fill('Disposable official plugin lifecycle check')
   assert.equal(await composer.isEditable(), true)
+  await page.screenshot({ path: path.join(evidence, 'after-restart-composer.png') })
   assert.deepEqual(report.pageErrors, [])
   report.composer = true
   report.ok = true
@@ -192,4 +227,11 @@ try {
     cwd: root, env, windowsHide: true, timeout: 120_000,
   }).catch(() => {})
   if (host.exitCode === null) host.kill()
+  // Restart replaces the original child. Restrict cleanup to this disposable
+  // executable, never to all Portable processes on the machine.
+  await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+    'Get-Process -Name DeepSeek-Herness -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $env:DSH_ACCEPTANCE_HOST_EXE } | Stop-Process -ErrorAction Stop'], {
+    windowsHide: true, timeout: 30000,
+    env: { ...process.env, DSH_ACCEPTANCE_HOST_EXE: path.join(root, 'DeepSeek-Herness.exe') },
+  })
 }
