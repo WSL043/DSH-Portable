@@ -574,8 +574,13 @@ try {
   const picturedUi = await waitForValue(client, `(() => {
     const projectHref = new URL(${JSON.stringify(picturedPlugin.projectHref)}, location.href).href
     const screenshotUrls = ${JSON.stringify(picturedPlugin.screenshots)}.map(value => new URL(value, location.href).href)
-    const titleLink = [...document.querySelectorAll('a')].find(item => item.href === projectHref && (item.textContent || '').trim() === ${JSON.stringify(picturedPlugin.name)})
-    const cardShot = [...document.querySelectorAll('img')].find(item => screenshotUrls.includes(item.src) && item.complete && item.naturalWidth > 0)
+    // Display names are not unique: match the repository identity first.
+    const card = [...document.querySelectorAll('[data-market-card]')].find(item =>
+      [...item.querySelectorAll('a[aria-label]')].some(node => node.href === projectHref)
+      && [...item.querySelectorAll('[title]')].some(node => node.title === ${JSON.stringify(picturedPlugin.name)}))
+    card?.scrollIntoView({ block: 'center' })
+    const titleLink = card && [...card.querySelectorAll('a[aria-label]')].find(item => item.href === projectHref)
+    const cardShot = card && [...card.querySelectorAll('img')].find(item => screenshotUrls.includes(item.src) && item.complete && item.naturalWidth > 0)
     const rect = cardShot?.getBoundingClientRect()
     return { projectHref: titleLink?.href || '', cardShot: Boolean(cardShot), width: rect?.width || 0, height: rect?.height || 0 }
   })()`, value => value?.projectHref && value.cardShot && value.width >= 200 && value.height >= 140, 'pictured plugin card and project link', 60000)

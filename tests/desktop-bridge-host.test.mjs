@@ -519,3 +519,34 @@ test('storage route rejects external requests and shares only an active scan', a
   await handler(request('GET'), refreshed)
   assert.equal(refreshed.json().scan, 2)
 })
+
+test('storage route measures real relocated data, including profile logs, without scanning workspaces', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-storage-integrated-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const stateRoot = path.join(root, 'relocated-state')
+  await mkdir(path.join(root, 'launcher'))
+  for (const name of ['storage-report.mjs', 'plugin-log-maintenance.mjs']) {
+    await copyFile(new URL(`../launcher/${name}`, import.meta.url), path.join(root, 'launcher', name))
+  }
+  for (const [name, text] of Object.entries({
+    'data/pnpm-store/blob': 'store', 'data/backups/saved': 'backup',
+    'data/recovery/saved': 'recovery', 'data/logs/host.log': 'host',
+    'data/dsh-home/profiles/web/.plugin-manager/logs/operation-abcdef/pnpm.log': 'plugin',
+    'workspace/private': 'must stay outside the report',
+  })) {
+    const filename = path.join(stateRoot, name)
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, text)
+  }
+  const routes = new Map()
+  t.after(mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root, stateRoot }))
+  const reply = response()
+  await routes.get('/dsh-portable/storage').handler(request('GET'), reply)
+  assert.equal(reply.status, 200)
+  assert.equal(reply.json().complete, true)
+  assert.deepEqual(reply.json().categories.map(({ id, bytes, files }) => ({ id, bytes, files })), [
+    { id: 'pnpm-store', bytes: 5, files: 1 }, { id: 'backups', bytes: 6, files: 1 },
+    { id: 'recovery', bytes: 8, files: 1 }, { id: 'logs', bytes: 10, files: 2 },
+  ])
+  assert.equal(await readFile(path.join(stateRoot, 'workspace/private'), 'utf8'), 'must stay outside the report')
+})

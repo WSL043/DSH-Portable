@@ -300,16 +300,25 @@ export async function restoreDataArchive(layout, filename, options = {}) {
 
   async function rollbackImport() {
     trace('rollback-begin', { changed: changed.length, generated: generated.length })
+    // Verify every required recovery source before removing any current data.
+    // A missing backup must not turn rollback into successful data deletion.
+    for (const entry of [...generated, ...changed]) {
+      if (entry.rollback && !await lstatIfPresent(entry.rollback)) {
+        const error = new Error('An import recovery backup is missing.')
+        error.code = 'DSH_DATA_IMPORT_BACKUP_MISSING'
+        throw error
+      }
+    }
     for (const entry of [...generated].reverse()) {
-      await rm(entry.target, { recursive: true, force: true }).catch(() => {})
-      if (entry.rollback && await lstatIfPresent(entry.rollback)) {
+      await rm(entry.target, { recursive: true, force: true })
+      if (entry.rollback) {
         await mkdir(path.dirname(entry.target), { recursive: true })
         await rename(entry.rollback, entry.target)
       }
     }
     for (const entry of [...changed].reverse()) {
-      await rm(entry.target, { force: true }).catch(() => {})
-      if (entry.rollback && await lstatIfPresent(entry.rollback)) {
+      await rm(entry.target, { force: true })
+      if (entry.rollback) {
         await mkdir(path.dirname(entry.target), { recursive: true })
         await rename(entry.rollback, entry.target)
       }

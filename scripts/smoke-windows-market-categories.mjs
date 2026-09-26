@@ -18,6 +18,7 @@ const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'accep
 const sourceOverlay = process.argv.includes('--source-overlay')
 if (sourceOverlay) env.DSH_PORTABLE_STARTUP_SOURCE_CACHE = '0'
 const soak = process.argv.includes('--soak')
+const maintenanceOnly = process.argv.includes('--maintenance-only')
 // Live npm availability is a separate integration check, not a layout prerequisite.
 const verifyTotal = process.argv.includes('--verify-total')
 const samples = []
@@ -182,6 +183,9 @@ try {
   assert.equal(generalBorders.portableGroup.borderBottom.px, 0, 'Portable group bottom border must be zero')
   assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
   assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
+  const { verifyMaintenance } = await import('./lib/native-maintenance-checks.mjs')
+  await verifyMaintenance({ evaluate, until, click, send, output, sample, soak })
+  if (!maintenanceOnly) {
   const hasBuiltInPluginsNavigation = await evaluate(`(() => {
     const labels = new Set(['内置插件', 'Built-in plugins'])
     // The topmost dialog may be a late provider notice, not settings.
@@ -338,6 +342,8 @@ try {
   assert.deepEqual(exceptions,[]);
   await writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
   console.log(JSON.stringify(checks));
+  }
+  assert.deepEqual(exceptions, [])
   passed=true;
 } finally {
   try {
@@ -361,7 +367,7 @@ try {
           assert.equal(samples.at(-1).processes.length, 0, 'isolated Portable processes remain after exit')
         }
       } catch (error) { passed = false; throw error }
-      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, verifiedLiveTotal: verifyTotal && passed }, null, 2)) }
+      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
     }
   }
 }

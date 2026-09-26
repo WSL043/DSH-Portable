@@ -581,7 +581,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Integrated titlebar acceptance failed.' }
           node scripts/smoke-windows-startup-theme.mjs (Join-Path $ThemeRoot 'DSH-Portable') --disposable
           if ($LASTEXITCODE -ne 0) { throw 'Startup theme and history acceptance failed.' }
-      - name: Verify market category expansion after window resizing
+      - name: Verify maintenance actions and market category expansion
         shell: powershell
         run: |
           $MarketRoot = Join-Path $env:RUNNER_TEMP 'dsh-market-layout'
