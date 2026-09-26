@@ -140,8 +140,8 @@ export function PluginUpdateRow({ zh, name, busy = false, view }: { zh: boolean;
   if (done && !error && !note) return null
   return <span className={css.row} data-portable-update={name}>
     {!done && status?.updateAvailable && <span className={css.version}>{`${status.version ?? ''} → ${status.latest ?? ''}`}</span>}
-    {!done && status?.betaAvailable && <span className={css.version}>{`Beta ${status.betaAvailable}`}</span>}
-    {!done && status?.stableAvailable && <span className={css.version}>{`Stable ${status.stableAvailable}`}</span>}
+    {!done && status?.betaAvailable && <span className={css.version}>{`${zh ? '可用预览版' : 'Preview available:'} ${status.betaAvailable}`}</span>}
+    {!done && status?.stableAvailable && <span className={css.version}>{`${zh ? '可用正式版' : 'Stable available:'} ${status.stableAvailable}`}</span>}
     {note && <span className={css.effectiveNote} role="status" title={zh ? noteCopy[note].zhTitle : noteCopy[note].enTitle}>{zh ? noteCopy[note].zh : noteCopy[note].en}</span>}
     {(note === 'running-outside-switch' || note === 'pending-stop') && <button type="button" className={css.verifyAction} disabled={busy || Boolean(state.busy)} onClick={() => void restartForState(name)}>{state.busy === name ? (zh ? '正在重启…' : 'Restarting…') : (zh ? '重启后确认' : 'Restart to verify')}</button>}
     {error && <span className={css.failure} role="alert" title={error}>{done ? (zh ? '未完成，请重试' : 'Could not apply. Please retry.') : (zh ? '更新失败，可重试' : 'Update failed. Retry available.')}</span>}

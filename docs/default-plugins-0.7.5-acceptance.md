@@ -16,6 +16,12 @@ Do not promote RC2-only dependencies into the alpha.1 stable composition. The im
 - Both GitHub repositories have no open issues at this check. This does not establish absence of defects.
 - Stable registry package integrity matches the Portable pins. Newer versions require compatibility review; they were not installed automatically.
 
+## 2026-09-27 CI evidence review
+
+Run `36253765356`, source `69a776746aa13df9b472d4aba9916d9e3cb62851`: the Windows official plugin lifecycle job passed uninstall cancellation, image uninstall/reinstall/enable, a simulated loader-state mismatch restart action, and composer availability. The build log identifies chat 1.5.1 and image 0.1.2; the pnpm operation log independently confirms removal and installation of image 0.1.2. The restart mismatch was deliberately supplied by response interception and is not evidence of a naturally occurring loader fault.
+
+The screenshot's `Beta 1.5.2-beta.5` and `Beta 0.1.3-beta.3` strings were **available update hints**, not installed versions. Their placement beside plugin names was ambiguous. The client now labels these as available previews; the lifecycle runner also asserts installed package names/versions against COMPONENTS before and after reinstall and stores them in the report. These new checks still require execution on the next candidate. Existing evidence does not cover session deletion or image annotation interaction.
+
 ## Final product acceptance required
 
 - Install, update, enable, disable, uninstall, reinstall and restart each exact default package through the supported product UI. Verify both configured and loaded versions; keep settings open during download, and confirm the composer remains usable after activation changes.

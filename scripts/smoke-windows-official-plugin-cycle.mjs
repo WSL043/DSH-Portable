@@ -43,6 +43,16 @@ const host = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], {
   },
 })
 const report = { ok: false, pageErrors: [] }
+async function verifyInstalledDefaults() {
+  const versions = {}
+  for (const plugin of components.defaultPlugins ?? []) {
+    const manifest = JSON.parse(await readFile(path.join(root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', plugin.package, 'package.json'), 'utf8'))
+    assert.equal(manifest.name, plugin.package, 'installed default plugin identity')
+    assert.equal(manifest.version, plugin.version, `installed ${plugin.package} must match the product manifest`)
+    versions[plugin.package] = manifest.version
+  }
+  return versions
+}
 let browser
 let page
 try {
@@ -64,6 +74,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('[data-dsh-boot]'))
   const routeStatus = await page.evaluate(async () => (await fetch('/dsh-portable/settings')).status)
   assert.equal(routeStatus, 200, 'Portable bridge route is unavailable')
+  report.initialDefaultVersions = await verifyInstalledDefaults()
 
   // The first-run notice and model prompt are official DSH UI. No model key is
   // needed for this disposable package-manager acceptance.
@@ -113,6 +124,7 @@ try {
   await page.waitForFunction(() => document.querySelector('[data-plugin-package="dsh-image-viewer"] [role="switch"]')?.getAttribute('aria-checked') === 'true')
   assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), 'true')
   report.reinstalledAndEnabled = true
+  report.reinstalledDefaultVersions = await verifyInstalledDefaults()
   await page.screenshot({ path: path.join(evidence, 'after-install.png') })
 
   // The official switch may hot-unload immediately. Supply a loader mismatch
