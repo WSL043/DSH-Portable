@@ -15,8 +15,11 @@ const root = path.resolve(rootArg)
 const evidence = path.resolve(evidenceArg)
 await mkdir(evidence, { recursive: true })
 const components = JSON.parse(await readFile(await verifiedPackageFile(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
-const reviewedImage = components.defaultPlugins?.find(plugin => plugin.package === 'dsh-image-viewer')
-assert.match(reviewedImage?.version ?? '', /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/, 'reviewed image viewer version')
+const reviewedPlugins = ['dsh-image-viewer', 'dsh-chat-manager'].map(name => {
+  const plugin = components.defaultPlugins?.find(item => item.package === name)
+  assert.match(plugin?.version ?? '', /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/, `reviewed ${name} version`)
+  return plugin
+})
 const { chromium } = createRequire(path.resolve(driverPackage))('playwright')
 const env = {
   ...process.env,
@@ -93,39 +96,47 @@ try {
   }
 
   await page.getByRole('button', { name: /^(Plugins|插件)$/ }).first().click()
-  const card = page.locator('[data-plugin-package="dsh-image-viewer"]')
-  await card.waitFor()
-  await card.getByRole('button').first().click()
-  await page.getByRole('button', { name: /^(卸载 |Uninstall )/ }).click()
-  let dialog = page.getByRole('dialog').last()
-  await dialog.getByRole('button', { name: /^(取消|Cancel)$/ }).click()
-  report.cancelUninstall = true
-  await page.getByRole('button', { name: /^(卸载 |Uninstall )/ }).click()
-  dialog = page.getByRole('dialog').last()
-  await dialog.getByRole('button', { name: /^(卸载|Uninstall)$/ }).click()
-  await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).waitFor({ timeout: 90_000 })
-  await page.waitForFunction(() => !document.querySelector('[data-plugin-package="dsh-image-viewer"]'), null, { timeout: 90_000 })
-  report.uninstalled = true
-  await page.screenshot({ path: path.join(evidence, 'after-uninstall.png') })
+  report.pluginCycles = {}
+  for (const plugin of reviewedPlugins) {
+    const cycle = report.pluginCycles[plugin.package] = {}
+    const selector = `[data-plugin-package="${plugin.package}"]`
+    const card = page.locator(selector)
+    await card.waitFor()
+    await card.getByRole('button').first().click()
+    await page.getByRole('button', { name: /^(卸载 |Uninstall )/ }).click()
+    let dialog = page.getByRole('dialog').last()
+    await dialog.getByRole('button', { name: /^(取消|Cancel)$/ }).click()
+    cycle.versionsAfterCancel = await verifyInstalledDefaults()
+    cycle.cancelUninstall = true
+    await page.getByRole('button', { name: /^(卸载 |Uninstall )/ }).click()
+    dialog = page.getByRole('dialog').last()
+    await dialog.getByRole('button', { name: /^(卸载|Uninstall)$/ }).click()
+    await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).waitFor({ timeout: 90_000 })
+    await page.waitForFunction(selector => !document.querySelector(selector), selector, { timeout: 90_000 })
+    cycle.uninstalled = true
+    await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-uninstall.png`) })
 
-  await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).click()
-  dialog = page.getByRole('dialog').last()
-  await dialog.getByRole('textbox').first().fill(`dsh-image-viewer@${reviewedImage.version}`)
-  await dialog.getByRole('button', { name: /^(安装|Install)$/ }).click()
-  const enableNow = page.getByRole('button', { name: /^(立即启用|Enable now)$/ })
-  const installResult = await Promise.race([
-    enableNow.waitFor({ timeout: 120_000 }).then(() => 'ready'),
-    page.getByText(/(?:could not be installed|无法安装)/i).waitFor({ timeout: 120_000 }).then(() => 'failed'),
-  ])
-  assert.equal(installResult, 'ready', `Official plugin installation failed: ${await page.getByRole('dialog').last().innerText()}`)
-  await enableNow.click()
-  await page.getByRole('button', { name: /^(返回插件列表|Back to plugins)$/ }).click()
-  await card.waitFor()
-  await page.waitForFunction(() => document.querySelector('[data-plugin-package="dsh-image-viewer"] [role="switch"]')?.getAttribute('aria-checked') === 'true')
-  assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), 'true')
-  report.reinstalledAndEnabled = true
-  report.reinstalledDefaultVersions = await verifyInstalledDefaults()
-  await page.screenshot({ path: path.join(evidence, 'after-install.png') })
+    await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).click()
+    dialog = page.getByRole('dialog').last()
+    await dialog.getByRole('textbox').first().fill(`${plugin.package}@${plugin.version}`)
+    await dialog.getByRole('button', { name: /^(安装|Install)$/ }).click()
+    const enableNow = page.getByRole('button', { name: /^(立即启用|Enable now)$/ })
+    const installResult = await Promise.race([
+      enableNow.waitFor({ timeout: 120_000 }).then(() => 'ready'),
+      page.getByText(/(?:could not be installed|无法安装)/i).waitFor({ timeout: 120_000 }).then(() => 'failed'),
+    ])
+    assert.equal(installResult, 'ready', `Official plugin installation failed: ${await page.getByRole('dialog').last().innerText()}`)
+    await enableNow.click()
+    await page.getByRole('button', { name: /^(返回插件列表|Back to plugins)$/ }).click()
+    await card.waitFor()
+    await page.waitForFunction(selector => document.querySelector(`${selector} [role="switch"]`)?.getAttribute('aria-checked') === 'true', selector)
+    assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), 'true')
+    cycle.reinstalledAndEnabled = true
+    cycle.reinstalledDefaultVersions = await verifyInstalledDefaults()
+    await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-install.png`) })
+
+  }
+  const card = page.locator('[data-plugin-package="dsh-image-viewer"]')
 
   // The official switch may hot-unload immediately. Supply a loader mismatch
   // only for this view-layer check, then verify the Portable recovery action
