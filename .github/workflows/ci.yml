@@ -599,7 +599,7 @@ jobs:
         if: matrix.label == 'windows-2025'
         with:
           repository: WSL043/DSH-Portable-Updates
-          ref: 3c8c68eb5523d4b6f3180beedf815bf630aa547c
+          ref: c2405ee4c530e7839cd1c24c5c9f49c55ba287cc
           path: qualification-tools
           persist-credentials: false
       - name: Verify packaged default plugins in native WebView2
@@ -615,6 +615,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Default plugin fixture extraction failed.' }
           npm install --prefix $DriverRoot --ignore-scripts --no-audit --no-fund playwright@1.63.0
           if ($LASTEXITCODE -ne 0) { throw 'Default plugin driver installation failed.' }
+          $env:DSH_PORTABLE_RUNTIME_CACHE = Join-Path $PluginRoot 'runtime-cache'
+          $env:DSH_CHAT_TEST_STALE_ARCHIVE = '1'
           node qualification-tools/scripts/verify-default-plugin-ui.mjs (Join-Path $PluginRoot 'DSH-Portable') (Join-Path $DriverRoot 'package.json') --disposable
           if ($LASTEXITCODE -ne 0) { throw 'Default plugin native acceptance failed.' }
       - uses: actions/upload-artifact@v7

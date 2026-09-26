@@ -24,6 +24,16 @@ The screenshot's `Beta 1.5.2-beta.5` and `Beta 0.1.3-beta.3` strings were **avai
 
 ## Final product acceptance required
 
+### Native interaction evidence reviewed on 2026-09-27
+
+The separate `windows-default-plugin-ui` artifact from run `36253765356` identifies Portable 0.7.5, DSH 0.1.7-alpha.1, chat 1.5.1 and image 0.1.2. Both themes passed annotation intake with draft preservation, cancelled deletion, archive restoration and plugin enable/disable with an editable composer. Light mode also passed confirmed session deletion. Reviewed screenshots show readable controls, distinct red destructive actions, four sidebar header actions and the image plus annotation text in the composer. The missing-credential model error shown in the synthetic session is intentional: no external model credentials were supplied.
+
+The pinned shared verifier `3c8c68e` only confirmed deletion after restoring the archived session. The newer reviewed verifier `c2405ee4c530e7839cd1c24c5c9f49c55ba287cc` instead confirms deletion from archive settings and can reconcile a synthetic stale archive. Portable CI now pins that verifier and enables the stale-archive case with its own runtime cache.
+
+Local native execution of that newer verifier passed with `DSH_CHAT_TEST_STALE_ARCHIVE=1`. It used the dedicated 0.7.4 extraction plus the current compiled native window executable, unchanged stable plugins (actual installed manifests 1.5.1 and 0.1.2), and an isolated runtime cache. Both themes passed stale-archive reconciliation, annotation intake, draft preservation, cancellation, restoration and enable/disable; light mode passed archive-settings confirmed deletion. No captured client errors. Evidence: `build/native075-baseline/archive-delete-acceptance.log` and `build/native075-baseline/extracted/DSH-Portable/acceptance/default-plugin-ui/`. This is focused interaction evidence, not a claim that the modified extraction is an immutable 0.7.5 release artifact.
+
+The next exact candidate must execute the updated verifier and the installed-version assertions before final qualification. The cancelled overall run `36253765356` is not a full green product gate even though its completed native UI job succeeded.
+
 - Install, update, enable, disable, uninstall, reinstall and restart each exact default package through the supported product UI. Verify both configured and loaded versions; keep settings open during download, and confirm the composer remains usable after activation changes.
 - Chat: preserve all official sidebar actions; archive icon opens the official archive page; cancel deletion performs no mutation; confirm deletion only on generated disposable sessions; restore and content search work without reopening Settings or unloading the official workspace.
 - Image: message/composer entry points, zoom, pan, gallery, download, Escape and focus restoration; edited annotations return image plus notes to the same composer without overwriting existing draft text or writing to a different session.
