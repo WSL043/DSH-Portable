@@ -1710,7 +1710,9 @@ namespace DshPortable
             AddDesktopCommand(view, "zoom-reset", L("实际大小", "Actual size"), Keys.Control | Keys.D0,
                 delegate { SetDesktopZoom(1); });
             view.DropDownItems.Add(new ToolStripSeparator());
-            AddDesktopCommand(view, "fullscreen", L("全屏（Esc 退出）", "Full screen (Esc to exit)"), Keys.F11,
+            AddDesktopCommand(view, "maximize", L("最大化或还原（保留任务栏）", "Maximize or restore (keep taskbar visible)"), Keys.None,
+                delegate { WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; });
+            AddDesktopCommand(view, "fullscreen", L("全屏（遮盖任务栏，Esc 退出）", "Full screen (cover taskbar, Esc to exit)"), Keys.F11,
                 delegate { SetDesktopFullscreen(!fullscreen); });
             AddDesktopCommand(help, "product-update", L("检查 Portable 更新", "Check Portable updates"), Keys.None,
                 async delegate { await CheckForDesktopUpdateAsync(true, "product"); });
@@ -1827,6 +1829,7 @@ namespace DshPortable
                     if (id == "close") item.Enabled &= desktopReady;
                     if (id == "exit") item.Enabled &= desktopReady && !operationRunning;
                     if (id.EndsWith("-update")) item.Enabled &= desktopReady && !operationRunning && !updateCheckRunning && !updateInteractionRunning;
+                    if (id == "maximize") ((ToolStripMenuItem)item).Checked = !fullscreen && WindowState == FormWindowState.Maximized;
                     if (id == "fullscreen") ((ToolStripMenuItem)item).Checked = fullscreen;
                 }
         }
