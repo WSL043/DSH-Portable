@@ -590,9 +590,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Market fixture extraction failed.' }
           node scripts/smoke-windows-market-categories.mjs (Join-Path $MarketRoot 'DSH-Portable') (Join-Path $MarketRoot 'evidence') --disposable
           if ($LASTEXITCODE -ne 0) { throw 'Market category layout acceptance failed.' }
-            $MarketProduct = Join-Path $MarketRoot 'DSH-Portable'
-            node scripts/smoke-windows-recovery.mjs $MarketProduct (Join-Path $MarketRoot 'evidence/recovery') --disposable
-            if ($LASTEXITCODE -ne 0) { throw 'Recovery executable acceptance failed.' }
+          $MarketProduct = Join-Path $MarketRoot 'DSH-Portable'
+          node scripts/smoke-windows-recovery.mjs $MarketProduct (Join-Path $MarketRoot 'evidence/recovery') --disposable
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery executable acceptance failed.' }
           & (Join-Path $MarketProduct 'runtime/node/node.exe') (Join-Path $MarketProduct 'launcher/runtime-entry.mjs') portable-cli.mjs support-report --output (Join-Path $MarketRoot 'evidence/support.json') --json
           if ($LASTEXITCODE -ne 0) { throw 'Market startup support export failed.' }
           node scripts/report-startup-performance.mjs (Join-Path $MarketRoot 'evidence/support.json') --output (Join-Path $MarketRoot 'evidence/startup-performance.json')

@@ -118,7 +118,7 @@ export async function pauseStartupProfileBundle(layout, index) {
   const missingOfficial = kind === 'official'
     && (await resolveBundle(layout, path.dirname(profile.filename), name)).status === 'missing'
   if (kind !== 'community' && !missingOfficial) {
-    throw new Error('Only community plugins or an unavailable official bundle can be temporarily paused; Portable and installed official bundles are protected.')
+    throw Object.assign(new Error('Only community plugins or an unavailable official bundle can be temporarily paused; Portable and installed official bundles are protected.'), { code: 'RECOVERY_BUNDLE_PROTECTED' })
   }
   const journal = await readJournal(layout)
   if (journal.pauses.some(item => item.name === name)) throw new Error('This plugin already has a pending recovery record.')
@@ -151,7 +151,7 @@ export async function restoreStartupProfileBundle(layout, index) {
     return { status: 'already-active', name }
   }
   if ((await resolveBundle(layout, path.dirname(profile.filename), name)).status === 'missing') {
-    throw new Error(`Plugin ${name} is not installed in the web profile; restore its package before enabling it.`)
+    throw Object.assign(new Error(`Plugin ${name} is not installed in the web profile; restore its package before enabling it.`), { code: 'RECOVERY_BUNDLE_UNAVAILABLE' })
   }
   profile.manifest.dsh.profile.bundles.splice(Math.min(record.position, profile.bundles.length), 0, name)
   await writeDataFileAtomic(profile.filename, `${JSON.stringify(profile.manifest, null, 2)}\n`)

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const root = process.argv[2] && path.resolve(process.argv[2])
@@ -66,6 +66,52 @@ try {
     assert.equal(await realpath(resolver), original)
   } finally {
     if (!await lstat(resolver).catch(error => { if (error.code === 'ENOENT') return null; throw error })) await cli('repair')
+  }
+  const profile = path.join(root, 'data/dsh-home/profiles/web/package.json')
+  const runtime = path.join(root, 'data/runtime')
+  const journal = path.join(runtime, 'startup-profile-recovery.json')
+  const profileBefore = await readFile(profile)
+  const manifestBefore = JSON.parse(profileBefore)
+  assert.equal(await lstat(journal).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
+  const runtimeFilesBefore = new Set(await readdir(runtime))
+  const missingBundle = 'dsh-recovery-missing-fixture'
+  const communityIndex = manifestBefore.dsh.profile.bundles.indexOf('dsh-chat-manager') + 1
+  const officialIndex = manifestBefore.dsh.profile.bundles.indexOf('@deepseek-ai/dsh-web-app') + 1
+  assert.ok(communityIndex > 0 && officialIndex > 0, 'requires the default product profile')
+  const readProfile = async () => JSON.parse(await readFile(profile, 'utf8'))
+  try {
+    const missing = structuredClone(manifestBefore)
+    assert.ok(!missing.dsh.profile.bundles.includes(missingBundle))
+    missing.dsh.profile.bundles.push(missingBundle)
+    await writeFile(profile, JSON.stringify(missing, null, 2))
+    await recovery('missing-plugin-diagnosis', '5\n0\n', /dsh-recovery-missing-fixture[^\r\n]*missing/)
+    await recovery('pause-missing-community', `6\n${missing.dsh.profile.bundles.length}\n0\n`, /"status":"paused"/)
+    assert.deepEqual(await readProfile(), manifestBefore)
+    await recovery('refuse-restore-unavailable', '7\n1\n0\n', /RECOVERY_BUNDLE_UNAVAILABLE[\s\S]*Exit code: 1/)
+    assert.deepEqual(await readProfile(), manifestBefore)
+    assert.equal(JSON.parse(await readFile(journal, 'utf8')).pauses[0].name, missingBundle)
+    await unlink(journal)
+    await recovery('protect-installed-official', `6\n${officialIndex}\n0\n`, /RECOVERY_BUNDLE_PROTECTED[\s\S]*Exit code: 1/)
+    assert.deepEqual(await readProfile(), manifestBefore)
+    await recovery('pause-installed-community', `6\n${communityIndex}\n0\n`, /"status":"paused"/)
+    assert.deepEqual((await readProfile()).dependencies, manifestBefore.dependencies)
+    assert.ok(!(await readProfile()).dsh.profile.bundles.includes('dsh-chat-manager'))
+    await recovery('restore-installed-community', '7\n1\n0\n', /"status":"restored"/)
+    assert.deepEqual(await readProfile(), manifestBefore)
+    assert.deepEqual(JSON.parse(await readFile(journal, 'utf8')).pauses, [])
+    await writeFile(profile, '{ malformed fixture')
+    await recovery('malformed-profile-diagnosis', '2\n0\n', /Checks failed/)
+    assert.equal(await readFile(profile, 'utf8'), '{ malformed fixture')
+  } finally {
+    await writeFile(profile, profileBefore)
+    await unlink(journal).catch(error => { if (error.code !== 'ENOENT') throw error })
+    for (const name of await readdir(runtime)) {
+      if (runtimeFilesBefore.has(name) || !/^startup-profile-backup-[a-f0-9-]+\.json$/.test(name)) continue
+      const target = path.resolve(runtime, name)
+      assert.ok(target.startsWith(runtime + path.sep) && (await lstat(target)).isFile())
+      await unlink(target)
+    }
+    assert.deepEqual(await readFile(profile), profileBefore)
   }
   const sentinel = path.join(root, 'workspace/recovery-acceptance-sentinel.txt')
   await mkdir(path.dirname(sentinel), { recursive: true })

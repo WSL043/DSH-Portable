@@ -9,6 +9,7 @@ import { promisify } from 'node:util'
 
 import { layoutForRoot, parseCli } from '../launcher/portable-core.mjs'
 import { inspectStartupProfile, pauseStartupProfileBundle, restoreStartupProfileBundle } from '../launcher/startup-profile-recovery.mjs'
+import { portablePublicError } from '../launcher/diagnostic-policy.mjs'
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-startup-recovery-'))
@@ -39,7 +40,11 @@ test('startup recovery identifies missing official bundle and pauses only select
   const before = await inspectStartupProfile(layout)
   assert.equal(before.status, 'attention')
   assert.deepEqual(before.bundles.map(item => item.status), ['runtime', 'profile', 'profile', 'missing'])
-  await assert.rejects(pauseStartupProfileBundle(layout, 1), /installed official bundles are protected/)
+  await assert.rejects(pauseStartupProfileBundle(layout, 1), error => {
+    assert.equal(portablePublicError(error).code, 'RECOVERY_BUNDLE_PROTECTED')
+    assert.match(portablePublicError(error).message, /受保护.*未暂停/)
+    return true
+  })
   const result = await pauseStartupProfileBundle(layout, 2)
   assert.equal(result.name, 'community-a')
   assert.equal(JSON.parse(await readFile(manifestFile, 'utf8')).dependencies['community-a'], '1.0.0')
@@ -60,7 +65,13 @@ test('an unavailable official bundle can be isolated and only restored after its
   const paused = await pauseStartupProfileBundle(layout, 4)
   assert.equal(paused.name, '@deepseek-ai/dsh-experimental-agent-team-web-profile')
   assert.equal((await inspectStartupProfile(layout)).status, 'ok')
-  await assert.rejects(restoreStartupProfileBundle(layout, 1), /not installed/)
+  await assert.rejects(restoreStartupProfileBundle(layout, 1), error => {
+    const result = portablePublicError(error)
+    assert.equal(result.code, 'RECOVERY_BUNDLE_UNAVAILABLE')
+    assert.match(result.message, /重新安装/)
+    assert.ok(!result.message.includes(paused.name), 'public error must not echo the dynamic package identity')
+    return true
+  })
   const packageRoot = path.join(profile, 'node_modules', '@deepseek-ai', 'dsh-experimental-agent-team-web-profile')
   await mkdir(packageRoot, { recursive: true })
   await writeFile(path.join(packageRoot, 'package.json'), '{"version":"1.0.0"}')

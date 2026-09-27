@@ -33,6 +33,7 @@ export function redactDiagnosticText(source) {
 }
 
 export function classifyPortableError(error) {
+  if (error?.code === 'RECOVERY_BUNDLE_PROTECTED' || error?.code === 'RECOVERY_BUNDLE_UNAVAILABLE') return error.code
   if (error?.code === 'DSH_DATA_IMPORT_PROFILE_FAILED') return 'DATA_IMPORT_ROLLED_BACK'
   const source = String(error?.stack ?? error?.message ?? error ?? '')
   if (/restored but could not restart|previous version could not be restarted/i.test(source)) return 'UPDATE_RECOVERY_FAILED'
@@ -55,6 +56,8 @@ export function classifyPortableError(error) {
 export function portablePublicError(error) {
   const code = classifyPortableError(error)
   const messages = {
+    RECOVERY_BUNDLE_PROTECTED: '该组件受保护，未暂停。只能暂停社区插件或缺失的官方组件。This component is protected; only community plugins or unavailable official bundles can be paused.',
+    RECOVERY_BUNDLE_UNAVAILABLE: '插件文件尚未恢复，已保持暂停。请先重新安装该插件，再恢复启动项。The plugin package is unavailable. Reinstall it before restoring the startup entry; it remains paused.',
     UPDATE_ROLLED_BACK: 'The update did not pass startup validation. The previous version was restored and restarted. Details were saved to the support log.',
     UPDATE_RECOVERY_FAILED: 'The update failed and the previous version could not be restarted. Reopen DSH-Portable and export a support report.',
     PORT_IN_USE: 'The local DSH service port is already in use. Close the other DSH instance and try again.',
