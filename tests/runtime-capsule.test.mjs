@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { promises as fsPromises } from 'node:fs'
 import { syncBuiltinESMExports } from 'node:module'
-import { mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -30,6 +30,46 @@ const REQUIRED = [
   'node_modules/@wsl043/dsh-portable-plugin-market/package.json',
   'node_modules/pnpm/bin/pnpm.cjs',
 ]
+
+test('partially written GC locks and leases close their handles and cannot poison later maintenance', async t => {
+  const { parent, root, app } = await fixture()
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  const cache = path.join(parent, 'fault-cache')
+  const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }
+  await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+    platform: process.platform, arch: process.arch, level: 1,
+  })
+  await ensureRuntimeCapsule(root, { env })
+  const old = path.join(cache, 'a'.repeat(64))
+  await mkdir(old)
+  await writeFile(path.join(old, 'keep'), 'retained')
+  const originalOpen = fsPromises.open
+  let closed = 0
+  const mocked = t.mock.method(fsPromises, 'open', async (file, flags, ...args) => {
+    const handle = await originalOpen(file, flags, ...args)
+    if (flags !== 'wx' || (!String(file).endsWith('.gc.lock') && !String(file).includes('.lease.'))) return handle
+    return {
+      async writeFile() {
+        await handle.writeFile('{')
+        throw Object.assign(new Error('simulated disk full'), { code: 'ENOSPC' })
+      },
+      async close() { await handle.close(); closed++ },
+    }
+  })
+  syncBuiltinESMExports()
+  t.after(() => { mocked.mock.restore(); syncBuiltinESMExports() })
+  const result = await cleanUnusedRuntimeCaches(root, { env })
+  assert.equal(result.retained.find(x => x.hash === 'a'.repeat(64)).code, 'ENOSPC')
+  await assert.rejects(acquireRuntimeLease(old), { code: 'ENOSPC' })
+  assert.equal(closed, 2)
+  assert.deepEqual((await readdir(cache)).filter(name => name.endsWith('.gc.lock') || name.includes('.lease.')), [])
+  assert.equal(await readFile(path.join(old, 'keep'), 'utf8'), 'retained')
+  mocked.mock.restore()
+  syncBuiltinESMExports()
+  const release = await acquireRuntimeLease(old)
+  await release()
+  assert.equal((await cleanUnusedRuntimeCaches(root, { env })).removed.length, 1)
+})
 
 test('background cache work stops before deletion on budget or cancellation and releases its locks', async t => {
   const { parent, root, app } = await fixture()

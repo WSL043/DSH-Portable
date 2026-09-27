@@ -72,8 +72,8 @@ try {
   assert.equal(await lstat(sentinel).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
   await writeFile(sentinel, 'workspace must survive repair')
   try {
-    await cli('start')
     started = true
+    await cli('start')
     await recovery('running-deferral', '3\n0\n', /Repair not performed[\s\S]*Exit code: 2/)
     assert.equal(await readFile(sentinel, 'utf8'), 'workspace must survive repair')
   } finally { await unlink(sentinel) }

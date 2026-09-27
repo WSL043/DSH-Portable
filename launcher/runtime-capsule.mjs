@@ -219,18 +219,26 @@ async function reclaimCrashedLock(filename) {
   return true
 }
 
+async function createProcessRecord(filename, token) {
+  const handle = await open(filename, 'wx')
+  try {
+    await handle.writeFile(`${JSON.stringify({ schemaVersion: 1, pid: process.pid, token, startedAt: new Date().toISOString() })}\n`, 'utf8')
+    return handle
+  } catch (error) {
+    // Only an exclusively created record is ours to remove. In particular, an
+    // EEXIST from open above must never remove another process's lock.
+    await handle.close().catch(() => {})
+    await rm(filename, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
 async function acquireLock(filename) {
   await mkdir(path.dirname(filename), { recursive: true })
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const handle = await open(filename, 'wx')
       const token = randomUUID()
-      await handle.writeFile(`${JSON.stringify({
-        schemaVersion: 1,
-        pid: process.pid,
-        token,
-        startedAt: new Date().toISOString(),
-      })}\n`, 'utf8')
+      const handle = await createProcessRecord(filename, token)
       return async () => {
         await handle.close().catch(() => {})
         const owned = await readLock(filename)
@@ -257,8 +265,7 @@ export async function acquireRuntimeLease(runtimeRoot, options = {}) {
     if (!await waitForMissing(gcLock, options.waitMs)) throw new Error('The DSH runtime cache is currently being maintained.')
     const token = randomUUID()
     const leaseFile = path.join(cacheParent, `${runtimeLeasePrefix(hash)}${process.pid}.${token}.json`)
-    const handle = await open(leaseFile, 'wx')
-    await handle.writeFile(`${JSON.stringify({ schemaVersion: 1, pid: process.pid, token, startedAt: new Date().toISOString() })}\n`, 'utf8')
+    const handle = await createProcessRecord(leaseFile, token)
     await handle.close()
     if (existsSync(gcLock)) {
       await rm(leaseFile, { force: true }).catch(() => {})
