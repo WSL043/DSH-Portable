@@ -5,6 +5,7 @@ import { createServer } from 'node:http'
 import { execFile, spawn } from 'node:child_process'
 import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 
 const [rootArg, driverArg, outputArg, mode] = process.argv.slice(2)
@@ -71,7 +72,9 @@ const cli = (...args) => exec(path.join(root, 'runtime/node/node.exe'),
 assert.equal(JSON.parse((await cli('status')).stdout).status, 'stopped')
 const capsule = JSON.parse(await readFile(path.join(root, 'runtime-capsule.json'), 'utf8'))
 result.capsuleSha256 = capsule.sha256
-let host, browser, page, sampleTimer, samplingError
+result.harnessSha256 = createHash('sha256').update(await readFile(new URL(import.meta.url))).digest('hex')
+result.nativeSha256 = createHash('sha256').update(await readFile(path.join(root, 'DeepSeek-Herness.exe'))).digest('hex')
+let host, browser, page, rendererProbe, sampleTimer, samplingError
 let sampling = Promise.resolve()
 async function sample(phase) {
   const { stdout } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
@@ -82,7 +85,18 @@ async function sample(phase) {
     assert.ok(browser.isConnected() && !page.isClosed(), 'Native page must remain connected')
     assert.ok(snapshot.processes.some(p => p.pid === host.pid), 'sampler must include the live Native host')
   }
-  result.samples.push({ phase, monotonicMs: performance.now(), ...snapshot }); await persist()
+  // Read-only counters distinguish retained page objects from native browser memory.
+  // Do not request GC or otherwise change the runtime's normal reclamation policy.
+  let renderer
+  if (phase !== 'exited' && rendererProbe) {
+    const [dom, performanceMetrics] = await Promise.all([
+      rendererProbe.send('Memory.getDOMCounters'), rendererProbe.send('Performance.getMetrics'),
+    ])
+    const names = new Set(['JSHeapUsedSize', 'JSHeapTotalSize', 'Documents', 'Nodes', 'JSEventListeners', 'LayoutObjects', 'Frames'])
+    renderer = { ...dom, ...Object.fromEntries(performanceMetrics.metrics
+      .filter(metric => names.has(metric.name)).map(metric => [metric.name, metric.value])) }
+  }
+  result.samples.push({ phase, monotonicMs: performance.now(), ...snapshot, ...(renderer ? { renderer } : {}) }); await persist()
 }
 async function dismissOnboarding() {
   for (let i = 0; i < 20; i++) {
@@ -171,6 +185,9 @@ try {
   assert.ok(browser)
   while (!page && Date.now() < deadline) { page = browser.contexts().flatMap(c => c.pages())[0]; if (!page) await delay(100) }
   assert.ok(page); page.setDefaultTimeout(30000)
+  result.browserVersion = browser.version()
+  rendererProbe = await page.context().newCDPSession(page)
+  await rendererProbe.send('Performance.enable')
   page.on('pageerror', error => result.exceptions.push(error.message))
   await page.waitForURL(/^http:\/\/127\.0\.0\.1:/)
   await page.waitForFunction(() => !document.querySelector('[data-dsh-boot]'))
@@ -225,7 +242,9 @@ try {
     const base = median(totals('baseline', 'privateBytes')), idle = median(totals('idle', 'privateBytes'))
     const handles = median(totals('idle', 'handles')) - median(totals('baseline', 'handles'))
     result.resources = { baselinePrivateBytes: base, idlePrivateBytes: idle, handleGrowth: handles }
-    assert.ok(idle <= base * 1.2 + 64 * 1024 * 1024); assert.ok(handles <= 100)
+    const limit = base * 1.2 + 64 * 1024 * 1024
+    assert.ok(idle <= limit, `Idle private bytes ${idle} exceed ${limit}; baseline=${base}. Inspect per-process and renderer samples.`)
+    assert.ok(handles <= 100, `Idle handle growth ${handles} exceeds 100. Inspect per-process samples.`)
   }
   assert.equal(host.exitCode, null)
   assert.ok(browser.isConnected() && !page.isClosed())

@@ -2,6 +2,22 @@
 
 状态：开发验收中，未发布。范围按 `native-release-exit-criteria.md` 的 G1–G8；Electron 与被隔离的 rc.2 不混入本批。
 
+最新阻断（2026-09-28）：`soak-final/result.json` 完成120分钟后未通过。基线私有内存中位数501,723,136字节，结束静置682,921,984字节，超过原定 `baseline * 1.2 + 64 MiB`；句柄增长110，超过100上限。200次导航、20次图片、10轮插件操作完成，页面异常为零，退出后所属进程为空。保留原始报告，不放宽阈值、不发布该候选。后台内存策略对照未证明收益，已撤回实验代码；诊断记录见下文。
+
+### 本轮诊断与工作区整理
+
+`memory-policy-probe` 和 `memory-policy-control` 在相同导航、图片和插件循环后，分别切换 Low 或保持 Normal。两组均完成操作及退出，前者四次静置总私有内存约 619–624 MiB，后者约 617–619 MiB。冷启动 Node 内存自行回落，两组 GPU/renderer 也都回落；不能把总量下降归功于 Low。没有证明此改动能解决 G7，已从产品源码撤回实验，仅保留 patch 和报告。未增加强制 GC、暂停脚本或修改发布阈值。
+
+后续诊断将设置导航、插件循环、图片操作分开记录 DOM、监听器和 JS heap 指标，使用原不可变成品；诊断 probe 不冒充 120 分钟验收。既有 G1–G6 证据继续保留。
+
+`renderer-growth/result.json` 已完成上述分场景诊断：200 次导航、20 次图片操作、10 轮插件操作通过，静置四个样本约 611–614 MiB。DOM/监听器在操作期间有升有降，退出无残留，不能据此声称所有长时资源行为均已排除。
+
+`model-growth/result.json` 单独执行 100 轮流式完成和取消，每十轮建立新会话；包括预热及标题调用共 213 个本地请求。突发工作量结束后总私有内存从约 1089 MiB 回落，四次原会话静置样本约 789、789、788、622 MiB；切换新会话后约 620–624 MiB，没有证明视图切换能显著降低占用。JS heap 从操作末约 57 MiB 降至约 32 MiB，退出无残留。这是短时诊断，不是 G7 通过或某项产品修复的证据。
+
+两次独立源码复核覆盖 Portable 适配边界，以及相同 capsule 内的官方 client-modules 和默认插件：停用会移除注册、模块缓存和事件监听，模块 URL 基于当前资源的确定性 rev；未发现每轮随机 URL 或缺失 dispose 的确认缺陷。G7 脚本现在保存每分钟 DOM/JS heap/布局对象、浏览器版本、Native 可执行文件和脚本摘要，失败信息直接输出实际值和上限。操作量、120 分钟时间窗及内存/句柄门槛均未改变，也未强制 GC。下一轮补采样是为定位原失败，不能把短 probe 替代最终长稳。
+
+已将八个停用的构建／验收目录移入回收站，合计 7,004,397,791 字节。目标均在本轮 `build/native-076-qualification` 内，执行前检查活跃进程，完成后核对源目录消失；证据报告未删除。收据为 `recycle-completed.txt`。用户已有的未跟踪文件不属于清理范围。
+
 ## 默认插件旧版升级
 
 2026-09-27，使用隔离的隐藏 Native WebView2，通过随包 CLI 安装历史版本，再在官方插件页实际点击更新。未关闭 peer 或供应链检查，没有替换安装结果或伪造更新响应。
@@ -33,7 +49,7 @@
 
 三平台构建统一使用 `--install-links=false`，与锁文件匹配，仍由既有 `stage-local-integrations.mjs` 将审核源码物化到产物。未更新依赖范围、未绕过 `npm ci`、未关闭完整性检查。原始失败保留在 `build/native-076-qualification/build-pwsh-error.txt`；修复后日志在 `build-fixed-lock.txt`，最终成品资格单独记录。
 
-## 内核交付核查
+## 内核交付早期失败记录（已由后续成功证据更新）
 
 本次实际执行发现器仍拒绝精确 rc.2 包，原因是历史 descriptor-v2 读取失败；此保护保留。不能将调度成功说成 rc.2 已发布。
 
@@ -41,16 +57,16 @@
 
 另发现 `accepted_only` 刷新错误：当 Portable preview 锁高于已发布核心时，选择器仍保留较新的 preview，未使用实际已接受核心。更新仓库修复为该模式采用公开核心；仍检查 registry 完整性、产品最低版本与插件兼容性。定向 29 项测试通过，真实发布及客户端回读尚需后续记录。
 
-更新仓库 `e1572ea` 进一步将默认插件与最低核心绑定到已发布产品锁，发现器17项定向测试通过。真实刷新 run `36330998424` 已执行，但**未发布**：它读取的 accepted 核心为 `0.1.7-alpha.2`，被产品图片插件 `0.1.2` 的明确 peer 范围拒绝；构建/发布均跳过。先前回读的 Windows 索引为 alpha.1，不能用这个旧快照证明当前全渠道状态。G5 保持未通过，不绕过兼容检查。
-# Final candidate follow-up (2026-09-28)
+更新仓库 `e1572ea` 进一步将默认插件与最低核心绑定到已发布产品锁，发现器17项定向测试通过。真实刷新 run `36330998424` 已执行，但**未发布**：它读取的 accepted 核心为 `0.1.7-alpha.2`，被产品图片插件 `0.1.2` 的明确 peer 范围拒绝；构建/发布均跳过。先前回读的 Windows 索引为 alpha.1，不能用这个旧快照证明当前全渠道状态。该次运行未通过；后续 `36333805484` 完成五平台发布及客户端回读，G5 已通过，详见下文。
+## Final candidate evidence (2026-09-28)
 
 The final Windows candidate is built from `f1d3398755429e1daee0def1414a350fffadf673`. Artifact hashes and sizes are recorded in `build/native-076-qualification/artifacts-final-receipt.json`; the ordinary archive is 153,186,334 bytes and the complete offline archive is 437,466,310 bytes.
 
 The complete offline artifact passed `maintenance-final/result.json` without source overlays. Dependency cleanup completed with the profile manifest, lockfile and modules metadata unchanged. The real WebView capsule test removed the retired managed runtime, preserved the legacy runtime and verified all 15 persistent profile files unchanged. The final light/dark cleanup screenshots were visually reviewed.
 
-Five platform contract jobs passed in CI run `36332653696`; remaining build and artifact acceptance jobs must still finish before release. The final isolated 120-minute soak is running under `soak-final`; its initial `passed: false` is not a completed result. Its native window was verified non-foreground with `WS_EX_NOACTIVATE`. Release qualification remains pending until the final soak assertions pass.
+Full CI `36336780636` at `4c32c1d` passed all 39 jobs. Its macOS x64 artifact upload first failed with ENOTFOUND; one retry of the failed jobs succeeded without product changes. The completed `soak-final` failed resource limits, as recorded at the top of this document; no release is authorized by that result. Its native window was verified non-foreground with `WS_EX_NOACTIVATE`.
 
-Core queue run `36332797595` now advances after a blocked candidate, with successor runs `36332855120`, `36332946243` and `36332999937`. The last run exposed a preflight ordering defect: it tested unadapted alpha.1 although the published product already ships a digest-bound historical migration adapter. Updates commit `32b62ea` applies that selected product adapter before the migration check, matching product packaging. The same verifier passes against the actual final packaged runtime. A new normal bounded queue was dispatched; publish, index and client readback remain required.
+Core queue run `36332797595` now advances after a blocked candidate, with successor runs `36332855120`, `36332946243` and `36332999937`. The last run exposed a preflight ordering defect: it tested unadapted alpha.1 although the published product already ships a digest-bound historical migration adapter. Updates commit `32b62ea` applies that selected product adapter before the migration check, matching product packaging. The same verifier passes against the actual final packaged runtime. The subsequent normal queue completed in `36333805484`; its publication and client readback evidence is recorded below.
 
 The final `layout-final/result.json` passed without source overlays or page exceptions, including English/Chinese, light/dark and 580/1200-pixel market layouts. Narrow English/light and Chinese/dark theme screenshots were visually reviewed. The earlier `size-comparison.json` is superseded: its locally named 0.7.5 baseline actually contained 0.7.4. `size-comparison-published.json` instead verifies the public v0.7.5 checksum and internal version: archive growth 65,862 bytes; unpacked growth 104,859 bytes (before runtime capsule expansion).
 
