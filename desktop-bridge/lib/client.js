@@ -42,7 +42,7 @@ window.__ModuleLoader__.load({
         fullPackage: '程序文件不完整，自动修复未改动用户数据。请使用完整版本覆盖安装。',
         clearWebCache: '清理网页缓存', webCacheCleared: '网页缓存已清理；登录状态和本地数据已保留。',
         storageUsage: '查看存储占用', storagePartial: '部分统计，未扫描完或有不可读目录。',
-        storageClean: '清理旧运行时和日志', storageCleanResult: '已清理 {0} 个旧运行时、{1} 条过期日志。',
+        storageClean: '清理旧运行时和日志', storageCleanResult: '已清理 {0} 个旧内核运行时、{2} 个旧 WebView 运行时、{1} 条过期日志。',
         storageCleanPartial: '部分项目被占用或尚未处理完，可稍后再试。', storageCleanProtected: '插件依赖、登录信息和恢复备份均保留。',
         storageCleanFailed: '有项目清理失败，请运行检查或导出支持报告。',
         storageNames: '插件依赖 / 导入备份 / 修复备份 / 日志', storageProtected: '按文件大小统计，可能与实际磁盘占用不同。依赖供运行及离线恢复使用；备份不是缓存，不自动删除。',
@@ -95,7 +95,7 @@ window.__ModuleLoader__.load({
         fullPackage: 'Program files are incomplete. Automatic repair preserved user data; reinstall the complete package.',
         clearWebCache: 'Clear web cache', webCacheCleared: 'Web cache cleared. Sign-in state and local data were preserved.',
         storageUsage: 'View storage usage', storagePartial: 'Partial totals: scan limit or unreadable directories.',
-        storageClean: 'Clean old runtimes and logs', storageCleanResult: 'Removed {0} old runtimes and {1} expired logs.',
+        storageClean: 'Clean old runtimes and logs', storageCleanResult: 'Removed {0} old core runtimes, {2} old WebView runtimes and {1} expired logs.',
         storageCleanPartial: 'Some items are busy or could not be processed. Try again later.', storageCleanProtected: 'Plugin dependencies, sign-in data and recovery backups are retained.',
         storageCleanFailed: 'Some cleanup failed. Run a check or export a support report.',
         storageNames: 'Plugin dependencies / Import backups / Recovery backups / Logs', storageProtected: 'File sizes may differ from disk space used. Dependencies support running plugins and offline recovery. Backups are not caches and are retained.',
@@ -908,7 +908,7 @@ window.__ModuleLoader__.load({
               const body = await response.json()
               if (!response.ok || !Number.isInteger(body.runtimes) || !Number.isInteger(body.logs)) throw new Error(body.error || t('invalidResult'))
               const warning = body.failures?.length ? t('storageCleanFailed') : body.complete ? '' : t('storageCleanPartial')
-              setStatus('maintenance', `${t('storageCleanResult').replace('{0}', body.runtimes).replace('{1}', body.logs)} ${warning} ${t('storageCleanProtected')}`)
+              setStatus('maintenance', `${t('storageCleanResult').replace('{0}', body.runtimes).replace('{1}', body.logs).replace('{2}', body.webviews ?? 0)} ${warning} ${t('storageCleanProtected')}`)
             }).catch(error => setStatus('maintenance', format(t('failed'), error.message))).finally(() => setBusy(''))
           }
           else if (id === 'web-cache') {

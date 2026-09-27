@@ -406,6 +406,7 @@ jobs:
           if (Select-String -Path $Log -SimpleMatch 'bundled-webview-prepare-begin') { throw 'System runtime startup expanded the offline capsule' }
           # Exercise absence without uninstalling the runner's shared runtime.
           $env:DSH_PORTABLE_TEST_WEBVIEW2_MISSING = '1'
+          $env:DSH_PORTABLE_WEBVIEW_CACHE = Join-Path $Portable 'acceptance-webview-cache'
           node scripts/audit-windows-startup-transition.mjs $Portable complete-evidence 75
           Remove-Item Env:DSH_PORTABLE_TEST_WEBVIEW2_MISSING
           if ($LASTEXITCODE -ne 0) { throw 'Complete offline native startup failed' }
@@ -413,6 +414,8 @@ jobs:
           if (-not (Select-String -Path $Log -SimpleMatch 'bundled-webview-runtime')) { throw 'Native host did not use bundled WebView2' }
           Copy-Item $Log complete-evidence/bundled-runtime.jsonl
           Copy-Item -Recurse system-evidence complete-evidence/system-runtime
+          node scripts/smoke-windows-market-categories.mjs $Portable complete-evidence/storage --disposable --maintenance-only --verify-webview-cache
+          if ($LASTEXITCODE -ne 0) { throw 'Managed WebView cleanup acceptance failed' }
       - uses: actions/upload-artifact@v7
         if: always()
         with:

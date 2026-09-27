@@ -17,6 +17,7 @@ const exec = promisify(execFile)
 const env = { ...process.env, DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: root,
   DSH_PORTABLE_BASE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default',
   DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
+  DSH_PORTABLE_WEBVIEW_CACHE: path.join(root, 'acceptance-webview-cache'),
   DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
 // A source-overlay probe must not load immutable server sources from the old
 // release capsule while serving new client files off disk.
@@ -24,6 +25,8 @@ const sourceOverlay = process.argv.includes('--source-overlay')
 if (sourceOverlay) env.DSH_PORTABLE_STARTUP_SOURCE_CACHE = '0'
 const soak = process.argv.includes('--soak')
 const maintenanceOnly = process.argv.includes('--maintenance-only')
+const verifyWebView = process.argv.includes('--verify-webview-cache')
+if (verifyWebView) env.DSH_PORTABLE_TEST_WEBVIEW2_MISSING = '1'
 // Live npm availability is a separate integration check, not a layout prerequisite.
 const verifyTotal = process.argv.includes('--verify-total')
 const samples = []
@@ -189,7 +192,7 @@ try {
   assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
   assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
   const { verifyMaintenance } = await import('./lib/native-maintenance-checks.mjs')
-  await verifyMaintenance({ root, evaluate, until, click, send, output, sample, soak })
+  await verifyMaintenance({ root, evaluate, until, click, send, output, sample, soak, nativePid: child.pid, verifyWebView })
   if (!maintenanceOnly) {
   const hasBuiltInPluginsNavigation = await evaluate(`(() => {
     const labels = new Set(['内置插件', 'Built-in plugins'])
@@ -366,6 +369,10 @@ try {
     } finally {
       if (child.exitCode === null) child.kill()
       try {
+        if (passed && verifyWebView) {
+          const { verifyRetiredWebViewCleanup } = await import('./lib/native-maintenance-checks.mjs')
+          await verifyRetiredWebViewCleanup({ root, output })
+        }
         if (soak) {
           await delay(3000)
           await sample('after-exit')

@@ -1283,6 +1283,7 @@ namespace DshPortable
         private CoreWebView2Environment webViewEnvironment;
         private TaskCompletionSource<CoreWebView2BrowserProcessExitedEventArgs> webViewBrowserExited;
         private int ownedWebViewBrowserProcessId;
+        private bool bundledWebViewLeaseRequired;
         private bool testWebViewBusyInjected;
         private bool testWebViewCrashInjected;
         private bool webViewRecoveryRunning;
@@ -5523,6 +5524,7 @@ namespace DshPortable
 
         private async Task InitializeWebViewAttemptAsync(string userData, CoreWebView2EnvironmentOptions options)
         {
+            bundledWebViewLeaseRequired = false;
             if (!testWebViewBusyInjected
                 && String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW2_BUSY_ONCE"), "1", StringComparison.Ordinal))
             {
@@ -5561,7 +5563,42 @@ namespace DshPortable
             AppendStartupTrace("native-host", "webview-initialized-behind-loader",
                 new Dictionary<string, object> { { "loadingFrontmost", desktopContent.Controls.GetChildIndex(launchPanel) == 0 } });
             ownedWebViewBrowserProcessId = unchecked((int)webView.CoreWebView2.BrowserProcessId);
+            if (bundledWebViewLeaseRequired)
+                await RunBundledWebViewRuntimeAsync(ownedWebViewBrowserProcessId, true);
             RecordWebViewPhase("environment-ready:" + webViewEnvironment.BrowserVersionString);
+        }
+
+        private Task<string> RunBundledWebViewRuntimeAsync(int ownerPid, bool leaseOnly)
+        {
+            return Task.Run(delegate
+            {
+                var start = new ProcessStartInfo(Path.Combine(root, "runtime", "node", "node.exe"),
+                    "\"" + Path.Combine(root, "launcher", "webview-runtime.mjs") + "\" \"" + root + "\" "
+                    + ownerPid.ToString(CultureInfo.InvariantCulture) + (leaseOnly ? " --lease-only" : ""));
+                start.UseShellExecute = false;
+                start.CreateNoWindow = true;
+                start.WindowStyle = ProcessWindowStyle.Hidden;
+                start.RedirectStandardOutput = true;
+                start.RedirectStandardError = true;
+                start.StandardOutputEncoding = Encoding.UTF8;
+                start.StandardErrorEncoding = Encoding.UTF8;
+                start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = stateRoot;
+                start.EnvironmentVariables["DSH_PORTABLE_STARTUP_ID"] = startupId;
+                start.EnvironmentVariables["DSH_PORTABLE_STARTUP_STARTED_AT"] = startupStartedAt.ToString(CultureInfo.InvariantCulture);
+                using (var process = Process.Start(start))
+                {
+                    var output = process.StandardOutput.ReadToEndAsync();
+                    var error = process.StandardError.ReadToEndAsync();
+                    if (!process.WaitForExit(120000))
+                    {
+                        process.Kill();
+                        throw new TimeoutException("Bundled WebView2 preparation timed out.");
+                    }
+                    if (process.ExitCode != 0) throw new InvalidOperationException("Bundled WebView2 preparation failed: " + error.Result);
+                    var result = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(output.Result);
+                    return Convert.ToString(result["browserFolder"], CultureInfo.InvariantCulture);
+                }
+            });
         }
 
         private async Task<string> ResolveBundledWebViewRuntimeAsync()
@@ -5571,34 +5608,8 @@ namespace DshPortable
             if (File.Exists(Path.Combine(folder, "runtime-capsule.json")))
             {
                 AppendStartupTrace("native-host", "bundled-webview-prepare-begin", new Dictionary<string, object>());
-                folder = await Task.Run(delegate
-                {
-                    var start = new ProcessStartInfo(Path.Combine(root, "runtime", "node", "node.exe"),
-                        "\"" + Path.Combine(root, "launcher", "webview-runtime.mjs") + "\" \"" + root + "\"");
-                    start.UseShellExecute = false;
-                    start.CreateNoWindow = true;
-                    start.WindowStyle = ProcessWindowStyle.Hidden;
-                    start.RedirectStandardOutput = true;
-                    start.RedirectStandardError = true;
-                    start.StandardOutputEncoding = Encoding.UTF8;
-                    start.StandardErrorEncoding = Encoding.UTF8;
-                    start.EnvironmentVariables["DSH_PORTABLE_STATE_ROOT"] = stateRoot;
-                    start.EnvironmentVariables["DSH_PORTABLE_STARTUP_ID"] = startupId;
-                    start.EnvironmentVariables["DSH_PORTABLE_STARTUP_STARTED_AT"] = startupStartedAt.ToString(CultureInfo.InvariantCulture);
-                    using (var process = Process.Start(start))
-                    {
-                        var output = process.StandardOutput.ReadToEndAsync();
-                        var error = process.StandardError.ReadToEndAsync();
-                        if (!process.WaitForExit(120000))
-                        {
-                            process.Kill();
-                            throw new TimeoutException("Bundled WebView2 preparation timed out.");
-                        }
-                        if (process.ExitCode != 0) throw new InvalidOperationException("Bundled WebView2 preparation failed: " + error.Result);
-                        var result = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(output.Result);
-                        return Convert.ToString(result["browserFolder"], CultureInfo.InvariantCulture);
-                    }
-                });
+                folder = await RunBundledWebViewRuntimeAsync(Process.GetCurrentProcess().Id, false);
+                bundledWebViewLeaseRequired = true;
             }
             if (!File.Exists(Path.Combine(folder, "msedgewebview2.exe")))
                 throw new InvalidOperationException("The bundled WebView2 runtime is incomplete. Extract the complete offline package again.");

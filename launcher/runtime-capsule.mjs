@@ -219,10 +219,10 @@ async function reclaimCrashedLock(filename) {
   return true
 }
 
-async function createProcessRecord(filename, token) {
+async function createProcessRecord(filename, token, ownerPid = process.pid) {
   const handle = await open(filename, 'wx')
   try {
-    await handle.writeFile(`${JSON.stringify({ schemaVersion: 1, pid: process.pid, token, startedAt: new Date().toISOString() })}\n`, 'utf8')
+    await handle.writeFile(`${JSON.stringify({ schemaVersion: 1, pid: ownerPid, token, startedAt: new Date().toISOString() })}\n`, 'utf8')
     return handle
   } catch (error) {
     // Only an exclusively created record is ours to remove. In particular, an
@@ -254,6 +254,8 @@ async function acquireLock(filename) {
 }
 
 export async function acquireRuntimeLease(runtimeRoot, options = {}) {
+  const ownerPid = options.ownerPid ?? process.pid
+  if (!Number.isSafeInteger(ownerPid) || ownerPid <= 0 || !processExists(ownerPid)) throw new Error('Runtime lease owner is not alive.')
   const target = path.resolve(runtimeRoot)
   const hash = path.basename(target)
   const cacheParent = path.dirname(target)
@@ -264,8 +266,8 @@ export async function acquireRuntimeLease(runtimeRoot, options = {}) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     if (!await waitForMissing(gcLock, options.waitMs)) throw new Error('The DSH runtime cache is currently being maintained.')
     const token = randomUUID()
-    const leaseFile = path.join(cacheParent, `${runtimeLeasePrefix(hash)}${process.pid}.${token}.json`)
-    const handle = await createProcessRecord(leaseFile, token)
+    const leaseFile = path.join(cacheParent, `${runtimeLeasePrefix(hash)}${ownerPid}.${token}.json`)
+    const handle = await createProcessRecord(leaseFile, token, ownerPid)
     await handle.close()
     if (existsSync(gcLock)) {
       await rm(leaseFile, { force: true }).catch(() => {})
@@ -273,7 +275,7 @@ export async function acquireRuntimeLease(runtimeRoot, options = {}) {
     }
     const release = async () => {
       const owned = await readLock(leaseFile)
-      if (owned?.pid === process.pid && owned?.token === token) await rm(leaseFile, { force: true }).catch(() => {})
+      if (owned?.pid === ownerPid && owned?.token === token) await rm(leaseFile, { force: true }).catch(() => {})
     }
     release.filename = leaseFile
     return release
@@ -425,6 +427,7 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
       continue
     }
     if (!incomplete && hash === manifest.sha256) {
+      await activeRuntimeLeases(paths.cacheParent, hash, { reclaimStale: true })
       retained.push({ ...identity, reason: 'current' })
       continue
     }
@@ -453,6 +456,10 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
       if (path.dirname(target) !== path.resolve(paths.cacheParent)
           || (!HASH_PATTERN.test(path.basename(target)) && !INCOMPLETE_CACHE_PATTERN.test(path.basename(target)))) {
         throw new Error('Refusing to clean an unsafe runtime cache path.')
+      }
+      if (options.acceptTarget && !await options.acceptTarget(target, identity)) {
+        retained.push({ ...identity, reason: 'unknown-owner' })
+        continue
       }
       // Background reclamation does not need a full size walk before deletion.
       // Otherwise a large old runtime can exhaust every pass's scan budget and

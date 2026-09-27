@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { cleanUnusedRuntimeCaches } from './runtime-capsule.mjs'
 import { maintainPluginLogs } from './plugin-log-maintenance.mjs'
+import { cleanWebViewCaches } from './webview-cache.mjs'
 
 export async function cleanProfileLogs({ root, runtimeRoot, stateRoot }, options) {
   const requireRuntime = createRequire(path.join(runtimeRoot || root, 'app', 'package.json'))
@@ -13,9 +14,9 @@ export async function cleanProfileLogs({ root, runtimeRoot, stateRoot }, options
 // The explicit user action uses the same age, owner and lock protections as
 // background maintenance. Never prune dependencies or delete recovery material.
 export async function cleanRetainedStorage(context, {
-  signal, cleanRuntime = cleanUnusedRuntimeCaches, cleanLogs = cleanProfileLogs,
+  signal, cleanRuntime = cleanUnusedRuntimeCaches, cleanLogs = cleanProfileLogs, cleanWebView = cleanWebViewCaches,
 } = {}) {
-  const result = { schemaVersion: 1, complete: true, runtimes: 0, logs: 0, deferred: 0, limited: false, failures: [] }
+  const result = { schemaVersion: 1, complete: true, runtimes: 0, webviews: 0, logs: 0, deferred: 0, limited: false, failures: [] }
   try {
     const runtime = await cleanRuntime(context.root, { signal, budgetMs: 3000, maxEntries: 100000, measure: false })
     result.runtimes = runtime.removed.length
@@ -29,6 +30,16 @@ export async function cleanRetainedStorage(context, {
   }
   if (signal?.aborted) result.limited = true
   else {
+    try {
+      const browser = await cleanWebView(context.root, { signal, budgetMs: 3000, maxEntries: 100000, measure: false })
+      result.webviews = browser.removed.length
+      result.deferred += browser.retained.filter(item => item.reason !== 'current').length
+      result.limited ||= Boolean(browser.limited || browser.cancelled)
+      for (const item of browser.retained.filter(item => item.reason === 'cleanup-failed').slice(0, 8))
+        result.failures.push({ component: 'webview', code: item.code || 'unknown' })
+    } catch (error) { result.failures.push({ component: 'webview', code: error?.code || 'unavailable' }) }
+  }
+  if (!signal?.aborted) {
     try {
       const logs = await cleanLogs(context, { signal, budgetMs: 3000 })
       result.logs = logs.removed
