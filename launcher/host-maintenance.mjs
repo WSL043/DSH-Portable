@@ -8,33 +8,35 @@ import { appendStartupTrace } from './startup-trace.mjs'
 export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace }, {
   delayMs = 60000, intervalMs = 6 * 60 * 60000,
   cleanRuntime = cleanUnusedRuntimeCaches,
-  cleanLogs = async () => {
+  cleanLogs = async options => {
     const requireRuntime = createRequire(path.join(runtimeRoot || root, 'app', 'package.json'))
     const { withFileLock } = await import(pathToFileURL(requireRuntime.resolve('@deepseek-ai/dsh-atomic-write')).href)
-    return maintainPluginLogs(path.join(stateRoot || root, 'data', 'dsh-home'), withFileLock)
+    return maintainPluginLogs(path.join(stateRoot || root, 'data', 'dsh-home'), withFileLock, options)
   },
   record = (component, phase, fields) => appendStartupTrace(trace, component, phase, fields),
 } = {}) {
   let stopped = false
   let running = false
+  const controller = new AbortController()
   const run = async () => {
     if (stopped || running) return
     running = true
     try {
       try {
-        const result = await cleanRuntime(root)
+        const result = await cleanRuntime(root, { signal: controller.signal, budgetMs: 1000, maxEntries: 100000 })
         const failed = result.retained.filter(entry => entry.reason === 'cleanup-failed')
-        if (result.removed.length || failed.length) record('runtime-cache', 'maintenance-complete', {
+        if (result.removed.length || failed.length || result.limited) record('runtime-cache', 'maintenance-complete', {
           removed: result.removed.length,
           removedIncomplete: result.removed.filter(entry => entry.incomplete).length,
           reclaimedBytes: result.removed.reduce((sum, entry) => sum + entry.bytes, 0),
           retained: result.retained.length, failureCount: failed.length,
+          ...(result.limited ? { limited: true } : {}),
           failures: failed.slice(0, 8).map(({ hash, code }) => ({ hash, code })),
         })
       } catch (error) { record('runtime-cache', 'maintenance-failed', { code: error?.code || 'unknown' }) }
       if (stopped) return
       try {
-        const result = await cleanLogs()
+        const result = await cleanLogs({ signal: controller.signal })
         if (result.removed || result.deferred || result.limited) record('plugin-logs', 'maintenance-complete', result)
       } catch (error) { record('plugin-logs', 'maintenance-deferred', { code: error?.code || 'unsupported' }) }
     } finally { running = false }
@@ -43,5 +45,5 @@ export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace },
   const periodic = setInterval(run, intervalMs)
   first.unref()
   periodic.unref()
-  return () => { stopped = true; clearTimeout(first); clearInterval(periodic) }
+  return () => { stopped = true; controller.abort(); clearTimeout(first); clearInterval(periodic) }
 }

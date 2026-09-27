@@ -31,6 +31,46 @@ const REQUIRED = [
   'node_modules/pnpm/bin/pnpm.cjs',
 ]
 
+test('background cache work stops before deletion on budget or cancellation and releases its locks', async t => {
+  const { parent, root, app } = await fixture()
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  const cache = path.join(parent, 'bounded-cache')
+  const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }
+  await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+    platform: process.platform, arch: process.arch, level: 1,
+  })
+  const current = await ensureRuntimeCapsule(root, { env })
+  const old = path.join(cache, 'a'.repeat(64))
+  await mkdir(old)
+  for (let i = 0; i < 40; i++) await writeFile(path.join(old, String(i)), 'keep')
+  for (const limits of [{ budgetMs: 0 }, { maxEntries: 10 }]) {
+    const result = await cleanUnusedRuntimeCaches(root, { env, ...limits })
+    assert.equal(result.limited, true)
+    assert.equal(result.removed.length, 0)
+    assert.equal(await readFile(path.join(old, '0'), 'utf8'), 'keep')
+  }
+  const controller = new AbortController()
+  const originalStat = fsPromises.stat
+  const mocked = t.mock.method(fsPromises, 'stat', async (...args) => {
+    const value = await originalStat(...args)
+    if (path.dirname(String(args[0])) === old) controller.abort()
+    return value
+  })
+  syncBuiltinESMExports()
+  t.after(() => { mocked.mock.restore(); syncBuiltinESMExports() })
+  const cancelled = await cleanUnusedRuntimeCaches(root, { env, signal: controller.signal })
+  mocked.mock.restore()
+  syncBuiltinESMExports()
+  assert.equal(cancelled.cancelled, true)
+  assert.equal(cancelled.removed.length, 0)
+  assert.equal(await readFile(path.join(old, '39'), 'utf8'), 'keep')
+  // A later pass can take both locks and remove the complete unused tree.
+  const retry = await cleanUnusedRuntimeCaches(root, { env, budgetMs: 10000, maxEntries: 1000 })
+  assert.equal(retry.removed.length, 1)
+  assert.equal(retry.removed[0].bytes, 160)
+  assert.ok((await stat(current.runtimeRoot)).isDirectory())
+})
+
 async function fixture() {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'dsh-runtime-capsule-test-'))
   const root = path.join(parent, 'portable-a')

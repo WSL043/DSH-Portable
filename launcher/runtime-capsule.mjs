@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, open, opendir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { zstdDecompressSync } from 'node:zlib'
@@ -297,26 +297,34 @@ async function activeRuntimeLeases(cacheParent, hash, { reclaimStale = false } =
   return active
 }
 
-async function directoryFootprint(root) {
+async function directoryFootprint(root, checkpoint = () => {}) {
   let bytes = 0
   let files = 0
-  const entries = await readdir(root, { withFileTypes: true })
-  const regularFiles = entries.filter(entry => entry.isFile() && !entry.isSymbolicLink())
-  for (let index = 0; index < regularFiles.length; index += 32) {
-    const sizes = await Promise.all(regularFiles.slice(index, index + 32).map(async entry =>
-      (await stat(path.join(root, entry.name))).size))
+  let batch = []
+  const flush = async () => {
+    checkpoint()
+    const sizes = await Promise.all(batch.map(async filename => (await stat(filename)).size))
     bytes += sizes.reduce((total, size) => total + size, 0)
     files += sizes.length
+    batch = []
   }
-  // Traverse directories serially so concurrency stays bounded at every depth.
-  for (const entry of entries) {
+  checkpoint()
+  for await (const entry of await opendir(root)) {
+    checkpoint(1)
     const filename = path.join(root, entry.name)
-    if (entry.isDirectory() && !entry.isSymbolicLink()) {
-      const nested = await directoryFootprint(filename)
+    if (entry.isSymbolicLink()) continue
+    if (entry.isFile()) {
+      batch.push(filename)
+      if (batch.length === 32) await flush()
+    } else if (entry.isDirectory()) {
+      // Flush before descending so pending file work never multiplies by depth.
+      await flush()
+      const nested = await directoryFootprint(filename, checkpoint)
       bytes += nested.bytes
       files += nested.files
     }
   }
+  await flush()
   return { bytes, files }
 }
 
@@ -379,6 +387,15 @@ export async function runtimeCacheStatus(root, options = {}) {
 }
 
 export async function cleanUnusedRuntimeCaches(root, options = {}) {
+  const deadline = Date.now() + (options.budgetMs ?? Infinity)
+  let inspected = 0
+  let interruption = null
+  const checkpoint = (entries = 0) => {
+    inspected += entries
+    const reason = options.signal?.aborted ? 'cancelled'
+      : Date.now() >= deadline || inspected > (options.maxEntries ?? Infinity) ? 'budget-exhausted' : null
+    if (reason) throw Object.assign(new Error('Runtime maintenance paused.'), { maintenanceReason: reason })
+  }
   const paths = capsulePaths(root, options.env)
   if (paths.mode !== 'capsule') return { mode: 'expanded', caches: [], removed: [], retained: [] }
   const manifest = await readManifest(paths.manifestFile)
@@ -389,6 +406,7 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
   const removed = []
   const retained = []
   for (const entry of names) {
+    try { checkpoint() } catch (error) { interruption = error.maintenanceReason; break }
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue
     const incomplete = INCOMPLETE_CACHE_PATTERN.exec(entry.name)
     if (!incomplete && !HASH_PATTERN.test(entry.name)) continue
@@ -429,17 +447,24 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
           || (!HASH_PATTERN.test(path.basename(target)) && !INCOMPLETE_CACHE_PATTERN.test(path.basename(target)))) {
         throw new Error('Refusing to clean an unsafe runtime cache path.')
       }
-      const footprint = await directoryFootprint(target)
+      const footprint = await directoryFootprint(target, checkpoint)
+      checkpoint()
       await rm(target, { recursive: true, force: true })
       removed.push({ ...identity, ...footprint })
     } catch (error) {
+      if (error.maintenanceReason) {
+        interruption = error.maintenanceReason
+        retained.push({ ...identity, reason: interruption })
+        break
+      }
       if (error?.code === 'ENOENT' && !existsSync(path.join(paths.cacheParent, entry.name))) continue
       retained.push({ ...identity, reason: 'cleanup-failed', code: error?.code || 'unknown' })
     } finally {
       try { await releasePreparation?.() } finally { await release?.() }
     }
   }
-  return { mode: 'capsule', cacheParent: paths.cacheParent, currentHash: manifest.sha256, removed, retained }
+  return { mode: 'capsule', cacheParent: paths.cacheParent, currentHash: manifest.sha256, removed, retained,
+    ...(interruption ? { limited: interruption === 'budget-exhausted', cancelled: interruption === 'cancelled' } : {}) }
 }
 
 export async function ensureRuntimeCapsule(root, options = {}) {

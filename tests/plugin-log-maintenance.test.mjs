@@ -28,6 +28,20 @@ async function fixture(t) {
 }
 const day = 86400000
 
+test('shutdown while acquiring the profile lock leaves old logs intact', async t => {
+  const f = await fixture(t)
+  const old = await f.add('operation-AAAAAA', 30 * day)
+  await f.add('operation-BBBBBB', 100)
+  const controller = new AbortController()
+  const result = await maintainPluginLogs(f.home, async (_file, fn) => {
+    controller.abort()
+    return fn()
+  }, { now, signal: controller.signal })
+  assert.equal(result.cancelled, true)
+  assert.equal(result.removed, 0)
+  await access(old)
+})
+
 test('empty-directory cleanup preserves content added just before removal and retries locks later', async t => {
   const f = await fixture(t)
   const racing = path.join(f.logs, 'operation-AAAAAA')

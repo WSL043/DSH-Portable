@@ -38,9 +38,10 @@ export async function profileLogDirectories(dshHome) {
 // No fallback lock: unsupported runtimes retain their logs rather than race writers.
 export async function maintainPluginLogs(dshHome, withFileLock, {
   now = Date.now(), maxRuns = 30, maxAgeMs = 14 * 86400000,
-  maxBytes = 32 * 1024 * 1024, graceMs = 86400000, budgetMs = 1000, maxEntries = 2000,
+  maxBytes = 32 * 1024 * 1024, graceMs = 86400000, budgetMs = 1000, maxEntries = 2000, signal,
 } = {}) {
   const result = { removed: 0, bytes: 0, deferred: 0, protected: 0, limited: false }
+  if (signal?.aborted) return { ...result, cancelled: true }
   if (typeof withFileLock !== 'function') return { ...result, deferred: 1 }
   const deadline = Date.now() + budgetMs
   // Reserve time to reclaim a bounded batch even when discovery hits its limit.
@@ -50,6 +51,7 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
   const discovery = await profileLogDirectories(dshHome)
   result.limited = !discovery.complete
   for (const { profile, logs } of discovery.roots) {
+    if (signal?.aborted) { result.cancelled = true; break }
     if (Date.now() >= deadline) { result.limited = true; break }
     try {
       await withFileLock(path.join(profile, 'package.json'), async () => {
@@ -57,6 +59,7 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
         const runs = []
         let inspected = 0
         for await (const entry of await opendir(logs)) {
+          if (signal?.aborted) { result.cancelled = true; return }
           if (++inspected > maxEntries || Date.now() >= scanDeadline) { result.limited = true; break }
           if (!/^operation-[A-Za-z0-9]{6}$/.test(entry.name) || !entry.isDirectory() || entry.isSymbolicLink()) { result.protected++; continue }
           const dir = path.join(logs, entry.name)
@@ -67,6 +70,7 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
             const info = await lstat(dir)
             if (!info.isDirectory() || info.isSymbolicLink() || now - info.mtimeMs < graceMs) { result.protected++; continue }
             try {
+              if (signal?.aborted) { result.cancelled = true; return }
               await rmdir(dir)
               result.removed++
             } catch (error) {
@@ -84,6 +88,7 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
         runs.sort((a, b) => b.mtime - a.mtime)
         let retainedBytes = 0
         for (let i = 0; i < runs.length; i++) {
+          if (signal?.aborted) { result.cancelled = true; break }
           const run = runs[i]
           if (Date.now() >= deadline) { result.limited = true; break }
           const recent = now - run.mtime < graceMs
@@ -93,6 +98,7 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
           if (!await directory(logs) || !await directory(run.dir)) { result.protected++; continue }
           const info = await lstat(run.file)
           if (!info.isFile() || info.isSymbolicLink() || info.mtimeMs !== run.mtime || info.size !== run.bytes) { result.protected++; continue }
+          if (signal?.aborted) { result.cancelled = true; break }
           await unlink(run.file)
           // Never recursively remove a directory: unknown concurrently added content survives.
           await rmdir(run.dir).catch(() => {})

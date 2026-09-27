@@ -19,15 +19,18 @@ test('slow maintenance cannot overlap and shutdown skips subsequent work', async
   const gate = new Promise(resolve => { release = resolve })
   let calls = 0
   let logCalls = 0
+  let signal
   const stop = scheduleHostMaintenance({ root: '.' }, {
     delayMs: 1, intervalMs: 5,
-    cleanRuntime: async () => { calls++; await gate; return { retained: [], removed: [] } },
+    cleanRuntime: async (_root, options) => { signal = options.signal; assert.equal(options.budgetMs, 1000); calls++; await gate; return { retained: [], removed: [] } },
     cleanLogs: async () => { logCalls++; return {} }, record() {},
   })
   try {
     await delay(30)
     assert.equal(calls, 1)
+    assert.equal(signal.aborted, false)
     stop()
+    assert.equal(signal.aborted, true)
     release()
     await delay(10)
     assert.equal(logCalls, 0)
