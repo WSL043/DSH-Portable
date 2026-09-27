@@ -184,7 +184,7 @@ try {
   assert.equal(generalBorders.dataSection.lastRow.borderBottom.px, 0, 'Data section last row bottom border must be zero')
   assert.ok(generalBorders.internalRows.some(row => row.borderBottom.px > 0), 'Portable internal rows must retain a separator')
   const { verifyMaintenance } = await import('./lib/native-maintenance-checks.mjs')
-  await verifyMaintenance({ evaluate, until, click, send, output, sample, soak })
+  await verifyMaintenance({ root, evaluate, until, click, send, output, sample, soak })
   if (!maintenanceOnly) {
   const hasBuiltInPluginsNavigation = await evaluate(`(() => {
     const labels = new Set(['内置插件', 'Built-in plugins'])

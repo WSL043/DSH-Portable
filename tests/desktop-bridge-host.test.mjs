@@ -520,6 +520,39 @@ test('storage route rejects external requests and shares only an active scan', a
   assert.equal(refreshed.json().scan, 2)
 })
 
+test('storage cleanup rejects external and read-only requests and coalesces concurrent clicks', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-storage-clean-route-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'launcher'))
+  await writeFile(path.join(root, 'launcher/storage-maintenance.mjs'), `
+    let calls = 0;
+    export async function cleanRetainedStorage({stateRoot}) {
+      const invocation = ++calls;
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return { invocation, stateRoot };
+    }
+  `)
+  const routes = new Map()
+  const stateRoot = path.join(root, 'relocated')
+  t.after(mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root, stateRoot }))
+  const handler = routes.get('/dsh-portable/storage-clean').handler
+  const external = request('POST')
+  external.headers.origin = 'https://example.com'
+  const denied = response(), readOnly = response()
+  await handler(external, denied)
+  await handler(request('GET'), readOnly)
+  assert.equal(denied.status, 403)
+  assert.equal(readOnly.status, 405)
+  const first = response(), second = response()
+  await Promise.all([handler(request('POST'), first), handler(request('POST'), second)])
+  assert.equal(first.json().invocation, 1)
+  assert.equal(second.json().invocation, 1)
+  assert.equal(first.json().stateRoot, stateRoot)
+  const next = response()
+  await handler(request('POST'), next)
+  assert.equal(next.json().invocation, 2)
+})
+
 test('storage route measures real relocated data, including profile logs, without scanning workspaces', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-storage-integrated-'))
   t.after(() => rm(root, { recursive: true, force: true }))

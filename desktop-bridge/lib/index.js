@@ -308,6 +308,18 @@ export function mountPortableRoutes(webServer, options = {}) {
     } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 
+  let storageCleanup = null
+  register({ kind: 'exact', path: '/dsh-portable/storage-clean', handler: async (request, response) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try {
+      if (!storageCleanup) storageCleanup = import(pathToFileURL(path.join(root, 'launcher', 'storage-maintenance.mjs')).href)
+        .then(module => module.cleanRetainedStorage({ root, stateRoot, runtimeRoot: process.env.DSH_PORTABLE_RUNTIME_ROOT || root }))
+        .finally(() => { storageCleanup = null })
+      sendJson(response, 200, await storageCleanup)
+    } catch { sendJson(response, 500, { error: 'Storage maintenance is unavailable.' }) }
+  } })
+
   register({ kind: 'exact', path: '/dsh-portable/repair', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })

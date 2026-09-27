@@ -1,18 +1,11 @@
-import path from 'node:path'
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import { cleanUnusedRuntimeCaches } from './runtime-capsule.mjs'
-import { maintainPluginLogs } from './plugin-log-maintenance.mjs'
+import { cleanProfileLogs } from './storage-maintenance.mjs'
 import { appendStartupTrace } from './startup-trace.mjs'
 
 export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace }, {
   delayMs = 60000, intervalMs = 6 * 60 * 60000,
   cleanRuntime = cleanUnusedRuntimeCaches,
-  cleanLogs = async options => {
-    const requireRuntime = createRequire(path.join(runtimeRoot || root, 'app', 'package.json'))
-    const { withFileLock } = await import(pathToFileURL(requireRuntime.resolve('@deepseek-ai/dsh-atomic-write')).href)
-    return maintainPluginLogs(path.join(stateRoot || root, 'data', 'dsh-home'), withFileLock, options)
-  },
+  cleanLogs = options => cleanProfileLogs({ root, runtimeRoot, stateRoot }, options),
   record = (component, phase, fields) => appendStartupTrace(trace, component, phase, fields),
 } = {}) {
   let stopped = false
