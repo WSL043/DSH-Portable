@@ -4,6 +4,7 @@ import path from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { acquireRuntimeLease } from '../../launcher/runtime-capsule.mjs'
 import { cleanWebViewCaches } from '../../launcher/webview-cache.mjs'
+const digest = value => createHash('sha256').update(value).digest('hex')
 
 export async function verifyRetiredWebViewCleanup({ root, output }) {
   const manifest = JSON.parse(await readFile(path.join(root, 'runtime/webview2/runtime-capsule.json'), 'utf8'))
@@ -139,7 +140,7 @@ async function verifyStorageCleanup({ root, evaluate, until, click, output, nati
 
 // Shared hidden-host harness; exercise actual official settings and the real
 // same-origin storage route, without mutating plugins or opening native dialogs.
-export async function verifyMaintenance({ root, evaluate, until, click, send, output, sample, soak, nativePid, verifyWebView }) {
+export async function verifyMaintenance({ root, evaluate, until, click, send, output, sample, soak, nativePid, verifyWebView, verifyPluginCache }) {
   const navigate = async () => {
     await until(click(['Desktop & data', '桌面与数据', 'Portable']), Boolean, 'Portable maintenance')
     await until(`document.body.innerText.includes('Check and repair') || document.body.innerText.includes('检查与修复')`, Boolean, 'maintenance loaded')
@@ -152,6 +153,31 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
   await sample('maintenance-ready')
   await navigate()
   await verifyStorageCleanup({ root, evaluate, until, click, output, nativePid, verifyWebView })
+  if (verifyPluginCache) {
+    const profile = path.join(root, 'data/dsh-home/profiles/web')
+    const protectedFiles = ['package.json', 'pnpm-lock.yaml', 'node_modules/.modules.yaml']
+    const before = await Promise.all(protectedFiles.map(async name => digest(await readFile(path.join(profile, name)))))
+    await evaluate(`(() => {
+      const original = window.fetch; window.__portableStoreResult = null;
+      window.fetch = async (...args) => {
+        const response = await original(...args);
+        if (args[0] === '/dsh-portable/plugin-cache-clean') {
+          window.__portableStoreResult = {status:response.status,body:await response.clone().json()}; window.fetch = original;
+        }
+        return response;
+      };
+    })()`)
+    await until(click(['More', '更多']), Boolean, 'dependency menu')
+    await until(click(['Clean plugin dependency cache', '整理插件依赖缓存']), Boolean, 'dependency cleanup action')
+    const response = await until('window.__portableStoreResult', Boolean, 'dependency cleanup response')
+    assert.equal(response.status, 200, JSON.stringify(response))
+    assert.equal(response.body.complete, true)
+    assert.ok(response.body.references > 0)
+    assert.deepEqual(await Promise.all(protectedFiles.map(async name => digest(await readFile(path.join(profile, name))))), before)
+    await until(`document.body.innerText.includes('离线重建检查') || document.body.innerText.includes('offline rebuild checks')`, Boolean, 'dependency completion feedback')
+    await writeFile(path.join(output, 'dependency-cleanup.json'), JSON.stringify({ passed: true, ...response, unchanged: protectedFiles }))
+    await writeFile(path.join(output, 'dependency-cleanup.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+  }
   await scan()
   const report = await evaluate(`fetch('/dsh-portable/storage', {cache:'no-store'}).then(async r => ({status:r.status, body:await r.json()}))`)
   assert.equal(report.status, 200)

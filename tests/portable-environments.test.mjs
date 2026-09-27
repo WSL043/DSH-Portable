@@ -107,6 +107,10 @@ test('shared product mutation sees every live environment and uses one exclusive
     }),
     /shared Portable components are being changed/i,
   )
+  await assert.rejects(acquireProductMutationLock(research, {
+    processQuery: () => ({ executablePath: current.nodeExe, commandLine: `"${current.nodeExe}" "${current.hostBin}"` }),
+    pidExists: () => true,
+  }), /shared Portable components are being changed/i, 'host-owned cleanup cannot be mistaken for a stale launcher lock')
   await release()
 })
 

@@ -583,3 +583,33 @@ test('storage route measures real relocated data, including profile logs, withou
   ])
   assert.equal(await readFile(path.join(stateRoot, 'workspace/private'), 'utf8'), 'must stay outside the report')
 })
+
+test('dependency cleanup is same-origin POST, coalesces work, and sanitizes failure details', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-store-clean-route-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'launcher'))
+  await writeFile(path.join(root, 'launcher/store-maintenance.mjs'), `
+    let calls = 0;
+    export async function cleanPluginStores() {
+      const invocation = ++calls;
+      await new Promise(resolve => setTimeout(resolve, 20));
+      if (invocation > 1) throw Object.assign(new Error('secret private path'), {code:'STORE_OFFLINE_PREPARE_FAILED'});
+      return {complete:true,invocation};
+    }
+  `)
+  const routes = new Map()
+  t.after(mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root }))
+  const handler = routes.get('/dsh-portable/plugin-cache-clean').handler
+  const external = request('POST'); external.headers.origin = 'https://example.com'
+  const denied = response(), readOnly = response()
+  await handler(external, denied); await handler(request('GET'), readOnly)
+  assert.equal(denied.status, 403); assert.equal(readOnly.status, 405)
+  const a = response(), b = response()
+  await Promise.all([handler(request('POST'), a), handler(request('POST'), b)])
+  assert.equal(a.json().invocation, 1); assert.equal(b.json().invocation, 1)
+  const failed = response()
+  await handler(request('POST'), failed)
+  assert.equal(failed.status, 409)
+  assert.equal(failed.json().code, 'STORE_OFFLINE_PREPARE_FAILED')
+  assert.doesNotMatch(JSON.stringify(failed.json()), /secret|private path/)
+})

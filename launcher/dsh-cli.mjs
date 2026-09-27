@@ -8,6 +8,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
+  acquireProductMutationLockWithWait,
   buildDshEnv,
   environmentStateRoot,
   layoutForRoot,
@@ -480,8 +481,10 @@ export async function main(inputArgv = process.argv.slice(2), source = process.e
     if (!existsSync(filename)) throw new Error(`${label} is missing: ${filename}`)
   }
 
-  const release = await acquirePluginLock(spec.layout)
+  const releaseProduct = await acquireProductMutationLockWithWait(spec.layout, 0)
+  let release = async () => {}
   try {
+    release = await acquirePluginLock(spec.layout)
     const materializedArgv = await materializeRemotePluginArchives(argv, stateRoot, process.platform)
     const normalizedArgv = normalizeFreshReleaseRemovalArgv(materializedArgv)
     spec = buildPluginCliSpec(root, stateRoot, normalizedArgv, process.platform, source, selected.environmentId)
@@ -516,7 +519,7 @@ export async function main(inputArgv = process.argv.slice(2), source = process.e
     }
     return exitCode
   } finally {
-    await release()
+    try { await release() } finally { await releaseProduct() }
   }
 }
 

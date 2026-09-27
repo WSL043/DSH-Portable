@@ -320,6 +320,23 @@ export function mountPortableRoutes(webServer, options = {}) {
     } catch { sendJson(response, 500, { error: 'Storage maintenance is unavailable.' }) }
   } })
 
+  let dependencyCleanup = null
+  register({ kind: 'exact', path: '/dsh-portable/plugin-cache-clean', handler: async (request, response) => {
+    if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
+    if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
+    try {
+      if (!dependencyCleanup) dependencyCleanup = import(pathToFileURL(path.join(root, 'launcher', 'store-maintenance.mjs')).href)
+        .then(module => module.cleanPluginStores({ root, stateRoot,
+          baseStateRoot: process.env.DSH_PORTABLE_BASE_STATE_ROOT || stateRoot,
+          runtimeRoot: process.env.DSH_PORTABLE_RUNTIME_ROOT || root }))
+        .finally(() => { dependencyCleanup = null })
+      sendJson(response, 200, await dependencyCleanup)
+    } catch (error) {
+      const code = /^STORE_[A-Z_]+$/.test(error?.code || '') ? error.code : 'STORE_MAINTENANCE_FAILED'
+      sendJson(response, 409, { code, error: 'Dependency cleanup did not complete. Existing plugins and recovery material were retained.' })
+    }
+  } })
+
   register({ kind: 'exact', path: '/dsh-portable/repair', handler: async (request, response) => {
     if (request.method !== 'POST') return sendJson(response, 405, { error: 'method not allowed' })
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })

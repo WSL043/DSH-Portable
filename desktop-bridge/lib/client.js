@@ -45,6 +45,9 @@ window.__ModuleLoader__.load({
         storageClean: '清理旧运行时和日志', storageCleanResult: '已清理 {0} 个旧内核运行时、{2} 个旧 WebView 运行时、{1} 条过期日志。',
         storageCleanPartial: '部分项目被占用或尚未处理完，可稍后再试。', storageCleanProtected: '插件依赖、登录信息和恢复备份均保留。',
         storageCleanFailed: '有项目清理失败，请运行检查或导出支持报告。',
+        dependencyClean: '整理插件依赖缓存', dependencyCleaning: '正在保护已安装插件和恢复版本，并整理依赖缓存…',
+        dependencyCleanResult: '已整理 {0} 个环境的依赖缓存，{1} 组插件引用通过离线重建检查。',
+        dependencyCleanBlocked: '依赖整理未完成，现用插件和恢复材料已保留。请结束其他安装或更新后重试；仍失败时导出支持报告。',
         storageNames: '插件依赖 / 导入备份 / 修复备份 / 日志', storageProtected: '按文件大小统计，可能与实际磁盘占用不同。依赖供运行及离线恢复使用；备份不是缓存，不自动删除。',
         report: '导出支持报告', more: '更多', cancel: '取消', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
         data: '数据', dataTitle: '迁移与备份', dataHint: '按所选范围导出；不包含缓存、运行环境和工作区文件。',
@@ -98,6 +101,9 @@ window.__ModuleLoader__.load({
         storageClean: 'Clean old runtimes and logs', storageCleanResult: 'Removed {0} old core runtimes, {2} old WebView runtimes and {1} expired logs.',
         storageCleanPartial: 'Some items are busy or could not be processed. Try again later.', storageCleanProtected: 'Plugin dependencies, sign-in data and recovery backups are retained.',
         storageCleanFailed: 'Some cleanup failed. Run a check or export a support report.',
+        dependencyClean: 'Clean plugin dependency cache', dependencyCleaning: 'Protecting installed and recovery versions, then cleaning dependencies…',
+        dependencyCleanResult: 'Cleaned dependency caches in {0} environments; {1} retained references passed offline rebuild checks.',
+        dependencyCleanBlocked: 'Cleanup did not complete. Installed plugins and recovery material were retained. Finish other installs or updates and retry; export a support report if it persists.',
         storageNames: 'Plugin dependencies / Import backups / Recovery backups / Logs', storageProtected: 'File sizes may differ from disk space used. Dependencies support running plugins and offline recovery. Backups are not caches and are retained.',
         report: 'Export support report', more: 'More', cancel: 'Cancel', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
         data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Exports the selected contents; caches, runtimes, and workspace files stay out.',
@@ -886,7 +892,7 @@ window.__ModuleLoader__.load({
         open: maintenanceMenuOpen,
         anchor: h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => setMaintenanceMenuOpen(current => !current) }, t('more')),
         align: 'end', portal: true,
-        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') }, { id: 'storage', label: t('storageUsage') }, { id: 'storage-clean', label: t('storageClean') },
+        items: [{ id: 'repair', label: t('repair') }, { id: 'report', label: t('report') }, { id: 'storage', label: t('storageUsage') }, { id: 'storage-clean', label: t('storageClean') }, { id: 'dependency-clean', label: t('dependencyClean') },
           ...(nativeHostTransport()?.capabilities.clearWebCache === true ? [{ id: 'web-cache', label: t('clearWebCache') }] : [])],
         onClose: () => setMaintenanceMenuOpen(false),
         onSelect: id => {
@@ -910,6 +916,18 @@ window.__ModuleLoader__.load({
               const warning = body.failures?.length ? t('storageCleanFailed') : body.complete ? '' : t('storageCleanPartial')
               setStatus('maintenance', `${t('storageCleanResult').replace('{0}', body.runtimes).replace('{1}', body.logs).replace('{2}', body.webviews ?? 0)} ${warning} ${t('storageCleanProtected')}`)
             }).catch(error => setStatus('maintenance', format(t('failed'), error.message))).finally(() => setBusy(''))
+          }
+          else if (id === 'dependency-clean') {
+            setBusy('dependency-clean')
+            setStatus('maintenance', t('dependencyCleaning'))
+            fetch('/dsh-portable/plugin-cache-clean', { method: 'POST' }).then(async response => {
+              const body = await response.json()
+              if (!response.ok || body.complete !== true) {
+                setStatus('maintenance', `${t('dependencyCleanBlocked')} ${/^STORE_[A-Z_]+$/.test(body.code || '') ? body.code : ''}`)
+                return
+              }
+              setStatus('maintenance', t('dependencyCleanResult').replace('{0}', body.environments).replace('{1}', body.references))
+            }).catch(() => setStatus('maintenance', t('dependencyCleanBlocked'))).finally(() => setBusy(''))
           }
           else if (id === 'web-cache') {
             setBusy('web-cache')

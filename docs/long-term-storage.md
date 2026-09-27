@@ -83,6 +83,18 @@ sub-agent 给出的下一顺序是 WebView 生产回收 → pnpm 引用保护与
 
 这是整理器的基础模块，不是清理入口完成。`complete` 仅指受管路径发现完成；仍需持有所有写入者的锁、校验 `.modules.yaml` 与实际 store、校验事务状态、物化全部恢复引用，并在同一锁内验证后才允许 prune。外部导出包的离线恢复不在这个枚举的证明范围内。未对用户 store 执行任何整理。
 
+### 2026-09-27：生产 pnpm 整理与失败重试
+
+已接入设置 → 桌面与数据 → 更多 → 整理插件依赖缓存，及 `plugin-cache-clean` CLI。它先持共享产品锁和全部环境的官方 profile 写锁，离线物化当前及恢复锁文件对应的硬链接引用，全部成功后复扫，再调用锁定 pnpm 11.11.0 的 prune。清理后对每组引用执行离线 copy 重建，全部成功才返回完成。常规启动不执行这项较重操作。
+
+CLI 插件变更、导入、修复、恢复启动项加入共享产品锁；修复了宿主持锁被误当成非 launcher 进程而回收的边界。官方页写入仍由同一 profile 文件锁互斥。现用插件文件、manifest、锁文件、归档和登录数据均不作为删除目标。pnpm 元数据使用独立临时 cache 执行 prune，原 metadata 保留。维护临时目录使用 `--offline --frozen-lockfile --trust-lockfile --ignore-scripts` 重放既有图，避免 pnpm 11 在 offline 模式仍进行在线策略查询；没有修改正常插件安装策略或 peer 范围。
+
+两个环境 × 当前/回滚的 copy 与 hardlink 各十轮实际安装并加载通过，引用内容保持稳定：`build/production-store-copy-QOuIyd/result.json`、`build/production-store-hardlink-1p293m/result.json`。原 hardlink 夹具把 pnpm 仍物理保留的 v3 当成无引用数据，导致缩减断言失败；修正夹具为真正卸掉 v3 安装后通过，没有为过关放松产品保护。
+
+后续故障验收 `build/production-store-copy-uRdSCK/result.json`、`build/production-store-hardlink-v9qFAs/result.json`：产品锁/第二环境官方锁拒绝；缺失恢复图在 prune 前拒绝且两份内容 store 不变；通过私有 pnpm 代理注入 post-prune 验证失败，物化副本保留，同一宿主进程重试成功后移除临时副本；准备期间注入外部项目注册，最终复扫拒绝且两份 store 不变。每组另跑两轮正常清理/重建。产品使用者必须通过受支持的 Portable 安装入口；检测到其他项目共用 store 会拒绝，不能把这一检查宣称为能锁住任意外部 raw pnpm 或手工文件修改。
+
+实际隐藏 Native 设置按钮已通过：`build/native-plugin-cache-20260927/dependency-cleanup.json`，现用 manifest、lock、模块 metadata 不变，亮暗截图已查看。这是隔离源码覆盖成品，不是最终发布不可变包资格。相关 65 项回归通过，路由安全/宿主锁新增断言后的 36 项定向检查通过。新验收复用 CI 合约作业（仅 Linux x64 两轮）和既有 Windows 完整包原生任务，未新增打包矩阵。
+
 ### 2026-09-19 历史进展
 
 设置中的“查看存储占用”按需统计插件依赖、导入备份、修复备份和日志；扫描有数量/时间边界，不跟随目录链接，多次查询共用正在执行的扫描。显示的是文件逻辑大小，不承诺等同可回收磁盘空间。迁移和导入已取消冗余 `install --force`，避免无关平台依赖落盘。

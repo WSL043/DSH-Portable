@@ -56,6 +56,7 @@ import { preflightStagedDshProfiles } from './update-preflight.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { portablePublicError, recordPortableDiagnostic, readLogTail } from './diagnostic-policy.mjs'
 import { appendOperationTrace, beginOperationTrace } from './operation-trace.mjs'
+import { cleanPluginStores } from './store-maintenance.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const baseStateRoot = process.env.DSH_PORTABLE_STATE_ROOT || root
@@ -946,6 +947,10 @@ async function main() {
   if (options.command === 'list-updates') { print(await listUpdates(options), options.json); return }
   if (options.command === 'defer-update') { print(await deferUpdate(layout, { scope: options.updateScope }), options.json); return }
   if (options.command === 'ignore-update') { print(await ignoreUpdate(layout, '', { scope: options.updateScope }), options.json); return }
+  if (options.command === 'plugin-cache-clean') {
+    print(await cleanPluginStores({ root, stateRoot, runtimeRoot: layout.immutableRoot, baseStateRoot }), options.json)
+    return
+  }
   const release = options.waitForLockMs > 0
     ? await acquireLaunchLockWithWait(layout, options.waitForLockMs)
     : await acquireLaunchLock(layout)
@@ -954,11 +959,14 @@ async function main() {
     'runtime-cache-clean',
     'recover-update',
     'update',
+    'restore-data',
+    'repair',
+    'recovery-pause-plugin',
+    'recovery-restore-plugin',
   ])
-  const releaseProduct = productLockedCommands.has(options.command)
-    ? await acquireProductMutationLockWithWait(layout, Math.max(5000, options.waitForLockMs || 0))
-    : async () => {}
+  let releaseProduct = async () => {}
   try {
+    if (productLockedCommands.has(options.command)) releaseProduct = await acquireProductMutationLockWithWait(layout, Math.max(5000, options.waitForLockMs || 0))
     await ensurePortableDirectories(layout)
     let recovery = { status: 'none' }
     if (existsSync(layout.updateJournal) && ['start', 'runtime-cache-clean', 'update', 'recover-update'].includes(options.command)) {

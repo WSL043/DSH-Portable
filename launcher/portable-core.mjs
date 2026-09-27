@@ -750,7 +750,7 @@ export function parseCli(argv) {
       conflict = argv[index + 1]
       index += 1
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recovery-plugins', 'recovery-pause-plugin', 'recovery-restore-plugin', 'recover-update', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recovery-plugins', 'recovery-pause-plugin', 'recovery-restore-plugin', 'recover-update', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'plugin-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
@@ -1286,6 +1286,12 @@ async function acquireOwnedLauncherLock(layout, filename, busyMessage, adapters 
       if (error?.code !== 'EEXIST') throw error
 
       const ownerPid = Number.parseInt((await readFile(filename, 'utf8').catch(() => '')).trim(), 10)
+      // Product mutations may be owned by the host's settings route or plugin
+      // CLI, not only portable-cli. Never steal their live lock based on argv.
+      if (filename === layout.productOperationLock) {
+        if (pidExists(ownerPid) || (!Number.isSafeInteger(ownerPid) && Date.now() - (await lstat(filename)).mtimeMs < 30000))
+          throw new Error(busyMessage)
+      }
       let owner = null
       try {
         owner = processQuery(ownerPid)
