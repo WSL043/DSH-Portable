@@ -1,0 +1,37 @@
+{
+  "version": "0.7.6",
+  "zh": {
+    "summary": "完善长期存储维护、离线依赖整理与数据导入中断恢复。",
+    "highlights": [
+      "设置页可整理插件依赖缓存；保留当前环境及回滚引用，并在整理后验证离线重建。修复完整离线包默认插件导致的清理误拒绝。",
+      "回收可确认不再使用的受管 WebView 运行时，保留正在运行的浏览器及登录数据。",
+      "数据导入记录事务阶段；导入进程中断后，启动和独立恢复入口可识别并恢复未完成事务。",
+      "默认插件旧版升级、卸载重装及多客户端同时安装纳入成品验收，避免并发修改同一插件目录。"
+    ],
+    "knownIssues": [
+      "物理断电和跨磁盘移动中断未作兼容承诺；跨机凭据可能需要重新登录。",
+      "多屏及不同 DPI 的完整硬件组合仍在专项跟踪。"
+    ],
+    "upgradeNotes": [
+      "保持 DSH 0.1.7-alpha.1、会话管理 1.5.1 和图片查看器 0.1.2；较新内核须独立通过兼容验收后推送。",
+      "插件依赖整理是主动操作。清理无法证明安全时会保留原数据并报告原因。"
+    ]
+  },
+  "en": {
+    "summary": "Improve long-term storage maintenance, offline dependency cleanup and interrupted data-import recovery.",
+    "highlights": [
+      "Clean plugin dependency caches from settings while retaining current and rollback references and verifying offline reconstruction. Fix incorrect cleanup refusal for bundled default plugins.",
+      "Reclaim managed WebView runtimes only when they are no longer in use, retaining active browsers and sign-in data.",
+      "Journal data-import stages so startup and independent recovery can identify and recover interrupted imports.",
+      "Qualify historical default-plugin upgrades, uninstall/reinstall and concurrent clients against packaged products to protect the shared plugin profile."
+    ],
+    "knownIssues": [
+      "Physical power loss and interrupted cross-volume moves are not qualified; credentials moved between machines may require signing in again.",
+      "The full multi-monitor and mixed-DPI hardware matrix remains a separate tracked qualification."
+    ],
+    "upgradeNotes": [
+      "Retain DSH 0.1.7-alpha.1, Session Manager 1.5.1 and Image Viewer 0.1.2. Newer cores require separate compatibility qualification before delivery.",
+      "Dependency cleanup is an explicit action. If safety cannot be established, existing data is retained and the reason is reported."
+    ]
+  }
+}

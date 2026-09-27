@@ -19,7 +19,7 @@ function fixture({ owned = true, details = 'host failed', cleanupError = null, q
   const context = {
     path,
     layout: {
-      logsDir: 'logs', processState: 'state', repairRequest: 'repair-request', workspace: 'workspace',
+      dataDir: 'data', logsDir: 'logs', processState: 'state', repairRequest: 'repair-request', workspace: 'workspace',
       nodeExe: 'node', hostBin: 'host', dshBin: 'dsh', desktopBridgePatch: 'patch', root: 'root', environmentId: 'default',
     },
     requireRuntime() {}, ensurePortableDirectories: async () => {}, retirePendingExtensionOperation: async () => {},
