@@ -232,7 +232,9 @@ try {
         try {
             $env:npm_config_cache = Join-Path $CacheDir 'npm'
             $env:PATH = $NodeFolder + [System.IO.Path]::PathSeparator + $PriorPath
-            & $NodeExe $NpmCli ci --prefix (Join-Path $Stage 'app') --omit=dev --no-audit --no-fund --install-links
+            # The reviewed lock records local links. Materialize them only in
+            # stage-local-integrations; npm packing would resolve fresh ranges.
+            & $NodeExe $NpmCli ci --prefix (Join-Path $Stage 'app') --omit=dev --no-audit --no-fund --install-links=false
             if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
         } finally {
             $env:npm_config_cache = $PriorNpmCache

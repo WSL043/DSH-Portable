@@ -29,6 +29,25 @@ function dependencyKey(manifest) {
   return stable(Object.fromEntries(dependencyFields.map(field => [field, manifest[field] || {}])))
 }
 
+export async function readRetainedArchive(lock, name, specifier, origin) {
+  const normalized = specifier.replaceAll('\\', '/')
+  const match = /^file:(?:\.\/)?(\.dsh-portable-archives\/(?:sha512-[a-f0-9]+|dsh-chat-manager|dsh-image-viewer)\.tgz)$/.exec(normalized)
+  if (!match) fail('STORE_EXTERNAL_REFERENCE')
+  const entries = Object.entries(lock.packages || {}).filter(([key, item]) => key.startsWith(`${name}@file:`)
+    && item.resolution?.tarball?.replaceAll('\\', '/').replace(/^file:\.\//, 'file:') === `file:${match[1]}`)
+  if (entries.length !== 1) fail('STORE_ARCHIVE_IDENTITY')
+  const entry = entries[0][1]
+  if (!/^sha512-[A-Za-z0-9+/]{86}==$/.test(entry.resolution.integrity || '')
+    || !/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(entry.version || '')) fail('STORE_ARCHIVE_IDENTITY')
+  const archive = path.join(origin, match[1])
+  const parent = await lstat(path.dirname(archive)), info = await lstat(archive)
+  if (parent.isSymbolicLink() || !parent.isDirectory() || info.isSymbolicLink() || !info.isFile()
+    || info.size > 64 * 1024 * 1024) fail('STORE_EXTERNAL_REFERENCE')
+  const integrity = 'sha512-' + createHash('sha512').update(await readFile(archive)).digest('base64')
+  if (integrity !== entry.resolution.integrity) fail('STORE_ARCHIVE_IDENTITY')
+  return { source: archive, relative: match[1], version: entry.version }
+}
+
 async function loadRuntime(runtimeRoot) {
   const require = createRequire(path.join(runtimeRoot, 'app/package.json'))
   const pnpmPackage = path.join(runtimeRoot, 'app/node_modules/pnpm/package.json')
@@ -120,31 +139,42 @@ async function prepareReferences(environment, scratch, api, signal) {
     if (lock.overrides) manifest.pnpm = { overrides: lock.overrides }
     const installed = environment.installations.find(item => item.lock === reference.path)
     const origin = installed ? path.dirname(installed.modules) : path.dirname(reference.path)
-    locks.set(digest(stable(lock)), { source, lock, manifest, origin })
+    const archives = []
+    const registryManifest = structuredClone(manifest)
+    for (const field of dependencyFields) for (const [name, value] of Object.entries(manifest[field])) {
+      if (!value.startsWith('file:')) continue
+      const archive = await readRetainedArchive(lock, name, value, origin)
+      archives.push(archive)
+      // Default seeding promotes package.json to an exact registry version but
+      // retains the offline tarball graph. Accept only this verified identity;
+      // materialization below still replays the original immutable lock.
+      registryManifest[field][name] = archive.version
+    }
+    locks.set(digest(stable(lock)), { source, lock, manifest, origin, archives, registryManifest })
   }
   // A saved manifest without a retained matching lock must not be forgotten.
-  const keys = new Set([...locks.values()].map(item => dependencyKey(item.manifest)))
+  const keys = new Set([...locks.values()].flatMap(item => [dependencyKey(item.manifest), dependencyKey(item.registryManifest)]))
   for (const manifest of manifests) {
     if (dependencyFields.some(field => Object.keys(manifest[field] || {}).length)
-      && !keys.has(dependencyKey(manifest))) fail('STORE_UNRESOLVED_MANIFEST')
+      && !keys.has(dependencyKey(manifest))
+      && ![...locks.values()].some(item => dependencyFields.every(field => {
+        const actual = manifest[field] || {}, expected = item.manifest[field]
+        return Object.keys(actual).length === Object.keys(expected).length
+          && Object.entries(expected).every(([name, value]) => actual[name] === value || actual[name] === item.registryManifest[field][name])
+      }))) fail('STORE_UNRESOLVED_MANIFEST')
   }
   let index = 0
-  for (const { source, lock, manifest, origin } of locks.values()) {
+  for (const { source, lock, manifest, archives } of locks.values()) {
     signal?.throwIfAborted()
     const target = path.join(scratch, `reference-${index++}`)
     await mkdir(target)
-    // Only Portable's content-addressed local tarballs may be moved into the
-    // isolated reference workspace. Arbitrary links/files remain protected.
+    // Only verified Portable archive references enter the isolated workspace.
     for (const value of dependencyFields.flatMap(field => Object.values(manifest[field]))) {
       if (/^(?:link:|workspace:|portal:|\.\.?[\\/]|[A-Za-z]:[\\/]|\/)/.test(value)) fail('STORE_EXTERNAL_REFERENCE')
-      if (!value.startsWith('file:')) continue
-      const match = /^file:(?:\.\/)?(\.dsh-portable-archives\/sha512-[a-f0-9]+\.tgz)$/.exec(value.replaceAll('\\', '/'))
-      if (!match) fail('STORE_EXTERNAL_REFERENCE')
-      const archive = path.join(origin, match[1])
-      const parent = await lstat(path.dirname(archive)), info = await lstat(archive)
-      if (parent.isSymbolicLink() || !parent.isDirectory() || info.isSymbolicLink() || !info.isFile()) fail('STORE_EXTERNAL_REFERENCE')
+    }
+    for (const archive of archives) {
       await mkdir(path.join(target, '.dsh-portable-archives'), { recursive: true })
-      await copyFile(archive, path.join(target, match[1]))
+      await copyFile(archive.source, path.join(target, archive.relative))
     }
     await writeFile(path.join(target, 'package.json'), JSON.stringify(manifest))
     await writeFile(path.join(target, 'pnpm-lock.yaml'), source)

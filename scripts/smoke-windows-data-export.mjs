@@ -21,6 +21,12 @@ const executable = path.join(root, 'DeepSeek-Herness.exe')
 const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
 const runtimeEntry = path.join(root, 'launcher', 'runtime-entry.mjs')
+const acceptanceEnv = { ...process.env,
+  DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: root, DSH_PORTABLE_BASE_STATE_ROOT: root,
+  DSH_PORTABLE_ENVIRONMENT: 'default', DSH_HOME: path.join(root, 'data/dsh-home'),
+  DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
+  DSH_PORTABLE_SKIP_UPDATE_CHECK: '1', DSH_PORTABLE_TEST_HIDDEN: '1',
+}
 for (const filename of [executable, portableNode, portableCli, runtimeEntry]) {
   if (!existsSync(filename)) throw new Error(`portable file is missing: ${filename}`)
 }
@@ -162,7 +168,7 @@ async function capture(client, filename) {
 async function portable(args) {
   return execFileAsync(portableNode, [runtimeEntry, path.basename(portableCli), ...args], {
     cwd: root,
-    env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
+    env: acceptanceEnv,
     timeout: 120000,
     windowsHide: true,
   })
@@ -308,7 +314,7 @@ try {
   launcher = spawn(executable, [], {
     cwd: root,
     env: {
-      ...process.env,
+      ...acceptanceEnv,
       DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
       DSH_PORTABLE_TEST_AUTOMATION: '1',
       DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
@@ -316,6 +322,7 @@ try {
       DSH_PORTABLE_DATA_IMPORT_FILE: importArchive,
     },
     stdio: 'ignore',
+    windowsHide: true,
   })
 
   const page = await waitForPage(debugPort, launcher)

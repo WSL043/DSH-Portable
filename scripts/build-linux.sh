@@ -134,7 +134,7 @@ else
   (
     cd "$STAGE/app"
     PATH="$NODE_FOLDER/bin:$PATH" npm_config_cache="$CACHE_DIR/npm" \
-      "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund --install-links
+      "$NODE_EXE" "$NPM_CLI" ci --omit=dev --no-audit --no-fund --install-links=false
   )
 fi
 "$NODE_EXE" "$PROJECT_ROOT/scripts/stage-local-integrations.mjs" "$STAGE/app"

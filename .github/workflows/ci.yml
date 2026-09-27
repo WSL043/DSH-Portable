@@ -486,7 +486,7 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Cancel uninstall, uninstall, reinstall, enable, and compose in native WebView2
+      - name: Upgrade historical defaults, uninstall, reinstall, enable, and compose in native WebView2
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -497,10 +497,12 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Official plugin fixture extraction failed.' }
           npm install --prefix $DriverRoot --ignore-scripts --no-audit --no-fund playwright@1.63.0
           if ($LASTEXITCODE -ne 0) { throw 'Official plugin driver installation failed.' }
+          node (Join-Path $DriverRoot 'node_modules/playwright/cli.js') install chromium --only-shell
+          if ($LASTEXITCODE -ne 0) { throw 'Headless concurrent-client installation failed.' }
           $ProductRoot = Join-Path $FixtureRoot 'DSH-Portable'
           node scripts/smoke-windows-official-plugin-cycle.mjs `
             $ProductRoot (Join-Path $DriverRoot 'package.json') `
-            (Join-Path $ProductRoot 'acceptance/official-plugin-cycle') --disposable
+            (Join-Path $ProductRoot 'acceptance/official-plugin-cycle') --disposable --upgrade-defaults --concurrent-writers
           if ($LASTEXITCODE -ne 0) { throw 'Official plugin page lifecycle failed.' }
       - uses: actions/upload-artifact@v7
         if: always()
