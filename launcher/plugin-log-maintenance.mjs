@@ -61,6 +61,20 @@ export async function maintainPluginLogs(dshHome, withFileLock, {
           if (!/^operation-[A-Za-z0-9]{6}$/.test(entry.name) || !entry.isDirectory() || entry.isSymbolicLink()) { result.protected++; continue }
           const dir = path.join(logs, entry.name)
           const children = await readdir(dir)
+          // A previous unlink may have succeeded while rmdir was temporarily
+          // blocked. Revisit only old empty managed directories under the lock.
+          if (children.length === 0) {
+            const info = await lstat(dir)
+            if (!info.isDirectory() || info.isSymbolicLink() || now - info.mtimeMs < graceMs) { result.protected++; continue }
+            try {
+              await rmdir(dir)
+              result.removed++
+            } catch (error) {
+              if (error.code === 'ENOTEMPTY' || error.code === 'EEXIST') result.protected++
+              else if (error.code !== 'ENOENT') result.deferred++
+            }
+            continue
+          }
           if (children.length !== 1 || children[0] !== 'pnpm.log') { result.protected++; continue }
           const file = path.join(dir, 'pnpm.log')
           const info = await lstat(file)

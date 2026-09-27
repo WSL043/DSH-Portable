@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import { mkdtemp, mkdir, writeFile, readFile, utimes, access, symlink, rm } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
+import fsPromises from 'node:fs/promises'
+import { syncBuiltinESMExports } from 'node:module'
 import { maintainPluginLogs } from '../launcher/plugin-log-maintenance.mjs'
 import { inspectStorage } from '../launcher/storage-report.mjs'
 const now = Date.now()
@@ -25,6 +27,50 @@ async function fixture(t) {
   return { root, home, profile, logs, add }
 }
 const day = 86400000
+
+test('empty-directory cleanup preserves content added just before removal and retries locks later', async t => {
+  const f = await fixture(t)
+  const racing = path.join(f.logs, 'operation-AAAAAA')
+  const blocked = path.join(f.logs, 'operation-BBBBBB')
+  for (const dir of [racing, blocked]) {
+    await mkdir(dir)
+    await utimes(dir, new Date(now - 30 * day), new Date(now - 30 * day))
+  }
+  const original = fsPromises.rmdir
+  const replacement = t.mock.method(fsPromises, 'rmdir', async dir => {
+    if (dir === racing) await writeFile(path.join(dir, 'keep.json'), 'preserve')
+    if (dir === blocked) throw Object.assign(new Error('busy'), { code: 'EBUSY' })
+    return original(dir)
+  })
+  syncBuiltinESMExports()
+  t.after(() => { replacement.mock.restore(); syncBuiltinESMExports() })
+  const lock = async (_file, fn) => fn()
+  const first = await maintainPluginLogs(f.home, lock, { now })
+  assert.equal(first.removed, 0)
+  assert.equal(first.deferred, 1)
+  assert.equal(await readFile(path.join(racing, 'keep.json'), 'utf8'), 'preserve')
+  replacement.mock.restore()
+  syncBuiltinESMExports()
+  assert.equal((await maintainPluginLogs(f.home, lock, { now })).removed, 1)
+  await access(path.join(racing, 'keep.json'))
+})
+
+test('old empty operation remnants are reclaimed while recent and unknown directories survive', async t => {
+  const f = await fixture(t)
+  const old = path.join(f.logs, 'operation-AAAAAA')
+  const recent = path.join(f.logs, 'operation-BBBBBB')
+  const unknown = path.join(f.logs, 'user-backup')
+  for (const dir of [old, recent, unknown]) await mkdir(dir)
+  for (const dir of [old, unknown]) await utimes(dir, new Date(now - 30 * day), new Date(now - 30 * day))
+  const lock = async (_file, fn) => fn()
+  const result = await maintainPluginLogs(f.home, lock, { now })
+  assert.equal(result.removed, 1)
+  assert.equal(result.bytes, 0)
+  await assert.rejects(access(old), { code: 'ENOENT' })
+  await access(recent)
+  await access(unknown)
+  assert.equal((await maintainPluginLogs(f.home, lock, { now })).removed, 0)
+})
 
 test('bounded log retention keeps newest, recent, unknown content and all user data', async t => {
   const f = await fixture(t)
