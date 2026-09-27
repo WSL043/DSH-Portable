@@ -4,7 +4,19 @@ import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, writeFile, rm, symlink } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { readRetainedArchive } from '../launcher/store-maintenance.mjs'
+import { readRetainedArchive, isSupportedVirtualStore } from '../launcher/store-maintenance.mjs'
+
+test('pnpm relative virtual stores resolve beside modules metadata, including recovery directories', () => {
+  const profile = path.resolve('fixture-profile')
+  const current = path.join(profile, 'node_modules', '.modules.yaml')
+  const recovered = path.join(profile, 'node_modules.dsh-portable-recovery-test', '.modules.yaml')
+  assert.equal(isSupportedVirtualStore(current, '.pnpm'), true)
+  assert.equal(isSupportedVirtualStore(current, path.join(profile, 'node_modules/.pnpm')), true)
+  assert.equal(isSupportedVirtualStore(recovered, '.pnpm'), true)
+  assert.equal(isSupportedVirtualStore(recovered, path.join(profile, 'node_modules/.pnpm')), true)
+  assert.equal(isSupportedVirtualStore(current, '../../foreign/.pnpm'), false)
+  assert.equal(isSupportedVirtualStore(current, undefined), false)
+})
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'portable-retained-archive-'))

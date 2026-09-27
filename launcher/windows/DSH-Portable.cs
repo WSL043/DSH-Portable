@@ -1341,7 +1341,8 @@ namespace DshPortable
             // Keep the executable-owned DSH icon on the native frame so the
             // taskbar never falls back to the hosted WebView/Node identity.
             ShowIcon = true;
-            StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = testHidden ? FormStartPosition.Manual : FormStartPosition.CenterScreen;
+            if (testHidden) Location = new Point(-32000, -32000);
             FormBorderStyle = desktopStart ? FormBorderStyle.Sizable : FormBorderStyle.FixedSingle;
             MaximizeBox = desktopStart;
             MinimizeBox = desktopStart;
@@ -1579,6 +1580,11 @@ namespace DshPortable
             base.OnFormClosing(eventArgs);
         }
 
+        protected override bool ShowWithoutActivation
+        {
+            get { return hiddenForAutomation || base.ShowWithoutActivation; }
+        }
+
         protected override CreateParams CreateParams
         {
             get
@@ -1586,6 +1592,7 @@ namespace DshPortable
                 CreateParams parameters = base.CreateParams;
                 // Preserve native sizing/system-menu styles, without a second caption.
                 if (desktopStart) parameters.Style &= ~0x00C00000; // WS_CAPTION
+                if (hiddenForAutomation) parameters.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
                 return parameters;
             }
         }
@@ -2192,6 +2199,7 @@ namespace DshPortable
         private void RestoreFromTray()
         {
             if (!desktopReady) return;
+            if (hiddenForAutomation) return;
             ShowInTaskbar = true;
             Show();
             WindowState = windowStateBeforeHide;

@@ -29,6 +29,16 @@ function dependencyKey(manifest) {
   return stable(Object.fromEntries(dependencyFields.map(field => [field, manifest[field] || {}])))
 }
 
+export function isSupportedVirtualStore(modulesMetadataPath, virtualStoreDir) {
+  if (typeof virtualStoreDir !== 'string' || !virtualStoreDir) return false
+  // pnpm records an absolute path on Windows and a path relative to
+  // node_modules/.modules.yaml on POSIX. Recovery directories retain either.
+  const actual = path.join(path.dirname(modulesMetadataPath), '.pnpm')
+  const original = path.join(path.dirname(path.dirname(modulesMetadataPath)), 'node_modules/.pnpm')
+  const recorded = path.resolve(path.dirname(modulesMetadataPath), virtualStoreDir)
+  return [actual, original].some(filename => canonical(filename) === canonical(recorded))
+}
+
 export async function readRetainedArchive(lock, name, specifier, origin) {
   const normalized = specifier.replaceAll('\\', '/')
   const match = /^file:(?:\.\/)?(\.dsh-portable-archives\/(?:sha512-[a-f0-9]+|dsh-chat-manager|dsh-image-viewer)\.tgz)$/.exec(normalized)
@@ -120,9 +130,7 @@ async function prepareReferences(environment, scratch, api, signal) {
       const metadata = api.parse(source)
       if (canonical(metadata?.storeDir || '.') !== canonical(path.join(environment.store, 'v11')))
         fail('STORE_MODULES_MOVED')
-      const actual = path.join(path.dirname(reference.path), '.pnpm')
-      const original = path.join(path.dirname(path.dirname(reference.path)), 'node_modules/.pnpm')
-      if (![actual, original].some(filename => canonical(filename) === canonical(metadata?.virtualStoreDir || '.')))
+      if (!isSupportedVirtualStore(reference.path, metadata?.virtualStoreDir))
         fail('STORE_VIRTUAL_LAYOUT_UNSUPPORTED')
       continue
     }

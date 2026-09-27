@@ -25,6 +25,7 @@ foreach ($idValue in $owned) {
       pid = $item.Id; name = $item.ProcessName
       privateBytes = $item.PrivateMemorySize64; workingSetBytes = $item.WorkingSet64
       handles = $item.HandleCount; cpuSeconds = $item.CPU
+      startedAt = $item.StartTime.ToUniversalTime().ToString('o')
     }
   }
 }
