@@ -243,8 +243,8 @@ try {
     const handles = median(totals('idle', 'handles')) - median(totals('baseline', 'handles'))
     result.resources = { baselinePrivateBytes: base, idlePrivateBytes: idle, handleGrowth: handles }
     const limit = base * 1.2 + 64 * 1024 * 1024
-    assert.ok(idle <= limit, `Idle private bytes ${idle} exceed ${limit}; baseline=${base}. Inspect per-process and renderer samples.`)
-    assert.ok(handles <= 100, `Idle handle growth ${handles} exceeds 100. Inspect per-process samples.`)
+    result.resourceChecks = { memoryPassed: idle <= limit, handlePassed: handles <= 100, privateBytesLimit: limit }
+    // Resource failures must not skip the final composer and exception checks.
   }
   assert.equal(host.exitCode, null)
   assert.ok(browser.isConnected() && !page.isClosed())
@@ -252,6 +252,13 @@ try {
   assert.equal(await composer().innerText(), 'SOAK_FINAL_INPUT_CHECK')
   await composer().fill('')
   assert.deepEqual(result.exceptions, [])
+  result.functionalChecks = { finalInput: true, noPageExceptions: true }
+  if (mode === '--qualify') {
+    const { baselinePrivateBytes, idlePrivateBytes, handleGrowth } = result.resources
+    assert.ok(result.resourceChecks.memoryPassed,
+      `Idle private bytes ${idlePrivateBytes} exceed ${result.resourceChecks.privateBytesLimit}; baseline=${baselinePrivateBytes}. Inspect per-process and renderer samples.`)
+    assert.ok(result.resourceChecks.handlePassed, `Idle handle growth ${handleGrowth} exceeds 100. Inspect per-process samples.`)
+  }
   result.passed = true
 } catch (error) {
   result.error = error.stack
