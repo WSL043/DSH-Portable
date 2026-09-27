@@ -60,5 +60,20 @@ try {
  }
  results.push({label:'final-store',store:await measure(store)});
  if(mode === 'referenced-copy') assert.ok(results.at(-1).store.files < results.find(item=>item.label==='baseline').store.files, 'unreferenced third version should be reclaimed');
+ if(mode === 'referenced-copy') {
+  // Keep the registry closed for the entire repeated update/rollback sequence.
+  // Compare the store, not fixture node_modules retained as acceptance evidence.
+  const baseline = await measure(store)
+  for(let cycle = 1; cycle <= 10; cycle++) {
+   for(const version of ['2.0.0', '1.0.0']) {
+    await writeFile(path.join(profile, 'package.json'), JSON.stringify({name:'probe', private:true, dependencies:{'portable-storage-fixture':version}}))
+    assert.equal(await run(`cycle-${cycle}-${version}`, ['install', '--offline', '--ignore-scripts', '--no-frozen-lockfile', '--fetch-retries=0']), 0)
+    const loaded = execFileSync(process.execPath, ['-e', 'process.stdout.write(require("portable-storage-fixture"))'], {cwd:profile, windowsHide:true, encoding:'utf8'})
+    assert.equal(loaded, version, 'Offline install must load the requested version, not a stale module')
+   }
+   const measured = await measure(store)
+   results.push({label:`cycle-${cycle}-store`, store:measured})
+   assert.deepEqual(measured, baseline, 'Repeated retained versions must not increase the content store')
+  }
+ }
 } finally {server.close();await writeFile(path.join(root,'result.json'),JSON.stringify(results,null,2));console.log(JSON.stringify({mode, output:root, results}))}
-

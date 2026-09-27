@@ -114,6 +114,10 @@ Windows 原生窗口已有 1 MiB 日志轮转，但 Node 入口（命令行启�
 
 ### 复制安装的引用保留实验
 
+补充固定门槛 G3（2026-09-27）：`qualify-store-maintenance.mjs referenced-copy` 在整理后保持本地 registry 关闭，再执行十轮新版/回滚版离线安装，每次实际加载模块并核对版本。证据 `build/store-maintenance-referenced-copy-aY7z5T/result.json`：20 次安装均成功，每轮 store 均为 5 文件、12474 字节。它证明合成引用集合下重复操作不继续增长，不代表生产引用发现、锁或清理入口已经交付。
+
+生产实现必须区分各环境自己的 `data/pnpm-store`，收集全部 profile 以及 `before-import-*` 中的 generated 依赖、启动修复旁备；`profiles/node_modules` 是生成的宿主解析入口，不能当作全部插件引用。导出的 `.dshdata` 会排除 node_modules 和 pnpm-lock.yaml，可加密且可保存在任意位置，因此不能宣称扫描当前目录就覆盖所有历史导出包的离线恢复需求。无法确定引用或存在未完成事务时应保留并说明原因。官方 profile 写锁与产品变更锁并非同一把锁，不能只持产品锁就开始 prune。
+
 `qualify-store-maintenance.mjs referenced-copy` 在隔离 store 内为当前版和回滚版建立真实硬链接引用，再整理并断网以复制模式重建两个版本，均成功；无引用第三版本被回收（7 文件到 5 文件）。证据 `build/store-maintenance-referenced-copy-j5McVG/result.json`。对照重跑仍确认：普通 copy 整理后两个版本都不能断网重建，hardlink 对照可以。因此它只是可行性实验，不能直接接入用户清理按钮；生产实现仍需完整收集所有 profile/恢复引用、持锁、空间检查和失败恢复。
 
 Windows 官方插件页成品脚本新增真实重启后延迟维护断言：过期日志必须删除、近期日志必须保留，不能仅直接调用清理函数。源码全仓 873 项：859 通过、14 条件跳过、0 失败。最终提交成品 CI 仍需完成。
