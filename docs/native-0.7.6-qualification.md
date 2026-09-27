@@ -42,3 +42,16 @@
 另发现 `accepted_only` 刷新错误：当 Portable preview 锁高于已发布核心时，选择器仍保留较新的 preview，未使用实际已接受核心。更新仓库修复为该模式采用公开核心；仍检查 registry 完整性、产品最低版本与插件兼容性。定向 29 项测试通过，真实发布及客户端回读尚需后续记录。
 
 更新仓库 `e1572ea` 进一步将默认插件与最低核心绑定到已发布产品锁，发现器17项定向测试通过。真实刷新 run `36330998424` 已执行，但**未发布**：它读取的 accepted 核心为 `0.1.7-alpha.2`，被产品图片插件 `0.1.2` 的明确 peer 范围拒绝；构建/发布均跳过。先前回读的 Windows 索引为 alpha.1，不能用这个旧快照证明当前全渠道状态。G5 保持未通过，不绕过兼容检查。
+# Final candidate follow-up (2026-09-28)
+
+The final Windows candidate is built from `f1d3398755429e1daee0def1414a350fffadf673`. Artifact hashes and sizes are recorded in `build/native-076-qualification/artifacts-final-receipt.json`; the ordinary archive is 153,186,334 bytes and the complete offline archive is 437,466,310 bytes.
+
+The complete offline artifact passed `maintenance-final/result.json` without source overlays. Dependency cleanup completed with the profile manifest, lockfile and modules metadata unchanged. The real WebView capsule test removed the retired managed runtime, preserved the legacy runtime and verified all 15 persistent profile files unchanged. The final light/dark cleanup screenshots were visually reviewed.
+
+Five platform contract jobs passed in CI run `36332653696`; remaining build and artifact acceptance jobs must still finish before release. The final isolated 120-minute soak is running under `soak-final`; its initial `passed: false` is not a completed result. Its native window was verified non-foreground with `WS_EX_NOACTIVATE`. Release qualification remains pending until the final soak assertions pass.
+
+Core queue run `36332797595` now advances after a blocked candidate, with successor runs `36332855120`, `36332946243` and `36332999937`. The last run exposed a preflight ordering defect: it tested unadapted alpha.1 although the published product already ships a digest-bound historical migration adapter. Updates commit `32b62ea` applies that selected product adapter before the migration check, matching product packaging. The same verifier passes against the actual final packaged runtime. A new normal bounded queue was dispatched; publish, index and client readback remain required.
+
+The final `layout-final/result.json` passed without source overlays or page exceptions, including English/Chinese, light/dark and 580/1200-pixel market layouts. Narrow English/light and Chinese/dark theme screenshots were visually reviewed. `size-comparison.json` compares the verified 0.7.5 archive with this candidate: archive growth 57,119 bytes; unpacked growth 99,992 bytes (before runtime capsule expansion).
+
+The current security readback found 101 new open CodeQL alerts beyond the previous reviewed range (18 launcher, 83 scripts/tests), zero open Dependabot alerts and zero open PRs. These new alerts require individual boundary review and disposition before G8 can pass. Issue #148 remains the external native hardware/DPI scope.

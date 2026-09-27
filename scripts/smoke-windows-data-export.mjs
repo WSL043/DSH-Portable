@@ -647,6 +647,15 @@ try {
   // Persist the original failure before asking a possibly disconnected browser for evidence.
   await writeFile(path.join(outputDirectory, 'failure.json'), JSON.stringify({ message: error.message, stack: error.stack }, null, 2))
   console.error(error.stack || error.message)
+  // The earlier support export predates the import. Preserve post-failure
+  // diagnostics before stopping the fixture or removing its source archive.
+  await execFileAsync(portableNode, [runtimeEntry, 'portable-cli.mjs', 'support-report',
+    '--output', path.join(outputDirectory, 'failure-support.json'), '--json'],
+  { cwd: root, env: acceptanceEnv, windowsHide: true, timeout: 30000 }).catch(() => {})
+  if (launcher?.pid) await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive',
+    '-ExecutionPolicy', 'Bypass', '-File', path.resolve('scripts/capture-windows-native-window.ps1'),
+    '-TargetProcessId', String(launcher.pid), '-OutputDirectory', path.join(outputDirectory, 'failure-native'),
+    '-FrameCount', '1'], { windowsHide: true, timeout: 15000 }).catch(() => {})
   if (client) {
     let timer
     try {

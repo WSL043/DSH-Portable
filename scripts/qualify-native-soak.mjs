@@ -64,6 +64,7 @@ Object.assign(env, { DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: root,
 await mkdir(env.DSH_HOME, { recursive: true })
 // Synthetic fixture only: explicit local route plus a fake key. Never copy user settings.
 await writeFile(path.join(env.DSH_HOME, 'settings.yaml'), JSON.stringify({ 'llm-deepseek': { baseURL: gatewayUrl } }))
+await writeFile(path.join(root, 'data/launcher-settings.json'), JSON.stringify({ taskNotificationsEnabled: false }))
 const cli = (...args) => exec(path.join(root, 'runtime/node/node.exe'),
   [path.join(root, 'launcher/runtime-entry.mjs'), 'portable-cli.mjs', ...args, '--json'],
   { cwd: root, env, windowsHide: true, timeout: 120000 })
