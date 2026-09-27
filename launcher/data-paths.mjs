@@ -66,7 +66,8 @@ export async function safeDataTarget(root, relativePath, { leaf = 'file', create
 
 const pendingWrites = new Map()
 
-export async function writeDataFileAtomic(filename, bytes) {
+export async function writeDataFileAtomic(filename, bytes, { temporaryName } = {}) {
+  if (temporaryName !== undefined && !/^\.dsh-data-[a-f0-9]{32}\.tmp$/.test(temporaryName)) throw new Error('Invalid atomic data temporary name.')
   const absolute = path.resolve(filename)
   const parent = await realpath(path.dirname(absolute))
   const canonical = path.join(parent, path.basename(absolute))
@@ -75,7 +76,7 @@ export async function writeDataFileAtomic(filename, bytes) {
   // Serialize only this process's writes to that file; do not unlink the target
   // or turn this into a cross-process transaction/parent-directory lock.
   const previous = pendingWrites.get(key) ?? Promise.resolve()
-  const operation = previous.catch(() => {}).then(() => writeDataFileAtomicOnce(absolute, bytes))
+  const operation = previous.catch(() => {}).then(() => writeDataFileAtomicOnce(absolute, bytes, temporaryName))
   pendingWrites.set(key, operation)
   try {
     await operation
@@ -84,8 +85,8 @@ export async function writeDataFileAtomic(filename, bytes) {
   }
 }
 
-async function writeDataFileAtomicOnce(filename, bytes) {
-  const temporary = path.join(path.dirname(filename), `.dsh-data-${randomBytes(16).toString('hex')}.tmp`)
+async function writeDataFileAtomicOnce(filename, bytes, temporaryName) {
+  const temporary = path.join(path.dirname(filename), temporaryName ?? `.dsh-data-${randomBytes(16).toString('hex')}.tmp`)
   // Exclusive creation prevents following a pre-existing file, link or hard link.
   // Open before entering try/finally: a failed open does not own the path to unlink.
   const handle = await open(temporary, 'wx', 0o600)

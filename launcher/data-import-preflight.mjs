@@ -57,11 +57,12 @@ export async function rehydrateImportedProfiles({
   layout,
   changed,
   transaction,
-  run = execFileAsync,
+  run,
   installTimeoutMs = INSTALL_TIMEOUT_MS,
   composeTimeoutMs = COMPOSE_TIMEOUT_MS,
   trace = () => {},
 }) {
+  const execute = run ?? transaction.run ?? execFileAsync
   const profiles = changedPluginProfiles(changed)
   trace('profiles-discovered', { profiles: profiles.length })
   if (profiles.length === 0) return { status: 'skipped', profiles }
@@ -78,7 +79,7 @@ export async function rehydrateImportedProfiles({
       // a normal install rebuilds them without forcing foreign-platform optional binaries.
       const baseArgs = [layout.dshBin, 'plugin', '--profile', profile, 'install']
       try {
-        await run(layout.nodeExe, baseArgs, {
+        await execute(layout.nodeExe, baseArgs, {
           cwd: layout.workspace,
           env: environment,
           encoding: 'utf8',
@@ -90,7 +91,7 @@ export async function rehydrateImportedProfiles({
         const output = `${firstError?.stderr ?? ''}\n${firstError?.stdout ?? ''}`
         if (!output.includes(RELEASE_AGE_VIOLATION)) throw importFailure(profile, 'dependency restoration', firstError)
         try {
-          await run(layout.nodeExe, [
+          await execute(layout.nodeExe, [
             layout.dshBin,
             'plugin', '--profile', profile, 'install', '--config.minimumReleaseAge=0',
           ], {
@@ -110,7 +111,7 @@ export async function rehydrateImportedProfiles({
 
     trace('profile-compose-begin', { profile })
     try {
-      await run(layout.nodeExe, [layout.dshBin, '--profile', profile, '--dump-config'], {
+      await execute(layout.nodeExe, [layout.dshBin, '--profile', profile, '--dump-config'], {
         cwd: layout.workspace,
         env: environment,
         encoding: 'utf8',

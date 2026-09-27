@@ -47,6 +47,7 @@ import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.m
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from './default-plugins.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { formatRecoveryResult } from './recovery-presentation.mjs'
+import { recoverInterruptedImport } from './data-import-journal.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchiveAllowingPluginFailure } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
 import { pauseIncompatibleProfileBundles } from './profile-compatibility.mjs'
@@ -482,6 +483,10 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   startupLog(startedAt, 'runtime-verified')
   await ensurePortableDirectories(layout)
   startupLog(startedAt, 'directories-ready')
+  if (existsSync(path.join(layout.dataDir, 'runtime', 'data-import.json'))) {
+    if ((await status()).status !== 'stopped') throw new Error('Close DSH-Portable before recovering an interrupted data import.')
+    await recoverInterruptedImport(layout, { trace: (phase, fields) => startupLog(startedAt, phase, fields) })
+  }
   let requestedRepair = null
   if (existsSync(layout.repairRequest)) {
     requestedRepair = {
@@ -726,7 +731,9 @@ async function doctor() {
 async function repair() {
   const current = await status()
   const activeEnvironments = await runningEnvironments()
-  return repairPortable(layout, { running: current.status !== 'stopped' || activeEnvironments.length > 0 })
+  const running = current.status !== 'stopped' || activeEnvironments.length > 0
+  const dataImportRecovery = running ? { status: 'deferred' } : await recoverInterruptedImport(layout)
+  return { ...await repairPortable(layout, { running }), dataImportRecovery }
 }
 
 async function supportReport(options) {
@@ -956,10 +963,13 @@ async function main() {
     : await acquireLaunchLock(layout)
   const productLockedCommands = new Set([
     'start',
+    'open',
     'runtime-cache-clean',
     'recover-update',
+    'recover-data',
     'update',
     'restore-data',
+    'backup-data',
     'repair',
     'recovery-pause-plugin',
     'recovery-restore-plugin',
@@ -968,6 +978,10 @@ async function main() {
   try {
     if (productLockedCommands.has(options.command)) releaseProduct = await acquireProductMutationLockWithWait(layout, Math.max(5000, options.waitForLockMs || 0))
     await ensurePortableDirectories(layout)
+    if (existsSync(path.join(layout.dataDir, 'runtime', 'data-import.json'))
+      && ['backup-data', 'update', 'recover-update', 'runtime-cache-clean', 'recovery-pause-plugin', 'recovery-restore-plugin'].includes(options.command)) {
+      throw Object.assign(new Error('Recover the interrupted data import with Portable repair before changing this environment.'), { code: 'DSH_DATA_IMPORT_RECOVERY_REQUIRED' })
+    }
     let recovery = { status: 'none' }
     if (existsSync(layout.updateJournal) && ['start', 'runtime-cache-clean', 'update', 'recover-update'].includes(options.command)) {
       await assertSharedComponentsIdle({ allowCurrentDesktop: options.command === 'start' })
@@ -980,6 +994,10 @@ async function main() {
     }
     let result
     if (options.command === 'recover-update') result = recovery
+    else if (options.command === 'recover-data') {
+      if ((await status()).status !== 'stopped') throw new Error('Close DSH-Portable before recovering an interrupted data import.')
+      result = await recoverInterruptedImport(layout)
+    }
     else if (options.command === 'diagnostic-root') result = {
       status: 'ok',
       root: layout.root,

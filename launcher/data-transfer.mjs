@@ -4,6 +4,8 @@ import { mkdir, mkdtemp, readFile, readdir, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
+import { runImportCommand } from './data-import-worker.mjs'
+import { assertImportProfilesIdle, clearImportJournal, importEntryIdentity, recoverInterruptedImport, saveImportJournal } from './data-import-journal.mjs'
 import { projectKey, relocateSessionHeaderBytes, SESSION_LOG_FILENAMES } from './portable-core.mjs'
 import { dataPathKey, lstatIfPresent, normalizeDataPath, safeDataTarget as safeTarget, writeDataFileAtomic } from './data-paths.mjs'
 
@@ -249,6 +251,7 @@ function relocatePortableWorkspaceEntry(file, bytes, before, after) {
 }
 
 export async function restoreDataArchive(layout, filename, options = {}) {
+  await recoverInterruptedImport(layout, { trace: options.trace })
   const conflict = options.conflict ?? 'keep'
   if (!['keep', 'replace'].includes(conflict)) throw new Error('Conflict mode must be keep or replace.')
   const { document, encrypted } = decodeArchive(await readFile(path.resolve(filename)), options.password)
@@ -260,6 +263,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     throw new Error('The data package has no entries in the selected categories.')
   }
   const trace = typeof options.trace === 'function' ? options.trace : () => {}
+  await assertImportProfilesIdle(layout, document.files.filter(file => included.has(file.category)).map(file => file.path))
   trace('archive-validated', { files: document.files.length, categories: includedCategories.length, encrypted })
   const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')
   let rollbackDirectory = null
@@ -272,12 +276,26 @@ export async function restoreDataArchive(layout, filename, options = {}) {
   let replaced = 0
   let retainedGeneratedBackup = false
   const restorePaths = new Set()
+  const pending = []
+  const journal = { schemaVersion: 1, phase: 'active', backupRoot: null, entries: [], createdProfiles: [], temporaries: [], workers: [] }
+  const persist = () => {
+    journal.backupRoot = rollbackDirectory ? normalizedRelative(layout.stateRoot, rollbackDirectory) : null
+    journal.createdProfiles = [...createdProfileNames]
+    return saveImportJournal(layout, journal)
+  }
+  const profileNames = new Set(document.files.filter(file => included.has(file.category) && file.category === 'plugins')
+    .map(file => /^data\/dsh-home\/profiles\/([^/]+)\//.exec(file.path)?.[1]).filter(Boolean))
+  for (const name of profileNames) {
+    if (!await lstatIfPresent(path.join(layout.dshHome, 'profiles', name))) createdProfileNames.add(name)
+  }
+  await persist()
 
   async function rollbackTarget(relativePath, options) {
     if (!rollbackDirectory) {
       const prefix = path.join(layout.dataDir, 'backups', `before-import-${stamp}-`)
       const safePrefix = await safeTarget(layout.stateRoot, normalizedRelative(layout.stateRoot, prefix))
       rollbackDirectory = await mkdtemp(safePrefix)
+      await persist()
     }
     const relative = normalizedRelative(layout.stateRoot, path.join(rollbackDirectory, ...relativePath.split('/')))
     return safeTarget(layout.stateRoot, relative, options)
@@ -290,47 +308,21 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     await safeTarget(layout.stateRoot, relative, { leaf: 'any' })
     if (await lstatIfPresent(absolute)) {
       const rollback = await rollbackTarget(`generated/${relative}`, { leaf: 'any' })
+      journal.entries.push({ kind: 'generated', path: relative, backup: normalizedRelative(layout.stateRoot, rollback), identity: await importEntryIdentity(absolute) })
+      await persist()
       await rename(absolute, rollback)
       generated.push({ target: absolute, rollback })
       retainedGeneratedBackup = true
     } else {
+      journal.entries.push({ kind: 'generated', path: relative, backup: null, identity: null })
+      await persist()
       generated.push({ target: absolute, rollback: null })
     }
   }
 
   async function rollbackImport() {
     trace('rollback-begin', { changed: changed.length, generated: generated.length })
-    // Verify every required recovery source before removing any current data.
-    // A missing backup must not turn rollback into successful data deletion.
-    for (const entry of [...generated, ...changed]) {
-      if (entry.rollback && !await lstatIfPresent(entry.rollback)) {
-        const error = new Error('An import recovery backup is missing.')
-        error.code = 'DSH_DATA_IMPORT_BACKUP_MISSING'
-        throw error
-      }
-    }
-    for (const entry of [...generated].reverse()) {
-      await rm(entry.target, { recursive: true, force: true })
-      if (entry.rollback) {
-        await mkdir(path.dirname(entry.target), { recursive: true })
-        await rename(entry.rollback, entry.target)
-      }
-    }
-    for (const entry of [...changed].reverse()) {
-      await rm(entry.target, { force: true })
-      if (entry.rollback) {
-        await mkdir(path.dirname(entry.target), { recursive: true })
-        await rename(entry.rollback, entry.target)
-      }
-    }
-    // DSH's plugin installer may have written operation logs in a profile
-    // created by this import. Remove that whole new profile on rollback so an
-    // empty shell does not suppress first-launch default plugin seeding.
-    for (const name of createdProfileNames) {
-      const directory = await safeTarget(layout.stateRoot, `data/dsh-home/profiles/${name}`, { leaf: 'any' })
-      if (await lstatIfPresent(directory)) await rm(directory, { recursive: true, force: true })
-    }
-    if (rollbackDirectory) await rm(rollbackDirectory, { recursive: true, force: true }).catch(() => {})
+    await recoverInterruptedImport(layout, { trace })
     trace('rollback-complete')
   }
 
@@ -338,13 +330,6 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     for (const file of document.files) {
       if (!included.has(file.category)) continue
       if (options.excludeProfileCredentials === true && profileCredential(file)) continue
-      if (file.category === 'plugins') {
-        const match = /^data\/dsh-home\/profiles\/([^/]+)\//.exec(file.path)
-        if (match) {
-          const profileDirectory = path.join(layout.dshHome, 'profiles', match[1])
-          if (!await lstatIfPresent(profileDirectory)) createdProfileNames.add(match[1])
-        }
-      }
       const relocated = relocatePortableWorkspaceEntry(
         file,
         Buffer.from(file.data, 'base64'),
@@ -364,19 +349,55 @@ export async function restoreDataArchive(layout, filename, options = {}) {
         rollback = await rollbackTarget(relocated.archivePath)
         await writeDataFileAtomic(rollback, previous)
         replaced += 1
+        if (replaced === 1) trace('import-backup-written')
       }
-      await writeDataFileAtomic(target, bytes)
-      changed.push({ target, rollback, path: relocated.archivePath, category: file.category })
+      journal.entries.push({ kind: 'file', path: relocated.archivePath, writtenHash: sha256(bytes), backup: rollback ? normalizedRelative(layout.stateRoot, rollback) : null, identity: rollback ? await importEntryIdentity(rollback) : null })
+      const temporaryName = `.dsh-data-${randomBytes(16).toString('hex')}.tmp`
+      journal.temporaries.push(normalizedRelative(layout.stateRoot, path.join(path.dirname(target), temporaryName)))
+      pending.push({ target, rollback, file, archivePath: relocated.archivePath, temporaryName })
+    }
+    // Plan and preserve every original before the first replacement. One ledger
+    // write replaces two growing JSON rewrites per file (quadratic I/O).
+    await persist()
+    trace('import-plan-ready', { files: pending.length })
+    for (const { target, rollback, file, archivePath, temporaryName } of pending) {
+      // Decode one entry at a time instead of retaining a second full archive.
+      const { bytes } = relocatePortableWorkspaceEntry(file, Buffer.from(file.data, 'base64'), document.portableWorkspace, layout.workspace)
+      await writeDataFileAtomic(target, bytes, { temporaryName })
+      if (imported === 0 || (imported + 1) % 1000 === 0) trace('import-file-written', { imported: imported + 1 })
+      changed.push({ target, rollback, path: archivePath, category: file.category })
       imported += 1
     }
     if (typeof options.validate === 'function') {
       trace('operability-validation-begin', { imported, unchanged, conflicts: conflicts.length, replaced })
       await options.validate({
         changed: changed.map(({ path: archivePath, category }) => ({ path: archivePath, category })),
-        transaction: { prepareGeneratedPath },
+        transaction: { prepareGeneratedPath, run: async (command, args, options) => {
+          let workerPid
+          try {
+            return await runImportCommand(command, args, options, async (pid, token) => {
+              workerPid = pid
+              journal.workers.push({ pid, token })
+              await persist()
+            })
+          } finally {
+            if (workerPid) {
+              let exited = false
+              try { process.kill(workerPid, 0) } catch (error) { exited = error.code === 'ESRCH' }
+              if (exited) {
+                journal.workers = journal.workers.filter(worker => worker.pid !== workerPid)
+                await persist()
+              }
+            }
+          }
+        } },
       })
       trace('operability-validation-complete')
     }
+    trace('commit-begin')
+    journal.phase = 'committed'
+    await persist()
+    trace('commit-recorded')
   } catch (error) {
     try { await rollbackImport() }
     catch (rollbackError) {
@@ -389,6 +410,7 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     }
     throw error
   }
+  await clearImportJournal(layout)
   if (rollbackDirectory && replaced === 0 && !retainedGeneratedBackup) await rm(rollbackDirectory, { recursive: true, force: true })
   trace('complete', { imported, unchanged, conflicts: conflicts.length, replaced })
   return {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
-import { lstat, mkdir, readFile, readdir, realpath, rename, unlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const root = process.argv[2] && path.resolve(process.argv[2])
@@ -52,6 +52,11 @@ try {
   await recovery('check', '', /OK\s+runtime\/node\/node.exe/, 0, ['--check'])
   await absent('runtime/node/node.exe', () => recovery('missing-node', '', /MISSING\s+runtime\/node\/node.exe/, 1, ['--check']))
   await absent('launcher/runtime-entry.mjs', () => recovery('missing-entry', '', /MISSING\s+launcher\/runtime-entry.mjs/, 1, ['--check']))
+  const normalCache = env.DSH_PORTABLE_RUNTIME_CACHE
+  env.DSH_PORTABLE_RUNTIME_CACHE = path.join(root, 'acceptance-missing-capsule-cache')
+  try {
+    await absent('runtime/DSH-App.dshpack', () => recovery('missing-capsule-guidance', '3\n0\n', /Runtime preparation failed[\s\S]*full offline package[\s\S]*Exit code: 1/))
+  } finally { env.DSH_PORTABLE_RUNTIME_CACHE = normalCache }
   // Prepare this fixture's own cache/resolvers through the actual shipped entry.
   await cli('repair')
   await recovery('no-op-repair', '3\n0\n', /no generated components need repair/)
@@ -77,6 +82,10 @@ try {
   const missingBundle = 'dsh-recovery-missing-fixture'
   const communityIndex = manifestBefore.dsh.profile.bundles.indexOf('dsh-chat-manager') + 1
   const officialIndex = manifestBefore.dsh.profile.bundles.indexOf('@deepseek-ai/dsh-web-app') + 1
+  const throwingName = 'dsh-recovery-throw-fixture'
+  const throwingDirectory = path.join(path.dirname(profile), 'node_modules', throwingName)
+  assert.ok((await realpath(path.dirname(throwingDirectory))).startsWith(root + path.sep))
+  assert.equal(await lstat(throwingDirectory).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
   assert.ok(communityIndex > 0 && officialIndex > 0, 'requires the default product profile')
   const readProfile = async () => JSON.parse(await readFile(profile, 'utf8'))
   try {
@@ -99,11 +108,41 @@ try {
     await recovery('restore-installed-community', '7\n1\n0\n', /"status":"restored"/)
     assert.deepEqual(await readProfile(), manifestBefore)
     assert.deepEqual(JSON.parse(await readFile(journal, 'utf8')).pauses, [])
+    await mkdir(throwingDirectory)
+    await writeFile(path.join(throwingDirectory, 'package.json'), JSON.stringify({ name: throwingName, version: '1.0.0',
+      type: 'module', exports: './index.js', dsh: { bundle: { patch: './cordis.patch.yml' } } }))
+    await writeFile(path.join(throwingDirectory, 'index.js'), 'import {writeFileSync} from "node:fs"; writeFileSync(new URL("./executed", import.meta.url), "executed"); throw new Error("DSH_RECOVERY_THROW_FIXTURE");\n')
+    await writeFile(path.join(throwingDirectory, 'cordis.patch.yml'), `- insert:\n    - id: recovery-throw-fixture\n      name: ${throwingName}\n`)
+    const throwingProfile = structuredClone(manifestBefore)
+    throwingProfile.dsh.profile.bundles.push(throwingName)
+    await writeFile(profile, JSON.stringify(throwingProfile, null, 2))
+    started = true
+    await execute(path.join(root, 'runtime/node/node.exe'), [path.join(root, 'launcher/runtime-entry.mjs'), 'portable-cli.mjs', 'start', '--no-browser', '--json'])
+    await cli('stop')
+    started = false
+    const errorLog = path.join(root, 'data/logs/dsh.stderr.log')
+    assert.equal(await readFile(path.join(throwingDirectory, 'executed'), 'utf8'), 'executed', 'the fixture must actually execute in the official runtime')
+    assert.match(await readFile(errorLog, 'utf8'), /recovery-throw-fixture \(dsh-recovery-throw-fixture\): failed to import/)
+    evidence.cases.push('throwing-plugin-executed')
+    await recovery('pause-throwing-community', `6\n${throwingProfile.dsh.profile.bundles.length}\n0\n`, /"status":"paused"/)
+    assert.deepEqual(await readProfile(), manifestBefore)
+    await unlink(path.join(throwingDirectory, 'executed'))
+    const previousErrors = await readFile(errorLog, 'utf8')
+    started = true
+    await cli('start')
+    await cli('stop')
+    started = false
+    const newErrors = await readFile(errorLog, 'utf8')
+    assert.doesNotMatch(newErrors.startsWith(previousErrors) ? newErrors.slice(previousErrors.length) : newErrors, /recovery-throw-fixture/)
+    assert.equal(await lstat(path.join(throwingDirectory, 'executed')).catch(error => { if (error.code === 'ENOENT') return null; throw error }), null)
+    evidence.cases.push('paused-throwing-plugin-startup')
     await writeFile(profile, '{ malformed fixture')
     await recovery('malformed-profile-diagnosis', '2\n0\n', /Checks failed/)
     assert.equal(await readFile(profile, 'utf8'), '{ malformed fixture')
   } finally {
+    if (started) { await cli('stop'); started = false }
     await writeFile(profile, profileBefore)
+    await rm(throwingDirectory, { recursive: true, force: true })
     await unlink(journal).catch(error => { if (error.code !== 'ENOENT') throw error })
     for (const name of await readdir(runtime)) {
       if (runtimeFilesBefore.has(name) || !/^startup-profile-backup-[a-f0-9-]+\.json$/.test(name)) continue

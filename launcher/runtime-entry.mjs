@@ -46,6 +46,15 @@ if (isStart) {
 // mutation locks, and refuses to restore while a Portable environment is live.
 if (cliOptions?.command === 'repair') {
   const recoveryLayout = layoutForRoot(root, process.platform, effectiveStateRoot, root, requestedEnvironment)
+  if (existsSync(path.join(recoveryLayout.dataDir, 'runtime', 'data-import.json'))) {
+    await promisify(execFile)(process.execPath, [
+      path.join(root, 'launcher', 'portable-cli.mjs'), 'recover-data', '--json',
+      '--environment', requestedEnvironment,
+    ], {
+      cwd: root, windowsHide: true, timeout: 60000,
+      env: { ...process.env, DSH_PORTABLE_RUNTIME_ROOT: root },
+    })
+  }
   if (existsSync(recoveryLayout.updateJournal)) {
     const { stdout } = await promisify(execFile)(process.execPath, [
       path.join(root, 'launcher', 'portable-cli.mjs'), 'recover-update', '--json',
@@ -71,6 +80,11 @@ const prepared = await ensureRuntimeCapsule(root, {
     else if (phase === 'cache-commit') reportStartupProgress('runtime-finalizing')
   },
   onRetry: fields => appendStartupTrace(startupTrace, 'runtime-entry', 'runtime-commit-retry', fields),
+}).catch(error => {
+  if (cliOptions?.command === 'repair' || cliOptions?.command === 'doctor') {
+    throw new Error('运行组件尚未就绪，未继续修复。请保留原目录和 data/workspace，完全退出后重试；若运行包缺失或损坏，将完整离线包解压到新目录再迁移数据。\nRuntime preparation failed; repair did not continue. Keep the original folder and data/workspace. Quit Portable and retry; for missing or damaged runtime files, extract a full offline package to a new folder before migrating data.', { cause: error })
+  }
+  throw error
 }).finally(() => {
   if (process.env.DSH_PORTABLE_PREPARATION_POOL === '16') {
     delete process.env.DSH_PORTABLE_PREPARATION_POOL

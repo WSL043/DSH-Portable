@@ -484,6 +484,9 @@ export async function main(inputArgv = process.argv.slice(2), source = process.e
   const releaseProduct = await acquireProductMutationLockWithWait(spec.layout, 0)
   let release = async () => {}
   try {
+    if (existsSync(path.join(spec.layout.dataDir, 'runtime', 'data-import.json'))) {
+      throw Object.assign(new Error('An interrupted data import needs recovery. Run Portable repair before modifying plugins.'), { code: 'DSH_DATA_IMPORT_RECOVERY_REQUIRED' })
+    }
     release = await acquirePluginLock(spec.layout)
     const materializedArgv = await materializeRemotePluginArchives(argv, stateRoot, process.platform)
     const normalizedArgv = normalizeFreshReleaseRemovalArgv(materializedArgv)

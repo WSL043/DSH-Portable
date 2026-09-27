@@ -33,6 +33,8 @@ export function redactDiagnosticText(source) {
 }
 
 export function classifyPortableError(error) {
+  if (['DSH_DATA_IMPORT_RECOVERY_REQUIRED', 'DSH_DATA_IMPORT_WORKER_ACTIVE', 'DSH_DATA_IMPORT_PROFILE_BUSY',
+    'DSH_DATA_IMPORT_BACKUP_MISSING', 'DSH_DATA_IMPORT_ROLLBACK_FAILED'].includes(error?.code)) return error.code
   if (error?.code === 'RECOVERY_BUNDLE_PROTECTED' || error?.code === 'RECOVERY_BUNDLE_UNAVAILABLE') return error.code
   if (error?.code === 'DSH_DATA_IMPORT_PROFILE_FAILED') return 'DATA_IMPORT_ROLLED_BACK'
   const source = String(error?.stack ?? error?.message ?? error ?? '')
@@ -56,6 +58,11 @@ export function classifyPortableError(error) {
 export function portablePublicError(error) {
   const code = classifyPortableError(error)
   const messages = {
+    DSH_DATA_IMPORT_RECOVERY_REQUIRED: '存在未完成的数据导入，未执行本次操作。请完全退出 Portable 后运行修复；保留原目录与恢复备份。An unfinished data import requires recovery. Quit Portable and run repair; keep the original folder and recovery backups.',
+    DSH_DATA_IMPORT_WORKER_ACTIVE: '导入的后台依赖操作尚未退出，暂未回滚。请稍后重试修复。The import dependency operation is still running; rollback was deferred. Retry repair after it exits.',
+    DSH_DATA_IMPORT_PROFILE_BUSY: '插件配置仍有写入锁，未执行导入或恢复。请关闭插件安装操作后重试；不要直接删除未知锁文件。A plugin profile write lock is present. Close its installer and retry; do not delete unknown lock files.',
+    DSH_DATA_IMPORT_BACKUP_MISSING: '导入恢复所需备份缺失，未删除当前数据。请保留目录并导出支持报告。An import recovery backup is missing. Current data was kept; preserve the folder and export a support report.',
+    DSH_DATA_IMPORT_ROLLBACK_FAILED: '导入失败且回滚未完成。请保留当前目录与恢复备份，导出支持报告后再处理。Import failed and rollback is incomplete. Keep the current folder and recovery backups and export a support report.',
     RECOVERY_BUNDLE_PROTECTED: '该组件受保护，未暂停。只能暂停社区插件或缺失的官方组件。This component is protected; only community plugins or unavailable official bundles can be paused.',
     RECOVERY_BUNDLE_UNAVAILABLE: '插件文件尚未恢复，已保持暂停。请先重新安装该插件，再恢复启动项。The plugin package is unavailable. Reinstall it before restoring the startup entry; it remains paused.',
     UPDATE_ROLLED_BACK: 'The update did not pass startup validation. The previous version was restored and restarted. Details were saved to the support log.',
