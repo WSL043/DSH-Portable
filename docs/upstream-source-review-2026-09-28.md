@@ -36,3 +36,15 @@
 接入决定：本次 Native 0.7.6 不加载这套新 desktop profile，因此不为它新增依赖或遥测。Electron 后续适配时，产品分析应有清楚、可关闭的选择，不直接继承无界面开关的默认收集；分析失败不得影响启动、登录和更新。这是后续接入条件，不是声称该实现已交付。保留官方账号和核心能力，重新验证变更的覆盖锚点；不以旧 rc.2 成品测试替代新组合验收。
 
 源码证据：[desktop bundle](https://github.com/deepseek-ai/deepseek-harness/blob/21638c56315ae6a2b552d6091945d3144c9af32e/packages/bundle/web-app/cordis.patch.yml)、[事件定义](https://github.com/deepseek-ai/deepseek-harness/blob/21638c56315ae6a2b552d6091945d3144c9af32e/packages/client/product-analytics/src/events.ts)、[Desktop main](https://github.com/deepseek-ai/deepseek-harness/blob/21638c56315ae6a2b552d6091945d3144c9af32e/apps/desktop/src/main.ts)。本地完整记录为 `upstream-latest/desktop-rc2-delta/summary.md`，只证明源码核查，没有宣称运行过这个新桌面版本。
+
+## 按提交而非发布标签补查（9月28日）
+
+重新读取官方master最近100条提交，HEAD仍为21638c56315ae6a2b552d6091945d3144c9af32e。补查此前摘要未展开的9月25–27日实际源码差异：
+
+- f057cc37c478：插件安装包名/自定义registry输入新增组合输入保护，覆盖isComposing、229和composition结束后的短窗口。最新HEAD仍保留。下一兼容内核直接使用官方实现，不给当前稳定版复制新安装对话框。
+- 8de4e51875d0：ToolCallRecovery读取tool/result时明确判断pending entry存在，防止恢复路径空值访问；最新HEAD仍保留。不同于descriptor-v2读取迁移，不解除rc.2历史数据隔离。
+- 3dd52bfd9bae、b97ef29e793b：会话遥测独立字节受限队列，以及导出回调后等待SDK槽位清理。属于上游遥测运行时；现有长稳使用DISABLED，不能将此修复当成已确诊的Portable内存解决方案。
+- 738178f13630、6085a56eb6c6：撤回rowSwitches相关接口。本地app、desktop-bridge、launcher、experiments未检出对该字段的依赖，不新增适配。
+- 97b3e97657a4：官方Electron在锁定Host更新请求前await确认上报。Native未使用该main.ts；后续Electron覆盖层必须基于最新源码重新验证顺序，不直接复用旧覆盖。
+
+实际commit响应保存在upstream-latest/commit-*.json；repair-current.txt、plugin-page-current.txt来自上述固定HEAD，避免把单个已被后续撤销的提交当现状。最近内核任务36354177813的两个resolve成功，publish均跳过，HOLD_REASON为no-unverified-candidate；不是新内核已发布。公开稳定Portable仍为0.7.5。
