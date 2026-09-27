@@ -49,6 +49,32 @@ test('unpublished master commits are observed without creating an installable ca
   assert.equal(result.version, '0.1.0-rc.6')
 })
 
+test('latest intake cannot reopen an immutable candidate rejected by preview qualification', () => {
+  const input = {
+    lock,
+    registry: registry({ latest: '0.1.0-rc.7', next: '' }),
+    commit: { sha: 'b'.repeat(40) },
+    requestedTag: 'latest',
+    rejectedCandidates: [{ version: '0.1.0-rc.7', integrity: 'sha512-latest', reason: 'historical data rejected' }],
+  }
+  const result = evaluateUpstream(input)
+  assert.equal(result.blocked, true)
+  assert.equal(result.changed, false)
+  assert.equal(result.packageChanged, false)
+  assert.equal(result.sourceChanged, true)
+  assert.equal(result.rejectedVersion, '0.1.0-rc.7')
+  assert.equal(result.version, lock.dsh.version)
+  assert.equal(result.integrity, lock.dsh.integrity)
+  assert.equal(result.commit, lock.dsh.reviewedCommit)
+  assert.throws(() => evaluateUpstream({ ...input, registry: {
+    'dist-tags': { latest: '0.1.0-rc.7' },
+    versions: { '0.1.0-rc.7': { dist: { integrity: 'sha512-replaced' } } },
+  } }), /integrity changed for the rejected/)
+  const newer = evaluateUpstream({ ...input, registry: registry({ latest: '0.1.0-rc.8', next: '' }) })
+  assert.equal(newer.changed, true)
+  assert.notEqual(newer.blocked, true)
+})
+
 test('a published preview is an installable candidate with pinned integrity', () => {
   const result = evaluateUpstream({
     lock,

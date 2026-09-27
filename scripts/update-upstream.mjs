@@ -37,11 +37,18 @@ async function officialTagCommit(version) {
   return { sha: object.sha }
 }
 
-const [distTags, commit, currentLock] = await Promise.all([
+const [distTags, commit, currentLock, rejected] = await Promise.all([
   json('https://registry.npmjs.org/-/package/@deepseek-ai%2Fdsh/dist-tags'),
   json('https://api.github.com/repos/deepseek-ai/deepseek-harness/commits/master'),
   readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
+  readFile(path.join(root, 'rejected-official-candidates.json'), 'utf8').then(JSON.parse),
 ])
+if (rejected.schemaVersion !== 1 || !Array.isArray(rejected.candidates)
+  || rejected.candidates.some(candidate => !/^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/.test(candidate.version ?? '')
+    || !/^sha512-[A-Za-z0-9+/]+={0,2}$/.test(candidate.integrity ?? '')
+    || typeof candidate.reason !== 'string' || !candidate.reason.trim())) {
+  throw new Error('invalid rejected official candidate policy')
+}
 const needsRegistry = [distTags.latest, distTags.next]
   .filter(Boolean)
   .some(version => version !== currentLock.dsh.version)
@@ -58,6 +65,7 @@ const provisional = evaluateUpstream({
   registry,
   commit,
   requestedTag: tag,
+  rejectedCandidates: rejected.candidates,
 })
 const packageCommit = provisional.version === currentLock.dsh.version
   ? { sha: currentLock.dsh.reviewedCommit }
@@ -68,6 +76,7 @@ const state = evaluateUpstream({
   commit,
   packageCommit,
   requestedTag: tag,
+  rejectedCandidates: rejected.candidates,
 })
 const { changed, version } = state
 if (changed) {
@@ -163,6 +172,9 @@ const result = {
   changed,
   packageChanged: state.packageChanged,
   sourceChanged: state.sourceChanged,
+  blocked: state.blocked ?? false,
+  rejectedVersion: state.rejectedVersion,
+  reason: state.reason,
   tag: state.selectedTag,
   version,
   commit: state.commit,
@@ -172,6 +184,8 @@ console.log(JSON.stringify(result, null, 2))
 if (process.env.GITHUB_OUTPUT) {
   await appendFile(process.env.GITHUB_OUTPUT, [
     `changed=${changed}`,
+    `blocked=${state.blocked ?? false}`,
+    `rejected_version=${state.rejectedVersion ?? ''}`,
     `version=${version}`,
     `commit=${state.commit}`,
     `source_commit=${state.sourceCommit}`,

@@ -135,7 +135,7 @@ export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejecte
   }
 }
 
-export function evaluateUpstream({ lock, registry, commit, packageCommit, requestedTag = 'next' }) {
+export function evaluateUpstream({ lock, registry, commit, packageCommit, requestedTag = 'next', rejectedCandidates = [] }) {
   const tags = registry?.['dist-tags'] ?? {}
   const selectedTag = requestedTag === 'latest'
     ? 'latest'
@@ -159,6 +159,27 @@ export function evaluateUpstream({ lock, registry, commit, packageCommit, reques
   // has already been reviewed. Intake must never rewrite the product lock to
   // that older package merely because a dist-tag moved backwards.
   const selectedOlder = compareSemver(version, lock.dsh.version) < 0
+  const rejected = !selectedOlder && version !== lock.dsh.version
+    ? rejectedCandidates.find(candidate => candidate.version === version)
+    : null
+  if (rejected) {
+    if (integrity !== rejected.integrity) {
+      throw new Error(`integrity changed for the rejected official candidate ${version}`)
+    }
+    return {
+      changed: false,
+      packageChanged: false,
+      sourceChanged: commit.sha !== lock.dsh.reviewedCommit,
+      blocked: true,
+      rejectedVersion: version,
+      reason: rejected.reason,
+      selectedTag,
+      version: lock.dsh.version,
+      integrity: lock.dsh.integrity,
+      commit: lock.dsh.reviewedCommit,
+      sourceCommit: commit.sha,
+    }
+  }
   const packageChanged = !selectedOlder && version !== lock.dsh.version
   const reviewedCommit = selectedOlder ? lock.dsh.reviewedCommit : (packageCommit?.sha ?? commit.sha)
   const sourceChanged = commit.sha !== lock.dsh.reviewedCommit

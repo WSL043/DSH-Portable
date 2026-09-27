@@ -140,7 +140,7 @@ jobs:
           retention-days: 30
           if-no-files-found: error
       - name: Summarize source-only upstream activity
-        if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.source_changed == 'true'
+        if: steps.upstream.outputs.changed != 'true' && steps.upstream.outputs.blocked != 'true' && steps.upstream.outputs.source_changed == 'true'
         env:
           COMMIT: ${{ steps.upstream.outputs.source_commit }}
           VERSION: ${{ steps.upstream.outputs.version }}
@@ -150,6 +150,15 @@ jobs:
             '' "- installable npm package remains: \`${VERSION}\`" \
             "- official master is now: \`${COMMIT}\`" \
             '' 'No candidate issue was created because there is no new installable package.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Record an already rejected immutable package
+        if: steps.upstream.outputs.blocked == 'true'
+        env:
+          REJECTED_VERSION: ${{ steps.upstream.outputs.rejected_version }}
+        run: |
+          printf '%s\n' \
+            '### Dependency proposal withheld' \
+            '' "The selected package ${REJECTED_VERSION} matches rejected-official-candidates.json, including its immutable integrity." \
+            'No lock update, dependency PR or product build was requested. A newer package is still eligible for independent review.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run the complete repository contract before proposing an update
         if: steps.proposal.outputs.changed == 'true'
         run: |
