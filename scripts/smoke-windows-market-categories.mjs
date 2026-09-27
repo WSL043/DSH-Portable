@@ -12,7 +12,12 @@ assert.ok(process.argv.includes('--disposable'), 'use an isolated test installat
 assert.ok(root && output)
 await mkdir(output, { recursive: true })
 const exec = promisify(execFile)
-const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'), DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
+// Never inherit the developer's selected profile/data environment into a
+// disposable test that can now explicitly reclaim managed logs and caches.
+const env = { ...process.env, DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: root,
+  DSH_PORTABLE_BASE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default',
+  DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
+  DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
 // A source-overlay probe must not load immutable server sources from the old
 // release capsule while serving new client files off disk.
 const sourceOverlay = process.argv.includes('--source-overlay')
