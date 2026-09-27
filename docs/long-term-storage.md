@@ -114,6 +114,8 @@ Windows 原生窗口已有 1 MiB 日志轮转，但 Node 入口（命令行启�
 
 ### 复制安装的引用保留实验
 
+另一个必须保留的输入是 profile 内 `.dsh-portable-archives/sha512-<digest>.tgz`：CLI 将远程 tarball 下载到此处并写为 `file:` 依赖。迁移包没有排除此目录，因此不能将所有 profile 下的压缩包视作可再生下载缓存。
+
 补充固定门槛 G3（2026-09-27）：`qualify-store-maintenance.mjs referenced-copy` 在整理后保持本地 registry 关闭，再执行十轮新版/回滚版离线安装，每次实际加载模块并核对版本。证据 `build/store-maintenance-referenced-copy-aY7z5T/result.json`：20 次安装均成功，每轮 store 均为 5 文件、12474 字节。它证明合成引用集合下重复操作不继续增长，不代表生产引用发现、锁或清理入口已经交付。
 
 生产实现必须区分各环境自己的 `data/pnpm-store`，收集全部 profile 以及 `before-import-*` 中的 generated 依赖、启动修复旁备；`profiles/node_modules` 是生成的宿主解析入口，不能当作全部插件引用。导出的 `.dshdata` 会排除 node_modules 和 pnpm-lock.yaml，可加密且可保存在任意位置，因此不能宣称扫描当前目录就覆盖所有历史导出包的离线恢复需求。无法确定引用或存在未完成事务时应保留并说明原因。官方 profile 写锁与产品变更锁并非同一把锁，不能只持产品锁就开始 prune。
