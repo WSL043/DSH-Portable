@@ -23,12 +23,13 @@ export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace },
     running = true
     try {
       try {
-        const result = await cleanRuntime(root, { signal: controller.signal, budgetMs: 1000, maxEntries: 100000 })
+        const result = await cleanRuntime(root, { signal: controller.signal, budgetMs: 1000, maxEntries: 100000, measure: false })
         const failed = result.retained.filter(entry => entry.reason === 'cleanup-failed')
         if (result.removed.length || failed.length || result.limited) record('runtime-cache', 'maintenance-complete', {
           removed: result.removed.length,
           removedIncomplete: result.removed.filter(entry => entry.incomplete).length,
-          reclaimedBytes: result.removed.reduce((sum, entry) => sum + entry.bytes, 0),
+          reclaimedBytes: result.removed.every(entry => Number.isFinite(entry.bytes))
+            ? result.removed.reduce((sum, entry) => sum + entry.bytes, 0) : null,
           retained: result.retained.length, failureCount: failed.length,
           ...(result.limited ? { limited: true } : {}),
           failures: failed.slice(0, 8).map(({ hash, code }) => ({ hash, code })),

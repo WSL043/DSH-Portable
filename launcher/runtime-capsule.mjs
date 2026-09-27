@@ -413,7 +413,7 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
   const removed = []
   const retained = []
   for (const entry of names) {
-    try { checkpoint() } catch (error) { interruption = error.maintenanceReason; break }
+    try { checkpoint(1) } catch (error) { interruption = error.maintenanceReason; break }
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue
     const incomplete = INCOMPLETE_CACHE_PATTERN.exec(entry.name)
     if (!incomplete && !HASH_PATTERN.test(entry.name)) continue
@@ -454,7 +454,11 @@ export async function cleanUnusedRuntimeCaches(root, options = {}) {
           || (!HASH_PATTERN.test(path.basename(target)) && !INCOMPLETE_CACHE_PATTERN.test(path.basename(target)))) {
         throw new Error('Refusing to clean an unsafe runtime cache path.')
       }
-      const footprint = await directoryFootprint(target, checkpoint)
+      // Background reclamation does not need a full size walk before deletion.
+      // Otherwise a large old runtime can exhaust every pass's scan budget and
+      // never be reclaimed. Explicit/manual calls retain exact measurement.
+      const footprint = options.measure === false ? { files: null, bytes: null }
+        : await directoryFootprint(target, checkpoint)
       checkpoint()
       await rm(target, { recursive: true, force: true })
       removed.push({ ...identity, ...footprint })

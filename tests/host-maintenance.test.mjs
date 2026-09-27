@@ -22,7 +22,7 @@ test('slow maintenance cannot overlap and shutdown skips subsequent work', async
   let signal
   const stop = scheduleHostMaintenance({ root: '.' }, {
     delayMs: 1, intervalMs: 5,
-    cleanRuntime: async (_root, options) => { signal = options.signal; assert.equal(options.budgetMs, 1000); calls++; await gate; return { retained: [], removed: [] } },
+    cleanRuntime: async (_root, options) => { signal = options.signal; assert.equal(options.budgetMs, 1000); assert.equal(options.measure, false); calls++; await gate; return { retained: [], removed: [] } },
     cleanLogs: async () => { logCalls++; return {} }, record() {},
   })
   try {
@@ -51,5 +51,22 @@ test('runtime cleanup failure does not prevent bounded plugin log maintenance', 
     await Promise.race([done, delay(1000).then(() => { throw new Error('maintenance did not run') })])
     assert.equal(events[0].fields.code, 'EBUSY')
     assert.equal(events[1].fields.removed, 3)
+  } finally { stop() }
+})
+
+test('unmeasured background reclamation does not report zero bytes as an exact saving', async () => {
+  let recorded
+  let finish
+  const done = new Promise(resolve => { finish = resolve })
+  const stop = scheduleHostMaintenance({ root: '.' }, {
+    delayMs: 1, intervalMs: 10000,
+    cleanRuntime: async () => ({ retained: [], removed: [{ hash: 'old', bytes: null, files: null }] }),
+    cleanLogs: async () => { finish(); return {} },
+    record(_component, _phase, fields) { recorded = fields },
+  })
+  try {
+    await Promise.race([done, delay(1000).then(() => { throw new Error('maintenance did not run') })])
+    assert.equal(recorded.removed, 1)
+    assert.equal(recorded.reclaimedBytes, null)
   } finally { stop() }
 })

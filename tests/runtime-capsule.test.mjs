@@ -111,6 +111,44 @@ test('background cache work stops before deletion on budget or cancellation and 
   assert.ok((await stat(current.runtimeRoot)).isDirectory())
 })
 
+test('background reclamation skips size walks without bypassing leases or cancellation', async t => {
+  const { parent, root, app } = await fixture()
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  const cache = path.join(parent, 'background-cache')
+  const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }
+  await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+    platform: process.platform, arch: process.arch, level: 1,
+  })
+  const current = await ensureRuntimeCapsule(root, { env })
+  const old = path.join(cache, 'a'.repeat(64))
+  await mkdir(old)
+  for (let i = 0; i < 40; i++) await writeFile(path.join(old, String(i)), 'keep')
+  const options = { env, measure: false, maxEntries: 10 }
+  const release = await acquireRuntimeLease(old)
+  try {
+    assert.equal((await cleanUnusedRuntimeCaches(root, options)).removed.length, 0)
+    assert.equal(await readFile(path.join(old, '0'), 'utf8'), 'keep')
+  } finally { await release() }
+  assert.equal((await cleanUnusedRuntimeCaches(root, { ...options, signal: AbortSignal.abort() })).cancelled, true)
+  assert.equal(await readFile(path.join(old, '0'), 'utf8'), 'keep')
+  const originalOpen = fsPromises.opendir
+  const mocked = t.mock.method(fsPromises, 'opendir', async (...args) => {
+    assert.ok(!String(args[0]).startsWith(old), 'background cleanup must not measure the tree')
+    return originalOpen(...args)
+  })
+  syncBuiltinESMExports()
+  try {
+    // More files than the scan budget still reclaim: only candidate discovery
+    // needs this budget; a cosmetic size walk must not starve deletion forever.
+    const result = await cleanUnusedRuntimeCaches(root, options)
+    assert.equal(result.removed.length, 1)
+    assert.equal(result.removed[0].bytes, null)
+    assert.equal(result.removed[0].files, null)
+    await assert.rejects(stat(old), { code: 'ENOENT' })
+    assert.ok((await stat(current.runtimeRoot)).isDirectory())
+  } finally { mocked.mock.restore(); syncBuiltinESMExports() }
+})
+
 async function fixture() {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'dsh-runtime-capsule-test-'))
   const root = path.join(parent, 'portable-a')
