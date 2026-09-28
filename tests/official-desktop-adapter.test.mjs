@@ -8,10 +8,10 @@ import { createRequire } from 'node:module';
 import { PortableUpdater } from '../experiments/official-payload/update-bridge.mjs';
 const {adapt}=createRequire(import.meta.url)('../experiments/official-payload/adapt-asar.cjs');
 
-test('ASAR adaptation changes only the two intended boundaries and rejects repeat/ambiguous input', () => {
+test('ASAR adaptation changes only intended boundaries and rejects repeat/ambiguous input', () => {
   const directory=mkdtempSync(join(tmpdir(),'portable-asar-contract-'));
   try {
-    const main='const updates = new DesktopUpdateCoordinator(publishUpdate, async () => {\n});\nif (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === "1") app.setAsDefaultProtocolClient("dsh");';
+    const main='const updates = new DesktopUpdateCoordinator(publishUpdate, async () => {\n});\nif (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === "1") app.setAsDefaultProtocolClient("dsh");\nawait manager.applyRelease();';
     const tail=Buffer.from('unchanged payload'), bytes=Buffer.from(main);
     const header={files:{lib:{files:{'main.js':{offset:'0',size:bytes.length}}},'tail.bin':{offset:String(bytes.length),size:tail.length}}};
     const json=Buffer.from(JSON.stringify(header)), size=4+((json.length+3)&~3), prefix=Buffer.alloc(12+size);

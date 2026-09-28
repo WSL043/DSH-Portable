@@ -1,0 +1,31 @@
+param([string]$Root,[string]$Version)
+$ErrorActionPreference='Stop'
+Import-Module "$PSScriptRoot/Payload.psm1" -Force
+$defaults=Join-Path $Root 'launcher/default-plugins'
+Assert-PlainPath $defaults
+New-Item -ItemType Directory -Path $defaults -Force | Out-Null
+$market=Join-Path $PSScriptRoot '../../build/official-market-plugin'
+if(-not(Test-Path "$market/package.json")){throw 'Build the standalone market plugin before packaging'}
+Copy-Item -LiteralPath $market -Destination "$defaults/dsh-portable-plugin-market" -Recurse
+$chat=Join-Path $defaults 'dsh-chat-manager'
+New-Item -ItemType Directory -Path $chat | Out-Null
+$archive=Join-Path $defaults 'chat.tgz'
+Invoke-WebRequest -UseBasicParsing 'https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.2.tgz' -OutFile $archive
+if((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne '5bb23c7a0296704a42ce2c0935f0ddca08db3b73504d0a9c8365c5a21b869744'){throw 'Default chat plugin integrity mismatch'}
+& tar -xf $archive -C $chat --strip-components=1
+if($LASTEXITCODE -ne 0){throw 'Default chat plugin extraction failed'}
+Remove-Item -LiteralPath $archive
+$seed=Join-Path $defaults 'seed-project'
+New-Item -ItemType Directory -Path $seed | Out-Null
+@{name='portable-default-seed';private=$true;dependencies=@{'dsh-chat-manager'='file:../dsh-chat-manager';'@wsl043/dsh-portable-plugin-market'='file:../dsh-portable-plugin-market'}}|ConvertTo-Json -Depth 5|Set-Content "$seed/package.json" -Encoding UTF8
+"packages:`n  - .`nautoInstallPeers: false`nnodeLinker: hoisted`n"|Set-Content "$seed/pnpm-workspace.yaml" -Encoding UTF8
+$runtime=Join-Path $Root "app/$Version"
+$prior=$env:ELECTRON_RUN_AS_NODE
+try {
+  $env:ELECTRON_RUN_AS_NODE='1'
+  $arguments=@((Join-Path $runtime 'resources/runtime/pnpm/bin/pnpm.mjs'),'install','--ignore-scripts','--store-dir',(Join-Path $defaults 'store'))|ForEach-Object {'"'+$_+'"'}
+  $process=Start-Process -FilePath (Join-Path $runtime 'DeepSeek Harness.exe') -ArgumentList $arguments -WorkingDirectory $seed -WindowStyle Hidden -Wait -PassThru
+  if($process.ExitCode -ne 0){throw "Default plugin offline store preparation failed ($($process.ExitCode))"}
+} finally {$env:ELECTRON_RUN_AS_NODE=$prior}
+Remove-PortableScratch $seed $defaults
+@{schemaVersion=1;packages=@(@{name='dsh-chat-manager';version='1.5.2'},@{name='@wsl043/dsh-portable-plugin-market';version='0.2.0-alpha.1'})}|ConvertTo-Json -Depth 5|Set-Content "$defaults/manifest.json" -Encoding UTF8

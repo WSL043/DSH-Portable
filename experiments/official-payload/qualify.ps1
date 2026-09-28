@@ -10,7 +10,7 @@ $sevenZip=Join-Path $env:ProgramFiles '7-Zip/7z.exe'
 $package=Join-Path $env:RUNNER_TEMP 'portable-alpha3-native'
 & "$PSScriptRoot/test-boundaries.ps1"
 & "$PSScriptRoot/test-update.ps1"
-node --test tests/official-payload.test.mjs tests/official-desktop-adapter.test.mjs
+node --test tests/official-payload.test.mjs tests/official-desktop-adapter.test.mjs tests/official-default-plugins.test.mjs
 if($LASTEXITCODE -ne 0){throw 'Boundary unit tests failed'}
 & "$PSScriptRoot/package.ps1" -Installer $installer -Output $package -SevenZip $sevenZip
 $receipt=Get-Content "$package/launcher/provenance.json" -Raw|ConvertFrom-Json

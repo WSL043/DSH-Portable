@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PortableUpdater } from './update-bridge.mjs';
+import { seedDefaults, isFreshProfile } from './default-plugins.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const launcher = join(root, 'DeepSeek Harness Portable.exe');
@@ -19,6 +20,8 @@ if (process.env.DSH_PORTABLE_ROOT?.toLowerCase() !== root.toLowerCase()) {
 export function configurePortableProtocol(application) {
   if (!application.setAsDefaultProtocolClient('dsh', launcher)) console.error('Portable protocol registration failed');
 }
+export const portableProfileIsFresh = isFreshProfile;
+export const seedPortableDefaults = (profile, fresh) => seedDefaults(root, profile, process.execPath, process.resourcesPath, fresh);
 export function portableCoordinator(OfficialCoordinator, application) {
   return class extends OfficialCoordinator {
     constructor(publish, beforeRestart) {

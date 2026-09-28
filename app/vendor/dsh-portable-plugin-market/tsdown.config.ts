@@ -9,8 +9,8 @@ const prefix = '\0dsh-css:'
 const suffix = '.mjs'
 
 export default defineConfig({
-  entry: { client: 'src/client/index.ts' },
-  outDir: 'client',
+  entry: { client: process.env.DSH_MARKET_TARGET === 'official' ? 'src/client/official.tsx' : 'src/client/index.ts' },
+  outDir: process.env.DSH_MARKET_OUTPUT ? `${process.env.DSH_MARKET_OUTPUT}/client` : 'client',
   format: 'cjs',
   platform: 'browser',
   target: 'es2022',

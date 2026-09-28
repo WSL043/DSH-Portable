@@ -56,7 +56,12 @@ jobs:
         shell: pwsh
         env:
           DSH_BUILD_ALPHA_ARCHIVE: ${{ github.event_name != 'schedule' && !inputs.latest }}
-        run: ./experiments/official-payload/qualify.ps1
+        run: |
+          npx --yes pnpm@11.19.0 --dir app/vendor/dsh-portable-plugin-market install --frozen-lockfile --ignore-scripts
+          if ($LASTEXITCODE -ne 0) { throw 'Market build dependency installation failed' }
+          node scripts/build-official-market.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone market build failed' }
+          ./experiments/official-payload/qualify.ps1
       - uses: actions/upload-artifact@v7
         if: always()
         with:

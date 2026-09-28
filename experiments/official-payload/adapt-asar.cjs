@@ -16,13 +16,14 @@ function adapt(file) {
   const substitutions = [
     ['const updates = new DesktopUpdateCoordinator(publishUpdate, async () => {', 'const updates = new (portableCoordinator(DesktopUpdateCoordinator, app))(publishUpdate, async () => {'],
     ['if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === "1") app.setAsDefaultProtocolClient("dsh");', 'configurePortableProtocol(app);'],
+    ['await manager.applyRelease();', 'const freshPortableProfile = await portableProfileIsFresh(manager.paths.profile);\n\t\t\t\tawait manager.applyRelease();\n\t\t\t\tawait seedPortableDefaults(manager.paths.profile, freshPortableProfile);'],
   ];
   let source = input;
   for (const [from, to] of substitutions) {
     if (source.split(from).length !== 2) throw Error('Official desktop boundary changed; qualification required');
     source = source.replace(from, to);
   }
-  source = 'import { portableCoordinator, configurePortableProtocol } from "../../../../../launcher/desktop-adapter.mjs";\n' + source;
+  source = 'import { portableCoordinator, configurePortableProtocol, seedPortableDefaults, portableProfileIsFresh } from "../../../../../launcher/desktop-adapter.mjs";\n' + source;
   const replacement = Buffer.from(source), delta = replacement.length - entry.size;
   const oldEnd = Number(entry.offset) + entry.size;
   function rebase(files) {
