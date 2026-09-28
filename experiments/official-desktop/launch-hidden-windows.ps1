@@ -3,7 +3,8 @@ param(
   [Parameter(Mandatory=$true)][string]$Arguments,
   [int]$Milliseconds = 30000,
   [int]$CloseAfterMilliseconds = 0,
-  [switch]$UseExecutableRoot
+  [switch]$UseExecutableRoot,
+  [switch]$CleanRunnerNativeDirectories
 )
 
 # Keep native Desktop probes on a private Windows desktop and in disposable data roots.
@@ -12,11 +13,12 @@ $rootValue = $env:DSH_PORTABLE_DEVELOPMENT_ROOT
 if (-not $rootValue -or $rootValue -notmatch '^[A-Za-z]:[\\/]') { throw 'An absolute, fixed-drive DSH_PORTABLE_DEVELOPMENT_ROOT is required' }
 $root = [IO.Path]::GetFullPath($rootValue)
 if ($root -eq [IO.Path]::GetPathRoot($root)) { throw 'The probe root cannot be a drive root' }
+if ($CleanRunnerNativeDirectories -and ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted')) { throw 'Native directory audit requires a disposable GitHub-hosted runner' }
 foreach ($name in @('APPDATA', 'LOCALAPPDATA')) {
   $value = [Environment]::GetEnvironmentVariable($name)
   if (-not $value -or $value -notmatch '^[A-Za-z]:[\\/]') { throw "$name must be on an absolute, fixed drive" }
   $path = [IO.Path]::GetFullPath($value)
-  if (-not $path.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "$name must stay inside the probe root" }
+  if (-not $CleanRunnerNativeDirectories -and -not $path.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) { throw "$name must stay inside the probe root" }
 }
 if ($Exe -notmatch '^[A-Za-z]:[\\/]' -or -not (Test-Path -LiteralPath $Exe -PathType Leaf)) { throw 'The executable must be an existing absolute path on a fixed drive' }
 if ($UseExecutableRoot) {

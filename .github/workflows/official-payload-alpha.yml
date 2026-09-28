@@ -1,0 +1,28 @@
+name: Official payload portable alpha
+on:
+  workflow_dispatch:
+  push:
+    branches: [development/official-payload-alpha2]
+permissions:
+  contents: read
+concurrency:
+  group: official-payload-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  boundary:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Unmodified official executable with native system directories
+        shell: pwsh
+        run: ./experiments/official-payload/qualify.ps1
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-payload-boundary
+          path: build/official-payload-evidence
+          retention-days: 7
