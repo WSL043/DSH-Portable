@@ -1,4 +1,4 @@
-import { createElement as h, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { Component, createElement as h, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Button, Modal, IconCordisPluginOutline14, IconLinkOutline14 } from './primitives.ts'
 import { CardPreview } from './CardPreview.tsx'
 import { DownloadCount } from './DownloadCount.tsx'
@@ -9,7 +9,17 @@ import page from './OfficialMarket.module.css'
 
 const id = '@wsl043/dsh-portable-plugin-market'
 export const name = 'portable-market'
-export const inject = ['slots', 'locale', 'layout', 'remote.pluginManager', 'pluginNavigation']
+export const inject = ['slots', 'locale', 'layout', 'remote', 'remote.pluginManager', 'pluginNavigation']
+
+class CatalogBoundary extends Component<{ children: ReactNode; chinese: boolean }, { error: string }> {
+  state = { error: '' }
+  static getDerivedStateFromError(error: Error) { return { error: error.message || String(error) } }
+  componentDidCatch(error: Error) { console.error('Portable market render failed:', error) }
+  render() {
+    if (!this.state.error) return this.props.children
+    return <section className={page.page} role="alert"><h2>{this.props.chinese ? '插件市场暂时无法显示' : 'Plugin market could not be displayed'}</h2><p>{this.state.error}</p><Button variant="outline" onClick={() => this.setState({ error: '' })}>{this.props.chinese ? '重试' : 'Retry'}</Button></section>
+  }
+}
 
 function Catalog({ ctx }: { ctx: any }) {
   const locale = useSyncExternalStore((f: () => void) => ctx.locale.subscribe(f), () => ctx.locale.getSnapshot()) as { active: string }
@@ -96,7 +106,8 @@ function Catalog({ ctx }: { ctx: any }) {
 export function apply(ctx: any): void {
   ctx.effect(() => ctx.locale.register('portable-market', { zh: { title: '插件市场' }, en: { title: 'Plugin market' } }))
   const title = () => ctx.locale.bind('portable-market')('title')
-  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'portable-market', label: title }, () => h(Catalog, { ctx })))
+  const render = () => h(CatalogBoundary, { chinese: ctx.locale.getSnapshot().active.toLowerCase().startsWith('zh'), children: h(Catalog, { ctx }) })
+  ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'portable-market', label: title }, render))
   ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({ name: 'sidebar.panellist', id: 'portable-market', order: 1, label: title }, () => h(IconCordisPluginOutline14, { size: 16 })))
-  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: id }, () => h(Catalog, { ctx })))
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({ name: 'plugins.bundle.config', key: id }, render))
 }
