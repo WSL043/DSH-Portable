@@ -29,10 +29,10 @@ $env:NODE_COMPILE_CACHE = Join-Path $root 'data/node-compile-cache'
 $userData = Join-Path $root 'data/electron'
 $watch = @("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater", "$env:LOCALAPPDATA/node-addon-native-custom-loader")
 $before = @($watch | Where-Object { Test-Path -LiteralPath $_ })
-$harness = Join-Path $env:GITHUB_WORKSPACE 'experiments/official-desktop/launch-hidden-windows.ps1'
+$harness = Join-Path $PSScriptRoot 'launch-hidden-windows.ps1'
 $job = Start-Job -ScriptBlock { param($h,$x,$a) & $h -Exe $x -Arguments $a -Milliseconds 180000 -CleanRunnerNativeDirectories } -ArgumentList $harness,$exe,"--user-data-dir=`"$userData`" --remote-debugging-port=19489"
 try {
-  node experiments/official-payload/probe.mjs 19489 "$evidence/page.json" "$env:GITHUB_WORKSPACE/experiments/official-desktop/fixtures/lifecycle"
+  node experiments/official-payload/probe.mjs 19489 "$evidence/page.json" "$PSScriptRoot/fixtures/lifecycle"
   $probeExit = $LASTEXITCODE
   Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($app) } | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Depth 4 | Set-Content "$evidence/processes.json"
 } finally {
@@ -58,7 +58,7 @@ $nativeExe = Join-Path $package 'DeepSeek Harness Portable.exe'
 @{ version=$candidate.version; from=$candidate.version; receipt=@{asarSha256=('0'*64)} } | ConvertTo-Json -Depth 4 | Set-Content "$package/app/staged.json"
 $job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19490' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,$nativeExe
 try {
-  node experiments/official-payload/probe.mjs 19490 "$evidence/launcher-page.json" "$env:GITHUB_WORKSPACE/experiments/official-desktop/fixtures/lifecycle"
+  node experiments/official-payload/probe.mjs 19490 "$evidence/launcher-page.json" "$PSScriptRoot/fixtures/lifecycle"
   $nativeExit = $LASTEXITCODE
 } finally {
   $job | Wait-Job | Receive-Job | Out-File "$evidence/launcher-process.log"
@@ -70,7 +70,7 @@ if (-not (Test-Path "$package/data/launcher/activation-error.json") -or (Get-Con
 Copy-Item "$package/data/launcher/activation-error.json" "$evidence/rejected-stage.json"
 # Simulate interruption after current was committed but before staged was removed.
 @{ version=$candidate.version; from=$candidate.version; receipt=(Get-Content "$package/launcher/provenance.json" -Raw|ConvertFrom-Json) } | ConvertTo-Json -Depth 5 | Set-Content "$package/app/staged.json"
-$moved = Join-Path $env:RUNNER_TEMP 'portable-alpha2-moved'
+$moved = Join-Path $env:RUNNER_TEMP 'portable-alpha2-moved 中文 space'
 if (Test-Path $moved) { throw 'Moved qualification destination already exists' }
 # Both exact paths are inside the disposable runner temp root and owned by this run.
 foreach ($path in @($package,$moved)) {
@@ -93,3 +93,18 @@ $candidate | Add-Member -NotePropertyName launcherProtocol -NotePropertyValue 1 
 $candidate.qualification = 'qualified'
 $candidate | Add-Member -NotePropertyName evidence -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
 $candidate | ConvertTo-Json -Depth 5 | Set-Content "$evidence/qualified-candidate.json" -Encoding UTF8
+if ($env:DSH_BUILD_ALPHA_ARCHIVE -eq 'true') {
+  $release = Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-release'
+  $clean = Join-Path $env:RUNNER_TEMP 'DSH-Portable-1.0.0-alpha.2'
+  if (Test-Path $clean) { throw 'Release directory must be fresh' }
+  New-Item -ItemType Directory -Path $release,$clean | Out-Null
+  foreach ($entry in Get-ChildItem -LiteralPath $moved -Force | Where-Object Name -ne 'data') { Copy-Item -LiteralPath $entry.FullName -Destination $clean -Recurse }
+  if (Test-Path "$clean/data") { throw 'Acceptance data entered the release package' }
+  $archive = Join-Path $release 'DSH-Portable-1.0.0-alpha.2-windows-x64.zip'
+  & $sevenZip a -tzip -mx=7 $archive $clean | Out-File "$evidence/archive.log"
+  if ($LASTEXITCODE -ne 0) { throw 'Release archive failed' }
+  (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + (Split-Path -Leaf $archive) | Set-Content "$release/checksums.txt" -Encoding ASCII
+  Copy-Item "$evidence/provenance.json" "$release/provenance.json"
+  Copy-Item "$evidence/qualified-candidate.json" "$release/qualified-candidate.json"
+  @{sourceCommit=$env:GITHUB_SHA;nativeQualification=$candidate.evidence;version='1.0.0-alpha.2';binarySha256=(Get-FileHash "$clean/DeepSeek Harness Portable.exe" -Algorithm SHA256).Hash.ToLowerInvariant();officialAsarSha256=$receipt.asarSha256;scenarios=@('input','plugin-install-enable-disable','moved-draft','moved-plugin-enable-uninstall','corrupt-stage-preserves-current','interrupted-stage-converges','normal-exit','outside-write-audit');limits=@('external-workspaces','dsh-protocol-registration','no-cross-machine-login-proof','no-historical-data-migration','no-real-distinct-version-upgrade-yet')} | ConvertTo-Json -Depth 5 | Set-Content "$release/qualification.json"
+}

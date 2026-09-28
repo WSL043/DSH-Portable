@@ -1,6 +1,13 @@
 name: Official payload portable alpha
 on:
   workflow_dispatch:
+    inputs:
+      latest:
+        description: Qualify the latest official desktop feed instead of the checked-in candidate
+        type: boolean
+        default: false
+  schedule:
+    - cron: '17 * * * *'
   push:
     branches: [development/official-payload-alpha2]
 permissions:
@@ -9,16 +16,48 @@ concurrency:
   group: official-payload-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  boundary:
-    runs-on: windows-2025
-    timeout-minutes: 15
+  detect:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.candidate.outputs.changed }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - id: candidate
+        env:
+          LATEST: ${{ github.event_name == 'schedule' || inputs.latest }}
+        run: |
+          if [ "$LATEST" = true ]; then
+            node experiments/official-payload/resolve-candidate.mjs
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: steps.candidate.outputs.changed == 'true'
+        with:
+          name: official-candidate-input
+          path: experiments/official-payload/candidate.json
+          retention-days: 7
+  boundary:
+    needs: detect
+    if: needs.detect.outputs.changed == 'true'
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-candidate-input
+          path: experiments/official-payload
       - name: Unmodified official executable with native system directories
         shell: pwsh
+        env:
+          DSH_BUILD_ALPHA_ARCHIVE: ${{ github.event_name != 'schedule' && !inputs.latest }}
         run: ./experiments/official-payload/qualify.ps1
       - uses: actions/upload-artifact@v7
         if: always()
@@ -26,3 +65,29 @@ jobs:
           name: official-payload-boundary
           path: build/official-payload-evidence
           retention-days: 7
+      - uses: actions/upload-artifact@v7
+        if: success() && github.event_name != 'schedule' && !inputs.latest
+        with:
+          name: official-payload-alpha2-package
+          path: build/official-payload-release
+          compression-level: 0
+          retention-days: 7
+  publish-channel:
+    needs: boundary
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'schedule' || inputs.latest)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-payload-boundary
+          path: build/official-payload-evidence
+      - name: Publish qualified official identity
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node experiments/official-payload/publish-candidate.mjs

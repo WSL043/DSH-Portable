@@ -20,7 +20,7 @@ $receipt | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output "launcher/re
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'candidate.json') -Destination (Join-Path $Output 'launcher/candidate.json')
 foreach ($file in @('Payload.psm1','update.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $Output "launcher/$file") }
 foreach ($file in @('7z.exe','7z.dll','License.txt')) { Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $SevenZip) $file) -Destination (Join-Path $Output "launcher/$file") }
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $Output 'README.md')
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PACKAGE-README.md') -Destination (Join-Path $Output 'README.md')
 $outer = [IO.Path]::GetFullPath($payload + '.outer')
 if (-not $outer.StartsWith($Output.TrimEnd('\')+'\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Extraction scratch escaped package root' }
 Assert-PlainPath $outer
