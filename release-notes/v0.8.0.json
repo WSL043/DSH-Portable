@@ -5,7 +5,7 @@
     "highlights": [
       "将运行时、官方 tag 与提交、npm integrity 和许可清单锁定到 DSH 0.2.0-rc.1。",
       "历史会话兼容继续绑定精确摘要；独立 staged app 已实跑读取、AgentLoop 继续、保存重开与中断恢复，最终成品仍需完整 CI。",
-      "待发布的默认图片查看器 0.1.4 与会话管理 1.5.3 声明兼容 alpha.1、rc.2 和 0.2.0-rc.1。",
+      "默认图片查看器 0.1.4 与会话管理 1.5.3 已发布为 npm latest，声明兼容 alpha.1、rc.2 和 0.2.0-rc.1。",
       "官方插件管理页的新版本继续提供 Portable 刷新与更新入口，刷新锚点按上游精确匹配。"
     ],
     "upgradeNotes": [
@@ -21,7 +21,7 @@
     "highlights": [
       "Pin the runtime, official tag and commit, npm integrity, and license manifest to DSH 0.2.0-rc.1.",
       "Keep historical-session compatibility bound to exact digests; read, AgentLoop continuation, persisted reopen, and interrupted recovery passed in an independent staged app, while the final package still requires full CI.",
-      "Pending publication, default Image Viewer 0.1.4 and Session Manager 1.5.3 declare compatibility with alpha.1, rc.2, and 0.2.0-rc.1.",
+      "Default Image Viewer 0.1.4 and Session Manager 1.5.3 are published as npm latest and declare compatibility with alpha.1, rc.2, and 0.2.0-rc.1.",
       "The newer official plugin manager page continues to provide Portable refresh and update entry points, using an exact upstream refresh anchor."
     ],
     "upgradeNotes": [

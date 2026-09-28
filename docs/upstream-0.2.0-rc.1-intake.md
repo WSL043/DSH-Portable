@@ -18,4 +18,4 @@
 ## 插件页与默认插件
 
 - rc.1 刷新动作改用精确 aria-label=t("refresh") 锚点；保留 rc.2 的 title: t("refresh") 旧锚点。锚点缺失、多重或歧义时失败，不放宽匹配；见 [patch-native-settings-command.mjs](../scripts/patch-native-settings-command.mjs)。
-- **待发布**：默认图片查看器 0.1.4 与会话管理 1.5.3 均声明兼容 alpha.1、rc.2、0.2.0-rc.1。会话管理三目标官方验收 [CI run 36439106814](https://github.com/WSL043/dsh-chat-manager/actions/runs/36439106814) 全绿；图片查看器本机三目标验收通过，发布工作流仍需再跑一次。这里不表示两插件或 Portable 0.8.0 已发布。
+- **已发布**：默认图片查看器 [0.1.4](https://github.com/WSL043/dsh-image-viewer/releases/tag/v0.1.4) 与会话管理 [1.5.3](https://github.com/WSL043/dsh-chat-manager/releases/tag/v1.5.3) 均已发布为 npm `latest`，且声明兼容 alpha.1、rc.2、0.2.0-rc.1。图片查看器三内核官方验收及发布工作流 [CI run 36463863431](https://github.com/WSL043/dsh-image-viewer/actions/runs/36463863431) 成功；会话管理发布工作流 [CI run 36463858247](https://github.com/WSL043/dsh-chat-manager/actions/runs/36463858247) 成功。这里不表示 Portable 0.8.0 已发布。
