@@ -31,9 +31,9 @@ $userData = Join-Path $root 'data/electron'
 $watch = @("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater")
 $before = @($watch | Where-Object { Test-Path -LiteralPath $_ })
 $harness = Join-Path $env:GITHUB_WORKSPACE 'experiments/official-desktop/launch-hidden-windows.ps1'
-$job = Start-Job -ScriptBlock { param($h,$x,$a) & $h -Exe $x -Arguments $a -Milliseconds 60000 -CleanRunnerNativeDirectories } -ArgumentList $harness,$exe,"--user-data-dir=`"$userData`" --remote-debugging-port=19489"
+$job = Start-Job -ScriptBlock { param($h,$x,$a) & $h -Exe $x -Arguments $a -Milliseconds 180000 -CleanRunnerNativeDirectories } -ArgumentList $harness,$exe,"--user-data-dir=`"$userData`" --remote-debugging-port=19489"
 try {
-  node experiments/official-payload/probe.mjs 19489 "$evidence/page.json"
+  node experiments/official-payload/probe.mjs 19489 "$evidence/page.json" "$env:GITHUB_WORKSPACE/experiments/official-desktop/fixtures/lifecycle"
   $probeExit = $LASTEXITCODE
   Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($app) } | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Depth 4 | Set-Content "$evidence/processes.json"
 } finally {

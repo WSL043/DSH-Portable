@@ -1,42 +1,65 @@
-// Official, unmodified application on a disposable Windows runner. No credentials.
-import { writeFile } from 'node:fs/promises';
-const [port, output] = process.argv.slice(2);
+// Native CDP acceptance of an unmodified official executable, disposable data only.
+import { writeFile, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+const [port, output, fixture] = process.argv.slice(2);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-const evidence = { targets: [], passed: false };
-let socket;
-try {
-  let targets;
-  for (let attempt = 0; attempt < 60; attempt++) {
-    try { targets = await (await fetch(`http://127.0.0.1:${Number(port)}/json/list`, { signal: AbortSignal.timeout(1000) })).json(); } catch {}
-    if (targets?.some(t => t.type === 'page')) break;
-    await delay(1000);
-  }
-  evidence.targets = targets?.map(({ type, url }) => ({ type, url }));
-  const target = targets?.find(t => t.type === 'page' && /welcome\.html|dsh-app:\/\/app\//.test(t.url));
-  if (!target) throw new Error('Official welcome/workspace did not open');
-  socket = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
+const evidence = { passed: false, steps: [] };
+let client;
+async function connect(target) {
+  const socket = new WebSocket(target.webSocketDebuggerUrl), pending = new Map();
+  await new Promise((resolve, reject) => { const timer=setTimeout(()=>reject(new Error('CDP connect timeout')),5000); socket.onopen=()=>{clearTimeout(timer);resolve();};socket.onerror=()=>{clearTimeout(timer);reject(new Error('CDP error'));}; });
   let seq = 0;
-  const pending = new Map();
-  socket.onmessage = ({ data }) => {
-    const r = JSON.parse(data), request = pending.get(r.id);
-    if (!request) return;
-    pending.delete(r.id); clearTimeout(request.timer);
-    if (r.error || r.result?.exceptionDetails) request.reject(new Error(JSON.stringify(r.error ?? r.result.exceptionDetails)));
-    else request.resolve(r.result);
+  socket.onmessage = ({data}) => {
+    const r=JSON.parse(data), p=pending.get(r.id); if (!p) return;
+    pending.delete(r.id);clearTimeout(p.timer);
+    if(r.error||r.result?.exceptionDetails)p.reject(new Error(JSON.stringify(r.error??r.result.exceptionDetails)));else p.resolve(r.result);
   };
-  const send = (method, params = {}) => new Promise((resolve, reject) => {
-    const id = ++seq, timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timeout`)); }, 10000);
-    pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
-  });
-  evidence.page = (await send('Runtime.evaluate', { expression: '({title:document.title,state:document.readyState,buttons:[...document.querySelectorAll("button")].map(e=>e.textContent),welcome:typeof window.dshWelcome?.skip})', returnByValue: true })).result.value;
-  await writeFile(`${output}.png`, Buffer.from((await send('Page.captureScreenshot')).data, 'base64'));
-  if (evidence.page.welcome === 'function') {
-    await send('Runtime.evaluate', { expression: 'void window.dshWelcome.skip()' });
+  socket.onclose = () => { for (const p of pending.values()) {clearTimeout(p.timer);p.reject(new Error('CDP target closed'));} pending.clear(); };
+  const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);reject(new Error(`${method} timeout`));},8000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
+  return {send, close:()=>socket.close(), evaluate:async expression=>(await send('Runtime.evaluate',{expression,returnByValue:true})).result.value};
+}
+async function targets() {return await(await fetch(`http://127.0.0.1:${Number(port)}/json/list`,{signal:AbortSignal.timeout(1000)})).json();}
+async function until(fn, description, milliseconds=45000) {
+  const deadline=Date.now()+milliseconds; let last;
+  while(Date.now()<deadline){try{const result=await fn();if(result)return result;}catch(error){last=error;}await delay(400);}
+  throw new Error(`${description}: ${last??'condition not reached'}`);
+}
+async function click(text, selector='button') {
+  const point=await until(()=>client.evaluate(`(()=>{const e=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length&&!e.disabled&&${JSON.stringify(text)}.some(t=>e.textContent.trim()===t||e.getAttribute('aria-label')===t));if(!e)return null;const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`),`Button ${text}`);
+  for(const type of ['mousePressed','mouseReleased'])await client.send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
+}
+async function snapshot(name) {
+  await writeFile(`${output}.${name}.png`,Buffer.from((await client.send('Page.captureScreenshot')).data,'base64'));
+  evidence[name]=await client.evaluate(`({text:document.body.innerText.slice(0,5000),editors:[...document.querySelectorAll('[contenteditable=true],textarea')].filter(e=>e.getClientRects().length).length})`);
+}
+try {
+  const welcome=await until(async()=> (await targets()).find(t=>t.type==='page'&&t.url.endsWith('/renderer/welcome.html')),'Welcome');
+  client=await connect(welcome);
+  await until(()=>client.evaluate(`typeof window.dshWelcome?.skip==='function'`),'Welcome API');
+  await snapshot('welcome');
+  await client.evaluate('void window.dshWelcome.skip()');client.close();
+  client=await connect(await until(async()=>(await targets()).find(t=>t.type==='page'&&t.url==='dsh-app://app/'),'Workspace'));
+  await until(()=>client.evaluate(`!![...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length)`),'Visible editor');
+  await client.evaluate(`(()=>{const e=[...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length);e.focus();})()`);
+  await client.send('Input.insertText',{text:'Portable alpha2 input acceptance 123'});
+  if(!await client.evaluate(`(document.activeElement.textContent||document.activeElement.value).includes('Portable alpha2 input acceptance 123')`))throw new Error('Input not retained');
+  evidence.steps.push('actual editor input');await snapshot('workspace');
+  await click(['Plugins','插件']);await snapshot('plugins');
+  if(fixture){
+    await click(['Add plugin','Add Plugin','添加插件']);
+    await until(()=>client.evaluate(`(()=>{const e=document.querySelector('[role=dialog] input[type=text]');if(!e)return false;e.focus();return true;})()`),'Install input');
+    await client.send('Input.insertText',{text:fixture});await click(['Install','安装']);
+    await click(['Enable now','Enable Now','立即启用']);
+    await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='enabled','Actual plugin activation');
+    evidence.steps.push('actual plugin install/enable');await snapshot('installed');
+    await click(['Enable dsh-portable-acceptance-fixture','启用 dsh-portable-acceptance-fixture']);
+    await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='disabled','Actual plugin deactivation');
+    evidence.steps.push('actual plugin disable');
   }
-  await delay(12000);
-  evidence.after = (await (await fetch(`http://127.0.0.1:${Number(port)}/json/list`)).json()).map(({ type, url }) => ({ type, url }));
-  evidence.passed = evidence.after.some(t => t.url === 'dsh-app://app/');
-  if (!evidence.passed) throw new Error('Workspace absent after welcome');
-} catch (error) { evidence.error = String(error); process.exitCode = 1; }
-finally { socket?.close(); await writeFile(output, JSON.stringify(evidence, null, 2)); }
+  await client.evaluate('void window.dshDesktop.updates.open()');await delay(2500);
+  evidence.updateTargets=(await targets()).map(({type,url})=>({type,url}));
+  await client.evaluate('void window.dshDesktop.updates.status().then(x=>window.__portableUpdateResult=x)');
+  await delay(500);evidence.updateStatus=await client.evaluate('window.__portableUpdateResult');
+  evidence.passed=true;
+} catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }
+finally{ client?.close();await writeFile(output,JSON.stringify(evidence,null,2)); }
