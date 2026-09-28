@@ -73,6 +73,9 @@ try {
  if($window.WindowState -ne 'Minimized'){throw 'Minimize command failed'}
  $window.WindowState='Normal'
  $window.Location=[Drawing.Point]::new(-32000,-32000)
+ # Settle queued activation changes from fullscreen/minimize before opening
+ # a popup. Otherwise an earlier WM_ACTIVATE closes the new popup in DoEvents.
+ [Windows.Forms.Application]::DoEvents()
  foreach($name in @('menu-file','menu-view','menu-help')) {
    $item=$menu.Items[$name]
    if($item.DropDown.DropShadowEnabled){throw "$name still enables the large native popup shadow"}
