@@ -1,16 +1,17 @@
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { gunzipSync } from 'node:zlib'
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { descriptorV2PatchIdentity, descriptorV2PatchIdentityFor } from './patch-historical-descriptor.mjs'
+import { descriptorV2PatchIdentity, readHistoricalDescriptorVersions } from './patch-historical-descriptor.mjs'
 import { patchPluginManagerActions } from './patch-native-settings-command.mjs'
 import { readOfficialSourceMetadata } from './upstream-source-metadata.mjs'
 import { upstreamRequestHeaders } from './upstream-request-headers.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const LOCK_PATH = path.join(ROOT, 'upstream.lock.json')
+const HISTORICAL_DESCRIPTOR_VERSIONS_PATH = path.join(ROOT, 'config', 'historical-descriptor-versions.json')
 const REPOSITORY = 'deepseek-ai/deepseek-harness'
 const API_BASE = `https://api.github.com/repos/${REPOSITORY}`
 const RAW_BASE = `https://raw.githubusercontent.com/${REPOSITORY}`
@@ -29,6 +30,7 @@ export const HISTORICAL_VALIDATION_BLOBS = Object.freeze({
 const isCommit = value => /^[0-9a-f]{40}$/.test(value ?? '')
 const isIntegrity = value => /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(value ?? '')
 const isSha256 = value => /^[0-9a-f]{64}$/.test(value ?? '')
+const isExactVersion = value => /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value ?? '')
 const sha256 = value => createHash('sha256').update(value).digest('hex')
 
 function npmCli() {
@@ -177,7 +179,7 @@ function sourceManifestPath(tree, suffix) {
   return matches[0].path
 }
 
-async function collectHistory(commit, tree, readers, version) {
+async function collectHistory(commit, tree, readers) {
   const validationBlobs = Object.fromEntries(Object.keys(HISTORICAL_VALIDATION_BLOBS)
     .map(filename => [filename, treeBlob(tree, filename)]))
   const sessionManifestPath = sourceManifestPath(tree, '/session-format-v0-to-v1/package.json')
@@ -195,7 +197,6 @@ async function collectHistory(commit, tree, readers, version) {
   return {
     validationBlobs,
     inputSha256: sha256(indexBytes),
-    versionIdentity: descriptorV2PatchIdentityFor(version),
   }
 }
 
@@ -232,7 +233,7 @@ function errorEvidence(error) {
 export function createIntakeReport(input) {
   const {
     version, lock, tagCommit, npmIntegrity, noticesSha256, packedFamilies,
-    history, pluginManagerBundle, failures = {},
+    history, pluginManagerBundle, failures = {}, lockName = 'upstream.lock.json',
   } = input
   const checks = []
   const add = (id, title, pass, evidence) => checks.push({ id, title, status: pass ? 'PASS' : 'FAIL', evidence })
@@ -259,7 +260,7 @@ export function createIntakeReport(input) {
     ? LOCK_FIELDS.filter(field => !jsonSame(lock.dsh[field], candidateFields[field]))
       .map(field => ({ field, current: lock.dsh[field], candidate: candidateFields[field] }))
     : null
-  add('2', 'Differences from upstream.lock.json',
+  add('2', `Differences from ${lockName}`,
     !failures.lock && haveLockInputs && lockDifferences !== null,
     failures.lock
       ? errorEvidence(failures.lock)
@@ -274,16 +275,12 @@ export function createIntakeReport(input) {
   if (!failures.history && history) {
     const blobLines = Object.entries(HISTORICAL_VALIDATION_BLOBS).map(([filename, expected]) =>
       `${filename}=${history.validationBlobs?.[filename] ?? 'missing'} (expected ${expected})`)
-    const identity = history.versionIdentity
     const indexMatch = history.inputSha256 === descriptorV2PatchIdentity.sourceSha256
     const blobsMatch = Object.entries(HISTORICAL_VALIDATION_BLOBS)
       .every(([filename, expected]) => history.validationBlobs?.[filename] === expected)
-    const versionBound = identity !== null && identity !== undefined
-      && identity.dshVersion === version
-      && identity.sourceSha256 === descriptorV2PatchIdentity.sourceSha256
-      && identity.patchedSha256 === descriptorV2PatchIdentity.patchedSha256
-    historyMatches = blobsMatch && indexMatch && versionBound
-    historyEvidence = `${blobLines.join('; ')}; lib/index.js sha256=${history.inputSha256 ?? 'missing'} (expected ${descriptorV2PatchIdentity.sourceSha256}); patch version identity=${versionBound ? 'exact match' : 'not bound to this exact version'}`
+    const exactVersion = isExactVersion(version)
+    historyMatches = blobsMatch && indexMatch && exactVersion
+    historyEvidence = `${blobLines.join('; ')}; lib/index.js sha256=${history.inputSha256 ?? 'missing'} (expected ${descriptorV2PatchIdentity.sourceSha256}); candidate version=${version} (${exactVersion ? 'exact version string' : 'not an exact version string'}); migration inputs=${historyMatches ? 'same-shape' : 'different or incomplete'}`
     if (!historyMatches) historyEvidence += '; needs human patch review; automatic identity relaxation is forbidden'
   } else if (!historyEvidence) {
     historyEvidence = 'historical migration identities were not collected; no patch relaxation was attempted'
@@ -317,24 +314,67 @@ export function createIntakeReport(input) {
   }
   add('5', 'patch-native-settings-command.mjs Plugin Manager anchors', anchorPassed, anchorEvidence)
 
+  const shapeChecks = checks.filter(check => ['3', '4', '5'].includes(check.id))
+  const firstShapeFailure = shapeChecks.find(check => check.status !== 'PASS')
+  const sameShape = firstShapeFailure === undefined
   return {
     version,
     checks,
     passed: checks.every(check => check.status === 'PASS'),
+    sameShape,
+    verdict: sameShape ? 'same-shape' : `needs-review:${firstShapeFailure.id}`,
     lockDifferences,
     candidateFields,
   }
 }
 
-export function formatIntakeReport(report, { writeRequested = false } = {}) {
+export function formatIntakeReport(report, {
+  writeRequested = false,
+  recordShapeRequested = false,
+  lockName = 'upstream.lock.json',
+  actionEvidence = '',
+} = {}) {
   const lines = [
     `Upstream core intake: ${report.version}`,
-    `Mode: ${writeRequested ? '--write (gated by all checks)' : 'read-only'}`,
+    `Lock: ${lockName}`,
+    `Mode: ${writeRequested ? '--write (gated by all checks)' : recordShapeRequested ? '--record-shape (gated by all checks)' : 'read-only'}`,
   ]
   for (const check of report.checks) lines.push(`[${check.status}] ${check.id}. ${check.title} — ${check.evidence}`)
   lines.push(`Decision: ${report.passed ? 'PASS' : 'FAIL'}`)
   if (writeRequested) lines.push(`Lock write: ${report.passed ? 'authorized after checks' : 'not applied because checks failed'}`)
+  if (actionEvidence) lines.push(actionEvidence)
+  lines.push('稳定线采用前仍需人工接入记录；stable-release-readiness.json 的证据要求不变。')
+  lines.push(`VERDICT=${report.verdict}`)
   return `${lines.join('\n')}\n`
+}
+
+export function formatIntakeMarkdown(report, {
+  recordShapeRequested = false,
+  lockName = 'upstream.lock.json',
+  actionEvidence = '',
+} = {}) {
+  const lines = [
+    `# Upstream core intake: ${report.version}`,
+    '',
+    `- Compared lock: \`${lockName}\``,
+    `- Mode: ${recordShapeRequested ? '`--record-shape` (all five checks required)' : 'read-only'}`,
+    `- Overall checks: **${report.passed ? 'PASS' : 'FAIL'}**`,
+    `- Intake verdict: \`${report.verdict}\``,
+    '',
+    '## Checks',
+    '',
+  ]
+  for (const check of report.checks) {
+    lines.push(`### ${check.id}. ${check.title} — ${check.status}`, '', check.evidence, '')
+  }
+  lines.push('## Stable-line note', '', '稳定线采用前仍需人工接入记录；stable-release-readiness.json 的证据要求不变。', '')
+  if (actionEvidence) lines.push(actionEvidence, '')
+  lines.push(`VERDICT=${report.verdict}`)
+  return `${lines.join('\n')}\n`
+}
+
+export function intakeExitCode(report, { failedOperation = false } = {}) {
+  return report.passed && !failedOperation ? 0 : 1
 }
 
 export function updateDshLock(lock, candidateFields) {
@@ -343,11 +383,74 @@ export function updateDshLock(lock, candidateFields) {
   return updated
 }
 
-async function collectCandidate(version) {
+export async function recordHistoricalDescriptorVersion(version, report, {
+  filePath = HISTORICAL_DESCRIPTOR_VERSIONS_PATH,
+} = {}) {
+  if (!isExactVersion(version)) throw new Error('cannot record a non-exact historical descriptor version')
+  if (!report.sameShape || !report.passed) {
+    return { changed: false, skipped: true, reason: 'all intake checks, including checks 3-5, must PASS' }
+  }
+  const versions = readHistoricalDescriptorVersions(filePath)
+  if (versions.includes(version)) return { changed: false, skipped: false }
+
+  const updated = `${JSON.stringify([...versions, version], null, 2)}\n`
+  const temporary = `${filePath}.${randomUUID()}.tmp`
+  try {
+    await writeFile(temporary, updated, { encoding: 'utf8', flag: 'wx' })
+    await rename(temporary, filePath)
+  } finally {
+    await rm(temporary, { force: true })
+  }
+  return { changed: true, skipped: false }
+}
+
+export async function writeIntakeMarkdown(filePath, report, options = {}) {
+  const resolvedPath = path.resolve(filePath)
+  await mkdir(path.dirname(resolvedPath), { recursive: true })
+  await writeFile(resolvedPath, formatIntakeMarkdown(report, options), 'utf8')
+  return resolvedPath
+}
+
+export function parseIntakeArgs(argv) {
+  if (!Array.isArray(argv) || argv.length < 1 || !isExactVersion(argv[0])) return null
+  const options = {
+    version: argv[0],
+    lockPath: 'upstream.lock.json',
+    markdownPath: null,
+    writeRequested: false,
+    recordShapeRequested: false,
+  }
+  const seen = new Set()
+  for (let index = 1; index < argv.length; index += 1) {
+    const flag = argv[index]
+    if (flag === '--write' || flag === '--record-shape') {
+      if (seen.has(flag)) return null
+      seen.add(flag)
+      if (flag === '--write') options.writeRequested = true
+      else options.recordShapeRequested = true
+      continue
+    }
+    if (flag === '--lock' || flag === '--markdown') {
+      if (seen.has(flag) || !argv[index + 1] || argv[index + 1].startsWith('--')) return null
+      seen.add(flag)
+      const value = argv[++index]
+      if (flag === '--lock') options.lockPath = value
+      else options.markdownPath = value
+      continue
+    }
+    return null
+  }
+  if (options.writeRequested && options.recordShapeRequested) return null
+  if (options.writeRequested && options.lockPath !== 'upstream.lock.json') return null
+  return options
+}
+
+async function collectCandidate(version, lockPath) {
   const readers = cachedReaders()
   const failures = {}
+  const resolvedLockPath = path.resolve(ROOT, lockPath)
   const [lock, tagResult, integrityResult] = await Promise.all([
-    readFile(LOCK_PATH, 'utf8').then(JSON.parse),
+    readFile(resolvedLockPath, 'utf8').then(JSON.parse),
     resolveOfficialTagCommit(version).then(value => ({ value }), error => ({ error })),
     Promise.resolve().then(() => runNpmView(`@deepseek-ai/dsh@${version}`, 'dist.integrity'))
       .then(value => ({ value }), error => ({ error })),
@@ -369,7 +472,7 @@ async function collectCandidate(version) {
       const tree = await readers.json(treeUrl)
       const [notices, historyResult, pluginResult] = await Promise.all([
         readers.bytes(`${RAW_BASE}/${tagCommit}/THIRD_PARTY_NOTICES.md`).then(value => ({ value }), error => ({ error })),
-        collectHistory(tagCommit, tree, readers, version).then(value => ({ value }), error => ({ error })),
+        collectHistory(tagCommit, tree, readers).then(value => ({ value }), error => ({ error })),
         collectPluginManager(tagCommit, tree, readers).then(value => ({ value }), error => ({ error })),
       ])
       if (notices.error) failures.lock = notices.error
@@ -404,36 +507,71 @@ async function writeLock(lock, candidateFields) {
 }
 
 async function main(argv = process.argv.slice(2)) {
-  if (argv.length < 1 || argv.length > 2 || argv[1] && argv[1] !== '--write'
-    || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(argv[0])) {
-    console.error('usage: node scripts/intake-upstream-core.mjs <version> [--write]')
+  const options = parseIntakeArgs(argv)
+  if (!options) {
+    console.error('usage: node scripts/intake-upstream-core.mjs <version> [--lock <path>] [--record-shape] [--markdown <file>] [--write]')
     process.exitCode = 2
     return
   }
-  const version = argv[0]
-  const writeRequested = argv[1] === '--write'
+  const { version, lockPath, markdownPath, writeRequested, recordShapeRequested } = options
+  let failedOperation = false
   let collected
+  let report
   try {
-    collected = await collectCandidate(version)
+    collected = await collectCandidate(version, lockPath)
+    report = createIntakeReport({ version, ...collected, lockName: lockPath })
   } catch (error) {
-    const report = createIntakeReport({
+    report = createIntakeReport({
       version,
       lock: null,
+      lockName: lockPath,
       failures: { tag: error, npm: error, lock: error, history: error, families: error, anchor: error },
     })
-    process.stdout.write(formatIntakeReport(report, { writeRequested }))
-    process.exitCode = 1
-    return
   }
-  const report = createIntakeReport({ version, ...collected })
-  process.stdout.write(formatIntakeReport(report, { writeRequested }))
+
+  const actionEvidence = []
   if (writeRequested && report.passed) {
-    const result = await writeLock(collected.lock, report.candidateFields)
-    process.stdout.write(result.changed
-      ? '--write applied the six dsh fields in upstream.lock.json\n'
-      : '--write made zero changes to upstream.lock.json (byte-identical serialization)\n')
+    try {
+      const result = await writeLock(collected.lock, report.candidateFields)
+      actionEvidence.push(result.changed
+        ? '--write applied the six dsh fields in upstream.lock.json'
+        : '--write made zero changes to upstream.lock.json (byte-identical serialization)')
+    } catch (error) {
+      failedOperation = true
+      actionEvidence.push(`--write failed: ${errorEvidence(error)}`)
+    }
   }
-  process.exitCode = report.passed ? 0 : 1
+  if (recordShapeRequested) {
+    try {
+      const result = await recordHistoricalDescriptorVersion(version, report)
+      actionEvidence.push(result.changed
+        ? `--record-shape added exact version ${version} to config/historical-descriptor-versions.json`
+        : result.skipped
+          ? `--record-shape did not write: ${result.reason}`
+          : `--record-shape left config/historical-descriptor-versions.json unchanged; ${version} is already present`)
+    } catch (error) {
+      failedOperation = true
+      actionEvidence.push(`--record-shape failed closed: ${errorEvidence(error)}`)
+    }
+  }
+
+  const reportOptions = {
+    writeRequested,
+    recordShapeRequested,
+    lockName: lockPath,
+    actionEvidence: actionEvidence.join('\n'),
+  }
+  if (markdownPath) {
+    try {
+      await writeIntakeMarkdown(path.resolve(ROOT, markdownPath), report, reportOptions)
+    } catch (error) {
+      failedOperation = true
+      actionEvidence.push(`--markdown failed: ${errorEvidence(error)}`)
+      reportOptions.actionEvidence = actionEvidence.join('\n')
+    }
+  }
+  process.stdout.write(formatIntakeReport(report, reportOptions))
+  process.exitCode = intakeExitCode(report, { failedOperation })
 }
 
 const invokedPath = process.argv[1] && path.resolve(process.argv[1])

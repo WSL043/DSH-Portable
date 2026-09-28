@@ -51,6 +51,21 @@ jobs:
         if: steps.preview.outputs.changed == 'false' && steps.preview.outputs.blocked != 'true'
         run: |
           echo 'No newer unshipped candidate needs review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
+      - id: intake
+        name: Check and record same-shape historical migration candidates
+        if: steps.preview.outputs.changed == 'true'
+        continue-on-error: true
+        env:
+          VERSION: ${{ steps.preview.outputs.version }}
+        run: |
+          set +e
+          node scripts/intake-upstream-core.mjs "$VERSION" --lock upstream.preview.lock.json --record-shape --markdown intake-report.md > intake-output.txt 2>&1
+          INTAKE_STATUS=$?
+          cat intake-output.txt
+          INTAKE_VERDICT=$(sed -n 's/^VERDICT=//p' intake-output.txt | tail -n 1)
+          echo "status=$INTAKE_STATUS" >> "$GITHUB_OUTPUT"
+          echo "verdict=$INTAKE_VERDICT" >> "$GITHUB_OUTPUT"
+          exit "$INTAKE_STATUS"
       - name: Run repository contracts before opening the review
         id: contracts
         if: steps.preview.outputs.changed == 'true'
@@ -65,23 +80,39 @@ jobs:
           NPM_TAG: ${{ steps.preview.outputs.selectedTag }}
           VERSION: ${{ steps.preview.outputs.version }}
           COMMIT: ${{ steps.preview.outputs.commit }}
+          INTAKE_RESULT: ${{ steps.intake.outcome }}
+          INTAKE_STATUS: ${{ steps.intake.outputs.status }}
+          INTAKE_VERDICT: ${{ steps.intake.outputs.verdict }}
           CONTRACT_RESULT: ${{ steps.contracts.outcome }}
         run: |
           set -euo pipefail
           BRANCH=automation/official-preview
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add upstream.preview.lock.json
+          git add upstream.preview.lock.json config/historical-descriptor-versions.json
           git commit -m "chore: review official DSH candidate ${VERSION}"
           git push origin "$BRANCH"
           BODY=$(mktemp)
           cat > "$BODY" <<EOF
           Reviews official DeepSeek Harness candidate ${VERSION} (npm tag: ${NPM_TAG}) at immutable commit ${COMMIT} for the Portable candidate channel.
 
+          Intake result: ${INTAKE_RESULT} (exit ${INTAKE_STATUS}); verdict: ${INTAKE_VERDICT}.
+
           Repository contracts: ${CONTRACT_RESULT}. Evidence: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}
 
           Product qualification is dispatched only after repository contracts pass. A failed contract is an intake blocker, not a supported-version claim. Manual review and merge are required; this workflow never publishes or merges an upstream candidate automatically.
           EOF
+          if [ -f intake-report.md ]; then
+            printf '\n## Intake report\n\n' >> "$BODY"
+            cat intake-report.md >> "$BODY"
+          else
+            printf '\nIntake report unavailable; inspect intake step result %s (exit %s).\n' "$INTAKE_RESULT" "$INTAKE_STATUS" >> "$BODY"
+          fi
+          if [[ "$INTAKE_VERDICT" == needs-review:* ]]; then
+            INTAKE_REVIEW_INDEX=${INTAKE_VERDICT#needs-review:}
+            printf '\n需要人工审查：第 %s 项。\n' "$INTAKE_REVIEW_INDEX" >> "$BODY"
+          fi
+          printf '\n稳定线采用前仍需人工接入记录。\n' >> "$BODY"
           PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$PR" ]; then
             gh pr edit "$PR" --title "Review official DSH candidate ${VERSION}" --body-file "$BODY" --add-assignee WSL043

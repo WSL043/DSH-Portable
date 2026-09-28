@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { readFile, writeFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -9,11 +10,30 @@ export const descriptorV2PatchIdentity = Object.freeze({
   sourceSha256: '1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1',
   patchedSha256: '18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6',
 })
+const HISTORICAL_DESCRIPTOR_VERSIONS_URL = new URL('../config/historical-descriptor-versions.json', import.meta.url)
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/
+
+export function readHistoricalDescriptorVersions(filePath = HISTORICAL_DESCRIPTOR_VERSIONS_URL) {
+  let versions
+  try {
+    versions = JSON.parse(readFileSync(filePath, 'utf8'))
+  } catch (error) {
+    const reason = error?.code === 'ENOENT' ? 'missing' : 'unreadable or invalid JSON'
+    throw new Error(`historical descriptor version allowlist is ${reason}`, { cause: error })
+  }
+  if (!Array.isArray(versions) || versions.length === 0
+    || versions.some(version => typeof version !== 'string' || !EXACT_VERSION.test(version))
+    || new Set(versions).size !== versions.length) {
+    throw new Error('historical descriptor version allowlist must be a non-empty array of unique exact version strings')
+  }
+  return versions
+}
+
 export function descriptorV2PatchIdentityFor(version) {
-  if (version === descriptorV2PatchIdentity.dshVersion) return descriptorV2PatchIdentity
-  // These releases ship the exact same reviewed migration bytes; the version
-  // identity remains exact and is never inferred from a semver range.
-  if (version === '0.1.7-rc.2' || version === '0.2.0-rc.1') {
+  const versions = readHistoricalDescriptorVersions()
+  if (version === descriptorV2PatchIdentity.dshVersion && versions.includes(version)) return descriptorV2PatchIdentity
+  // This file is an exact, reviewable allowlist; ranges, prefixes, and globs are invalid.
+  if (versions.includes(version)) {
     return Object.freeze({ ...descriptorV2PatchIdentity, dshVersion: version })
   }
   return null

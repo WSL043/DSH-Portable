@@ -100,8 +100,9 @@ test('candidate intake checks the open review head and never replaces manual fix
   assert.match(workflow, /git checkout -B "\$BRANCH" FETCH_HEAD/)
   assert.match(workflow, /git push origin "\$BRANCH"/)
   assert.doesNotMatch(workflow, /git push --force/)
+  assert.match(workflow, /id: intake/)
   assert.ok(workflow.indexOf('git checkout -B "$BRANCH" FETCH_HEAD') < workflow.indexOf('node scripts/update-preview-upstream.mjs'))
-  assert.equal((workflow.match(/if: steps\.preview\.outputs\.changed == 'true'/g) ?? []).length, 2)
+  assert.equal((workflow.match(/if: steps\.preview\.outputs\.changed == 'true'/g) ?? []).length, 3)
 })
 
 test('pull requests use one contract runner while main retains full product qualification', async () => {
