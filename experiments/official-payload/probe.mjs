@@ -81,7 +81,7 @@ try {
   const root=process.env.DSH_PORTABLE_DEVELOPMENT_ROOT;
   const selected=JSON.parse((await readFile(join(root,'app','current.json'),'utf8')).replace(/^\uFEFF/,''));
   const official=join(root,'app',selected.version,'DeepSeek Harness.exe');
-  const owner=()=>execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '(Get-NetTCPConnection -State Listen -LocalPort 19387).OwningProcess'],{windowsHide:true,encoding:'utf8'}).trim();
+  const owner=()=>execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '(Get-NetTCPConnection -State Listen -LocalPort 19387 -ErrorAction SilentlyContinue).OwningProcess'],{windowsHide:true,encoding:'utf8'}).trim();
   const originalOwner=owner();
   for(const executable of [join(root,'DeepSeek Harness Portable.exe'),official]) {
     const env={...process.env};delete env.DSH_PORTABLE_ROOT;
@@ -148,7 +148,7 @@ try {
   restarted.catch(()=>{});
   try{await client.send('Browser.close');}catch(error){if(!String(error).includes('CDP target closed'))throw error;}
   client.close();
-  await until(async()=>owner()!==originalOwner,'Restart replaces the old host',60000);
+  await until(async()=>{const pid=owner();return pid&&pid!==originalOwner;},'Restart replaces the old host',60000);
   const newWelcome=await until(async()=>(await targets()).find(t=>t.type==='page'&&t.url.endsWith('/renderer/welcome.html')),'Restart welcome');
   client=await connect(newWelcome);
   await until(()=>client.evaluate(`typeof window.dshWelcome?.skip==='function'`),'Restart welcome API');

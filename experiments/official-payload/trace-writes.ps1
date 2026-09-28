@@ -31,7 +31,7 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
             $category = 'needs-review'
             if ($_.Path.StartsWith($env:TEMP.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith('C:\Windows\Temp\',[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith((Join-Path $env:LOCALAPPDATA 'Temp')+'\',[StringComparison]::OrdinalIgnoreCase)) { $category='temporary' }
             if ($_.Path -match '^HKCU\\Software\\Classes\\dsh(\\|$)') { $category='known-protocol-registration' }
-            if ($_.Path -match '^\\Device\\NamedPipe\\') { $category='ipc-not-a-disk-file' }
+            if ($_.Path -match '^\\Device\\NamedPipe(\\|$)') { $category='ipc-not-a-disk-file' }
             if ($_.Path -match '^[A-Z]:$|^[A-Z]:\\\$(LogFile|Mft)$|^HKLM\\System\\CurrentControlSet\\Services\\bam\\') { $category='windows-system-record' }
             # Reviewed in alpha3 run 36404975086: paired .NET process registration
             # writes/deletes, not portable account, profile or application data.
