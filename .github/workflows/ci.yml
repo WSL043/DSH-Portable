@@ -500,9 +500,16 @@ jobs:
           node (Join-Path $DriverRoot 'node_modules/playwright/cli.js') install chromium --only-shell
           if ($LASTEXITCODE -ne 0) { throw 'Headless concurrent-client installation failed.' }
           $ProductRoot = Join-Path $FixtureRoot 'DSH-Portable'
+          $SeedRoot = Join-Path $env:RUNNER_TEMP 'dsh-historical-plugin-seed'
+          New-Item -ItemType Directory -Force -Path $SeedRoot | Out-Null
+          $SeedZip = Join-Path $SeedRoot 'v0.7.7.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri 'https://github.com/WSL043/DSH-Portable/releases/download/v0.7.7/DSH-Portable-windows-x64-offline.zip' -OutFile $SeedZip
+          if ((Get-FileHash -LiteralPath $SeedZip -Algorithm SHA256).Hash.ToLowerInvariant() -ne 'd213a4b2263a6e37ba971255a1e813f8fff2866a31622b1971f7f2465a4f3f5e') { throw 'Historical seed package integrity mismatch.' }
+          tar.exe -x -f $SeedZip -C $SeedRoot
+          if ($LASTEXITCODE -ne 0) { throw 'Historical seed extraction failed.' }
           node scripts/smoke-windows-official-plugin-cycle.mjs `
             $ProductRoot (Join-Path $DriverRoot 'package.json') `
-            (Join-Path $ProductRoot 'acceptance/official-plugin-cycle') --disposable --upgrade-defaults --concurrent-writers
+            (Join-Path $ProductRoot 'acceptance/official-plugin-cycle') --disposable --upgrade-defaults --concurrent-writers (Join-Path $SeedRoot 'DSH-Portable')
           if ($LASTEXITCODE -ne 0) { throw 'Official plugin page lifecycle failed.' }
       - uses: actions/upload-artifact@v7
         if: always()

@@ -8,7 +8,7 @@ import { promisify } from 'node:util'
 import { verifiedPackageFile } from './verified-package-file.mjs'
 import { createHash, randomBytes } from 'node:crypto'
 
-const [rootArg, driverPackage, evidenceArg, disposable, mode, concurrency] = process.argv.slice(2)
+const [rootArg, driverPackage, evidenceArg, disposable, mode, concurrency, historicalSeedArg] = process.argv.slice(2)
 if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable') {
   throw new Error('Expected a disposable extracted product, Playwright driver package and evidence directory.')
 }
@@ -35,17 +35,31 @@ assert.ok(mode === undefined || mode === '--upgrade-defaults', 'unknown acceptan
 assert.ok(concurrency === undefined || concurrency === '--concurrent-writers' && mode === '--upgrade-defaults', 'concurrent acceptance requires historical upgrade mode')
 const historicalVersions = { 'dsh-chat-manager': '1.4.0-beta.3', 'dsh-image-viewer': '0.1.1' }
 if (mode === '--upgrade-defaults') {
+  assert.ok(historicalSeedArg, 'Historical upgrade requires the isolated 0.7.7 seed runtime')
+  const seedRoot = path.resolve(historicalSeedArg)
+  assert.notEqual(seedRoot, root, 'Historical seed runtime must be separate from the candidate')
+  const seedComponents = JSON.parse(await readFile(await verifiedPackageFile(seedRoot, 'licenses', 'COMPONENTS.json'), 'utf8'))
+  assert.equal(seedComponents.portableVersion, '0.7.7')
+  assert.equal(seedComponents.dshVersion, '0.1.7-alpha.1')
+  const seedEnv = { ...env, DSH_PORTABLE_RUNTIME_CACHE: path.join(seedRoot, 'acceptance-runtime-cache') }
+  for (const key of Object.keys(seedEnv)) {
+    if (['DSH_PORTABLE_ROOT', 'DSH_PORTABLE_RUNTIME_ROOT', 'DSH_PORTABLE_BASE_STATE_ROOT'].includes(key.toUpperCase())) delete seedEnv[key]
+  }
   assert.equal(await access(path.join(root, 'data/dsh-home/profiles/web/.dsh-portable-default-seed.json'))
     .then(() => true, error => { if (error.code === 'ENOENT') return false; throw error }), false,
   'Historical upgrade acceptance requires a freshly extracted disposable profile; startup refreshes existing defaults.')
-  // Seed through the shipped CLI, not by replacing installed package manifests.
-  // The fixture is disposable; production peer/supply-chain checks stay enabled.
-  const result = await promisify(execFile)(path.join(root, 'runtime/node/node.exe'), [
-    path.join(root, 'launcher/runtime-entry.mjs'), 'dsh-cli.mjs',
+  // Establish a real old profile with its compatible released core before upgrading.
+  // rc.2 correctly refuses a fresh install of these old peers; do not bypass it.
+  const result = await promisify(execFile)(path.join(seedRoot, 'runtime/node/node.exe'), [
+    path.join(seedRoot, 'launcher/runtime-entry.mjs'), 'dsh-cli.mjs',
     'plugin', '--profile', 'web', 'add',
     ...Object.entries(historicalVersions).map(([name, version]) => `${name}@${version}`),
-  ], { cwd: root, env, windowsHide: true, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })
+  ], { cwd: seedRoot, env: seedEnv, windowsHide: true, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })
   await writeFile(path.join(evidence, 'historical-seed.log'), `${result.stdout}\n${result.stderr}`)
+  for (const [name, version] of Object.entries(historicalVersions)) {
+    const installed = JSON.parse(await readFile(path.join(root, 'data/dsh-home/profiles/web/node_modules', name, 'package.json'), 'utf8'))
+    assert.equal(installed.version, version, `historical ${name} must be seeded into the candidate profile`)
+  }
 }
 const listener = createServer()
 await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve))

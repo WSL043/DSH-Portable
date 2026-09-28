@@ -89,9 +89,23 @@ try {
   const click = names => `(() => {const names=${JSON.stringify(names)};const button=[...document.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
   await send('Runtime.enable')
   await send('Page.enable')
+  await evaluate(`(() => {
+    const events = window.__portableAcceptanceDialogs = [];
+    let previous = '';
+    const observe = () => {
+      const visible = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
+        .filter(item => item.getBoundingClientRect().width > 0)
+        .map(item => (item.textContent || '').slice(0, 160)).join(' | ');
+      if (visible !== previous && events.length < 100) {
+        events.push({ at: performance.now(), visible }); previous = visible;
+      }
+    };
+    new MutationObserver(observe).observe(document.body, { childList: true, subtree: true, attributes: true });
+    observe();
+  })()`)
 
-  // Onboarding is asynchronous: keep handling it until the settings dialog
-  // actually opens, rather than declaring success before the first notice mounts.
+  // Send one user action and observe its result, rather than queuing repeated
+  // native commands while the asynchronous settings UI is still opening.
   await until(`(() => {
     const dialogs = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
       .filter(item => item.getBoundingClientRect().width > 0)
@@ -103,14 +117,14 @@ try {
       button?.click()
       return false
     }
-    if (dialogs.length) return true
+    if (dialogs.length) return false
     const settings = [...document.querySelectorAll('button')].find(item =>
       ['Settings', '设置'].includes((item.textContent || '').trim()))
-    if (settings && settings.getBoundingClientRect().width > 0 && !settings.closest('[inert]')) {
-      chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})
-    }
-    return false
-  })()`, Boolean, 'native settings command opens after onboarding')
+    return Boolean(settings && settings.getBoundingClientRect().width > 0 && !settings.closest('[inert]'))
+  })()`, Boolean, 'settings command is available after onboarding')
+  await evaluate(`chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})`)
+  await until(`Boolean([...document.querySelectorAll('dialog,[role="dialog"]')].find(item =>
+    item.getBoundingClientRect().width > 0 && /Desktop & data|桌面与数据/.test(item.textContent || '')))` , Boolean, 'native settings command opens after onboarding')
 
   if (process.argv.includes('--layout')) {
     await until(click(['General', 'General settings', '通用设置']), Boolean, 'general theme baseline')
@@ -356,6 +370,7 @@ try {
 } finally {
   try {
     if (evaluate) {
+      await writeFile(path.join(output, 'dialog-events.json'), JSON.stringify(await evaluate('window.__portableAcceptanceDialogs').catch(String), null, 2))
       await writeFile(path.join(output, 'page.txt'), await evaluate('document.body.innerText').catch(String))
       await writeFile(path.join(output, 'page.html'), await evaluate('document.documentElement.outerHTML').catch(String))
     }
