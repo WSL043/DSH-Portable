@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "c36a83ff6bb95e3f82cf79f9be7c724270a8aa61",
-  "dshNpmIntegrity": "sha512-fim76775kLyal0lLNmpktZfOiOwU0P9qdluknL5Sm3F6ax9I5PcLD0W0WzqH9tMOOY8yHya5VShuEzSSh223sw==",
+  "dshReviewedCommit": "477b4f420553e8a52c2fbccc464d7561b239c443",
+  "dshNpmIntegrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
   "historicalSessionMigration": {
     "status": "passed",
-    "evidence": "docs/release-0.7.5-plan.md#2026-09-27-执行清单; scripts/verify-historical-session.mjs: locked writer, official AgentLoop continuation, JSONL reopen and interrupted-journal recovery",
+    "evidence": "docs/core-rc2-migration-2026-09-28.md; scripts/verify-historical-session.mjs",
     "compatibilityPatch": {
       "id": "released-v0-descriptor-v2-read-v1",
-      "dshVersion": "0.1.7-alpha.1",
+      "dshVersion": "0.1.7-rc.2",
       "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
       "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
     },
-    "reason": "Historical data checks passed on the exact reviewed alpha.1 compatibility adaptation. Every platform builder repeats them; final product CI, upgrade and native acceptance remain independent mandatory gates."
+    "reason": "Exact rc.2 historical writer, runtime continuation, persisted reopen and interrupted journal recovery passed; every platform builder repeats the checks. Product release still requires full CI."
   }
 }

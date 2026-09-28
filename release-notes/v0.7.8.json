@@ -1,0 +1,23 @@
+{
+  "version": "0.7.8",
+  "zh": {
+    "summary": "安装包直接内置官方 DSH 0.1.7-rc.2，新安装无需先从 alpha.1 单独更新内核。",
+    "highlights": [
+      "将运行时、源码提交、依赖完整性和许可清单一起锁定到官方 0.1.7-rc.2。",
+      "保留经过精确文件摘要验证的历史会话读取兼容；各平台重新验证旧会话继续执行、保存重开和中断恢复。",
+      "继续内置正式版图片查看器 0.1.3 与会话管理 1.5.2，并对成品执行插件操作和亮暗界面验收。"
+    ],
+    "upgradeNotes": ["0.7.7 的公开文件保持不变；本版本是直接内置 rc.2 的独立正式发行。"],
+    "knownIssues": ["完整多屏与混合 DPI 硬件组合、物理断电恢复尚未完成专项验收。"]
+  },
+  "en": {
+    "summary": "Bundle official DSH 0.1.7-rc.2 directly, removing the separate alpha.1-to-rc.2 core update for fresh installations.",
+    "highlights": [
+      "Pin the runtime, official source commit, package integrity and third-party notices to DSH 0.1.7-rc.2.",
+      "Retain the digest-bound historical-session read adaptation and repeat continuation, persisted reopen and interrupted recovery checks on every platform.",
+      "Keep stable Image Viewer 0.1.3 and Session Manager 1.5.2, with packaged plugin operation and light/dark UI qualification."
+    ],
+    "upgradeNotes": ["Public 0.7.7 files remain immutable; this is a separate stable release that directly bundles rc.2."],
+    "knownIssues": ["The complete multi-monitor/mixed-DPI hardware matrix and physical power-loss recovery remain unqualified."]
+  }
+}
