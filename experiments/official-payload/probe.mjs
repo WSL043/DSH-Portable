@@ -70,6 +70,13 @@ try {
   await click(['Plugin market','插件市场']);
   await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length>0`),'Standalone market catalog renders',90000);
   await snapshot('market');
+  await click(['Compact','紧凑']);await snapshot('market-compact');
+  await click(['Gallery','图文']);
+  await until(()=>client.evaluate(`(()=>{const e=document.querySelector('section[aria-label] input');if(!e)return false;e.focus();return true;})()`),'Market search input');
+  await client.send('Input.insertText',{text:'dsh-chat-manager'});
+  await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length===1`),'Market search filters cards');
+  await click(['Manage','管理'],'[data-market-card] button');
+  await until(()=>client.evaluate(`!!document.querySelector('button[aria-label="Uninstall Session Manager"]')`),'Market manage opens official bundle details');
   await click(['Plugins','插件']);
   await click(['Enable @wsl043/dsh-portable-plugin-market','启用 @wsl043/dsh-portable-plugin-market']);
   await until(()=>client.evaluate(`![...document.querySelectorAll('button')].some(e=>e.getClientRects().length&&['Plugin market','插件市场'].includes(e.textContent.trim()))`),'Disabled market removes sidebar entry');
