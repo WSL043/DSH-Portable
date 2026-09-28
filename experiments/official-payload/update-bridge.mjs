@@ -18,7 +18,7 @@ export class PortableUpdater extends EventEmitter {
     if (version) args.push('-ExpectedVersion', version);
     if (process.env.GITHUB_ACTIONS === 'true' && process.env.RUNNER_ENVIRONMENT === 'github-hosted' && process.env.DSH_PORTABLE_QUALIFICATION_CANDIDATE) args.push('-QualificationCandidate', process.env.DSH_PORTABLE_QUALIFICATION_CANDIDATE);
     let timer;
-    const child = this.spawn(join(process.env.SystemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), args, {windowsHide: true, stdio: 'ignore'});
+    const child = this.spawn(join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe'), args, {windowsHide: true, stdio: 'ignore'});
     if (operation === 'Prepare') timer = setInterval(async () => {
       try {
         const state = JSON.parse((await this.readFile(statusPath, 'utf8')).replace(/^\uFEFF/, ''));
