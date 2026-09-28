@@ -108,8 +108,11 @@ function Expand-OfficialPayload([string]$Installer, $Candidate, [string]$Output,
     $previousRunAsNode=$env:ELECTRON_RUN_AS_NODE
     try {
         $env:ELECTRON_RUN_AS_NODE='1'
-        & (Join-Path $Output 'DeepSeek Harness.exe') (Join-Path $PSScriptRoot 'adapt-asar.cjs') $asar $adaptation
-        if($LASTEXITCODE -ne 0){throw 'Official desktop adapter contract failed'}
+        # GUI-subsystem executables do not reliably block PowerShell invocation.
+        # Wait for the receipt writer before reading or launching the payload.
+        $adapterArgs = @((Join-Path $PSScriptRoot 'adapt-asar.cjs'), $asar, $adaptation) | ForEach-Object { '"' + $_ + '"' }
+        $adapter = Start-Process -FilePath (Join-Path $Output 'DeepSeek Harness.exe') -ArgumentList $adapterArgs -WindowStyle Hidden -PassThru -Wait
+        if($adapter.ExitCode -ne 0){throw "Official desktop adapter contract failed ($($adapter.ExitCode))"}
     } finally { $env:ELECTRON_RUN_AS_NODE=$previousRunAsNode }
     $record=Get-Content -LiteralPath $adaptation -Raw|ConvertFrom-Json
     if($record.originalAsarSha256 -ne $originalHash -or $record.adapterProtocol -ne 2){throw 'Adapter identity mismatch'}
