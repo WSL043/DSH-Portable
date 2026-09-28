@@ -1,6 +1,6 @@
 # Native 0.7.6 候选验收记录
 
-状态：0.7.6正式版已发布，产品发布回读完成；独立内核新基线同步另行记录。范围按 `native-release-exit-criteria.md` 的 G1–G8；Electron 与被隔离的 rc.2 不混入本批。
+状态：0.7.6正式版已发布，产品与独立内核新基线发布回读完成。范围按 `native-release-exit-criteria.md` 的 G1–G8；Electron 与被隔离的 rc.2 不混入本批。
 
 历史未通过记录（2026-09-28，后续单项例外见下）：`soak-final/result.json` 完成120分钟后未通过。基线私有内存中位数501,723,136字节，结束静置682,921,984字节，超过原定 `baseline * 1.2 + 64 MiB`；句柄增长110，超过100上限。200次导航、20次图片、10轮插件操作完成，页面异常为零，退出后所属进程为空。保留原始报告，不放宽阈值、不发布该候选。后台内存策略对照未证明收益，已撤回实验代码；诊断记录见下文。
 
@@ -101,3 +101,12 @@ The diff from `f1d3398` to `2626237` contains only this qualification document a
 v0.7.6 已于2026-09-28发布为正式版，发布提交93f6b3b934f2eb46a3836d7072e93f61260b0fb1，发布工作流36360849097成功。公开checksums与GitHub的全部对应资产SHA256一致；五平台稳定产品索引均为0.7.6/0.7.5/0.7.4。0.7.6随包CLI识别current，公开0.7.5随包CLI识别0.7.6并要求完整产品包，未向旧壳投放不兼容组件包。内存例外中英说明已放在发布说明开头。
 
 回读证据：release-93f6b3b/public-verification.json、public-release.json、product-client.json、previous-product-client.json。五份已退出诊断副本经IFileOperation回收，共3546132563字节，回收站回读5项；报告及最终成品保留，receipt为recycle-late-receipt.json。
+
+
+## 内核通道最终收尾（2026-09-28）
+
+Updates工作流36361220097完成0.7.6基线下alpha.1的五平台成品验收和候选通道发布；stable发布跳过，不计为稳定内核发布。五平台版本化清单portableVersion均为0.7.6，076随包CLI的版本列表接受alpha.1且unavailable为空。
+
+公开回读另发现自动检查的无版本别名仍保留073/alpha.2。Updates提交0f74860改为从同一个兼容性过滤后索引生成默认清单，消除跨Portable基线单纯比较内核版本造成的错误保留；10项索引回归通过，包括新基线替代旧高版本和历史回填保留当前最高兼容版本。未改变已验收二进制，将五平台公开别名及对应来源/锁定记录同步到已发布076/alpha.1后，五平台回读通过，076随包CLI实际check-update返回current、engineCurrent/engineLatest均为0.1.7-alpha.1。
+
+证据：`build/native-076-qualification/release-93f6b3b/core-manifests.json`、`core-client.json`、`core-automatic-check.json`、`core-alias-readback.json`。本次完成不表示rc.2隔离已经解除，也不把G7原内存比例失败改记为通过。
