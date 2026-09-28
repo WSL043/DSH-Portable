@@ -66,7 +66,7 @@ try {
   evidence.steps.push('actual editor input');await snapshot('workspace');
   await click(['Plugins','插件']);await snapshot('plugins');
   for(const name of ['dsh-chat-manager','@wsl043/dsh-portable-plugin-market']) {
-    const expected = name==='dsh-chat-manager' && mode==='moved' ? 'false' : 'true';
+    const expected = name==='dsh-chat-manager' && ['moved','upgraded'].includes(mode) ? 'false' : 'true';
     const label=name==='dsh-chat-manager'?'Session Manager':name;
     await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable ${label}"]')?.getAttribute('aria-checked')==='${expected}'`),`Default ${name} state ${expected} in official UI`);
     if(expected==='false') {

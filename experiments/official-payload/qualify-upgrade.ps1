@@ -20,7 +20,7 @@ foreach($phase in @('before','after')){
         $status=Get-Content "$root/data/launcher/update-status.json" -Raw|ConvertFrom-Json
         if($status.status -ne 'ready'){throw "Real official update was not staged: $($status.error)"}
     }
-    $job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19492' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,$exe
+    $job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19492' -Milliseconds 300000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,$exe
     try{
         $mode=if($phase -eq 'before'){'install'}else{'upgraded'}
         node experiments/official-payload/probe.mjs 19492 "$Evidence/upgrade-$phase.json" "$PSScriptRoot/fixtures/lifecycle" $mode

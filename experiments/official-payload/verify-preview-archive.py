@@ -29,6 +29,7 @@ with zipfile.ZipFile(archive) as bundle:
         assert entry.startswith(root) and '..' not in PurePosixPath(entry).parts and '\\' not in entry, 'Unsafe archive path'
         assert not entry.startswith(root + 'data/'), 'Acceptance data entered distribution'
         assert not entry.endswith('/resources/app-update.yml'), 'Installer updater enabled'
+        assert '/default-plugins/store/v11/projects/' not in entry, 'Build-machine project registrations entered distribution'
     native = root + 'DeepSeek Harness Portable.exe'
     official_version = load('qualified-candidate.json')['version']
     asar = root + f'app/{official_version}/resources/app.asar'

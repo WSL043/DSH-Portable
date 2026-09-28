@@ -29,5 +29,17 @@ try {
   $process=Start-Process -FilePath (Join-Path $runtime 'DeepSeek Harness.exe') -ArgumentList $arguments -WorkingDirectory $seed -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$seed/stdout.log" -RedirectStandardError "$seed/stderr.log"
   if($process.ExitCode -ne 0){Get-Content "$seed/stdout.log","$seed/stderr.log" -Tail 80;throw "Default plugin offline store preparation failed ($($process.ExitCode))"}
 } finally {$env:ELECTRON_RUN_AS_NODE=$prior}
+# pnpm registers its temporary seed project with a junction in the store.
+# It is build-machine bookkeeping, not offline package content. Unlink only
+# that verified junction before removing the seed; never follow its target.
+$registrations=Join-Path $defaults 'store/v11/projects'
+if(Test-Path -LiteralPath $registrations){
+  Assert-PlainPath $registrations
+  foreach($entry in Get-ChildItem -LiteralPath $registrations -Force){
+    if(-not($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $entry.LinkType -ne 'Junction' -or [IO.Path]::GetFullPath([string]$entry.Target) -ne [IO.Path]::GetFullPath($seed)){throw 'Unexpected offline-store project registration'}
+    [IO.Directory]::Delete($entry.FullName)
+  }
+  Remove-PortableScratch $registrations $defaults
+}
 Remove-PortableScratch $seed $defaults
 @{schemaVersion=1;packages=@(@{name='dsh-chat-manager';version='1.5.2'},@{name='@wsl043/dsh-portable-plugin-market';version='0.2.0-alpha.1'})}|ConvertTo-Json -Depth 5|Set-Content "$defaults/manifest.json" -Encoding UTF8
