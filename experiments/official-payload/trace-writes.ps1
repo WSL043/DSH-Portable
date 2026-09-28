@@ -33,6 +33,9 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
             if ($_.Path -match '^HKCU\\Software\\Classes\\dsh(\\|$)') { $category='known-protocol-registration' }
             if ($_.Path -match '^\\Device\\NamedPipe\\') { $category='ipc-not-a-disk-file' }
             if ($_.Path -match '^[A-Z]:$|^[A-Z]:\\\$(LogFile|Mft)$|^HKLM\\System\\CurrentControlSet\\Services\\bam\\') { $category='windows-system-record' }
+            # Reviewed in alpha3 run 36404975086: paired .NET process registration
+            # writes/deletes, not portable account, profile or application data.
+            if ($_.'Process Name' -in @('DeepSeek Harness Portable.exe','powershell.exe') -and $_.Operation -in @('RegSetValue','RegDeleteValue') -and $_.Path -match '^HKLM\\System\\CurrentControlSet\\Services\\ASP\.NET_4\.0\.30319\\Names\\[A-Za-z0-9]+$') { $category='reviewed-dotnet-system-registration' }
             if ($_.Path -match '\\Microsoft\\Spelling\\|^HKCU\\Software\\Microsoft\\Spelling') { $category='windows-shared-spelling' }
             if ($_.Path -match '\\Microsoft\\Windows\\PowerShell\\StartupProfileData-NonInteractive$') { $category='windows-powershell-startup-cache' }
             if ($_.Path.StartsWith((Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'deepseek-harness'),[StringComparison]::OrdinalIgnoreCase)) { $category='official-external-workspace' }
