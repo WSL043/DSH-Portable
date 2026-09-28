@@ -12,16 +12,19 @@ test('ASAR adaptation changes only intended boundaries and rejects repeat/ambigu
   const directory=mkdtempSync(join(tmpdir(),'portable-asar-contract-'));
   try {
     const main='const updates = new DesktopUpdateCoordinator(publishUpdate, async () => {\n});\nif (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === "1") app.setAsDefaultProtocolClient("dsh");\nawait manager.applyRelease();';
+    const market=Buffer.from('"plugins.bundle.config": {\n}\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: []');
     const tail=Buffer.from('unchanged payload'), bytes=Buffer.from(main);
-    const header={files:{lib:{files:{'main.js':{offset:'0',size:bytes.length}}},'tail.bin':{offset:String(bytes.length),size:tail.length}}};
+    const header={files:{lib:{files:{'main.js':{offset:'0',size:bytes.length}}},dsh:{files:{node_modules:{files:{'@deepseek-ai':{files:{'dsh-client-ui-plugin-manager':{files:{lib:{files:{'client.js':{offset:String(bytes.length),size:market.length}}}}}}}}}}},'tail.bin':{offset:String(bytes.length+market.length),size:tail.length}}};
     const json=Buffer.from(JSON.stringify(header)), size=4+((json.length+3)&~3), prefix=Buffer.alloc(12+size);
     prefix.writeUInt32LE(4,0);prefix.writeUInt32LE(size+4,4);prefix.writeUInt32LE(size,8);prefix.writeUInt32LE(json.length,12);json.copy(prefix,16);
-    const file=join(directory,'app.asar');writeFileSync(file,Buffer.concat([prefix,bytes,tail]));
+    const file=join(directory,'app.asar');writeFileSync(file,Buffer.concat([prefix,bytes,market,tail]));
     const receipt=adapt(file), output=readFileSync(file), next=JSON.parse(output.subarray(16,16+output.readUInt32LE(12)));
     const offset=8+output.readUInt32LE(4)+Number(next.files['tail.bin'].offset);
     assert.deepEqual(output.subarray(offset),tail);
     assert.equal(receipt.adapterProtocol,2);
     assert.notEqual(receipt.originalAsarSha256,receipt.asarSha256);
+    assert.notEqual(receipt.originalPluginManagerSha256,receipt.adaptedPluginManagerSha256);
+    assert.ok(output.includes(Buffer.from('renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec })')));
     assert.throws(()=>adapt(file),/boundary changed/);
   } finally {rmSync(directory,{recursive:true,force:true});}
 });

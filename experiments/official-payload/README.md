@@ -10,7 +10,9 @@ Official executable and runtime bytes stay unchanged. A narrow ASAR adapter conn
 
 ## 自动交付 / Automated delivery
 
-默认启用两款普通插件：会话管理和 Portable 插件市场，不再默认携带图片查看器。市场负责浏览和截图预览，安装与启停交给官方管理服务；首次离线初始化之后不重置用户选择。
+默认启用两款普通插件：会话管理和 Portable 插件市场，不再默认携带图片查看器。从官方「插件」页的工具栏打开市场，沿用稳定版的图文浏览和截图预览；点击安装进入官方安装窗口，管理进入官方插件详情。市场不另设侧栏入口。首次离线初始化之后不重置用户选择。
+
+官方当前未提供工具栏扩展点，因此适配器与稳定版一样，仅在插件管理客户端增加一个工具栏 slot，把官方的打开安装窗口、填写安装来源和刷新回调交给市场插件。安装、启停和卸载仍由官方管理器负责。主进程和插件管理客户端两处修改前后摘要均写入 provenance；上游定位片段变化时停止交付。
 
 Two ordinary plugins are enabled initially: session management and the Portable market. The market provides discovery and previews; official services own installation and activation. Offline initialization runs once and never resets user choices. The image viewer is no longer included by default.
 

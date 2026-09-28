@@ -75,8 +75,8 @@ try {
     }
   }
   if(await client.evaluate(`document.body.innerText.includes('dsh-image-viewer')`))throw Error('Removed image viewer still bundled by default');
-  await click(['Plugin market','插件市场']);
-  await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length>0`),'Standalone market catalog renders',90000);
+  await click(['Plugin Market','插件市场']);
+  await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length>0`),'Market opened from official Plugins toolbar renders',90000);
   await snapshot('market');
   await click(['Compact','紧凑']);await snapshot('market-compact');
   await click(['Gallery','图文']);
@@ -87,10 +87,10 @@ try {
   await until(()=>client.evaluate(`!!document.querySelector('button[aria-label="Uninstall Session Manager"]')`),'Market manage opens official bundle details');
   await click(['Back to plugins','返回插件列表']);
   await click(['Enable @wsl043/dsh-portable-plugin-market','启用 @wsl043/dsh-portable-plugin-market']);
-  await until(()=>client.evaluate(`![...document.querySelectorAll('button')].some(e=>e.getClientRects().length&&['Plugin market','插件市场'].includes(e.textContent.trim()))`),'Disabled market removes sidebar entry');
+  await until(()=>client.evaluate(`![...document.querySelectorAll('button')].some(e=>e.getClientRects().length&&['Plugin Market','插件市场'].includes(e.textContent.trim()))`),'Disabled market removes official toolbar entry');
   await click(['Enable @wsl043/dsh-portable-plugin-market','启用 @wsl043/dsh-portable-plugin-market']);
   await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable @wsl043/dsh-portable-plugin-market"],button[aria-label="启用 @wsl043/dsh-portable-plugin-market"]')?.getAttribute('aria-checked')==='true'`),'Market reactivation');
-  evidence.steps.push('two default plugins enabled; standalone market loads and disables cleanly; image viewer absent');
+  evidence.steps.push('two default plugins enabled; official toolbar market loads and disables cleanly; image viewer absent');
   if(mode==='install') {
     await click(['Enable Session Manager','启用会话管理','启用 会话管理']);
     await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable Session Manager"]')?.getAttribute('aria-checked')==='false'`),'Disable default chat manager before restart and relocation');
@@ -121,6 +121,26 @@ try {
     const manifest=JSON.parse(await readFile(join(process.env.DSH_HOME,'profiles','desktop','package.json'),'utf8'));
     if(manifest.dependencies?.['dsh-portable-acceptance-fixture'])throw new Error('Uninstalled plugin remains in profile dependencies');
     evidence.steps.push('moved plugin uninstall');await snapshot('uninstalled');
+    // Exercise the market's real installation button with our published plugin.
+    // All data belongs to this disposable runner; no user plugin is removed.
+    await click(['View Session Manager']);
+    await click(['Uninstall Session Manager']);
+    await click(['Uninstall','卸载'],'[role=dialog] button');
+    await until(async()=> {
+      const state=JSON.parse(await readFile(join(process.env.DSH_HOME,'profiles/desktop/package.json'),'utf8'));
+      return !state.dependencies?.['dsh-chat-manager'] && await client.evaluate(`!![...document.querySelectorAll('button')].find(e=>e.textContent.trim()==='Add plugin')`);
+    },'Default chat uninstalled through official manager');
+    await click(['Plugin Market','插件市场']);
+    await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length>0`),'Market after uninstall');
+    await client.evaluate(`document.querySelector('section[aria-label] input').focus()`);
+    await client.send('Input.insertText',{text:'dsh-chat-manager'});
+    await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length===1`),'Find published chat plugin');
+    await click(['Install','安装'],'[data-market-card] button');
+    await click(['Install','安装'],'[role=dialog] button');
+    await click(['Enable now','Enable Now','立即启用']);
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable Session Manager"]')?.getAttribute('aria-checked')==='true'`),'Official activation after market install');
+    evidence.steps.push('default chat uninstall and actual market npm reinstall with explicit official activation');
+    await snapshot('market-reinstalled');
   }
   // Exercise both the registered wrapper and the previous browser bypass entry.
   const root=process.env.DSH_PORTABLE_DEVELOPMENT_ROOT;

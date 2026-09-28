@@ -56,7 +56,7 @@ $deadline=[DateTime]::UtcNow.AddSeconds(10)
 while($true){try{[IO.Directory]::Move($package,$moved);break}catch{if([DateTime]::UtcNow -ge $deadline){throw};Start-Sleep -Milliseconds 500}}
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT=$moved
 $env:DSH_HOME=Join-Path $moved 'data/dsh-home'
-$job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')
+$job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 300000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')
 try {
  node experiments/official-payload/probe.mjs 19491 "$evidence/moved-page.json" '-' moved
  $movedExit=$LASTEXITCODE

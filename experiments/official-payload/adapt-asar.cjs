@@ -5,25 +5,15 @@ const fs = process.versions.electron ? require('original-fs') : require('node:fs
 const crypto = require('node:crypto');
 const path = require('node:path');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-function adapt(file) {
-  const original = fs.readFileSync(file), originalHash = digest(original);
+function rewriteEntry(original, entryPath, transform) {
   const headerSize = original.readUInt32LE(4);
   const header = JSON.parse(original.subarray(16, 16 + original.readUInt32LE(12)).toString());
-  const entry = header.files.lib.files['main.js'];
+  let entry = header;
+  for (const part of entryPath.split('/')) entry = entry?.files?.[part];
   if (!entry || entry.unpacked || entry.link) throw Error('Unsupported official main entry');
   const start = 8 + headerSize + Number(entry.offset);
   const input = original.subarray(start, start + entry.size).toString('utf8');
-  const substitutions = [
-    ['const updates = new DesktopUpdateCoordinator(publishUpdate, async () => {', 'const updates = new (portableCoordinator(DesktopUpdateCoordinator, app))(publishUpdate, async () => {'],
-    ['if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === "1") app.setAsDefaultProtocolClient("dsh");', 'configurePortableProtocol(app);'],
-    ['await manager.applyRelease();', 'const freshPortableProfile = await portableProfileIsFresh(manager.paths.profile);\n\t\t\t\tawait manager.applyRelease();\n\t\t\t\tawait seedPortableDefaults(manager.paths.profile, freshPortableProfile);'],
-  ];
-  let source = input;
-  for (const [from, to] of substitutions) {
-    if (source.split(from).length !== 2) throw Error('Official desktop boundary changed; qualification required');
-    source = source.replace(from, to);
-  }
-  source = 'import { portableCoordinator, configurePortableProtocol, seedPortableDefaults, portableProfileIsFresh } from "../../../../../launcher/desktop-adapter.mjs";\n' + source;
+  const source = transform(input);
   const replacement = Buffer.from(source), delta = replacement.length - entry.size;
   const oldEnd = Number(entry.offset) + entry.size;
   function rebase(files) {
@@ -44,10 +34,36 @@ function adapt(file) {
   const prefix = Buffer.alloc(8 + 4 + payloadSize);
   prefix.writeUInt32LE(4, 0); prefix.writeUInt32LE(4 + payloadSize, 4);
   prefix.writeUInt32LE(payloadSize, 8); prefix.writeUInt32LE(json.length, 12); json.copy(prefix, 16);
-  const output = Buffer.concat([prefix, original.subarray(8 + headerSize, start), replacement, original.subarray(start + (replacement.length - delta))]);
+  return { input, source, output: Buffer.concat([prefix, original.subarray(8 + headerSize, start), replacement, original.subarray(start + (replacement.length - delta))]) };
+}
+function replaceOnce(source, from, to) {
+  if (source.split(from).length !== 2) throw Error('Official desktop boundary changed; qualification required');
+  return source.replace(from, to);
+}
+const marketPath = 'dsh/node_modules/@deepseek-ai/dsh-client-ui-plugin-manager/lib/client.js';
+function adapt(file) {
+  const original = fs.readFileSync(file), originalHash = digest(original);
+  const main = rewriteEntry(original, 'lib/main.js', input => {
+    const substitutions = [
+    ['const updates = new DesktopUpdateCoordinator(publishUpdate, async () => {', 'const updates = new (portableCoordinator(DesktopUpdateCoordinator, app))(publishUpdate, async () => {'],
+    ['if (app.isPackaged || process.env.DSH_DESKTOP_DEV_APP === "1") app.setAsDefaultProtocolClient("dsh");', 'configurePortableProtocol(app);'],
+    ['await manager.applyRelease();', 'const freshPortableProfile = await portableProfileIsFresh(manager.paths.profile);\n\t\t\t\tawait manager.applyRelease();\n\t\t\t\tawait seedPortableDefaults(manager.paths.profile, freshPortableProfile);'],
+  ];
+    let source = input;
+    for (const [from, to] of substitutions) source = replaceOnce(source, from, to);
+    return 'import { portableCoordinator, configurePortableProtocol, seedPortableDefaults, portableProfileIsFresh } from "../../../../../launcher/desktop-adapter.mjs";\n' + source;
+  });
+  // The same small toolbar extension as stable Portable. Official inventory,
+  // install form and lifecycle remain owned by the original page.
+  const market = rewriteEntry(main.output, marketPath, input => {
+    let source = replaceOnce(input, '"plugins.bundle.config": {', '"plugins.portable.actions": { kind: "list", scope: "root" },\n"plugins.bundle.config": {');
+    const anchor = 'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [';
+    return replaceOnce(source, anchor, anchor+'renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec }), ');
+  });
+  const output = market.output;
   fs.writeFileSync(file + '.adapted', output, {flag: 'wx'});
   fs.renameSync(file + '.adapted', file);
-  return { adapterProtocol: 2, originalAsarSha256: originalHash, asarSha256: digest(output), originalMainSha256: digest(Buffer.from(input)), adaptedMainSha256: digest(replacement) };
+  return { adapterProtocol: 2, originalAsarSha256: originalHash, asarSha256: digest(output), originalMainSha256: digest(Buffer.from(main.input)), adaptedMainSha256: digest(Buffer.from(main.source)), originalPluginManagerSha256:digest(Buffer.from(market.input)), adaptedPluginManagerSha256:digest(Buffer.from(market.source)) };
 }
 module.exports = { adapt };
 if (require.main === module) fs.writeFileSync(process.argv[3], JSON.stringify(adapt(path.resolve(process.argv[2])), null, 2));
