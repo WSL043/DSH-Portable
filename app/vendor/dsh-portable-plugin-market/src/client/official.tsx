@@ -35,12 +35,15 @@ function Catalog({ ctx }: { ctx: any }) {
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
   const [preview, setPreview] = useState<{shots:string[];index:number} | null>(null)
   const [beta, setBeta] = useState(false)
-  const manager = ctx.remote.pluginManager
+  // Dynamic-plugin service facades may be recreated on property access.
+  // Capture one per mount; otherwise every inventory response restarts loading.
+  const manager = useMemo(() => ctx.remote.pluginManager, [ctx])
   const refreshInstalled = useCallback(async () => { setBundles(await manager.listBundles()) }, [manager])
   const load = useCallback(async (refresh = false, signal?: AbortSignal) => {
     setLoading(true); setError('')
     try {
-      const response = await fetch(`/dsh-market/registry?mode=${refresh ? 'refresh' : 'cache'}`, { signal })
+      const deadline = AbortSignal.timeout(45000)
+      const response = await fetch(`/dsh-market/registry?mode=${refresh ? 'refresh' : 'cache'}`, { signal: signal ? AbortSignal.any([signal, deadline]) : deadline })
       const body = await response.json()
       if (!response.ok) throw Error(body.error ?? `HTTP ${response.status}`)
       if (!signal?.aborted) setRegistry(body.registry)

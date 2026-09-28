@@ -12,6 +12,13 @@ async function connect(target) {
   let seq = 0;
   socket.onmessage = ({data}) => {
     const r=JSON.parse(data);
+    if(r.method==='Network.requestWillBeSent'&&r.params?.request?.url?.includes('/dsh-market/registry')) {
+      evidence.marketCatalogRequests=(evidence.marketCatalogRequests??0)+1;
+    }
+    if(r.method==='Network.responseReceived'&&r.params?.response?.url?.includes('/dsh-market/registry')) {
+      evidence.marketCatalogResponses ??= [];
+      if(evidence.marketCatalogResponses.length<10)evidence.marketCatalogResponses.push(r.params.response.status);
+    }
     if(r.method==='Runtime.exceptionThrown'||(r.method==='Runtime.consoleAPICalled'&&r.params?.type==='error')) {
       evidence.rendererErrors ??= [];
       if(evidence.rendererErrors.length<20)evidence.rendererErrors.push(r.params);
@@ -23,6 +30,7 @@ async function connect(target) {
   socket.onclose = () => { for (const p of pending.values()) {clearTimeout(p.timer);p.reject(new Error('CDP target closed'));} pending.clear(); };
   const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);reject(new Error(`${method} timeout`));},8000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
   await send('Runtime.enable');
+  await send('Network.enable');
   return {send, close:()=>socket.close(), evaluate:async expression=>(await send('Runtime.evaluate',{expression,returnByValue:true})).result.value};
 }
 async function targets() {return await(await fetch(`http://127.0.0.1:${Number(port)}/json/list`,{signal:AbortSignal.timeout(1000)})).json();}
