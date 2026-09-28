@@ -116,7 +116,7 @@ The Plugin Market and the two default plugins are Portable integration component
 **Choose your core version** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
 
 <details>
-<summary>View available cores for Portable 0.7.5</summary>
+<summary>View available cores for Portable 0.7.6</summary>
 
 | Platform | Stable channel | Candidate channel |
 | --- | --- | --- |
