@@ -53,10 +53,11 @@ try {
   await click(['Plugins','插件']);await snapshot('plugins');
   for(const name of ['dsh-chat-manager','@wsl043/dsh-portable-plugin-market']) {
     const expected = name==='dsh-chat-manager' && mode==='moved' ? 'false' : 'true';
-    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable ${name}"],button[aria-label="启用 ${name}"]')?.getAttribute('aria-checked')==='${expected}'`),`Default ${name} state ${expected} in official UI`);
+    const label=name==='dsh-chat-manager'?'Session Manager':name;
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable ${label}"]')?.getAttribute('aria-checked')==='${expected}'`),`Default ${name} state ${expected} in official UI`);
     if(expected==='false') {
       evidence.steps.push('disabled default remains disabled after restart and relocation');
-      await click(['Enable dsh-chat-manager','启用 dsh-chat-manager']);
+      await click(['Enable Session Manager','启用会话管理','启用 会话管理']);
     }
   }
   if(await client.evaluate(`document.body.innerText.includes('dsh-image-viewer')`))throw Error('Removed image viewer still bundled by default');
@@ -70,8 +71,8 @@ try {
   await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable @wsl043/dsh-portable-plugin-market"],button[aria-label="启用 @wsl043/dsh-portable-plugin-market"]')?.getAttribute('aria-checked')==='true'`),'Market reactivation');
   evidence.steps.push('two default plugins enabled; standalone market loads and disables cleanly; image viewer absent');
   if(mode==='install') {
-    await click(['Enable dsh-chat-manager','启用 dsh-chat-manager']);
-    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable dsh-chat-manager"],button[aria-label="启用 dsh-chat-manager"]')?.getAttribute('aria-checked')==='false'`),'Disable default chat manager before restart and relocation');
+    await click(['Enable Session Manager','启用会话管理','启用 会话管理']);
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable Session Manager"]')?.getAttribute('aria-checked')==='false'`),'Disable default chat manager before restart and relocation');
     evidence.steps.push('default chat manager disabled for restart persistence check');
   }
   if(fixture && mode === 'install'){
