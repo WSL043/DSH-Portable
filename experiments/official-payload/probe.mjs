@@ -1,7 +1,7 @@
 // Native CDP acceptance of an unmodified official executable, disposable data only.
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 const [port, output, fixture, mode = 'install'] = process.argv.slice(2);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evidence = { passed: false, steps: [] };
@@ -137,6 +137,27 @@ try {
   await client.evaluate('void window.dshDesktop.updates.open()');
   await until(async()=>await phase()==='idle','Official UI retries after failed check');
   evidence.steps.push('official update retry recovers without restart');
+  await dismiss();
+  const rootEnv={...process.env,DSH_PORTABLE_ACCEPTANCE_EXE:official};
+  const mainPid=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', `(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq $env:DSH_PORTABLE_ACCEPTANCE_EXE -and $_.CommandLine -like '*--user-data-dir=*' -and $_.CommandLine -notlike '*--type=*' }).ProcessId`],{env:rootEnv,windowsHide:true,encoding:'utf8'}).trim();
+  if(!/^\d+$/.test(mainPid))throw Error('Cannot identify the unique portable main process');
+  const restart=spawn(join(root,'DeepSeek Harness Portable.exe'),[`--restart-after=${mainPid}`,`--probe-port=${port}`],{windowsHide:true,stdio:'ignore'});
+  const restarted=new Promise((resolve,reject)=>{restart.once('error',reject);restart.once('exit',code=>code===0?resolve():reject(Error(`Restart helper exit ${code}`)));});
+  // Attach rejection immediately while CDP waits for the old window to close.
+  restarted.catch(()=>{});
+  try{await client.send('Browser.close');}catch(error){if(!String(error).includes('CDP target closed'))throw error;}
+  client.close();
+  await until(async()=>owner()!==originalOwner,'Restart replaces the old host',60000);
+  const newWelcome=await until(async()=>(await targets()).find(t=>t.type==='page'&&t.url.endsWith('/renderer/welcome.html')),'Restart welcome');
+  client=await connect(newWelcome);
+  await until(()=>client.evaluate(`typeof window.dshWelcome?.skip==='function'`),'Restart welcome API');
+  await client.evaluate('void window.dshWelcome.skip()');client.close();
+  client=await connect(await until(async()=>(await targets()).find(t=>t.type==='page'&&t.url==='dsh-app://app/'),'Restart workspace'));
+  await until(()=>client.evaluate(`!![...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length)`),'Restart visible editor');
+  if(!await client.evaluate(`document.body.innerText.includes('Portable alpha2 input acceptance 123')`))throw Error('Restart lost the portable draft');
+  await until(()=>restart.exitCode!==null,'Restart helper exits');await restarted;
+  evidence.steps.push('native restart helper waits for old process and preserves draft');
+  await snapshot('restarted');
   evidence.passed=true;
   try { await client.send('Browser.close'); } catch(error) { if(!String(error).includes('CDP target closed'))throw error; }
 } catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }
