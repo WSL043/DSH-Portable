@@ -144,7 +144,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 ## 下载
 
-[试用 1.0.0-alpha.1 · Electron（Windows x64）](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.1)：仅全新目录试用，不覆盖旧版、不迁移旧数据、不自动推送。日常使用仍选下面的稳定版。
+[试用 1.0.0-alpha.2 · 官方 Electron 成品便携化（Windows x64）](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.2)：保留官方程序原字节，外置启动器负责数据路径与已验收版本更新。仅全新目录，不覆盖或迁移旧版；工作区仍是外部文件，应用内更新入口及协议存在已知差异，试用前请阅读发布说明。日常使用仍选下面的稳定版。
 
 ### Windows
 

@@ -23,3 +23,7 @@
 完整限制见 [随包说明](../experiments/official-payload/PACKAGE-README.md)。尚不覆盖旧数据迁移、跨机器账号、真实模型请求、全部第三方插件、物理断电和磁盘耗尽。Alpha.2 公开探索允许这些明确边界，不能据此宣布 1.0 正式版完成。
 
 English: acceptance uses the actual signed official Windows desktop payload and independent native launcher. Source and binary identity are recorded in the release qualification attachment. Input, fixture plugin lifecycle, relocation to a Unicode/space path, draft persistence, normal exit, staged-state recovery and outside-write classification passed. Initial qualification has no previous distinct official version, so no cross-version upgrade is claimed. Known upstream protocol/update UI/workspace differences and formal 1.0 gaps remain explicit.
+
+发布收尾：官方 feed 实际使用 YAML 折叠行，在线检测发现并修正读取器；新增普通/折叠/CRLF/重复字段/多行拒绝验证。[在线检测复验](https://github.com/WSL043/DSH-Portable/actions/runs/36399009477)正确返回 changed=false，跳过 Windows。Windows PowerShell 5.1 实际读取公开便携目录，得到 status=current。
+
+[最终压缩包核验与发布](https://github.com/WSL043/DSH-Portable/actions/runs/36399175924)再次核对通过的运行、源码提交、ZIP 摘要、包内原生启动器/ASAR 摘要以及没有携带验收 data。公开 ZIP 为 374,795,340 字节，SHA-256 `83e27654a6d931e0493e7f3788c144268483d881049b36d4618fcd81d1bbfb47`。发布为 [v1.0.0-alpha.2](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.2) 预发布，Latest 回读仍为 v0.7.8。修订读取器只影响 CI，不改变已经验收并发布的程序。
