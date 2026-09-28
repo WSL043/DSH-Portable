@@ -90,11 +90,12 @@ try {
     if(owner()!==originalOwner)throw new Error('Protocol return replaced the active host');
   }
   evidence.steps.push('wrapper and direct EXE protocol return preserve host');
-  execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', "Start-Process -FilePath 'dsh://open/' -WindowStyle Hidden"],{windowsHide:true,timeout:20000});
+  execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', "$ErrorActionPreference='Stop'; Start-Process -FilePath 'dsh://open/' -WindowStyle Hidden"],{windowsHide:true,timeout:20000});
   await delay(1200);
   if(owner()!==originalOwner)throw new Error('Windows protocol dispatch replaced the active host');
   evidence.steps.push('Windows ShellExecute protocol return preserves host');
-  const registration=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '(Get-ItemProperty "Registry::HKEY_CURRENT_USER\\Software\\Classes\\dsh\\shell\\open\\command")."(default)"'],{windowsHide:true,encoding:'utf8'});
+  const registration=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false); (Get-ItemProperty "Registry::HKEY_CURRENT_USER\\Software\\Classes\\dsh\\shell\\open\\command")."(default)"'],{windowsHide:true,encoding:'utf8'});
+  evidence.protocolRegistration=registration;
   if(!registration.includes(join(root,'DeepSeek Harness Portable.exe')))throw new Error('Protocol registry bypasses portable launcher');
   await client.evaluate('void window.dshDesktop.updates.open()');
   await until(async()=>{
