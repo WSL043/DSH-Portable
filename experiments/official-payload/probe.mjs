@@ -79,7 +79,7 @@ try {
   }
   // Exercise both the registered wrapper and the previous browser bypass entry.
   const root=process.env.DSH_PORTABLE_DEVELOPMENT_ROOT;
-  const selected=JSON.parse(await readFile(join(root,'app','current.json'),'utf8'));
+  const selected=JSON.parse((await readFile(join(root,'app','current.json'),'utf8')).replace(/^\uFEFF/,''));
   const official=join(root,'app',selected.version,'DeepSeek Harness.exe');
   const owner=()=>execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '(Get-NetTCPConnection -State Listen -LocalPort 19387).OwningProcess'],{windowsHide:true,encoding:'utf8'}).trim();
   const originalOwner=owner();
@@ -110,6 +110,33 @@ try {
   evidence.steps.push('official update action uses portable check without missing-source error');
   const dialogs=(await targets()).filter(t=>t.type==='page'&&t.url.includes('update-dialog'));
   for(const target of dialogs){const dialog=await connect(target);try{await writeFile(`${output}.update.png`,Buffer.from((await dialog.send('Page.captureScreenshot')).data,'base64'));}finally{dialog.close();}}
+  // Corrupt only the disposable runner's catalog, then recover through the same UI.
+  const candidateFile=process.env.DSH_PORTABLE_QUALIFICATION_CANDIDATE;
+  if(process.env.GITHUB_ACTIONS!=='true'||process.env.RUNNER_ENVIRONMENT!=='github-hosted'||!candidateFile)throw Error('Update failure acceptance requires a disposable candidate');
+  const candidateBytes=await readFile(candidateFile);
+  const dismiss=async()=>{
+    const target=(await targets()).find(t=>t.type==='page'&&t.url.includes('update-dialog'));
+    if(!target)return;
+    const workspace=client;client=await connect(target);
+    try {
+      const result=await client.send('Runtime.evaluate',{expression:'window.dshUpdateDialog.status()',awaitPromise:true,returnByValue:true});
+      const view=result.result.value;
+      if(view)await click([view.buttons[view.cancelId]??view.buttons[0]]);
+    } finally {client.close();client=workspace;}
+    await delay(400);
+  };
+  const phase=async()=>(await client.send('Runtime.evaluate',{expression:'window.dshDesktop.updates.status()',awaitPromise:true,returnByValue:true})).result.value.phase;
+  try {
+    await dismiss();
+    await writeFile(candidateFile,'{"schemaVersion":-1}');
+    await client.evaluate('void window.dshDesktop.updates.open()');
+    await until(async()=>await phase()==='error','Official UI shows failed catalog check');
+    evidence.steps.push('actual invalid catalog surfaces check error');
+  } finally {await writeFile(candidateFile,candidateBytes);}
+  await dismiss();
+  await client.evaluate('void window.dshDesktop.updates.open()');
+  await until(async()=>await phase()==='idle','Official UI retries after failed check');
+  evidence.steps.push('official update retry recovers without restart');
   evidence.passed=true;
   try { await client.send('Browser.close'); } catch(error) { if(!String(error).includes('CDP target closed'))throw error; }
 } catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }

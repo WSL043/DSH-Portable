@@ -37,8 +37,13 @@ internal static class PortableLauncher {
             if (restart > 0) {
                 try {
                     using (var previous = Process.GetProcessById(restart)) {
-                        if (!previous.MainModule.FileName.StartsWith(Path.Combine(root, "app") + "\\", StringComparison.OrdinalIgnoreCase)) throw new IOException("Restart process is not owned by this Portable");
-                        if (!previous.WaitForExit(120000)) throw new IOException("The previous desktop has not exited");
+                        try {
+                            if (!previous.HasExited) {
+                                if (!previous.MainModule.FileName.StartsWith(Path.Combine(root, "app") + "\\", StringComparison.OrdinalIgnoreCase)) throw new IOException("Restart process is not owned by this Portable");
+                                if (!previous.WaitForExit(120000)) throw new IOException("The previous desktop has not exited");
+                            }
+                        } catch (InvalidOperationException) { if (!previous.HasExited) throw; }
+                        catch (System.ComponentModel.Win32Exception) { if (!previous.HasExited) throw; }
                     }
                 } catch (ArgumentException) { /* The owned process already exited. */ }
                 var deadline = DateTime.UtcNow.AddSeconds(30);
