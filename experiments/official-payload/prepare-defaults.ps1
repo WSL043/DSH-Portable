@@ -24,8 +24,8 @@ $prior=$env:ELECTRON_RUN_AS_NODE
 try {
   $env:ELECTRON_RUN_AS_NODE='1'
   $arguments=@((Join-Path $runtime 'resources/runtime/pnpm/bin/pnpm.mjs'),'install','--ignore-scripts','--store-dir',(Join-Path $defaults 'store'))|ForEach-Object {'"'+$_+'"'}
-  $process=Start-Process -FilePath (Join-Path $runtime 'DeepSeek Harness.exe') -ArgumentList $arguments -WorkingDirectory $seed -WindowStyle Hidden -Wait -PassThru
-  if($process.ExitCode -ne 0){throw "Default plugin offline store preparation failed ($($process.ExitCode))"}
+  $process=Start-Process -FilePath (Join-Path $runtime 'DeepSeek Harness.exe') -ArgumentList $arguments -WorkingDirectory $seed -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$seed/stdout.log" -RedirectStandardError "$seed/stderr.log"
+  if($process.ExitCode -ne 0){Get-Content "$seed/stdout.log","$seed/stderr.log" -Tail 80;throw "Default plugin offline store preparation failed ($($process.ExitCode))"}
 } finally {$env:ELECTRON_RUN_AS_NODE=$prior}
 Remove-PortableScratch $seed $defaults
 @{schemaVersion=1;packages=@(@{name='dsh-chat-manager';version='1.5.2'},@{name='@wsl043/dsh-portable-plugin-market';version='0.2.0-alpha.1'})}|ConvertTo-Json -Depth 5|Set-Content "$defaults/manifest.json" -Encoding UTF8

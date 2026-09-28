@@ -20,9 +20,10 @@ function Catalog({ ctx }: { ctx: any }) {
   const [error, setError] = useState(''), [notice, setNotice] = useState('')
   const [query, setQuery] = useState(''), [category, setCategory] = useState('all')
   const [sort, setSort] = useState('stars-desc'), [current, setCurrent] = useState(1)
+  const [compact, setCompact] = useState(false)
   const [loading, setLoading] = useState(false), [busy, setBusy] = useState<string | null>(null)
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
-  const [preview, setPreview] = useState<string | null>(null)
+  const [preview, setPreview] = useState<{shots:string[];index:number} | null>(null)
   const [beta, setBeta] = useState(false)
   const manager = ctx.remote.pluginManager
   const refreshInstalled = useCallback(async () => { setBundles(await manager.listBundles()) }, [manager])
@@ -68,18 +69,19 @@ function Catalog({ ctx }: { ctx: any }) {
       <input aria-label={t('searchPh')} placeholder={t('searchPh')} value={query} onChange={e => setQuery(e.target.value)} />
       <select aria-label={chinese ? '分类' : 'Category'} value={category} onChange={e => setCategory(e.target.value)}><option value="all">{t('all')}</option>{Object.entries(registry?.categories ?? {}).map(([key, value]) => <option key={key} value={key}>{localizedText(value, lang)}</option>)}</select>
       <select aria-label={chinese ? '排序' : 'Sort'} value={sort} onChange={e => setSort(e.target.value)}><option value="stars-desc">{chinese ? '星标最多' : 'Most stars'}</option><option value="added-desc">{chinese ? '最新收录' : 'Recently added'}</option></select>
+      <Button size="sm" variant="outline" onClick={() => setCompact(!compact)}>{compact ? (chinese ? '图文' : 'Gallery') : (chinese ? '紧凑' : 'Compact')}</Button>
     </div>
     {error && <div role="alert" className={page.error}>{error}<Button size="sm" variant="outline" onClick={() => void load(true)}>{chinese ? '重试' : 'Retry'}</Button></div>}
     {notice && <p role="status">{notice}</p>}
     {!registry && loading && <p role="status">{chinese ? '正在加载插件…' : 'Loading plugins…'}</p>}
-    <div className={page.list}>{filtered.slice((selectedPage - 1) * 20, selectedPage * 20).map(p => <article key={p.url} data-market-card className={css.card}>
+    <div className={page.list}><div className={compact ? page.compact : css.grid}>{filtered.slice((selectedPage - 1) * 20, selectedPage * 20).map(p => <article key={p.url} data-market-card className={`${css.card}${compact ? ` ${css.compactCard}` : ''}`}>
       <div className={css.cardContent}><div className={css.nm}><button className={css.nameButton} onClick={() => { setBeta(false); setConfirming(p) }}>{pluginName(p.name)}</button><a className={css.projectLinkIcon} href={p.url} target="_blank" rel="noreferrer" aria-label={t('openProject')}><IconLinkOutline14 size={13} /></a></div>
         <div className={css.byline}><span className={css.owner}>{p.owner}</span>{p.npm && <DownloadCount name={p.npm} chinese={chinese} className={css.star} />}{typeof p.stars === 'number' && <span className={css.star} title="GitHub stars">· ★ {formatCount(p.stars)}</span>}</div>
         <div className={css.desc}>{localizedText(p.description, lang)}</div>{p.deprecated && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
       </div>
-      <CardPreview plugin={p} t={t} onOpen={(shots, i) => setPreview(shots[i])} />
+      <CardPreview plugin={p} t={t} onOpen={(shots, index) => setPreview({shots,index})} />
       <div className={css.cardFooter}><span className={css.tag}>{categoryText(p.category, registry!.categories, lang)}</span><Button size="sm" variant={installed(p) ? 'outline' : 'primary'} disabled={!!busy} onClick={() => installed(p) ? openDetails(p) : (setBeta(false), setConfirming(p))}>{installed(p) ? (chinese ? '管理' : 'Manage') : t('install')}</Button></div>
-    </article>)}</div>
+    </article>)}</div></div>
     {registry && <footer className={page.pagination}><span>{filtered.length} {chinese ? '个插件' : 'plugins'}</span><Button size="sm" variant="outline" disabled={selectedPage <= 1} onClick={() => setCurrent(selectedPage - 1)}>‹</Button><span>{selectedPage} / {pages}</span><Button size="sm" variant="outline" disabled={selectedPage >= pages} onClick={() => setCurrent(selectedPage + 1)}>›</Button></footer>}
     <Modal open={confirming !== null} onClose={() => { if (!busy) setConfirming(null) }} title={confirming ? pluginName(confirming.name) : ''} closeLabel={t('cancel')}>
       <p>{localizedText(confirming?.description, lang)}</p><p>{chinese ? '插件以你的权限运行。请确认来源可信；安装后由你决定是否启用。' : 'Plugins run with your permissions. Trust the source before installing; enable it separately afterward.'}</p>
@@ -87,7 +89,7 @@ function Catalog({ ctx }: { ctx: any }) {
       {error && <p role="alert" className={page.error}>{error}</p>}
       <div className={page.actions}><Button variant="outline" onClick={() => busy ? void manager.cancelInstall(busy) : setConfirming(null)}>{t('cancel')}</Button><Button disabled={!!busy} onClick={() => void install()}>{busy ? t('installing') : t('install')}</Button></div>
     </Modal>
-    <Modal open={preview !== null} onClose={() => setPreview(null)} title={chinese ? '截图预览' : 'Screenshot'} closeLabel={t('cancel')}><img className={page.preview} src={preview ?? undefined} alt={chinese ? '插件截图' : 'Plugin screenshot'} /></Modal>
+    <Modal open={preview !== null} onClose={() => setPreview(null)} title={chinese ? '截图预览' : 'Screenshot'} closeLabel={t('cancel')}><img className={page.preview} src={preview?.shots[preview.index]} alt={chinese ? '插件截图' : 'Plugin screenshot'} />{preview && preview.shots.length>1 && <div className={page.actions}><Button variant="outline" disabled={preview.index===0} onClick={()=>setPreview({...preview,index:preview.index-1})}>‹</Button><span>{preview.index+1}/{preview.shots.length}</span><Button variant="outline" disabled={preview.index===preview.shots.length-1} onClick={()=>setPreview({...preview,index:preview.index+1})}>›</Button></div>}</Modal>
   </section>
 }
 

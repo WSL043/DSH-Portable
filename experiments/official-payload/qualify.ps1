@@ -20,6 +20,11 @@ $candidate | Add-Member -NotePropertyName launcherProtocol -NotePropertyValue 2 
 $candidate.qualification='qualified'
 $candidate | ConvertTo-Json -Depth 5 | Set-Content "$evidence/test-candidate.json" -Encoding UTF8
 $env:DSH_PORTABLE_QUALIFICATION_CANDIDATE=Join-Path $evidence 'test-candidate.json'
+function Save-NativeLogs([string]$Root,[string]$Label) {
+  $logFiles=@(Get-ChildItem -LiteralPath (Join-Path $Root 'data') -Filter '*.log' -Recurse -File -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 12)
+  $index=0
+  foreach($file in $logFiles){Get-Content -LiteralPath $file.FullName -Tail 500 -ErrorAction SilentlyContinue | Set-Content (Join-Path $evidence "$Label-$index-$($file.Name)");$index++}
+}
 $harness=Join-Path $PSScriptRoot 'launch-hidden-windows.ps1'
 $watch=@("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater", "$env:LOCALAPPDATA/node-addon-native-custom-loader")
 $before=@($watch|Where-Object {Test-Path -LiteralPath $_})
@@ -34,6 +39,7 @@ try {
 } finally {
  $job|Wait-Job|Receive-Job|Out-File "$evidence/launcher-process.log"
  $job|Remove-Job
+ Save-NativeLogs $package 'initial'
  & "$PSScriptRoot/trace-writes.ps1" -Mode Stop -Evidence $evidence -PortableRoot $package
 }
 if($nativeExit -ne 0){throw 'Native alpha3 acceptance failed'}
@@ -54,7 +60,7 @@ $job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=
 try {
  node experiments/official-payload/probe.mjs 19491 "$evidence/moved-page.json" '-' moved
  $movedExit=$LASTEXITCODE
-} finally {$job|Wait-Job|Receive-Job|Out-File "$evidence/moved-process.log";$job|Remove-Job}
+} finally {$job|Wait-Job|Receive-Job|Out-File "$evidence/moved-process.log";$job|Remove-Job;Save-NativeLogs $moved 'moved'}
 if($movedExit -ne 0 -or (Test-Path "$moved/app/staged.json")){throw 'Moved alpha3 acceptance failed'}
 $candidate|Add-Member -NotePropertyName evidence -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
 $candidate|ConvertTo-Json -Depth 5|Set-Content "$evidence/qualified-candidate.json" -Encoding UTF8
