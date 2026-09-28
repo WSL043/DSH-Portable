@@ -31,6 +31,7 @@ export async function seedDefaults(root, profile, executable, resources, fresh =
   const store = join(root, 'data/pnpm-store');
   await mkdir(store, {recursive:true});
   await cp(join(defaults, 'store'), store, {recursive:true, force:false, errorOnExist:false});
+  await cp(join(defaults, 'cache'), join(root,'data/pnpm-cache'), {recursive:true, force:false, errorOnExist:false});
   const specs = directories.map(directory => 'file:' + relative(profile, join(defaults, directory)).replaceAll('\\', '/'));
   const args = [join(resources, 'runtime/pnpm/bin/pnpm.mjs'), 'add', ...specs, '--offline', '--ignore-scripts', '--store-dir', store, '--config.auto-install-peers=false'];
   let diagnostic = '';

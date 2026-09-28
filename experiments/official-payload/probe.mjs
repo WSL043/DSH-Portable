@@ -52,7 +52,12 @@ try {
   evidence.steps.push('actual editor input');await snapshot('workspace');
   await click(['Plugins','插件']);await snapshot('plugins');
   for(const name of ['dsh-chat-manager','@wsl043/dsh-portable-plugin-market']) {
-    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable ${name}"],button[aria-label="启用 ${name}"]')?.getAttribute('aria-checked')==='true'`),`Default ${name} enabled in official UI`);
+    const expected = name==='dsh-chat-manager' && mode==='moved' ? 'false' : 'true';
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable ${name}"],button[aria-label="启用 ${name}"]')?.getAttribute('aria-checked')==='${expected}'`),`Default ${name} state ${expected} in official UI`);
+    if(expected==='false') {
+      evidence.steps.push('disabled default remains disabled after restart and relocation');
+      await click(['Enable dsh-chat-manager','启用 dsh-chat-manager']);
+    }
   }
   if(await client.evaluate(`document.body.innerText.includes('dsh-image-viewer')`))throw Error('Removed image viewer still bundled by default');
   await click(['Plugin market','插件市场']);
@@ -64,6 +69,11 @@ try {
   await click(['Enable @wsl043/dsh-portable-plugin-market','启用 @wsl043/dsh-portable-plugin-market']);
   await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable @wsl043/dsh-portable-plugin-market"],button[aria-label="启用 @wsl043/dsh-portable-plugin-market"]')?.getAttribute('aria-checked')==='true'`),'Market reactivation');
   evidence.steps.push('two default plugins enabled; standalone market loads and disables cleanly; image viewer absent');
+  if(mode==='install') {
+    await click(['Enable dsh-chat-manager','启用 dsh-chat-manager']);
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable dsh-chat-manager"],button[aria-label="启用 dsh-chat-manager"]')?.getAttribute('aria-checked')==='false'`),'Disable default chat manager before restart and relocation');
+    evidence.steps.push('default chat manager disabled for restart persistence check');
+  }
   if(fixture && mode === 'install'){
     await click(['Add plugin','Add Plugin','添加插件']);
     await until(()=>client.evaluate(`(()=>{const e=document.querySelector('[role=dialog] input[type=text]');if(!e)return false;e.focus();return true;})()`),'Install input');

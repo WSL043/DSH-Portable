@@ -23,7 +23,9 @@ $runtime=Join-Path $Root "app/$Version"
 $prior=$env:ELECTRON_RUN_AS_NODE
 try {
   $env:ELECTRON_RUN_AS_NODE='1'
-  $arguments=@((Join-Path $runtime 'resources/runtime/pnpm/bin/pnpm.mjs'),'install','--ignore-scripts','--store-dir',(Join-Path $defaults 'store'))|ForEach-Object {'"'+$_+'"'}
+  # Offline range resolution needs registry metadata as well as content-addressed files.
+  # Use a fresh package-owned cache so no runner account/cache data is shipped.
+  $arguments=@((Join-Path $runtime 'resources/runtime/pnpm/bin/pnpm.mjs'),'install','--ignore-scripts','--store-dir',(Join-Path $defaults 'store'),'--cache-dir',(Join-Path $defaults 'cache'))|ForEach-Object {'"'+$_+'"'}
   $process=Start-Process -FilePath (Join-Path $runtime 'DeepSeek Harness.exe') -ArgumentList $arguments -WorkingDirectory $seed -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$seed/stdout.log" -RedirectStandardError "$seed/stderr.log"
   if($process.ExitCode -ne 0){Get-Content "$seed/stdout.log","$seed/stderr.log" -Tail 80;throw "Default plugin offline store preparation failed ($($process.ExitCode))"}
 } finally {$env:ELECTRON_RUN_AS_NODE=$prior}

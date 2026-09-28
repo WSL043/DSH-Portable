@@ -37,6 +37,7 @@ test('fresh profile initialization records defaults only after an offline instal
     await mkdir(profile,{recursive:true});
     await mkdir(join(root,'data/launcher'),{recursive:true});
     await mkdir(join(root,'launcher/default-plugins/store'),{recursive:true});
+    await mkdir(join(root,'launcher/default-plugins/cache'),{recursive:true});
     await mkdir(join(resources,'runtime/pnpm/bin'),{recursive:true});
     await writeFile(join(profile,'package.json'),JSON.stringify({dependencies:{},dsh:{profile:{bundles:['official-bundle']}}}));
     const script=join(resources,'runtime/pnpm/bin/pnpm.mjs');
