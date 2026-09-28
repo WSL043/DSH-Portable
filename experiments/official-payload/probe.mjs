@@ -44,6 +44,7 @@ try {
   await client.evaluate('void window.dshWelcome.skip()');client.close();
   client=await connect(await until(async()=>(await targets()).find(t=>t.type==='page'&&t.url==='dsh-app://app/'),'Workspace'));
   await until(()=>client.evaluate(`!![...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length)`),'Visible editor');
+  if(mode==='moved'&&!await client.evaluate(`document.body.innerText.includes('Portable alpha2 input acceptance 123')`))throw new Error('Draft lost after directory relocation');
   await client.evaluate(`(()=>{const e=[...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length);e.focus();})()`);
   await client.send('Input.insertText',{text:'Portable alpha2 input acceptance 123'});
   if(!await client.evaluate(`(document.activeElement.textContent||document.activeElement.value).includes('Portable alpha2 input acceptance 123')`))throw new Error('Input not retained');
@@ -71,6 +72,8 @@ try {
     await click(['Uninstall dsh-portable-acceptance-fixture','卸载 dsh-portable-acceptance-fixture']);
     await click(['Uninstall','卸载'],'[role=dialog] button');
     await until(()=>client.evaluate(`!document.body.innerText.includes('dsh-portable-acceptance-fixture')`),'Moved plugin uninstall');
+    const manifest=JSON.parse(await readFile(join(process.env.DSH_HOME,'profiles','desktop','package.json'),'utf8'));
+    if(manifest.dependencies?.['dsh-portable-acceptance-fixture'])throw new Error('Uninstalled plugin remains in profile dependencies');
     evidence.steps.push('moved plugin uninstall');await snapshot('uninstalled');
   }
   await client.evaluate('void window.dshDesktop.updates.open()');await delay(2500);

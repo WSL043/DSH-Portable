@@ -9,6 +9,10 @@ using System.Net.NetworkInformation;
 using System.Text;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+[assembly: System.Reflection.AssemblyTitle("DSH-Portable")]
+[assembly: System.Reflection.AssemblyProduct("DSH-Portable official-payload alpha")]
+[assembly: System.Reflection.AssemblyVersion("1.0.0.2")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0-alpha.2")]
 
 internal static class PortableLauncher {
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
@@ -50,6 +54,7 @@ internal static class PortableLauncher {
                 if (File.Exists(stagedFile) && !Process.GetProcessesByName("DeepSeek Harness").Any(p => {
                     try { return p.MainModule.FileName.StartsWith(Path.Combine(root, "app") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase); } catch { return true; }
                 })) {
+                  try {
                     var staged = Read(stagedFile);
                     var next = (string)staged["version"];
                     if (((string)staged["from"] != version && next != version) || !System.Text.RegularExpressions.Regex.IsMatch(next, @"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$")) throw new IOException("Staged update does not match the current version");
@@ -65,6 +70,12 @@ internal static class PortableLauncher {
                     if (next != version) Write(state, new Dictionary<string, object> { { "version", next }, { "previous", version } });
                     File.Delete(stagedFile);
                     version = next; app = nextApp; executable = Path.Combine(app, "DeepSeek Harness.exe");
+                  } catch (Exception activationError) {
+                    // A failed candidate must not prevent use of the existing application.
+                    Write(Path.Combine(data, "launcher", "activation-error.json"), new Dictionary<string, object> {
+                        { "status", "current-preserved" }, { "error", activationError.Message }, { "at", DateTime.UtcNow.ToString("o") }
+                    });
+                  }
                 }
                 Write(marker, new Dictionary<string, object> { { "layout", Layout }, { "root", root } });
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = root };

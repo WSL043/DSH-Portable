@@ -12,7 +12,9 @@ if ($signature.Status -ne 'Valid') { throw 'Invalid official installer signature
 $signature | Select-Object Status,@{n='subject';e={$_.SignerCertificate.Subject}} | ConvertTo-Json | Set-Content "$evidence/signature.json"
 $outer = Join-Path $root 'outer'
 $app = Join-Path $root 'app'
-$receipt = Expand-OfficialPayload $installer $candidate $app (Get-Command 7z).Source
+$sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+if (-not (Test-Path $sevenZip)) { throw 'Full 7-Zip installation is required on the build runner' }
+$receipt = Expand-OfficialPayload $installer $candidate $app $sevenZip
 $exe = Join-Path $app 'DeepSeek Harness.exe'
 if ((Get-AuthenticodeSignature $exe).Status -ne 'Valid') { throw 'Invalid payload signature' }
 & "$PSScriptRoot/trace-writes.ps1" -Mode Start -Evidence $evidence -PortableRoot $root
@@ -44,13 +46,16 @@ try {
   if (Test-Path "$env:DSH_HOME/acceptance-plugin-state.txt") { Copy-Item "$env:DSH_HOME/acceptance-plugin-state.txt" "$evidence/plugin-state.txt" }
 }
 if ($probeExit -ne 0 -or $leaks.Count -gt 0) { throw 'Official payload boundary qualification failed; inspect evidence' }
+if ((Get-Content "$evidence/write-trace-summary.json" -Raw | ConvertFrom-Json).unclassifiedEvents -gt 0) { throw 'Unclassified outside writes require review' }
 & "$PSScriptRoot/test-boundaries.ps1"
 & "$PSScriptRoot/test-update.ps1"
 $package = Join-Path $env:RUNNER_TEMP 'portable-alpha2-native'
-& "$PSScriptRoot/package.ps1" -Installer $installer -Output $package -SevenZip (Get-Command 7z).Source
+& "$PSScriptRoot/package.ps1" -Installer $installer -Output $package -SevenZip $sevenZip
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $package
 $env:DSH_HOME = Join-Path $package 'data/dsh-home'
 $nativeExe = Join-Path $package 'DeepSeek Harness Portable.exe'
+# Simulate a corrupt staged receipt: the existing application must remain launchable.
+@{ version=$candidate.version; from=$candidate.version; receipt=@{asarSha256=('0'*64)} } | ConvertTo-Json -Depth 4 | Set-Content "$package/app/staged.json"
 $job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19490' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,$nativeExe
 try {
   node experiments/official-payload/probe.mjs 19490 "$evidence/launcher-page.json" "$env:GITHUB_WORKSPACE/experiments/official-desktop/fixtures/lifecycle"
@@ -61,6 +66,10 @@ try {
   Copy-Item "$package/launcher/provenance.json" "$evidence/provenance.json"
 }
 if ($nativeExit -ne 0) { throw 'Native launcher artifact qualification failed' }
+if (-not (Test-Path "$package/data/launcher/activation-error.json") -or (Get-Content "$package/app/current.json" -Raw | ConvertFrom-Json).version -ne $candidate.version) { throw 'Corrupt staged receipt did not preserve current application' }
+Copy-Item "$package/data/launcher/activation-error.json" "$evidence/rejected-stage.json"
+# Simulate interruption after current was committed but before staged was removed.
+@{ version=$candidate.version; from=$candidate.version; receipt=(Get-Content "$package/launcher/provenance.json" -Raw|ConvertFrom-Json) } | ConvertTo-Json -Depth 5 | Set-Content "$package/app/staged.json"
 $moved = Join-Path $env:RUNNER_TEMP 'portable-alpha2-moved'
 if (Test-Path $moved) { throw 'Moved qualification destination already exists' }
 # Both exact paths are inside the disposable runner temp root and owned by this run.
@@ -79,3 +88,8 @@ try {
   $job | Remove-Job
 }
 if ($movedExit -ne 0) { throw 'Moved native artifact qualification failed' }
+if (Test-Path "$moved/app/staged.json") { throw 'Interrupted activation did not converge' }
+$candidate | Add-Member -NotePropertyName launcherProtocol -NotePropertyValue 1 -Force
+$candidate.qualification = 'qualified'
+$candidate | Add-Member -NotePropertyName evidence -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
+$candidate | ConvertTo-Json -Depth 5 | Set-Content "$evidence/qualified-candidate.json" -Encoding UTF8
