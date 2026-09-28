@@ -11,8 +11,11 @@ export const descriptorV2PatchIdentity = Object.freeze({
 })
 export function descriptorV2PatchIdentityFor(version) {
   if (version === descriptorV2PatchIdentity.dshVersion) return descriptorV2PatchIdentity
-  // rc.2 ships the exact same reviewed migration bytes as alpha.1.
-  if (version === '0.1.7-rc.2') return Object.freeze({ ...descriptorV2PatchIdentity, dshVersion: version })
+  // These releases ship the exact same reviewed migration bytes; the version
+  // identity remains exact and is never inferred from a semver range.
+  if (version === '0.1.7-rc.2' || version === '0.2.0-rc.1') {
+    return Object.freeze({ ...descriptorV2PatchIdentity, dshVersion: version })
+  }
   return null
 }
 const hash = source => createHash('sha256').update(source).digest('hex')

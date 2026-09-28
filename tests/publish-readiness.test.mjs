@@ -65,6 +65,22 @@ test('rc.2 migration evidence requires its own exact compatibility identity', ()
   } }))
 })
 
+test('0.2.0-rc.1 rejects the previous identity and requires its own exact compatibility identity', () => {
+  const version = '0.2.0-rc.1'
+  const lock = { ...stableLock, dsh: { ...stableLock.dsh, version } }
+  const productVersion = '0.8.0'
+  const oldIdentity = descriptorV2PatchIdentityFor('0.1.7-rc.2')
+  const identity = descriptorV2PatchIdentityFor(version)
+  assert.throws(() => assertPublishReadiness({ productVersion, stableLock: lock, readiness: passed }), /exact reviewed compatibility patch/)
+  assert.throws(() => assertPublishReadiness({ productVersion, stableLock: lock, readiness: {
+    ...passed, historicalSessionMigration: { ...passed.historicalSessionMigration, compatibilityPatch: oldIdentity },
+  } }), /exact reviewed compatibility patch/)
+  assert.equal(identity.dshVersion, version)
+  assert.doesNotThrow(() => assertPublishReadiness({ productVersion, stableLock: lock, readiness: {
+    ...passed, historicalSessionMigration: { ...passed.historicalSessionMigration, compatibilityPatch: identity },
+  } }))
+})
+
 test('publish workflow checks candidate readiness before creating a release', async () => {
   const workflow = await readFile(new URL('../.github/workflows/publish.yml', import.meta.url), 'utf8')
   assert.ok(workflow.indexOf('scripts/assert-publish-readiness.mjs') > workflow.indexOf('scripts/version-policy.mjs'))
