@@ -29,14 +29,18 @@ try {
   $process=Start-Process -FilePath (Join-Path $runtime 'DeepSeek Harness.exe') -ArgumentList $arguments -WorkingDirectory $seed -WindowStyle Hidden -Wait -PassThru -RedirectStandardOutput "$seed/stdout.log" -RedirectStandardError "$seed/stderr.log"
   if($process.ExitCode -ne 0){Get-Content "$seed/stdout.log","$seed/stderr.log" -Tail 80;throw "Default plugin offline store preparation failed ($($process.ExitCode))"}
 } finally {$env:ELECTRON_RUN_AS_NODE=$prior}
-# pnpm registers its temporary seed project with a junction in the store.
+# pnpm registers its temporary seed project with a directory link in the store.
 # It is build-machine bookkeeping, not offline package content. Unlink only
-# that verified junction before removing the seed; never follow its target.
+# that verified link before removing the seed; never follow its target.
 $registrations=Join-Path $defaults 'store/v11/projects'
 if(Test-Path -LiteralPath $registrations){
   Assert-PlainPath $registrations
   foreach($entry in Get-ChildItem -LiteralPath $registrations -Force){
-    if(-not($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $entry.LinkType -ne 'Junction' -or [IO.Path]::GetFullPath([string]$entry.Target) -ne [IO.Path]::GetFullPath($seed)){throw 'Unexpected offline-store project registration'}
+    # pnpm prefers relative symbolic links when Windows permits them, and
+    # falls back to absolute junctions otherwise (e.g. a non-admin machine).
+    $linkTarget=[string]$entry.Target
+    if(-not[IO.Path]::IsPathRooted($linkTarget)){$linkTarget=Join-Path $entry.Parent.FullName $linkTarget}
+    if(-not($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) -or $entry.LinkType -notin @('Junction','SymbolicLink') -or [IO.Path]::GetFullPath($linkTarget).TrimEnd('\') -ne [IO.Path]::GetFullPath($seed).TrimEnd('\')){throw "Unexpected offline-store project registration: $($entry.LinkType) $linkTarget"}
     [IO.Directory]::Delete($entry.FullName)
   }
   Remove-PortableScratch $registrations $defaults
