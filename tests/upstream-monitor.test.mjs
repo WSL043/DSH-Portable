@@ -193,6 +193,16 @@ function previewRegistry({
   return { 'dist-tags': tags, versions }
 }
 
+test('shipped packages do not reopen preview PRs while future versions still qualify', () => {
+  const stableLock = { dsh: {version: '0.1.2-rc.1', integrity: 'sha512-0.1.2-rc.1'} }
+  const input = {lock: previewLock, stableLock, packageCommit: {sha: 'f'.repeat(40)}}
+  const shipped = evaluatePreviewUpstream({...input, registry: previewRegistry({next: '0.1.2-rc.1'})})
+  assert.equal(shipped.changed, false)
+  assert.equal(shipped.reason, 'already-shipped')
+  assert.equal(evaluatePreviewUpstream({...input, registry: previewRegistry({next: '0.1.2-rc.2'})}).changed, true)
+  assert.throws(() => evaluatePreviewUpstream({...input, registry: previewRegistry({next: '0.1.2-rc.1', integrities: {'0.1.2-rc.1': 'sha512-replaced'}})}), /integrity changed/)
+})
+
 test('a newer official alpha becomes a review-only candidate', () => {
   const result = evaluatePreviewUpstream({
     lock: previewLock,

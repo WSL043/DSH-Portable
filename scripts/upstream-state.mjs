@@ -78,7 +78,7 @@ export function selectPreviewCandidate(registry) {
   return selected
 }
 
-export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates = [] }) {
+export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates = [], stableLock }) {
   const currentVersion = lock.dsh.version
   const currentIntegrity = registry?.versions?.[currentVersion]?.dist?.integrity
   if (currentIntegrity && currentIntegrity !== lock.dsh.npmIntegrity) {
@@ -96,6 +96,13 @@ export function evaluatePreviewUpstream({ lock, registry, packageCommit, rejecte
   }
 
   const comparison = compareSemver(selected.version, currentVersion)
+  if (stableLock?.dsh && compareSemver(selected.version, stableLock.dsh.version) <= 0) {
+    if (selected.version === stableLock.dsh.version && selected.integrity !== stableLock.dsh.integrity) {
+      throw new Error(`integrity changed for the shipped official package ${selected.version}`)
+    }
+    return { changed: false, reason: 'already-shipped', selectedTag: selected.tag,
+      version: currentVersion, integrity: lock.dsh.npmIntegrity, commit: lock.dsh.reviewedCommit }
+  }
   if (comparison <= 0) {
     return {
       changed: false,

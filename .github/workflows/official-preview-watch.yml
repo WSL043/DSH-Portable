@@ -50,7 +50,7 @@ jobs:
       - name: Keep an identical candidate review unchanged
         if: steps.preview.outputs.changed == 'false' && steps.preview.outputs.blocked != 'true'
         run: |
-          echo 'This official candidate is already awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'No newer unshipped candidate needs review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
       - name: Run repository contracts before opening the review
         id: contracts
         if: steps.preview.outputs.changed == 'true'

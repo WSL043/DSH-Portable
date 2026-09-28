@@ -27,7 +27,10 @@ test('official DSH candidate discovery opens a review-only pull request', async 
   assert.match(updater, /provisional\.version/)
   assert.doesNotMatch(updater, /const alphaVersion/)
   assert.match(updater, /upstream\.preview\.lock\.json/)
-  assert.doesNotMatch(updater, /upstream\.lock\.json/)
+  // Stable identity is a read-only floor; writes remain confined to the preview lock.
+  assert.match(updater, /readFile\(path\.join\(root, 'upstream\.lock\.json'\), 'utf8'\)/)
+  assert.equal(updater.match(/upstream\.lock\.json/g)?.length, 1)
+  assert.match(updater, /const lockPath = path\.join\(root, 'upstream\.preview\.lock\.json'\)/)
 })
 
 test('bot dependency branches report qualification for a human merge', async () => {

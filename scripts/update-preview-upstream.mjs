@@ -36,10 +36,11 @@ async function officialTagCommit(version) {
 }
 
 const lockPath = path.join(root, 'upstream.preview.lock.json')
-const [registry, lock, rejected] = await Promise.all([
+const [registry, lock, rejected, stableLock] = await Promise.all([
   json('https://registry.npmjs.org/@deepseek-ai%2Fdsh'),
   readFile(lockPath, 'utf8').then(JSON.parse),
   readFile(path.join(root, 'rejected-official-candidates.json'), 'utf8').then(JSON.parse),
+  readFile(path.join(root, 'upstream.lock.json'), 'utf8').then(JSON.parse),
 ])
 if (rejected.schemaVersion !== 1 || !Array.isArray(rejected.candidates)
   || rejected.candidates.some(candidate => !/^\d+\.\d+\.\d+-(?:alpha|beta|rc)\.\d+$/.test(candidate.version ?? '')
@@ -48,6 +49,7 @@ if (rejected.schemaVersion !== 1 || !Array.isArray(rejected.candidates)
   throw new Error('invalid rejected official candidate policy')
 }
 const provisional = evaluatePreviewUpstream({
+  stableLock,
   lock,
   registry,
   packageCommit: { sha: lock.dsh.reviewedCommit },
@@ -56,7 +58,7 @@ const provisional = evaluatePreviewUpstream({
 const packageCommit = provisional.changed
   ? await officialTagCommit(provisional.version)
   : { sha: lock.dsh.reviewedCommit }
-const state = evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates: rejected.candidates })
+const state = evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates: rejected.candidates, stableLock })
 
 if (state.changed) {
   const sourceMetadata = await readOfficialSourceMetadata(state.commit, { json, text })
