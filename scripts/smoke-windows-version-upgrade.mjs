@@ -135,6 +135,8 @@ try {
     [path.join(destination, 'data', 'dsh-home', 'settings.yaml'), 'locale:\n  preference: zh\n'],
     [path.join(destination, 'data', 'dsh-home', 'portable-upgrade-session.marker'), 'keep-session\n'],
     [path.join(destination, 'data', 'dsh-home', 'profiles', 'web', 'portable-upgrade-plugin.marker'), 'keep-plugin\n'],
+    // A comment-only YAML document stands in for the real credential store.
+    [path.join(destination, 'data', 'dsh-home', '.credentials.yaml'), '# keep-credentials\n'],
     [path.join(destination, 'workspace', 'portable-upgrade-project.txt'), 'keep-workspace\n'],
   ])
   for (const [filename, value] of markers) {
@@ -270,7 +272,12 @@ try {
   assert.ok((await stat(path.join(destination, 'runtime', 'DSH-App.dshpack'))).isFile())
   await assert.rejects(stat(path.join(destination, 'app', 'node_modules')), { code: 'ENOENT' })
   for (const [filename, value] of markers) {
-    try { assert.equal(await readFile(filename, 'utf8'), value) }
+    try {
+      const actual = await readFile(filename, 'utf8')
+      // DSH appends its own records to the credential store after startup; the original bytes must stay first.
+      if (path.basename(filename) === '.credentials.yaml') assert.ok(actual.startsWith(value), 'credential store prefix was not retained')
+      else assert.equal(actual, value)
+    }
     catch (error) {
       if (error.code !== 'ENOENT' || path.basename(filename) !== 'settings.yaml') throw error
       // Official 0.1.7 imports legacy settings into the active profile and keeps
