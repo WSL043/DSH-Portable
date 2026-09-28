@@ -66,7 +66,7 @@ try {
   const dismissLateOnboarding = `(() => {
     const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
       .filter(item => item.getBoundingClientRect().width > 0)
-      .find(item => /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
+      .find(item => /Internal Testing Notice|内测声明|Preview Notice|预览版说明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
     if (!notice) return false
     const button = [...notice.querySelectorAll('button')].find(item =>
       ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)

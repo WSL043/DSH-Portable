@@ -211,7 +211,7 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
     const onboarding = await evaluate(client, `(() => {
       const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
         .find(item => item.getBoundingClientRect().width > 0
-          && /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(item.textContent || ''))
+          && /Internal Testing Notice|内测声明|Preview Notice|预览版说明|Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(item.textContent || ''))
       const button = [...(notice?.querySelectorAll('button') || [])]
         .find(item => ['Continue', '继续', 'Configure later', 'Set up later', '稍后配置'].includes((item.textContent || '').trim())
           && !item.disabled && !item.closest('[inert],[aria-hidden="true"]'))
