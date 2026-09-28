@@ -140,7 +140,10 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       && maximized.clientScreen.y + maximized.clientScreen.height <= maximized.workArea.y + maximized.workArea.height,
     'maximized content respects the Windows working area')
     assert.equal((await native(122)).fullscreen, true, 'F11 still enters true fullscreen from maximized')
-    assert.equal((await native(27)).windowState, 'Maximized', 'Escape restores the previous maximized state')
+    const restoredMaximized = await native(27)
+    assert.equal(restoredMaximized.windowState, 'Maximized', 'Escape restores the previous maximized state')
+    assert.deepEqual(restoredMaximized.clientScreen, maximized.clientScreen,
+      'Escape restores the taskbar-preserving client bounds, not only the maximized flag')
     const unmaximized = await native('maximize')
     assert.equal(unmaximized.windowState, 'Normal')
     assert.deepEqual(unmaximized.bounds, normal.bounds, 'the menu restores the original window bounds')

@@ -60,6 +60,13 @@ try {
  # Hidden controls exercise the same caption handlers without moving a visible window.
  $menu.Items['caption-maximize'].PerformClick()
  if($window.WindowState -ne 'Maximized'){throw 'Maximize command failed'}
+ $maximizedClient=$window.RectangleToScreen($window.ClientRectangle)
+ $workArea=[Windows.Forms.Screen]::FromControl($window).WorkingArea
+ if(-not $workArea.Contains($maximizedClient)){throw 'Maximized client overlaps the taskbar working area'}
+ $fullscreenMethod=$type.GetMethod('SetDesktopFullscreen',$flags)
+ $fullscreenMethod.Invoke($window,@($true)) | Out-Null
+ $fullscreenMethod.Invoke($window,@($false)) | Out-Null
+ if($window.RectangleToScreen($window.ClientRectangle) -ne $maximizedClient){throw 'Fullscreen exit did not restore taskbar-preserving client bounds'}
  $menu.Items['caption-maximize'].PerformClick()
  if($window.WindowState -ne 'Normal'){throw 'Restore command failed'}
  $menu.Items['caption-minimize'].PerformClick()

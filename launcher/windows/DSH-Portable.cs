@@ -1920,8 +1920,9 @@ namespace DshPortable
                 FormBorderStyle = FormBorderStyle.Sizable;
                 desktopMenu.Visible = true;
                 Bounds = boundsBeforeFullscreen;
-                WindowState = stateBeforeFullscreen;
+                // Restore work-area sizing before re-entering the maximized state.
                 fullscreen = false;
+                WindowState = stateBeforeFullscreen;
                 ApplyDesktopChrome();
             }
             ResumeLayout(true);
