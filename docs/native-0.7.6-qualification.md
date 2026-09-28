@@ -1,6 +1,6 @@
 # Native 0.7.6 候选验收记录
 
-状态：准备发布，未发布。范围按 `native-release-exit-criteria.md` 的 G1–G8；Electron 与被隔离的 rc.2 不混入本批。
+状态：0.7.6正式版已发布，产品发布回读完成；独立内核新基线同步另行记录。范围按 `native-release-exit-criteria.md` 的 G1–G8；Electron 与被隔离的 rc.2 不混入本批。
 
 历史未通过记录（2026-09-28，后续单项例外见下）：`soak-final/result.json` 完成120分钟后未通过。基线私有内存中位数501,723,136字节，结束静置682,921,984字节，超过原定 `baseline * 1.2 + 64 MiB`；句柄增长110，超过100上限。200次导航、20次图片、10轮插件操作完成，页面异常为零，退出后所属进程为空。保留原始报告，不放宽阈值、不发布该候选。后台内存策略对照未证明收益，已撤回实验代码；诊断记录见下文。
 
@@ -95,3 +95,9 @@ The diff from `f1d3398` to `2626237` contains only this qualification document a
 93f6b3b934f2eb46a3836d7072e93f61260b0fb1 / CI 36343395952 的Windows普通离线包已下载并按随包SHA256核对：70ef32cdb09d067146895c6fc8acf4e02a58621c73160d4f3aecf34b9b091970，153210103字节，比公开0.7.5增加89631字节（约87.53 KiB）。不是本地候选归档的摘要。
 
 2026-09-28T00:04:17Z，release-93f6b3b/probe/result.json 关键实机probe通过：原生隐藏启动、4次导航、图片标注回填、默认插件启停、确定性流式/取消及最终输入，无页面异常、sourceOverlay=false、退出存活PID为空。probe自身qualifiesRelease=false，含义是它不是120分钟长跑；整体发布依据为已有G1–G6、精确CI成品probe及上述G7明确例外，不将probe伪称完整长稳。CI亮暗维护截图已复核。
+
+## 公开发布回读
+
+v0.7.6 已于2026-09-28发布为正式版，发布提交93f6b3b934f2eb46a3836d7072e93f61260b0fb1，发布工作流36360849097成功。公开checksums与GitHub的全部对应资产SHA256一致；五平台稳定产品索引均为0.7.6/0.7.5/0.7.4。0.7.6随包CLI识别current，公开0.7.5随包CLI识别0.7.6并要求完整产品包，未向旧壳投放不兼容组件包。内存例外中英说明已放在发布说明开头。
+
+回读证据：release-93f6b3b/public-verification.json、public-release.json、product-client.json、previous-product-client.json。五份已退出诊断副本经IFileOperation回收，共3546132563字节，回收站回读5项；报告及最终成品保留，receipt为recycle-late-receipt.json。
