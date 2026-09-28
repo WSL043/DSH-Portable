@@ -4,7 +4,7 @@
   "dshNpmIntegrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng==",
   "historicalSessionMigration": {
     "status": "passed",
-    "evidence": "build/orch-080/T6/historical-result.json; scripts/verify-historical-session.mjs",
+    "evidence": "docs/upstream-0.2.0-rc.1-intake.md; scripts/verify-historical-session.mjs",
     "compatibilityPatch": {
       "id": "released-v0-descriptor-v2-read-v1",
       "dshVersion": "0.2.0-rc.1",
