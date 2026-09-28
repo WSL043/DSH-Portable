@@ -10,7 +10,7 @@
 
 ## rc.2 开发适配
 
-- 在隔离、忽略的检出中固定官方提交 `477b4f420553e8a52c2fbccc464d7561b239c443`。`experiments/official-desktop/prepare-development.mjs` 现支持 `rc2`，只接受 `main.ts` 和 `update-coordinator.ts` 的精确 SHA-256；输出独立源码覆盖层，不编辑下载的签名发行物。开发入口在 Electron 选定日志路径前要求绝对的 `DSH_PORTABLE_DEVELOPMENT_ROOT`，把 DSH home、Electron userData、sessionData、日志和崩溃目录放在该根目录；开发更新器拒绝官方安装器调用。
+- 历史 alpha.1 探针（已退出当前实现，源码见 v1.0.0-alpha.1 标签）：在隔离检出中固定官方提交 `477b4f420553e8a52c2fbccc464d7561b239c443`，按主进程文件摘要生成源码覆盖层。alpha.2 已改为 [原版官方成品路线](../experiments/official-payload/README.md)，不再复用这套覆盖构建。
 - `pnpm install --frozen-lockfile --ignore-scripts`、官方 `pnpm run build` 和适配后的 `pnpm --filter @deepseek-ai/dsh-desktop run build` 均成功；独立的 `pnpm run build:lib:host` 也成功。覆盖层校验在真实更新协调器上记录 **0 次更新 I/O**；原先 alpha.2 覆盖层仍通过校验。上游更新协调器专项 15/15 通过。
 - rc.2 覆盖层还对上游开发启动脚本的精确 SHA-256 固定 `--prepare-only` 开关：只准备真实开发项目与 Primary Runtime，不打开窗口。这一步实跑成功，包含 Office runtime 版本和文档往返检查。开发源码覆盖层的 `dev.ts` 与隔离检出中实际执行的文件 SHA-256 一致。
 - 用 Electron 44.0.0 官方 ZIP（SHA-256 `e61aa3bcea8152bc0730abd015e47c032d778a0ef10e2a1c78ba3c4ea47942f9`）在独立 Windows 桌面启动编译后的**真实官方 Desktop 开发宿主**，没有调用签名安装器，也没有使用现有 Portable profile。它连续运行 35 秒以上；CDP 显示欢迎页 `readyState=complete`，标题 `DeepSeek Harness`，可见登录与添加 API Key 入口，截图视觉检查通过。实际进程写入隔离的 DSH home、Electron userData 和日志根；原有 3080 服务仍由原进程占用。

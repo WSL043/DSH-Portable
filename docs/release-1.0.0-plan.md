@@ -1,5 +1,17 @@
 # 1.0.0 交付范围与验收
 
+## 当前决策：alpha.2 原版成品路线（2026-09-28）
+
+用户授权 alpha.2 公开试用并允许重构。当前实现改为 [官方成品与外置启动器](../experiments/official-payload/README.md)：不再编译覆盖官方主进程，不修改官方 EXE、ASAR 和运行库；只不部署安装器更新配置。旧 alpha.1 的构建和探针已退出当前实现，历史源码留在 v1.0.0-alpha.1 标签。下文 alpha.1 批次为历史证据，不能代替 alpha.2 成品验收。
+
+新流程通过原始官方桌面更新源发现候选，在 Windows 实机验证签名、输入、插件生命周期、搬迁、退出与写入边界后，更新独立的小型目录。更新器只暂存，原生启动器在冷启动切换；保留当前、上一和待切换程序。新目录初次只有 rc.2，跨两个不同官方版本的升级尚无通过证据；后续目录更新必须经过该专项门槛。
+
+本次公开边界是 Windows x64、全新目录、预发布，不进入 0.7.x 产品或内核通道。官方默认及用户自选工作区仍是外部文件；不改写官方会话绝对路径。dsh:// 协议注册和应用内更新入口需要上游扩展；目前明确列为 alpha 限制，不伪造兼容。macOS、旧版迁移、跨机器账号、模型请求、完整故障注入仍是正式版门槛。此次路线推翻了原先“复用旧事务层和源码覆盖”的实施方式，不再按旧批次继续累积补丁。
+
+Current direction: preserve official payload bytes and maintain an external portable launcher. Alpha.1 source overlays are retired. Qualification and known boundaries are documented with the new implementation; the earlier batches below are historical only. Alpha.2 remains a Windows fresh-directory preview, separate from stable updates and full 1.0 acceptance.
+
+## 历史计划与 alpha.1 证据
+
 2026-09-26，用户在查看独立样包后授权 **1.0.0-alpha.1 公开试用**，取代本日早先的“仅内部开发、不建 Release”限制。发布为 Windows x64、仅全新目录的 GitHub 预发布，不成为 Latest，也不进入 Native 产品/内核更新列表。当前 Native 产品版本与稳定锁不改号。1.0.0 正式版仍须完成下表所有门槛。设计依据为 [长期架构](portable-long-term-architecture.md)。
 
 Alpha 发布使用 `experiments/official-desktop/qualify-alpha.mjs` 的独立门槛和精确成品摘要；原 Native 发布门槛继续拒绝将 1.0 alpha 当作可升级旧数据的产品发布。允许的试用范围是官方 Electron 工作台与全新便携数据根；旧数据迁移、跨机器登录态、自动更新恢复和默认插件完整功能均不作承诺。未经证实的场景写入预发布已知限制，不用 Alpha 降低正式版标准。
