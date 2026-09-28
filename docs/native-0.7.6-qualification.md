@@ -89,3 +89,9 @@ The diff from `f1d3398` to `2626237` contains only this qualification document a
 `historical-final.txt` verifies the extracted final runtime with official JSONL persistence: historical sessions can be read, continued and reopened, interrupted-journal recovery succeeds, and original historical files remain unchanged. The deterministic adapter avoids paid model requests; this is not a claim about every user's historical data or physical power loss.
 
 `startup-comparison.json` records backend readiness using a new private runtime cache for cold starts: public 0.7.5 cold/warm 7,501/2,698 ms; final 0.7.6 cold/warm 7,402/2,566 ms. These single controlled measurements exclude native first-paint time and do not establish a general performance improvement. The prewarmed preliminary measurement is retained separately and is not counted as cold-start evidence.
+
+## 最终CI成品关键检查
+
+93f6b3b934f2eb46a3836d7072e93f61260b0fb1 / CI 36343395952 的Windows普通离线包已下载并按随包SHA256核对：70ef32cdb09d067146895c6fc8acf4e02a58621c73160d4f3aecf34b9b091970，153210103字节，比公开0.7.5增加89631字节（约87.53 KiB）。不是本地候选归档的摘要。
+
+2026-09-28T00:04:17Z，release-93f6b3b/probe/result.json 关键实机probe通过：原生隐藏启动、4次导航、图片标注回填、默认插件启停、确定性流式/取消及最终输入，无页面异常、sourceOverlay=false、退出存活PID为空。probe自身qualifiesRelease=false，含义是它不是120分钟长跑；整体发布依据为已有G1–G6、精确CI成品probe及上述G7明确例外，不将probe伪称完整长稳。CI亮暗维护截图已复核。
