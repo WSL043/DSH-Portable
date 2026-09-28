@@ -177,11 +177,33 @@ export function patchPluginManagerActions(source) {
   source = patchPluginManagerToolbar(source)
   const refreshMarker = 'dsh-portable-plugin-refresh-v1'
   if (!source.includes(refreshMarker)) {
-    const start = source.indexOf('title: t("refresh"),')
-    const end = source.indexOf('onClick: props.refresh,', start)
-    if (start < 0 || end < start || end - start > 180) throw new Error('official plugin refresh action changed upstream')
-    source = source.slice(0, end) + source.slice(end).replace('onClick: props.refresh,',
-      `onClick: () => { /* ${refreshMarker} */ window.dispatchEvent(new Event("dsh-portable/refresh-plugins")); props.refresh(); },`)
+    const refreshAction = `onClick: () => { /* ${refreshMarker} */ window.dispatchEvent(new Event("dsh-portable/refresh-plugins")); props.refresh(); },`
+    const currentRefreshAnchor = '"aria-label": t("refresh"),\n\t\t\t\t\t\t\t\t\t"aria-busy": refreshing,\n\t\t\t\t\t\t\t\t\tdisabled: !loaded || refreshing,\n\t\t\t\t\t\t\t\t\tonClick: props.refresh,'
+    const modernMatches = source.split(currentRefreshAnchor).length - 1
+    const legacyTitle = 'title: t("refresh"),'
+    const legacyMatches = source.split(legacyTitle).length - 1
+    if (modernMatches > 0 && legacyMatches > 0) {
+      throw new Error('official plugin refresh action changed upstream: ambiguous legacy and current anchors')
+    }
+    if (modernMatches === 1 && legacyMatches === 0) {
+      source = replaceRequired(source, currentRefreshAnchor,
+        currentRefreshAnchor.replace('onClick: props.refresh,', refreshAction),
+        'official plugin refresh action changed upstream')
+    } else if (modernMatches === 0 && legacyMatches === 1) {
+      const start = source.indexOf(legacyTitle)
+      const legacyWindow = source.slice(start, start + 180)
+      const callback = 'onClick: props.refresh,'
+      const callbackMatches = legacyWindow.split(callback).length - 1
+      if (callbackMatches !== 1) {
+        throw new Error(`official plugin refresh action changed upstream: expected 1 legacy callback, found ${callbackMatches}`)
+      }
+      const end = start + legacyWindow.indexOf(callback)
+      source = source.slice(0, end) + source.slice(end).replace(callback, refreshAction)
+    } else if (modernMatches !== 0 || legacyMatches !== 0) {
+      throw new Error(`official plugin refresh action changed upstream: expected one exact anchor, found ${modernMatches + legacyMatches}`)
+    } else {
+      throw new Error('official plugin refresh action changed upstream: expected one exact anchor, found 0')
+    }
   }
 
   const marker = 'dsh-portable-plugin-card-updates-v1'

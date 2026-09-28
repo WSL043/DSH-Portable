@@ -16,10 +16,17 @@ test('workspace header extension keeps official controls and allocates room with
   assert.throws(() => patchWorkspaceHeaderActions(source.replace('max-width:60px', 'max-width:61px')), /width changed upstream/)
 })
 
-test('official plugin manager extension preserves actions and rejects changed seams', () => {
+function pluginManagerFixture(refreshAction) {
   let source = '"plugins.bundle.config": { kind: "keyed" };\nclassName: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [originalAction]'
   source += '\nfunction PackageCard({ pkg, t, busy, highlighted, onOpen, onSetEnabled }) { return jsx("li", { children: (0, react_jsx_runtime.jsx)(CardHead, { tags: jsxs(Fragment, { children: [beta ? null : null] }), end: (0, react_jsx_runtime.jsx)(EnableSwitch, {\n\t\t\t\t\t})\n\t\t\t\t}) }); }\nfunction ItemCard() {}\nconst packageCard = (pkg) => (0, react_jsx_runtime.jsx)(PackageCard, {});'
-  source += '\ntitle: t("refresh"), disabled: !loaded, onClick: props.refresh,'
+  source += `\n${refreshAction}`
+  return source
+}
+
+const currentRefreshAnchor = '"aria-label": t("refresh"),\n\t\t\t\t\t\t\t\t\t"aria-busy": refreshing,\n\t\t\t\t\t\t\t\t\tdisabled: !loaded || refreshing,\n\t\t\t\t\t\t\t\t\tonClick: props.refresh,'
+
+test('official rc2 plugin manager extension preserves actions and rejects changed seams', () => {
+  const source = pluginManagerFixture('title: t("refresh"), disabled: !loaded, onClick: props.refresh,')
   const patched = patchPluginManagerActions(source)
   assert.match(patched, /renderSlot\("plugins.portable.actions", \{ refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec \}\), originalAction/)
   assert.match(patched, /"plugins.bundle.config": \{ kind: "keyed" \}/)
@@ -28,6 +35,18 @@ test('official plugin manager extension preserves actions and rejects changed se
   assert.throws(() => patchPluginManagerActions('changed'), /declaration changed upstream/)
   assert.throws(() => patchPluginManagerActions(source + source), /expected 1 match/)
   assert.throws(() => patchPluginManagerActions(source.replace('toolbar', 'changed')), /toolbar changed upstream/)
+})
+
+test('official 0.2.0-rc.1 plugin refresh action uses an exact aria-label anchor', () => {
+  const source = pluginManagerFixture(currentRefreshAnchor)
+  const patched = patchPluginManagerActions(source)
+  assert.match(patched, /renderSlot\("plugins.portable.actions", \{ refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec \}\), originalAction/)
+  assert.match(patched, /dispatchEvent\(new Event\("dsh-portable\/refresh-plugins"\)\); props\.refresh\(\)/)
+  assert.match(patched, /renderSlot\("plugins\.portable\.update"/)
+  assert.ok(patched.includes('dsh-portable-plugin-card-updates-v1'))
+  assert.equal(patchPluginManagerActions(patched), patched)
+  assert.throws(() => patchPluginManagerActions(source.replace('"aria-label": t("refresh"),', '"aria-label": t("reload"),')), /official plugin refresh action changed upstream: expected one exact anchor, found 0/)
+  assert.throws(() => patchPluginManagerActions(source.replace(currentRefreshAnchor, `${currentRefreshAnchor}\n${currentRefreshAnchor}`)), /expected one exact anchor, found 2/)
 })
 
 test('official plugin management retires only the recognized legacy installation copy', () => {
