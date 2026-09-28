@@ -41,12 +41,14 @@ try {
     }
     Write-Atomic "$Root/app/current.json" @{version='1.2.0';previous='1.1.0'}
     Write-Atomic "$Root/app/staged.json" @{version='1.3.0'}
+    Write-Atomic "$Root/launcher/receipts/0.9.0.json" @{version='0.9.0'}
     $scratch=Join-Path $Root ('app/1.5.0.staging-'+[guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $scratch | Out-Null
     $junction=Join-Path $Root 'app/2.0.0/redirect'
     New-Item -ItemType Junction -Path $junction -Target "$Root/outside" | Out-Null
     Clear-OldPrograms
     if((Test-Path "$Root/app/1.0.0") -or (Test-Path $scratch)){throw 'Obsolete managed versions were retained'}
+    if(Test-Path "$Root/launcher/receipts/0.9.0.json"){throw 'Interrupted preparation receipt was retained'}
     foreach($version in @('1.1.0','1.2.0','1.3.0','1.4.0','2.0.0')) {if(-not(Test-Path "$Root/app/$version/owned.txt")){throw "Protected or unmanaged version removed: $version"}}
     if((Get-Content "$Root/outside/keep.txt") -ne 'outside-survives' -or $status.cleanup -ne 'deferred'){throw 'Redirected cleanup was not safely deferred'}
 } finally {

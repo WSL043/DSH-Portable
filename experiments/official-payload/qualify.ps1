@@ -79,7 +79,19 @@ foreach ($path in @($package,$moved)) {
 # Same-volume directory rename must not enumerate pnpm's project-registration links.
 # PowerShell Move-Item can traverse those links while their old targets disappear.
 Get-ChildItem "$package/data/pnpm-store/v11/projects" -Force -ErrorAction SilentlyContinue | Select-Object Name,LinkType,Target | ConvertTo-Json | Set-Content "$evidence/store-project-links-before-move.json"
-[IO.Directory]::Move($package,$moved)
+# Windows may release file-system handles shortly after process exit. Bound that
+# grace period; preserve ownership evidence and fail instead of copying live data.
+$moveDeadline=[DateTime]::UtcNow.AddSeconds(10)
+while($true){
+  try{[IO.Directory]::Move($package,$moved);break}catch{
+    if([DateTime]::UtcNow -ge $moveDeadline){
+      Get-CimInstance Win32_Process | Where-Object {($_.ExecutablePath -and $_.ExecutablePath.StartsWith($package)) -or ($_.CommandLine -and $_.CommandLine.Contains($package))} | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Depth 4 | Set-Content "$evidence/move-blocking-processes.json"
+      Get-Item -LiteralPath $package -Force | Select-Object FullName,Attributes | ConvertTo-Json | Set-Content "$evidence/move-source.json"
+      throw
+    }
+    Start-Sleep -Milliseconds 500
+  }
+}
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $moved
 $env:DSH_HOME = Join-Path $moved 'data/dsh-home'
 $job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')

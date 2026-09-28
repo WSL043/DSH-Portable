@@ -90,8 +90,9 @@ try {
     $operation = $null
     try {
         $operation = [IO.File]::Open((Join-Path $Root 'data/.launch.lock'),'OpenOrCreate','ReadWrite','None')
-        [IO.Directory]::Move($payload,$destination)
+        # Persist ownership before the move so an interruption remains recoverable.
         Write-Atomic (Join-Path $Root "launcher/receipts/$($candidate.version).json") $receipt
+        [IO.Directory]::Move($payload,$destination)
         Write-Atomic (Join-Path $Root 'app/staged.json') @{version=$candidate.version;from=$current.version;receipt=$receipt}
     } finally { if ($operation) { $operation.Dispose() } }
     $status.status='staged';$status.version=$candidate.version
