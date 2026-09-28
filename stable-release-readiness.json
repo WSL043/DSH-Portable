@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "477b4f420553e8a52c2fbccc464d7561b239c443",
-  "dshNpmIntegrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw==",
+  "dshReviewedCommit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
+  "dshNpmIntegrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng==",
   "historicalSessionMigration": {
     "status": "passed",
-    "evidence": "docs/core-rc2-migration-2026-09-28.md; scripts/verify-historical-session.mjs",
+    "evidence": "build/orch-080/T6/historical-result.json; scripts/verify-historical-session.mjs",
     "compatibilityPatch": {
       "id": "released-v0-descriptor-v2-read-v1",
-      "dshVersion": "0.1.7-rc.2",
+      "dshVersion": "0.2.0-rc.1",
       "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
       "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
     },
-    "reason": "Exact rc.2 historical writer, runtime continuation, persisted reopen and interrupted journal recovery passed; every platform builder repeats the checks. Product release still requires full CI."
+    "reason": "Exact 0.2.0-rc.1 identity passed historical writer reading, AgentLoop continuation, persisted JSONL reopen and interrupted journal recovery in an independent staged app. Product release still requires full CI."
   }
 }

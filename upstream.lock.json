@@ -2,19 +2,19 @@
   "schemaVersion": 1,
   "dsh": {
     "package": "@deepseek-ai/dsh",
-    "version": "0.1.7-rc.2",
-    "tag": "dsh-v0.1.7-rc.2",
+    "version": "0.2.0-rc.1",
+    "tag": "dsh-v0.2.0-rc.1",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
-    "reviewedCommit": "477b4f420553e8a52c2fbccc464d7561b239c443",
-    "noticesSha256": "d5f1a9aa9e7b4a39f2407c8bdb3db8b13c79bbedb2651f38b616205824427581",
+    "reviewedCommit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
+    "noticesSha256": "7f1b13082b40882731368cb2f62f254f4c1e257ff27fe22773532e912722bdf6",
     "buildProfile": "official",
     "packageManager": "pnpm@11.7.0",
     "packedFamilies": {
-      "dsh": 314,
+      "dsh": 318,
       "vendor": 9,
       "landlock": 0
     },
-    "integrity": "sha512-SQFhriLvza8GnFApnC5/32AgpcyKxrWnYXhvwDOLJdgWpkCX2EexyR9c8kCkMITJXnFLEN3Qb2CEh0W36vkLyw=="
+    "integrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng=="
   },
   "pnpm": {
     "package": "pnpm",
