@@ -98,9 +98,28 @@ function Expand-OfficialPayload([string]$Installer, $Candidate, [string]$Output,
     }
     $asar = Join-Path $Output 'resources/app.asar'
     if (-not (Test-Path -LiteralPath $asar)) { throw 'Official ASAR missing' }
+    if ((Get-AsarVersion $asar) -cne $Candidate.version) { throw 'Desktop version does not match candidate' }
     # Reviewed rc.2 identity; a future payload needs its own qualification record.
     if ($Candidate.version -eq '0.1.7-rc.2' -and (Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash -ne '708229949f0533d6d69fca3d4d72c3ad6814fda484ea3b0a7af96b71e83a6126') { throw 'Unexpected official ASAR' }
     return @{ version=$Candidate.version; installerSha512=$Candidate.sha512; asarSha256=(Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash.ToLowerInvariant(); excluded=@('resources/app-update.yml') }
 }
 
-Export-ModuleMember -Function Assert-PlainPath,Assert-Candidate,Assert-Installer,Get-OfficialInstaller,Expand-OfficialPayload
+function Get-AsarVersion([string]$File) {
+    $stream = [IO.File]::OpenRead($File)
+    $reader = New-Object IO.BinaryReader($stream)
+    try {
+        if ($reader.ReadUInt32() -ne 4) { throw 'Unsupported ASAR header' }
+        $headerSize = $reader.ReadUInt32()
+        $null = $reader.ReadUInt32()
+        $jsonSize = $reader.ReadUInt32()
+        if ($headerSize -gt 20971520 -or $jsonSize -gt $headerSize -or $jsonSize -lt 2) { throw 'Invalid ASAR index' }
+        $header = [Text.Encoding]::UTF8.GetString($reader.ReadBytes($jsonSize)) | ConvertFrom-Json
+        $entry = $header.files.'package.json'
+        if ($entry.size -gt 1048576 -or $entry.size -lt 2 -or [long]$entry.offset -lt 0) { throw 'Invalid ASAR package metadata' }
+        $null = $stream.Seek(8 + [long]$headerSize + [long]$entry.offset, [IO.SeekOrigin]::Begin)
+        $manifest = [Text.Encoding]::UTF8.GetString($reader.ReadBytes($entry.size)) | ConvertFrom-Json
+        return $manifest.version
+    } finally { $reader.Dispose(); $stream.Dispose() }
+}
+
+Export-ModuleMember -Function Assert-PlainPath,Assert-Candidate,Assert-Installer,Get-OfficialInstaller,Expand-OfficialPayload,Get-AsarVersion

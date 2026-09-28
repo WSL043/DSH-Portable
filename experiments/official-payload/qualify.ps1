@@ -21,6 +21,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Payload extraction failed' }
 $exe = Join-Path $app 'DeepSeek Harness.exe'
 if ((Get-AuthenticodeSignature $exe).Status -ne 'Valid') { throw 'Invalid payload signature' }
 Remove-Item -LiteralPath "$app/resources/app-update.yml"
+& "$PSScriptRoot/trace-writes.ps1" -Mode Start -Evidence $evidence -PortableRoot $root
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $root
 $env:DSH_HOME = Join-Path $root 'data/dsh-home'
 $env:DSH_AGENTS_HOME = Join-Path $root 'data/agents'
@@ -39,6 +40,7 @@ try {
 } finally {
   $job | Wait-Job | Receive-Job | Out-File "$evidence/hidden-process.log"
   $job | Remove-Job
+  & "$PSScriptRoot/trace-writes.ps1" -Mode Stop -Evidence $evidence -PortableRoot $root
   $leaks = @($watch | Where-Object { (Test-Path -LiteralPath $_) -and $_ -notin $before })
   @{ leaks=$leaks; userDataPresent=(Test-Path $userData); dshHomePresent=(Test-Path $env:DSH_HOME); originalSystemDirectories=$true } | ConvertTo-Json | Set-Content "$evidence/paths.json"
   Get-ChildItem "$root/data" -Recurse -File -ErrorAction SilentlyContinue | Select-Object FullName,Length | ConvertTo-Json | Set-Content "$evidence/data-inventory.json"
@@ -46,3 +48,19 @@ try {
   if (Test-Path "$env:DSH_HOME/acceptance-plugin-state.txt") { Copy-Item "$env:DSH_HOME/acceptance-plugin-state.txt" "$evidence/plugin-state.txt" }
 }
 if ($probeExit -ne 0 -or $leaks.Count -gt 0) { throw 'Official payload boundary qualification failed; inspect evidence' }
+& "$PSScriptRoot/test-boundaries.ps1"
+$package = Join-Path $env:RUNNER_TEMP 'portable-alpha2-native'
+& "$PSScriptRoot/package.ps1" -Installer $installer -Output $package -SevenZip (Get-Command 7z).Source
+$env:DSH_PORTABLE_DEVELOPMENT_ROOT = $package
+$env:DSH_HOME = Join-Path $package 'data/dsh-home'
+$nativeExe = Join-Path $package 'DeepSeek Harness Portable.exe'
+$job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19490' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,$nativeExe
+try {
+  node experiments/official-payload/probe.mjs 19490 "$evidence/launcher-page.json" "$env:GITHUB_WORKSPACE/experiments/official-desktop/fixtures/lifecycle"
+  $nativeExit = $LASTEXITCODE
+} finally {
+  $job | Wait-Job | Receive-Job | Out-File "$evidence/launcher-process.log"
+  $job | Remove-Job
+  Copy-Item "$package/launcher/provenance.json" "$evidence/provenance.json"
+}
+if ($nativeExit -ne 0) { throw 'Native launcher artifact qualification failed' }

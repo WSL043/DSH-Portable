@@ -17,5 +17,8 @@ New-Item -ItemType Directory -Path (Join-Path $Output 'launcher') -Force | Out-N
 $receipt | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output 'launcher/provenance.json') -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'candidate.json') -Destination (Join-Path $Output 'launcher/candidate.json')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $Output 'README.md')
-# The extraction scratch directory is outside the final payload. Never include it in a ZIP.
-# It remains owned by the caller until evidence has been collected and cleanup is authorized.
+$outer = [IO.Path]::GetFullPath($payload + '.outer')
+if (-not $outer.StartsWith($Output.TrimEnd('\')+'\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Extraction scratch escaped package root' }
+Assert-PlainPath $outer
+if (@(Get-ChildItem -LiteralPath $outer -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -ne 0) { throw 'Redirected extraction scratch' }
+Remove-Item -LiteralPath $outer -Recurse -Force
