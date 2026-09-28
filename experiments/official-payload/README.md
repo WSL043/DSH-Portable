@@ -2,6 +2,8 @@
 
 **1.0.0-alpha.2 · Windows x64 · 全新目录 / fresh directory.**
 
+2026-09-28：按用户决定，1.0 Alpha 改为开发构建与 Release 草稿，不在公开 Releases 列表展示。后续工作流默认只生成草稿。Development alpha artifacts are retained as drafts, not public releases.
+
 本路线替代 alpha.1 的源码覆盖构建。官方 EXE、ASAR 和运行库保持原字节；仅排除 `resources/app-update.yml`，由外置原生启动器独占整套桌面更新。不得运行安装器，不把旧 WebView 或 alpha.1 补丁带入新包。稳定版 0.7.x 不受影响。使用限制见 [随包说明](PACKAGE-README.md)。
 
 This replaces alpha.1 source overlays. Official executable, ASAR and runtime bytes stay unchanged; only installer updater configuration is omitted. An external native launcher owns whole-desktop updates. Stable 0.7.x remains separate. See [package instructions and limitations](PACKAGE-README.md).

@@ -142,7 +142,7 @@ The close button sends the app to the system tray by default, so an active task 
 
 ## Downloads
 
-[Try 1.0.0-alpha.2 · Portable official Electron payload (Windows x64)](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.2): unchanged official program bytes, with an external launcher for application data and qualified desktop updates. Fresh folders only; no legacy migration. Workspaces remain external, and in-app updates/protocol handling have known differences: read the release notes before trying. Use the stable downloads below for everyday work.
+[1.0 development track · Portable official Electron payload](experiments/official-payload/README.md): exploratory alpha builds remain development artifacts and drafts, outside public Releases. Use the stable downloads below for everyday work.
 
 ### Windows
 

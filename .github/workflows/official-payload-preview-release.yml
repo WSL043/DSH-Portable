@@ -1,4 +1,4 @@
-name: Publish qualified official desktop preview
+name: Prepare qualified official desktop preview draft
 on:
   workflow_dispatch:
     inputs:
@@ -32,7 +32,7 @@ jobs:
           path: release-input
           run-id: ${{ inputs.qualification_run }}
           github-token: ${{ github.token }}
-      - name: Verify exact archive and publish as non-latest prerelease
+      - name: Verify exact archive and retain as a private draft
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.qualification_run }}
@@ -41,4 +41,4 @@ jobs:
           VERSION=$(node -p 'require("./release-input/qualification.json").version')
           SOURCE=$(node -p 'require("./release-input/qualification.json").sourceCommit')
           test -f "docs/release-$VERSION-notes.md"
-          gh release create "v$VERSION" release-input/* --target "$SOURCE" --prerelease --latest=false --title "DSH-Portable $VERSION — Official desktop payload preview" --notes-file "docs/release-$VERSION-notes.md"
+          gh release create "v$VERSION" release-input/* --target "$SOURCE" --draft --prerelease --latest=false --title "DSH-Portable $VERSION — Official desktop payload preview" --notes-file "docs/release-$VERSION-notes.md"
