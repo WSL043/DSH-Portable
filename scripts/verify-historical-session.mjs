@@ -5,7 +5,7 @@ import os from 'node:os'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
-import { descriptorV2PatchIdentity, prepareHistoricalDescriptor } from './patch-historical-descriptor.mjs'
+import { descriptorV2PatchIdentityFor, prepareHistoricalDescriptor } from './patch-historical-descriptor.mjs'
 
 const app = path.resolve(process.argv[2] ?? '')
 if (!process.argv[3]) throw new Error('usage: verify-historical-session.mjs <staged-app> <selected-upstream-lock>')
@@ -38,7 +38,7 @@ const identity = await prepareHistoricalDescriptor(app, { verifyOnly: true })
   run([path.join(repo, 'experiments/descriptor-v2/writer-probe.mjs'), writer, app, '-', fixtures])
   const continuation = path.join(root, 'continuation')
   run([path.join(repo, 'experiments/descriptor-v2/continuation-probe.mjs'), app, fixtures, continuation])
-  const result = { status: 'passed', coreProvenance, compatibilityPatch: identity.applied ? descriptorV2PatchIdentity : null,
+  const result = { status: 'passed', coreProvenance, compatibilityPatch: identity.applied ? descriptorV2PatchIdentityFor(core.version) : null,
     writer: JSON.parse(await readFile(path.join(fixtures, 'result.json'), 'utf8')),
     continuation: JSON.parse(await readFile(path.join(continuation, 'result.json'), 'utf8')) }
   console.log(JSON.stringify(result))

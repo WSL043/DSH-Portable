@@ -1,0 +1,23 @@
+{
+  "version": "0.7.7",
+  "zh": {
+    "summary": "更新正式版默认插件，修复全屏退出后的窗口边界，并为 rc.2 独立内核资格补齐历史会话兼容。",
+    "highlights": [
+      "图片查看器升级至 0.1.3、会话管理升级至 1.5.2；同一发布包已在 alpha.1 和 rc.2 上验证关键操作。",
+      "修复 Windows 从最大化进入全屏再退出时，窗口仍覆盖任务栏区域的问题。",
+      "对精确版本和文件摘要绑定的 rc.2 迁移模块增加旧 descriptor-v2 读取兼容，并验证继续执行、保存重开和中断恢复。"
+    ],
+    "upgradeNotes": ["内置内核仍为 0.1.7-alpha.1；rc.2 须经本产品基线的五平台独立资格后才进入内核更新列表。"],
+    "knownIssues": ["完整多屏与混合 DPI 硬件组合、物理断电恢复尚未完成专项验收。"]
+  },
+  "en": {
+    "summary": "Update stable default plugins, restore maximized window bounds after fullscreen, and prepare historical-session compatibility for separate rc.2 core qualification.",
+    "highlights": [
+      "Bundle Image Viewer 0.1.3 and Session Manager 1.5.2, with critical operations verified against both alpha.1 and rc.2.",
+      "Fix maximized Windows windows retaining fullscreen bounds over the taskbar after leaving fullscreen.",
+      "Extend the exact version-and-digest-bound descriptor-v2 read adapter to rc.2, with continuation, persisted reopen and interrupted journal recovery checks."
+    ],
+    "upgradeNotes": ["The bundled core remains 0.1.7-alpha.1. rc.2 enters the core update list only after independent five-platform qualification against this product baseline."],
+    "knownIssues": ["The complete multi-monitor/mixed-DPI hardware matrix and physical power-loss recovery remain unqualified."]
+  }
+}

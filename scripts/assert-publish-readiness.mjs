@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
 import { classifyProductVersion } from './version-policy.mjs'
-import { descriptorV2PatchIdentity } from './patch-historical-descriptor.mjs'
+import { descriptorV2PatchIdentityFor } from './patch-historical-descriptor.mjs'
 
 export function assertPublishReadiness({ productVersion, stableLock, previewLock, readiness }) {
   const policy = classifyProductVersion(productVersion)
@@ -20,7 +20,8 @@ export function assertPublishReadiness({ productVersion, stableLock, previewLock
   const commit = selectedLock?.dsh?.reviewedCommit
   const integrity = selectedLock?.dsh?.npmIntegrity ?? selectedLock?.dsh?.integrity
   const migration = readiness?.historicalSessionMigration
-  if (selectedLock?.dsh?.version === descriptorV2PatchIdentity.dshVersion && migration?.status === 'passed'
+  const descriptorV2PatchIdentity = descriptorV2PatchIdentityFor(selectedLock?.dsh?.version)
+  if (descriptorV2PatchIdentity && migration?.status === 'passed'
     && JSON.stringify(migration.compatibilityPatch) !== JSON.stringify(descriptorV2PatchIdentity)) {
     throw new Error('Historical-session evidence must identify the exact reviewed compatibility patch.')
   }

@@ -9,6 +9,12 @@ export const descriptorV2PatchIdentity = Object.freeze({
   sourceSha256: '1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1',
   patchedSha256: '18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6',
 })
+export function descriptorV2PatchIdentityFor(version) {
+  if (version === descriptorV2PatchIdentity.dshVersion) return descriptorV2PatchIdentity
+  // rc.2 ships the exact same reviewed migration bytes as alpha.1.
+  if (version === '0.1.7-rc.2') return Object.freeze({ ...descriptorV2PatchIdentity, dshVersion: version })
+  return null
+}
 const hash = source => createHash('sha256').update(source).digest('hex')
 // Only the reviewed immutable baseline is supported. Retire after equivalent
 // official migration passes the same writer/continuation fixtures.
@@ -38,13 +44,14 @@ ${validation}`)
 
 export async function prepareHistoricalDescriptor(appRoot, { verifyOnly = false } = {}) {
   const core = JSON.parse(await readFile(path.join(appRoot, 'node_modules/@deepseek-ai/dsh/package.json'), 'utf8'))
-  if (core.version !== descriptorV2PatchIdentity.dshVersion) return { applied: false, reason: 'different-core' }
+  const identity = descriptorV2PatchIdentityFor(core.version)
+  if (!identity) return { applied: false, reason: 'different-core' }
   const bundle = path.join(appRoot, 'node_modules/@deepseek-ai/dsh-session-format-v0-to-v1/lib/index.js')
   const manifest = path.join(appRoot, 'portable-session-compatibility.json')
   const source = await readFile(bundle, 'utf8')
   if (verifyOnly) {
-    if (hash(source) !== descriptorV2PatchIdentity.patchedSha256
-      || JSON.stringify(JSON.parse(await readFile(manifest, 'utf8'))) !== JSON.stringify(descriptorV2PatchIdentity)) {
+    if (hash(source) !== identity.patchedSha256
+      || JSON.stringify(JSON.parse(await readFile(manifest, 'utf8'))) !== JSON.stringify(identity)) {
       throw new Error('Historical compatibility package identity mismatch')
     }
   } else {
@@ -57,9 +64,9 @@ export async function prepareHistoricalDescriptor(appRoot, { verifyOnly = false 
         await rename(temporary, bundle)
       } finally { await rm(temporary, { force: true }) }
     }
-    await writeFile(manifest, JSON.stringify(descriptorV2PatchIdentity, null, 2) + '\n')
+    await writeFile(manifest, JSON.stringify(identity, null, 2) + '\n')
   }
-  return { applied: true, ...descriptorV2PatchIdentity }
+  return { applied: true, ...identity }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

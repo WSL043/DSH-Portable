@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import { assertPublishReadiness } from '../scripts/assert-publish-readiness.mjs'
-import { descriptorV2PatchIdentity } from '../scripts/patch-historical-descriptor.mjs'
+import { descriptorV2PatchIdentity, descriptorV2PatchIdentityFor } from '../scripts/patch-historical-descriptor.mjs'
 
 const commit = 'a'.repeat(40)
 const integrity = 'sha512-' + 'a'.repeat(86) + '=='
@@ -55,6 +55,14 @@ test('stable migration evidence cannot hide a missing or altered compatibility p
       ...passed, historicalSessionMigration: { ...passed.historicalSessionMigration, compatibilityPatch },
     } }), /exact reviewed compatibility patch/)
   }
+})
+
+test('rc.2 migration evidence requires its own exact compatibility identity', () => {
+  const lock = { ...stableLock, dsh: { ...stableLock.dsh, version: '0.1.7-rc.2' } }
+  assert.throws(() => assertPublishReadiness({ productVersion: '0.7.7', stableLock: lock, readiness: passed }), /exact reviewed compatibility patch/)
+  assert.doesNotThrow(() => assertPublishReadiness({ productVersion: '0.7.7', stableLock: lock, readiness: {
+    ...passed, historicalSessionMigration: { ...passed.historicalSessionMigration, compatibilityPatch: descriptorV2PatchIdentityFor('0.1.7-rc.2') },
+  } }))
 })
 
 test('publish workflow checks candidate readiness before creating a release', async () => {
