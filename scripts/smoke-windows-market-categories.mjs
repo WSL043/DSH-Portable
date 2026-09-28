@@ -87,6 +87,13 @@ try {
     throw new Error(`${label}: ${JSON.stringify(result)}`)
   }
   const click = names => `(() => {const names=${JSON.stringify(names)};const button=[...document.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
+  const nativeStateExpression = key => `new Promise(resolve => {
+    const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
+      chrome.webview.removeEventListener('message', listener); resolve(event.data); };
+    chrome.webview.addEventListener('message', listener);
+    chrome.webview.postMessage({type:'dsh-portable/test-desktop',${key == null ? '' : `key:${key},`}});
+  })`
+  const nativeState = key => evaluate(nativeStateExpression(key))
   await send('Runtime.enable')
   await send('Page.enable')
   await evaluate(`(() => {
@@ -100,7 +107,7 @@ try {
         events.push({ at: performance.now(), visible }); previous = visible;
       }
     };
-    new MutationObserver(observe).observe(document.body, { childList: true, subtree: true, attributes: true });
+    new MutationObserver(observe).observe(document, { childList: true, subtree: true, attributes: true });
     observe();
   })()`)
 
@@ -122,6 +129,8 @@ try {
       ['Settings', '设置'].includes((item.textContent || '').trim()))
     return Boolean(settings && settings.getBoundingClientRect().width > 0 && !settings.closest('[inert]'))
   })()`, Boolean, 'settings command is available after onboarding')
+  await until(nativeStateExpression(), state => state.nativeLoadingVisible === false, 'native workspace handoff completes')
+  await until(`typeof window.__DSH_PORTABLE_SETTINGS__?.open === 'function'`, Boolean, 'official settings adapter is ready')
   await evaluate(`chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})`)
   await until(`Boolean([...document.querySelectorAll('dialog,[role="dialog"]')].find(item =>
     item.getBoundingClientRect().width > 0 && /Desktop & data|桌面与数据/.test(item.textContent || '')))` , Boolean, 'native settings command opens after onboarding')
@@ -152,12 +161,6 @@ try {
   await writeFile(path.join(output, 'updates-version-menu.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
   await until(click(['Engine version', '内核版本']), Boolean, 'close core version selector')
   await until(click(['Desktop & data', '桌面与数据', 'Portable']), Boolean, 'return to Portable maintenance')
-  const nativeState = key => evaluate(`new Promise(resolve => {
-    const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
-      chrome.webview.removeEventListener('message', listener); resolve(event.data); };
-    chrome.webview.addEventListener('message', listener);
-    chrome.webview.postMessage({type:'dsh-portable/test-desktop',${key == null ? '' : `key:${key},`}});
-  })`)
   for (const key of [262214, 262230, 262216]) {
     assert.equal((await nativeState(key)).openMenus.length, 1, 'keyboard opens one native menu')
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: 600, y: 130, button: 'left', clickCount: 1 })
