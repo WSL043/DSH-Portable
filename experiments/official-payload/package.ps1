@@ -1,14 +1,15 @@
 param(
     [Parameter(Mandatory=$true)][string]$Installer,
     [Parameter(Mandatory=$true)][string]$Output,
-    [Parameter(Mandatory=$true)][string]$SevenZip
+    [Parameter(Mandatory=$true)][string]$SevenZip,
+    [string]$CandidateFile = (Join-Path $PSScriptRoot 'candidate.json')
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Payload.psm1') -Force
 $Output = [IO.Path]::GetFullPath($Output)
 Assert-PlainPath $Output
 if (Test-Path -LiteralPath $Output) { throw 'Packaging requires a fresh directory' }
-$candidate = Get-Content (Join-Path $PSScriptRoot 'candidate.json') -Raw | ConvertFrom-Json
+$candidate = Get-Content -LiteralPath $CandidateFile -Raw | ConvertFrom-Json
 $payload = Join-Path $Output "app/$($candidate.version)"
 $receipt = Expand-OfficialPayload $Installer $candidate $payload $SevenZip
 New-Item -ItemType Directory -Path (Join-Path $Output 'launcher') -Force | Out-Null
@@ -17,7 +18,7 @@ New-Item -ItemType Directory -Path (Join-Path $Output 'launcher') -Force | Out-N
 $receipt | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output 'launcher/provenance.json') -Encoding UTF8
 New-Item -ItemType Directory -Path (Join-Path $Output 'launcher/receipts') -Force | Out-Null
 $receipt | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output "launcher/receipts/$($candidate.version).json") -Encoding UTF8
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'candidate.json') -Destination (Join-Path $Output 'launcher/candidate.json')
+Copy-Item -LiteralPath $CandidateFile -Destination (Join-Path $Output 'launcher/candidate.json')
 foreach ($file in @('Payload.psm1','update.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $Output "launcher/$file") }
 foreach ($file in @('7z.exe','7z.dll','License.txt')) { Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $SevenZip) $file) -Destination (Join-Path $Output "launcher/$file") }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'PACKAGE-README.md') -Destination (Join-Path $Output 'README.md')

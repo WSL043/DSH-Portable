@@ -44,7 +44,7 @@ try {
   await client.evaluate('void window.dshWelcome.skip()');client.close();
   client=await connect(await until(async()=>(await targets()).find(t=>t.type==='page'&&t.url==='dsh-app://app/'),'Workspace'));
   await until(()=>client.evaluate(`!![...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length)`),'Visible editor');
-  if(mode==='moved'&&!await client.evaluate(`document.body.innerText.includes('Portable alpha2 input acceptance 123')`))throw new Error('Draft lost after directory relocation');
+  if(['moved','upgraded'].includes(mode)&&!await client.evaluate(`document.body.innerText.includes('Portable alpha2 input acceptance 123')`))throw new Error('Draft lost after directory relocation or upgrade');
   await client.evaluate(`(()=>{const e=[...document.querySelectorAll('[contenteditable=true],textarea')].find(e=>e.getClientRects().length);e.focus();})()`);
   await client.send('Input.insertText',{text:'Portable alpha2 input acceptance 123'});
   if(!await client.evaluate(`(document.activeElement.textContent||document.activeElement.value).includes('Portable alpha2 input acceptance 123')`))throw new Error('Input not retained');
@@ -62,7 +62,7 @@ try {
     await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='disabled','Actual plugin deactivation');
     evidence.steps.push('actual plugin disable');
   }
-  if(mode === 'moved'){
+  if(['moved','upgraded'].includes(mode)){
     await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable dsh-portable-acceptance-fixture"],button[aria-label="启用 dsh-portable-acceptance-fixture"]')?.getAttribute('aria-checked')==='false'`),'Moved disabled state reflected in official UI');
     await click(['Enable dsh-portable-acceptance-fixture','启用 dsh-portable-acceptance-fixture']);
     await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='enabled','Moved plugin activation');

@@ -76,7 +76,10 @@ if (Test-Path $moved) { throw 'Moved qualification destination already exists' }
 foreach ($path in @($package,$moved)) {
   if (-not ([IO.Path]::GetFullPath($path)).StartsWith([IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Move escaped disposable runner root' }
 }
-Move-Item -LiteralPath $package -Destination $moved
+# Same-volume directory rename must not enumerate pnpm's project-registration links.
+# PowerShell Move-Item can traverse those links while their old targets disappear.
+Get-ChildItem "$package/data/pnpm-store/v11/projects" -Force -ErrorAction SilentlyContinue | Select-Object Name,LinkType,Target | ConvertTo-Json | Set-Content "$evidence/store-project-links-before-move.json"
+[IO.Directory]::Move($package,$moved)
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $moved
 $env:DSH_HOME = Join-Path $moved 'data/dsh-home'
 $job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')
@@ -93,6 +96,7 @@ $candidate | Add-Member -NotePropertyName launcherProtocol -NotePropertyValue 1 
 $candidate.qualification = 'qualified'
 $candidate | Add-Member -NotePropertyName evidence -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
 $candidate | ConvertTo-Json -Depth 5 | Set-Content "$evidence/qualified-candidate.json" -Encoding UTF8
+& "$PSScriptRoot/qualify-upgrade.ps1" -CandidateFile "$evidence/qualified-candidate.json" -Evidence $evidence -SevenZip $sevenZip
 if ($env:DSH_BUILD_ALPHA_ARCHIVE -eq 'true') {
   $release = Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-release'
   $clean = Join-Path $env:RUNNER_TEMP 'DSH-Portable-1.0.0-alpha.2'

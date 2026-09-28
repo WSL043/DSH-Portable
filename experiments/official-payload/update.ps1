@@ -1,5 +1,5 @@
 # Background preparation only. The launcher alone activates a prepared version on next start.
-param([Parameter(Mandatory=$true)][string]$Root)
+param([Parameter(Mandatory=$true)][string]$Root, [string]$QualificationCandidate)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Payload.psm1') -Force
 $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
@@ -66,9 +66,15 @@ try {
     Clear-OldPrograms
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     # This small channel lists qualified official bytes, not repackaged installers.
-    $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri 'https://raw.githubusercontent.com/WSL043/DSH-Portable/main/channels/official-desktop/windows-x64.json'
-    if ($response.Content.Length -gt 16384) { throw 'Candidate metadata is too large' }
-    $candidate = $response.Content | ConvertFrom-Json
+    if ($QualificationCandidate) {
+        if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Candidate override is only for disposable qualification runners' }
+        $candidateText = Get-Content -LiteralPath $QualificationCandidate -Raw
+    } else {
+        $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri 'https://raw.githubusercontent.com/WSL043/DSH-Portable/main/channels/official-desktop/windows-x64.json'
+        $candidateText = $response.Content
+    }
+    if ($candidateText.Length -gt 16384) { throw 'Candidate metadata is too large' }
+    $candidate = $candidateText | ConvertFrom-Json
     Assert-Candidate $candidate
     if ($candidate.qualification -cne 'qualified' -or $candidate.launcherProtocol -ne 1) { throw 'Candidate is not qualified for this launcher' }
     $current = Get-Content (Join-Path $Root 'app/current.json') -Raw | ConvertFrom-Json
