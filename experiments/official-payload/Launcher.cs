@@ -9,6 +9,7 @@ using System.Net.NetworkInformation;
 using System.Text;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+using System.Management;
 [assembly: System.Reflection.AssemblyTitle("DSH-Portable")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable official-payload alpha")]
 [assembly: System.Reflection.AssemblyVersion("1.0.0.2")]
@@ -51,9 +52,7 @@ internal static class PortableLauncher {
                 foreach (var name in directories) { var path = Path.Combine(data, name); CheckPath(path); Directory.CreateDirectory(path); }
                 var stagedFile = Path.Combine(root, "app", "staged.json");
                 CheckPath(stagedFile);
-                if (File.Exists(stagedFile) && !Process.GetProcessesByName("DeepSeek Harness").Any(p => {
-                    try { return p.MainModule.FileName.StartsWith(Path.Combine(root, "app") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase); } catch { return true; }
-                })) {
+                if (File.Exists(stagedFile) && !HasOwnedProcesses(Path.Combine(root, "app"))) {
                   try {
                     var staged = Read(stagedFile);
                     var next = (string)staged["version"];
@@ -133,6 +132,18 @@ internal static class PortableLauncher {
         Write(file, modules);
     }
     private static Dictionary<string, object> Read(string file) { return Json.Deserialize<Dictionary<string, object>>(File.ReadAllText(file)); }
+    private static bool HasOwnedProcesses(string appRoot) {
+        var prefix = appRoot + Path.DirectorySeparatorChar;
+        try {
+            using (var query = new ManagementObjectSearcher("SELECT Name, ExecutablePath FROM Win32_Process"))
+            using (var rows = query.Get()) foreach (ManagementObject row in rows) using (row) {
+                var path = row["ExecutablePath"] as string;
+                if (path != null && path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+                if (path == null && String.Equals(row["Name"] as string, "DeepSeek Harness.exe", StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        } catch { return true; } // Unknown ownership defers activation, never blocks the current app.
+    }
     private static void Write(string file, object value) {
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None)) {
