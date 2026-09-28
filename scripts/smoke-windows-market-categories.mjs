@@ -62,6 +62,7 @@ try {
   socket.onmessage = ({ data }) => { const message = JSON.parse(data); if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params?.exceptionDetails?.exception?.description || message.params?.exceptionDetails?.text); const entry = pending.get(message.id); if (!entry) return; pending.delete(message.id); clearTimeout(entry.timer); message.error ? entry.reject(new Error(JSON.stringify(message.error))) : entry.resolve(message.result) }
   const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++next; const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout ${method}`)) }, 15000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })) })
   evaluate = async expression => { const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text); return result.result?.value }
+  let completedCredentialOnboarding = false
   const dismissLateOnboarding = `(() => {
     const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
       .filter(item => item.getBoundingClientRect().width > 0)
@@ -70,7 +71,7 @@ try {
     const button = [...notice.querySelectorAll('button')].find(item =>
       ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
     button?.click()
-    return Boolean(button)
+    return { clicked: Boolean(button), terminal: /Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(notice.textContent || '') }
   })()`
   const until = async (expression, predicate, label) => {
     const limit = Date.now() + 30000
@@ -78,7 +79,10 @@ try {
     while (Date.now() < limit) {
       // A provider notice can mount after settings are already interactive.
       // Dismiss only these known first-run prompts, never arbitrary dialogs.
-      if (!await evaluate(dismissLateOnboarding)) {
+      const onboarding = await evaluate(dismissLateOnboarding)
+      if (onboarding?.clicked) {
+        completedCredentialOnboarding ||= onboarding.terminal
+      } else {
         result = await evaluate(expression)
         if (predicate(result)) return result
       }
@@ -111,24 +115,17 @@ try {
     observe();
   })()`)
 
-  // Send one user action and observe its result, rather than queuing repeated
-  // native commands while the asynchronous settings UI is still opening.
+  // In this keyless disposable profile, the official final onboarding step is
+  // Configure later. A newly appearing step deliberately closes Settings, so
+  // complete that real flow before issuing any settings navigation.
   await until(`(() => {
     const dialogs = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
       .filter(item => item.getBoundingClientRect().width > 0)
-    const notice = dialogs.find(item =>
-      /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
-    if (notice) {
-      const button = [...notice.querySelectorAll('button')].find(item =>
-        ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
-      button?.click()
-      return false
-    }
     if (dialogs.length) return false
     const settings = [...document.querySelectorAll('button')].find(item =>
       ['Settings', '设置'].includes((item.textContent || '').trim()))
     return Boolean(settings && settings.getBoundingClientRect().width > 0 && !settings.closest('[inert]'))
-  })()`, Boolean, 'settings command is available after onboarding')
+  })()`, ready => ready && completedCredentialOnboarding, 'credential onboarding finishes before settings navigation')
   await until(nativeStateExpression(), state => state.nativeLoadingVisible === false, 'native workspace handoff completes')
   await until(`typeof window.__DSH_PORTABLE_SETTINGS__?.open === 'function'`, Boolean, 'official settings adapter is ready')
   await evaluate(`chrome.webview.postMessage({type:'dsh-portable/test-desktop',key:131260})`)
@@ -373,7 +370,7 @@ try {
 } finally {
   try {
     if (evaluate) {
-      await writeFile(path.join(output, 'dialog-events.json'), JSON.stringify(await evaluate('window.__portableAcceptanceDialogs').catch(String), null, 2))
+      await writeFile(path.join(output, 'dialog-events.json'), JSON.stringify(await evaluate('window.__portableAcceptanceDialogs').catch(String) ?? [], null, 2))
       await writeFile(path.join(output, 'page.txt'), await evaluate('document.body.innerText').catch(String))
       await writeFile(path.join(output, 'page.html'), await evaluate('document.documentElement.outerHTML').catch(String))
     }

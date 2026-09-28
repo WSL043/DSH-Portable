@@ -201,13 +201,14 @@ async function evaluate(client, expression) {
   return response.result?.value
 }
 
+let completedCredentialOnboarding = false
 async function waitForValue(client, expression, predicate, label, timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs
   let latest
   while (Date.now() < deadline) {
     // The official first-run notice can mount after settings or locale changes.
     // Deal only with that known onboarding dialog, never click through a modal.
-    await evaluate(client, `(() => {
+    const onboarding = await evaluate(client, `(() => {
       const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
         .find(item => item.getBoundingClientRect().width > 0
           && /Internal Testing Notice|内测声明|Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(item.textContent || ''))
@@ -216,8 +217,9 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
           && !item.disabled && !item.closest('[inert],[aria-hidden="true"]'))
       if (!button) return false
       button.click()
-      return true
+      return { terminal: /Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(notice.textContent || '') }
     })()`)
+    completedCredentialOnboarding ||= Boolean(onboarding?.terminal)
     latest = await evaluate(client, expression)
     if (predicate(latest)) return latest
     await new Promise(resolve => setTimeout(resolve, 100))
@@ -369,33 +371,12 @@ try {
   assert.ok(Array.isArray(state.sessions))
   assert.ok(state.sessions.length <= 10)
 
-  const onboarding = await evaluate(client, clickButton(['稍后配置', 'Set up later', 'Configure later']))
-  if (onboarding?.clicked) {
-    await waitForValue(
-      client,
-      `![...document.querySelectorAll('button')].some(item => ['稍后配置', 'Set up later', 'Configure later'].includes((item.textContent || '').trim()))`,
-      Boolean,
-      'onboarding dismissal',
-    )
-  }
-  const testingNotice = await evaluate(client, clickButton(['Continue', '继续']))
-  if (testingNotice?.clicked) {
-    await waitForValue(
-      client,
-      `![...document.querySelectorAll('button')].some(item => ['Continue', '继续'].includes((item.textContent || '').trim()))`,
-      Boolean,
-      'testing notice dismissal',
-    )
-  }
-  const providerOnboarding = await evaluate(client, clickButton(['稍后配置', 'Set up later', 'Configure later']))
-  if (providerOnboarding?.clicked) {
-    await waitForValue(
-      client,
-      `![...document.querySelectorAll('button')].some(item => ['稍后配置', 'Set up later', 'Configure later'].includes((item.textContent || '').trim()))`,
-      Boolean,
-      'provider onboarding dismissal',
-    )
-  }
+  // This isolated, keyless browser must complete the actual final provider
+  // onboarding step. A transient empty overlay is not completion: the next
+  // official step deliberately closes Settings and any open language menu.
+  await waitForValue(client,
+    `![...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')].some(item => item.getBoundingClientRect().width > 0)`,
+    clear => clear && completedCredentialOnboarding, 'final credential onboarding dismissal')
   await waitForValue(client, `(() => {
     const labels = [...document.querySelectorAll('button')].map(item => (item.textContent || '').trim())
     return {
