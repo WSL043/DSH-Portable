@@ -38,7 +38,12 @@ function Catalog({ ctx, onInstall, onManage }: { ctx: any; onInstall: (spec:stri
   // Dynamic-plugin service facades may be recreated on property access.
   // Capture one per mount; otherwise every inventory response restarts loading.
   const manager = useMemo(() => ctx.remote.pluginManager, [ctx])
-  const refreshInstalled = useCallback(async () => { setBundles(await manager.listBundles()) }, [manager])
+  const refreshInstalled = useCallback(async () => {
+    const result = await manager.listBundles()
+    if (!result.ok) throw new Error(result.error?.message ?? 'Official plugin inventory unavailable')
+    if (!Array.isArray(result.value)) throw new Error('Unexpected official plugin inventory response')
+    setBundles(result.value)
+  }, [manager])
   const load = useCallback(async (refresh = false, signal?: AbortSignal) => {
     setLoading(true); setError('')
     try {
