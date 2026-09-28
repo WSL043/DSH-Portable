@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "deepseek-herness-linux"
-version = "0.7.8"
+version = "0.8.0"
 dependencies = [
  "rfd",
  "semver",

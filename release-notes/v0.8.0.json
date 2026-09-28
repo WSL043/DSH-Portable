@@ -1,0 +1,35 @@
+{
+  "version": "0.8.0",
+  "zh": {
+    "summary": "内置官方 DSH 0.2.0-rc.1（官方预发布候选）。",
+    "highlights": [
+      "将运行时、官方 tag 与提交、npm integrity 和许可清单锁定到 DSH 0.2.0-rc.1。",
+      "历史会话兼容继续绑定精确摘要；独立 staged app 已实跑读取、AgentLoop 继续、保存重开与中断恢复，最终成品仍需完整 CI。",
+      "待发布的默认图片查看器 0.1.4 与会话管理 1.5.3 声明兼容 alpha.1、rc.2 和 0.2.0-rc.1。",
+      "官方插件管理页的新版本继续提供 Portable 刷新与更新入口，刷新锚点按上游精确匹配。"
+    ],
+    "upgradeNotes": [
+      "可从 0.7.x 通过应用内更新或下载完整新包升级；会话、设置、凭据与插件预计保留（待 G1 证实）。官方 DSH 0.2.0-rc.1 是预发布候选，不是正式上游内核。"
+    ],
+    "knownIssues": [
+      "完整多屏与混合 DPI 硬件组合、物理断电恢复尚未完成本版本专项验收。",
+      "官方自动化任务 Schedule 作为可选插件包提供，Portable 默认 profile 未启用。"
+    ]
+  },
+  "en": {
+    "summary": "Bundle official DSH 0.2.0-rc.1, an upstream release candidate.",
+    "highlights": [
+      "Pin the runtime, official tag and commit, npm integrity, and license manifest to DSH 0.2.0-rc.1.",
+      "Keep historical-session compatibility bound to exact digests; read, AgentLoop continuation, persisted reopen, and interrupted recovery passed in an independent staged app, while the final package still requires full CI.",
+      "Pending publication, default Image Viewer 0.1.4 and Session Manager 1.5.3 declare compatibility with alpha.1, rc.2, and 0.2.0-rc.1.",
+      "The newer official plugin manager page continues to provide Portable refresh and update entry points, using an exact upstream refresh anchor."
+    ],
+    "upgradeNotes": [
+      "Upgrade from 0.7.x through the in-app updater or a complete package. Sessions, settings, credentials, and plugins are expected to be retained (pending G1 verification). Official DSH 0.2.0-rc.1 is a prerelease candidate, not a final upstream core."
+    ],
+    "knownIssues": [
+      "The complete multi-monitor/mixed-DPI hardware matrix and physical power-loss recovery have not completed qualification for this version.",
+      "Official Schedule automation is supplied as an optional plugin bundle and is not enabled in the Portable default profile."
+    ]
+  }
+}
