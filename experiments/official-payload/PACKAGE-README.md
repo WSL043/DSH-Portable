@@ -6,9 +6,19 @@ Windows x64 development draft. Extract into a fresh directory and run **DeepSeek
 
 ## 便携边界 / Portable boundary
 
-官方 EXE 和运行库保留原字节；官方 app.asar 的主进程增加两处边界适配：协议注册指向便携启动器；更新协调器接入便携更新传输。修改前后摘要与适配协议版本记录在 launcher/provenance.json 和 resources/portable-adaptation.json。不能把此版描述为完全未经修改的官方程序。
+官方 EXE 和运行库保留原字节；官方 app.asar 的主进程增加协议、更新传输和首次默认插件初始化三处边界适配。修改前后摘要与适配协议版本记录在 launcher/provenance.json 和 resources/portable-adaptation.json。不能把此版描述为完全未经修改的官方程序。
 
-Official executable and runtimes remain unchanged. The ASAR main process has two audited adaptations: portable protocol registration and an external update transport for the official coordinator. Original and adapted hashes are recorded. This is a community-adapted desktop, not an unmodified official distribution.
+Official executable and runtimes remain unchanged. The ASAR main process adapts protocol registration, update transport and first-profile default plugin initialization. Original and adapted hashes are recorded. This is a community-adapted desktop, not an unmodified official distribution.
+
+## 默认插件 / Default plugins
+
+新目录只默认启用会话管理 `dsh-chat-manager` 与插件市场 `@wsl043/dsh-portable-plugin-market`。不再内置图片查看器。两款都是官方插件管理页可以关闭、卸载的普通插件；完成首次初始化后，重启和更新不会恢复已卸载或已关闭的插件。现有 profile 不强行补装。首次初始化使用随包离线依赖，不要求网络。
+
+Only Chat Manager and Portable Plugin Market are enabled in a fresh profile. Image Viewer is not bundled. Both use ordinary official plugin controls; disabling or uninstalling them persists across restarts and updates. Existing profiles are preserved. Initial provisioning uses bundled offline dependencies.
+
+市场负责浏览、截图、搜索、分类与下载统计；安装通过官方 pluginManager 服务执行，安装后在官方详情页决定是否启用。需要手动重新安装时，可在官方“添加插件”中填写 `launcher/default-plugins` 下对应插件目录的完整路径。
+
+The market handles discovery; official pluginManager owns installation and activation. Enable newly installed packages from their official detail page. To reinstall a removed default, add its absolute directory path under launcher/default-plugins through the official Add Plugin dialog.
 
 ## 使用和更新 / Use and updates
 

@@ -116,7 +116,7 @@ function Expand-OfficialPayload([string]$Installer, $Candidate, [string]$Output,
     } finally { $env:ELECTRON_RUN_AS_NODE=$previousRunAsNode }
     $record=Get-Content -LiteralPath $adaptation -Raw|ConvertFrom-Json
     if($record.originalAsarSha256 -ne $originalHash -or $record.adapterProtocol -ne 2){throw 'Adapter identity mismatch'}
-    return @{ version=$Candidate.version; installerSha512=$Candidate.sha512; originalAsarSha256=$originalHash; asarSha256=$record.asarSha256; adapterProtocol=2; excluded=@('resources/app-update.yml'); adapted=@('lib/main.js: protocol and updater boundary') }
+    return @{ version=$Candidate.version; installerSha512=$Candidate.sha512; originalAsarSha256=$originalHash; asarSha256=$record.asarSha256; adapterProtocol=2; excluded=@('resources/app-update.yml'); adapted=@('lib/main.js: protocol, updater and first-profile defaults boundary') }
 }
 
 function Get-AsarVersion([string]$File) {

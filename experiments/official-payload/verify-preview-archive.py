@@ -32,6 +32,9 @@ with zipfile.ZipFile(archive) as bundle:
     native = root + 'DeepSeek Harness Portable.exe'
     official_version = load('qualified-candidate.json')['version']
     asar = root + f'app/{official_version}/resources/app.asar'
+    defaults = json.loads(bundle.read(root + 'launcher/default-plugins/manifest.json').decode('utf-8-sig'))
+    assert {entry['name'] for entry in defaults['packages']} == {'dsh-chat-manager', '@wsl043/dsh-portable-plugin-market'}, 'Unexpected default plugins'
+    assert not any('/dsh-image-viewer/' in name for name in names), 'Removed default image viewer remains bundled'
     for path, expected in [(native, qualification['binarySha256']), (asar, qualification.get('adaptedAsarSha256', qualification['officialAsarSha256']))]:
         with bundle.open(path) as stream:
             assert hashlib.file_digest(stream, 'sha256').hexdigest() == expected, f'Payload digest mismatch: {path}'
