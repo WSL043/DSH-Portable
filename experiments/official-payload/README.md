@@ -10,6 +10,10 @@ Official executable and runtime bytes stay unchanged. A narrow ASAR adapter conn
 
 ## 自动交付 / Automated delivery
 
+默认启用两款普通插件：会话管理和 Portable 插件市场，不再默认携带图片查看器。市场负责浏览和截图预览，安装与启停交给官方管理服务；首次离线初始化之后不重置用户选择。
+
+Two ordinary plugins are enabled initially: session management and the Portable market. The market provides discovery and previews; official services own installation and activation. Offline initialization runs once and never resets user choices. The image viewer is no longer included by default.
+
 每小时检查官方桌面更新源；身份没有变化时不启动 Windows 验收。新候选必须通过官方安装包摘要、发布者签名、原版输入框、插件安装启停、搬迁后草稿与卸载、进程退出、文件和注册表写入审计。已有不同版本通道时，还要从上一已验收版本通过随包更新器真正升级。全部通过后仅更新小型身份目录；程序仍直接从官方下载。
 
 The hourly workflow skips Windows when the official identity is unchanged. Candidates require installer hash and publisher verification, real input and plugin lifecycle tests, relocation, normal exit and write tracing. When a distinct previous qualified version exists, it additionally exercises the shipped updater across those two official versions. Only successful runs promote the small catalog; official binaries are downloaded directly from the official CDN.

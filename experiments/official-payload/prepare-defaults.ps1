@@ -17,7 +17,7 @@ if($LASTEXITCODE -ne 0){throw 'Default chat plugin extraction failed'}
 Remove-Item -LiteralPath $archive
 $seed=Join-Path $defaults 'seed-project'
 New-Item -ItemType Directory -Path $seed | Out-Null
-@{name='portable-default-seed';private=$true;dependencies=@{'dsh-chat-manager'='file:../dsh-chat-manager';'@wsl043/dsh-portable-plugin-market'='file:../dsh-portable-plugin-market'}}|ConvertTo-Json -Depth 5|Set-Content "$seed/package.json" -Encoding UTF8
+@{name='portable-default-seed';private=$true;dependencies=@{'dsh-chat-manager'='1.5.2';'@wsl043/dsh-portable-plugin-market'='file:../dsh-portable-plugin-market'}}|ConvertTo-Json -Depth 5|Set-Content "$seed/package.json" -Encoding UTF8
 "packages:`n  - .`nautoInstallPeers: false`nnodeLinker: hoisted`n"|Set-Content "$seed/pnpm-workspace.yaml" -Encoding UTF8
 $runtime=Join-Path $Root "app/$Version"
 $prior=$env:ELECTRON_RUN_AS_NODE

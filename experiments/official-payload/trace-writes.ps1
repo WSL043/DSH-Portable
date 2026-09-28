@@ -37,6 +37,11 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
             # writes/deletes, not portable account, profile or application data.
             if ($_.'Process Name' -in @('DeepSeek Harness Portable.exe','powershell.exe') -and $_.Operation -in @('RegSetValue','RegDeleteValue') -and $_.Path -match '^HKLM\\System\\CurrentControlSet\\Services\\ASP\.NET_4\.0\.30319\\Names\\[A-Za-z0-9]+$') { $category='reviewed-dotnet-system-registration' }
             if ($_.Path -match '\\Microsoft\\Spelling\\|^HKCU\\Software\\Microsoft\\Spelling') { $category='windows-shared-spelling' }
+            # Reviewed in native run 36409052501: DirectX shader cache files,
+            # https://microsoft.github.io/DirectX-Specs/d3d/ShaderCache.html
+            # Retain them in evidence; do not classify other LocalAppData writes here.
+            $shaderRoot=(Join-Path $env:LOCALAPPDATA 'D3DSCache')+'\'
+            if ($_.'Process Name' -eq 'DeepSeek Harness.exe' -and $_.Path.StartsWith($shaderRoot,[StringComparison]::OrdinalIgnoreCase) -and $_.Path.Substring($shaderRoot.Length) -match '^[a-f0-9]+(?:\\[a-f0-9-]+\.dxcache(?:-journal|-shm|-wal)?)?$') { $category='windows-directx-shader-cache' }
             if ($_.Path -match '\\Microsoft\\Windows\\PowerShell\\StartupProfileData-NonInteractive$') { $category='windows-powershell-startup-cache' }
             if ($_.Path.StartsWith((Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'deepseek-harness'),[StringComparison]::OrdinalIgnoreCase)) { $category='official-external-workspace' }
             $findings.Add([pscustomobject]@{process=$_.'Process Name';pid=$_.PID;operation=$_.Operation;path=$_.Path;category=$category})

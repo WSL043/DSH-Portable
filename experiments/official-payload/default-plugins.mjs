@@ -3,7 +3,6 @@ import { join, relative, resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 
 const names = ['dsh-chat-manager', '@wsl043/dsh-portable-plugin-market'];
-const directories = ['dsh-chat-manager', 'dsh-portable-plugin-market'];
 export async function isFreshProfile(profile) {
   try {await readFile(join(profile,'package.json'));return false;} catch(error) {if(error.code==='ENOENT')return true;throw error;}
 }
@@ -32,7 +31,9 @@ export async function seedDefaults(root, profile, executable, resources, fresh =
   await mkdir(store, {recursive:true});
   await cp(join(defaults, 'store'), store, {recursive:true, force:false, errorOnExist:false});
   await cp(join(defaults, 'cache'), join(root,'data/pnpm-cache'), {recursive:true, force:false, errorOnExist:false});
-  const specs = directories.map(directory => 'file:' + relative(profile, join(defaults, directory)).replaceAll('\\', '/'));
+  // Keep the published chat plugin as an npm source so the official manager
+  // can discover later releases. Only the unpublished alpha market is local.
+  const specs = ['dsh-chat-manager@1.5.2', 'file:' + relative(profile, join(defaults, 'dsh-portable-plugin-market')).replaceAll('\\', '/')];
   const args = [join(resources, 'runtime/pnpm/bin/pnpm.mjs'), 'add', ...specs, '--offline', '--ignore-scripts', '--store-dir', store, '--config.auto-install-peers=false'];
   let diagnostic = '';
   const child = spawn(executable, args, {cwd:profile, windowsHide:true, env:{...process.env, ELECTRON_RUN_AS_NODE:'1', CI:'true'}, stdio:['ignore','pipe','pipe'], timeout:90000});
