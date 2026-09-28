@@ -13,11 +13,15 @@ test('late API Key onboarding is dismissed without touching unrelated dialogs', 
   const button = { textContent: 'Configure later', disabled: false, closest: () => null, click: () => clicks++ }
   const modal = { textContent: 'Add an API Key to get started', getBoundingClientRect: () => ({ width: 400 }), querySelectorAll: () => [button] }
   const context = { document: { querySelectorAll: () => [modal] } }
-  assert.equal(vm.runInNewContext(expression, context), true)
+  assert.equal(vm.runInNewContext(expression, context).terminal, true)
   assert.equal(clicks, 1)
+  modal.textContent = 'Internal Testing Notice'
+  button.textContent = 'Continue'
+  assert.equal(vm.runInNewContext(expression, context).terminal, false, 'welcome is not the final onboarding step')
+  assert.equal(clicks, 2)
   modal.textContent = 'Confirm deleting your session'
   assert.equal(vm.runInNewContext(expression, context), false)
-  assert.equal(clicks, 1)
+  assert.equal(clicks, 2)
 })
 
 test('native acceptance waits for an actionable control after a tab change', async () => {
