@@ -1,7 +1,7 @@
 // Native CDP acceptance of an unmodified official executable, disposable data only.
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-const [port, output, fixture] = process.argv.slice(2);
+const [port, output, fixture, mode = 'install'] = process.argv.slice(2);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evidence = { passed: false, steps: [] };
 let client;
@@ -34,7 +34,7 @@ async function click(text, selector='button') {
 }
 async function snapshot(name) {
   await writeFile(`${output}.${name}.png`,Buffer.from((await client.send('Page.captureScreenshot')).data,'base64'));
-  evidence[name]=await client.evaluate(`({text:document.body.innerText.slice(0,5000),editors:[...document.querySelectorAll('[contenteditable=true],textarea')].filter(e=>e.getClientRects().length).length})`);
+  evidence[name]=await client.evaluate(`({text:document.body.innerText.slice(0,5000),buttons:[...document.querySelectorAll('button')].filter(e=>e.getClientRects().length).map(e=>({text:e.textContent.trim(),label:e.getAttribute('aria-label'),checked:e.getAttribute('aria-checked')})),editors:[...document.querySelectorAll('[contenteditable=true],textarea')].filter(e=>e.getClientRects().length).length})`);
 }
 try {
   const welcome=await until(async()=> (await targets()).find(t=>t.type==='page'&&t.url.endsWith('/renderer/welcome.html')),'Welcome');
@@ -49,7 +49,7 @@ try {
   if(!await client.evaluate(`(document.activeElement.textContent||document.activeElement.value).includes('Portable alpha2 input acceptance 123')`))throw new Error('Input not retained');
   evidence.steps.push('actual editor input');await snapshot('workspace');
   await click(['Plugins','插件']);await snapshot('plugins');
-  if(fixture){
+  if(fixture && mode === 'install'){
     await click(['Add plugin','Add Plugin','添加插件']);
     await until(()=>client.evaluate(`(()=>{const e=document.querySelector('[role=dialog] input[type=text]');if(!e)return false;e.focus();return true;})()`),'Install input');
     await client.send('Input.insertText',{text:fixture});await click(['Install','安装']);
@@ -59,6 +59,17 @@ try {
     await click(['Enable dsh-portable-acceptance-fixture','启用 dsh-portable-acceptance-fixture']);
     await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='disabled','Actual plugin deactivation');
     evidence.steps.push('actual plugin disable');
+  }
+  if(mode === 'moved'){
+    await click(['Enable dsh-portable-acceptance-fixture','启用 dsh-portable-acceptance-fixture']);
+    await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='enabled','Moved plugin activation');
+    evidence.steps.push('moved plugin activation');
+    await click(['View dsh-portable-acceptance-fixture','查看 dsh-portable-acceptance-fixture']);
+    await snapshot('detail');
+    await click(['Uninstall dsh-portable-acceptance-fixture','卸载 dsh-portable-acceptance-fixture']);
+    await click(['Uninstall','卸载'],'[role=dialog] button');
+    await until(()=>client.evaluate(`!document.body.innerText.includes('dsh-portable-acceptance-fixture')`),'Moved plugin uninstall');
+    evidence.steps.push('moved plugin uninstall');await snapshot('uninstalled');
   }
   await client.evaluate('void window.dshDesktop.updates.open()');await delay(2500);
   evidence.updateTargets=(await targets()).map(({type,url})=>({type,url}));

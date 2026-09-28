@@ -25,10 +25,16 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
     if ($_.'Process Name' -eq 'DeepSeek Harness.exe') { [void]$owned.Add([string]$_.PID) }
     if ($owned.Contains([string]$_.PID)) {
         if ($_.Operation -eq 'Process Create' -and $_.Detail -match '^PID: (\d+)') { [void]$owned.Add($Matches[1]) }
-        if ($_.Result -eq 'SUCCESS' -and $_.Operation -in $operations -and -not $_.Path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) {
+        $write = $_.Operation -in $operations -or ($_.Operation -eq 'CreateFile' -and $_.Detail -match 'OpenResult: Created')
+        if ($_.Operation -eq 'RegCreateKey' -and $_.Detail -match 'REG_OPENED_EXISTING_KEY') { $write=$false }
+        if ($_.Result -eq 'SUCCESS' -and $write -and -not $_.Path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) {
             $category = 'needs-review'
             if ($_.Path.StartsWith($env:TEMP.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith('C:\Windows\Temp\',[StringComparison]::OrdinalIgnoreCase)) { $category='temporary' }
             if ($_.Path -match '^HKCU\\Software\\Classes\\dsh(\\|$)') { $category='known-protocol-registration' }
+            if ($_.Path -match '^\\Device\\NamedPipe\\') { $category='ipc-not-a-disk-file' }
+            if ($_.Path -match '^[A-Z]:$|^[A-Z]:\\\$(LogFile|Mft)$|^HKLM\\System\\CurrentControlSet\\Services\\bam\\') { $category='windows-system-record' }
+            if ($_.Path -match '\\Microsoft\\Spelling\\|^HKCU\\Software\\Microsoft\\Spelling') { $category='windows-shared-spelling' }
+            if ($_.Path -match '\\Microsoft\\Windows\\PowerShell\\StartupProfileData-NonInteractive$') { $category='windows-powershell-startup-cache' }
             $findings.Add([pscustomobject]@{process=$_.'Process Name';pid=$_.PID;operation=$_.Operation;path=$_.Path;category=$category})
         }
     }

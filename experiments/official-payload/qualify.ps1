@@ -28,8 +28,10 @@ $env:DSH_AGENTS_HOME = Join-Path $root 'data/agents'
 $env:pnpm_config_store_dir = Join-Path $root 'data/pnpm-store'
 $env:pnpm_config_cache_dir = Join-Path $root 'data/pnpm-cache'
 $env:pnpm_config_state_dir = Join-Path $root 'data/pnpm-state'
+$env:NARB_NATIVE_CACHE_DIR = Join-Path $root 'data/native-cache'
+$env:NODE_COMPILE_CACHE = Join-Path $root 'data/node-compile-cache'
 $userData = Join-Path $root 'data/electron'
-$watch = @("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater")
+$watch = @("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater", "$env:LOCALAPPDATA/node-addon-native-custom-loader")
 $before = @($watch | Where-Object { Test-Path -LiteralPath $_ })
 $harness = Join-Path $env:GITHUB_WORKSPACE 'experiments/official-desktop/launch-hidden-windows.ps1'
 $job = Start-Job -ScriptBlock { param($h,$x,$a) & $h -Exe $x -Arguments $a -Milliseconds 180000 -CleanRunnerNativeDirectories } -ArgumentList $harness,$exe,"--user-data-dir=`"$userData`" --remote-debugging-port=19489"
@@ -64,3 +66,21 @@ try {
   Copy-Item "$package/launcher/provenance.json" "$evidence/provenance.json"
 }
 if ($nativeExit -ne 0) { throw 'Native launcher artifact qualification failed' }
+$moved = Join-Path $env:RUNNER_TEMP 'portable-alpha2-moved'
+if (Test-Path $moved) { throw 'Moved qualification destination already exists' }
+# Both exact paths are inside the disposable runner temp root and owned by this run.
+foreach ($path in @($package,$moved)) {
+  if (-not ([IO.Path]::GetFullPath($path)).StartsWith([IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Move escaped disposable runner root' }
+}
+Move-Item -LiteralPath $package -Destination $moved
+$env:DSH_PORTABLE_DEVELOPMENT_ROOT = $moved
+$env:DSH_HOME = Join-Path $moved 'data/dsh-home'
+$job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')
+try {
+  node experiments/official-payload/probe.mjs 19491 "$evidence/moved-page.json" '-' moved
+  $movedExit = $LASTEXITCODE
+} finally {
+  $job | Wait-Job | Receive-Job | Out-File "$evidence/moved-process.log"
+  $job | Remove-Job
+}
+if ($movedExit -ne 0) { throw 'Moved native artifact qualification failed' }

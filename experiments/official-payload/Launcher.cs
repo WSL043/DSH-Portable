@@ -43,8 +43,29 @@ internal static class PortableLauncher {
                     var previousRoot = (string)previous["root"];
                     if (!String.Equals(previousRoot, root, StringComparison.OrdinalIgnoreCase)) Relocate(root, previousRoot);
                 }
-                var directories = new[] { "electron", "dsh-home", "agents", "pnpm-store", "pnpm-cache", "pnpm-state", "launcher" };
+                var directories = new[] { "electron", "dsh-home", "agents", "pnpm-store", "pnpm-cache", "pnpm-state", "native-cache", "node-compile-cache", "launcher" };
                 foreach (var name in directories) { var path = Path.Combine(data, name); CheckPath(path); Directory.CreateDirectory(path); }
+                var stagedFile = Path.Combine(root, "app", "staged.json");
+                CheckPath(stagedFile);
+                if (File.Exists(stagedFile) && !Process.GetProcessesByName("DeepSeek Harness").Any(p => {
+                    try { return p.MainModule.FileName.StartsWith(Path.Combine(root, "app") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase); } catch { return true; }
+                })) {
+                    var staged = Read(stagedFile);
+                    var next = (string)staged["version"];
+                    if ((string)staged["from"] != version || !System.Text.RegularExpressions.Regex.IsMatch(next, @"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$")) throw new IOException("Staged update does not match the current version");
+                    var nextApp = Path.Combine(root, "app", next);
+                    CheckPath(nextApp);
+                    var nextAsar = Path.Combine(nextApp, "resources", "app.asar");
+                    if (File.Exists(Path.Combine(nextApp, "resources", "app-update.yml")) || !File.Exists(Path.Combine(nextApp, "DeepSeek Harness.exe"))) throw new IOException("Staged application incomplete");
+                    var receipt = (Dictionary<string, object>)staged["receipt"];
+                    using (var stream = File.OpenRead(nextAsar)) using (var sha = System.Security.Cryptography.SHA256.Create()) {
+                        var hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
+                        if (hash != (string)receipt["asarSha256"]) throw new IOException("Staged application digest mismatch");
+                    }
+                    Write(state, new Dictionary<string, object> { { "version", next }, { "previous", version } });
+                    File.Delete(stagedFile);
+                    version = next; app = nextApp; executable = Path.Combine(app, "DeepSeek Harness.exe");
+                }
                 Write(marker, new Dictionary<string, object> { { "layout", Layout }, { "root", root } });
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = root };
                 start.Arguments = "--user-data-dir=" + Quote(Path.Combine(data, "electron"));
@@ -57,6 +78,8 @@ internal static class PortableLauncher {
                 start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
                 start.EnvironmentVariables["DSH_HOME"] = Path.Combine(data, "dsh-home");
                 start.EnvironmentVariables["DSH_AGENTS_HOME"] = Path.Combine(data, "agents");
+                start.EnvironmentVariables["NARB_NATIVE_CACHE_DIR"] = Path.Combine(data, "native-cache");
+                start.EnvironmentVariables["NODE_COMPILE_CACHE"] = Path.Combine(data, "node-compile-cache");
                 foreach (var name in new[] { "store", "cache", "state" }) start.EnvironmentVariables["pnpm_config_" + name + "_dir"] = Path.Combine(data, "pnpm-" + name);
                 // The stock host currently owns this fixed port. Never attach to another installation.
                 if (IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p => p.Port == 19387)) {
@@ -66,6 +89,14 @@ internal static class PortableLauncher {
                     if (!owned) throw new IOException("Another desktop owns port 19387. Exit it before starting Portable. / 请先退出另一份官方桌面程序。");
                 }
                 Process.Start(start);
+                var updateScript = Path.Combine(root, "launcher", "update.ps1");
+                if (args.Length == 0 && File.Exists(updateScript)) {
+                    var updater = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe")) {
+                        UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
+                        Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(updateScript) + " -Root " + Quote(root)
+                    };
+                    Process.Start(updater);
+                }
             }
             return 0;
         } catch (Exception error) {
