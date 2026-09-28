@@ -77,7 +77,7 @@ try {
   await until(()=>client.evaluate(`document.querySelectorAll('[data-market-card]').length===1`),'Market search filters cards');
   await click(['Manage','管理'],'[data-market-card] button');
   await until(()=>client.evaluate(`!!document.querySelector('button[aria-label="Uninstall Session Manager"]')`),'Market manage opens official bundle details');
-  await click(['Plugins','插件']);
+  await click(['Back to plugins','返回插件列表']);
   await click(['Enable @wsl043/dsh-portable-plugin-market','启用 @wsl043/dsh-portable-plugin-market']);
   await until(()=>client.evaluate(`![...document.querySelectorAll('button')].some(e=>e.getClientRects().length&&['Plugin market','插件市场'].includes(e.textContent.trim()))`),'Disabled market removes sidebar entry');
   await click(['Enable @wsl043/dsh-portable-plugin-market','启用 @wsl043/dsh-portable-plugin-market']);
