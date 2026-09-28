@@ -6,7 +6,7 @@ Windows x64 development draft. Extract into a fresh directory and run **DeepSeek
 
 ## 便携边界 / Portable boundary
 
-官方 EXE 和运行库保留原字节；官方 app.asar 的主进程增加协议、更新传输和首次默认插件初始化三处边界适配。修改前后摘要与适配协议版本记录在 launcher/provenance.json 和 resources/portable-adaptation.json。不能把此版描述为完全未经修改的官方程序。
+官方 EXE 和运行库保留原字节；官方 app.asar 的主进程增加协议、更新传输和首次默认插件初始化三处边界适配，插件管理客户端增加官方「插件」页工具栏的市场扩展点。市场的安装操作进入官方安装窗口。修改前后摘要与适配协议版本记录在 launcher/provenance.json 和 resources/portable-adaptation.json。不能把此版描述为完全未经修改的官方程序。
 
 Official executable and runtimes remain unchanged. The ASAR main process adapts protocol registration, update transport and first-profile default plugin initialization. Original and adapted hashes are recorded. This is a community-adapted desktop, not an unmodified official distribution.
 
