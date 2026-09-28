@@ -9,10 +9,10 @@
       "官方插件管理页的新版本继续提供 Portable 刷新与更新入口，刷新锚点按上游精确匹配。"
     ],
     "upgradeNotes": [
-      "可从 0.7.x 通过应用内更新或下载完整新包升级；会话、设置、凭据与插件预计保留（待 G1 证实）。官方 DSH 0.2.0-rc.1 是预发布候选，不是正式上游内核。"
+      "可从 0.7.x 通过应用内更新或下载完整新包升级；已用公开 0.7.5 包实测升级到本版本，会话、设置、插件与工作区标记均保留。官方 DSH 0.2.0-rc.1 是预发布候选，不是正式上游内核。"
     ],
     "knownIssues": [
-      "完整多屏与混合 DPI 硬件组合、物理断电恢复尚未完成本版本专项验收。",
+      "完整多屏与混合 DPI 硬件组合、物理断电恢复以及 120 分钟长时间运行专项尚未完成本版本验收。",
       "官方自动化任务 Schedule 作为可选插件包提供，Portable 默认 profile 未启用。"
     ]
   },
@@ -25,10 +25,10 @@
       "The newer official plugin manager page continues to provide Portable refresh and update entry points, using an exact upstream refresh anchor."
     ],
     "upgradeNotes": [
-      "Upgrade from 0.7.x through the in-app updater or a complete package. Sessions, settings, credentials, and plugins are expected to be retained (pending G1 verification). Official DSH 0.2.0-rc.1 is a prerelease candidate, not a final upstream core."
+      "Upgrade from 0.7.x through the in-app updater or a complete package. Upgrading from the public 0.7.5 package was tested end to end; session, settings, plugin, and workspace markers were retained. Official DSH 0.2.0-rc.1 is a prerelease candidate, not a final upstream core."
     ],
     "knownIssues": [
-      "The complete multi-monitor/mixed-DPI hardware matrix and physical power-loss recovery have not completed qualification for this version.",
+      "The complete multi-monitor/mixed-DPI hardware matrix and physical power-loss recovery, and the 120-minute long-run soak have not completed qualification for this version.",
       "Official Schedule automation is supplied as an optional plugin bundle and is not enabled in the Portable default profile."
     ]
   }
