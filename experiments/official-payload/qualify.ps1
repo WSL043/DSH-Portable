@@ -4,23 +4,17 @@ $evidence = Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-evidence'
 $root = Join-Path $env:RUNNER_TEMP 'portable-official-alpha2'
 New-Item -ItemType Directory -Path $evidence,$root -Force | Out-Null
 $installer = Join-Path $root 'official.exe'
-$url = 'https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.1.7-rc.2-win-x64.exe'
-Invoke-WebRequest -Uri $url -OutFile $installer
-$hash = [Convert]::ToBase64String([Convert]::FromHexString((Get-FileHash $installer -Algorithm SHA512).Hash))
-if ($hash -ne 'AY7f45dYO7BFrfgaLmzXNWP0pavlxkSbsehPo/WF6PXcFdDK3fF1oHUPs/4f2bzROgQvm6wSgawZ/g7UzbPRmw==') { throw 'Installer hash mismatch' }
+Import-Module "$PSScriptRoot/Payload.psm1" -Force
+$candidate = Get-Content "$PSScriptRoot/candidate.json" -Raw | ConvertFrom-Json
+Get-OfficialInstaller $installer $candidate
 $signature = Get-AuthenticodeSignature $installer
 if ($signature.Status -ne 'Valid') { throw 'Invalid official installer signature' }
 $signature | Select-Object Status,@{n='subject';e={$_.SignerCertificate.Subject}} | ConvertTo-Json | Set-Content "$evidence/signature.json"
 $outer = Join-Path $root 'outer'
 $app = Join-Path $root 'app'
-& 7z x $installer "-o$outer" '-y' | Out-File "$evidence/extract.log"
-if ($LASTEXITCODE -ne 0) { throw 'Outer extraction failed' }
-$archive = Join-Path $outer '$PLUGINSDIR/app-64.7z'
-& 7z x $archive "-o$app" '-y' | Out-File "$evidence/extract-app.log"
-if ($LASTEXITCODE -ne 0) { throw 'Payload extraction failed' }
+$receipt = Expand-OfficialPayload $installer $candidate $app (Get-Command 7z).Source
 $exe = Join-Path $app 'DeepSeek Harness.exe'
 if ((Get-AuthenticodeSignature $exe).Status -ne 'Valid') { throw 'Invalid payload signature' }
-Remove-Item -LiteralPath "$app/resources/app-update.yml"
 & "$PSScriptRoot/trace-writes.ps1" -Mode Start -Evidence $evidence -PortableRoot $root
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $root
 $env:DSH_HOME = Join-Path $root 'data/dsh-home'
@@ -51,6 +45,7 @@ try {
 }
 if ($probeExit -ne 0 -or $leaks.Count -gt 0) { throw 'Official payload boundary qualification failed; inspect evidence' }
 & "$PSScriptRoot/test-boundaries.ps1"
+& "$PSScriptRoot/test-update.ps1"
 $package = Join-Path $env:RUNNER_TEMP 'portable-alpha2-native'
 & "$PSScriptRoot/package.ps1" -Installer $installer -Output $package -SevenZip (Get-Command 7z).Source
 $env:DSH_PORTABLE_DEVELOPMENT_ROOT = $package

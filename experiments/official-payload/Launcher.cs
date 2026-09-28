@@ -52,7 +52,7 @@ internal static class PortableLauncher {
                 })) {
                     var staged = Read(stagedFile);
                     var next = (string)staged["version"];
-                    if ((string)staged["from"] != version || !System.Text.RegularExpressions.Regex.IsMatch(next, @"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$")) throw new IOException("Staged update does not match the current version");
+                    if (((string)staged["from"] != version && next != version) || !System.Text.RegularExpressions.Regex.IsMatch(next, @"^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$")) throw new IOException("Staged update does not match the current version");
                     var nextApp = Path.Combine(root, "app", next);
                     CheckPath(nextApp);
                     var nextAsar = Path.Combine(nextApp, "resources", "app.asar");
@@ -62,7 +62,7 @@ internal static class PortableLauncher {
                         var hash = BitConverter.ToString(sha.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
                         if (hash != (string)receipt["asarSha256"]) throw new IOException("Staged application digest mismatch");
                     }
-                    Write(state, new Dictionary<string, object> { { "version", next }, { "previous", version } });
+                    if (next != version) Write(state, new Dictionary<string, object> { { "version", next }, { "previous", version } });
                     File.Delete(stagedFile);
                     version = next; app = nextApp; executable = Path.Combine(app, "DeepSeek Harness.exe");
                 }

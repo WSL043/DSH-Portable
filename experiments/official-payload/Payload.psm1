@@ -122,4 +122,14 @@ function Get-AsarVersion([string]$File) {
     } finally { $reader.Dispose(); $stream.Dispose() }
 }
 
-Export-ModuleMember -Function Assert-PlainPath,Assert-Candidate,Assert-Installer,Get-OfficialInstaller,Expand-OfficialPayload,Get-AsarVersion
+function Remove-PortableScratch([string]$Path, [string]$AppRoot) {
+    $resolved = [IO.Path]::GetFullPath($Path)
+    $parent = [IO.Path]::GetFullPath($AppRoot).TrimEnd('\') + '\'
+    if (-not $resolved.StartsWith($parent,[StringComparison]::OrdinalIgnoreCase)) { throw 'Cleanup escaped managed application root' }
+    Assert-PlainPath $resolved
+    if (-not (Test-Path -LiteralPath $resolved)) { return }
+    if (@(Get-ChildItem -LiteralPath $resolved -Recurse -Force | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count) { throw 'Cleanup encountered a reparse point' }
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
+Export-ModuleMember -Function Assert-PlainPath,Assert-Candidate,Assert-Installer,Get-OfficialInstaller,Expand-OfficialPayload,Get-AsarVersion,Remove-PortableScratch

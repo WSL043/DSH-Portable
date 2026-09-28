@@ -55,12 +55,14 @@ try {
     await client.send('Input.insertText',{text:fixture});await click(['Install','安装']);
     await click(['Enable now','Enable Now','立即启用']);
     await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='enabled','Actual plugin activation');
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable dsh-portable-acceptance-fixture"],button[aria-label="启用 dsh-portable-acceptance-fixture"]')?.getAttribute('aria-checked')==='true'`),'Enabled state reflected in official UI');
     evidence.steps.push('actual plugin install/enable');await snapshot('installed');
     await click(['Enable dsh-portable-acceptance-fixture','启用 dsh-portable-acceptance-fixture']);
     await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='disabled','Actual plugin deactivation');
     evidence.steps.push('actual plugin disable');
   }
   if(mode === 'moved'){
+    await until(()=>client.evaluate(`document.querySelector('button[aria-label="Enable dsh-portable-acceptance-fixture"],button[aria-label="启用 dsh-portable-acceptance-fixture"]')?.getAttribute('aria-checked')==='false'`),'Moved disabled state reflected in official UI');
     await click(['Enable dsh-portable-acceptance-fixture','启用 dsh-portable-acceptance-fixture']);
     await until(async()=> (await readFile(join(process.env.DSH_HOME,'acceptance-plugin-state.txt'),'utf8'))==='enabled','Moved plugin activation');
     evidence.steps.push('moved plugin activation');
@@ -75,6 +77,7 @@ try {
   evidence.updateTargets=(await targets()).map(({type,url})=>({type,url}));
   await client.evaluate('void window.dshDesktop.updates.status().then(x=>window.__portableUpdateResult=x)');
   await delay(500);evidence.updateStatus=await client.evaluate('window.__portableUpdateResult');
+  if(evidence.updateStatus?.phase!=='error'||evidence.updateStatus?.failure!=='check')throw new Error('Official installer updater did not reject the absent update source');
   evidence.passed=true;
   try { await client.send('Browser.close'); } catch(error) { if(!String(error).includes('CDP target closed'))throw error; }
 } catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }

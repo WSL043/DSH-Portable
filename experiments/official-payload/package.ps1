@@ -15,7 +15,11 @@ New-Item -ItemType Directory -Path (Join-Path $Output 'launcher') -Force | Out-N
 & (Join-Path $PSScriptRoot 'build-launcher.ps1') -Output (Join-Path $Output 'DeepSeek Harness Portable.exe')
 @{ version=$candidate.version } | ConvertTo-Json | Set-Content (Join-Path $Output 'app/current.json') -Encoding UTF8
 $receipt | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output 'launcher/provenance.json') -Encoding UTF8
+New-Item -ItemType Directory -Path (Join-Path $Output 'launcher/receipts') -Force | Out-Null
+$receipt | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $Output "launcher/receipts/$($candidate.version).json") -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'candidate.json') -Destination (Join-Path $Output 'launcher/candidate.json')
+foreach ($file in @('Payload.psm1','update.ps1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $Output "launcher/$file") }
+foreach ($file in @('7z.exe','7z.dll','License.txt')) { Copy-Item -LiteralPath (Join-Path (Split-Path -Parent $SevenZip) $file) -Destination (Join-Path $Output "launcher/$file") }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'README.md') -Destination (Join-Path $Output 'README.md')
 $outer = [IO.Path]::GetFullPath($payload + '.outer')
 if (-not $outer.StartsWith($Output.TrimEnd('\')+'\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Extraction scratch escaped package root' }
