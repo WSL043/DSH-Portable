@@ -11,12 +11,18 @@ async function connect(target) {
   await new Promise((resolve, reject) => { const timer=setTimeout(()=>reject(new Error('CDP connect timeout')),5000); socket.onopen=()=>{clearTimeout(timer);resolve();};socket.onerror=()=>{clearTimeout(timer);reject(new Error('CDP error'));}; });
   let seq = 0;
   socket.onmessage = ({data}) => {
-    const r=JSON.parse(data), p=pending.get(r.id); if (!p) return;
+    const r=JSON.parse(data);
+    if(r.method==='Runtime.exceptionThrown'||(r.method==='Runtime.consoleAPICalled'&&r.params?.type==='error')) {
+      evidence.rendererErrors ??= [];
+      if(evidence.rendererErrors.length<20)evidence.rendererErrors.push(r.params);
+    }
+    const p=pending.get(r.id); if (!p) return;
     pending.delete(r.id);clearTimeout(p.timer);
     if(r.error||r.result?.exceptionDetails)p.reject(new Error(JSON.stringify(r.error??r.result.exceptionDetails)));else p.resolve(r.result);
   };
   socket.onclose = () => { for (const p of pending.values()) {clearTimeout(p.timer);p.reject(new Error('CDP target closed'));} pending.clear(); };
   const send=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq,timer=setTimeout(()=>{pending.delete(id);reject(new Error(`${method} timeout`));},8000);pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));});
+  await send('Runtime.enable');
   return {send, close:()=>socket.close(), evaluate:async expression=>(await send('Runtime.evaluate',{expression,returnByValue:true})).result.value};
 }
 async function targets() {return await(await fetch(`http://127.0.0.1:${Number(port)}/json/list`,{signal:AbortSignal.timeout(1000)})).json();}
