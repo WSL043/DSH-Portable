@@ -1,0 +1,44 @@
+name: Publish qualified official desktop preview
+on:
+  workflow_dispatch:
+    inputs:
+      qualification_run:
+        description: Successful Official payload portable alpha run ID
+        required: true
+        type: string
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: official-desktop-preview-publication
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - name: Require a successful native qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.qualification_run }}
+        run: |
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          gh run view "$RUN_ID" --json conclusion,workflowName,headSha > qualification-run.json
+          node -e 'const r=require("./qualification-run.json");if(r.conclusion!=="success"||r.workflowName!=="Official payload portable alpha")throw Error("Not a successful native qualification")'
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-payload-alpha2-package
+          path: release-input
+          run-id: ${{ inputs.qualification_run }}
+          github-token: ${{ github.token }}
+      - name: Verify exact archive and publish as non-latest prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.qualification_run }}
+        run: |
+          python3 experiments/official-payload/verify-preview-archive.py
+          VERSION=$(node -p 'require("./release-input/qualification.json").version')
+          SOURCE=$(node -p 'require("./release-input/qualification.json").sourceCommit')
+          test -f "docs/release-$VERSION-notes.md"
+          gh release create "v$VERSION" release-input/* --target "$SOURCE" --prerelease --latest=false --title "DSH-Portable $VERSION — Official desktop payload preview" --notes-file "docs/release-$VERSION-notes.md"
