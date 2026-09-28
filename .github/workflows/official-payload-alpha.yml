@@ -8,8 +8,6 @@ on:
         default: false
   schedule:
     - cron: '17 * * * *'
-  push:
-    branches: [development/official-payload-alpha2]
 permissions:
   contents: read
 concurrency:
@@ -54,7 +52,7 @@ jobs:
         with:
           name: official-candidate-input
           path: experiments/official-payload
-      - name: Unmodified official executable with native system directories
+      - name: Portable boundary adapter with native system directories
         shell: pwsh
         env:
           DSH_BUILD_ALPHA_ARCHIVE: ${{ github.event_name != 'schedule' && !inputs.latest }}
@@ -68,7 +66,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: success() && github.event_name != 'schedule' && !inputs.latest
         with:
-          name: official-payload-alpha2-package
+          name: official-payload-preview-package
           path: build/official-payload-release
           compression-level: 0
           retention-days: 7

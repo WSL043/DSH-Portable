@@ -1,7 +1,7 @@
 param([string]$CandidateFile,[string]$Evidence,[string]$SevenZip)
 $ErrorActionPreference='Stop'
 Import-Module "$PSScriptRoot/Payload.psm1" -Force
-$previousFile=Join-Path $env:GITHUB_WORKSPACE 'channels/official-desktop/windows-x64.json'
+$previousFile=Join-Path $env:GITHUB_WORKSPACE 'channels/official-desktop/windows-x64-v2.json'
 $candidate=Get-Content $CandidateFile -Raw|ConvertFrom-Json
 if(-not(Test-Path $previousFile)){ @{status='not-run';reason='no-previous-qualified-channel'}|ConvertTo-Json|Set-Content "$Evidence/upgrade.json"; return }
 $previous=Get-Content $previousFile -Raw|ConvertFrom-Json
@@ -16,9 +16,9 @@ $harness=Join-Path $PSScriptRoot 'launch-hidden-windows.ps1'
 $exe=Join-Path $root 'DeepSeek Harness Portable.exe'
 foreach($phase in @('before','after')){
     if($phase -eq 'after'){
-        & "$root/launcher/update.ps1" -Root $root -QualificationCandidate $CandidateFile
+        & "$root/launcher/update.ps1" -Root $root -QualificationCandidate $CandidateFile -Operation Prepare -ExpectedVersion $candidate.version
         $status=Get-Content "$root/data/launcher/update-status.json" -Raw|ConvertFrom-Json
-        if($status.status -ne 'staged'){throw "Real official update was not staged: $($status.error)"}
+        if($status.status -ne 'ready'){throw "Real official update was not staged: $($status.error)"}
     }
     $job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19492' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,$exe
     try{

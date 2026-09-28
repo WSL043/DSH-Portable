@@ -1,6 +1,7 @@
 // Native CDP acceptance of an unmodified official executable, disposable data only.
 import { writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 const [port, output, fixture, mode = 'install'] = process.argv.slice(2);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const evidence = { passed: false, steps: [] };
@@ -76,11 +77,39 @@ try {
     if(manifest.dependencies?.['dsh-portable-acceptance-fixture'])throw new Error('Uninstalled plugin remains in profile dependencies');
     evidence.steps.push('moved plugin uninstall');await snapshot('uninstalled');
   }
-  await client.evaluate('void window.dshDesktop.updates.open()');await delay(2500);
+  // Exercise both the registered wrapper and the previous browser bypass entry.
+  const root=process.env.DSH_PORTABLE_DEVELOPMENT_ROOT;
+  const selected=JSON.parse(await readFile(join(root,'app','current.json'),'utf8'));
+  const official=join(root,'app',selected.version,'DeepSeek Harness.exe');
+  const owner=()=>execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '(Get-NetTCPConnection -State Listen -LocalPort 19387).OwningProcess'],{windowsHide:true,encoding:'utf8'}).trim();
+  const originalOwner=owner();
+  for(const executable of [join(root,'DeepSeek Harness Portable.exe'),official]) {
+    const env={...process.env};delete env.DSH_PORTABLE_ROOT;
+    execFileSync(executable,['dsh://open/'],{env,windowsHide:true,timeout:20000});
+    await delay(1200);
+    if(owner()!==originalOwner)throw new Error('Protocol return replaced the active host');
+  }
+  evidence.steps.push('wrapper and direct EXE protocol return preserve host');
+  execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', "Start-Process -FilePath 'dsh://open/' -WindowStyle Hidden"],{windowsHide:true,timeout:20000});
+  await delay(1200);
+  if(owner()!==originalOwner)throw new Error('Windows protocol dispatch replaced the active host');
+  evidence.steps.push('Windows ShellExecute protocol return preserves host');
+  const registration=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command', '(Get-ItemProperty "Registry::HKEY_CURRENT_USER\\Software\\Classes\\dsh\\shell\\open\\command")."(default)"'],{windowsHide:true,encoding:'utf8'});
+  if(!registration.includes(join(root,'DeepSeek Harness Portable.exe')))throw new Error('Protocol registry bypasses portable launcher');
+  await client.evaluate('void window.dshDesktop.updates.open()');
+  await until(async()=>{
+    await client.evaluate('void window.dshDesktop.updates.status().then(x=>window.__portableUpdateResult=x)');
+    const result=JSON.parse((await readFile(join(root,'data','launcher','update-status.json'),'utf8')).replace(/^\uFEFF/,''));
+    return result.status==='current';
+  },'Real portable update check');
+  await delay(700);
   evidence.updateTargets=(await targets()).map(({type,url})=>({type,url}));
   await client.evaluate('void window.dshDesktop.updates.status().then(x=>window.__portableUpdateResult=x)');
   await delay(500);evidence.updateStatus=await client.evaluate('window.__portableUpdateResult');
-  if(evidence.updateStatus?.phase!=='error'||evidence.updateStatus?.failure!=='check')throw new Error('Official installer updater did not reject the absent update source');
+  if(evidence.updateStatus?.phase!=='idle')throw new Error('Official update UI did not receive portable current state');
+  evidence.steps.push('official update action uses portable check without missing-source error');
+  const dialogs=(await targets()).filter(t=>t.type==='page'&&t.url.includes('update-dialog'));
+  for(const target of dialogs){const dialog=await connect(target);try{await writeFile(`${output}.update.png`,Buffer.from((await dialog.send('Page.captureScreenshot')).data,'base64'));}finally{dialog.close();}}
   evidence.passed=true;
   try { await client.send('Browser.close'); } catch(error) { if(!String(error).includes('CDP target closed'))throw error; }
 } catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }

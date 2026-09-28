@@ -2,8 +2,8 @@
 import { readFile } from 'node:fs/promises';
 import { compareVersions } from './version.mjs';
 const candidate=JSON.parse((await readFile('build/official-payload-evidence/qualified-candidate.json','utf8')).replace(/^\uFEFF/,''));
-if(candidate.qualification!=='qualified'||candidate.launcherProtocol!==1||!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$/.test(candidate.version)||candidate.evidence!==`https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`)throw new Error('Qualification identity mismatch');
-const endpoint=`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/channels/official-desktop/windows-x64.json`;
+if(candidate.qualification!=='qualified'||candidate.launcherProtocol!==2||!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$/.test(candidate.version)||candidate.evidence!==`https://github.com/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`)throw new Error('Qualification identity mismatch');
+const endpoint=`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/contents/channels/official-desktop/windows-x64-v2.json`;
 const headers={Authorization:`Bearer ${process.env.GITHUB_TOKEN}`,Accept:'application/vnd.github+json','Content-Type':'application/json'};
 const previous=await fetch(`${endpoint}?ref=main`,{headers,signal:AbortSignal.timeout(15000)});
 let sha;

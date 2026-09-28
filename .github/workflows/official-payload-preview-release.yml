@@ -28,7 +28,7 @@ jobs:
           node -e 'const r=require("./qualification-run.json");if(r.conclusion!=="success"||r.workflowName!=="Official payload portable alpha")throw Error("Not a successful native qualification")'
       - uses: actions/download-artifact@v8
         with:
-          name: official-payload-alpha2-package
+          name: official-payload-preview-package
           path: release-input
           run-id: ${{ inputs.qualification_run }}
           github-token: ${{ github.token }}

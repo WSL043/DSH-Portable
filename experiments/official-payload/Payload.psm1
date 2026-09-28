@@ -34,7 +34,7 @@ function Assert-Installer([string]$File, $Candidate) {
     Assert-Publisher $File $Candidate.publisher
 }
 
-function Get-OfficialInstaller([string]$Destination, $Candidate) {
+function Get-OfficialInstaller([string]$Destination, $Candidate, [scriptblock]$Progress) {
     Assert-Candidate $Candidate
     Assert-PlainPath $Destination
     if (Test-Path -LiteralPath $Destination) { throw 'Download destination already exists' }
@@ -52,10 +52,12 @@ function Get-OfficialInstaller([string]$Destination, $Candidate) {
             $buffer = New-Object byte[] 131072
             [long]$total = 0
             $deadline = [DateTime]::UtcNow.AddMinutes(10)
+            $lastProgress = [DateTime]::MinValue
             while (($length = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
                 $total += $length
                 if ($total -gt $Candidate.size -or [DateTime]::UtcNow -gt $deadline) { throw 'Download exceeded bounds' }
                 $outputStream.Write($buffer, 0, $length)
+                if ($Progress -and ([DateTime]::UtcNow-$lastProgress).TotalMilliseconds -ge 500) { & $Progress ([Math]::Floor(100*$total/$Candidate.size)); $lastProgress=[DateTime]::UtcNow }
             }
             $outputStream.Flush($true)
         } finally { $outputStream.Dispose(); $inputStream.Dispose() }
@@ -101,7 +103,17 @@ function Expand-OfficialPayload([string]$Installer, $Candidate, [string]$Output,
     if ((Get-AsarVersion $asar) -cne $Candidate.version) { throw 'Desktop version does not match candidate' }
     # Reviewed rc.2 identity; a future payload needs its own qualification record.
     if ($Candidate.version -eq '0.1.7-rc.2' -and (Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash -ne '708229949f0533d6d69fca3d4d72c3ad6814fda484ea3b0a7af96b71e83a6126') { throw 'Unexpected official ASAR' }
-    return @{ version=$Candidate.version; installerSha512=$Candidate.sha512; asarSha256=(Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash.ToLowerInvariant(); excluded=@('resources/app-update.yml') }
+    $originalHash=(Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash.ToLowerInvariant()
+    $adaptation=Join-Path $Output 'resources/portable-adaptation.json'
+    $previousRunAsNode=$env:ELECTRON_RUN_AS_NODE
+    try {
+        $env:ELECTRON_RUN_AS_NODE='1'
+        & (Join-Path $Output 'DeepSeek Harness.exe') (Join-Path $PSScriptRoot 'adapt-asar.cjs') $asar $adaptation
+        if($LASTEXITCODE -ne 0){throw 'Official desktop adapter contract failed'}
+    } finally { $env:ELECTRON_RUN_AS_NODE=$previousRunAsNode }
+    $record=Get-Content -LiteralPath $adaptation -Raw|ConvertFrom-Json
+    if($record.originalAsarSha256 -ne $originalHash -or $record.adapterProtocol -ne 2){throw 'Adapter identity mismatch'}
+    return @{ version=$Candidate.version; installerSha512=$Candidate.sha512; originalAsarSha256=$originalHash; asarSha256=$record.asarSha256; adapterProtocol=2; excluded=@('resources/app-update.yml'); adapted=@('lib/main.js: protocol and updater boundary') }
 }
 
 function Get-AsarVersion([string]$File) {

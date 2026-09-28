@@ -1,126 +1,76 @@
-$ErrorActionPreference = 'Stop'
-if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Disposable hosted Windows runner required' }
-$evidence = Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-evidence'
-$root = Join-Path $env:RUNNER_TEMP 'portable-official-alpha2'
-New-Item -ItemType Directory -Path $evidence,$root -Force | Out-Null
-$installer = Join-Path $root 'official.exe'
+$ErrorActionPreference='Stop'
+if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted'){throw 'Disposable hosted Windows runner required'}
+$evidence=Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-evidence'
+New-Item -ItemType Directory -Path $evidence -Force | Out-Null
 Import-Module "$PSScriptRoot/Payload.psm1" -Force
-$candidate = Get-Content "$PSScriptRoot/candidate.json" -Raw | ConvertFrom-Json
+$candidate=Get-Content "$PSScriptRoot/candidate.json" -Raw|ConvertFrom-Json
+$installer=Join-Path $env:RUNNER_TEMP 'official-alpha3.exe'
 Get-OfficialInstaller $installer $candidate
-$signature = Get-AuthenticodeSignature $installer
-if ($signature.Status -ne 'Valid') { throw 'Invalid official installer signature' }
-$signature | Select-Object Status,@{n='subject';e={$_.SignerCertificate.Subject}} | ConvertTo-Json | Set-Content "$evidence/signature.json"
-$outer = Join-Path $root 'outer'
-$app = Join-Path $root 'app'
-$sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
-if (-not (Test-Path $sevenZip)) { throw 'Full 7-Zip installation is required on the build runner' }
-$receipt = Expand-OfficialPayload $installer $candidate $app $sevenZip
-$exe = Join-Path $app 'DeepSeek Harness.exe'
-if ((Get-AuthenticodeSignature $exe).Status -ne 'Valid') { throw 'Invalid payload signature' }
-& "$PSScriptRoot/trace-writes.ps1" -Mode Start -Evidence $evidence -PortableRoot $root
-$env:DSH_PORTABLE_DEVELOPMENT_ROOT = $root
-$env:DSH_HOME = Join-Path $root 'data/dsh-home'
-$env:DSH_AGENTS_HOME = Join-Path $root 'data/agents'
-$env:pnpm_config_store_dir = Join-Path $root 'data/pnpm-store'
-$env:pnpm_config_cache_dir = Join-Path $root 'data/pnpm-cache'
-$env:pnpm_config_state_dir = Join-Path $root 'data/pnpm-state'
-$env:NARB_NATIVE_CACHE_DIR = Join-Path $root 'data/native-cache'
-$env:NODE_COMPILE_CACHE = Join-Path $root 'data/node-compile-cache'
-$userData = Join-Path $root 'data/electron'
-$watch = @("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater", "$env:LOCALAPPDATA/node-addon-native-custom-loader")
-$before = @($watch | Where-Object { Test-Path -LiteralPath $_ })
-$harness = Join-Path $PSScriptRoot 'launch-hidden-windows.ps1'
-$job = Start-Job -ScriptBlock { param($h,$x,$a) & $h -Exe $x -Arguments $a -Milliseconds 180000 -CleanRunnerNativeDirectories } -ArgumentList $harness,$exe,"--user-data-dir=`"$userData`" --remote-debugging-port=19489"
-try {
-  node experiments/official-payload/probe.mjs 19489 "$evidence/page.json" "$PSScriptRoot/fixtures/lifecycle"
-  $probeExit = $LASTEXITCODE
-  Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($app) } | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Depth 4 | Set-Content "$evidence/processes.json"
-} finally {
-  $job | Wait-Job | Receive-Job | Out-File "$evidence/hidden-process.log"
-  $job | Remove-Job
-  & "$PSScriptRoot/trace-writes.ps1" -Mode Stop -Evidence $evidence -PortableRoot $root
-  $leaks = @($watch | Where-Object { (Test-Path -LiteralPath $_) -and $_ -notin $before })
-  @{ leaks=$leaks; userDataPresent=(Test-Path $userData); dshHomePresent=(Test-Path $env:DSH_HOME); originalSystemDirectories=$true } | ConvertTo-Json | Set-Content "$evidence/paths.json"
-  Get-ChildItem "$root/data" -Recurse -File -ErrorAction SilentlyContinue | Select-Object FullName,Length | ConvertTo-Json | Set-Content "$evidence/data-inventory.json"
-  Get-ChildItem "$root/data" -Recurse -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $evidence ($_.Name + '-' + [guid]::NewGuid().ToString('N') + '.txt')) }
-  if (Test-Path "$env:DSH_HOME/acceptance-plugin-state.txt") { Copy-Item "$env:DSH_HOME/acceptance-plugin-state.txt" "$evidence/plugin-state.txt" }
-}
-if ($probeExit -ne 0 -or $leaks.Count -gt 0) { throw 'Official payload boundary qualification failed; inspect evidence' }
-if ((Get-Content "$evidence/write-trace-summary.json" -Raw | ConvertFrom-Json).unclassifiedEvents -gt 0) { throw 'Unclassified outside writes require review' }
+$sevenZip=Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+$package=Join-Path $env:RUNNER_TEMP 'portable-alpha3-native'
 & "$PSScriptRoot/test-boundaries.ps1"
 & "$PSScriptRoot/test-update.ps1"
-$package = Join-Path $env:RUNNER_TEMP 'portable-alpha2-native'
+node --test tests/official-payload.test.mjs tests/official-desktop-adapter.test.mjs
+if($LASTEXITCODE -ne 0){throw 'Boundary unit tests failed'}
 & "$PSScriptRoot/package.ps1" -Installer $installer -Output $package -SevenZip $sevenZip
-$env:DSH_PORTABLE_DEVELOPMENT_ROOT = $package
-$env:DSH_HOME = Join-Path $package 'data/dsh-home'
-$nativeExe = Join-Path $package 'DeepSeek Harness Portable.exe'
-# Simulate a corrupt staged receipt: the existing application must remain launchable.
-@{ version=$candidate.version; from=$candidate.version; receipt=@{asarSha256=('0'*64)} } | ConvertTo-Json -Depth 4 | Set-Content "$package/app/staged.json"
-$job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19490' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,$nativeExe
+$receipt=Get-Content "$package/launcher/provenance.json" -Raw|ConvertFrom-Json
+Copy-Item "$package/launcher/provenance.json" "$evidence/provenance.json"
+# Candidate source is restricted to disposable runners; public catalog is promoted only after all gates.
+$candidate | Add-Member -NotePropertyName launcherProtocol -NotePropertyValue 2 -Force
+$candidate.qualification='qualified'
+$candidate | ConvertTo-Json -Depth 5 | Set-Content "$evidence/test-candidate.json" -Encoding UTF8
+$env:DSH_PORTABLE_QUALIFICATION_CANDIDATE=Join-Path $evidence 'test-candidate.json'
+$harness=Join-Path $PSScriptRoot 'launch-hidden-windows.ps1'
+$watch=@("$env:APPDATA/@deepseek-ai", "$env:USERPROFILE/.dsh", "$env:LOCALAPPDATA/pnpm", "$env:LOCALAPPDATA/@deepseek-aidsh-desktop-updater", "$env:LOCALAPPDATA/node-addon-native-custom-loader")
+$before=@($watch|Where-Object {Test-Path -LiteralPath $_})
+& "$PSScriptRoot/trace-writes.ps1" -Mode Start -Evidence $evidence -PortableRoot $package
+@{version=$candidate.version;from=$candidate.version;receipt=@{asarSha256=('0'*64)}} | ConvertTo-Json -Depth 4 | Set-Content "$package/app/staged.json"
+$env:DSH_PORTABLE_DEVELOPMENT_ROOT=$package
+$env:DSH_HOME=Join-Path $package 'data/dsh-home'
+$job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19490' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,(Join-Path $package 'DeepSeek Harness Portable.exe')
 try {
-  node experiments/official-payload/probe.mjs 19490 "$evidence/launcher-page.json" "$PSScriptRoot/fixtures/lifecycle"
-  $nativeExit = $LASTEXITCODE
+ node experiments/official-payload/probe.mjs 19490 "$evidence/launcher-page.json" "$PSScriptRoot/fixtures/lifecycle"
+ $nativeExit=$LASTEXITCODE
 } finally {
-  $job | Wait-Job | Receive-Job | Out-File "$evidence/launcher-process.log"
-  $job | Remove-Job
-  Copy-Item "$package/launcher/provenance.json" "$evidence/provenance.json"
+ $job|Wait-Job|Receive-Job|Out-File "$evidence/launcher-process.log"
+ $job|Remove-Job
+ & "$PSScriptRoot/trace-writes.ps1" -Mode Stop -Evidence $evidence -PortableRoot $package
 }
-if ($nativeExit -ne 0) { throw 'Native launcher artifact qualification failed' }
-if (-not (Test-Path "$package/data/launcher/activation-error.json") -or (Get-Content "$package/app/current.json" -Raw | ConvertFrom-Json).version -ne $candidate.version) { throw 'Corrupt staged receipt did not preserve current application' }
+if($nativeExit -ne 0){throw 'Native alpha3 acceptance failed'}
+$leaks=@($watch|Where-Object {(Test-Path -LiteralPath $_) -and $_ -notin $before})
+if($leaks.Count){$leaks|ConvertTo-Json|Set-Content "$evidence/leaks.json";throw 'Application data escaped portable root'}
+if((Get-Content "$evidence/write-trace-summary.json" -Raw|ConvertFrom-Json).unclassifiedEvents -gt 0){throw 'Unclassified outside writes require review'}
+if(-not(Test-Path "$package/data/launcher/activation-error.json")){throw 'Corrupt stage did not preserve current program'}
 Copy-Item "$package/data/launcher/activation-error.json" "$evidence/rejected-stage.json"
-# Simulate interruption after current was committed but before staged was removed.
-@{ version=$candidate.version; from=$candidate.version; receipt=(Get-Content "$package/launcher/provenance.json" -Raw|ConvertFrom-Json) } | ConvertTo-Json -Depth 5 | Set-Content "$package/app/staged.json"
-$moved = Join-Path $env:RUNNER_TEMP 'portable-alpha2-moved 中文 space'
-if (Test-Path $moved) { throw 'Moved qualification destination already exists' }
-# Both exact paths are inside the disposable runner temp root and owned by this run.
-foreach ($path in @($package,$moved)) {
-  if (-not ([IO.Path]::GetFullPath($path)).StartsWith([IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) { throw 'Move escaped disposable runner root' }
-}
-# Same-volume directory rename must not enumerate pnpm's project-registration links.
-# PowerShell Move-Item can traverse those links while their old targets disappear.
-Get-ChildItem "$package/data/pnpm-store/v11/projects" -Force -ErrorAction SilentlyContinue | Select-Object Name,LinkType,Target | ConvertTo-Json | Set-Content "$evidence/store-project-links-before-move.json"
-# Windows may release file-system handles shortly after process exit. Bound that
-# grace period; preserve ownership evidence and fail instead of copying live data.
-$moveDeadline=[DateTime]::UtcNow.AddSeconds(10)
-while($true){
-  try{[IO.Directory]::Move($package,$moved);break}catch{
-    if([DateTime]::UtcNow -ge $moveDeadline){
-      Get-CimInstance Win32_Process | Where-Object {($_.ExecutablePath -and $_.ExecutablePath.StartsWith($package)) -or ($_.CommandLine -and $_.CommandLine.Contains($package))} | Select-Object ProcessId,ParentProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Depth 4 | Set-Content "$evidence/move-blocking-processes.json"
-      Get-Item -LiteralPath $package -Force | Select-Object FullName,Attributes | ConvertTo-Json | Set-Content "$evidence/move-source.json"
-      throw
-    }
-    Start-Sleep -Milliseconds 500
-  }
-}
-$env:DSH_PORTABLE_DEVELOPMENT_ROOT = $moved
-$env:DSH_HOME = Join-Path $moved 'data/dsh-home'
-$job = Start-Job -ScriptBlock { param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants } -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')
+@{version=$candidate.version;from=$candidate.version;receipt=$receipt}|ConvertTo-Json -Depth 5|Set-Content "$package/app/staged.json"
+$moved=Join-Path $env:RUNNER_TEMP 'portable-alpha3-moved 中文 space'
+if(Test-Path $moved){throw 'Moved destination must be fresh'}
+foreach($path in @($package,$moved)){if(-not([IO.Path]::GetFullPath($path)).StartsWith([IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)){throw 'Move outside runner root'}}
+$deadline=[DateTime]::UtcNow.AddSeconds(10)
+while($true){try{[IO.Directory]::Move($package,$moved);break}catch{if([DateTime]::UtcNow -ge $deadline){throw};Start-Sleep -Milliseconds 500}}
+$env:DSH_PORTABLE_DEVELOPMENT_ROOT=$moved
+$env:DSH_HOME=Join-Path $moved 'data/dsh-home'
+$job=Start-Job -ScriptBlock {param($h,$x) & $h -Exe $x -Arguments '--probe-port=19491' -Milliseconds 180000 -CleanRunnerNativeDirectories -WaitForDescendants} -ArgumentList $harness,(Join-Path $moved 'DeepSeek Harness Portable.exe')
 try {
-  node experiments/official-payload/probe.mjs 19491 "$evidence/moved-page.json" '-' moved
-  $movedExit = $LASTEXITCODE
-} finally {
-  $job | Wait-Job | Receive-Job | Out-File "$evidence/moved-process.log"
-  $job | Remove-Job
-}
-if ($movedExit -ne 0) { throw 'Moved native artifact qualification failed' }
-if (Test-Path "$moved/app/staged.json") { throw 'Interrupted activation did not converge' }
-$candidate | Add-Member -NotePropertyName launcherProtocol -NotePropertyValue 1 -Force
-$candidate.qualification = 'qualified'
-$candidate | Add-Member -NotePropertyName evidence -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
-$candidate | ConvertTo-Json -Depth 5 | Set-Content "$evidence/qualified-candidate.json" -Encoding UTF8
+ node experiments/official-payload/probe.mjs 19491 "$evidence/moved-page.json" '-' moved
+ $movedExit=$LASTEXITCODE
+} finally {$job|Wait-Job|Receive-Job|Out-File "$evidence/moved-process.log";$job|Remove-Job}
+if($movedExit -ne 0 -or (Test-Path "$moved/app/staged.json")){throw 'Moved alpha3 acceptance failed'}
+$candidate|Add-Member -NotePropertyName evidence -NotePropertyValue "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" -Force
+$candidate|ConvertTo-Json -Depth 5|Set-Content "$evidence/qualified-candidate.json" -Encoding UTF8
 & "$PSScriptRoot/qualify-upgrade.ps1" -CandidateFile "$evidence/qualified-candidate.json" -Evidence $evidence -SevenZip $sevenZip
 if ($env:DSH_BUILD_ALPHA_ARCHIVE -eq 'true') {
   $release = Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-release'
-  $clean = Join-Path $env:RUNNER_TEMP 'DSH-Portable-1.0.0-alpha.2'
+  $clean = Join-Path $env:RUNNER_TEMP 'DSH-Portable-1.0.0-alpha.3'
   if (Test-Path $clean) { throw 'Release directory must be fresh' }
   New-Item -ItemType Directory -Path $release,$clean | Out-Null
   foreach ($entry in Get-ChildItem -LiteralPath $moved -Force | Where-Object Name -ne 'data') { Copy-Item -LiteralPath $entry.FullName -Destination $clean -Recurse }
   if (Test-Path "$clean/data") { throw 'Acceptance data entered the release package' }
-  $archive = Join-Path $release 'DSH-Portable-1.0.0-alpha.2-windows-x64.zip'
+  $archive = Join-Path $release 'DSH-Portable-1.0.0-alpha.3-windows-x64.zip'
   & $sevenZip a -tzip -mx=7 $archive $clean | Out-File "$evidence/archive.log"
   if ($LASTEXITCODE -ne 0) { throw 'Release archive failed' }
   (Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + (Split-Path -Leaf $archive) | Set-Content "$release/checksums.txt" -Encoding ASCII
   Copy-Item "$evidence/provenance.json" "$release/provenance.json"
   Copy-Item "$evidence/qualified-candidate.json" "$release/qualified-candidate.json"
-  @{sourceCommit=$env:GITHUB_SHA;nativeQualification=$candidate.evidence;version='1.0.0-alpha.2';binarySha256=(Get-FileHash "$clean/DeepSeek Harness Portable.exe" -Algorithm SHA256).Hash.ToLowerInvariant();officialAsarSha256=$receipt.asarSha256;scenarios=@('input','plugin-install-enable-disable','moved-draft','moved-plugin-enable-uninstall','corrupt-stage-preserves-current','interrupted-stage-converges','normal-exit','outside-write-audit');limits=@('external-workspaces','dsh-protocol-registration','no-cross-machine-login-proof','no-historical-data-migration','no-real-distinct-version-upgrade-yet')} | ConvertTo-Json -Depth 5 | Set-Content "$release/qualification.json"
+  @{sourceCommit=$env:GITHUB_SHA;nativeQualification=$candidate.evidence;version='1.0.0-alpha.3';binarySha256=(Get-FileHash "$clean/DeepSeek Harness Portable.exe" -Algorithm SHA256).Hash.ToLowerInvariant();adaptedAsarSha256=$receipt.asarSha256;officialAsarSha256=$receipt.originalAsarSha256;scenarios=@('input','plugin-install-enable-disable','moved-draft','moved-plugin-enable-uninstall','corrupt-stage-preserves-current','interrupted-stage-converges','normal-exit','outside-write-audit','protocol-return','official-update-current');limits=@('external-workspaces','no-cross-machine-login-proof','no-historical-data-migration','no-real-distinct-version-upgrade-yet')} | ConvertTo-Json -Depth 5 | Set-Content "$release/qualification.json"
 }

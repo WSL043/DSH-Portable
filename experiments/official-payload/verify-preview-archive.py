@@ -32,7 +32,7 @@ with zipfile.ZipFile(archive) as bundle:
     native = root + 'DeepSeek Harness Portable.exe'
     official_version = load('qualified-candidate.json')['version']
     asar = root + f'app/{official_version}/resources/app.asar'
-    for path, expected in [(native, qualification['binarySha256']), (asar, qualification['officialAsarSha256'])]:
+    for path, expected in [(native, qualification['binarySha256']), (asar, qualification.get('adaptedAsarSha256', qualification['officialAsarSha256']))]:
         with bundle.open(path) as stream:
             assert hashlib.file_digest(stream, 'sha256').hexdigest() == expected, f'Payload digest mismatch: {path}'
 print(f'Verified fresh {version} distribution and exact qualified binaries')

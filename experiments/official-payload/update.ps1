@@ -1,5 +1,5 @@
 # Background preparation only. The launcher alone activates a prepared version on next start.
-param([Parameter(Mandatory=$true)][string]$Root, [string]$QualificationCandidate)
+param([Parameter(Mandatory=$true)][string]$Root, [string]$QualificationCandidate, [ValidateSet('Check','Prepare')][string]$Operation='Check', [string]$ExpectedVersion)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Payload.psm1') -Force
 $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
@@ -61,7 +61,6 @@ function Clear-OldPrograms {
 try {
     $lock = [IO.File]::Open((Join-Path $storage 'update.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
     $statusPath = Join-Path $storage 'update-status.json'
-    if ((Test-Path $statusPath) -and (Get-Item $statusPath).LastWriteTimeUtc -gt [DateTime]::UtcNow.AddHours(-1)) { return }
     $record = $true
     Clear-OldPrograms
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
@@ -70,18 +69,28 @@ try {
         if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Candidate override is only for disposable qualification runners' }
         $candidateText = Get-Content -LiteralPath $QualificationCandidate -Raw
     } else {
-        $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri 'https://raw.githubusercontent.com/WSL043/DSH-Portable/main/channels/official-desktop/windows-x64.json'
+        $response = Invoke-WebRequest -UseBasicParsing -TimeoutSec 10 -Uri 'https://raw.githubusercontent.com/WSL043/DSH-Portable/main/channels/official-desktop/windows-x64-v2.json'
         $candidateText = $response.Content
     }
     if ($candidateText.Length -gt 16384) { throw 'Candidate metadata is too large' }
     $candidate = $candidateText | ConvertFrom-Json
     Assert-Candidate $candidate
-    if ($candidate.qualification -cne 'qualified' -or $candidate.launcherProtocol -ne 1) { throw 'Candidate is not qualified for this launcher' }
+    if ($candidate.qualification -cne 'qualified' -or $candidate.launcherProtocol -ne 2) { throw 'Candidate is not qualified for this launcher' }
     $current = Get-Content (Join-Path $Root 'app/current.json') -Raw | ConvertFrom-Json
-    if (-not (Is-Newer $candidate.version $current.version)) { $status.status='current'; return }
-    if (Test-Path (Join-Path $Root 'app/staged.json')) { $status.status='staged'; return }
+    if ($Operation -eq 'Prepare' -and $ExpectedVersion -cne $candidate.version) { throw 'Confirmed update no longer matches the qualified candidate' }
+    if (-not (Is-Newer $candidate.version $current.version)) { $status.status='current'; $status.version=$current.version; return }
+    if (Test-Path (Join-Path $Root 'app/staged.json')) {
+        $staged=Get-Content (Join-Path $Root 'app/staged.json') -Raw|ConvertFrom-Json
+        if($staged.version -ne $candidate.version){throw 'A different update is already staged'}
+        $status.status='ready'; $status.version=$staged.version; return
+    }
+    $status.version=$candidate.version
+    if ($Operation -eq 'Check') { $status.status='available'; return }
+    $status.status='downloading'; $status.percent=0
+    Write-Atomic $statusPath $status
     $temporary = Join-Path $storage ('download-' + [guid]::NewGuid().ToString('N') + '.exe')
-    Get-OfficialInstaller $temporary $candidate
+    Get-OfficialInstaller $temporary $candidate {param($percent) $status.percent=$percent; Write-Atomic $statusPath $status}
+    $status.status='verifying'; $status.percent=100; Write-Atomic $statusPath $status
     $payload = Join-Path $Root ('app/' + $candidate.version + '.staging-' + [guid]::NewGuid().ToString('N'))
     $receipt = Expand-OfficialPayload $temporary $candidate $payload (Join-Path $PSScriptRoot '7z.exe')
     $destination = Join-Path $Root ('app/' + $candidate.version)
@@ -95,8 +104,8 @@ try {
         [IO.Directory]::Move($payload,$destination)
         Write-Atomic (Join-Path $Root 'app/staged.json') @{version=$candidate.version;from=$current.version;receipt=$receipt}
     } finally { if ($operation) { $operation.Dispose() } }
-    $status.status='staged';$status.version=$candidate.version
-} catch { $status.error=$_.Exception.Message }
+    $status.status='ready';$status.version=$candidate.version
+} catch { $status.status='failed'; $status.error=$_.Exception.Message; if(-not $lock){throw} }
 finally {
     if ($lock) {
         if ($temporary -and (Test-Path -LiteralPath $temporary)) { Assert-PlainPath $temporary; Remove-Item -LiteralPath $temporary -Force }

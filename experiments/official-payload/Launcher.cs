@@ -1,4 +1,4 @@
-// Windows alpha launcher. The official process receives paths; its code is never patched.
+// Windows portable entry: all launches and update restarts share this boundary.
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -12,18 +12,39 @@ using System.Windows.Forms;
 using System.Management;
 [assembly: System.Reflection.AssemblyTitle("DSH-Portable")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable official-payload alpha")]
-[assembly: System.Reflection.AssemblyVersion("1.0.0.2")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0-alpha.2")]
+[assembly: System.Reflection.AssemblyVersion("1.0.0.3")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0-alpha.3")]
 
 internal static class PortableLauncher {
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
-    private const string Layout = "official-payload-alpha2";
+    private const string Layout = "official-desktop-v1";
     [STAThread]
     private static int Main(string[] args) {
         try {
             var root = Path.GetFullPath(AppDomain.CurrentDomain.BaseDirectory).TrimEnd(Path.DirectorySeparatorChar);
             if (root.Length <= 3) throw new IOException("Extract into a folder, not the drive root. / 请解压到独立文件夹。");
             CheckPath(root);
+            string link = null, probe = null;
+            int restart = 0;
+            foreach (var arg in args) {
+                int number;
+                Uri uri;
+                if (arg.StartsWith("--probe-port=") && probe == null && Int32.TryParse(arg.Substring(13), out number) && number >= 1024 && number <= 65535) probe = number.ToString();
+                else if (arg.StartsWith("--restart-after=") && restart == 0 && Int32.TryParse(arg.Substring(16), out number) && number > 0) restart = number;
+                else if (link == null && arg.Length <= 8192 && arg.IndexOfAny(new[] {'"', '\r', '\n', '\0'}) < 0 && Uri.TryCreate(arg, UriKind.Absolute, out uri) && uri.Scheme == "dsh") link = arg;
+                else throw new IOException("Unsupported portable launch argument");
+            }
+            if (restart > 0) {
+                try {
+                    using (var previous = Process.GetProcessById(restart)) {
+                        if (!previous.MainModule.FileName.StartsWith(Path.Combine(root, "app") + "\\", StringComparison.OrdinalIgnoreCase)) throw new IOException("Restart process is not owned by this Portable");
+                        if (!previous.WaitForExit(120000)) throw new IOException("The previous desktop has not exited");
+                    }
+                } catch (ArgumentException) { /* The owned process already exited. */ }
+                var deadline = DateTime.UtcNow.AddSeconds(30);
+                while (HasOwnedProcesses(Path.Combine(root, "app")) && DateTime.UtcNow < deadline) System.Threading.Thread.Sleep(100);
+                if (HasOwnedProcesses(Path.Combine(root, "app"))) throw new IOException("Desktop runtimes have not exited");
+            }
             var data = Path.Combine(root, "data");
             CheckPath(data);
             var marker = Path.Combine(data, "portable-layout.json");
@@ -38,9 +59,9 @@ internal static class PortableLauncher {
             if (!File.Exists(executable) || !File.Exists(Path.Combine(app, "resources", "app.asar"))) throw new IOException("Application incomplete. Extract a fresh alpha package. / 程序不完整，请重新解压实验版。");
             if (File.Exists(Path.Combine(app, "resources", "app-update.yml"))) throw new IOException("Installer updater is enabled; refusing portable launch.");
             Directory.CreateDirectory(data);
-            using (var gate = new FileStream(Path.Combine(data, ".launch.lock"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {
+            using (var gate = AcquireGate(Path.Combine(data, ".launch.lock"))) {
                 var entries = Directory.EnumerateFileSystemEntries(data).Where(p => Path.GetFileName(p) != ".launch.lock");
-                if (!File.Exists(marker) && entries.Any()) throw new IOException("Alpha.2 requires a fresh data folder. Existing data was not changed. / Alpha.2 需要全新目录，旧数据未修改。");
+                if (!File.Exists(marker) && entries.Any()) throw new IOException("Portable requires a fresh data folder. Existing data was not changed. / 请使用全新目录，旧数据未修改。");
                 if (File.Exists(marker)) {
                     CheckPath(marker);
                     var previous = Read(marker);
@@ -80,12 +101,10 @@ internal static class PortableLauncher {
                 var start = new ProcessStartInfo(executable) { UseShellExecute = false, WorkingDirectory = root };
                 start.Arguments = "--user-data-dir=" + Quote(Path.Combine(data, "electron"));
                 // A bounded diagnostic port is permitted for isolated artifact qualification.
-                if (args.Length == 1 && args[0].StartsWith("--probe-port=")) {
-                    int port;
-                    if (!Int32.TryParse(args[0].Substring(13), out port) || port < 1024 || port > 65535) throw new IOException("Invalid diagnostic port");
-                    start.Arguments += " --remote-debugging-port=" + port;
-                } else if (args.Length != 0) throw new IOException("Unknown launcher option");
+                if (probe != null) start.Arguments += " --remote-debugging-port=" + probe;
+                if (link != null) start.Arguments += " " + Quote(link);
                 start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
+                start.EnvironmentVariables["DSH_PORTABLE_ROOT"] = root;
                 start.EnvironmentVariables["DSH_HOME"] = Path.Combine(data, "dsh-home");
                 start.EnvironmentVariables["DSH_AGENTS_HOME"] = Path.Combine(data, "agents");
                 start.EnvironmentVariables["NARB_NATIVE_CACHE_DIR"] = Path.Combine(data, "native-cache");
@@ -99,19 +118,18 @@ internal static class PortableLauncher {
                     if (!owned) throw new IOException("Another desktop owns port 19387. Exit it before starting Portable. / 请先退出另一份官方桌面程序。");
                 }
                 Process.Start(start);
-                var updateScript = Path.Combine(root, "launcher", "update.ps1");
-                if (args.Length == 0 && File.Exists(updateScript)) {
-                    var updater = new ProcessStartInfo(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), @"WindowsPowerShell\v1.0\powershell.exe")) {
-                        UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
-                        Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(updateScript) + " -Root " + Quote(root)
-                    };
-                    Process.Start(updater);
-                }
             }
             return 0;
         } catch (Exception error) {
-            MessageBox.Show(error.Message, "DSH-Portable alpha.2", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(error.Message, "DSH-Portable alpha.3", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
+        }
+    }
+    private static FileStream AcquireGate(string file) {
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (true) {
+            try { return new FileStream(file, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None); }
+            catch (IOException) { if (DateTime.UtcNow >= deadline) throw; System.Threading.Thread.Sleep(100); }
         }
     }
     private static void Relocate(string root, string previousRoot) {

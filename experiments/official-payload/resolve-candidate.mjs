@@ -10,9 +10,9 @@ if(text.length>32768)throw new Error('Unexpected feed size');
 const {version,url:file,sha512,size}=parseDesktopFeed(text);
 const uri=new URL(file);
 if(!/^\d+\.\d+\.\d+(?:-[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*)?$/.test(version)||uri.origin!=='https://download.deepseek.com'||!uri.pathname.startsWith('/dsh-desk/bin/win-x64/')||Buffer.from(sha512,'base64').length!==64||!Number.isSafeInteger(size)||size<1000000||size>2147483648)throw new Error('Invalid official candidate identity');
-const candidate={schemaVersion:1,version,url:file,size,sha512,publisher:'Hangzhou DeepSeek Artificial Intelligence Co., Ltd.',qualification:'pending',launcherProtocol:1};
+const candidate={schemaVersion:1,version,url:file,size,sha512,publisher:'Hangzhou DeepSeek Artificial Intelligence Co., Ltd.',qualification:'pending',launcherProtocol:2};
 let current;
-try{current=JSON.parse(await readFile('channels/official-desktop/windows-x64.json','utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
+try{current=JSON.parse(await readFile('channels/official-desktop/windows-x64-v2.json','utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
 if(current&&compareVersions(version,current.version)===0&&current.sha512!==sha512)throw new Error('Same-version repack requires an explicit delivery decision');
 const changed=!current||compareVersions(version,current.version)>0;
 await writeFile('experiments/official-payload/candidate.json',JSON.stringify(candidate,null,2)+'\n');
