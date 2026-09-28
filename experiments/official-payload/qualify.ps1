@@ -43,5 +43,6 @@ try {
   @{ leaks=$leaks; userDataPresent=(Test-Path $userData); dshHomePresent=(Test-Path $env:DSH_HOME); originalSystemDirectories=$true } | ConvertTo-Json | Set-Content "$evidence/paths.json"
   Get-ChildItem "$root/data" -Recurse -File -ErrorAction SilentlyContinue | Select-Object FullName,Length | ConvertTo-Json | Set-Content "$evidence/data-inventory.json"
   Get-ChildItem "$root/data" -Recurse -Filter '*.log' -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $evidence ($_.Name + '-' + [guid]::NewGuid().ToString('N') + '.txt')) }
+  if (Test-Path "$env:DSH_HOME/acceptance-plugin-state.txt") { Copy-Item "$env:DSH_HOME/acceptance-plugin-state.txt" "$evidence/plugin-state.txt" }
 }
 if ($probeExit -ne 0 -or $leaks.Count -gt 0) { throw 'Official payload boundary qualification failed; inspect evidence' }

@@ -4,7 +4,8 @@ param(
   [int]$Milliseconds = 30000,
   [int]$CloseAfterMilliseconds = 0,
   [switch]$UseExecutableRoot,
-  [switch]$CleanRunnerNativeDirectories
+  [switch]$CleanRunnerNativeDirectories,
+  [switch]$WaitForDescendants
 )
 
 # Keep native Desktop probes on a private Windows desktop and in disposable data roots.
@@ -85,6 +86,16 @@ public static class HiddenDesktopProcess {
   [DllImport("kernel32.dll", SetLastError=true)] public static extern uint WaitForSingleObject(IntPtr handle, uint ms);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetExitCodeProcess(IntPtr process, out uint code);
   [DllImport("kernel32.dll", SetLastError=true)] public static extern bool CloseHandle(IntPtr handle);
+  [StructLayout(LayoutKind.Sequential)] public struct JOB_ACCOUNTING {
+    public long userTime, kernelTime, periodUserTime, periodKernelTime;
+    public uint pageFaults, totalProcesses, activeProcesses, terminatedProcesses;
+  }
+  [DllImport("kernel32.dll", SetLastError=true)] public static extern bool QueryInformationJobObject(IntPtr job, int infoClass, out JOB_ACCOUNTING info, uint size, IntPtr length);
+  public static uint ActiveProcesses(IntPtr job) {
+    JOB_ACCOUNTING info;
+    if (!QueryInformationJobObject(job, 1, out info, (uint)Marshal.SizeOf(typeof(JOB_ACCOUNTING)), IntPtr.Zero)) throw new Win32Exception(Marshal.GetLastWin32Error());
+    return info.activeProcesses;
+  }
 }
 '@
 
@@ -107,6 +118,7 @@ try {
   if (-not [HiddenDesktopProcess]::AssignProcessToJobObject($job, $pi.hProcess)) { throw "AssignProcessToJobObject failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
   if ([HiddenDesktopProcess]::ResumeThread($pi.hThread) -eq [uint32]::MaxValue) { throw "ResumeThread failed: $([Runtime.InteropServices.Marshal]::GetLastWin32Error())" }
   Write-Output "hidden-desktop pid=$($pi.dwProcessId) name=$desktopName"
+  $deadline = [DateTime]::UtcNow.AddMilliseconds($Milliseconds)
   $closeRequests = 0
   if ($CloseAfterMilliseconds -gt 0) {
     $wait = [HiddenDesktopProcess]::WaitForSingleObject($pi.hProcess, [uint32]$CloseAfterMilliseconds)
@@ -119,6 +131,10 @@ try {
   }
   [uint32]$exitCode = 0
   [HiddenDesktopProcess]::GetExitCodeProcess($pi.hProcess, [ref]$exitCode) | Out-Null
+  if ($WaitForDescendants -and $wait -eq 0) {
+    while ([HiddenDesktopProcess]::ActiveProcesses($job) -gt 0 -and [DateTime]::UtcNow -lt $deadline) { Start-Sleep -Milliseconds 100 }
+    if ([HiddenDesktopProcess]::ActiveProcesses($job) -gt 0) { $wait = 258 }
+  }
   Write-Output "wait=$wait exit=$exitCode"
   [pscustomobject]@{ processId=$pi.dwProcessId; closeRequests=$closeRequests; exitedBeforeCleanup=($wait -eq 0); exitCode=$exitCode; forcedCleanup=($wait -ne 0) } | ConvertTo-Json -Compress
 } finally {

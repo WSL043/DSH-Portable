@@ -25,7 +25,11 @@ async function until(fn, description, milliseconds=45000) {
   throw new Error(`${description}: ${last??'condition not reached'}`);
 }
 async function click(text, selector='button') {
-  const point=await until(()=>client.evaluate(`(()=>{const e=[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length&&!e.disabled&&${JSON.stringify(text)}.some(t=>e.textContent.trim()===t||e.getAttribute('aria-label')===t));if(!e)return null;const r=e.getBoundingClientRect();return{x:r.x+r.width/2,y:r.y+r.height/2};})()`),`Button ${text}`);
+  const expression=`[...document.querySelectorAll(${JSON.stringify(selector)})].find(e=>e.getClientRects().length&&!e.disabled&&${JSON.stringify(text)}.some(t=>e.textContent.trim()===t||e.getAttribute('aria-label')===t))`;
+  await until(()=>client.evaluate(`(()=>{const e=${expression};if(!e)return false;e.scrollIntoView({block:'center'});return true;})()`),`Button ${text}`);
+  await delay(250);
+  const point=await until(()=>client.evaluate(`(()=>{const e=${expression};if(!e)return null;const r=e.getBoundingClientRect(),x=r.x+r.width/2,y=r.y+r.height/2;if(x<0||y<0||x>=innerWidth||y>=innerHeight||!e.contains(document.elementFromPoint(x,y)))return null;return{x,y};})()`),`Unobstructed button ${text}`);
+  await client.send('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
   for(const type of ['mousePressed','mouseReleased'])await client.send('Input.dispatchMouseEvent',{type,...point,button:'left',clickCount:1});
 }
 async function snapshot(name) {
@@ -61,5 +65,6 @@ try {
   await client.evaluate('void window.dshDesktop.updates.status().then(x=>window.__portableUpdateResult=x)');
   await delay(500);evidence.updateStatus=await client.evaluate('window.__portableUpdateResult');
   evidence.passed=true;
+  try { await client.send('Browser.close'); } catch(error) { if(!String(error).includes('CDP target closed'))throw error; }
 } catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }
 finally{ client?.close();await writeFile(output,JSON.stringify(evidence,null,2)); }
