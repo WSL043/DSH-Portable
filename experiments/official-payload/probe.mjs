@@ -161,4 +161,7 @@ try {
   evidence.passed=true;
   try { await client.send('Browser.close'); } catch(error) { if(!String(error).includes('CDP target closed'))throw error; }
 } catch(error){ evidence.error=String(error);process.exitCode=1;try{await snapshot('failure');}catch{} }
-finally{ client?.close();await writeFile(output,JSON.stringify(evidence,null,2)); }
+finally{
+  if(!evidence.passed&&client){try{await client.send('Browser.close');}catch{}}
+  client?.close();await writeFile(output,JSON.stringify(evidence,null,2));
+}
