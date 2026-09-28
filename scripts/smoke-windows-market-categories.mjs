@@ -5,6 +5,7 @@ import { createServer } from 'node:net'
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 
 const root = process.argv[2] && path.resolve(process.argv[2])
 const output = process.argv[3] && path.resolve(process.argv[3])
@@ -63,16 +64,7 @@ try {
   const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++next; const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout ${method}`)) }, 15000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })) })
   evaluate = async expression => { const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text); return result.result?.value }
   let completedCredentialOnboarding = false
-  const dismissLateOnboarding = `(() => {
-    const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
-      .filter(item => item.getBoundingClientRect().width > 0)
-      .find(item => /Internal Testing Notice|内测声明|Preview Notice|预览版说明|Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(item.textContent || ''))
-    if (!notice) return false
-    const button = [...notice.querySelectorAll('button')].find(item =>
-      ['Continue', '继续', 'Configure later', '稍后配置'].includes((item.textContent || '').trim()) && !item.disabled)
-    button?.click()
-    return { clicked: Boolean(button), terminal: /Add an API key to get started|添加 API 密钥|添加一个 API Key/.test(notice.textContent || '') }
-  })()`
+  const dismissLateOnboarding = dismissOfficialOnboardingExpression
   const until = async (expression, predicate, label) => {
     const limit = Date.now() + 30000
     let result
@@ -81,7 +73,7 @@ try {
       // Dismiss only these known first-run prompts, never arbitrary dialogs.
       const onboarding = await evaluate(dismissLateOnboarding)
       if (onboarding?.clicked) {
-        completedCredentialOnboarding ||= onboarding.terminal
+        completedCredentialOnboarding ||= onboarding.clicked && onboarding.terminal
       } else {
         result = await evaluate(expression)
         if (predicate(result)) return result

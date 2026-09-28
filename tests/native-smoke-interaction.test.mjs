@@ -2,18 +2,17 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
+import { dismissOfficialOnboardingExpression } from '../scripts/lib/official-onboarding.mjs'
 
 test('late API Key onboarding is dismissed without touching unrelated dialogs', async () => {
-  const source = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
-  const start = source.indexOf('await evaluate(client, `(() => {', source.indexOf('async function waitForValue'))
-  const end = source.indexOf('`)\n', start)
-  assert.ok(start >= 0 && end > start)
-  const expression = source.slice(source.indexOf('`', start) + 1, end)
+  const expression = dismissOfficialOnboardingExpression
   let clicks = 0
   const button = { textContent: 'Configure later', disabled: false, closest: () => null, click: () => clicks++ }
   const modal = { textContent: 'Add an API Key to get started', getBoundingClientRect: () => ({ width: 400 }), querySelectorAll: () => [button] }
   const context = { document: { querySelectorAll: () => [modal] } }
-  assert.equal(vm.runInNewContext(expression, context).terminal, true)
+  const first = vm.runInNewContext(expression, context)
+  assert.equal(first.clicked, true)
+  assert.equal(first.terminal, true)
   assert.equal(clicks, 1)
   modal.textContent = 'Internal Testing Notice'
   button.textContent = 'Continue'

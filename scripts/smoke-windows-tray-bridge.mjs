@@ -6,6 +6,7 @@ import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -208,18 +209,8 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
   while (Date.now() < deadline) {
     // The official first-run notice can mount after settings or locale changes.
     // Deal only with that known onboarding dialog, never click through a modal.
-    const onboarding = await evaluate(client, `(() => {
-      const notice = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
-        .find(item => item.getBoundingClientRect().width > 0
-          && /Internal Testing Notice|内测声明|Preview Notice|预览版说明|Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(item.textContent || ''))
-      const button = [...(notice?.querySelectorAll('button') || [])]
-        .find(item => ['Continue', '继续', 'Configure later', 'Set up later', '稍后配置'].includes((item.textContent || '').trim())
-          && !item.disabled && !item.closest('[inert],[aria-hidden="true"]'))
-      if (!button) return false
-      button.click()
-      return { terminal: /Add an API key to get started|添加 API 密钥|添加一个 API Key/i.test(notice.textContent || '') }
-    })()`)
-    completedCredentialOnboarding ||= Boolean(onboarding?.terminal)
+    const onboarding = await evaluate(client, dismissOfficialOnboardingExpression)
+    completedCredentialOnboarding ||= Boolean(onboarding?.clicked && onboarding.terminal)
     latest = await evaluate(client, expression)
     if (predicate(latest)) return latest
     await new Promise(resolve => setTimeout(resolve, 100))
