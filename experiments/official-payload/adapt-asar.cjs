@@ -1,5 +1,7 @@
 // Narrow, audited boundary adapter. No third-party ASAR implementation is shipped.
-const fs = require('node:fs');
+// Electron treats *.asar as a virtual directory even in RUN_AS_NODE mode.
+// Packaging must read and replace the physical archive, not its virtual entries.
+const fs = process.versions.electron ? require('original-fs') : require('node:fs');
 const crypto = require('node:crypto');
 const path = require('node:path');
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
