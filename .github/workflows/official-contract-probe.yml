@@ -1,0 +1,115 @@
+name: Official desktop update contract probe
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '29 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: official-contract-probe-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    outputs:
+      cache_key: ${{ steps.identity.outputs.cache_key }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Resolve the latest official desktop feed
+        run: node experiments/official-payload/resolve-candidate.mjs
+      - id: identity
+        name: Build the successful-probe identity key
+        run: |
+          node --input-type=module <<'NODE' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          const candidate = JSON.parse(readFileSync('experiments/official-payload/candidate.json', 'utf8'));
+          const digest = Buffer.from(candidate.sha512, 'base64').toString('hex');
+          console.log(`cache_key=official-contract-${candidate.version}-${digest}`);
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: official-contract-candidate
+          path: experiments/official-payload/candidate.json
+          retention-days: 7
+
+  probe:
+    needs: candidate
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-contract-candidate
+          path: experiments/official-payload
+      - id: success-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build/official-contract-success
+          key: ${{ needs.candidate.outputs.cache_key }}
+      - name: Skip an already successful version and digest
+        if: steps.success-cache.outputs.cache-hit == 'true'
+        shell: pwsh
+        run: |
+          Write-Output 'The exact official version and SHA-512 already passed: ${{ needs.candidate.outputs.cache_key }}'
+      - name: Download and validate the official installer
+        if: steps.success-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Import-Module ./experiments/official-payload/Payload.psm1
+          $candidate = Get-Content ./experiments/official-payload/candidate.json -Raw | ConvertFrom-Json
+          $installer = Join-Path $env:RUNNER_TEMP 'official-desktop-installer.exe'
+          Get-OfficialInstaller -Destination $installer -Candidate $candidate
+          "installer=$installer" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Expand official payload and run update contract probe
+        if: steps.success-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          Import-Module ./experiments/official-payload/Payload.psm1
+          $candidate = Get-Content ./experiments/official-payload/candidate.json -Raw | ConvertFrom-Json
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenZip)) { throw "7-Zip not found: $sevenZip" }
+          $expanded = Join-Path $env:RUNNER_TEMP 'official-contract-expanded'
+          $null = Expand-OfficialPayload -Installer $env:installer -Candidate $candidate -Output $expanded -SevenZip $sevenZip
+          # Expand-OfficialPayload is the shared installer/archive validator; its alpha adapter intentionally changes app.asar.
+          # For this raw official-desktop probe, extract the same validated inner NSIS archive without the alpha adaptation.
+          $inner = Join-Path ($expanded + '.outer') '$PLUGINSDIR\app-64.7z'
+          $raw = Join-Path $env:RUNNER_TEMP 'official-contract-raw'
+          & $sevenZip x $inner "-o$raw" '-y' | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Raw official payload extraction failed' }
+          # Restore the two files Expand-OfficialPayload intentionally excludes/adapts so the probe sees the byte-original desktop.
+          Copy-Item -LiteralPath (Join-Path $raw 'resources/app.asar') -Destination (Join-Path $expanded 'resources/app.asar') -Force
+          Copy-Item -LiteralPath (Join-Path $raw 'resources/app-update.yml') -Destination (Join-Path $expanded 'resources/app-update.yml') -Force
+          $receipt = Join-Path $expanded 'resources/portable-adaptation.json'
+          if (Test-Path -LiteralPath $receipt) { Remove-Item -LiteralPath $receipt -Force }
+          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir $expanded -WorkRoot 'build/official-contract-probe/work' -Locale en
+          if ($LASTEXITCODE -ne 0) { throw 'Official update contract probe failed' }
+      - name: Save exact successful probe identity
+        if: success() && steps.success-cache.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $null = New-Item -ItemType Directory -Force -Path 'build/official-contract-success'
+          $candidate = Get-Content ./experiments/official-payload/candidate.json -Raw | ConvertFrom-Json
+          @{ version = $candidate.version; sha512 = $candidate.sha512 } | ConvertTo-Json | Set-Content 'build/official-contract-success/identity.json' -Encoding utf8
+      - uses: actions/cache/save@v4
+        if: success() && steps.success-cache.outputs.cache-hit != 'true'
+        with:
+          path: build/official-contract-success
+          key: ${{ needs.candidate.outputs.cache_key }}
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.success-cache.outputs.cache-hit != 'true'
+        with:
+          name: official-contract-probe-evidence
+          path: |
+            build/official-contract-probe/contract-report.json
+            build/official-contract-probe/request-log.jsonl
+            build/official-contract-probe/stub-calls.jsonl
+            build/official-contract-probe/ui-probe-output.log
+          if-no-files-found: warn
+          retention-days: 14
