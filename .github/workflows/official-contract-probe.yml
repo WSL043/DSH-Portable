@@ -71,23 +71,18 @@ jobs:
         if: steps.success-cache.outputs.cache-hit != 'true'
         shell: pwsh
         run: |
-          Import-Module ./experiments/official-payload/Payload.psm1
-          $candidate = Get-Content ./experiments/official-payload/candidate.json -Raw | ConvertFrom-Json
+          # The installer was already validated above (size, SHA-512, Authenticode). Extract it plainly: this probe
+          # must see the byte-original desktop, so none of the alpha packaging or adapter code is used here.
           $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
           if (-not (Test-Path -LiteralPath $sevenZip)) { throw "7-Zip not found: $sevenZip" }
+          $outer = Join-Path $env:RUNNER_TEMP 'official-contract-outer'
           $expanded = Join-Path $env:RUNNER_TEMP 'official-contract-expanded'
-          $null = Expand-OfficialPayload -Installer $env:installer -Candidate $candidate -Output $expanded -SevenZip $sevenZip
-          # Expand-OfficialPayload is the shared installer/archive validator; its alpha adapter intentionally changes app.asar.
-          # For this raw official-desktop probe, extract the same validated inner NSIS archive without the alpha adaptation.
-          $inner = Join-Path ($expanded + '.outer') '$PLUGINSDIR\app-64.7z'
-          $raw = Join-Path $env:RUNNER_TEMP 'official-contract-raw'
-          & $sevenZip x $inner "-o$raw" '-y' | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Raw official payload extraction failed' }
-          # Restore the two files Expand-OfficialPayload intentionally excludes/adapts so the probe sees the byte-original desktop.
-          Copy-Item -LiteralPath (Join-Path $raw 'resources/app.asar') -Destination (Join-Path $expanded 'resources/app.asar') -Force
-          Copy-Item -LiteralPath (Join-Path $raw 'resources/app-update.yml') -Destination (Join-Path $expanded 'resources/app-update.yml') -Force
-          $receipt = Join-Path $expanded 'resources/portable-adaptation.json'
-          if (Test-Path -LiteralPath $receipt) { Remove-Item -LiteralPath $receipt -Force }
+          & $sevenZip x $env:installer "-o$outer" '-y' | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Official installer extraction failed' }
+          $inner = Join-Path $outer '$PLUGINSDIR\app-64.7z'
+          if (-not (Test-Path -LiteralPath $inner)) { throw 'The official installer no longer contains $PLUGINSDIR\app-64.7z; the packaging contract changed' }
+          & $sevenZip x $inner "-o$expanded" '-y' | Out-Null
+          if ($LASTEXITCODE -ne 0) { throw 'Official payload extraction failed' }
           ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir $expanded -WorkRoot 'build/official-contract-probe/work' -Locale en
           if ($LASTEXITCODE -ne 0) { throw 'Official update contract probe failed' }
       - name: Save exact successful probe identity
