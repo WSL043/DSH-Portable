@@ -12,7 +12,7 @@ function section(source, startMarker, endMarker) {
 test('updater launch failures restore the workspace and remove an unstarted helper copy', async () => {
   const source = await readLauncherSource()
   const update = section(source, 'private async Task ApplyDesktopUpdateAsync(', 'private void StartFullPackageUpdate(')
-  assert.match(update, /catch\s*\{\s*if\s*\(!restoredAfterFailure\)\s*await RestoreDesktopAfterUpdateAttemptAsync\(\);\s*throw;/)
+  assert.match(update, /catch\s*\(Exception error\)\s*\{\s*updateFailure\s*=\s*ExceptionDispatchInfo\.Capture\(error\);\s*\}\s*if\s*\(updateFailure != null\)\s*\{\s*if\s*\(!restoredAfterFailure\)\s*await RestoreDesktopAfterUpdateAttemptAsync\(\);\s*updateFailure\.Throw\(\);/)
 
   const fullUpdate = section(source, 'private void StartFullPackageUpdate(', 'private static bool IsTrustedProductManifestUrl(')
   assert.match(fullUpdate, /catch\s*\{[\s\S]*?File\.Delete\(helper\)[\s\S]*?HideDesktopOperation\(\)[\s\S]*?throw;/)

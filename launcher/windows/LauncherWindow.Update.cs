@@ -11,6 +11,7 @@ using Microsoft.Win32;
 using System.Net;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -205,6 +206,7 @@ namespace DshPortable
         private async Task ApplyDesktopUpdateAsync(string scope, string manifestUrl = "")
         {
             bool restoredAfterFailure = false;
+            ExceptionDispatchInfo updateFailure = null;
             try
             {
                 bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
@@ -241,10 +243,14 @@ namespace DshPortable
                     targetName + L(" 更新已完成。", " update is complete."),
                     targetName + L(" 已更新", " updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            catch
+            catch (Exception error)
+            {
+                updateFailure = ExceptionDispatchInfo.Capture(error);
+            }
+            if (updateFailure != null)
             {
                 if (!restoredAfterFailure) await RestoreDesktopAfterUpdateAttemptAsync();
-                throw;
+                updateFailure.Throw();
             }
         }
 
