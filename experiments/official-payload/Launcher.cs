@@ -95,7 +95,6 @@ internal static class PortableLauncher {
         if (args.Count(a => a == "--open") > 1 || args.Contains("--open") && link == null) throw new IOException("Invalid dsh:// link.");
 
         CheckPath(LauncherData); Directory.CreateDirectory(LauncherData);
-        WritePortableRootPointer(ReadCacheName());
         bool created;
         using (var mutex = new Mutex(true, MutexName(Root), out created)) {
             if (!created) {
@@ -116,6 +115,10 @@ internal static class PortableLauncher {
         string executable = AppExecutable(version);
         EnsureApplication(executable);
         CheckExternalOfficialOrPort(executable);
+        // Only one official desktop can run at a time (fixed port), so the root whose launcher passed these checks
+        // is the only possible requester of an update. Writing the pointer earlier let a second Portable copy that
+        // failed to start redirect another root's update to itself.
+        WritePortableRootPointer(ReadCacheName());
 
         ProtocolBefore = CaptureProtocol();
         bool protocolChanged = false;
@@ -145,6 +148,13 @@ internal static class PortableLauncher {
             DateTime nextProtocolRepair = DateTime.UtcNow.AddSeconds(60);
             while (!app.WaitForExit(1000)) {
                 if (DateTime.UtcNow >= nextProtocolRepair) { RegisterProtocol(); nextProtocolRepair = DateTime.UtcNow.AddSeconds(60); }
+            }
+            // The official app may relaunch itself (settings restart, protocol hand-off); keep supervising while any of its processes remain.
+            DateTime relaunchGrace = DateTime.UtcNow.AddSeconds(10);
+            while (HasOwnedProcesses(AppRoot, false) || DateTime.UtcNow < relaunchGrace) {
+                if (DateTime.UtcNow >= nextProtocolRepair) { RegisterProtocol(); nextProtocolRepair = DateTime.UtcNow.AddSeconds(60); }
+                Thread.Sleep(1000);
+                if (HasOwnedProcesses(AppRoot, false)) relaunchGrace = DateTime.UtcNow.AddSeconds(3);
             }
             Log("desktop exited version=" + version + " code=" + app.ExitCode);
             return app.ExitCode;
@@ -259,7 +269,7 @@ internal static class PortableLauncher {
         for (string current = Path.GetFullPath(path); !String.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
             if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new IOException("Redirected portable path is not supported: " + current);
     }
-    private static bool HasOwnedProcesses(string appRoot) {
+    private static bool HasOwnedProcesses(string appRoot, bool onError = true) {
         string prefix = Path.GetFullPath(appRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         try {
             using (var query = new ManagementObjectSearcher("SELECT Name, ExecutablePath FROM Win32_Process"))
@@ -269,7 +279,7 @@ internal static class PortableLauncher {
                 if (path == null && String.Equals(row["Name"] as string, "DeepSeek Harness.exe", StringComparison.OrdinalIgnoreCase)) return true;
             }
             return false;
-        } catch { return true; }
+        } catch { return onError; }
     }
     private static string Quote(string value) {
         var output = new StringBuilder(); output.Append('"'); int slashes = 0;
