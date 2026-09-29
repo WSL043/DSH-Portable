@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -136,7 +137,7 @@ test('all finished-product manifests use the same declared product version', asy
   for (const source of productSources) assert.match(source, productVersion)
   const windowsSources = await Promise.all([
     read('launcher/windows/DSH-Bootstrap.cs'),
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('launcher/windows/DSH-Command.cs'),
   ])
   const windowsVersion = new RegExp(regexEscape(policy.windowsVersion))

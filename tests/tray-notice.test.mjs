@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, mkdtemp, writeFile, rename, rm } from 'node:fs/promises'
@@ -8,7 +9,7 @@ import { spawnSync } from 'node:child_process'
 test('native tray onboarding persists across processes and directory moves', { skip: process.platform !== 'win32' }, async t => {
   const root = await mkdtemp(join(tmpdir(), 'portable-tray-notice-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const source = await readLauncherSource()
   const start = source.indexOf('        internal static bool TryClaimTrayNotice(')
   const end = source.indexOf('        private void RestoreFromTray()', start)
   assert.ok(start > 0 && end > start)

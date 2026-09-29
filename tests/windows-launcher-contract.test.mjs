@@ -1,3 +1,4 @@
+import { launcherSourceFiles } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
@@ -10,7 +11,7 @@ import { promisify } from 'node:util'
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const sources = [
-  path.join(projectRoot, 'launcher', 'windows', 'DSH-Portable.cs'),
+  ...launcherSourceFiles.map(filename => path.join(projectRoot, 'launcher', 'windows', filename)),
   path.join(projectRoot, 'launcher', 'windows', 'PortableProcessJob.cs'),
 ]
 const utf8FailureFixture = path.join(projectRoot, 'tests', 'fixtures', 'launcher-error-utf8.mjs')

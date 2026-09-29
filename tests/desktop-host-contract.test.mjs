@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -7,7 +8,7 @@ const read = (filename) => readFile(new URL(`../${filename}`, import.meta.url), 
 
 test('Windows GUI is a native WebView2 host with its own stable taskbar identity', async () => {
   const [host, build, lock] = await Promise.all([
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('scripts/build-windows.ps1'),
     read('upstream.lock.json').then(JSON.parse),
   ])
@@ -110,14 +111,14 @@ test('Windows GUI is a native WebView2 host with its own stable taskbar identity
 })
 
 test('Windows desktop diagnostics do not depend on a user PATH entry for PowerShell', async () => {
-  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const source = await readLauncherSource()
   assert.match(source, /SpecialFolder\.Windows[\s\S]+WindowsPowerShell[\s\S]+powershell\.exe/)
   assert.doesNotMatch(source, /FileName = "powershell\.exe"/)
 })
 
 test('Windows exit does not complete until the owned WebView2 runtime releases the portable folder', async () => {
   const [host, processJob, build, moveSmoke] = await Promise.all([
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('launcher/windows/PortableProcessJob.cs'),
     read('scripts/build-windows.ps1'),
     read('scripts/smoke-windows-desktop-move.ps1'),
@@ -213,7 +214,7 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
 })
 
 test('Windows workspace selection is owned by the native DSH window instead of a Node child process', async () => {
-  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const host = await readLauncherSource()
   const bridge = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
   const smoke = await readFile(new URL('../scripts/smoke-windows-native-workspace-picker.mjs', import.meta.url), 'utf8')
 
@@ -245,7 +246,7 @@ test('Windows workspace selection is owned by the native DSH window instead of a
 })
 
 test('Windows desktop uses compact native chrome without sacrificing resize or Snap Layout hit targets', async () => {
-  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const host = await readLauncherSource()
   assert.match(host, /FormBorderStyle\s*=\s*desktopStart\s*\?\s*FormBorderStyle\.Sizable/)
   assert.match(host, /FormBorderStyle\s*=\s*FormBorderStyle\.Sizable/)
   assert.match(host, /ShowIcon\s*=\s*true/)
@@ -260,7 +261,7 @@ test('Windows desktop uses compact native chrome without sacrificing resize or S
 
 test('Windows data migration uses an owned Save dialog and never forces a package into the portable folder', async () => {
   const [host, bridge, finishedProductSmoke] = await Promise.all([
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('desktop-bridge/lib/client.js'),
     read('scripts/smoke-windows-data-export.mjs'),
   ])
@@ -301,7 +302,7 @@ test('macOS data import restores an operable host after a failed restore', async
 })
 
 test('Windows startup reveals only the full-size official DSH boot surface', async () => {
-  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const host = await readLauncherSource()
   assert.match(host, /FormBorderStyle\s*=\s*desktopStart\s*\?\s*FormBorderStyle\.Sizable/)
   assert.match(host, /ClientSize\s*=\s*desktopStart\s*\?\s*new Size\(1280, 820\)/)
   assert.match(host, /MinimumSize\s*=\s*desktopStart\s*\?\s*new Size\(900, 620\)/)
@@ -340,7 +341,7 @@ test('Windows startup reveals only the full-size official DSH boot surface', asy
 })
 
 test('Windows staged-update preflight exits without leaving a hidden failure window', async () => {
-  const source = await read('launcher/windows/DSH-Portable.cs')
+  const source = await readLauncherSource()
   const failure = source.match(/private void HandleFailure\(int exitCode, string message\)[\s\S]*?\n        \}/u)?.[0] ?? ''
   assert.match(failure, /DSH_PORTABLE_UPDATE_PREFLIGHT/)
   assert.match(failure, /DisposeTrayIcon\(\)/)
@@ -349,7 +350,7 @@ test('Windows staged-update preflight exits without leaving a hidden failure win
 })
 
 test('Windows workspace readiness survives the official Alpha token redirect without logging the token', async () => {
-  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const host = await readLauncherSource()
   const traySmoke = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
   assert.match(host, /private static string WorkspaceOriginPath\(string value\)/)
   assert.match(host, /location\.origin[\s\S]+location\.pathname/)
@@ -364,7 +365,7 @@ test('Windows workspace readiness survives the official Alpha token redirect wit
 })
 
 test('Windows owns browser chrome and file downloads instead of exposing Edge UI', async () => {
-  const host = await read('launcher/windows/DSH-Portable.cs')
+  const host = await readLauncherSource()
 
   assert.match(host, /AreDefaultContextMenusEnabled\s*=\s*false/)
   assert.match(host, /IsStatusBarEnabled\s*=\s*false/)
@@ -384,7 +385,7 @@ test('Windows owns browser chrome and file downloads instead of exposing Edge UI
 })
 
 test('Windows tray presents sessions and commands in one compact Codex-style native menu', async () => {
-  const host = await read('launcher/windows/DSH-Portable.cs')
+  const host = await readLauncherSource()
 
   assert.doesNotMatch(host, /class\s+TrayTaskFlyout\s*:\s*Form/)
   assert.doesNotMatch(host, /class\s+TraySessionRow\s*:\s*Control/)
@@ -446,7 +447,7 @@ test('macOS GUI is a native WKWebView app rather than a Chrome app-mode launcher
 
 test('native desktop hosts diagnose renderer failures and recover without restarting DSH', async () => {
   const [windowsHost, windowsSmoke, macHost] = await Promise.all([
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('scripts/smoke-windows-desktop-host.ps1'),
     read('launcher/macos/DeepSeek-Herness.swift'),
   ])
@@ -679,7 +680,7 @@ test('macOS package smokes treat the native app as a long-lived desktop process'
 
 test('native hosts preserve only safe on-screen window placement in product data', async () => {
   const [windowsHost, macHost] = await Promise.all([
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('launcher/macos/DeepSeek-Herness.swift'),
   ])
 

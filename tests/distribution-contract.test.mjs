@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { readFile } from 'node:fs/promises'
@@ -153,7 +154,7 @@ test('all platform builders verify official notices through the reviewed upstrea
 })
 
 test('one-click launchers resolve everything from their own folder', async () => {
-  const windows = await read('launcher/windows/DSH-Portable.cs')
+  const windows = await readLauncherSource()
   const macos = await read('launcher/macos/DSH-Portable')
   assert.match(windows, /Application\.ExecutablePath/)
   assert.match(windows, /runtime.+node.+node\.exe/s)

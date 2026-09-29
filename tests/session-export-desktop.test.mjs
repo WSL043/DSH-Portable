@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
@@ -7,7 +8,7 @@ const read = filename => readFile(new URL(`../${filename}`, import.meta.url), 'u
 
 test('Windows routes native download lifecycle back into the existing DSH export modal', async () => {
   const [host, bridge] = await Promise.all([
-    read('launcher/windows/DSH-Portable.cs'),
+    readLauncherSource(),
     read('desktop-bridge/lib/client.js'),
   ])
 

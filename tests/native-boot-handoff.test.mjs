@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
@@ -80,7 +81,7 @@ test('every platform build applies the same native surface handoff', async () =>
 })
 
 test('Windows keeps one native loading panel until the real DSH surface is ready', async () => {
-  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const source = await readLauncherSource()
   assert.match(source, /ShowInTaskbar = !nonInteractive && !testHidden/)
   assert.doesNotMatch(source, /else if \(desktopStart\) Opacity = 0/)
   assert.match(source, /launchPanel\.Visible = true/)

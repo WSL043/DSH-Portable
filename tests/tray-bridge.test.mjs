@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
@@ -433,7 +434,7 @@ test('Portable exposes a native restart contract and returns the host decision',
   const bridgeSource = await readFile(sourceUrl, 'utf8')
   assert.match(bridgeSource, /__DSH_PORTABLE_HOST__\s*=\s*\{\s*restart:\s*restartPortableHost\s*\}/)
   assert.match(bridgeSource, /dsh-portable\/restart-host-result/)
-  const windowsHost = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const windowsHost = await readLauncherSource()
   assert.match(windowsHost, /dsh-portable\/restart-host/)
   assert.match(windowsHost, /trayState != null && trayState\.hasRunningSession/)
   assert.match(windowsHost, /restart-host[\s\S]*request-accepted[\s\S]*reply-posted/)
@@ -837,7 +838,7 @@ test('portable bridge fallback follows the moved product without entering a user
 })
 
 test('Windows tray consumes official projected state in one bounded compact native menu', async () => {
-  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const source = await readLauncherSource()
   const build = await readFile(new URL('../scripts/build-windows.ps1', import.meta.url), 'utf8')
   const desktopMenu = source.slice(
     source.indexOf('private void InitializeDesktopMenu()'),
@@ -929,7 +930,7 @@ test('Windows tray consumes official projected state in one bounded compact nati
 })
 
 test('Windows task completion notifications use the native action center with exact-session reply and a taskbar badge', async () => {
-  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const source = await readLauncherSource()
 
   assert.match(source, /public bool completed \{ get; set; \}/)
   assert.match(source, /private bool taskNotificationsEnabled;/)
@@ -1004,7 +1005,7 @@ test('Windows task completion notifications use the native action center with ex
 })
 
 test('Windows notifications distinguish background completion from tasks that need attention', async () => {
-  const source = (await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')).replace(/\r\n/g, '\n')
+  const source = (await readLauncherSource()).replace(/\r\n/g, '\n')
   const client = await readFile(sourceUrl, 'utf8')
 
   assert.match(source, /Dictionary<string, string> taskInteractionState/)

@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -130,7 +131,7 @@ test('Portable commands accept an explicit environment without changing the defa
 })
 
 test('the Windows host keys state and single-instance signaling by environment', async () => {
-  const host = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const host = await readLauncherSource()
   assert.match(host, /ResolveEnvironmentId/)
   assert.match(host, /ResolveStateRoot/)
   assert.match(host, /RegisterWindowMessage/)

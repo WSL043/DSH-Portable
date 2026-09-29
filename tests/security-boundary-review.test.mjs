@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
@@ -97,7 +98,7 @@ test('timer overrides remain finite positive integers within the actual product 
 })
 
 test('the full updater copy uses an unpredictable name and never overwrites an existing target', async () => {
-  const source = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+  const source = await readLauncherSource()
   const start = source.indexOf('private void StartFullPackageUpdate(')
   assert.ok(start >= 0)
   const method = source.slice(start, source.indexOf('private static bool IsTrustedProductManifestUrl', start))

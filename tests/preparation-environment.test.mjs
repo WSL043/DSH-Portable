@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -21,7 +22,7 @@ test('runtime preparation restores the child environment and preserves explicit 
       const result = execFileSync(process.execPath, [path.join(root, 'launcher/runtime-entry.mjs'), 'inspect.mjs'], { env, windowsHide: true, encoding: 'utf8' })
       assert.deepEqual(JSON.parse(result), { pool: expected, marker: null })
     }
-    const native = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
+    const native = await readLauncherSource()
     assert.match(native, /actionArgs\[0\] == "start"\s*&& !start\.EnvironmentVariables\.ContainsKey\("UV_THREADPOOL_SIZE"\)/)
   } finally { await rm(root, { recursive: true, force: true }) }
 })

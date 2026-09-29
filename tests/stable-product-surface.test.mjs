@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
@@ -60,7 +61,7 @@ test('dsh.exe opens an isolated official-syntax terminal and preserves parameter
 })
 
 test('Windows tray exposes the isolated DSH terminal without changing global PATH', async () => {
-  const source = await read('launcher/windows/DSH-Portable.cs')
+  const source = await readLauncherSource()
   assert.match(source, /CreateTerminalItem/)
   assert.match(source, /DSH 终端/)
   assert.match(source, /DSH Terminal/)

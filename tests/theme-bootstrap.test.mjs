@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
@@ -30,5 +31,5 @@ test('every product builder preserves the boot preference and native preference 
   for (const file of ['build-windows.ps1', 'build-macos.sh', 'build-linux.sh']) {
     assert.match(await readFile(new URL(`../scripts/${file}`, import.meta.url), 'utf8'), /patch-theme-bootstrap\.mjs/)
   }
-  assert.match(await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8'), /if \(chromeChanged \|\| preferenceChanged\) ApplyDesktopChrome\(\)/)
+  assert.match(await readLauncherSource(), /if \(chromeChanged \|\| preferenceChanged\) ApplyDesktopChrome\(\)/)
 })

@@ -370,6 +370,22 @@ try {
         "/reference:$NotificationAssembly", "/reference:$ValueTupleAssembly",
         "/out:$LauncherExe",
         (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Chrome.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Tray.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Data.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.WebViewShutdown.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Host.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Update.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Navigation.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.WebView.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.UpdateUi.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.HostFailure.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\TrayBridge.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\NativeTaskNotification.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\TaskbarBadge.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\DesktopChrome.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\TaskbarIdentity.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\Program.cs'),
         (Join-Path $ProjectRoot 'launcher\windows\PortableProcessJob.cs')
     )
     & $Csc $CompilerArgs

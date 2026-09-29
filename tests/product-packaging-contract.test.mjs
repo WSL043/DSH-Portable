@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { access, readFile, readdir } from 'node:fs/promises'
@@ -499,7 +500,7 @@ test('desktop icons are derived from the pinned official DSH mark', async () => 
 })
 
 test('Windows package exposes real GUI executables with matching icon and an isolated portable launch', async () => {
-  const source = await read('launcher/windows/DSH-Portable.cs')
+  const source = await readLauncherSource()
   const bootstrap = await read('launcher/windows/DSH-Bootstrap.cs')
   const manifest = await read('launcher/windows/DSH-Portable.manifest')
   const build = await read('scripts/build-windows.ps1')

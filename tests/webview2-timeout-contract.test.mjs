@@ -1,3 +1,4 @@
+import { readLauncherSource } from './helpers/launcher-source.mjs'
 import { readNativeWorkflow } from './helpers/read-native-workflow.mjs'
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
@@ -5,10 +6,9 @@ import path from 'node:path'
 import test from 'node:test'
 
 const projectRoot = path.resolve(import.meta.dirname, '..')
-const launcherSource = path.join(projectRoot, 'launcher', 'windows', 'DSH-Portable.cs')
 
 test('Windows desktop host waits for the usable DOM and reports the failing boundary', async () => {
-  const source = await readFile(launcherSource, 'utf8')
+  const source = await readLauncherSource()
   assert.match(source, /WorkspaceNavigationTimeoutMs\s*=\s*60000/)
   assert.match(source, /TaskCompletionSource<bool>\s+workspaceUsable/)
   assert.match(source, /EventHandler<CoreWebView2DOMContentLoadedEventArgs>\s+domLoaded/)
@@ -48,7 +48,7 @@ test('Windows desktop host waits for the usable DOM and reports the failing boun
 
 test('Windows finished-product smoke proves usable DOM wins over a stalled subresource', async () => {
   const [source, smoke, workflow] = await Promise.all([
-    readFile(launcherSource, 'utf8'),
+    readLauncherSource(),
     readFile(path.join(projectRoot, 'scripts', 'smoke-windows-dom-ready.ps1'), 'utf8'),
     readNativeWorkflow(),
   ])
@@ -65,7 +65,7 @@ test('Windows finished-product smoke proves usable DOM wins over a stalled subre
 })
 
 test('Windows overlaps cold WebView2 initialization with the first DSH start', async () => {
-  const source = await readFile(launcherSource, 'utf8')
+  const source = await readLauncherSource()
   const runLauncher = source.slice(
     source.indexOf('private async Task RunLauncherAsync()'),
     source.indexOf('private async Task CheckForDesktopUpdateAsync'),
@@ -79,7 +79,7 @@ test('Windows overlaps cold WebView2 initialization with the first DSH start', a
 
 test('Windows recovers a bounded WebView2 resource-in-use race after an update restart', async () => {
   const [source, bootstrap, upgradeSmoke] = await Promise.all([
-    readFile(launcherSource, 'utf8'),
+    readLauncherSource(),
     readFile(path.join(projectRoot, 'launcher', 'windows', 'DSH-Bootstrap.cs'), 'utf8'),
     readFile(path.join(projectRoot, 'scripts', 'smoke-windows-version-upgrade.mjs'), 'utf8'),
   ])
@@ -101,7 +101,7 @@ test('Windows recovers a bounded WebView2 resource-in-use race after an update r
 })
 
 test('Windows cold start shows the local workspace before checking for updates in the background', async () => {
-  const source = await readFile(launcherSource, 'utf8')
+  const source = await readLauncherSource()
   const runLauncher = source.slice(
     source.indexOf('private async Task RunLauncherAsync()'),
     source.indexOf('private void ShowDesktopOperation'),
@@ -118,7 +118,7 @@ test('Windows cold start shows the local workspace before checking for updates i
 })
 
 test('Windows never treats an unavailable tray bridge state as permission to replace the running product', async () => {
-  const source = await readFile(launcherSource, 'utf8')
+  const source = await readLauncherSource()
   const updateCheck = source.slice(
     source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual, string scope)'),
     source.indexOf('private void ShowDesktopOperation'),
@@ -138,7 +138,7 @@ test('Windows never treats an unavailable tray bridge state as permission to rep
 })
 
 test('Windows update checking and update interaction use separate states', async () => {
-  const source = await readFile(launcherSource, 'utf8')
+  const source = await readLauncherSource()
   const rebuild = source.slice(
     source.indexOf('private void RebuildTrayMenu()'),
     source.indexOf('private void RebuildRecentSessionItems'),
@@ -162,7 +162,7 @@ test('Windows update checking and update interaction use separate states', async
 })
 
 test('Windows product and engine update choices share the live workspace and restore it on cancel', async () => {
-  const source = await readFile(launcherSource, 'utf8')
+  const source = await readLauncherSource()
   const updateCheck = source.slice(
     source.indexOf('private async Task CheckForDesktopUpdateAsync(bool manual, string scope)'),
     source.indexOf('private void ShowDesktopOperation'),
