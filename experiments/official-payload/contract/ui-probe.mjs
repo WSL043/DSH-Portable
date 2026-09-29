@@ -75,7 +75,7 @@ try {
   const workspace = initial.url === 'dsh-app://app/' ? initial : await until(async () => (await targets()).find(target => target.type === 'page' && target.url === 'dsh-app://app/'), 'dsh-app://app/ workspace');
   client = await connect(workspace);
   await until(() => client.evaluate(`document.readyState === 'complete' && document.body && document.body.innerText.length > 0`), 'Workspace render');
-  const updateLabels = ['新版本', 'New version'];
+  const updateLabels = ['新版本', 'New version', 'Update'];
   evidence.updateEntry = await mouseClick(updateLabels, 'button,[role="button"],a,[tabindex]');
   const dialog = await until(async () => (await targets()).find(target => target.type === 'page' && target.url.startsWith('dsh-app://shell/update-dialog.html')), 'dsh-app://shell/update-dialog.html');
   client.close();
