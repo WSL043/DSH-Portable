@@ -113,3 +113,12 @@ macOS：官方有桌面端，同架构可移植，另立阶段。Linux：官方�
 - 已把官方安装包下载、大小/SHA-512/Authenticode 校验及 NSIS 展开抽为共享 action，并由原有两个官方验收 workflow 复用。
 - 已编写手动 alpha.4 生产通道打包、解压后启动冒烟与草稿 Release 流水线，以及中文运维文档。
 - 本地源码/静态检查不等于 GitHub Windows runner 的真实官方成品验收；工作流尚未运行、通道 Release 未修改、alpha.4 草稿未创建，连续多次自动跟进仍待 CI 证据。因此阶段 3 **未验收**，纯便携架构也未因此宣告通过。
+
+### 预装默认插件（开发线）
+
+- 可选随包携带已审阅的插件 `.tgz` 与 `launcher/seed/seed.json`；不传种子参数时打包行为保持不变。
+- 启动器只在官方 `desktop` profile 已存在、未记录该插件且无官方进程时，在启动官方应用前调用官方 `dsh.cmd plugin add`。
+- 首次启动创建 profile，因此预装插件在第二次启动前播种；这是预期时序。
+- 插件加入 bundles 并在 `cordis.patch.yml` 默认 disabled；已有同 id patch、已记录插件和之后的用户选择不覆盖、不重播。
+- 播种校验 SHA-512；单插件失败回滚其 profile/patch/`node_modules` 改动并记状态，失败不阻断官方应用启动。
+- 本机 CLI/profile 搬动验证不替代启动器真机验证；隐藏 PowerShell 调用、超时与第二次启动流程仍待真机验收。
