@@ -769,7 +769,7 @@ namespace DshPortable
             if (Visible && WindowState != FormWindowState.Minimized)
                 windowStateBeforeHide = WindowState;
             Rectangle bounds = WindowState == FormWindowState.Normal ? Bounds : RestoreBounds;
-            if (!IsSafeDesktopBounds(bounds)) return;
+            if (bounds.Width <= 0 || bounds.Height <= 0) return;
             DesktopWindowState state = new DesktopWindowState
             {
                 schemaVersion = 1,
