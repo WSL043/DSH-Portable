@@ -105,3 +105,11 @@ macOS：官方有桌面端，同架构可移植，另立阶段。Linux：官方�
 - 同时记录便携数据路径、`app-update.yml`、协议键还原、版本保留和根目录外写入。
 - 仅在干净的 GitHub-hosted Windows runner 运行；工作流为 `.github/workflows/official-pure-e2e.yml`，证据保留 14 天。
 - 脚本、报告汇总和纯逻辑测试已编写；真实官方成品完整链路**尚未运行**，阶段 2 验收状态未判定。
+
+### 阶段 3 状态（2026-09-30，T28）
+
+- 已编写离线通道生成器、semver 排序与 20 条保留规则、固定生产 URL 常量，以及针对索引、`nightly.yml` 与启动器文件名契约的 Node 测试。
+- 已编写每小时候选发现→Windows 契约与真实升级双门槛→受控 Release 上传/回读流水线；不合格时不进入发布 job，并按版本创建或评论 issue。
+- 已把官方安装包下载、大小/SHA-512/Authenticode 校验及 NSIS 展开抽为共享 action，并由原有两个官方验收 workflow 复用。
+- 已编写手动 alpha.4 生产通道打包、解压后启动冒烟与草稿 Release 流水线，以及中文运维文档。
+- 本地源码/静态检查不等于 GitHub Windows runner 的真实官方成品验收；工作流尚未运行、通道 Release 未修改、alpha.4 草稿未创建，连续多次自动跟进仍待 CI 证据。因此阶段 3 **未验收**，纯便携架构也未因此宣告通过。
