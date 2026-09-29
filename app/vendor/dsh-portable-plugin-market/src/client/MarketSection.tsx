@@ -7,6 +7,7 @@ import { restartApp } from './restart-app.ts'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { createPortal } from 'react-dom'
 import { DownloadCount } from './DownloadCount.tsx'
+import type { DownloadTotalsTable } from '../download-totals.ts'
 import { CardPreview } from './CardPreview.tsx'
 import {
   Button,
@@ -43,7 +44,7 @@ import type { OperationRecord } from './operations.ts'
 import { Diagnostics } from './Diagnostics.tsx'
 import {
   avatarColor, batchUpdateNames, entryForDep, groupSwitchState, hasCategory, humanOutput, isInstalled, matchInstalledName, orderedCategories,
-  formatCount, localizedText, categoryText, pageItems, pluginName, pluginScreenshots, readSession, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
+  effectiveMarketSort, formatCount, localizedText, categoryText, pageItems, pluginName, pluginScreenshots, readSession, syncScreenshotsGeneration, TIME_RANGE_DAYS, visiblePlugins,
 } from './market-data.ts'
 import type {
 ActivationInfo, ActivationState, InstalledMap, InstalledRepoHints, InstalledRepoIdentities, MarketStatus, Registry, RegistryPlugin,
@@ -355,6 +356,7 @@ function sameInstalledMap(left: InstalledMap, right: InstalledMap): boolean {
 
 /** Sort field choices in the filter panel. */
 const SORT_FIELD_OPTIONS: ReadonlyArray<{ key: SortField; label: string }> = [
+  { key: 'total', label: 'sortTotal' },
   { key: 'downloads', label: 'sortDownloads' },
   { key: 'stars', label: 'sortStars' },
   { key: 'added', label: 'sortAdded' },
@@ -584,10 +586,10 @@ export function MarketSection(props: MarketSectionProps) {
   const [restarting, setRestarting] = useState(false)
   const [showTop, setShowTop] = useState(false)
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  // Default to the catalog's 30-day npm downloads (labelled as such). Card badges
-  // show lifetime totals, so never present this ranking as a lifetime ranking;
-  // entries without a catalog count sort after every entry that has one.
-  const [sortField, setSortField] = useState<SortField>('downloads')
+  const [downloadTotals, setDownloadTotals] = useState<DownloadTotalsTable | null>(null)
+  const [downloadTotalsState, setDownloadTotalsState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const pendingTotalsAnchor = useRef<{ key: string; offset: number } | null>(null)
+  const [sortField, setSortField] = useState<SortField>('total')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   /** Direction labels adapt to the field: stars → asc/desc, added → oldest/newest. */
   const sortDirLabel = (dir: SortDir): string =>
@@ -739,6 +741,42 @@ export function MarketSection(props: MarketSectionProps) {
     // page should immediately see a plugin release that became available.
     refreshInstalled(true)
   }, [refreshInstalled, loadCatalog])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/dsh-market/download-totals', { cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`)
+        if (typeof body?.generatedAt !== 'string' || typeof body?.complete !== 'boolean'
+          || typeof body?.start !== 'string' || typeof body?.end !== 'string'
+          || typeof body?.totals !== 'object' || body.totals === null || Array.isArray(body.totals)
+          || !Object.values(body.totals).some(value => Number.isSafeInteger(value) && value >= 0)) {
+          throw new Error('npm totals table unavailable')
+        }
+        return body as DownloadTotalsTable
+      })
+      .then(table => {
+        if (controller.signal.aborted) return
+        const container = bodyRef.current
+        if (container !== null) {
+          const containerTop = container.getBoundingClientRect().top
+          const containerBottom = container.getBoundingClientRect().bottom
+          const anchor = Array.from(container.querySelectorAll<HTMLElement>('[data-market-card][data-market-key]'))
+            .find(card => card.getBoundingClientRect().bottom > containerTop && card.getBoundingClientRect().top < containerBottom)
+          if (anchor !== undefined) {
+            pendingTotalsAnchor.current = {
+              key: anchor.dataset.marketKey ?? '',
+              offset: anchor.getBoundingClientRect().top - containerTop,
+            }
+          }
+        }
+        setDownloadTotals(table)
+        setDownloadTotalsState('ready')
+      })
+      .catch(() => { if (!controller.signal.aborted) setDownloadTotalsState('failed') })
+    return () => controller.abort()
+  }, [])
 
   // Pending-restart flags survive tab switches and page reloads, scoped to
   // one host process: a different boot id means the restart happened and the
@@ -895,10 +933,11 @@ export function MarketSection(props: MarketSectionProps) {
   const plugins = useMemo(
     () => (data === null ? [] : visiblePlugins(data.plugins, {
       category: cat, query: q, lang,
-      sort: `${sortField}-${sortDir}`,
+      sort: effectiveMarketSort(`${sortField}-${sortDir}`, downloadTotalsState),
+      totals: downloadTotalsState === 'ready' ? downloadTotals?.totals : undefined,
       sinceDays: timeRange === 'all' ? undefined : TIME_RANGE_DAYS[timeRange],
     })),
-    [data, q, cat, lang, sortField, sortDir, timeRange])
+    [data, q, cat, lang, sortField, sortDir, timeRange, downloadTotals, downloadTotalsState])
 
   useEffect(() => { setPage(1) }, [q, cat, sortField, sortDir, timeRange])
 
@@ -906,6 +945,23 @@ export function MarketSection(props: MarketSectionProps) {
   // Clamp in case the list shrank while the user was on a later page.
   const currentPage = Math.min(page, totalPages)
   const pagePlugins = plugins.slice((currentPage - 1) * pageSize, currentPage * pageSize)
+
+  useLayoutEffect(() => {
+    const anchor = pendingTotalsAnchor.current
+    if (anchor === null || downloadTotalsState !== 'ready') return
+    const index = plugins.findIndex(plugin => plugin.url === anchor.key)
+    if (index < 0) { pendingTotalsAnchor.current = null; return }
+    const targetPage = Math.floor(index / pageSize) + 1
+    if (targetPage !== currentPage) { setPage(targetPage); return }
+    const container = bodyRef.current
+    const card = container === null ? undefined : Array.from(container.querySelectorAll<HTMLElement>('[data-market-card][data-market-key]'))
+      .find(element => element.dataset.marketKey === anchor.key)
+    if (container !== null && card !== undefined) {
+      const currentOffset = card.getBoundingClientRect().top - container.getBoundingClientRect().top
+      container.scrollTop += currentOffset - anchor.offset
+    }
+    pendingTotalsAnchor.current = null
+  }, [downloadTotalsState, plugins, currentPage, pageSize])
 
   const scrollToTop = () => {
     const el = bodyRef.current
@@ -1512,16 +1568,21 @@ export function MarketSection(props: MarketSectionProps) {
   // Filter dropdown (primitives Menu): three independent option groups, ids
   // namespaced so one onSelect routes by prefix. The host Menu closes on
   // selection; Escape is contained here so it does not dismiss the market.
+  const totalSortLabel = downloadTotalsState === 'loading' ? 'sortTotalPending'
+    : downloadTotalsState === 'failed' ? 'sortTotalFallback'
+      : downloadTotals?.complete === false ? 'sortTotalPartial' : 'sortTotal'
+  const sortFieldLabel = (field: SortField): string => field === 'total' ? totalSortLabel
+    : field === 'downloads' ? 'sortDownloads' : field === 'stars' ? 'sortStars' : 'sortAdded'
   const filterItems = useMemo<MenuEntry[]>(() => [
     { type: 'label', id: 'f-sort', text: t('filterSort') },
-    ...SORT_FIELD_OPTIONS.map(opt => ({ id: 'field:' + opt.key, label: t(opt.label) })),
+    ...SORT_FIELD_OPTIONS.map(opt => ({ id: 'field:' + opt.key, label: t(sortFieldLabel(opt.key)) })),
     { type: 'separator', id: 'f-sep1' },
     { type: 'label', id: 'f-dir', text: t('filterDir') },
     ...SORT_DIR_OPTIONS.map(dir => ({ id: 'dir:' + dir, label: t(sortDirLabel(dir)) })),
     { type: 'separator', id: 'f-sep2' },
     { type: 'label', id: 'f-time', text: t('filterTime') },
     ...TIME_OPTIONS.map(opt => ({ id: 'time:' + opt.key, label: t(opt.label) })),
-  ], [t, sortField, lang])
+  ], [t, sortField, lang, totalSortLabel])
   const filterSelectedIds = useMemo(
     () => ['field:' + sortField, 'dir:' + sortDir, 'time:' + timeRange],
     [sortField, sortDir, timeRange])
@@ -1531,10 +1592,10 @@ export function MarketSection(props: MarketSectionProps) {
     else if (id.startsWith('time:')) setTimeRange(id.slice(5) as TimeRange)
   }
 
-  const filterCount = Number(sortField !== 'downloads') + Number(sortDir !== 'desc') + Number(timeRange !== 'all')
+  const filterCount = Number(sortField !== 'total') + Number(sortDir !== 'desc') + Number(timeRange !== 'all')
   const hasConditions = filterCount > 0 || cat !== 'all' || q.trim() !== ''
-  const sortSummary = t(sortField === 'downloads' ? 'sortDownloads' : sortField === 'stars' ? 'sortStars' : 'sortAdded') + ' · ' + t(sortDirLabel(sortDir))
-  const resetConditions = () => { setQ(''); setCat('all'); setSortField('stars'); setSortDir('desc'); setTimeRange('all'); setFilterOpen(false) }
+  const sortSummary = t(sortFieldLabel(sortField)) + ' · ' + t(sortDirLabel(sortDir))
+  const resetConditions = () => { setQ(''); setCat('all'); setSortField('total'); setSortDir('desc'); setTimeRange('all'); setFilterOpen(false) }
 
   /** The catalog entry a deprecated plugin's `replacement` names, if any. */
   const replacementOf = (p: RegistryPlugin): RegistryPlugin | undefined =>
@@ -1554,7 +1615,7 @@ export function MarketSection(props: MarketSectionProps) {
     const record = recordForUrl(records, p.url)
     const blocked = record !== null && (record.state === 'input' || record.state === 'failed')
     return (
-      <div key={p.url} data-market-card className={`${blocked ? `${css.card} ${css.cardBlocked}` : css.card}${marketView === 'compact' ? ` ${css.compactCard}` : ''}`}>
+      <div key={p.url} data-market-card data-market-key={p.url} className={`${blocked ? `${css.card} ${css.cardBlocked}` : css.card}${marketView === 'compact' ? ` ${css.compactCard}` : ''}`}>
         <div className={css.cardContent}>
           <div className={css.row1}>
             {/* The avatar belongs to the AUTHOR, not to the title. Beside the
@@ -1570,7 +1631,7 @@ export function MarketSection(props: MarketSectionProps) {
               <div className={css.byline}>
                 <OwnerAvatar name={p.name} owner={p.owner || ''} />
                 <span className={css.owner}>{p.owner}</span>
-                {p.npm && <DownloadCount key={p.npm} name={p.npm} chinese={lang === 'zh'} className={css.star} />}
+                {p.npm && <DownloadCount key={p.npm} name={p.npm} chinese={lang === 'zh'} className={css.star} totals={downloadTotals} totalsSettled={downloadTotalsState !== 'loading'} />}
                 {typeof p.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', p.stars)}>{'· ★ ' + formatCount(p.stars)}</span>}
               </div>
             </div>
@@ -2529,7 +2590,7 @@ export function MarketSection(props: MarketSectionProps) {
           <div className={css.byline}>
             <OwnerAvatar name={confirming.name} owner={confirming.owner || ''} />
             <span className={css.owner}>{confirming.owner}</span>
-            {confirming.npm && <DownloadCount key={confirming.npm} name={confirming.npm} chinese={lang === 'zh'} className={css.star} />}
+      {confirming.npm && <DownloadCount key={confirming.npm} name={confirming.npm} chinese={lang === 'zh'} className={css.star} totals={downloadTotals} totalsSettled={downloadTotalsState !== 'loading'} />}
             {typeof confirming.stars === 'number' && <span className={css.star} title={metricTitle('metricStars', confirming.stars)}>{'· ★ ' + formatCount(confirming.stars)}</span>}
             <span className={css.grow} />
             <span className={css.tag}>

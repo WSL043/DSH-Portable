@@ -1,5 +1,5 @@
 import { profileRevision } from './profile-revision.ts'
-import { getDownloadTotal } from './download-totals.ts'
+import { getDownloadTotal, getDownloadTotalsTable } from './download-totals.ts'
 import { createOfficialTransactionRuntime, type OfficialTransactionRuntime } from './official-transaction.ts'
 import { createLegacyDisableReplay, legacyOwnsPluginState } from './disable-replay.ts'
 /**
@@ -220,6 +220,11 @@ export function mountMarketRoutes(
   }
   const activeProfileDir = profileDir(config.profile, config.profileDirectory)
   const registryCacheFile = join(activeProfileDir, '.dsh-market', 'registry-cache-v1.json')
+  const warmDownloadTotals = (registry: { plugins: readonly { npm?: string | null }[] }): void => {
+    void getDownloadTotalsTable(registry.plugins, registryCacheFile).catch(error => {
+      logEvent('warn', 'npm-totals', `background refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+    })
+  }
   let agentGuardUnavailableLogged = false
   /** Running-agent ids for the mutation gate; logs once when the host exposes no agents service. */
   const runningAgentsForGuard = (): string[] => {
@@ -774,6 +779,27 @@ export function mountMarketRoutes(
 
     host.webServer.register({
       kind: 'exact',
+      path: '/dsh-market/download-totals',
+      handler: async (request, response) => {
+        if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return }
+        try {
+          // Coalesces with /registry revalidation while giving the totals
+          // request the exact catalog generation it is meant to summarize.
+          const registry = await loadRegistry({ cacheFile: registryCacheFile })
+          const table = await getDownloadTotalsTable(registry.plugins, registryCacheFile)
+          const hasNpmPackages = registry.plugins.some(plugin => typeof plugin.npm === 'string' && plugin.npm !== '')
+          if (hasNpmPackages && Object.keys(table.totals).length === 0) {
+            sendJson(response, 503, { error: 'npm totals temporarily unavailable' }); return
+          }
+          sendJson(response, 200, table)
+        } catch (error) {
+          sendJson(response, 503, { error: error instanceof Error ? error.message : 'npm totals temporarily unavailable' })
+        }
+      },
+    }),
+
+    host.webServer.register({
+      kind: 'exact',
       path: '/dsh-market/registry',
       handler: async (request, response) => {
         if (request.method !== 'GET') {
@@ -789,10 +815,12 @@ export function mountMarketRoutes(
               const cached = await readRegistrySnapshot(registryCacheFile)
               if (cached !== null) {
                 sendJson(response, 200, { registry: cached.registry, cached: true, savedAt: cached.savedAt })
+                warmDownloadTotals(cached.registry)
                 return
               }
               const fresh = await revalidateRegistry({ cacheFile: registryCacheFile })
               sendJson(response, 200, { registry: fresh.registry, fresh: true, checkedAt: fresh.checkedAt })
+              warmDownloadTotals(fresh.registry)
               return
             }
             if (mode === 'refresh') {
@@ -802,9 +830,12 @@ export function mountMarketRoutes(
                 changed: fresh.changed,
                 checkedAt: fresh.checkedAt,
               })
+              warmDownloadTotals(fresh.registry)
               return
             }
-            sendJson(response, 200, { registry: await loadRegistry({ cacheFile: registryCacheFile }) })
+            const registry = await loadRegistry({ cacheFile: registryCacheFile })
+            sendJson(response, 200, { registry })
+            warmDownloadTotals(registry)
           } catch (error) {
             // Say what went wrong. The market used to substitute a bundled
             // copy here, so an unreachable registry looked exactly like a

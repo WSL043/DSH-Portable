@@ -190,7 +190,7 @@ export function readSession(key: string): any {
 }
 
 /** Sortable field for the Discover list. */
-export type SortField = 'downloads' | 'stars' | 'added'
+export type SortField = 'total' | 'downloads' | 'stars' | 'added'
 /** Sort direction: desc = newest/most first, asc = oldest/least first. */
 export type SortDir = 'desc' | 'asc'
 /** Combined sort key sent to visiblePlugins. */
@@ -225,10 +225,19 @@ export interface ListQuery {
   query: string
   /** UI language for description matching ('zh' / 'en'). */
   lang: string
-  /** 'stars-desc' | 'stars-asc' | 'added-desc' | 'added-asc'; anything else keeps registry order. */
+  /** Sort key; anything unknown keeps registry order. */
   sort: string
+  /** Shared npm cumulative-download table keyed by npm package name. */
+  totals?: Readonly<Record<string, number>>
   /** Keep only plugins published within the last N days; undefined = any time. */
   sinceDays?: number
+}
+
+/** Use the existing catalog metric until the shared cumulative table arrives. */
+export function effectiveMarketSort(sort: string, totalsState: 'loading' | 'ready' | 'failed'): string {
+  return sort.startsWith('total-') && totalsState !== 'ready'
+    ? sort.replace(/^total-/, 'downloads-')
+    : sort
 }
 
 /**
@@ -280,22 +289,19 @@ export function visiblePlugins(plugins: RegistryPlugin[], options: ListQuery): R
   // direction, and are ordered against each other by star count — the only
   // signal available for them — rather than left in an arbitrary tie.
   const hasDownloads = (p: RegistryPlugin): p is RegistryPlugin & { downloads: number } => typeof p.downloads === 'number'
-  if (options.sort === 'downloads-desc') {
-    return [...list].sort((a, b) => {
-      if (hasDownloads(a) && hasDownloads(b)) return b.downloads - a.downloads
-      if (hasDownloads(a)) return -1
-      if (hasDownloads(b)) return 1
+  const sortCount = (value: (plugin: RegistryPlugin) => number | undefined, direction: SortDir): RegistryPlugin[] =>
+    [...list].sort((a, b) => {
+      const left = value(a), right = value(b)
+      if (left !== undefined && right !== undefined) return direction === 'desc' ? right - left : left - right
+      if (left !== undefined) return -1
+      if (right !== undefined) return 1
       return (b.stars ?? -1) - (a.stars ?? -1)
     })
-  }
-  if (options.sort === 'downloads-asc') {
-    return [...list].sort((a, b) => {
-      if (hasDownloads(a) && hasDownloads(b)) return a.downloads - b.downloads
-      if (hasDownloads(a)) return -1
-      if (hasDownloads(b)) return 1
-      return (a.stars ?? -1) - (b.stars ?? -1)
-    })
-  }
+  if (options.sort === 'downloads-desc') return sortCount(p => hasDownloads(p) ? p.downloads : undefined, 'desc')
+  if (options.sort === 'downloads-asc') return sortCount(p => hasDownloads(p) ? p.downloads : undefined, 'asc')
+  const totalFor = (plugin: RegistryPlugin): number | undefined => plugin.npm === undefined ? undefined : options.totals?.[plugin.npm]
+  if (options.sort === 'total-desc') return sortCount(totalFor, 'desc')
+  if (options.sort === 'total-asc') return sortCount(totalFor, 'asc')
   if (options.sort === 'stars-desc') {
     return [...list].sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1))
   }

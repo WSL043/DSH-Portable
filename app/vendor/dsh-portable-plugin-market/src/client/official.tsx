@@ -1,8 +1,9 @@
-import { Component, createElement as h, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { Component, createElement as h, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { Button, Modal, IconCordisPluginOutline14, IconLinkOutline14 } from './primitives.ts'
 import { CardPreview } from './CardPreview.tsx'
 import { DownloadCount } from './DownloadCount.tsx'
-import { categoryText, formatCount, localizedText, pluginName, visiblePlugins, type Registry, type RegistryPlugin } from './market-data.ts'
+import { categoryText, effectiveMarketSort, formatCount, localizedText, pluginName, visiblePlugins, type Registry, type RegistryPlugin } from './market-data.ts'
+import type { DownloadTotalsTable } from '../download-totals.ts'
 import { en, zh } from './locales.ts'
 import css from './Market.module.css'
 import page from './OfficialMarket.module.css'
@@ -26,10 +27,14 @@ function Catalog({ ctx, onInstall, onManage }: { ctx: any; onInstall: (spec:stri
   const chinese = locale.active.toLowerCase().startsWith('zh'), lang = chinese ? 'zh' : 'en'
   const t = (key: string) => String((chinese ? zh : en)[key as keyof typeof en] ?? key)
   const [registry, setRegistry] = useState<Registry | null>(null)
+  const [downloadTotals, setDownloadTotals] = useState<DownloadTotalsTable | null>(null)
+  const [downloadTotalsState, setDownloadTotalsState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const pendingTotalsAnchor = useRef<{ key: string; offset: number } | null>(null)
   const [bundles, setBundles] = useState<any[]>([])
   const [error, setError] = useState('')
   const [query, setQuery] = useState(''), [category, setCategory] = useState('all')
-  const [sort, setSort] = useState('downloads-desc'), [current, setCurrent] = useState(1)
+  const [sort, setSort] = useState('total-desc'), [current, setCurrent] = useState(1)
   const [compact, setCompact] = useState(false)
   const [loading, setLoading] = useState(false)
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
@@ -61,9 +66,67 @@ function Catalog({ ctx, onInstall, onManage }: { ctx: any; onInstall: (spec:stri
     const off = ctx.remote.$on('plugin-manager/changed', () => { void refreshInstalled().catch(e => setError(String(e))) })
     return () => { abort.abort(); off() }
   }, [ctx, load, refreshInstalled])
+  useEffect(() => {
+    const controller = new AbortController()
+    fetch('/dsh-market/download-totals', { cache: 'no-store', signal: controller.signal })
+      .then(async response => {
+        const body = await response.json()
+        if (!response.ok) throw new Error(body.error ?? `HTTP ${response.status}`)
+        if (typeof body?.generatedAt !== 'string' || typeof body?.complete !== 'boolean'
+          || typeof body?.start !== 'string' || typeof body?.end !== 'string'
+          || typeof body?.totals !== 'object' || body.totals === null || Array.isArray(body.totals)
+          || !Object.values(body.totals).some(value => Number.isSafeInteger(value) && value >= 0)) {
+          throw new Error('npm totals table unavailable')
+        }
+        return body as DownloadTotalsTable
+      })
+      .then(table => {
+        if (controller.signal.aborted) return
+        const list = listRef.current
+        if (list !== null) {
+          const listTop = list.getBoundingClientRect().top
+          const listBottom = list.getBoundingClientRect().bottom
+          const anchor = Array.from(list.querySelectorAll<HTMLElement>('[data-market-card][data-market-key]'))
+            .find(card => card.getBoundingClientRect().bottom > listTop && card.getBoundingClientRect().top < listBottom)
+          if (anchor !== undefined) {
+            pendingTotalsAnchor.current = {
+              key: anchor.dataset.marketKey ?? '',
+              offset: anchor.getBoundingClientRect().top - listTop,
+            }
+          }
+        }
+        setDownloadTotals(table)
+        setDownloadTotalsState('ready')
+      })
+      .catch(() => { if (!controller.signal.aborted) setDownloadTotalsState('failed') })
+    return () => controller.abort()
+  }, [])
   useEffect(() => { setCurrent(1) }, [query, category, sort])
-  const filtered = useMemo(() => visiblePlugins(registry?.plugins ?? [], { category, query, lang, sort }), [registry, category, query, lang, sort])
+  const totalSortLabel = downloadTotalsState === 'loading' ? 'sortTotalPending'
+    : downloadTotalsState === 'failed' ? 'sortTotalFallback'
+      : downloadTotals?.complete === false ? 'sortTotalPartial' : 'sortTotal'
+  const effectiveSort = effectiveMarketSort(sort, downloadTotalsState)
+  const filtered = useMemo(() => visiblePlugins(registry?.plugins ?? [], {
+    category, query, lang, sort: effectiveSort,
+    totals: downloadTotalsState === 'ready' ? downloadTotals?.totals : undefined,
+  }), [registry, category, query, lang, effectiveSort, downloadTotals, downloadTotalsState])
   const pages = Math.max(1, Math.ceil(filtered.length / 20)), selectedPage = Math.min(current, pages)
+  useLayoutEffect(() => {
+    const anchor = pendingTotalsAnchor.current
+    if (anchor === null || downloadTotalsState !== 'ready') return
+    const index = filtered.findIndex(plugin => plugin.url === anchor.key)
+    if (index < 0) { pendingTotalsAnchor.current = null; return }
+    const targetPage = Math.floor(index / 20) + 1
+    if (targetPage !== selectedPage) { setCurrent(targetPage); return }
+    const list = listRef.current
+    const card = list === null ? undefined : Array.from(list.querySelectorAll<HTMLElement>('[data-market-card][data-market-key]'))
+      .find(element => element.dataset.marketKey === anchor.key)
+    if (list !== null && card !== undefined) {
+      const currentOffset = card.getBoundingClientRect().top - list.getBoundingClientRect().top
+      list.scrollTop += currentOffset - anchor.offset
+    }
+    pendingTotalsAnchor.current = null
+  }, [downloadTotalsState, filtered, selectedPage])
   const installed = (p: RegistryPlugin) => bundles.find(b => b.name === p.npm || b.name === p.name)
   const openDetails = (p: RegistryPlugin) => onManage(installed(p)?.name ?? p.npm ?? p.name)
   const install = () => {
@@ -77,14 +140,14 @@ function Catalog({ ctx, onInstall, onManage }: { ctx: any; onInstall: (spec:stri
     <div className={page.filters}>
       <input aria-label={t('searchPh')} placeholder={t('searchPh')} value={query} onChange={e => setQuery(e.target.value)} />
       <select aria-label={chinese ? '分类' : 'Category'} value={category} onChange={e => setCategory(e.target.value)}><option value="all">{t('all')}</option>{Object.entries(registry?.categories ?? {}).map(([key, value]) => <option key={key} value={key}>{localizedText(value, lang)}</option>)}</select>
-      <select aria-label={chinese ? '排序' : 'Sort'} value={sort} onChange={e => setSort(e.target.value)}><option value="downloads-desc">{chinese ? '近 30 天下载最多' : 'Most downloads (30 days)'}</option><option value="stars-desc">{chinese ? '星标最多' : 'Most stars'}</option><option value="added-desc">{chinese ? '最新收录' : 'Recently added'}</option></select>
+      <select aria-label={chinese ? '排序' : 'Sort'} value={sort} onChange={e => setSort(e.target.value)}><option value="total-desc">{t(totalSortLabel)}</option><option value="downloads-desc">{t('sortDownloads')}</option><option value="stars-desc">{t('sortStars')}</option><option value="added-desc">{t('sortAdded')}</option></select>
       <Button size="sm" variant="outline" onClick={() => setCompact(!compact)}>{compact ? (chinese ? '图文' : 'Gallery') : (chinese ? '紧凑' : 'Compact')}</Button>
     </div>
     {error && <div role="alert" className={page.error}>{error}<Button size="sm" variant="outline" onClick={() => void load(true)}>{chinese ? '重试' : 'Retry'}</Button></div>}
     {!registry && loading && <p role="status">{chinese ? '正在加载插件…' : 'Loading plugins…'}</p>}
-    <div className={page.list}><div className={compact ? page.compact : css.grid}>{filtered.slice((selectedPage - 1) * 20, selectedPage * 20).map(p => <article key={p.url} data-market-card className={`${css.card}${compact ? ` ${css.compactCard}` : ''}`}>
+    <div className={page.list} ref={listRef}><div className={compact ? page.compact : css.grid}>{filtered.slice((selectedPage - 1) * 20, selectedPage * 20).map(p => <article key={p.url} data-market-card data-market-key={p.url} className={`${css.card}${compact ? ` ${css.compactCard}` : ''}`}>
       <div className={css.cardContent}><div className={css.nm}><button className={css.nameButton} onClick={() => { setBeta(false); setConfirming(p) }}>{pluginName(p.name)}</button><a className={css.projectLinkIcon} href={p.url} target="_blank" rel="noreferrer" aria-label={t('openProject')}><IconLinkOutline14 size={13} /></a></div>
-        <div className={css.byline}><span className={css.owner}>{p.owner}</span>{p.npm && <DownloadCount name={p.npm} chinese={chinese} className={css.star} />}{typeof p.stars === 'number' && <span className={css.star} title="GitHub stars">· ★ {formatCount(p.stars)}</span>}</div>
+        <div className={css.byline}><span className={css.owner}>{p.owner}</span>{p.npm && <DownloadCount name={p.npm} chinese={chinese} className={css.star} totals={downloadTotals} totalsSettled={downloadTotalsState !== 'loading'} />}{typeof p.stars === 'number' && <span className={css.star} title="GitHub stars">· ★ {formatCount(p.stars)}</span>}</div>
         <div className={css.desc}>{localizedText(p.description, lang)}</div>{p.deprecated && <span className={css.depBadge}>{t('deprecatedBadge')}</span>}
       </div>
       <CardPreview plugin={p} t={t} onOpen={(shots, index) => setPreview({shots,index})} />
