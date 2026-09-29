@@ -1,0 +1,35 @@
+{
+  "version": "0.8.1",
+  "zh": {
+    "summary": "修复从 0.7.x 升级后默认插件未刷新的问题，并改进插件市场与设置页。",
+    "highlights": [
+      "修复升级后旧版默认插件（会话管理、图片查看器）没有刷新、在官方 DSH 0.2.0-rc.1 下显示“不兼容”的问题；升级验收现在会检查插件版本和刷新结果。",
+      "插件市场默认按累计下载量排序（npm 近 364 天累计），排序与卡片上的数字同源；暂无统计的条目排在后面。",
+      "首次安装、尚未在设置里选过语言时，界面语言跟随 Windows 的首选语言；设置里的选择仍然优先。",
+      "设置页：检查更新的结果显示在对应区块内，“运行检查”按钮与反馈链接的样式和间距统一。"
+    ],
+    "upgradeNotes": [
+      "已升到 0.8.0 且插件页显示“不兼容”的用户：升级到 0.8.1 后首次启动会自动离线把默认插件刷新为会话管理 1.5.3 与图片查看器 0.1.4，会话、设置和凭据保留。内核仍是官方 DSH 0.2.0-rc.1（预发布候选）。"
+    ],
+    "knownIssues": [
+      "完整多屏与混合 DPI 硬件组合、物理断电恢复以及 120 分钟长时间运行专项尚未完成本版本验收。",
+      "官方自动化任务 Schedule 作为可选插件包提供，Portable 默认 profile 未启用。"
+    ]
+  },
+  "en": {
+    "summary": "Fix default plugins not refreshing after upgrading from 0.7.x, and improve the plugin market and Settings.",
+    "highlights": [
+      "Fix the default plugins (Session Manager, Image Viewer) staying on old versions after an upgrade and showing as incompatible with official DSH 0.2.0-rc.1; upgrade qualification now checks plugin versions and the refresh result.",
+      "The plugin market now sorts by cumulative downloads by default (npm, last 364 days); the ranking uses the same numbers shown on the cards, and entries without statistics come last.",
+      "On a fresh install, before a language is chosen in Settings, the interface follows the preferred Windows language; a choice made in Settings still takes precedence.",
+      "Settings: update-check results appear inside their own section, and the Run check button and feedback links are styled and spaced consistently."
+    ],
+    "upgradeNotes": [
+      "If you are on 0.8.0 and the plugins page shows incompatible plugins, the first start of 0.8.1 refreshes the default plugins offline to Session Manager 1.5.3 and Image Viewer 0.1.4; sessions, settings, and credentials are retained. The core is still official DSH 0.2.0-rc.1, a prerelease candidate."
+    ],
+    "knownIssues": [
+      "The complete multi-monitor/mixed-DPI hardware matrix, physical power-loss recovery, and the 120-minute long-run soak have not completed qualification for this version.",
+      "Official Schedule automation is supplied as an optional plugin bundle and is not enabled in the Portable default profile."
+    ]
+  }
+}
