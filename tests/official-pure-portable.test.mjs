@@ -43,7 +43,7 @@ test('updated-copy filename, protocol link whitelist and launcher protocol comma
   assert.match(source, /1\.0\.0-alpha\.4/);
 });
 
-test('follow and accepted-index URL policy rejects downgrade and host/path confusion', () => {
+test('follow and accepted-index URL policy rejects downgrade and host/path confusion', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, () => {
   const good = { version: '0.2.0-rc.3', installerUrl: 'https://download.deepseek.com/dsh-desk/bin/win-x64/app.exe', sha512: Buffer.alloc(64).toString('base64'), size: 289313640 };
   const source = `
     ${psModule}
@@ -64,7 +64,7 @@ test('follow and accepted-index URL policy rejects downgrade and host/path confu
   assert.deepEqual(checks, { valid: true, missingRejected: true, duplicateRejected: true });
 });
 
-test('PowerShell app-update.yml rewrite matches phase-1 contract semantics', () => {
+test('PowerShell app-update.yml rewrite matches phase-1 contract semantics', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, () => {
   const source = [
     'provider: generic', 'url: https://updates.example.test/', 'channel: nightly',
     'publisherName: old publisher', '  nested: remove me', 'updaterCacheDirName: old-cache', 'custom: keep', '',
@@ -77,7 +77,7 @@ test('PowerShell app-update.yml rewrite matches phase-1 contract semantics', () 
   assert.doesNotMatch(actual, /^publisherName:/m);
 });
 
-test('archive path and version-retention PowerShell helpers enforce extraction boundaries', () => {
+test('archive path and version-retention PowerShell helpers enforce extraction boundaries', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, () => {
   const script = `${psModule}
     Assert-ArchiveEntryPath 'resources/app.asar';
     foreach($bad in @('../escape','resources/../../escape','C:\\absolute','foo:bar','trailing. ')){ try { Assert-ArchiveEntryPath $bad; throw "accepted $bad" } catch { if ($_.Exception.Message -like 'accepted *') { throw } } }
