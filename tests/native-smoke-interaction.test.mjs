@@ -21,9 +21,16 @@ test('late API Key onboarding is dismissed without touching unrelated dialogs', 
   modal.textContent = '预览版说明'
   assert.equal(vm.runInNewContext(expression, context).terminal, false, 'preview notice is not the final onboarding step')
   assert.equal(clicks, 3)
+  modal.textContent = 'A brand new official notice'
+  assert.equal(vm.runInNewContext(expression, context).terminal, false, 'an unnamed acknowledgement dialog is dismissed')
+  assert.equal(clicks, 4)
+  button.textContent = 'Delete'
   modal.textContent = 'Confirm deleting your session'
   assert.equal(vm.runInNewContext(expression, context), false)
-  assert.equal(clicks, 3)
+  const cancel = { textContent: 'Continue', disabled: false, closest: () => null, click: () => clicks++ }
+  modal.querySelectorAll = () => [cancel, button]
+  assert.equal(vm.runInNewContext(expression, context), false, 'a dialog that offers a choice is never dismissed')
+  assert.equal(clicks, 4)
 })
 
 test('native acceptance waits for an actionable control after a tab change', async () => {
