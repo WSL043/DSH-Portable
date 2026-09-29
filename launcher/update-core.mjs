@@ -368,10 +368,9 @@ export async function cleanStaleUpdateOperationDirectories(layout, { now = Date.
     return { removed: [], deferred: true, reason: 'unsafe-update-root' }
   }
 
+  // Ancestors may legitimately be links (macOS /var, Windows short names, a folder reached through a
+  // symlink); the root itself was checked above, and every candidate below is built from the real path.
   const canonicalRoot = await realpath(updateRoot)
-  if (path.relative(updateRoot, canonicalRoot) || path.relative(canonicalRoot, updateRoot)) {
-    return { removed: [], deferred: true, reason: 'symlinked-update-root' }
-  }
   let protectedOperationId = null
   try {
     const journal = JSON.parse(await readFile(layout.updateJournal, 'utf8'))
