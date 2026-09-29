@@ -237,10 +237,14 @@ function Close-CurrentOfficial([int]$ProbePort, [string]$Stage) {
         $script:UiProcess.WaitForExit()
         if ($script:UiProcess.ExitCode -ne 0) { throw ('CDP Browser.close failed: ' + (Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue)) }
     } else {
+        $closedAny = $false
         foreach ($app in @(Get-PrimaryVersionProcesses $script:NewVersion)) {
             $windowProcess = Get-Process -Id ([int]$app.ProcessId) -ErrorAction SilentlyContinue
-            if ($null -ne $windowProcess -and -not $windowProcess.CloseMainWindow()) { throw 'Updated official app did not accept a normal main-window close' }
+            if ($null -eq $windowProcess -or $windowProcess.MainWindowHandle -eq [IntPtr]::Zero) { continue }
+            if (-not $windowProcess.CloseMainWindow()) { throw 'Updated official app did not accept a normal main-window close' }
+            $closedAny = $true
         }
+        if (-not $closedAny) { throw 'Updated official app has no main window to close normally' }
     }
     $end = [DateTime]::UtcNow.AddSeconds(40)
     if ($end -gt $script:Deadline) { $end = $script:Deadline }
@@ -320,7 +324,7 @@ function Test-ProtocolOwnedStable([string]$Version) {
     for ($i = 0; $i -lt 4; $i++) {
         $snapshot = Get-ProtocolSnapshot
         $samples.Add($snapshot)
-        if (-not $snapshot.valueExists -or [string]$snapshot.value -cne [string]$script:ProtocolExpected) { return [pscustomobject]@{ passed = $false; samples = @($samples); expected = $script:ProtocolExpected; launcherPath = (Join-Path $script:PortableRoot 'DeepSeek Harness Portable.exe') } }
+        if (-not $snapshot.valueExists -or [string]$snapshot.value -cne [string]$script:ProtocolExpected) { return [pscustomobject]@{ passed = $false; samples = $samples.ToArray(); expected = $script:ProtocolExpected; launcherPath = (Join-Path $script:PortableRoot 'DeepSeek Harness Portable.exe') } }
         if ($i -lt 3) { Start-Sleep -Seconds 1 }
     }
     $launcherPath = Join-Path $script:PortableRoot 'DeepSeek Harness Portable.exe'
@@ -345,7 +349,7 @@ function Test-ProtocolOwnedStable([string]$Version) {
     $errorTitles = @($ownedWindowTitles | Where-Object { [string]$_.title -match '(?i)(error|exception|failed|错误|失败|出错|another DSH|另一个 DSH)' })
     $noErrorDialog = $null -eq $linkError -and $beforeLaunchers.Count -gt 0 -and $addedLaunchers.Count -eq 0 -and $addedApps.Count -eq 0 -and $errorTitles.Count -eq 0
     $link = [pscustomobject]@{ uri = 'dsh://t27-e2e-probe'; launchError = $linkError; beforeOfficialPids = $beforeAppIds; afterOfficialPids = @($afterApps | ForEach-Object { [int]$_.ProcessId }); newOfficialProcesses = @($addedApps | Select-Object ProcessId, ExecutablePath, CommandLine); beforeLauncherPids = $beforeLauncherIds; afterLauncherPids = @($afterLaunchers | ForEach-Object { [int]$_.ProcessId }); newLauncherProcesses = @($addedLaunchers | Select-Object ProcessId, ExecutablePath, CommandLine); ownedWindowTitles = $ownedWindowTitles; errorTitleWindows = $errorTitles; noNewOfficialInstance = $noNewOfficialInstance; noErrorDialog = $noErrorDialog; passed = ($noNewOfficialInstance -and $noErrorDialog) }
-    [pscustomobject]@{ passed = ($link.passed); samples = @($samples); expected = $script:ProtocolExpected; launcherPath = $launcherPath; linkHandoff = $link }
+    [pscustomobject]@{ passed = ($link.passed); samples = $samples.ToArray(); expected = $script:ProtocolExpected; launcherPath = $launcherPath; linkHandoff = $link }
 }
 
 function Copy-E2EEvidence {
@@ -395,7 +399,7 @@ try {
         throw 'CandidateOld must be the repository official 0.1.7-rc.2 candidate'
     }
     if ([string]::IsNullOrWhiteSpace($script:NewVersion) -or $script:NewVersion -ceq $script:OldVersion) { throw 'CandidateNew must be a different real official version' }
-    if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'crash-stub.cs') -PathType Leaf)) { throw 'The rollback crash stub source is missing' }
+    if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'CrashStub.cs') -PathType Leaf)) { throw 'The rollback crash stub source is missing' }
 
     Import-Module (Join-Path $PSScriptRoot '..\Payload.psm1') -Force
     $oldIdentity = [pscustomobject]@{ version = $oldCandidate.version; installerUrl = $oldCandidate.url; sha512 = $oldCandidate.sha512; size = $oldCandidate.size }
@@ -690,7 +694,7 @@ try {
         feedUrl = $script:FeedUrl
         indexUrl = $script:IndexUrl
         workRoot = $script:WorkPath
-        stages = @($script:Stages)
+        stages = $script:Stages.ToArray()
     }
     try {
         if (-not $script:Node) { $script:Node = Find-Node }
@@ -707,7 +711,7 @@ try {
     } catch {
         $script:ExitCode = 1
         $fallbackResults = @($script:Ids | ForEach-Object { [pscustomobject]@{ id = $_; passed = $false; evidence = 'Report generation failed' } })
-        $fallback = [ordered]@{ oldVersion = $script:OldVersion; newVersion = $script:NewVersion; overallPassed = $false; results = $fallbackResults; outsideWriteDifferences = $script:OutsideWriteDifferences; diagnostics = @{ failure = $script:Failure; reportError = $_.Exception.Message; stages = @($script:Stages) } }
+        $fallback = [ordered]@{ oldVersion = $script:OldVersion; newVersion = $script:NewVersion; overallPassed = $false; results = $fallbackResults; outsideWriteDifferences = $script:OutsideWriteDifferences; diagnostics = @{ failure = $script:Failure; reportError = $_.Exception.Message; stages = $script:Stages.ToArray() } }
         try { Write-JsonFile (Join-Path $script:EvidenceRoot 'pure-e2e-report.json') $fallback } catch {}
     }
     if ($script:Failure) { Write-Output ('E2E failure: ' + $script:Failure) }
