@@ -279,9 +279,9 @@ try {
     $script:ProbeUi.WaitForExit()
     if (Test-Path -LiteralPath $uiResultPath) {
         $ui = Get-Content -LiteralPath $uiResultPath -Raw | ConvertFrom-Json
-        $script:Input.updateDialogShown = ($ui.updateDialogShown -eq $true)
+        $script:Input.updateDialogShown = ($ui.PSObject.Properties.Name -contains 'updateDialogShown' -and $ui.updateDialogShown -eq $true)
         $uiError = if ($ui.PSObject.Properties.Name -contains 'error') { $ui.error } else { $null }
-        $script:Input.updateDialogEvidence = [pscustomobject]@{ dialogText = $ui.dialogText; updateEntry = $ui.updateEntry; installButton = $ui.installButton; error = $uiError }
+        $script:Input.updateDialogEvidence = [pscustomobject]@{ dialogText = $(if ($ui.PSObject.Properties.Name -contains 'dialogText') { $ui.dialogText } else { $null }); updateEntry = $(if ($ui.PSObject.Properties.Name -contains 'updateEntry') { $ui.updateEntry } else { $null }); installButton = $(if ($ui.PSObject.Properties.Name -contains 'installButton') { $ui.installButton } else { $null }); error = $uiError }
     }
     if ($script:ProbeUi.ExitCode -ne 0) { throw "UI contract probe failed (exit $($script:ProbeUi.ExitCode)): $($script:Input.updateDialogEvidence.error)" }
 

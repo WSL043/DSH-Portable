@@ -93,6 +93,15 @@ try {
   client.close();
 } catch (error) {
   evidence.error = String(error);
+  // Show what the app was actually displaying so a failed run on a clean machine can be diagnosed.
+  try {
+    evidence.targets = [];
+    for (const target of (await targets()).filter(item => item.type === 'page')) {
+      const entry = { url: target.url, title: target.title };
+      try { const view = await connect(target); entry.text = String(await view.evaluate('document.body ? document.body.innerText.slice(0, 1500) : ""')); view.close(); } catch (probeError) { entry.error = String(probeError); }
+      evidence.targets.push(entry);
+    }
+  } catch {}
   try { await writeFile(resultPath, `${JSON.stringify(evidence, null, 2)}\n`); } catch {}
   process.exitCode = 1;
 } finally {
