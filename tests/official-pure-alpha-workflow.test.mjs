@@ -18,7 +18,48 @@ test('alpha.4 workflow parses, uses production channel constants, smoke-tests, a
   const selector = await readFile(new URL('../experiments/official-payload/channel/select-candidate.mjs', import.meta.url), 'utf8');
   assert.match(selector, /redirect:\s*'follow'/);
   assert.match(source, /-FeedUrl \$urls\.channelBaseUrl[\s\S]*-IndexUrl \$urls\.indexUrl/);
-  assert.match(source, /smoke-package\.ps1/);
+  assert.match(source, /smoke-alpha-seeded\.ps1/);
   assert.match(source, /--draft/);
   assert.doesNotMatch(source, /--prerelease|--latest\b/);
+});
+
+test('alpha.4 pins the two default plugin sources and packages their asserted CI-built versions', async () => {
+  const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
+  const source = await readFile(file, 'utf8');
+  const workflow = yaml.load(source);
+  assert.match(workflow.env.IMAGE_VIEWER_COMMIT, /^[0-9a-f]{40}$/);
+  assert.match(workflow.env.CHAT_MANAGER_COMMIT, /^[0-9a-f]{40}$/);
+  assert.equal(workflow.env.IMAGE_VIEWER_VERSION, '0.1.5');
+  assert.equal(workflow.env.CHAT_MANAGER_VERSION, '1.5.4');
+  const pluginCheckouts = workflow.jobs.package.steps.filter(step => step.uses === 'actions/checkout@v7' && step.with?.repository);
+  assert.deepEqual(pluginCheckouts.map(step => [step.with.repository, step.with.ref]), [
+    ['${{ env.IMAGE_VIEWER_REPOSITORY }}', '${{ env.IMAGE_VIEWER_COMMIT }}'],
+    ['${{ env.CHAT_MANAGER_REPOSITORY }}', '${{ env.CHAT_MANAGER_COMMIT }}'],
+  ]);
+  assert.match(source, /version = \$env:IMAGE_VIEWER_VERSION/);
+  assert.match(source, /version = \$env:CHAT_MANAGER_VERSION/);
+  assert.match(source, /\[string\]\$manifest\.version -cne \[string\]\$target\.version/);
+  assert.match(source, /dsh-image-viewer-' \+ \$env:IMAGE_VIEWER_VERSION \+ '\.tgz/);
+  assert.match(source, /dsh-chat-manager-' \+ \$env:CHAT_MANAGER_VERSION \+ '\.tgz/);
+  assert.doesNotMatch(source, /dsh-image-viewer-0\.1\.5\.tgz|dsh-chat-manager-1\.5\.4\.tgz/);
+  assert.match(source, /pnpm run test:behavior/);
+  assert.match(source, /pnpm run build/);
+  assert.match(source, /pnpm pack --pack-destination/);
+  assert.equal((source.match(/-SeedPlugin\b/g) ?? []).length, 2);
+});
+
+test('alpha.4 failure evidence upload excludes the official payload', async () => {
+  const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
+  const workflow = yaml.load(await readFile(file, 'utf8'));
+  const steps = workflow.jobs.package.steps;
+  const evidence = steps.find(step => step.with?.name === 'official-pure-alpha-4-seed-smoke-evidence');
+  assert.ok(evidence);
+  assert.equal(evidence.if, 'always()');
+  assert.equal(evidence.with.path, 'build/orch-080/T32/evidence/');
+  assert.doesNotMatch(evidence.with.path, /\.zip|(?:^|\/)package(?:\/|$)|(?:^|\/)app(?:\/|$)/i);
+  const releaseAssets = steps.find(step => step.with?.name === 'official-pure-alpha-4-draft-assets');
+  assert.ok(releaseAssets);
+  assert.equal(releaseAssets.if, 'success()');
+  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.4-windows-x64\.zip/);
+  assert.match(releaseAssets.with.path, /smoke-root-moved\/smoke-report\.json/);
 });

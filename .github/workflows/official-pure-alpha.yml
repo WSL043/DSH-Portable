@@ -123,8 +123,8 @@ jobs:
           if (-not $urls.channelBaseUrl -or -not $urls.indexUrl) { throw 'Production channel constants are unavailable' }
           $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
           if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw 'GitHub Windows runner 7-Zip is required' }
-          $imageViewer = Join-Path $env:GITHUB_WORKSPACE 'build/orch-080/T32/packages/dsh-image-viewer/dsh-image-viewer-0.1.5.tgz'
-          $chatManager = Join-Path $env:GITHUB_WORKSPACE 'build/orch-080/T32/packages/dsh-chat-manager/dsh-chat-manager-1.5.4.tgz'
+          $imageViewer = Join-Path $env:GITHUB_WORKSPACE ('build/orch-080/T32/packages/dsh-image-viewer/dsh-image-viewer-' + $env:IMAGE_VIEWER_VERSION + '.tgz')
+          $chatManager = Join-Path $env:GITHUB_WORKSPACE ('build/orch-080/T32/packages/dsh-chat-manager/dsh-chat-manager-' + $env:CHAT_MANAGER_VERSION + '.tgz')
           ./experiments/official-payload/package-pure.ps1 `
             -Installer $env:INSTALLER `
             -Output 'build/orch-080/T32/package' `
@@ -171,8 +171,8 @@ jobs:
             build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip
             build/orch-080/T32/checksums.txt
             build/orch-080/T32/SOURCE.md
-            build/orch-080/T32/smoke-root/smoke-report.json
-            build/orch-080/T32/smoke-root/smoke-page.json
+            build/orch-080/T32/smoke-root-moved/smoke-report.json
+            build/orch-080/T32/smoke-root-moved/smoke-page.json
           if-no-files-found: warn
           retention-days: 14
 
