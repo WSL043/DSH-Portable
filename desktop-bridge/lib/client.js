@@ -945,7 +945,7 @@ window.__ModuleLoader__.load({
             h('div', { style: styles.hint }, t('maintenanceHint')),
             inlineStatus('maintenance')),
           h('div', { style: styles.rowActions },
-            h(primitives.Button, { size: 'sm', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
+            h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy), onClick: () => action('doctor', '/dsh-portable/doctor') }, busy === 'doctor' ? t('checking') : t('check')),
             maintenanceMenu)))
       const privatePasswordMismatch = privatePasswordConfirm.length > 0 && privatePassword !== privatePasswordConfirm
       const environmentCreateDialog = environmentDialog ? h(primitives.Modal, {
@@ -1033,14 +1033,14 @@ window.__ModuleLoader__.load({
         careSection,
         h('section', { style: styles.section, 'aria-label': t('community') },
           h('div', { style: styles.sectionHeading }, t('community')),
-          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '12px 20px' } },
+          h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px 20px', marginTop: 4, fontSize: 13, lineHeight: '20px' } },
             ...[
               ['repository', 'https://github.com/WSL043/DSH-Portable'],
               ['reportProblem', 'https://github.com/WSL043/DSH-Portable/issues/new/choose'],
               ['suggestIdea', 'https://github.com/WSL043/DSH-Portable/discussions/new'],
               ['starProject', 'https://github.com/WSL043/DSH-Portable'],
             ].map(([key, href]) => h('a', { key, href, target: '_blank', rel: 'noopener noreferrer', style: { color: 'inherit', textUnderlineOffset: '3px' } }, t(key)))),
-          h('div', { style: styles.hint }, t('communityHint'))),
+          h('div', { style: { ...styles.hint, marginTop: 8 } }, t('communityHint'))),
         environmentCreateDialog,
         exportDialog,
         privateDialog,
