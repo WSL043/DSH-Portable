@@ -29,7 +29,7 @@ function Catalog({ ctx, onInstall, onManage }: { ctx: any; onInstall: (spec:stri
   const [bundles, setBundles] = useState<any[]>([])
   const [error, setError] = useState('')
   const [query, setQuery] = useState(''), [category, setCategory] = useState('all')
-  const [sort, setSort] = useState('stars-desc'), [current, setCurrent] = useState(1)
+  const [sort, setSort] = useState('downloads-desc'), [current, setCurrent] = useState(1)
   const [compact, setCompact] = useState(false)
   const [loading, setLoading] = useState(false)
   const [confirming, setConfirming] = useState<RegistryPlugin | null>(null)
@@ -77,7 +77,7 @@ function Catalog({ ctx, onInstall, onManage }: { ctx: any; onInstall: (spec:stri
     <div className={page.filters}>
       <input aria-label={t('searchPh')} placeholder={t('searchPh')} value={query} onChange={e => setQuery(e.target.value)} />
       <select aria-label={chinese ? '分类' : 'Category'} value={category} onChange={e => setCategory(e.target.value)}><option value="all">{t('all')}</option>{Object.entries(registry?.categories ?? {}).map(([key, value]) => <option key={key} value={key}>{localizedText(value, lang)}</option>)}</select>
-      <select aria-label={chinese ? '排序' : 'Sort'} value={sort} onChange={e => setSort(e.target.value)}><option value="stars-desc">{chinese ? '星标最多' : 'Most stars'}</option><option value="added-desc">{chinese ? '最新收录' : 'Recently added'}</option></select>
+      <select aria-label={chinese ? '排序' : 'Sort'} value={sort} onChange={e => setSort(e.target.value)}><option value="downloads-desc">{chinese ? '近 30 天下载最多' : 'Most downloads (30 days)'}</option><option value="stars-desc">{chinese ? '星标最多' : 'Most stars'}</option><option value="added-desc">{chinese ? '最新收录' : 'Recently added'}</option></select>
       <Button size="sm" variant="outline" onClick={() => setCompact(!compact)}>{compact ? (chinese ? '图文' : 'Gallery') : (chinese ? '紧凑' : 'Compact')}</Button>
     </div>
     {error && <div role="alert" className={page.error}>{error}<Button size="sm" variant="outline" onClick={() => void load(true)}>{chinese ? '重试' : 'Retry'}</Button></div>}

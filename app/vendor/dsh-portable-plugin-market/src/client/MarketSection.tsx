@@ -355,6 +355,7 @@ function sameInstalledMap(left: InstalledMap, right: InstalledMap): boolean {
 
 /** Sort field choices in the filter panel. */
 const SORT_FIELD_OPTIONS: ReadonlyArray<{ key: SortField; label: string }> = [
+  { key: 'downloads', label: 'sortDownloads' },
   { key: 'stars', label: 'sortStars' },
   { key: 'added', label: 'sortAdded' },
 ]
@@ -583,9 +584,10 @@ export function MarketSection(props: MarketSectionProps) {
   const [restarting, setRestarting] = useState(false)
   const [showTop, setShowTop] = useState(false)
   const bodyRef = useRef<HTMLDivElement | null>(null)
-  // Lifetime counts load only for visible cards. Do not pretend a monthly
-  // catalog ranking is a total-download ranking, or rank a partially loaded set.
-  const [sortField, setSortField] = useState<SortField>('stars')
+  // Default to the catalog's 30-day npm downloads (labelled as such). Card badges
+  // show lifetime totals, so never present this ranking as a lifetime ranking;
+  // entries without a catalog count sort after every entry that has one.
+  const [sortField, setSortField] = useState<SortField>('downloads')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   /** Direction labels adapt to the field: stars → asc/desc, added → oldest/newest. */
   const sortDirLabel = (dir: SortDir): string =>
@@ -1529,9 +1531,9 @@ export function MarketSection(props: MarketSectionProps) {
     else if (id.startsWith('time:')) setTimeRange(id.slice(5) as TimeRange)
   }
 
-  const filterCount = Number(sortField !== 'stars') + Number(sortDir !== 'desc') + Number(timeRange !== 'all')
+  const filterCount = Number(sortField !== 'downloads') + Number(sortDir !== 'desc') + Number(timeRange !== 'all')
   const hasConditions = filterCount > 0 || cat !== 'all' || q.trim() !== ''
-  const sortSummary = t(sortField === 'stars' ? 'sortStars' : 'sortAdded') + ' · ' + t(sortDirLabel(sortDir))
+  const sortSummary = t(sortField === 'downloads' ? 'sortDownloads' : sortField === 'stars' ? 'sortStars' : 'sortAdded') + ' · ' + t(sortDirLabel(sortDir))
   const resetConditions = () => { setQ(''); setCat('all'); setSortField('stars'); setSortDir('desc'); setTimeRange('all'); setFilterOpen(false) }
 
   /** The catalog entry a deprecated plugin's `replacement` names, if any. */
