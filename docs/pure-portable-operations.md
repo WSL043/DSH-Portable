@@ -6,6 +6,8 @@
 - 新身份先验证官方安装包大小、SHA-512、Authenticode 发布者及 NSIS 展开，再依次通过阶段 1 更新契约哨兵和阶段 2 的真实旧版到新版升级验收。
 - 仅两个门槛都报告 `overallPassed: true` 才生成并发布索引、`nightly.yml` 与启动器副本。用户仍从官方更新界面升级，程序下载官方安装包。
 - `official-pure-alpha.yml` 只在手动 dispatch 后打包、解压冒烟并更新 `v1.0.0-alpha.4` 草稿；不会替代稳定 Native 线。
+- alpha.4 随包预装 `dsh-image-viewer@0.1.5` 与 `dsh-chat-manager@1.5.4`，两个插件默认关闭。源码仓库与固定提交、期望版本集中在 `.github/workflows/official-pure-alpha.yml` 顶部 `env`；升级时同步更新对应的 `*_COMMIT` 与 `*_VERSION`，工作流会断言各自 `package.json` 版本，并按插件 CI 的构建/打包步骤生成 tgz。
+- alpha.4 的 CI 冒烟要求首次启动成功、第二次启动完成两个插件播种并保持健康，之后用官方 `--dump-config` 检查关闭状态及整根搬动后的相对路径。配置和本地证据不等于 GitHub Windows runner 验收；CI 运行前不宣称通过。
 - 这些工作流目前等待 GitHub Windows runner 首次验证；配置存在不代表阶段 3 已验收。
 
 ## 需要人工介入的情况

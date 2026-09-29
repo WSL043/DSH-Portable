@@ -117,6 +117,8 @@ macOS：官方有桌面端，同架构可移植，另立阶段。Linux：官方�
 ### 预装默认插件（开发线）
 
 - 可选随包携带已审阅的插件 `.tgz` 与 `launcher/seed/seed.json`；不传种子参数时打包行为保持不变。
+- alpha.4 包含 `dsh-image-viewer@0.1.5` 与 `dsh-chat-manager@1.5.4` 两个预装插件，均默认关闭。两个源码仓库、固定提交 SHA 与期望版本常量位于 `.github/workflows/official-pure-alpha.yml` 顶部 `env`；升级插件时同步更新对应 `*_COMMIT` 和 `*_VERSION`，并保留工作流的 `package.json` 版本断言。
+- alpha.4 Windows CI 会沿用插件仓库的安装、行为测试、构建及 `pnpm pack` 流程生成种子包；冒烟覆盖第一次启动、第二次启动播种和健康检查、`probe` profile 的 disabled dump，以及整根搬动后的再次 dump。该工作流尚待 runner 执行，本地脚本和静态测试不构成 CI 验收。
 - 启动器只在官方 `desktop` profile 已存在、未记录该插件且无官方进程时，在启动官方应用前调用官方 `dsh.cmd plugin add`。
 - 首次启动创建 profile，因此预装插件在第二次启动前播种；这是预期时序。
 - 官方 `plugin add` 自动将包名加入 `dsh.profile.bundles`；种子脚本不手改 bundles。归档保留在 profile 的 `seed/`，依赖及 `pnpm-lock.yaml` specifier 使用 `file:./seed/...`，`.modules.yaml` 的虚拟存储路径为相对 `.pnpm`；patch 条目默认 `disabled: true`。
