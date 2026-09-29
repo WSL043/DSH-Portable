@@ -689,7 +689,7 @@ test('native hosts preserve only safe on-screen window placement in product data
   assert.match(windowsHost, /RestoreDesktopWindowState/)
   assert.match(windowsHost, /RestoreBounds/)
   assert.match(windowsHost, /Screen\.AllScreens/)
-  assert.match(windowsHost, /Rectangle\.Intersect/)
+  assert.match(windowsHost, /ClampRestoredBounds\(bounds,\s*workAreas,\s*MinimumSize\)/)
 
   assert.match(macHost, /window-state\.json/)
   assert.match(macHost, /saveWindowFrame/)
@@ -697,4 +697,87 @@ test('native hosts preserve only safe on-screen window placement in product data
   assert.match(macHost, /NSScreen\.screens/)
   assert.match(macHost, /visibleFrame\.intersection/)
   assert.match(macHost, /options:\s*\.atomic/)
+})
+
+function clampRestoredBounds(saved, workAreas, minimum) {
+  let selected = workAreas[0]
+  let largestIntersection = 0
+  for (const area of workAreas) {
+    const overlapWidth = Math.max(0, Math.min(area.x + area.width, saved.x + Math.max(0, saved.width)) - Math.max(area.x, saved.x))
+    const overlapHeight = Math.max(0, Math.min(area.y + area.height, saved.y + Math.max(0, saved.height)) - Math.max(area.y, saved.y))
+    const intersection = overlapWidth * overlapHeight
+    if (intersection > largestIntersection) {
+      selected = area
+      largestIntersection = intersection
+    }
+  }
+  const width = Math.min(Math.max(Math.max(1, saved.width), Math.max(1, minimum.width)), selected.width)
+  const height = Math.min(Math.max(Math.max(1, saved.height), Math.max(1, minimum.height)), selected.height)
+  return {
+    x: Math.max(selected.x, Math.min(saved.x, selected.x + selected.width - width)),
+    y: Math.max(selected.y, Math.min(saved.y, selected.y + selected.height - height)),
+    width,
+    height,
+  }
+}
+
+test('Windows restore uses a pure clamp helper and targets the selected monitor before maximizing', async () => {
+  const source = await read('launcher/windows/LauncherWindow.Data.cs')
+  const helperStart = source.indexOf('private static Rectangle ClampRestoredBounds(')
+  const restoreStart = source.indexOf('private void RestoreDesktopWindowState()')
+  assert.ok(helperStart >= 0 && restoreStart > helperStart)
+  const helper = source.slice(helperStart, restoreStart)
+  assert.match(helper, /IList<Rectangle> workAreas, Size minimumSize/)
+  assert.doesNotMatch(helper, /Screen\.|WindowState|Bounds\s*=/)
+  assert.match(helper, /largestIntersection/)
+  assert.match(source.slice(restoreStart), /OrderByDescending\(screen => screen\.Primary\)/)
+  const restore = source.slice(restoreStart, source.indexOf('private void SaveDesktopWindowState()', restoreStart))
+  assert.ok(restore.indexOf('Bounds = bounds;') < restore.indexOf('WindowState = windowStateBeforeHide;'),
+    'the clamped bounds must choose the monitor before a saved maximized state is restored')
+})
+
+test('equivalent window-boundary model covers unplugged, smaller, oversized, spanning, and negative-coordinate displays', () => {
+  // Boundary cases: secondary display unplugged; resolution becomes smaller;
+  // window larger than the screen; saved rectangle spans two screens; and a
+  // secondary monitor whose work area uses negative coordinates.
+  const cases = [
+    {
+      name: 'secondary unplugged falls back to primary',
+      saved: { x: 4000, y: 80, width: 1280, height: 820 },
+      areas: [{ x: 0, y: 0, width: 1920, height: 1040 }],
+      expected: { x: 640, y: 80, width: 1280, height: 820 },
+    },
+    {
+      name: 'smaller resolution caps restored dimensions',
+      saved: { x: 100, y: 100, width: 1600, height: 900 },
+      areas: [{ x: 0, y: 0, width: 1280, height: 720 }],
+      expected: { x: 0, y: 0, width: 1280, height: 720 },
+    },
+    {
+      name: 'oversized window shrinks to the whole work area',
+      saved: { x: 0, y: 0, width: 2560, height: 1440 },
+      areas: [{ x: 0, y: 0, width: 1024, height: 768 }],
+      expected: { x: 0, y: 0, width: 1024, height: 768 },
+    },
+    {
+      name: 'cross-display bounds choose the largest intersection',
+      saved: { x: 1200, y: 50, width: 2000, height: 900 },
+      areas: [{ x: 0, y: 0, width: 1920, height: 1080 }, { x: 1920, y: 0, width: 1280, height: 1024 }],
+      expected: { x: 1920, y: 50, width: 1280, height: 900 },
+    },
+    {
+      name: 'negative-coordinate secondary remains usable',
+      saved: { x: -1200, y: 50, width: 1600, height: 900 },
+      areas: [{ x: 0, y: 0, width: 1920, height: 1080 }, { x: -1280, y: 0, width: 1280, height: 1024 }],
+      expected: { x: -1280, y: 50, width: 1280, height: 900 },
+    },
+  ]
+  for (const item of cases) {
+    const result = clampRestoredBounds(item.saved, item.areas, { width: 900, height: 620 })
+    assert.deepEqual(result, item.expected, item.name)
+    const area = item.areas.find(candidate => result.x >= candidate.x && result.y >= candidate.y
+      && result.x + result.width <= candidate.x + candidate.width
+      && result.y + result.height <= candidate.y + candidate.height)
+    assert.ok(area, `${item.name}: restored window and draggable title bar must be fully visible`)
+  }
 })

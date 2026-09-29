@@ -688,14 +688,39 @@ namespace DshPortable
             return Path.Combine(ResolveProductDataRoot(), "window-state.json");
         }
 
-        private static bool IsSafeDesktopBounds(Rectangle bounds)
+        private static Rectangle ClampRestoredBounds(Rectangle savedBounds, IList<Rectangle> workAreas, Size minimumSize)
         {
-            if (bounds.Width < 900 || bounds.Height < 620) return false;
-            return Screen.AllScreens.Any(screen =>
+            if (workAreas == null || workAreas.Count == 0)
+                throw new ArgumentException("At least one monitor work area is required.", "workAreas");
+
+            // The caller places the primary work area first. Keeping it selected
+            // when every intersection is zero handles a removed secondary display.
+            Rectangle selected = workAreas[0];
+            long largestIntersection = 0;
+            foreach (Rectangle workArea in workAreas)
             {
-                Rectangle visible = Rectangle.Intersect(screen.WorkingArea, bounds);
-                return visible.Width >= 120 && visible.Height >= 80;
-            });
+                if (workArea.Width <= 0 || workArea.Height <= 0) continue;
+                long overlapWidth = Math.Max(0L,
+                    Math.Min((long)workArea.X + workArea.Width, (long)savedBounds.X + Math.Max(0, savedBounds.Width))
+                    - Math.Max((long)workArea.X, savedBounds.X));
+                long overlapHeight = Math.Max(0L,
+                    Math.Min((long)workArea.Y + workArea.Height, (long)savedBounds.Y + Math.Max(0, savedBounds.Height))
+                    - Math.Max((long)workArea.Y, savedBounds.Y));
+                long intersection = overlapWidth * overlapHeight;
+                if (intersection > largestIntersection)
+                {
+                    selected = workArea;
+                    largestIntersection = intersection;
+                }
+            }
+
+            int width = Math.Min(Math.Max(Math.Max(1, savedBounds.Width), Math.Max(1, minimumSize.Width)), selected.Width);
+            int height = Math.Min(Math.Max(Math.Max(1, savedBounds.Height), Math.Max(1, minimumSize.Height)), selected.Height);
+            long maxX = (long)selected.X + selected.Width - width;
+            long maxY = (long)selected.Y + selected.Height - height;
+            long x = Math.Max((long)selected.X, Math.Min((long)savedBounds.X, maxX));
+            long y = Math.Max((long)selected.Y, Math.Min((long)savedBounds.Y, maxY));
+            return new Rectangle((int)x, (int)y, width, height);
         }
 
         private void RestoreDesktopWindowState()
@@ -705,7 +730,12 @@ namespace DshPortable
                 DesktopWindowState state = json.Deserialize<DesktopWindowState>(
                     File.ReadAllText(DesktopWindowStatePath(), Encoding.UTF8));
                 Rectangle bounds = new Rectangle(state.x, state.y, state.width, state.height);
-                if (state.schemaVersion != 1 || !IsSafeDesktopBounds(bounds)) throw new InvalidDataException();
+                if (state.schemaVersion != 1 || state.width <= 0 || state.height <= 0) throw new InvalidDataException();
+                Rectangle[] workAreas = Screen.AllScreens
+                    .OrderByDescending(screen => screen.Primary)
+                    .Select(screen => screen.WorkingArea)
+                    .ToArray();
+                bounds = ClampRestoredBounds(bounds, workAreas, MinimumSize);
                 StartPosition = FormStartPosition.Manual;
                 // Saved bounds are native outer bounds. Creating a captionless
                 // Sizable handle after assigning them adds the legacy frame size.
