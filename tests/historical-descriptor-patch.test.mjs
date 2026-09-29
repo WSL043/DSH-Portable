@@ -51,13 +51,18 @@ test('0.2.0-rc.1 has a separate exact digest-bound identity', () => {
   assert.equal(identity.dshVersion, '0.2.0-rc.1')
   assert.equal(identity.sourceSha256, '1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1')
   assert.equal(identity.patchedSha256, '18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6')
-  assert.equal(descriptorV2PatchIdentityFor('0.2.0-rc.2'), null)
+  // Never-recorded versions fail closed; the intake automation appends newly reviewed versions to the allowlist.
+  assert.equal(descriptorV2PatchIdentityFor('0.2.0-rc.99'), null)
 })
 
 test('historical descriptor versions come from a unique exact-string allowlist', () => {
-  assert.deepEqual(readHistoricalDescriptorVersions(), ['0.1.7-alpha.1', '0.1.7-rc.2', '0.2.0-rc.1'])
-  for (const version of ['0.1.7-alpha.1', '0.1.7-rc.2', '0.2.0-rc.1']) {
-    assert.deepEqual(descriptorV2PatchIdentityFor(version), { ...EXPECTED_IDENTITY, dshVersion: version })
+  // The list grows when the intake automation records a same-shape version, so assert the rules, not today's contents.
+  const listed = readHistoricalDescriptorVersions()
+  for (const baseline of ['0.1.7-alpha.1', '0.1.7-rc.2', '0.2.0-rc.1']) assert.ok(listed.includes(baseline), baseline + ' stays reviewed')
+  assert.equal(new Set(listed).size, listed.length, 'entries are unique')
+  for (const version of listed) {
+    assert.match(version, /^[0-9]+[.][0-9]+[.][0-9]+(?:-[a-z]+[.][0-9]+)?$/, 'entries are exact versions')
+    if (version !== '0.2.0-rc.1') assert.deepEqual(descriptorV2PatchIdentityFor(version), { ...EXPECTED_IDENTITY, dshVersion: version })
   }
   for (const version of ['0.1.7-rc.20', '0.2.0-rc.10', '^0.2.0-rc.1', '0.2.0-*']) {
     assert.equal(descriptorV2PatchIdentityFor(version), null)
