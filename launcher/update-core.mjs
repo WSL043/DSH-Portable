@@ -787,9 +787,11 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, pr
   }
   if (!existsSync(layout.appDir)) throw new Error('The current DSH application is missing.')
 
+  let preflightWarnings = []
   if (typeof preflight === 'function') {
     onProgress({ phase: 'preflighting' })
-    await preflight({ layout, stagedRoot, metadata })
+    const result = await preflight({ layout, stagedRoot, metadata })
+    if (Array.isArray(result?.warnings)) preflightWarnings = result.warnings
   }
   onProgress({ phase: 'installing' })
 
@@ -832,7 +834,7 @@ export async function applyStagedAppUpdate({ layout, stagedRoot, healthCheck, pr
   } catch {
     cleanupPending = true
   }
-  return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
+  return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending, warnings: preflightWarnings }
 }
 
 export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback = async () => {}, onProgress = () => {} }) {
@@ -870,9 +872,11 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
     throw new Error('Staged compact runtime failed integrity verification.')
   }
 
+  let preflightWarnings = []
   if (typeof preflight === 'function') {
     onProgress({ phase: 'preflighting' })
-    await preflight({ layout, stagedRoot, metadata })
+    const result = await preflight({ layout, stagedRoot, metadata })
+    if (Array.isArray(result?.warnings)) preflightWarnings = result.warnings
   }
   onProgress({ phase: 'installing' })
 
@@ -915,7 +919,7 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
   } catch {
     cleanupPending = true
   }
-  return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending }
+  return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending, warnings: preflightWarnings }
 }
 
 export async function installAvailableAppUpdate({
@@ -981,8 +985,9 @@ export async function installAvailableAppUpdate({
     const applied = metadata.kind === 'dsh-runtime-capsule'
       ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback, onProgress })
       : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback, onProgress })
-    onProgress({ phase: 'complete', percent: 100 })
-    return { ...applied, updateKind: update.updateKind || 'product' }
+    const result = { ...applied, updateKind: update.updateKind || 'product' }
+    onProgress({ phase: 'complete', percent: 100, warnings: result.warnings ?? [] })
+    return result
   } catch (error) {
     if (!await readJson(layout.updateJournal, null)) await rm(operationRoot, { recursive: true, force: true })
     throw error

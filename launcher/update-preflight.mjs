@@ -10,6 +10,28 @@ import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule } f
 const execFileAsync = promisify(execFile)
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const PROFILE_PREFLIGHT_TIMEOUT_MS = 30000
+const DISABLED_PROFILE_PLUGIN_ROW = /^dsh: disabling profile plugin row "(?<row>[^"]+)": Plugin (?<plugin>(?:@[^/\s]+\/)?[^@\s/]+)@(?<version>[^:\s]+) is incompatible with dsh [^:\s]+: (?<reason>.+)$/
+
+function profilePluginWarnings(profile, stderr) {
+  const warnings = []
+  const seen = new Set()
+  for (const line of String(stderr ?? '').split(/\r?\n/)) {
+    const match = DISABLED_PROFILE_PLUGIN_ROW.exec(line)
+    if (!match) continue
+    const warning = {
+      profile,
+      plugin: match.groups.plugin,
+      version: match.groups.version,
+      row: match.groups.row,
+      reason: match.groups.reason.slice(0, 300),
+    }
+    const key = JSON.stringify(warning)
+    if (seen.has(key)) continue
+    seen.add(key)
+    warnings.push(warning)
+  }
+  return warnings
+}
 
 export async function discoverExistingDshProfiles(layout) {
   const profilesRoot = path.join(layout.dshHome, 'profiles')
@@ -50,7 +72,7 @@ export async function preflightStagedDshProfiles({
   cleanCaches = cleanUnusedRuntimeCaches,
 }) {
   const profiles = await discoverExistingDshProfiles(layout)
-  if (profiles.length === 0) return { status: 'skipped', profiles }
+  if (profiles.length === 0) return { status: 'skipped', profiles, warnings: [] }
 
   let runtimeRoot = stagedRoot
   let preparedCapsule = false
@@ -78,9 +100,10 @@ export async function preflightStagedDshProfiles({
       DSH_PORTABLE_DSH_VERSION: metadata.dshVersion,
       DSH_PORTABLE_DSH_COMMIT: metadata.dshCommit || '',
     }
+    const warnings = []
     for (const profile of profiles) {
       try {
-        await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
+        const result = await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
           cwd: targetLayout.workspace,
           env: environment,
           encoding: 'utf8',
@@ -88,11 +111,12 @@ export async function preflightStagedDshProfiles({
           timeout: timeoutMs,
           windowsHide: true,
         })
+        warnings.push(...profilePluginWarnings(profile, result?.stderr))
       } catch (error) {
         throw preflightFailure(profile, error)
       }
     }
-    return { status: 'passed', profiles }
+    return { status: 'passed', profiles, warnings }
   } catch (error) {
     failed = true
     throw error

@@ -47,12 +47,71 @@ test('expanded target runtime composes every existing profile without a visible 
 
     assert.equal(result.status, 'passed')
     assert.deepEqual(result.profiles, ['web'])
+    assert.deepEqual(result.warnings, [])
     assert.equal(calls.length, 1)
     assert.equal(calls[0].command, layout.nodeExe)
     assert.deepEqual(calls[0].args, [targetDsh, '--profile', 'web', '--dump-config'])
     assert.equal(calls[0].options.windowsHide, true)
     assert.equal(calls[0].options.timeout, 30000)
     assert.equal(calls[0].options.env.DSH_HOME, layout.dshHome)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('successful profile preflight reports deduplicated known disable warnings and ignores unknown stderr', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-preflight-warnings-'))
+  const layout = layoutForRoot(root)
+  const stagedRoot = path.join(root, '.dsh-portable-update', 'operation', 'staged')
+  const targetDsh = path.join(stagedRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  const reason = `peerDependencies {"@deepseek-ai/dsh":"${'x'.repeat(400)}"}`
+  const warning = `dsh: disabling profile plugin row "command-compact": Plugin @vendor/old-compact@1.2.3 is incompatible with dsh 0.2.0-rc.1: ${reason}`
+  try {
+    await mkdir(path.dirname(targetDsh), { recursive: true })
+    await writeFile(targetDsh, '// fixture\n')
+    await mkdir(path.join(layout.dshHome, 'profiles', 'web'), { recursive: true })
+    await writeFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), '{}\n')
+
+    const result = await preflightStagedDshProfiles({
+      layout,
+      stagedRoot,
+      metadata: { kind: 'dsh-app', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
+      run: async () => ({ stderr: `${warning}\n${warning}\ndsh: skipping profile bundle "other": unknown format\nnot a dsh diagnostic` }),
+    })
+
+    assert.equal(result.status, 'passed')
+    assert.deepEqual(result.warnings, [{
+      profile: 'web',
+      plugin: '@vendor/old-compact',
+      version: '1.2.3',
+      row: 'command-compact',
+      reason: reason.slice(0, 300),
+    }])
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('successful profile preflight returns an empty warning array when stderr has no known disable warning', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-update-preflight-no-warnings-'))
+  const layout = layoutForRoot(root)
+  const stagedRoot = path.join(root, '.dsh-portable-update', 'operation', 'staged')
+  const targetDsh = path.join(stagedRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+  try {
+    await mkdir(path.dirname(targetDsh), { recursive: true })
+    await writeFile(targetDsh, '// fixture\n')
+    await mkdir(path.join(layout.dshHome, 'profiles', 'web'), { recursive: true })
+    await writeFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), '{}\n')
+
+    const result = await preflightStagedDshProfiles({
+      layout,
+      stagedRoot,
+      metadata: { kind: 'dsh-app', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
+      run: async () => ({ stderr: 'ordinary diagnostic\ndsh: disabling profile plugin row malformed' }),
+    })
+
+    assert.equal(result.status, 'passed')
+    assert.deepEqual(result.warnings, [])
   } finally {
     await rm(root, { recursive: true, force: true })
   }

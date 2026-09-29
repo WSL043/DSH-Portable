@@ -866,14 +866,16 @@ async function update(options) {
         const current = readProcessState()
         if (ownedState(current)) await stop()
       },
-      onProgress: reportProgress,
+      onProgress: (event) => reportProgress(event.phase === 'complete'
+        ? { ...event, warnings: event.warnings ?? [] }
+        : event),
       onCleanupError: error => startupLog(Date.now(), 'update-operation-cleanup-failed', {
         code: error?.code || error?.name || 'unknown',
       }),
     })
     const running = await status()
     const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null
-    return { ...applied, running, browser }
+    return { ...applied, warnings: applied.warnings ?? [], running, browser }
   } catch (error) {
     await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     if (!stoppedForApply) throw error

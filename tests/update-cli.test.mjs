@@ -25,13 +25,17 @@ async function compileUpdateExtractor(output) {
   ])
 }
 
-function fakeDsh(version) {
+function fakeDsh(version, { pluginDisableWarning = false } = {}) {
+  const dumpWarning = pluginDisableWarning
+    ? `dsh: disabling profile plugin row "command-compact": Plugin @fixture/old-compact@1.2.3 is incompatible with dsh ${version}: peerDependencies {"@deepseek-ai/dsh":"^0.1.0"}\n`
+    : ''
   return `
 import http from 'node:http'
 const args = process.argv.slice(2)
 if (args.includes('--version') || args.includes('-V')) {
   console.log(${JSON.stringify(version)})
 } else if (args.includes('--dump-config')) {
+  process.stderr.write(${JSON.stringify(dumpWarning)})
   console.log('profile composed')
 } else if (args.includes('web')) {
   const port = Number(args[args.indexOf('--port') + 1])
@@ -56,7 +60,7 @@ async function makeComponentArchive(root, version, portableVersion) {
   await mkdir(path.dirname(dshBin), { recursive: true })
   await mkdir(path.dirname(bridgePatch), { recursive: true })
   await mkdir(path.join(source, 'licenses'), { recursive: true })
-  await writeFile(dshBin, fakeDsh(version))
+  await writeFile(dshBin, fakeDsh(version, { pluginDisableWarning: true }))
   await writeFile(path.join(path.dirname(path.dirname(dshBin)), 'package.json'), JSON.stringify({
     name: '@deepseek-ai/dsh', version, dependencies: {},
   }))
@@ -225,9 +229,18 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     assert.ok(progress.some((event) => event.phase === 'verifying'))
     assert.ok(progress.some((event) => event.phase === 'preflighting'))
     assert.ok(progress.some((event) => event.phase === 'installing'))
+    const warnings = [{
+      profile: 'web',
+      plugin: '@fixture/old-compact',
+      version: '1.2.3',
+      row: 'command-compact',
+      reason: 'peerDependencies {"@deepseek-ai/dsh":"^0.1.0"}',
+    }]
+    assert.deepEqual(progress.find((event) => event.phase === 'complete').warnings, warnings)
     assert.equal(hostWasRunningWhenComponentDownloaded, true)
     assert.equal(result.status, 'updated')
     assert.equal(result.dshVersion, '0.1.0-rc.7')
+    assert.deepEqual(result.warnings, warnings)
     assert.equal(JSON.parse(await readFile(path.join(root, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, portableVersion)
     assert.equal(await readFile(path.join(root, 'data', 'private-session.txt'), 'utf8'), 'keep me')
 
