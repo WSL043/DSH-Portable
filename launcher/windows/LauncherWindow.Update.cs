@@ -204,65 +204,85 @@ namespace DshPortable
 
         private async Task ApplyDesktopUpdateAsync(string scope, string manifestUrl = "")
         {
-            bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
-            string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
-            ShowDesktopOperation(engineScope
-                ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
-                : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
-            MarkTrayBridgeUnavailable();
-            string[] updateArguments = String.IsNullOrEmpty(manifestUrl)
-                ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }
-                : new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--update-manifest", manifestUrl };
-            Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(updateArguments, HandleUpdateProgress));
-            if (updated.Item1 != 0)
+            bool restoredAfterFailure = false;
+            try
             {
-                await RestoreDesktopAfterUpdateAttemptAsync();
-                string code = JsonString(updated.Item2, "code");
-                string safeDetail = RedactSensitiveText(updated.Item2);
-                WriteLauncherLog("portable-cli-error", safeDetail.Length > 4096 ? safeDetail.Substring(0, 4096) : safeDetail);
-                throw new InvalidOperationException(FriendlyPortableUpdateError(code));
+                bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
+                string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
+                ShowDesktopOperation(engineScope
+                    ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
+                    : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
+                MarkTrayBridgeUnavailable();
+                string[] updateArguments = String.IsNullOrEmpty(manifestUrl)
+                    ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }
+                    : new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--update-manifest", manifestUrl };
+                Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(updateArguments, HandleUpdateProgress));
+                if (updated.Item1 != 0)
+                {
+                    await RestoreDesktopAfterUpdateAttemptAsync();
+                    restoredAfterFailure = true;
+                    string code = JsonString(updated.Item2, "code");
+                    string safeDetail = RedactSensitiveText(updated.Item2);
+                    WriteLauncherLog("portable-cli-error", safeDetail.Length > 4096 ? safeDetail.Substring(0, 4096) : safeDetail);
+                    throw new InvalidOperationException(FriendlyPortableUpdateError(code));
+                }
+                string url = JsonString(updated.Item2, "url");
+                if (!IsTrustedLoopbackUrl(url))
+                {
+                    Tuple<int, string> status = await Task.Run(() => InvokePortableCli(new[] { "status", "--json" }));
+                    url = status.Item1 == 0 ? JsonString(status.Item2, "url") : String.Empty;
+                }
+                if (!IsTrustedLoopbackUrl(url)) throw new InvalidOperationException(L(
+                    "更新完成，但工作台没有返回可用的本地地址。请重新打开 DSH-Portable。",
+                    "The update finished, but the workspace did not return a usable local address. Reopen DSH-Portable."));
+                await NavigateDesktopAsync(url);
+                HideDesktopOperation();
+                MessageBox.Show(this,
+                    targetName + L(" 更新已完成。", " update is complete."),
+                    targetName + L(" 已更新", " updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
-            string url = JsonString(updated.Item2, "url");
-            if (!IsTrustedLoopbackUrl(url))
+            catch
             {
-                Tuple<int, string> status = await Task.Run(() => InvokePortableCli(new[] { "status", "--json" }));
-                url = status.Item1 == 0 ? JsonString(status.Item2, "url") : String.Empty;
+                if (!restoredAfterFailure) await RestoreDesktopAfterUpdateAttemptAsync();
+                throw;
             }
-            if (!IsTrustedLoopbackUrl(url)) throw new InvalidOperationException(L(
-                "更新完成，但工作台没有返回可用的本地地址。请重新打开 DSH-Portable。",
-                "The update finished, but the workspace did not return a usable local address. Reopen DSH-Portable."));
-            await NavigateDesktopAsync(url);
-            HideDesktopOperation();
-            MessageBox.Show(this,
-                targetName + L(" 更新已完成。", " update is complete."),
-                targetName + L(" 已更新", " updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
         private void StartFullPackageUpdate(string manifestUrl)
         {
-            Uri manifest;
-            if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
-                || manifest.Scheme != Uri.UriSchemeHttps
-                || !String.Equals(manifest.Host, "github.com", StringComparison.OrdinalIgnoreCase)
-                || !manifest.AbsolutePath.StartsWith("/WSL043/DSH-Portable/releases/download/v", StringComparison.Ordinal)
-                || !manifest.AbsolutePath.EndsWith("/portable-manifest.json", StringComparison.Ordinal))
-                throw new InvalidOperationException(L(
-                    "更新清单地址无效，请重新检查更新。",
-                    "The update manifest target is invalid. Check for updates again."));
-            string source = Path.Combine(root, "launcher", "DSH-FullUpdater.exe");
-            if (!File.Exists(source)) throw new FileNotFoundException(L(
-                "完整更新组件缺失，请重新安装当前版本后再试。",
-                "The full update component is missing. Reinstall this version and try again."), source);
-            string helper = Path.Combine(Path.GetTempPath(), "DSH-FullUpdater-" + Guid.NewGuid().ToString("N") + ".exe");
-            File.Copy(source, helper, false);
-            PortableProcessJob.StartDetachedUpdater(helper, new[]
+            string helper = null;
+            try
             {
-                "--upgrade-existing",
-                "--destination", root,
-                "--manifest", manifest.AbsoluteUri,
-                "--window-bounds", String.Join(",", new[] { Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))),
-                "--theme", String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light",
-            });
+                Uri manifest;
+                if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
+                    || manifest.Scheme != Uri.UriSchemeHttps
+                    || !String.Equals(manifest.Host, "github.com", StringComparison.OrdinalIgnoreCase)
+                    || !manifest.AbsolutePath.StartsWith("/WSL043/DSH-Portable/releases/download/v", StringComparison.Ordinal)
+                    || !manifest.AbsolutePath.EndsWith("/portable-manifest.json", StringComparison.Ordinal))
+                    throw new InvalidOperationException(L(
+                        "更新清单地址无效，请重新检查更新。",
+                        "The update manifest target is invalid. Check for updates again."));
+                string source = Path.Combine(root, "launcher", "DSH-FullUpdater.exe");
+                if (!File.Exists(source)) throw new FileNotFoundException(L(
+                    "完整更新组件缺失，请重新安装当前版本后再试。",
+                    "The full update component is missing. Reinstall this version and try again."), source);
+                helper = Path.Combine(Path.GetTempPath(), "DSH-FullUpdater-" + Guid.NewGuid().ToString("N") + ".exe");
+                File.Copy(source, helper, false);
+                PortableProcessJob.StartDetachedUpdater(helper, new[]
+                {
+                    "--upgrade-existing",
+                    "--destination", root,
+                    "--manifest", manifest.AbsoluteUri,
+                    "--window-bounds", String.Join(",", new[] { Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))),
+                    "--theme", String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light",
+                });
+            }
+            catch
+            {
+                if (helper != null) try { File.Delete(helper); } catch { }
+                HideDesktopOperation();
+                throw;
+            }
             ShowDesktopOperation(L(
                 "正在交给独立更新器，当前窗口将安全关闭…",
                 "Handing off to the updater; this window will close safely…"));
