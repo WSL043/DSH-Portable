@@ -310,6 +310,12 @@ try {
     if ($_.Exception.Message -like 'Preflight blocked:*') { $script:ExitCode = 1 }
     elseif ($script:ExitCode -eq 0) { $script:ExitCode = 1 }
 } finally {
+    # Keep the child-process evidence a failed run would otherwise lose with the work copy.
+    foreach ($evidenceName in @('ui-probe-stderr.log', 'feed-stderr.log', 'feed-start.jsonl', 'ui-result.json')) {
+        $evidenceSource = Join-Path $script:WorkPath $evidenceName
+        if (Test-Path -LiteralPath $evidenceSource) { Copy-Item -LiteralPath $evidenceSource -Destination (Join-Path $script:EvidenceRoot $evidenceName) -Force -ErrorAction SilentlyContinue }
+    }
+    if (-not $script:Input.requests) { $script:Input.requests = @((Get-Content -LiteralPath $script:RequestLog -ErrorAction SilentlyContinue) | Where-Object { $_ } | ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } | Where-Object { $_ }) }
     if ($script:ProbeUi -and -not $script:ProbeUi.HasExited) { Stop-Process -Id $script:ProbeUi.Id -Force -ErrorAction SilentlyContinue }
     try { Stop-ProbeProcesses } catch {
         if (-not $script:Failure) { $script:Failure = "Probe process cleanup failed: $($_.Exception.Message)" }

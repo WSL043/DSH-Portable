@@ -106,5 +106,9 @@ jobs:
             build/official-contract-probe/request-log.jsonl
             build/official-contract-probe/stub-calls.jsonl
             build/official-contract-probe/ui-probe-output.log
+            build/official-contract-probe/ui-probe-stderr.log
+            build/official-contract-probe/feed-stderr.log
+            build/official-contract-probe/feed-start.jsonl
+            build/official-contract-probe/ui-result.json
           if-no-files-found: warn
           retention-days: 14
