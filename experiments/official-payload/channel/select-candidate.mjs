@@ -5,7 +5,7 @@ import { CHANNEL_INDEX_URL } from './constants.mjs';
 
 export async function selectCandidate({ requestedVersion = '', outputDirectory }) {
   if (!outputDirectory) throw new Error('Output directory is required');
-  const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+  const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`Production channel index returned ${response.status}`);
   const text = await response.text();
   if (text.length > 1_048_576) throw new Error('Production channel index is too large');

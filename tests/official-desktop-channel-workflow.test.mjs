@@ -23,6 +23,7 @@ test('hourly channel YAML is valid, read-only until gated publishing, and least-
   assert.match(channel.on.schedule[0].cron, /^\d+ \* \* \* \*$/);
   assert.equal(CHANNEL_INDEX_URL, `${CHANNEL_BASE_URL}index.json`);
   assert.match(channel.jobs.resolve.steps.find(step => step.name?.includes('candidate and current channel index')).run, /CHANNEL_INDEX_URL/);
+  assert.match(channel.jobs.resolve.steps.find(step => step.name?.includes('candidate and current channel index')).run, /redirect:\s*'follow'/);
   for (const [name, workflow] of [['contract', contract], ['e2e', e2e]]) {
     assert.equal(workflow.permissions.contents, 'read', `${name} workflow must remain read-only`);
     assert.ok(Object.values(workflow.jobs).every(job => !Object.values(job.permissions ?? {}).includes('write')));

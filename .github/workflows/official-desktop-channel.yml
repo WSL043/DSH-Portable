@@ -43,7 +43,7 @@ jobs:
           const candidate = JSON.parse(await readFile('build/orch-080/T28/input/candidate.json', 'utf8'));
           const requested = process.env.FORCE_VERSION ?? '';
           if (requested && candidate.version !== requested) throw new Error(`force_version ${requested} is not the current official feed candidate ${candidate.version}`);
-          const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+          const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'follow', signal: AbortSignal.timeout(15000) });
           let index;
           if (response.status === 404) index = { schemaVersion: 1, versions: [] };
           else {
