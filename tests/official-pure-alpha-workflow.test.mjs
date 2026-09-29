@@ -45,7 +45,9 @@ test('alpha.4 pins the two default plugin sources and packages their asserted CI
   assert.match(source, /pnpm run test:behavior/);
   assert.match(source, /pnpm run build/);
   assert.match(source, /pnpm pack --pack-destination/);
-  assert.equal((source.match(/-SeedPlugin\b/g) ?? []).length, 2);
+  // PowerShell rejects a repeated parameter: both archives must travel in one array argument.
+  assert.equal((source.match(/-SeedPlugin\b/g) ?? []).length, 1);
+  assert.match(source, /-SeedPlugin @\(\$imageViewer, \$chatManager\)/);
 });
 
 test('alpha.4 failure evidence upload excludes the official payload', async () => {

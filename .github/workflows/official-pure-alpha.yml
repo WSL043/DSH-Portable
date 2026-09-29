@@ -132,8 +132,7 @@ jobs:
             -SevenZip $sevenZip `
             -FeedUrl $urls.channelBaseUrl `
             -IndexUrl $urls.indexUrl `
-            -SeedPlugin $imageViewer `
-            -SeedPlugin $chatManager
+            -SeedPlugin @($imageViewer, $chatManager)
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
           $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
           Compress-Archive -Path 'build/orch-080/T32/package/*' -DestinationPath $archive -CompressionLevel Optimal
