@@ -572,8 +572,10 @@ namespace DshPortable
                     attentionThisFrame.Add(session);
             }
 
-            if (completedThisFrame.Count > 0) ShowTaskCompletionNotifications(completedThisFrame);
-            if (attentionThisFrame.Count > 0) ShowTaskAttentionNotifications(attentionThisFrame);
+            List<Tuple<TrayBridgeSession, bool>> fallbackNotifications = new List<Tuple<TrayBridgeSession, bool>>();
+            if (completedThisFrame.Count > 0) ShowTaskCompletionNotifications(completedThisFrame, fallbackNotifications);
+            if (attentionThisFrame.Count > 0) ShowTaskAttentionNotifications(attentionThisFrame, fallbackNotifications);
+            if (fallbackNotifications.Count > 0) ShowTaskNotificationFallback(fallbackNotifications);
             UpdateTaskbarBadge();
 
             taskCompletionState.Clear();
@@ -608,26 +610,69 @@ namespace DshPortable
                 && ContainsFocus;
         }
 
-        private void ShowTaskCompletionNotifications(List<TrayBridgeSession> sessions)
+        private void ShowTaskCompletionNotifications(
+            List<TrayBridgeSession> sessions,
+            List<Tuple<TrayBridgeSession, bool>> fallbackNotifications)
         {
             if (sessions == null || sessions.Count == 0) return;
             trayIcon.Visible = true;
             foreach (TrayBridgeSession session in sessions.Take(3))
             {
                 notificationSessionId = session.id;
-                NativeTaskNotification.ShowCompletion(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
+                if (!NativeTaskNotification.ShowCompletion(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase)))
+                    fallbackNotifications.Add(Tuple.Create(session, false));
             }
         }
 
-        private void ShowTaskAttentionNotifications(List<TrayBridgeSession> sessions)
+        private void ShowTaskAttentionNotifications(
+            List<TrayBridgeSession> sessions,
+            List<Tuple<TrayBridgeSession, bool>> fallbackNotifications)
         {
             if (sessions == null || sessions.Count == 0) return;
             trayIcon.Visible = true;
             foreach (TrayBridgeSession session in sessions.Take(3))
             {
                 notificationSessionId = session.id;
-                NativeTaskNotification.ShowAttention(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase));
+                if (!NativeTaskNotification.ShowAttention(session, uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase)))
+                    fallbackNotifications.Add(Tuple.Create(session, true));
             }
+        }
+
+        private void ShowTaskNotificationFallback(List<Tuple<TrayBridgeSession, bool>> failures)
+        {
+            if (failures == null || failures.Count == 0) return;
+            Tuple<TrayBridgeSession, bool> preferred = failures.FirstOrDefault(item => item.Item2) ?? failures[0];
+            TrayBridgeSession session = preferred.Item1;
+            bool attention = failures.Any(item => item.Item2);
+            string title = attention
+                ? L("任务需要你处理", "Task needs your attention")
+                : L("任务已完成", "Task completed");
+            string body;
+            if (failures.Count > 1)
+            {
+                body = L(
+                    failures.Count.ToString(CultureInfo.InvariantCulture) + " 条任务通知未能显示。点击打开一个任务。",
+                    failures.Count.ToString(CultureInfo.InvariantCulture) + " task notifications could not be shown. Click to open one task.");
+            }
+            else
+            {
+                string detail = attention
+                    ? (String.IsNullOrWhiteSpace(session.pendingInteractionPrompt)
+                        ? L("打开任务查看并处理。", "Open the task to review and respond.")
+                        : session.pendingInteractionPrompt.Trim())
+                    : (String.IsNullOrWhiteSpace(session.finalReply)
+                        ? L("打开任务查看结果。", "Open the task to view its result.")
+                        : session.finalReply.Trim());
+                body = (String.IsNullOrWhiteSpace(session.title) ? session.id : session.title.Trim()) + "\r\n" + detail;
+            }
+            if (body.Length > 240) body = body.Substring(0, 239).TrimEnd() + "…";
+            notificationSessionId = session.id;
+            try
+            {
+                trayIcon.Visible = true;
+                trayIcon.ShowBalloonTip(5000, title, body, attention ? ToolTipIcon.Warning : ToolTipIcon.Info);
+            }
+            catch { notificationSessionId = null; }
         }
 
         private static void ApplyRoundedCorners(ToolStripDropDown menu)
