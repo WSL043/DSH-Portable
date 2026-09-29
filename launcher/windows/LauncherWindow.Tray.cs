@@ -113,6 +113,7 @@ namespace DshPortable
             };
             item.Click += delegate
             {
+                if (!trayBridgeReady || updateInteractionRunning || shutdownRunning) return;
                 MarkTaskCompletionHandled(session.id);
                 RestoreFromTray();
                 PostBridgeAction("open-session", session.id);
@@ -161,6 +162,7 @@ namespace DshPortable
         {
             return new ToolStripMenuItem(L("DSH 终端", "DSH Terminal"), null, delegate
             {
+                if (!trayBridgeReady || updateInteractionRunning || shutdownRunning) return;
                 try
                 {
                     string root = Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
@@ -280,6 +282,7 @@ namespace DshPortable
                 ToolStripMenuItem fresh = new ToolStripMenuItem(L("新会话", "New session"));
                 fresh.Click += delegate
                 {
+                    if (!trayBridgeReady || updateInteractionRunning || shutdownRunning) return;
                     RestoreFromTray();
                     PostBridgeAction("new-session", null);
                 };
@@ -386,6 +389,13 @@ namespace DshPortable
             dropDown.Size = new Size(width, preferredHeight);
         }
 
+        private void MarkTrayBridgeUnavailable()
+        {
+            trayBridgeReady = false;
+            NativeTaskNotification.SetOwnerReady(false);
+            RebuildTrayMenu();
+        }
+
         private void PostBridgeAction(string action, string sessionId, string activationId = null)
         {
             if (!trayBridgeReady || webView.CoreWebView2 == null) return;
@@ -397,7 +407,7 @@ namespace DshPortable
             if (!String.IsNullOrEmpty(sessionId)) message["sessionId"] = sessionId;
             if (!String.IsNullOrEmpty(activationId)) message["activationId"] = activationId;
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
-            catch { trayBridgeReady = false; NativeTaskNotification.SetOwnerReady(false); RebuildTrayMenu(); }
+            catch { MarkTrayBridgeUnavailable(); }
         }
 
         private void PostBridgeReply(string activationId, string sessionId, string reply)
@@ -414,7 +424,7 @@ namespace DshPortable
                 { "reply", text },
             };
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
-            catch { trayBridgeReady = false; NativeTaskNotification.SetOwnerReady(false); RebuildTrayMenu(); }
+            catch { MarkTrayBridgeUnavailable(); }
         }
 
         private void PostBridgeInteractionAnswer(string activationId, string sessionId, string interactionKey, string response)
@@ -434,7 +444,7 @@ namespace DshPortable
                 { "response", value },
             };
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(message)); }
-            catch { trayBridgeReady = false; NativeTaskNotification.SetOwnerReady(false); RebuildTrayMenu(); }
+            catch { MarkTrayBridgeUnavailable(); }
         }
 
         private void HandleNativeNotificationAction(string activationId, string action, string sessionId, string interactionKey, string response)

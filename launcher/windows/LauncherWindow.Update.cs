@@ -209,8 +209,7 @@ namespace DshPortable
             ShowDesktopOperation(engineScope
                 ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
                 : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
-            trayBridgeReady = false;
-            NativeTaskNotification.SetOwnerReady(false);
+            MarkTrayBridgeUnavailable();
             string[] updateArguments = String.IsNullOrEmpty(manifestUrl)
                 ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }
                 : new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--update-manifest", manifestUrl };

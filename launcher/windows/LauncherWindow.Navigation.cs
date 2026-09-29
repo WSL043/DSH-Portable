@@ -65,8 +65,7 @@ namespace DshPortable
             if (eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited
                 || eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
             {
-                trayBridgeReady = false;
-                NativeTaskNotification.SetOwnerReady(false);
+                MarkTrayBridgeUnavailable();
             }
             string failure = eventArgs.ProcessFailedKind + "/" + eventArgs.Reason
                 + " exit=" + eventArgs.ExitCode
