@@ -86,7 +86,7 @@ try {
     return text.includes(version);
   }, `Rendered update dialog containing ${version}`);
   evidence.updateDialogShown = true;
-  const installLabels = ['安装并重启', 'Install and restart'];
+  const installLabels = ['安装并重启', 'Install and restart', 'Install and Restart'];
   evidence.installButton = await mouseClick(installLabels, 'button,[role="button"]');
   evidence.installClicked = true;
   await writeFile(resultPath, `${JSON.stringify(evidence, null, 2)}\n`);
