@@ -647,7 +647,10 @@ try {
                     $runnerTemp = $env:RUNNER_TEMP -and ($writePath.TrimEnd('\') + '\').StartsWith($env:RUNNER_TEMP.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
                     $systemNoise = $runnerTemp -or ($systemCategories -contains [string]$_.category) -or ($writePath -match '^[A-Za-z]:\\\$')
                     # Writes made by the official app itself (its native-addon cache, default workspace, spelling dictionary) are the official app's own behavior: recorded, not asserted.
-                    $isOfficialOwn = [string]$_.process -ceq 'DeepSeek Harness.exe' -and -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor)
+                    # Only the Portable components (launcher, update copy, update engine's PowerShell and 7-Zip) are audited; the official app and Windows' own helpers it triggers (for example directxdatabaseupdater.exe on a fresh machine) are recorded, not asserted.
+                    $processName = [string]$_.process
+                    $isPortableComponent = $processName -ceq 'DeepSeek Harness Portable.exe' -or $processName -like 'deepseek-harness-*-win-x64.exe' -or $processName -ceq 'powershell.exe' -or $processName -ceq '7z.exe'
+                    $isOfficialOwn = -not $isPortableComponent -and -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor)
                     if ($isOfficialOwn) { $officialOwn.Add($_) }
                     -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor -or $isOfficialOwn)
                 })

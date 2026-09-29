@@ -141,7 +141,8 @@ jobs:
         run: |
           if (Test-Path -LiteralPath 'build/orch-080/T27/pure-e2e-report.json') {
             New-Item -ItemType Directory -Path 'build/orch-080/T28/e2e-evidence' -Force | Out-Null
-            Copy-Item -Path 'build/orch-080/T27/*' -Destination 'build/orch-080/T28/e2e-evidence' -Recurse -Force
+            # Evidence only: the work directory holds two full official payloads and must not be uploaded.
+            Get-ChildItem -LiteralPath 'build/orch-080/T27' -Force | Where-Object { $_.Name -ne 'work' } | Copy-Item -Destination 'build/orch-080/T28/e2e-evidence' -Recurse -Force
           }
       - name: Require both qualification reports to pass
         shell: pwsh
