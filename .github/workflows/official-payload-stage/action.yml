@@ -1,0 +1,56 @@
+name: Download, validate, and optionally unpack official desktop payload
+description: Uses the shared Payload.psm1 identity, SHA-512, Authenticode, and NSIS extraction checks.
+inputs:
+  candidate:
+    description: Candidate JSON path (accepts url or installerUrl)
+    required: true
+  installer:
+    description: New installer destination path
+    required: true
+  expanded:
+    description: Optional fresh destination for the raw official payload
+    required: false
+    default: ''
+outputs:
+  installer:
+    description: Validated official installer path
+    value: ${{ steps.stage.outputs.installer }}
+runs:
+  using: composite
+  steps:
+    - id: stage
+      shell: pwsh
+      env:
+        CANDIDATE_PATH: ${{ inputs.candidate }}
+        INSTALLER_PATH: ${{ inputs.installer }}
+        EXPANDED_PATH: ${{ inputs.expanded }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $ProgressPreference = 'SilentlyContinue'
+        Import-Module './experiments/official-payload/Payload.psm1' -Force
+        $raw = Get-Content -LiteralPath $env:CANDIDATE_PATH -Raw | ConvertFrom-Json
+        $url = if ($raw.installerUrl) { [string]$raw.installerUrl } else { [string]$raw.url }
+        $candidate = [pscustomobject]@{ version=[string]$raw.version; installerUrl=$url; sha512=[string]$raw.sha512; size=[long]$raw.size }
+        $installer = [IO.Path]::GetFullPath($env:INSTALLER_PATH)
+        $parent = Split-Path -Parent $installer
+        New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        Get-OfficialInstaller -Destination $installer -Candidate $candidate
+        if ($env:EXPANDED_PATH) {
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw "7-Zip not found: $sevenZip" }
+          $outer = Join-Path $env:RUNNER_TEMP ('official-payload-' + [Guid]::NewGuid().ToString('N'))
+          $expanded = [IO.Path]::GetFullPath($env:EXPANDED_PATH)
+          if (Test-Path -LiteralPath $expanded) { throw "Expanded payload destination already exists: $expanded" }
+          New-Item -ItemType Directory -Path (Split-Path -Parent $expanded) -Force | Out-Null
+          try {
+            & $sevenZip x $installer "-o$outer" '-y' | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Official NSIS extraction failed' }
+            $inner = Join-Path $outer '$PLUGINSDIR\app-64.7z'
+            if (-not (Test-Path -LiteralPath $inner -PathType Leaf)) { throw 'Official installer layout changed: missing $PLUGINSDIR\app-64.7z' }
+            & $sevenZip x $inner "-o$expanded" '-y' | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw 'Official payload extraction failed' }
+          } finally {
+            if (Test-Path -LiteralPath $outer) { Remove-Item -LiteralPath $outer -Recurse -Force }
+          }
+        }
+        "installer=$installer" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8

@@ -1,0 +1,275 @@
+name: Official desktop qualified update channel
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+    inputs:
+      force_version:
+        description: Re-run qualification only when this version is still the official feed candidate
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: official-desktop-qualified-channel
+  cancel-in-progress: false
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      no_op: ${{ steps.identity.outputs.no_op }}
+      version: ${{ steps.identity.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Resolve the official desktop candidate and current channel index
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE_VERSION: ${{ inputs.force_version }}
+        run: |
+          set -euo pipefail
+          node experiments/official-payload/resolve-candidate.mjs
+          mkdir -p build/orch-080/T28/input
+          cp experiments/official-payload/candidate.json build/orch-080/T28/input/candidate.json
+          node --input-type=module <<'NODE'
+          import { mkdir, readFile, writeFile } from 'node:fs/promises';
+          import { CHANNEL_INDEX_URL } from './experiments/official-payload/channel/constants.mjs';
+          const candidate = JSON.parse(await readFile('build/orch-080/T28/input/candidate.json', 'utf8'));
+          const requested = process.env.FORCE_VERSION ?? '';
+          if (requested && candidate.version !== requested) throw new Error(`force_version ${requested} is not the current official feed candidate ${candidate.version}`);
+          const response = await fetch(CHANNEL_INDEX_URL, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+          let index;
+          if (response.status === 404) index = { schemaVersion: 1, versions: [] };
+          else {
+            if (!response.ok) throw new Error(`Channel index request failed: ${response.status}`);
+            const text = await response.text();
+            if (text.length > 1_048_576) throw new Error('Channel index is too large');
+            index = JSON.parse(text);
+          }
+          if (index.schemaVersion !== 1 || !Array.isArray(index.versions)) throw new Error('Existing channel index is invalid');
+          const same = index.versions.find(item => item.version === candidate.version);
+          if (same && (same.sha512 !== candidate.sha512 || same.size !== candidate.size)) throw new Error(`Official same-version identity changed: ${candidate.version}`);
+          await mkdir('build/orch-080/T28/input', { recursive: true });
+          await writeFile('build/orch-080/T28/input/index.json', JSON.stringify(index, null, 2) + '\n');
+          const noOp = Boolean(same) && !requested;
+          await writeFile(process.env.GITHUB_OUTPUT, `no_op=${noOp}\nversion=${candidate.version}\n`, { flag: 'a' });
+          console.log(JSON.stringify({ version: candidate.version, noOp, indexedVersions: index.versions.length, indexUrl: CHANNEL_INDEX_URL }));
+          NODE
+      - uses: actions/upload-artifact@v7
+        with:
+          name: official-desktop-channel-input
+          path: build/orch-080/T28/input/
+          retention-days: 2
+
+  gates:
+    needs: resolve
+    if: needs.resolve.outputs.no_op == 'false'
+    runs-on: windows-latest
+    timeout-minutes: 55
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-desktop-channel-input
+          path: build/orch-080/T28/input
+      - name: Normalize the checked-in baseline and the resolved candidate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $helper = 'experiments/official-payload/e2e/report.mjs'
+          node $helper candidate 'experiments/official-payload/candidate.json' 'build/orch-080/T28/input/old-candidate.json'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not normalize the checked-in 0.1.7-rc.2 candidate' }
+          node $helper candidate 'build/orch-080/T28/input/candidate.json' 'build/orch-080/T28/input/new-candidate.json'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not normalize the resolved official candidate' }
+          $old = Get-Content -LiteralPath 'build/orch-080/T28/input/old-candidate.json' -Raw | ConvertFrom-Json
+          $new = Get-Content -LiteralPath 'build/orch-080/T28/input/new-candidate.json' -Raw | ConvertFrom-Json
+          if ($old.version -cne '0.1.7-rc.2' -or $new.version -ceq $old.version) { throw 'Qualification requires the checked-in 0.1.7-rc.2 baseline and a distinct official candidate' }
+      - id: stage-old
+        name: Download and validate the baseline installer
+        uses: ./.github/workflows/official-payload-stage
+        with:
+          candidate: build/orch-080/T28/input/old-candidate.json
+          installer: ${{ runner.temp }}/official-desktop-old.exe
+      - id: stage-new
+        name: Download, validate, and unpack the candidate installer
+        uses: ./.github/workflows/official-payload-stage
+        with:
+          candidate: build/orch-080/T28/input/new-candidate.json
+          installer: ${{ runner.temp }}/official-desktop-new.exe
+          expanded: build/orch-080/T28/official-new
+      - name: Run phase-1 official update contract probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir 'build/orch-080/T28/official-new' -WorkRoot 'build/orch-080/T28/contract/work' -Locale en
+          if ($LASTEXITCODE -ne 0) { throw 'Official update contract probe exited non-zero' }
+          $report = Get-Content -LiteralPath 'build/orch-080/T28/contract/contract-report.json' -Raw | ConvertFrom-Json
+          if (-not $report.overallPassed) { throw 'Phase-1 contract report overallPassed was not true' }
+      - name: Run the phase-2 real old-to-new portable acceptance
+        shell: pwsh
+        env:
+          INSTALLER_OLD: ${{ steps.stage-old.outputs.installer }}
+          INSTALLER_NEW: ${{ steps.stage-new.outputs.installer }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw ('Runner 7-Zip not found: ' + $sevenZip) }
+          ./experiments/official-payload/e2e/run-pure-e2e.ps1 `
+            -InstallerOld $env:INSTALLER_OLD `
+            -CandidateOld 'build/orch-080/T28/input/old-candidate.json' `
+            -InstallerNew $env:INSTALLER_NEW `
+            -CandidateNew 'build/orch-080/T28/input/new-candidate.json' `
+            -SevenZip $sevenZip `
+            -WorkRoot 'build/orch-080/T27/work' `
+            -Locale en
+          if ($LASTEXITCODE -ne 0) { throw 'Pure portable end-to-end acceptance exited non-zero' }
+      - name: Copy phase-2 evidence into this task evidence directory
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath 'build/orch-080/T27/pure-e2e-report.json') {
+            New-Item -ItemType Directory -Path 'build/orch-080/T28/e2e-evidence' -Force | Out-Null
+            Copy-Item -Path 'build/orch-080/T27/*' -Destination 'build/orch-080/T28/e2e-evidence' -Recurse -Force
+          }
+      - name: Require both qualification reports to pass
+        shell: pwsh
+        run: |
+          $contract = Get-Content -LiteralPath 'build/orch-080/T28/contract/contract-report.json' -Raw | ConvertFrom-Json
+          $e2e = Get-Content -LiteralPath 'build/orch-080/T28/e2e-evidence/pure-e2e-report.json' -Raw | ConvertFrom-Json
+          if (-not $contract.overallPassed -or -not $e2e.overallPassed) { throw 'Both contract and full E2E overallPassed values are required' }
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-desktop-channel-gates
+          path: |
+            build/orch-080/T28/contract/
+            build/orch-080/T28/e2e-evidence/
+            build/orch-080/T28/input/
+          if-no-files-found: warn
+          retention-days: 14
+
+  publish:
+    needs: [resolve, gates]
+    if: needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'success'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-desktop-channel-input
+          path: build/orch-080/T28/input
+      - name: Build the channel with the established csc launcher command
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $launcher = Join-Path $env:RUNNER_TEMP 'DeepSeek Harness Portable.exe'
+          ./experiments/official-payload/build-launcher.ps1 -Output $launcher
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher csc build failed' }
+          node experiments/official-payload/channel/build-channel.mjs `
+            --candidate 'build/orch-080/T28/input/candidate.json' `
+            --index 'build/orch-080/T28/input/index.json' `
+            --launcher $launcher `
+            --output 'build/orch-080/T28/channel-output'
+          if ($LASTEXITCODE -ne 0) { throw 'Qualified channel generation failed' }
+      - name: Publish qualified assets and verify exact readback
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHANNEL_TAG: update-channel-desktop
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = $env:CHANNEL_TAG
+          gh release view $tag --repo $env:GITHUB_REPOSITORY --json isPrerelease *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Qualified official desktop update channel' --notes 'Automatically updated only after official desktop qualification.' --prerelease
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create the update-channel Release' }
+          }
+          $output = 'build/orch-080/T28/channel-output'
+          $exeFiles = @(Get-ChildItem -LiteralPath $output -Filter 'deepseek-harness-*-win-x64.exe' -File | ForEach-Object { $_.FullName })
+          if ($exeFiles.Count -lt 1 -or $exeFiles.Count -gt 2) { throw 'Channel builder did not emit exactly the latest one or two launcher copies' }
+          $assetLines = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets[].name'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing channel assets' }
+          foreach ($file in $exeFiles) {
+            $name = [IO.Path]::GetFileName($file)
+            if ($assetLines -contains $name) {
+              $existingDir = Join-Path $env:RUNNER_TEMP ('existing-' + [Guid]::NewGuid().ToString('N'))
+              New-Item -ItemType Directory -Path $existingDir | Out-Null
+              gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern $name --dir $existingDir
+              if ($LASTEXITCODE -ne 0) { throw "Could not verify immutable existing launcher asset $name" }
+              $existing = Join-Path $existingDir $name
+              $expectedHash = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash
+              $existingHash = (Get-FileHash -LiteralPath $existing -Algorithm SHA256).Hash
+              if ((Get-Item -LiteralPath $file).Length -ne (Get-Item -LiteralPath $existing).Length -or $expectedHash -cne $existingHash) { throw "Immutable launcher asset differs: $name" }
+            }
+          }
+          $exeArgs = @('scripts/upload-release-assets.mjs', $tag) + $exeFiles
+          node @exeArgs
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable launcher asset upload failed' }
+          node scripts/upload-release-assets.mjs $tag "$output/index.json" "$output/nightly.yml" --mutable
+          if ($LASTEXITCODE -ne 0) { throw 'Mutable channel metadata upload failed' }
+          $readback = Join-Path $env:RUNNER_TEMP 'channel-readback'
+          New-Item -ItemType Directory -Path $readback -Force | Out-Null
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --pattern index.json --pattern nightly.yml --dir $readback
+          if ($LASTEXITCODE -ne 0) { throw 'Channel metadata readback failed' }
+          foreach ($name in @('index.json', 'nightly.yml')) {
+            $expected = (Get-FileHash -LiteralPath (Join-Path $output $name) -Algorithm SHA256).Hash
+            $actual = (Get-FileHash -LiteralPath (Join-Path $readback $name) -Algorithm SHA256).Hash
+            if ($expected -cne $actual) { throw "Channel readback differs from generated $name" }
+          }
+
+  report-failure:
+    needs: [resolve, gates]
+    if: always() && needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-desktop-channel-gates
+          path: build/orch-080/T28/failure-evidence
+      - name: Create one version-scoped issue or append its latest failure report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          TITLE="Official desktop ${VERSION} did not qualify"
+          node --input-type=module <<'NODE'
+          import { readFile, writeFile } from 'node:fs/promises';
+          const paths = ['build/orch-080/T28/failure-evidence/contract/contract-report.json','build/orch-080/T28/failure-evidence/e2e-evidence/pure-e2e-report.json'];
+          const failures=[];
+          for (const path of paths) {
+            try {
+              const report=JSON.parse(await readFile(path,'utf8'));
+              for (const item of (report.results ?? [])) if (item.passed === false) failures.push(`${path}: ${item.id ?? 'assertion'} — ${JSON.stringify(item.evidence ?? item.detail ?? '')}`);
+              if (report.overallPassed !== true && !report.results?.some(item => item.passed === false)) failures.push(`${path}: overallPassed was not true`);
+            } catch { failures.push(`${path}: report missing (the preceding gate did not run or did not write evidence)`); }
+          }
+          const run=`${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+          await writeFile('build/orch-080/T28/failure.md', `Official desktop ${process.env.VERSION} did not qualify. The update channel was not published.\n\nFailed assertions:\n${failures.map(x=>`- ${x}`).join('\n')}\n\nWorkflow run: ${run}\n`);
+          NODE
+          EXISTING=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 1000 --json number,title --jq ".[] | select(.title == \"$TITLE\") | .number" | head -n 1)
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --repo "$GITHUB_REPOSITORY" --body-file build/orch-080/T28/failure.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file build/orch-080/T28/failure.md
+          fi

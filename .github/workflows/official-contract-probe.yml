@@ -58,32 +58,21 @@ jobs:
         shell: pwsh
         run: |
           Write-Output 'The exact official version and SHA-512 already passed: ${{ needs.candidate.outputs.cache_key }}'
-      - name: Download and validate the official installer
+      - id: official-payload
+        name: Download, validate, and unpack the official installer
+        if: steps.success-cache.outputs.cache-hit != 'true'
+        uses: ./.github/workflows/official-payload-stage
+        with:
+          candidate: experiments/official-payload/candidate.json
+          installer: ${{ runner.temp }}\official-desktop-installer.exe
+          expanded: build/official-contract-probe/official-payload
+      - name: Run update contract probe
         if: steps.success-cache.outputs.cache-hit != 'true'
         shell: pwsh
+        env:
+          EXPANDED_PAYLOAD: build/official-contract-probe/official-payload
         run: |
-          Import-Module ./experiments/official-payload/Payload.psm1
-          $candidate = Get-Content ./experiments/official-payload/candidate.json -Raw | ConvertFrom-Json
-          $installer = Join-Path $env:RUNNER_TEMP 'official-desktop-installer.exe'
-          Get-OfficialInstaller -Destination $installer -Candidate $candidate
-          "installer=$installer" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-      - name: Expand official payload and run update contract probe
-        if: steps.success-cache.outputs.cache-hit != 'true'
-        shell: pwsh
-        run: |
-          # The installer was already validated above (size, SHA-512, Authenticode). Extract it plainly: this probe
-          # must see the byte-original desktop, so none of the alpha packaging or adapter code is used here.
-          $sevenZip = Join-Path $env:ProgramFiles '7-Zip/7z.exe'
-          if (-not (Test-Path -LiteralPath $sevenZip)) { throw "7-Zip not found: $sevenZip" }
-          $outer = Join-Path $env:RUNNER_TEMP 'official-contract-outer'
-          $expanded = Join-Path $env:RUNNER_TEMP 'official-contract-expanded'
-          & $sevenZip x $env:installer "-o$outer" '-y' | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Official installer extraction failed' }
-          $inner = Join-Path $outer '$PLUGINSDIR\app-64.7z'
-          if (-not (Test-Path -LiteralPath $inner)) { throw 'The official installer no longer contains $PLUGINSDIR\app-64.7z; the packaging contract changed' }
-          & $sevenZip x $inner "-o$expanded" '-y' | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw 'Official payload extraction failed' }
-          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir $expanded -WorkRoot 'build/official-contract-probe/work' -Locale en
+          ./experiments/official-payload/contract/run-contract-probe.ps1 -AppDir $env:EXPANDED_PAYLOAD -WorkRoot 'build/official-contract-probe/work' -Locale en
           if ($LASTEXITCODE -ne 0) { throw 'Official update contract probe failed' }
       - name: Save exact successful probe identity
         if: success() && steps.success-cache.outputs.cache-hit != 'true'

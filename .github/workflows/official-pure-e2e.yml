@@ -44,22 +44,23 @@ jobs:
           $new = Get-Content -LiteralPath $newCandidate -Raw | ConvertFrom-Json
           if ($old.version -cne '0.1.7-rc.2' -or $new.version -ceq $old.version) { throw 'Old/new official candidate identities are not a real upgrade pair' }
           @(('CANDIDATE_OLD=' + $oldCandidate), ('CANDIDATE_NEW=' + $newCandidate), ('CANDIDATE_VERSION=' + $new.version)) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
-      - name: Download and validate both official installers
-        shell: powershell
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Import-Module './experiments/official-payload/Payload.psm1' -Force
-          $old = Get-Content -LiteralPath $env:CANDIDATE_OLD -Raw | ConvertFrom-Json
-          $new = Get-Content -LiteralPath $env:CANDIDATE_NEW -Raw | ConvertFrom-Json
-          $oldIdentity = [pscustomobject]@{ version = $old.version; installerUrl = $old.url; sha512 = $old.sha512; size = $old.size }
-          $newIdentity = [pscustomobject]@{ version = $new.version; installerUrl = $new.url; sha512 = $new.sha512; size = $new.size }
-          $installerOld = Join-Path $env:RUNNER_TEMP 'official-pure-e2e-old.exe'
-          $installerNew = Join-Path $env:RUNNER_TEMP 'official-pure-e2e-new.exe'
-          Get-OfficialInstaller -Destination $installerOld -Candidate $oldIdentity
-          Get-OfficialInstaller -Destination $installerNew -Candidate $newIdentity
-          @(('INSTALLER_OLD=' + $installerOld), ('INSTALLER_NEW=' + $installerNew)) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+      - id: stage-old
+        name: Download and validate the old official installer
+        uses: ./.github/workflows/official-payload-stage
+        with:
+          candidate: ${{ runner.temp }}/pure-e2e-old-candidate.json
+          installer: ${{ runner.temp }}/official-pure-e2e-old.exe
+      - id: stage-new
+        name: Download and validate the new official installer
+        uses: ./.github/workflows/official-payload-stage
+        with:
+          candidate: ${{ runner.temp }}/pure-e2e-new-candidate.json
+          installer: ${{ runner.temp }}/official-pure-e2e-new.exe
       - name: Run full official old-to-new portable acceptance
         shell: powershell
+        env:
+          INSTALLER_OLD: ${{ steps.stage-old.outputs.installer }}
+          INSTALLER_NEW: ${{ steps.stage-new.outputs.installer }}
         run: |
           $ErrorActionPreference = 'Stop'
           $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
