@@ -10,28 +10,107 @@ import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule } f
 const execFileAsync = promisify(execFile)
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 const PROFILE_PREFLIGHT_TIMEOUT_MS = 30000
-const DISABLED_PROFILE_PLUGIN_ROW = /^dsh: disabling profile plugin row "(?<row>[^"]+)": Plugin (?<plugin>(?:@[^/\s]+\/)?[^@\s/]+)@(?<version>[^:\s]+) is incompatible with dsh [^:\s]+: (?<reason>.+)$/
 
-function profilePluginWarnings(profile, stderr) {
-  const warnings = []
-  const seen = new Set()
-  for (const line of String(stderr ?? '').split(/\r?\n/)) {
-    const match = DISABLED_PROFILE_PLUGIN_ROW.exec(line)
-    if (!match) continue
-    const warning = {
-      profile,
-      plugin: match.groups.plugin,
-      version: match.groups.version,
-      row: match.groups.row,
-      reason: match.groups.reason.slice(0, 300),
-    }
-    const key = JSON.stringify(warning)
-    if (seen.has(key)) continue
-    seen.add(key)
-    warnings.push(warning)
+// This runs in the staged app directory so bare-package resolution uses the target
+// core's own node_modules. It reads manifests only; plugin entry points are never loaded.
+const PROFILE_COMPATIBILITY_CHECK_SCRIPT = String.raw`
+import { readFile, readdir } from 'node:fs/promises';
+import path from 'node:path';
+
+const emit = (value) => process.stdout.write(JSON.stringify(value) + '\n');
+const unavailable = (reason) => emit({ items: [], checkUnavailable: String(reason).slice(0, 1000) });
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const packageNamePattern = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i;
+const readJson = async (filename) => {
+  try {
+    const value = JSON.parse(await readFile(filename, 'utf8'));
+    return isObject(value) ? value : null;
+  } catch {
+    return null;
   }
-  return warnings
+};
+
+try {
+  const boot = await import('@deepseek-ai/dsh-app-boot');
+  const required = [
+    'evaluatePluginCompatibility',
+    'getDshRuntimeVersion',
+    'readProfileCompatibility',
+    'pluginCompatibilityWarning',
+  ];
+  const missing = required.filter((name) => typeof boot[name] !== 'function');
+  if (typeof boot.PROFILE_COMPATIBILITY_FILENAME !== 'string') missing.push('PROFILE_COMPATIBILITY_FILENAME');
+  if (missing.length) {
+    unavailable('Target @deepseek-ai/dsh-app-boot is missing required compatibility exports: ' + missing.join(', '));
+  } else {
+    const profilesRoot = process.argv[1];
+    const profiles = JSON.parse(process.argv[2]);
+    const runtimeVersion = boot.getDshRuntimeVersion();
+    const items = [];
+
+    for (const profile of profiles) {
+      const profileDir = path.join(profilesRoot, profile);
+      const profileManifest = await readJson(path.join(profileDir, 'package.json'));
+      const moduleRoot = path.join(profileDir, 'node_modules');
+      const packageNames = new Set();
+
+      if (profileManifest && isObject(profileManifest.dependencies)) {
+        for (const name of Object.keys(profileManifest.dependencies)) {
+          if (packageNamePattern.test(name)) packageNames.add(name);
+        }
+      }
+
+      try {
+        for (const entry of await readdir(moduleRoot, { withFileTypes: true })) {
+          if (entry.name.startsWith('dsh-') && packageNamePattern.test(entry.name)) packageNames.add(entry.name);
+          if (!entry.name.startsWith('@') || !packageNamePattern.test(entry.name + '/placeholder')) continue;
+          try {
+            for (const scoped of await readdir(path.join(moduleRoot, entry.name), { withFileTypes: true })) {
+              const name = entry.name + '/' + scoped.name;
+              if (scoped.name.startsWith('dsh-') && packageNamePattern.test(name)) packageNames.add(name);
+            }
+          } catch {
+            // A broken or disappearing scope does not prevent checking other installed packages.
+          }
+        }
+      } catch {
+        // Profiles without node_modules simply have no installed packages to inspect.
+      }
+
+      let exemptions = {};
+      try {
+        const compatibility = boot.readProfileCompatibility(profileDir);
+        if (isObject(compatibility?.exemptions)) exemptions = compatibility.exemptions;
+      } catch {
+        // Match the official profile reader's fail-closed behavior: no exemption is granted.
+      }
+
+      for (const plugin of packageNames) {
+        const manifest = await readJson(path.join(moduleRoot, plugin, 'package.json'));
+        if (!manifest) continue;
+        try {
+          const issue = boot.evaluatePluginCompatibility(manifest, exemptions, runtimeVersion);
+          if (!issue) continue;
+          items.push({
+            profile,
+            plugin: issue.name,
+            version: issue.version,
+            peers: issue.peers,
+            exempted: issue.exempted === true,
+            reason: boot.pluginCompatibilityWarning(issue),
+          });
+        } catch {
+          // A malformed individual manifest cannot make the rest of the preflight fail.
+        }
+      }
+    }
+
+    emit({ items, checkUnavailable: null });
+  }
+} catch (error) {
+  unavailable('Target core compatibility check unavailable: ' + (error?.message || String(error)));
 }
+`
 
 export async function discoverExistingDshProfiles(layout) {
   const profilesRoot = path.join(layout.dshHome, 'profiles')
@@ -61,6 +140,67 @@ function preflightFailure(profile, error) {
   return failure
 }
 
+function unavailableCheck(reason) {
+  const detail = String(reason?.stderr || reason?.message || reason || 'unknown error').trim().slice(-1000)
+  return `Target core plugin compatibility check unavailable: ${detail}`
+}
+
+export async function checkStagedDshProfileCompatibility({
+  layout,
+  profiles,
+  timeoutMs = PROFILE_PREFLIGHT_TIMEOUT_MS,
+  run = execFileAsync,
+  environment = buildDshEnv(layout),
+}) {
+  if (profiles.length === 0) return { warnings: [], checkUnavailable: null }
+
+  try {
+    const result = await run(layout.nodeExe, [
+      '--input-type=module',
+      '-e',
+      PROFILE_COMPATIBILITY_CHECK_SCRIPT,
+      path.join(layout.dshHome, 'profiles'),
+      JSON.stringify(profiles),
+    ], {
+      cwd: layout.appDir,
+      env: environment,
+      encoding: 'utf8',
+      maxBuffer: 4 * 1024 * 1024,
+      timeout: timeoutMs,
+      windowsHide: true,
+    })
+    const output = String(result?.stdout ?? '').trim()
+    const parsed = JSON.parse(output)
+    if (!Array.isArray(parsed?.items)) {
+      return { warnings: [], checkUnavailable: unavailableCheck('target checker returned an invalid result') }
+    }
+    if (typeof parsed.checkUnavailable === 'string' && parsed.checkUnavailable) {
+      return { warnings: [], checkUnavailable: parsed.checkUnavailable.slice(0, 1000) }
+    }
+
+    const warnings = []
+    for (const item of parsed.items) {
+      if (item?.exempted === true) continue
+      if (typeof item?.profile !== 'string'
+        || typeof item?.plugin !== 'string'
+        || typeof item?.version !== 'string'
+        || typeof item?.reason !== 'string') {
+        return { warnings: [], checkUnavailable: unavailableCheck('target checker returned an invalid warning') }
+      }
+      warnings.push({
+        profile: item.profile,
+        plugin: item.plugin,
+        version: item.version,
+        row: item.plugin,
+        reason: item.reason.slice(0, 300),
+      })
+    }
+    return { warnings, checkUnavailable: null }
+  } catch (error) {
+    return { warnings: [], checkUnavailable: unavailableCheck(error) }
+  }
+}
+
 export async function preflightStagedDshProfiles({
   layout,
   stagedRoot,
@@ -72,7 +212,7 @@ export async function preflightStagedDshProfiles({
   cleanCaches = cleanUnusedRuntimeCaches,
 }) {
   const profiles = await discoverExistingDshProfiles(layout)
-  if (profiles.length === 0) return { status: 'skipped', profiles, warnings: [] }
+  if (profiles.length === 0) return { status: 'skipped', profiles, warnings: [], checkUnavailable: null }
 
   let runtimeRoot = stagedRoot
   let preparedCapsule = false
@@ -100,10 +240,9 @@ export async function preflightStagedDshProfiles({
       DSH_PORTABLE_DSH_VERSION: metadata.dshVersion,
       DSH_PORTABLE_DSH_COMMIT: metadata.dshCommit || '',
     }
-    const warnings = []
     for (const profile of profiles) {
       try {
-        const result = await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
+        await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
           cwd: targetLayout.workspace,
           env: environment,
           encoding: 'utf8',
@@ -111,12 +250,19 @@ export async function preflightStagedDshProfiles({
           timeout: timeoutMs,
           windowsHide: true,
         })
-        warnings.push(...profilePluginWarnings(profile, result?.stderr))
       } catch (error) {
         throw preflightFailure(profile, error)
       }
     }
-    return { status: 'passed', profiles, warnings }
+
+    const compatibility = await checkStagedDshProfileCompatibility({
+      layout: targetLayout,
+      profiles,
+      timeoutMs,
+      run,
+      environment,
+    })
+    return { status: 'passed', profiles, ...compatibility }
   } catch (error) {
     failed = true
     throw error
