@@ -1,12 +1,10 @@
 # Official payload / 官方成品便携化
 
-**1.0.0-alpha.3 · Windows x64 · 全新目录 / fresh directory.**
+**1.0.0-alpha.4 · Windows x64 · 纯便携模式为默认 / pure portable mode is the default.**
 
-2026-09-28：按用户决定，1.0 Alpha 改为开发构建与 Release 草稿，不在公开 Releases 列表展示。后续工作流默认只生成草稿。Development alpha artifacts are retained as drafts, not public releases.
+官方桌面成品零改动（仅按架构约定改写 `resources/app-update.yml`）；纯模式不调用、不打包旧 ASAR adapter、desktop adapter、更新桥、默认插件或市场文件。仓库中的旧适配路线保留到阶段 3 统一删除，不再作为默认或交付路线。稳定版 Native 线不受影响。纯便携实现仍处于阶段 2 开发状态，不能据此宣称架构已验收。
 
-官方 EXE 和运行库保持原字节；ASAR 主进程增加有限的协议入口与更新传输适配，记录修改前后摘要。目标是保持官方操作体验与便携边界，不复制官方界面或任务关闭逻辑。每次官方成品变化重新验证，适配位置变化时停止投递。稳定版 0.7.x 不受影响。使用限制见 [随包说明](PACKAGE-README.md)。
-
-Official executable and runtime bytes stay unchanged. A narrow ASAR adapter connects protocol entry and update transport while retaining the official UI and task shutdown coordinator. Original and adapted hashes are recorded; changed upstream contracts stop delivery. Stable 0.7.x remains separate. See [package instructions and limitations](PACKAGE-README.md).
+The official desktop payload remains byte-for-byte unchanged except the permitted `resources/app-update.yml` rewrite. Pure packaging does not invoke or ship the legacy ASAR/desktop adapters, update bridge, default plugins or marketplace. Those legacy files remain only until their planned Phase 3 removal; they are no longer the default or delivery path. The stable Native line is separate. Phase 2 remains under development and is not yet architecture acceptance.
 
 ## 自动交付 / Automated delivery
 
