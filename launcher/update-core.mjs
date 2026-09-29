@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream, existsSync } from 'node:fs'
-import { mkdir, readFile, rename, rm } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
@@ -13,6 +13,8 @@ export const UPDATE_SCHEMA_VERSION = 1
 export const UPDATE_CHECK_TTL_MS = 12 * 60 * 60 * 1000
 export const UPDATE_FAILURE_TTL_MS = 60 * 60 * 1000
 const execFileAsync = promisify(execFile)
+const UPDATE_OPERATION_MAX_AGE_MS = 24 * 60 * 60 * 1000
+const UPDATE_OPERATION_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const UPDATE_LICENSE_FILES = [
   'COMPONENTS.json',
   'DeepSeek-Harness-LICENSE.txt',
@@ -348,6 +350,68 @@ export function freshUpdateMetadataUrl(urlValue, nonce = Date.now()) {
     url.searchParams.set('_portable_check', String(nonce))
   }
   return url
+}
+
+// Callers must hold Portable's product-mutation lock so a live updater cannot
+// be mistaken for an abandoned operation. Only direct UUID-v4 children of the
+// dedicated update root are candidates; a pending transaction journal protects
+// its operation directory until recovery has completed.
+export async function cleanStaleUpdateOperationDirectories(layout, { now = Date.now() } = {}) {
+  const updateRoot = path.resolve(layout.updateDir)
+  let rootInfo
+  try { rootInfo = await lstat(updateRoot) }
+  catch (error) {
+    if (error?.code === 'ENOENT') return { removed: [], deferred: false }
+    throw error
+  }
+  if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink()) {
+    return { removed: [], deferred: true, reason: 'unsafe-update-root' }
+  }
+
+  const canonicalRoot = await realpath(updateRoot)
+  if (path.relative(updateRoot, canonicalRoot) || path.relative(canonicalRoot, updateRoot)) {
+    return { removed: [], deferred: true, reason: 'symlinked-update-root' }
+  }
+  let protectedOperationId = null
+  try {
+    const journal = JSON.parse(await readFile(layout.updateJournal, 'utf8'))
+    if (typeof journal?.operationId !== 'string' || !UPDATE_OPERATION_ID_PATTERN.test(journal.operationId)) {
+      return { removed: [], deferred: true, reason: 'invalid-update-journal' }
+    }
+    protectedOperationId = journal.operationId
+  } catch (error) {
+    if (error?.code !== 'ENOENT') return { removed: [], deferred: true, reason: 'unreadable-update-journal' }
+  }
+
+  const entries = await readdir(canonicalRoot, { withFileTypes: true })
+  const removed = []
+  for (const entry of entries) {
+    if (!UPDATE_OPERATION_ID_PATTERN.test(entry.name)
+      || entry.name.toLowerCase() === protectedOperationId?.toLowerCase()) continue
+    const candidate = path.resolve(canonicalRoot, entry.name)
+    const relative = path.relative(canonicalRoot, candidate)
+    if (!relative || relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) continue
+    if (path.dirname(candidate) !== canonicalRoot) continue
+
+    let candidateInfo
+    try { candidateInfo = await lstat(candidate) }
+    catch (error) {
+      if (error?.code === 'ENOENT') continue
+      throw error
+    }
+    if (!candidateInfo.isDirectory() || candidateInfo.isSymbolicLink()) continue
+    if (now - candidateInfo.mtimeMs <= UPDATE_OPERATION_MAX_AGE_MS) continue
+
+    // Resolve and re-check immediately before removal. fs.rm does not follow
+    // directory symlinks, and the candidate remains a direct child by contract.
+    const checkedCandidate = path.resolve(canonicalRoot, entry.name)
+    const checkedRelative = path.relative(canonicalRoot, checkedCandidate)
+    if (!checkedRelative || checkedRelative === '..' || checkedRelative.startsWith(`..${path.sep}`)
+      || path.isAbsolute(checkedRelative) || path.dirname(checkedCandidate) !== canonicalRoot) continue
+    await rm(checkedCandidate, { recursive: true, force: false })
+    removed.push(entry.name)
+  }
+  return { removed, deferred: false }
 }
 
 async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs }) {
@@ -865,6 +929,8 @@ export async function installAvailableAppUpdate({
   download = downloadVerifiedComponent,
   extract = extractUpdateArchive,
   onProgress = () => {},
+  cleanOperationDirectories = cleanStaleUpdateOperationDirectories,
+  onCleanupError = (error) => console.warn(`Stale update-operation cleanup failed (${error?.code || error?.name || 'unknown'}).`),
 }) {
   if (update?.status !== 'available' || !['dsh-app', 'dsh-runtime-capsule'].includes(update.component?.kind)) {
     throw new Error('No compatible application update is available.')
@@ -873,6 +939,10 @@ export async function installAvailableAppUpdate({
     throw new Error('The update runtime layout is not compatible with this installation.')
   }
   if (typeof healthCheck !== 'function') throw new Error('Update health check is required.')
+  try { await cleanOperationDirectories(layout) }
+  catch (error) {
+    try { onCleanupError(error) } catch { /* Cleanup diagnostics must not block an update. */ }
+  }
   const operationId = randomUUID()
   const operationRoot = path.join(layout.updateDir, operationId)
   const archive = path.join(operationRoot, 'component.zip')

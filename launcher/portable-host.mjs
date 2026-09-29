@@ -26,9 +26,41 @@ if (!dshBin) throw new Error('portable host requires the official DSH bin path')
 if (!controlPipe || !controlToken) throw new Error('portable host control channel is not configured')
 
 const releaseRuntimeLease = runtimeRoot ? await acquireRuntimeLease(runtimeRoot) : async () => {}
+const portableRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+
+async function cleanStaleUpdateOperations({ signal } = {}) {
+  if (signal?.aborted) return { removed: [], deferred: true, reason: 'cancelled' }
+  const [{ cleanStaleUpdateOperationDirectories }, { acquireProductMutationLock, environmentStateRoot, layoutForRoot }] = await Promise.all([
+    import('./update-core.mjs'),
+    import('./portable-core.mjs'),
+  ])
+  const environmentId = process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
+  const baseStateRoot = process.env.DSH_PORTABLE_BASE_STATE_ROOT
+    || process.env.DSH_PORTABLE_STATE_ROOT
+    || portableRoot
+  const layout = layoutForRoot(
+    portableRoot,
+    process.platform,
+    environmentStateRoot(baseStateRoot, environmentId, process.platform),
+    runtimeRoot || portableRoot,
+    environmentId,
+  )
+  let release
+  try { release = await acquireProductMutationLock(layout) }
+  catch (error) {
+    if (String(error?.message ?? error).includes('shared Portable components are being changed'))
+      return { removed: [], deferred: true, reason: 'product-operation-busy' }
+    throw error
+  }
+  try { return await cleanStaleUpdateOperationDirectories(layout) }
+  finally { await release() }
+}
+
 const stopMaintenance = scheduleHostMaintenance({
-  root: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'),
+  root: portableRoot,
   runtimeRoot, stateRoot, trace: startupTrace,
+}, {
+  cleanUpdateOperations: cleanStaleUpdateOperations,
 })
 
 function tokenMatches(header) {

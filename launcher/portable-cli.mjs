@@ -867,6 +867,9 @@ async function update(options) {
         if (ownedState(current)) await stop()
       },
       onProgress: reportProgress,
+      onCleanupError: error => startupLog(Date.now(), 'update-operation-cleanup-failed', {
+        code: error?.code || error?.name || 'unknown',
+      }),
     })
     const running = await status()
     const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null

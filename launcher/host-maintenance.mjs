@@ -5,6 +5,7 @@ import { appendStartupTrace } from './startup-trace.mjs'
 export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace }, {
   delayMs = 60000, intervalMs = 6 * 60 * 60000,
   cleanRuntime = cleanUnusedRuntimeCaches,
+  cleanUpdateOperations = async () => ({ removed: [], deferred: false }),
   cleanLogs = options => cleanProfileLogs({ root, runtimeRoot, stateRoot }, options),
   record = (component, phase, fields) => appendStartupTrace(trace, component, phase, fields),
 } = {}) {
@@ -28,6 +29,14 @@ export function scheduleHostMaintenance({ root, runtimeRoot, stateRoot, trace },
           failures: failed.slice(0, 8).map(({ hash, code }) => ({ hash, code })),
         })
       } catch (error) { record('runtime-cache', 'maintenance-failed', { code: error?.code || 'unknown' }) }
+      if (stopped) return
+      try {
+        const result = await cleanUpdateOperations({ signal: controller.signal })
+        if (result.removed?.length || result.deferred) record('update-operations', 'maintenance-complete', {
+          removed: result.removed?.length || 0,
+          ...(result.deferred ? { deferred: true, reason: result.reason || 'busy-or-unsafe' } : {}),
+        })
+      } catch (error) { record('update-operations', 'maintenance-deferred', { code: error?.code || 'unknown' }) }
       if (stopped) return
       try {
         const result = await cleanLogs({ signal: controller.signal })

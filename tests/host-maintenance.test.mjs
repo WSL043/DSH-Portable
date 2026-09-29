@@ -70,3 +70,22 @@ test('unmeasured background reclamation does not report zero bytes as an exact s
     assert.equal(recorded.reclaimedBytes, null)
   } finally { stop() }
 })
+
+test('Portable host maintenance runs stale update-operation cleanup and records removals', async () => {
+  const events = []
+  let finish
+  const done = new Promise(resolve => { finish = resolve })
+  const stop = scheduleHostMaintenance({ root: '.' }, {
+    delayMs: 1, intervalMs: 10000,
+    cleanRuntime: async () => ({ retained: [], removed: [] }),
+    cleanUpdateOperations: async () => ({ removed: ['11111111-1111-4111-8111-111111111111'], deferred: false }),
+    cleanLogs: async () => { finish(); return {} },
+    record(component, phase, fields) { events.push({ component, phase, fields }) },
+  })
+  try {
+    await Promise.race([done, delay(1000).then(() => { throw new Error('maintenance did not run') })])
+    assert.deepEqual(events.find(event => event.component === 'update-operations'), {
+      component: 'update-operations', phase: 'maintenance-complete', fields: { removed: 1 },
+    })
+  } finally { stop() }
+})

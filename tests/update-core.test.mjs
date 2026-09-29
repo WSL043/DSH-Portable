@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -14,6 +14,7 @@ import {
   applyStagedCapsuleUpdate,
   checkForUpdate,
   comparePortableVersions,
+  cleanStaleUpdateOperationDirectories,
   defaultEngineUpdateIndexUrl,
   defaultEngineUpdateManifestUrl,
   defaultUpdateManifestUrl,
@@ -832,6 +833,7 @@ test('download, extract, and transactional apply form one verified update path',
       },
     }
     const sequence = []
+    const cleanupWarnings = []
     const result = await installAvailableAppUpdate({
       layout: fixture.layout,
       update,
@@ -845,17 +847,74 @@ test('download, extract, and transactional apply form one verified update path',
       healthCheck: async () => true,
       extract: (filename, destination) => extractUpdateArchive(filename, destination, { windowsExtractor: extractor }),
       onProgress: (event) => sequence.push(event.phase),
+      cleanOperationDirectories: async (layout) => {
+        assert.equal(layout.updateDir, fixture.layout.updateDir)
+        sequence.push('cleanup')
+        throw Object.assign(new Error('simulated cleanup failure'), { code: 'EACCES' })
+      },
+      onCleanupError: (error) => { cleanupWarnings.push(error.code); sequence.push('cleanup-warning') },
     })
     assert.equal(result.status, 'updated')
     assert.ok(sequence.indexOf('verifying') < sequence.indexOf('before-apply'))
     assert.ok(sequence.indexOf('before-apply') < sequence.indexOf('preflight'))
     assert.ok(sequence.indexOf('preflight') < sequence.indexOf('installing'))
+    assert.ok(sequence.indexOf('cleanup') < sequence.indexOf('preparing'))
+    assert.ok(sequence.indexOf('cleanup-warning') < sequence.indexOf('preparing'))
+    assert.deepEqual(cleanupWarnings, ['EACCES'])
     assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'new app')
     assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
   } finally {
     if (server) await new Promise((resolve) => server.close(resolve))
     await rm(fixture.root, { recursive: true, force: true })
   }
+})
+
+test('stale update cleanup removes only expired UUID operation directories and never follows links', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-stale-update-operations-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(layout.updateDir, { recursive: true })
+
+  const staleId = '11111111-1111-4111-8111-111111111111'
+  const freshId = '22222222-2222-4222-8222-222222222222'
+  const linkId = '33333333-3333-4333-8333-333333333333'
+  const stalePath = path.join(layout.updateDir, staleId)
+  const freshPath = path.join(layout.updateDir, freshId)
+  const externalPath = path.join(root, 'outside-update-root')
+  const linkPath = path.join(layout.updateDir, linkId)
+  const unmatchedPath = path.join(layout.updateDir, 'abandoned-operation')
+  await Promise.all([
+    mkdir(stalePath), mkdir(freshPath), mkdir(externalPath), mkdir(unmatchedPath),
+  ])
+  await writeFile(path.join(stalePath, 'component.zip'), 'stale')
+  await writeFile(path.join(externalPath, 'keep.txt'), 'outside')
+  await symlink(externalPath, linkPath, process.platform === 'win32' ? 'junction' : 'dir')
+
+  const now = Date.now()
+  const expired = new Date(now - 48 * 60 * 60 * 1000)
+  const recent = new Date(now - 60 * 60 * 1000)
+  await Promise.all([
+    utimes(stalePath, expired, expired),
+    utimes(unmatchedPath, expired, expired),
+    utimes(freshPath, recent, recent),
+  ])
+
+  const result = await cleanStaleUpdateOperationDirectories(layout, { now })
+  assert.deepEqual(result, { removed: [staleId], deferred: false })
+  await assert.rejects(lstat(stalePath), { code: 'ENOENT' })
+  assert.equal((await lstat(freshPath)).isDirectory(), true)
+  assert.equal((await lstat(unmatchedPath)).isDirectory(), true)
+  assert.equal((await lstat(linkPath)).isSymbolicLink(), true)
+  assert.equal(await readFile(path.join(externalPath, 'keep.txt'), 'utf8'), 'outside')
+
+  const journalId = '44444444-4444-4444-8444-444444444444'
+  const journalPath = path.join(layout.updateDir, journalId)
+  await mkdir(journalPath)
+  await utimes(journalPath, expired, expired)
+  await mkdir(path.dirname(layout.updateJournal), { recursive: true })
+  await writeFile(layout.updateJournal, JSON.stringify({ operationId: journalId, phase: 'testing' }))
+  assert.deepEqual(await cleanStaleUpdateOperationDirectories(layout, { now }), { removed: [], deferred: false })
+  assert.equal((await lstat(journalPath)).isDirectory(), true, 'a pending rollback journal owns its operation directory')
 })
 
 async function makeUpdateFixture() {
