@@ -239,8 +239,19 @@ namespace DshPortable
                     "The update finished, but the workspace did not return a usable local address. Reopen DSH-Portable."));
                 await NavigateDesktopAsync(url);
                 HideDesktopOperation();
+                string completionMessage = targetName + L(" 更新已完成。", " update is complete.");
+                string[] disabledPlugins = JsonUpdateWarningPlugins(updated.Item2);
+                if (disabledPlugins.Length > 0)
+                {
+                    string pluginList = String.Join("、", disabledPlugins);
+                    completionMessage += Environment.NewLine + String.Format(CultureInfo.CurrentCulture,
+                        L(
+                            "{0} 个插件与新版本不兼容，已被自动停用：{1}。请到插件页更新它们。",
+                            "{0} plugins are incompatible with the new version and were automatically disabled: {1}. Update them on the Plugins page."),
+                        disabledPlugins.Length, pluginList);
+                }
                 MessageBox.Show(this,
-                    targetName + L(" 更新已完成。", " update is complete."),
+                    completionMessage,
                     targetName + L(" 已更新", " updated"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             catch (Exception error)
@@ -251,6 +262,34 @@ namespace DshPortable
             {
                 if (!restoredAfterFailure) await RestoreDesktopAfterUpdateAttemptAsync();
                 updateFailure.Throw();
+            }
+        }
+
+        private static string[] JsonUpdateWarningPlugins(string json)
+        {
+            try
+            {
+                IDictionary<string, object> payload = new JavaScriptSerializer().DeserializeObject(json ?? String.Empty) as IDictionary<string, object>;
+                if (payload == null) return new string[0];
+                object warningsValue;
+                if (!payload.TryGetValue("warnings", out warningsValue)) return new string[0];
+                object[] warnings = warningsValue as object[];
+                if (warnings == null) return new string[0];
+
+                List<string> plugins = new List<string>();
+                foreach (object warningValue in warnings)
+                {
+                    IDictionary<string, object> warning = warningValue as IDictionary<string, object>;
+                    object pluginValue;
+                    if (warning == null || !warning.TryGetValue("plugin", out pluginValue)) continue;
+                    string plugin = Convert.ToString(pluginValue, CultureInfo.InvariantCulture);
+                    if (!String.IsNullOrWhiteSpace(plugin)) plugins.Add(plugin);
+                }
+                return plugins.Distinct(StringComparer.Ordinal).ToArray();
+            }
+            catch
+            {
+                return new string[0];
             }
         }
 
