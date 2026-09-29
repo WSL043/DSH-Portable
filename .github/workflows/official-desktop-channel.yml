@@ -118,7 +118,7 @@ jobs:
           $report = Get-Content -LiteralPath 'build/orch-080/T28/contract/contract-report.json' -Raw | ConvertFrom-Json
           if (-not $report.overallPassed) { throw 'Phase-1 contract report overallPassed was not true' }
       - name: Run the phase-2 real old-to-new portable acceptance
-        shell: pwsh
+        shell: powershell
         env:
           INSTALLER_OLD: ${{ steps.stage-old.outputs.installer }}
           INSTALLER_NEW: ${{ steps.stage-new.outputs.installer }}

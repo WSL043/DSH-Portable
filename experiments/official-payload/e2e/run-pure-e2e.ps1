@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
+if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this script with Windows PowerShell 5.1 (shell: powershell); the crash stub compiler needs it.' }
 $script:Ids = @(
     'old-app-running-from-root', 'update-copy-executed', 'update-applied', 'current-switched',
     'new-app-running', 'health-cleared', 'rewritten-app-update-yml', 'protocol-owned-while-running',
