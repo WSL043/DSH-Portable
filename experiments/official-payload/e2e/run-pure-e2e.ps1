@@ -641,11 +641,14 @@ try {
                     $writePath = [string]$_.path
                     $cacheAllowed = $script:CachePath -and ($writePath.StartsWith($script:CachePath.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase) -or $writePath.Equals($script:CachePath, [StringComparison]::OrdinalIgnoreCase))
                     $protocolAllowed = $writePath -match '^HKCU\\Software\\Classes\\dsh(?:\\|$)'
-                    $systemNoise = ($systemCategories -contains [string]$_.category) -or ($writePath -match '^[A-Za-z]:\\\$')
+                    # Extraction tools stamp the directories that contain the portable root; that is directory metadata, not content written outside it.
+                    $rootAncestor = $script:PortableRoot -and ([IO.Path]::GetFullPath($script:PortableRoot).TrimEnd('\') + '\').StartsWith($writePath.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+                    $runnerTemp = $env:RUNNER_TEMP -and ($writePath.TrimEnd('\') + '\').StartsWith($env:RUNNER_TEMP.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+                    $systemNoise = $runnerTemp -or ($systemCategories -contains [string]$_.category) -or ($writePath -match '^[A-Za-z]:\\\$')
                     # Writes made by the official app itself (its native-addon cache, default workspace, spelling dictionary) are the official app's own behavior: recorded, not asserted.
-                    $isOfficialOwn = [string]$_.process -ceq 'DeepSeek Harness.exe' -and -not ($cacheAllowed -or $protocolAllowed -or $systemNoise)
+                    $isOfficialOwn = [string]$_.process -ceq 'DeepSeek Harness.exe' -and -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor)
                     if ($isOfficialOwn) { $officialOwn.Add($_) }
-                    -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $isOfficialOwn)
+                    -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor -or $isOfficialOwn)
                 })
                 Set-Check 'no-outside-writes' ($unexpected.Count -eq 0) ([pscustomobject]@{ captured = $true; allowedOutsideRoots = @($script:CachePath, 'HKCU\Software\Classes\dsh'); officialOwnWrites = $officialOwn.ToArray(); unexpected = $unexpected })
                 if ($unexpected.Count -gt 0 -and -not $script:Failure) { $script:Failure = 'Process write trace found writes outside the portable root, unique updater cache, and dsh protocol key'; $script:ExitCode = 1 }
