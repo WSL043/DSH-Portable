@@ -83,8 +83,10 @@
    squeezed into a vertical stack instead of dropping to its own line. */
 .warnLine{color:var(--dsw-alias-state-warn-primary,#b45309);font-weight:600;font-size:12px;line-height:18px;margin:0;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .modalNote{font-size:12px;color:var(--dsw-alias-label-tertiary,#8b93a1);line-height:18px;margin:12px 0 0;display:flex;align-items:center;gap:4px}
-.grid{column-count:2;column-gap:14px;container-type:inline-size}
-.compactGrid{column-count:1}
+/* Row-major two-up grid: cards read left, right, left, right down the page. Cards in a row share a height;
+   the footer sticks to the bottom so the two edges line up. */
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:14px;row-gap:0;align-items:stretch;container-type:inline-size}
+.compactGrid{grid-template-columns:minmax(0,1fr)}
 .card.compactCard{gap:6px;padding:10px 12px}
 .compactCard .desc{min-height:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .compactCard .foot{row-gap:4px}
@@ -97,10 +99,11 @@
 .swatches{display:flex;gap:0;height:34px;border-radius:8px;overflow:hidden;border:1px solid var(--dsw-alias-border-l2,#e5e7eb)}
 .themesGrid{margin-bottom:12px}
 .swatches i{flex:1}
-/* Natural-height gallery; DOM/focus order stays top-to-bottom within each column. */
-.card{box-sizing:border-box;width:100%;display:inline-flex;vertical-align:top;break-inside:avoid;flex-direction:column;gap:12px;margin:0 0 14px;padding:16px;min-width:0;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff)}
+/* DOM and focus order follow the visual left-to-right, top-to-bottom order. */
+.card{box-sizing:border-box;width:100%;display:flex;flex-direction:column;gap:12px;margin:0 0 14px;padding:16px;min-width:0;border:1px solid var(--dsw-alias-border-l2,#e5e7eb);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff)}
 .cardContent{width:100%;min-width:0;display:flex;flex-direction:column;gap:9px}
 .card .desc{min-height:0;line-height:20px;font-size:13px;-webkit-line-clamp:3}
+.card .cardFooter{margin-top:auto}
 .cardFooter{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;min-width:0}
 .cardFooter .tag{border:0;padding:0;color:var(--dsw-alias-label-tertiary,#8b93a1);font-size:11px;white-space:normal}
 .card > .progress{width:100%}
@@ -451,7 +454,7 @@
 .compactCard .cardPreviews{width:144px}
 .compactCard .cardPreview{height:90px;aspect-ratio:auto}
 @container (max-width:640px){
-  .grid{column-count:1}
+  .grid{grid-template-columns:minmax(0,1fr)}
 }
 @container (max-width:620px){
   .compactCard .cardContent{flex-basis:calc(100% - 80px);order:0}
