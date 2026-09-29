@@ -116,6 +116,7 @@ internal static class PortableLauncher {
         string executable = AppExecutable(version);
         EnsureApplication(executable);
         CheckExternalOfficialOrPort(executable);
+        RunSeedPluginsBeforeLaunch();
         // Only one official desktop can run at a time (fixed port), so the root whose launcher passed these checks
         // is the only possible requester of an update. Writing the pointer earlier let a second Portable copy that
         // failed to start redirect another root's update to itself.
@@ -195,6 +196,32 @@ internal static class PortableLauncher {
             Thread.Sleep(500);
         }
     }
+
+    private static void RunSeedPluginsBeforeLaunch() {
+        string manifest = Path.Combine(Root, "launcher", "seed", "seed.json");
+        string profile = Path.Combine(DataRoot, "dsh-home", "profiles", "desktop", "package.json");
+        string script = Path.Combine(Root, "launcher", "seed-plugins.ps1");
+        if (!File.Exists(manifest) || !File.Exists(profile) || !File.Exists(script)) return;
+        string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+        var start = new ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = Root };
+        start.EnvironmentVariables.Remove("PSModulePath");
+        start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(script) + " -Root " + Quote(Root);
+        try {
+            using (Process child = Process.Start(start)) {
+                if (!child.WaitForExit(30000)) {
+                    try { child.Kill(); child.WaitForExit(5000); } catch { }
+                    SeedLog("plugin seed timed out; continuing official app startup");
+                } else if (child.ExitCode != 0) {
+                    SeedLog("plugin seed failed exit=" + child.ExitCode + "; continuing official app startup");
+                } else {
+                    SeedLog("plugin seed completed; continuing official app startup");
+                }
+            }
+        } catch (Exception error) {
+            SeedLog("plugin seed could not run: " + SafeMessage(error.Message) + "; continuing official app startup");
+        }
+    }
+    private static void SeedLog(string message) { try { Log(message); } catch { } }
 
     private static string FindOfficialConflict() {
         if (IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p => p.Port == 19387))
