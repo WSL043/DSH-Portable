@@ -63,3 +63,11 @@ test('alpha.4 failure evidence upload excludes the official payload', async () =
   assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.4-windows-x64\.zip/);
   assert.match(releaseAssets.with.path, /smoke-root-moved\/smoke-report\.json/);
 });
+
+test('the alpha workflow checks out this repository first, before the plugin repositories', async () => {
+  const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
+  const workflow = yaml.load(await readFile(file, 'utf8'));
+  const first = workflow.jobs.package.steps[0];
+  assert.match(first.uses, /^actions\/checkout@/);
+  assert.equal(first.with, undefined);
+});

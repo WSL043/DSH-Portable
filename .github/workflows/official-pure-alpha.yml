@@ -30,6 +30,7 @@ jobs:
       version: ${{ steps.select.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           repository: ${{ env.IMAGE_VIEWER_REPOSITORY }}
           ref: ${{ env.IMAGE_VIEWER_COMMIT }}
