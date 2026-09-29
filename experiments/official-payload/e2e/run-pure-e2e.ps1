@@ -91,7 +91,17 @@ function Get-FreeLoopbackPort {
 }
 
 function Read-JsonFile([string]$Path) {
-    Get-Content -LiteralPath $Path -Raw -ErrorAction Stop | ConvertFrom-Json
+    # The launcher and the update engine rewrite these files while the script polls them, so read with shared access and retry.
+    for ($attempt = 1; ; $attempt++) {
+        try {
+            $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+            try { $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8); $text = $reader.ReadToEnd() } finally { $stream.Dispose() }
+            return ($text | ConvertFrom-Json)
+        } catch {
+            if ($attempt -ge 20) { throw }
+            Start-Sleep -Milliseconds 150
+        }
+    }
 }
 
 function Write-JsonFile([string]$Path, $Value) {
