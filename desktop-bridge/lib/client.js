@@ -794,7 +794,8 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.updateHeader },
           h('div', { style: styles.text }, h('div', { style: styles.heading }, title),
             h('div', { style: styles.hint }, hint),
-            version && h('div', { style: styles.version }, format(t('currentVersion'), version))),
+            version && h('div', { style: styles.version }, format(t('currentVersion'), version)),
+            inlineStatus(`update-${scope}`)),
           h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
             busy === `update-${scope}` ? t('checking') : (scope === 'engine' && engineVersion && engineVersion !== version) || (scope === 'product' && productVersion && productVersion !== version)
               ? t('installVersion') : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))),
@@ -821,7 +822,7 @@ window.__ModuleLoader__.load({
             items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
             onSelect: value => update({ [key]: value === 'on' }),
           })),
-        inlineStatus(`update-${scope}`), details)
+        details)
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
         h('div', { style: styles.item },
           h('div', { style: styles.text },
