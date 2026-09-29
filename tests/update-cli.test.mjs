@@ -25,17 +25,13 @@ async function compileUpdateExtractor(output) {
   ])
 }
 
-function fakeDsh(version, { pluginDisableWarning = false } = {}) {
-  const dumpWarning = pluginDisableWarning
-    ? `dsh: disabling profile plugin row "command-compact": Plugin @fixture/old-compact@1.2.3 is incompatible with dsh ${version}: peerDependencies {"@deepseek-ai/dsh":"^0.1.0"}\n`
-    : ''
+function fakeDsh(version) {
   return `
 import http from 'node:http'
 const args = process.argv.slice(2)
 if (args.includes('--version') || args.includes('-V')) {
   console.log(${JSON.stringify(version)})
 } else if (args.includes('--dump-config')) {
-  process.stderr.write(${JSON.stringify(dumpWarning)})
   console.log('profile composed')
 } else if (args.includes('web')) {
   const port = Number(args[args.indexOf('--port') + 1])
@@ -60,13 +56,40 @@ async function makeComponentArchive(root, version, portableVersion) {
   await mkdir(path.dirname(dshBin), { recursive: true })
   await mkdir(path.dirname(bridgePatch), { recursive: true })
   await mkdir(path.join(source, 'licenses'), { recursive: true })
-  await writeFile(dshBin, fakeDsh(version, { pluginDisableWarning: true }))
+  await writeFile(dshBin, fakeDsh(version))
   await writeFile(path.join(path.dirname(path.dirname(dshBin)), 'package.json'), JSON.stringify({
     name: '@deepseek-ai/dsh', version, dependencies: {},
   }))
   await writeFile(bridgePatch, '- insert: []\n')
   await writeFile(path.join(path.dirname(bridgePatch), 'package.json'), '{"name":"@wsl043/dsh-portable-desktop-bridge"}\n')
   await writeFile(path.join(source, 'app', 'package.json'), '{"name":"updated-fixture"}\n')
+  const appBootDir = path.join(source, 'app', 'node_modules', '@deepseek-ai', 'dsh-app-boot')
+  await mkdir(path.join(appBootDir, 'lib'), { recursive: true })
+  await writeFile(path.join(appBootDir, 'package.json'), `${JSON.stringify({
+    name: '@deepseek-ai/dsh-app-boot',
+    type: 'module',
+    version,
+    exports: './lib/index.js',
+  })}\n`)
+  await writeFile(path.join(appBootDir, 'lib', 'index.js'), [
+    "import { readFileSync } from 'node:fs';",
+    "import path from 'node:path';",
+    "export const PROFILE_COMPATIBILITY_FILENAME = 'compatibility.json';",
+    "export function getDshRuntimeVersion() { return JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version; }",
+    'export function evaluatePluginCompatibility(manifest, exemptions = {}, runtimeVersion = getDshRuntimeVersion()) {',
+    "  if (!Object.hasOwn(manifest, 'peerDependencies')) return undefined;",
+    '  const peers = Object.fromEntries(Object.entries(manifest.peerDependencies).filter(([name, range]) =>',
+    "    (name === '@deepseek-ai/dsh' || name.startsWith('@deepseek-ai/dsh-')) && range !== runtimeVersion));",
+    '  if (Object.keys(peers).length === 0) return undefined;',
+    "  const key = manifest.name + '@' + manifest.version;",
+    '  return { name: manifest.name, version: manifest.version, runtimeVersion, peers, exempted: (exemptions[key] || []).includes(runtimeVersion) };',
+    '}',
+    'export function readProfileCompatibility(profileDir) {',
+    '  try { return { exemptions: JSON.parse(readFileSync(path.join(profileDir, PROFILE_COMPATIBILITY_FILENAME), \'utf8\')) }; }',
+    '  catch { return { exemptions: {} }; }',
+    '}',
+    "export function pluginCompatibilityWarning(issue) { return 'Plugin ' + issue.name + '@' + issue.version + ' is incompatible with dsh ' + issue.runtimeVersion + ': peerDependencies ' + JSON.stringify(issue.peers) + '. Running it may cause crashes or data loss. Exact-version exemption: ' + (issue.exempted ? 'active' : 'not active') + '.'; }",
+  ].join('\n'))
   await writeFile(path.join(source, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
     product: 'DSH-Portable',
     portableVersion,
@@ -145,7 +168,14 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       defaultPlugins: [],
     })}\n`)
     await writeFile(path.join(root, 'data', 'private-session.txt'), 'keep me')
-    await writeFile(path.join(root, 'data', 'dsh-home', 'profiles', 'web', 'package.json'), '{}\n')
+    const profileDir = path.join(root, 'data', 'dsh-home', 'profiles', 'web')
+    await writeFile(path.join(profileDir, 'package.json'), `${JSON.stringify({ dependencies: { 'dsh-cli-fixture': '1.0.0' } })}\n`)
+    await mkdir(path.join(profileDir, 'node_modules', 'dsh-cli-fixture'), { recursive: true })
+    await writeFile(path.join(profileDir, 'node_modules', 'dsh-cli-fixture', 'package.json'), `${JSON.stringify({
+      name: 'dsh-cli-fixture',
+      version: '1.0.0',
+      peerDependencies: { '@deepseek-ai/dsh': '^0.0.1' },
+    })}\n`)
 
     const portableVersion = '0.1.0-rc.7-portable.1'
     const componentBuild = await makeComponentArchive(root, '0.1.0-rc.7', portableVersion)
@@ -231,10 +261,10 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     assert.ok(progress.some((event) => event.phase === 'installing'))
     const warnings = [{
       profile: 'web',
-      plugin: '@fixture/old-compact',
-      version: '1.2.3',
-      row: 'command-compact',
-      reason: 'peerDependencies {"@deepseek-ai/dsh":"^0.1.0"}',
+      plugin: 'dsh-cli-fixture',
+      version: '1.0.0',
+      row: 'dsh-cli-fixture',
+      reason: 'Plugin dsh-cli-fixture@1.0.0 is incompatible with dsh 0.1.0-rc.7: peerDependencies {"@deepseek-ai/dsh":"^0.0.1"}. Running it may cause crashes or data loss. Exact-version exemption: not active.',
     }]
     assert.deepEqual(progress.find((event) => event.phase === 'complete').warnings, warnings)
     assert.equal(hostWasRunningWhenComponentDownloaded, true)
