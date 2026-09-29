@@ -285,23 +285,37 @@ export function visiblePlugins(plugins: RegistryPlugin[], options: ListQuery): R
   // A github:-only entry has no npm package and therefore no download count
   // at all — that is a coverage gap, not a "0 downloads" verdict, and must
   // not be read as less popular than a package that genuinely has zero.
-  // Such entries always sort after every entry WITH a real count, in either
-  // direction, and are ordered against each other by star count — the only
-  // signal available for them — rather than left in an arbitrary tie.
+  // Such entries always sort after every entry WITH a real count. For the
+  // cumulative sort, missing totals are then ordered by catalog 30-day
+  // downloads in the selected direction, with Star descending as the tie-break.
   const hasDownloads = (p: RegistryPlugin): p is RegistryPlugin & { downloads: number } => typeof p.downloads === 'number'
+  const compareStars = (a: RegistryPlugin, b: RegistryPlugin): number => (b.stars ?? -1) - (a.stars ?? -1)
   const sortCount = (value: (plugin: RegistryPlugin) => number | undefined, direction: SortDir): RegistryPlugin[] =>
     [...list].sort((a, b) => {
       const left = value(a), right = value(b)
       if (left !== undefined && right !== undefined) return direction === 'desc' ? right - left : left - right
       if (left !== undefined) return -1
       if (right !== undefined) return 1
-      return (b.stars ?? -1) - (a.stars ?? -1)
+      return compareStars(a, b)
     })
   if (options.sort === 'downloads-desc') return sortCount(p => hasDownloads(p) ? p.downloads : undefined, 'desc')
   if (options.sort === 'downloads-asc') return sortCount(p => hasDownloads(p) ? p.downloads : undefined, 'asc')
   const totalFor = (plugin: RegistryPlugin): number | undefined => plugin.npm === undefined ? undefined : options.totals?.[plugin.npm]
-  if (options.sort === 'total-desc') return sortCount(totalFor, 'desc')
-  if (options.sort === 'total-asc') return sortCount(totalFor, 'asc')
+  const sortTotal = (direction: SortDir): RegistryPlugin[] => [...list].sort((a, b) => {
+    const left = totalFor(a), right = totalFor(b)
+    if (left !== undefined && right !== undefined && left !== right) return direction === 'desc' ? right - left : left - right
+    if (left !== undefined && right === undefined) return -1
+    if (left === undefined && right !== undefined) return 1
+    if (left === undefined && right === undefined) {
+      const byRecentDownloads = hasDownloads(a) && hasDownloads(b)
+        ? (direction === 'desc' ? b.downloads - a.downloads : a.downloads - b.downloads)
+        : hasDownloads(a) ? -1 : hasDownloads(b) ? 1 : 0
+      if (byRecentDownloads !== 0) return byRecentDownloads
+    }
+    return compareStars(a, b)
+  })
+  if (options.sort === 'total-desc') return sortTotal('desc')
+  if (options.sort === 'total-asc') return sortTotal('asc')
   if (options.sort === 'stars-desc') {
     return [...list].sort((a, b) => (b.stars ?? -1) - (a.stars ?? -1))
   }

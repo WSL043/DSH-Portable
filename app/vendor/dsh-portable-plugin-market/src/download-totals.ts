@@ -3,29 +3,38 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 
+/** Single-package fallback count over the same rolling window; complete means that full window was returned. */
 export interface DownloadTotal { downloads: number; start: string; end: string; complete: boolean }
 export interface DownloadTotalsTable {
   generatedAt: string
+  /** True when every package selected for this table has a count in the stated window. */
   complete: boolean
-  /** The fixed lower bound and latest complete UTC day included in totals. */
+  /** Inclusive rolling-window dates, both in UTC. */
   start: string
   end: string
   totals: Record<string, number>
 }
 const DAY = 86400000
-const EARLIEST = '2015-01-10'
-/** One bounded cumulative window keeps the whole-market refresh practical. */
-export const DOWNLOAD_TOTALS_START = '2025-01-01'
+/** Query one rolling 365-day window: today and the previous 364 UTC dates. */
+export const DOWNLOAD_TOTALS_WINDOW_DAYS = 364
 /** 100 is below npm's documented 128-package bulk limit. */
 export const DOWNLOAD_TOTALS_BATCH_SIZE = 100
-export const DOWNLOAD_TOTALS_MAX_REQUESTS = 1280
+/** Keep a full catalog refresh near 120 calls, with a hard ceiling of 150. */
+export const DOWNLOAD_TOTALS_MAX_REQUESTS = 150
+export const DOWNLOAD_TOTALS_MAX_SCOPE_PACKAGES = 100
 export const DOWNLOAD_TOTALS_MAX_CONCURRENCY = 4
-const DOWNLOAD_TOTALS_REQUEST_TIMEOUT_MS = 10_000
-const DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS = 10 * 60_000
+export const DOWNLOAD_TOTALS_REQUEST_TIMEOUT_MS = 10_000
+export const DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS = 120_000
 const validDate = (value: unknown): value is string => typeof value === 'string'
   && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value))
 
 function utcDate(value: number): string { return new Date(value).toISOString().slice(0, 10) }
+/** UTC date range included in cumulative totals, with today's date as the endpoint. */
+export function downloadTotalsWindow(now: number): [string, string] {
+  const end = utcDate(now)
+  return [utcDate(Date.parse(`${end}T00:00:00Z`) - DOWNLOAD_TOTALS_WINDOW_DAYS * DAY), end]
+}
+
 function isPackageName(value: string): boolean {
   return /^(?:@[a-z0-9._-]+\/)?[a-z0-9][a-z0-9._-]*$/i.test(value) && value.length <= 214
 }
@@ -52,6 +61,40 @@ export interface DownloadTotalsPlan {
   omittedPackages: string[]
 }
 
+/** Keep every valid unscoped npm package; query only the catalog's top 100 scoped packages by 30-day downloads. */
+export function selectDownloadTotalsPackages(plugins: readonly {
+  npm?: string | null
+  downloads?: number | null
+  stars?: number | null
+}[]): string[] {
+  const plain = new Set<string>()
+  const scoped = new Map<string, { downloads: number; stars: number }>()
+  for (const plugin of plugins) {
+    const name = typeof plugin.npm === 'string' ? plugin.npm.trim() : ''
+    if (!isPackageName(name)) continue
+    if (!name.startsWith('@')) {
+      plain.add(name)
+      continue
+    }
+    if (!Number.isSafeInteger(plugin.downloads) || (plugin.downloads as number) < 0) continue
+    const candidate = {
+      downloads: plugin.downloads as number,
+      stars: Number.isSafeInteger(plugin.stars) && (plugin.stars as number) >= 0 ? plugin.stars as number : -1,
+    }
+    const current = scoped.get(name)
+    if (current === undefined || candidate.downloads > current.downloads
+      || (candidate.downloads === current.downloads && candidate.stars > current.stars)) {
+      scoped.set(name, candidate)
+    }
+  }
+  const topScoped = [...scoped]
+    .sort(([leftName, left], [rightName, right]) => right.downloads - left.downloads
+      || right.stars - left.stars || leftName.localeCompare(rightName))
+    .slice(0, DOWNLOAD_TOTALS_MAX_SCOPE_PACKAGES)
+    .map(([name]) => name)
+  return [...plain, ...topScoped]
+}
+
 /** Pure planner shared by the bounded production scheduler and its fixtures. */
 export function planDownloadTotals(packages: readonly string[], start: string, end: string, maxRequests = DOWNLOAD_TOTALS_MAX_REQUESTS): DownloadTotalsPlan {
   if (!Number.isSafeInteger(maxRequests) || maxRequests < 0) throw new Error('Invalid request limit')
@@ -64,8 +107,9 @@ export function planDownloadTotals(packages: readonly string[], start: string, e
     allUnits.push({ kind: 'bulk', packages: plain.slice(offset, offset + DOWNLOAD_TOTALS_BATCH_SIZE) })
   }
   for (const name of scoped) allUnits.push({ kind: 'scope', packages: [name] })
+  const requestLimit = Math.min(maxRequests, DOWNLOAD_TOTALS_MAX_REQUESTS)
   const cost = periods.length
-  const units = cost === 0 ? [] : allUnits.slice(0, Math.floor(maxRequests / cost))
+  const units = cost === 0 ? [] : allUnits.slice(0, Math.floor(requestLimit / cost))
   const included = new Set(units.flatMap(unit => unit.packages))
   return {
     periods,
@@ -171,19 +215,22 @@ async function writeTotalsCache(file: string, cache: DownloadTotalsCache, now: n
  */
 export function createDownloadTotalsTable(fetcher = marketFetch, options: DownloadTotalsOptions = {}) {
   const now = options.now ?? Date.now
-  const maxRequests = options.maxRequests ?? DOWNLOAD_TOTALS_MAX_REQUESTS
-  const requestTimeoutMs = options.requestTimeoutMs ?? DOWNLOAD_TOTALS_REQUEST_TIMEOUT_MS
-  const refreshTimeoutMs = options.refreshTimeoutMs ?? DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS
+  const maxRequests = Math.min(options.maxRequests ?? DOWNLOAD_TOTALS_MAX_REQUESTS, DOWNLOAD_TOTALS_MAX_REQUESTS)
+  const requestTimeoutMs = Math.min(options.requestTimeoutMs ?? DOWNLOAD_TOTALS_REQUEST_TIMEOUT_MS, DOWNLOAD_TOTALS_REQUEST_TIMEOUT_MS)
+  const refreshTimeoutMs = Math.min(options.refreshTimeoutMs ?? DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS, DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS)
   const memory = new Map<string, DownloadTotalsCache>()
   const pending = new Map<string, { signature: string; promise: Promise<DownloadTotalsTable> }>()
 
-  const get = async (plugins: readonly { npm?: string | null }[], registryCacheFile?: string): Promise<DownloadTotalsTable> => {
-    const names = [...new Set(plugins.flatMap(plugin => typeof plugin.npm === 'string' && plugin.npm.trim() !== '' ? [plugin.npm] : []))]
+  const get = async (plugins: readonly { npm?: string | null; downloads?: number | null; stars?: number | null }[], registryCacheFile?: string): Promise<DownloadTotalsTable> => {
+    const names = selectDownloadTotalsPackages(plugins)
     const signature = namesDigest(names)
-    const today = utcDate(now())
+    const nowAtStart = now()
+    const today = utcDate(nowAtStart)
+    const [start, end] = downloadTotalsWindow(nowAtStart)
     const profileKey = registryCacheFile === undefined ? '<memory>' : resolve(registryCacheFile)
     const cachedMemory = memory.get(profileKey)
-    if (cachedMemory?.generatedAt.slice(0, 10) === today && cachedMemory.namesDigest === signature) {
+    if (cachedMemory?.generatedAt.slice(0, 10) === today && cachedMemory.start === start && cachedMemory.end === end
+      && cachedMemory.namesDigest === signature) {
       return publicTable(cachedMemory, names)
     }
     const existing = pending.get(profileKey)
@@ -196,21 +243,21 @@ export function createDownloadTotalsTable(fetcher = marketFetch, options: Downlo
     const request = (async () => {
       const file = registryCacheFile === undefined ? undefined : totalsCacheFile(registryCacheFile)
       const cached = file === undefined ? memory.get(profileKey) ?? null : await readTotalsCache(file)
-      if (cached?.generatedAt.slice(0, 10) === today && cached.namesDigest === signature) {
+      if (cached?.generatedAt.slice(0, 10) === today && cached.start === start && cached.end === end
+        && cached.namesDigest === signature) {
         memory.set(profileKey, cached)
         return publicTable(cached, names)
       }
 
-      const sameDay = cached?.generatedAt.slice(0, 10) === today
+      const sameDay = cached?.generatedAt.slice(0, 10) === today && cached.start === start && cached.end === end
       const totals: Record<string, number> = {}
       if (sameDay && cached !== null) {
         for (const name of names) if (Object.hasOwn(cached.totals, name)) totals[name] = cached.totals[name]
       }
       const remaining = names.filter(name => !Object.hasOwn(totals, name))
-      const end = utcDate(now() - DAY) // npm settles complete download counts once per UTC day.
       const plan = remaining.length === 0
         ? { periods: [] as [string, string][], units: [] as DownloadTotalsWorkUnit[], bulkBatches: 0, scopePackages: 0, requestCount: 0, omittedPackages: [] as string[] }
-        : planDownloadTotals(remaining, DOWNLOAD_TOTALS_START, end, maxRequests)
+        : planDownloadTotals(remaining, start, end, maxRequests)
       const startedAt = now()
       const periodResults = plan.units.map(() => plan.periods.map(() => null as Map<string, number> | null))
       const tasks = plan.units.flatMap((unit, unitIndex) => plan.periods.map((period, periodIndex) => ({ unit, unitIndex, period, periodIndex })))
@@ -279,7 +326,7 @@ export function createDownloadTotalsTable(fetcher = marketFetch, options: Downlo
         generatedAt: new Date(now()).toISOString(),
         namesDigest: signature,
         complete: names.every(name => Object.hasOwn(totals, name)),
-        start: DOWNLOAD_TOTALS_START,
+        start,
         end,
         totals,
       }
@@ -313,18 +360,6 @@ export function createDownloadTotalsTable(fetcher = marketFetch, options: Downlo
 
 export const getDownloadTotalsTable = createDownloadTotalsTable()
 
-/** npm accepts at most 18 months per single-package request; use calendar years. */
-export function downloadPeriods(start: string, end: string): [string, string][] {
-  if (!validDate(start) || !validDate(end) || start > end) throw new Error('Invalid download period')
-  const periods: [string, string][] = []
-  for (let cursor = start; cursor <= end;) {
-    const stop = `${cursor.slice(0, 4)}-12-31` < end ? `${cursor.slice(0, 4)}-12-31` : end
-    periods.push([cursor, stop])
-    cursor = new Date(Date.parse(stop) + DAY).toISOString().slice(0, 10)
-  }
-  return periods
-}
-
 /** Bounded, coalesced, daily cache. Statistics never block catalog delivery. */
 export function createDownloadTotals(fetcher = marketFetch, now = Date.now) {
   const cache = new Map<string, { at: number; value: DownloadTotal }>()
@@ -341,23 +376,11 @@ export function createDownloadTotals(fetcher = marketFetch, now = Date.now) {
     else active++
     try {
       const encoded = encodeURIComponent(name)
-      const metadata = await json(`https://registry.npmjs.org/${encoded}`)
-      const created = String(metadata.time?.created ?? '').slice(0, 10)
-      if (metadata.name !== name || !validDate(created)) throw new Error('Missing npm creation date')
-      const latest = await json(`https://api.npmjs.org/downloads/point/last-day/${encoded}`)
-      if (latest.package !== name || !validDate(latest.end)) throw new Error('Invalid npm cutoff')
-      const end = latest.end
-      const start = created < EARLIEST ? EARLIEST : created
-      if (start > end) throw new Error('npm statistics have not settled yet')
-      let downloads = 0
-      for (const [from, to] of downloadPeriods(start, end)) {
-        const result = await json(`https://api.npmjs.org/downloads/point/${from}:${to}/${encoded}`)
-        if (result.package !== name || result.start !== from || result.end !== to
-          || !Number.isSafeInteger(result.downloads) || result.downloads < 0) throw new Error('Incomplete npm statistics')
-        downloads += result.downloads
-      }
-      if (!Number.isSafeInteger(downloads)) throw new Error('Invalid npm total')
-      return { downloads, start, end, complete: created >= EARLIEST }
+      const [start, end] = downloadTotalsWindow(now())
+      const result = await json(`https://api.npmjs.org/downloads/point/${start}:${end}/${encoded}`)
+      if (result.package !== name || result.start !== start || result.end !== end
+        || !Number.isSafeInteger(result.downloads) || result.downloads < 0) throw new Error('Incomplete npm statistics')
+      return { downloads: result.downloads, start, end, complete: true }
     } finally {
       const next = waiting.shift()
       if (next) next()

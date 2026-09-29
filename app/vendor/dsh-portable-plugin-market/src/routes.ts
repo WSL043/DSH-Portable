@@ -220,7 +220,7 @@ export function mountMarketRoutes(
   }
   const activeProfileDir = profileDir(config.profile, config.profileDirectory)
   const registryCacheFile = join(activeProfileDir, '.dsh-market', 'registry-cache-v1.json')
-  const warmDownloadTotals = (registry: { plugins: readonly { npm?: string | null }[] }): void => {
+  const warmDownloadTotals = (registry: { plugins: readonly { npm?: string | null; downloads?: number | null; stars?: number | null }[] }): void => {
     void getDownloadTotalsTable(registry.plugins, registryCacheFile).catch(error => {
       logEvent('warn', 'npm-totals', `background refresh failed: ${error instanceof Error ? error.message : String(error)}`)
     })
