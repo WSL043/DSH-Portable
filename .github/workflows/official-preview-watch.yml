@@ -35,10 +35,12 @@ jobs:
             git fetch --no-tags origin "$BRANCH"
             git checkout -B "$BRANCH" FETCH_HEAD
           else
-            # A closed review PR leaves its branch behind. The branch is automation-owned,
-            # so start it from the current main and let the push replace the stale one.
+            # The branch of a closed review is dead: remove it so this run can publish a fresh one.
+            # An open review is never touched, so manual fixes on it are never replaced.
+            if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+              git push origin --delete "$BRANCH"
+            fi
             git checkout -B "$BRANCH"
-            git fetch --no-tags origin "$BRANCH" || true
           fi
           echo "pr=$PR" >> "$GITHUB_OUTPUT"
       - id: preview
@@ -94,7 +96,7 @@ jobs:
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add upstream.preview.lock.json config/historical-descriptor-versions.json
           git commit -m "chore: review official DSH candidate ${VERSION}"
-          git push --force-with-lease origin "$BRANCH"
+          git push origin "$BRANCH"
           BODY=$(mktemp)
           cat > "$BODY" <<EOF
           Reviews official DeepSeek Harness candidate ${VERSION} (npm tag: ${NPM_TAG}) at immutable commit ${COMMIT} for the Portable candidate channel.
