@@ -517,6 +517,8 @@ try {
   await client.send('Runtime.enable')
   await client.send('Page.enable')
   await waitForValue(client, 'document.readyState', value => value === 'complete', 'restarted DSH document readiness', 60000)
+  // A narrow window collapses the sidebar into an icon rail, which hides the workspace tree this check reads.
+  await client.send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false })
 
   // Import restores settings from the fixture, including first-run onboarding.
   for (let attempt = 0; attempt < 16; attempt += 1) {
