@@ -16,11 +16,14 @@ const sitemap = await readFile(new URL("../site/sitemap.xml", import.meta.url), 
 const workflow = await readFile(new URL("../.github/workflows/pages.yml", import.meta.url), "utf8");
 const privacy = await readFile(new URL("../PRIVACY.md", import.meta.url), "utf8");
 const signing = await readFile(new URL("../CODE_SIGNING.md", import.meta.url), "utf8");
+const readme = await readFile(new URL("../README.md", import.meta.url), "utf8");
+const readmeEnglish = await readFile(new URL("../README.en.md", import.meta.url), "utf8");
 
 test("website uses only stable release asset names that the product publishes", () => {
   const assets = [
     "DSH-Portable-windows-x64.exe",
     "DSH-Portable-windows-x64-offline.zip",
+    "DSH-Portable-windows-x64-complete-offline.zip",
     "DSH-Portable-macos-arm64.zip",
     "DSH-Portable-macos-x64.zip",
     "DeepSeek-Herness-linux-x64.AppImage",
@@ -32,6 +35,44 @@ test("website uses only stable release asset names that the product publishes", 
 
   for (const asset of assets) assert.match(`${html}\n${app}`, new RegExp(asset.replaceAll(".", "\\.")));
   assert.doesNotMatch(`${html}\n${app}`, /windows-x64-offline\.exe/);
+});
+
+test("website download packages match both README language editions", () => {
+  const readmeAssets = source => new Set(
+    [...source.matchAll(/releases\/latest\/download\/((?:DSH-Portable|DeepSeek-Herness)-[A-Za-z0-9.-]+\.(?:exe|zip|AppImage|tar\.gz))/g)]
+      .map(([, asset]) => asset),
+  );
+  const siteAssets = new Set(
+    [...`${html}\n${app}`.matchAll(/\b((?:DSH-Portable|DeepSeek-Herness)-[A-Za-z0-9.-]+\.(?:exe|zip|AppImage|tar\.gz))\b/g)]
+      .map(([, asset]) => asset),
+  );
+  const chineseAssets = readmeAssets(readme);
+  const englishAssets = readmeAssets(readmeEnglish);
+  assert.deepEqual([...englishAssets].sort(), [...chineseAssets].sort());
+  assert.deepEqual([...siteAssets].sort(), [...chineseAssets].sort());
+});
+
+test("website localization keys are present in both languages and state the new position", () => {
+  const htmlKeys = new Set([...html.matchAll(/data-i18n="([^"]+)"/g)].map(([, key]) => key));
+  const dictionaryStart = app.indexOf("  en: {");
+  const dictionaryEnd = app.indexOf("\n  },", dictionaryStart);
+  assert.notEqual(dictionaryStart, -1);
+  assert.notEqual(dictionaryEnd, -1);
+  const englishKeys = new Set(
+    [...app.slice(dictionaryStart, dictionaryEnd).matchAll(/^\s{4}([A-Za-z][A-Za-z0-9]*):/gm)]
+      .map(([, key]) => key),
+  );
+  assert.deepEqual([...englishKeys].sort(), [...htmlKeys].sort());
+  assert.match(html, /一个文件夹，带走会话、设置、插件和工作区/);
+  assert.doesNotMatch(html, /无需 Node\.js 的可移动|自带运行环境和插件市场|免配环境|界面装插件/);
+  assert.doesNotMatch(app, /No runtime setup|Visual plugins|No Node\.js required/i);
+  assert.match(html, /不是 DeepSeek 官方应用，也未获 DeepSeek 背书/);
+  assert.match(app, /not an official DeepSeek app, and is not endorsed by DeepSeek/i);
+  assert.match(html, /href="https:\/\/www\.deepseek\.com\/harness\/"/);
+  assert.match(html, /稳定版 0\.x（Native）/);
+  assert.match(html, /1\.0 开发线[\s\S]*仅 Windows[\s\S]*不在公开下载中/);
+  assert.match(app, /Stable 0\.x supports Windows, macOS, and Linux/);
+  assert.match(app, /1\.0 development line[\s\S]*Windows only[\s\S]*outside public downloads/);
 });
 
 test("website exposes accessible platform selection and bilingual content", () => {
@@ -58,7 +99,30 @@ test("website defaults to Chinese and builds an indexable English route", async 
   assert.match(english, /<html lang="en">/);
   assert.match(english, /<meta name="dsh-page-language" content="en">/);
   assert.match(english, /<link rel="canonical" href="https:\/\/wsl043\.github\.io\/DSH-Portable\/en\/">/);
-  assert.match(english, /<title>DSH-Portable[^<]*Portable DeepSeek Harness/);
+  assert.match(english, /<title>DSH-Portable \| Portable DeepSeek Harness in a folder[^<]*<\/title>/);
+  assert.match(english, /<meta name="description" content="DSH-Portable is the portable edition of DeepSeek Harness: take sessions, settings, plugins, and your workspace in one folder\./);
+  assert.match(english, /<meta property="og:title" content="DSH-Portable \| Portable DeepSeek Harness">/);
+  assert.match(english, /<meta property="og:description" content="One folder for sessions, settings, plugins, and your workspace\./);
+  assert.match(english, /<meta name="twitter:title" content="DSH-Portable \| Portable DeepSeek Harness">/);
+  assert.match(english, /<meta name="twitter:description" content="One folder for sessions, settings, plugins, and your workspace\./);
+  assert.match(english, /"description": "The portable edition of DeepSeek Harness: take sessions, settings, plugins, and your workspace in one folder\./);
+  assert.match(english, /"operatingSystem":\s*"Windows, macOS, Linux \(stable 0\.x\); Windows \(1\.0 development line\)"/);
+  assert.match(english, /"softwareRequirements": "Stable 0\.x: Windows, macOS, and Linux; 1\.0 development line: Windows-only development builds and drafts, outside public downloads\."/);
+  assert.doesNotMatch(english, /"softwareRequirements"[^\n]*Node\.js|bundled runtime and visual plugin market|visual plugin installation/i);
+  assert.match(english, /DeepSeek Harness<br>in a portable folder\./);
+  assert.match(english, /not an official DeepSeek app, and is not endorsed by DeepSeek/i);
+  assert.match(english, /href="https:\/\/www\.deepseek\.com\/harness\/"/);
+  assert.match(english, /Stable 0\.x supports Windows, macOS, and Linux/);
+  assert.match(english, /1\.0 development line[\s\S]*Windows only[\s\S]*outside public downloads/);
+  const englishAssets = new Set(
+    [...`${english}\n${await readFile(new URL("../build/site/app.js", import.meta.url), "utf8")}`.matchAll(/\b((?:DSH-Portable|DeepSeek-Herness)-[A-Za-z0-9.-]+\.(?:exe|zip|AppImage|tar\.gz))\b/g)]
+      .map(([, asset]) => asset),
+  );
+  const readmeEnglishAssets = new Set(
+    [...readmeEnglish.matchAll(/releases\/latest\/download\/((?:DSH-Portable|DeepSeek-Herness)-[A-Za-z0-9.-]+\.(?:exe|zip|AppImage|tar\.gz))/g)]
+      .map(([, asset]) => asset),
+  );
+  assert.deepEqual([...englishAssets].sort(), [...readmeEnglishAssets].sort());
   assert.match(english, /class="language-switch" href="\.\.\/" hreflang="zh-CN"/);
   assert.match(english, /href="\.\.\/styles\.css\?v=[a-f0-9]+"/);
   assert.match(english, /src="\.\.\/assets\/dsh-interface-en\.png"/);
@@ -104,8 +168,17 @@ test("website publishes only through the currently verified Pages domain", async
 });
 
 test("website exposes search-engine metadata without duplicating release files", () => {
+  assert.match(html, /<title>DSH-Portable｜DeepSeek Harness 的便携版<\/title>/);
+  assert.match(html, /<meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区/);
+  assert.match(html, /<meta property="og:title" content="DSH-Portable｜DeepSeek Harness 便携版">/);
+  assert.match(html, /<meta property="og:description" content="一个文件夹带走会话、设置、插件和工作区/);
+  assert.match(html, /<meta name="twitter:title" content="DSH-Portable｜DeepSeek Harness 便携版">/);
+  assert.match(html, /<meta name="twitter:description" content="一个文件夹带走会话、设置、插件和工作区/);
   assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
   assert.match(html, /<script type="application\/ld\+json">[\s\S]*"@type":\s*"SoftwareApplication"/);
+  assert.match(html, /"operatingSystem":\s*"Windows, macOS, Linux \(stable 0\.x\); Windows \(1\.0 development line\)"/);
+  assert.match(html, /"softwareRequirements":\s*"稳定版 0\.x：Windows、macOS 和 Linux；1\.0 开发线：仅 Windows 开发构建与草稿，不在公开下载中。"/);
+  assert.doesNotMatch(html, /"softwareRequirements"[^\n]*Node\.js/);
   assert.match(html, /"downloadUrl":\s*"https:\/\/github\.com\/WSL043\/DSH-Portable\/releases\/latest\/download\/DSH-Portable-windows-x64\.exe"/);
   assert.match(robots, /User-agent:\s*\*[\s\S]*Allow:\s*\/[\s\S]*Sitemap:\s*https:\/\/wsl043\.github\.io\/DSH-Portable\/sitemap\.xml/);
   assert.match(sitemap, /<loc>https:\/\/wsl043\.github\.io\/DSH-Portable\/<\/loc>/);
@@ -116,8 +189,8 @@ test("website exposes search-engine metadata without duplicating release files",
 });
 
 test("hero and trust copy use durable portable-product facts", () => {
-  assert.match(html, /无需 Node\.js/);
-  assert.match(app, /No Node\.js required/);
+  assert.match(html, /DeepSeek Harness<br>的便携版/);
+  assert.match(app, /Do I need to install Node\.js separately/);
   assert.doesNotMatch(html, /≈\s*55\s*KB|−15%/);
   assert.match(`${html}\n${app}`, /SmartScreen/);
   assert.match(`${html}\n${app}`, /data\/.*workspace\/|data and workspace/);
