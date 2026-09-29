@@ -73,6 +73,16 @@ function Invoke-SeedPlugin {
     $packageBytes = [IO.File]::ReadAllBytes($packagePath)
     $patchExisted = Test-Path -LiteralPath $patchPath -PathType Leaf
     $patchBytes = if ($patchExisted) { [IO.File]::ReadAllBytes($patchPath) } else { $null }
+    $lockPath = Join-Path $ProfileDirectory 'pnpm-lock.yaml'
+    $lockExisted = Test-Path -LiteralPath $lockPath -PathType Leaf
+    if ($lockExisted -and (([IO.File]::GetAttributes($lockPath) -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'Profile pnpm-lock.yaml is redirected; refusing to seed through it.' }
+    $lockBytes = if ($lockExisted) { [IO.File]::ReadAllBytes($lockPath) } else { $null }
+    $profileSeedDirectory = Join-Path $ProfileDirectory 'seed'
+    $profileSeedDirectoryExisted = Test-Path -LiteralPath $profileSeedDirectory -PathType Container
+    if ($profileSeedDirectoryExisted -and (([IO.File]::GetAttributes($profileSeedDirectory) -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'Profile seed directory is redirected; refusing to seed through it.' }
+    $profileSeedFile = Join-Path $profileSeedDirectory $Plugin.file
+    $profileSeedFileExisted = Test-Path -LiteralPath $profileSeedFile -PathType Leaf
+    if ($profileSeedFileExisted -and (([IO.File]::GetAttributes($profileSeedFile) -band [IO.FileAttributes]::ReparsePoint) -ne 0)) { throw 'Profile seed archive is redirected; refusing to seed through it.' }
     $nodeModulesPath = Join-Path $ProfileDirectory 'node_modules'
     $snapshot = Get-SeedNodeModulesSnapshot -NodeModulesPath $nodeModulesPath
     $modulePath = Get-SeedModulePath -ProfileDirectory $ProfileDirectory -Name $name
@@ -82,10 +92,19 @@ function Invoke-SeedPlugin {
     $seededBytesExisted = Test-Path -LiteralPath $seededPath -PathType Leaf
     $seededBytes = if ($seededBytesExisted) { [IO.File]::ReadAllBytes($seededPath) } else { $null }
     $seededPluginsBefore = @($Seeded.plugins)
+    $profileSeedDirectoryCreated = $false
+    $profileSeedFileCreated = $false
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
     try {
         if (Test-Path -LiteralPath $modulePath) { Move-Item -LiteralPath $modulePath -Destination $backupModule }
-        $relativePackage = Get-SeedRelativeDependencyPath -ProfileDirectory $ProfileDirectory -SeedPackagePath $seedFile
+        if (-not $profileSeedDirectoryExisted) { New-Item -ItemType Directory -Path $profileSeedDirectory -Force | Out-Null; $profileSeedDirectoryCreated = $true }
+        if ($profileSeedFileExisted) {
+            if (-not [String]::Equals((Get-SeedSha512 -Path $profileSeedFile), [string]$Plugin.sha512, [StringComparison]::OrdinalIgnoreCase)) { throw "Profile seed archive already exists with different contents: $($Plugin.file)" }
+        } else {
+            Copy-Item -LiteralPath $seedFile -Destination $profileSeedFile
+            $profileSeedFileCreated = $true
+        }
+        $relativePackage = './seed/' + [string]$Plugin.file
         if (Test-SeedOfficialProcess) { throw 'An official DSH process started while plugins were being seeded.' }
         Invoke-SeedPluginAdd -Root $Root -ProfileDirectory $ProfileDirectory -DshCmd $DshCmd -RelativePackage $relativePackage
 
@@ -93,9 +112,25 @@ function Invoke-SeedPlugin {
         if ($null -eq $package.dependencies) { throw "Official plugin add did not add dependency '$name'." }
         $dependency = $package.dependencies.PSObject.Properties[$name]
         if ($null -eq $dependency) { throw "Official plugin add did not add dependency '$name'." }
+        if ($null -eq $package.dsh -or $null -eq $package.dsh.profile -or @($package.dsh.profile.bundles) -cnotcontains $name) { throw "Official plugin add did not add '$name' to profile bundles." }
+        $dependencyPath = [string]$dependency.Value
+        if (-not $dependencyPath.StartsWith('file:', [StringComparison]::OrdinalIgnoreCase)) { throw "Official plugin add wrote an unexpected dependency for '$name'." }
+        $dependencyPath = $dependencyPath.Substring(5)
+        $resolvedDependencyPath = if ([IO.Path]::IsPathRooted($dependencyPath)) { [IO.Path]::GetFullPath($dependencyPath) } else { [IO.Path]::GetFullPath((Join-Path $ProfileDirectory $dependencyPath)) }
+        if (-not [String]::Equals($resolvedDependencyPath, [IO.Path]::GetFullPath($profileSeedFile), [StringComparison]::OrdinalIgnoreCase)) { throw "Official plugin add referenced an unexpected archive for '$name'." }
         $dependency.Value = 'file:' + $relativePackage
-        $package = Add-SeedBundleName -Package $package -Name $name
         Write-SeedJsonAtomic -Path $packagePath -Value $package
+        if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
+            $lockContent = [IO.File]::ReadAllText($lockPath, [Text.Encoding]::UTF8)
+            $rewrittenLock = Rewrite-SeedLockfilePackagePath -Content $lockContent -AbsolutePackagePath $profileSeedFile -RelativePackagePath $relativePackage
+            Write-SeedTextAtomic -Path $lockPath -Value $rewrittenLock.content
+        }
+        $modulesMetadataPath = Join-Path $nodeModulesPath '.modules.yaml'
+        if (Test-Path -LiteralPath $modulesMetadataPath -PathType Leaf) {
+            $modulesContent = [IO.File]::ReadAllText($modulesMetadataPath, [Text.Encoding]::UTF8)
+            $rewrittenModules = Rewrite-SeedVirtualStorePath -Content $modulesContent
+            Write-SeedTextAtomic -Path $modulesMetadataPath -Value $rewrittenModules.content
+        }
 
         $installedPackagePath = Join-Path $modulePath 'package.json'
         if (-not (Test-Path -LiteralPath $installedPackagePath -PathType Leaf)) { throw "Official plugin add did not materialize node_modules/$name." }
@@ -117,7 +152,10 @@ function Invoke-SeedPlugin {
         try {
             [IO.File]::WriteAllBytes($packagePath, $packageBytes)
             if ($patchExisted) { [IO.File]::WriteAllBytes($patchPath, $patchBytes) } elseif (Test-Path -LiteralPath $patchPath) { Remove-Item -LiteralPath $patchPath -Force }
+            if ($lockExisted) { [IO.File]::WriteAllBytes($lockPath, $lockBytes) } elseif (Test-Path -LiteralPath $lockPath) { Remove-Item -LiteralPath $lockPath -Force }
             Restore-SeedNodeModules -NodeModulesPath $nodeModulesPath -Snapshot $snapshot -PluginModulePath $modulePath -BackupModulePath $backupModule
+            if ($profileSeedFileCreated -and (Test-Path -LiteralPath $profileSeedFile)) { Remove-Item -LiteralPath $profileSeedFile -Force }
+            if ($profileSeedDirectoryCreated -and (Test-Path -LiteralPath $profileSeedDirectory) -and @(Get-ChildItem -LiteralPath $profileSeedDirectory -Force).Count -eq 0) { Remove-Item -LiteralPath $profileSeedDirectory -Force }
             if ($seededBytesExisted) { [IO.File]::WriteAllBytes($seededPath, $seededBytes) } elseif (Test-Path -LiteralPath $seededPath) { Remove-Item -LiteralPath $seededPath -Force }
             $Seeded.plugins = $seededPluginsBefore
         } catch { $failure += '; rollback error: ' + $_.Exception.Message }

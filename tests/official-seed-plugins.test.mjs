@@ -79,21 +79,22 @@ test('seed.json manifest generation reads package metadata and Cordis id from tg
   assert.equal(result.runtimeSha512, createHash('sha512').update(bytes).digest('hex'))
 })
 
-test('seed helpers preserve patches, merge bundles, honor recorded names, and compute relocatable file paths', { skip: !onWindows }, () => {
+test('seed helpers preserve patches, honor recorded names, and rewrite lockfile paths', { skip: !onWindows }, () => {
   const module = resolve(root, 'experiments/official-payload/seed-plugins-core.psm1')
-  const profile = join(tmpdir(), 'portable seed space', 'data', 'dsh-home', 'profiles', 'desktop')
-  const seed = join(tmpdir(), 'portable seed space', 'launcher', 'seed', 'test-plugin-1.2.3.tgz')
+  const seed = join(tmpdir(), 'portable seed space', 'data', 'dsh-home', 'profiles', 'desktop', 'seed', 'test-plugin-1.2.3.tgz')
   const output = runPowerShell(`
     Import-Module ${literal(module)} -Force
     $old = ([string]::Join([char]10, @('# preserve this comment', '- id: existing', '  disabled: false')) + [char]10)
     $first = Merge-SeedCordisPatch -Content $old -EntryId 'new-entry'
     $again = Merge-SeedCordisPatch -Content $first.content -EntryId 'new-entry'
     $keep = Merge-SeedCordisPatch -Content $old -EntryId 'existing'
-    $package = '{"dsh":{"profile":{"bundles":["existing"]}}}' | ConvertFrom-Json
-    $package = Add-SeedBundleName -Package $package -Name 'new-plugin'
     $seeded = '{"schemaVersion":1,"plugins":[{"name":"new-plugin","version":"1.0.0","nameVersion":"new-plugin@1.0.0"}]}' | ConvertFrom-Json
-    $relative = Get-SeedRelativeDependencyPath -ProfileDirectory ${literal(profile)} -SeedPackagePath ${literal(seed)}
-    [ordered]@{ first=$first.content; second=$again.content; repeated=$again.existed; kept=$keep.content; bundles=@($package.dsh.profile.bundles); recorded=(Test-SeedRecordedName -Seeded $seeded -Name 'new-plugin'); relative=$relative } | ConvertTo-Json -Depth 8 -Compress
+    $absolute = 'file:' + [IO.Path]::GetFullPath(${literal(seed)}).Replace('\\', '/')
+    $lock = [string]::Join([char]10, @('importers:', '  .:', '    dependencies:', '      new-plugin:', "        specifier: $absolute", '        version: file:seed/test-plugin-1.2.3.tgz')) + [char]10
+    $rewritten = Rewrite-SeedLockfilePackagePath -Content $lock -AbsolutePackagePath ${literal(seed)} -RelativePackagePath './seed/test-plugin-1.2.3.tgz'
+    $modules = [string]::Join([char]10, @('"virtualStoreDir": "C:\\old\\profile\\node_modules\\.pnpm"', '"virtualStoreDirMaxLength": 60')) + [char]10
+    $relativeModules = Rewrite-SeedVirtualStorePath -Content $modules
+    [ordered]@{ first=$first.content; second=$again.content; repeated=$again.existed; kept=$keep.content; recorded=(Test-SeedRecordedName -Seeded $seeded -Name 'new-plugin'); relative=$rewritten.relativeSpecifier; lock=$rewritten.content; replacements=$rewritten.replacements; modules=$relativeModules.content } | ConvertTo-Json -Depth 8 -Compress
   `)
   const result = JSON.parse(output)
   assert.ok(result.first.startsWith('# preserve this comment\n- id: existing\n  disabled: false\n'))
@@ -101,9 +102,13 @@ test('seed helpers preserve patches, merge bundles, honor recorded names, and co
   assert.equal(result.second, result.first)
   assert.equal(result.repeated, true)
   assert.equal(result.kept, '# preserve this comment\n- id: existing\n  disabled: false\n')
-  assert.deepEqual(result.bundles, ['existing', 'new-plugin'])
   assert.equal(result.recorded, true)
-  assert.equal(result.relative, '../../../../launcher/seed/test-plugin-1.2.3.tgz')
+  assert.equal(result.relative, 'file:./seed/test-plugin-1.2.3.tgz')
+  assert.match(result.lock, /specifier: file:\.\/seed\/test-plugin-1\.2\.3\.tgz/)
+  assert.match(result.lock, /version: file:seed\/test-plugin-1\.2\.3\.tgz/)
+  assert.equal(result.replacements, 1)
+  assert.match(result.modules, /"virtualStoreDir": "\.pnpm"/)
+  assert.match(result.modules, /"virtualStoreDirMaxLength": 60/)
 })
 
 test('seed script is a no-op before the desktop profile exists', { skip: !onWindows }, async t => {
@@ -139,12 +144,36 @@ test('seed orchestration is transactional and never reapplies a recorded plugin 
   }))
   const initialPatch = '# preserve comment\n- id: another-entry\n  disabled: false\n'
   await writeFile(join(profile, 'cordis.patch.yml'), initialPatch)
+  const fakeAdd = String.raw`
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
+
+const profile = process.cwd()
+const relative = process.argv.at(-1).replaceAll('\\', '/')
+const archive = resolve(profile, relative)
+const packagePath = join(profile, 'package.json')
+const pkg = JSON.parse(await readFile(packagePath, 'utf8'))
+pkg.dependencies ??= {}
+pkg.dependencies['test-plugin'] = 'file:' + archive.replaceAll('\\', '/')
+pkg.dsh ??= {}
+pkg.dsh.profile ??= {}
+pkg.dsh.profile.bundles ??= []
+if (!pkg.dsh.profile.bundles.includes('test-plugin')) pkg.dsh.profile.bundles.push('test-plugin')
+await writeFile(packagePath, JSON.stringify(pkg, null, 2) + '\n')
+await mkdir(join(profile, 'node_modules', 'test-plugin'), { recursive: true })
+await writeFile(join(profile, 'node_modules', 'test-plugin', 'package.json'), JSON.stringify({ name: 'test-plugin', version: '1.2.3' }))
+const lock = "lockfileVersion: '9.0'\n\nimporters:\n  .:\n    dependencies:\n      test-plugin:\n        specifier: file:" + archive.replaceAll('\\', '/') + "\n        version: file:" + relative.replace(/^\.\//, '') + "\n\npackages: {}\n"
+await writeFile(join(profile, 'pnpm-lock.yaml'), lock)
+const virtualStoreDir = join(profile, 'node_modules', '.pnpm').replaceAll('\\', '\\\\')
+await writeFile(join(profile, 'node_modules', '.modules.yaml'), '"virtualStoreDir": "' + virtualStoreDir + '"\n')
+console.log('official add complete')
+`
+  await writeFile(join(appDirectory, 'fake-dsh-add.mjs'), fakeAdd)
   await writeFile(join(appDirectory, 'dsh.cmd'), [
     '@echo off',
     'echo add>>plugin-add-count.txt',
-    'if not exist node_modules\\test-plugin mkdir node_modules\\test-plugin',
-    '>node_modules\\test-plugin\\package.json echo {"name":"test-plugin","version":"1.2.3"}',
-    'exit /b 0',
+    `"${process.execPath}" "${join(appDirectory, 'fake-dsh-add.mjs')}" %*`,
+    'exit /b %errorlevel%',
     '',
   ].join('\r\n'))
 
@@ -159,8 +188,15 @@ test('seed orchestration is transactional and never reapplies a recorded plugin 
   assert.equal(firstCode, 0, JSON.stringify(firstStatus))
 
   const seededPackage = JSON.parse(await readFile(join(profile, 'package.json'), 'utf8'))
-  assert.equal(seededPackage.dependencies['test-plugin'], 'file:../../../../launcher/seed/test-plugin-1.2.3.tgz')
+  assert.equal(seededPackage.dependencies['test-plugin'], 'file:./seed/test-plugin-1.2.3.tgz')
   assert.deepEqual(seededPackage.dsh.profile.bundles, ['official-base', 'test-plugin'])
+  assert.deepEqual(await readFile(join(profile, 'seed', 'test-plugin-1.2.3.tgz')), archive)
+  const seededLock = await readFile(join(profile, 'pnpm-lock.yaml'), 'utf8')
+  assert.match(seededLock, /specifier: file:\.\/seed\/test-plugin-1\.2\.3\.tgz/)
+  assert.match(seededLock, /version: file:seed\/test-plugin-1\.2\.3\.tgz/)
+  assert.doesNotMatch(seededLock, /specifier:\s*file:[A-Za-z]:\//i)
+  const modulesMetadata = await readFile(join(profile, 'node_modules', '.modules.yaml'), 'utf8')
+  assert.match(modulesMetadata, /"virtualStoreDir": "\.pnpm"/)
   const seededPatch = await readFile(join(profile, 'cordis.patch.yml'), 'utf8')
   assert.ok(seededPatch.startsWith(initialPatch))
   assert.match(seededPatch, /- id: test-plugin-entry\r?\n  disabled: true\r?\n$/)
@@ -205,6 +241,10 @@ test('a failed plugin add restores package, patch, and pre-existing node_modules
   const originalPatch = '# retain me\n- id: another-entry\n  disabled: false\n'
   await writeFile(join(profile, 'package.json'), originalPackage)
   await writeFile(join(profile, 'cordis.patch.yml'), originalPatch)
+  const originalLock = "lockfileVersion: '9.0'\nimporters: {}\n"
+  await writeFile(join(profile, 'pnpm-lock.yaml'), originalLock)
+  const originalModules = '"virtualStoreDir": ".pnpm"\n'
+  await writeFile(join(profile, 'node_modules', '.modules.yaml'), originalModules)
   await writeFile(join(profile, 'node_modules', 'test-plugin', 'package.json'), '{"name":"test-plugin","version":"0.9.0"}')
   await writeFile(join(profile, 'node_modules', '.pnpm', 'original.txt'), 'keep')
   await writeFile(join(profile, 'node_modules', 'untouched.txt'), 'keep')
@@ -215,6 +255,8 @@ test('a failed plugin add restores package, patch, and pre-existing node_modules
     'echo partial>node_modules\\test-plugin\\package.json',
     'mkdir node_modules\\new-dependency',
     'mkdir node_modules\\.pnpm\\new-partial',
+    '>pnpm-lock.yaml echo partial lock',
+    '>node_modules\\.modules.yaml echo partial modules',
     'exit /b 7',
     '',
   ].join('\r\n'))
@@ -224,11 +266,14 @@ test('a failed plugin add restores package, patch, and pre-existing node_modules
   assert.equal(result, 1)
   assert.equal(await readFile(join(profile, 'package.json'), 'utf8'), originalPackage)
   assert.equal(await readFile(join(profile, 'cordis.patch.yml'), 'utf8'), originalPatch)
+  assert.equal(await readFile(join(profile, 'pnpm-lock.yaml'), 'utf8'), originalLock)
+  assert.equal(await readFile(join(profile, 'node_modules', '.modules.yaml'), 'utf8'), originalModules)
   assert.equal(await readFile(join(profile, 'node_modules', 'test-plugin', 'package.json'), 'utf8'), '{"name":"test-plugin","version":"0.9.0"}')
   assert.equal(await readFile(join(profile, 'node_modules', '.pnpm', 'original.txt'), 'utf8'), 'keep')
   assert.equal(await readFile(join(profile, 'node_modules', 'untouched.txt'), 'utf8'), 'keep')
   await assert.rejects(readFile(join(profile, 'node_modules', 'new-dependency')))
   await assert.rejects(readFile(join(profile, 'node_modules', '.pnpm', 'new-partial')))
+  await assert.rejects(readFile(join(profile, 'seed', 'test-plugin-1.2.3.tgz')))
   await assert.rejects(readFile(join(temp, 'data', 'launcher', 'seeded.json')))
   const status = JSON.parse(await readFile(join(temp, 'data', 'launcher', 'seed-status.json'), 'utf8'))
   assert.equal(status.plugins[0].status, 'failed')

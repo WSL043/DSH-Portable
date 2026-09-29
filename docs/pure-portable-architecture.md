@@ -119,6 +119,7 @@ macOS：官方有桌面端，同架构可移植，另立阶段。Linux：官方�
 - 可选随包携带已审阅的插件 `.tgz` 与 `launcher/seed/seed.json`；不传种子参数时打包行为保持不变。
 - 启动器只在官方 `desktop` profile 已存在、未记录该插件且无官方进程时，在启动官方应用前调用官方 `dsh.cmd plugin add`。
 - 首次启动创建 profile，因此预装插件在第二次启动前播种；这是预期时序。
-- 插件加入 bundles 并在 `cordis.patch.yml` 默认 disabled；已有同 id patch、已记录插件和之后的用户选择不覆盖、不重播。
+- 官方 `plugin add` 自动将包名加入 `dsh.profile.bundles`；种子脚本不手改 bundles。归档保留在 profile 的 `seed/`，依赖及 `pnpm-lock.yaml` specifier 使用 `file:./seed/...`，`.modules.yaml` 的虚拟存储路径为相对 `.pnpm`；patch 条目默认 `disabled: true`。
 - 播种校验 SHA-512；单插件失败回滚其 profile/patch/`node_modules` 改动并记状态，失败不阻断官方应用启动。
-- 本机 CLI/profile 搬动验证不替代启动器真机验证；隐藏 PowerShell 调用、超时与第二次启动流程仍待真机验收。
+- 2026-09-30 已用两个真实插件包和官方 rc.2 `dsh.cmd` 验证播种；复制为 `probe` 后 `--dump-config` 两条均为 disabled，整根移动后重复通过，移动后再用官方命令添加另一包也成功。
+- 启动器第二次启动确实完成播种、官方界面显示两个插件关闭，仍待主管真机验证；本机 CLI 验收未启动官方应用。

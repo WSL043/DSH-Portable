@@ -43,30 +43,28 @@ function Merge-SeedCordisPatch {
     return [pscustomobject]@{ content=($Content + $separator + $addition); existed=$false }
 }
 
-function Add-SeedBundleName {
-    param($Package, [Parameter(Mandatory=$true)][string]$Name)
-    if ($null -eq $Package.dsh) { $Package | Add-Member -NotePropertyName dsh -NotePropertyValue ([pscustomobject]@{}) }
-    if ($null -eq $Package.dsh.profile) { $Package.dsh | Add-Member -NotePropertyName profile -NotePropertyValue ([pscustomobject]@{}) }
-    $bundles = @($Package.dsh.profile.bundles | Where-Object { $null -ne $_ })
-    if ($bundles -cnotcontains $Name) { $bundles += $Name }
-    if ($null -eq $Package.dsh.profile.PSObject.Properties['bundles']) {
-        $Package.dsh.profile | Add-Member -NotePropertyName bundles -NotePropertyValue $bundles
-    } else {
-        $Package.dsh.profile.bundles = $bundles
-    }
-    return $Package
+function Rewrite-SeedLockfilePackagePath {
+    param(
+        [AllowEmptyString()][string]$Content,
+        [Parameter(Mandatory=$true)][string]$AbsolutePackagePath,
+        [Parameter(Mandatory=$true)][string]$RelativePackagePath
+    )
+    $absoluteFile = 'file:' + [IO.Path]::GetFullPath($AbsolutePackagePath).Replace('\', '/')
+    $relativeFile = 'file:' + $RelativePackagePath
+    $rewritten = [Regex]::Replace($Content, [Regex]::Escape($absoluteFile), [System.Text.RegularExpressions.MatchEvaluator]{ param($match) $relativeFile }, [Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $count = [Regex]::Matches($Content, [Regex]::Escape($absoluteFile), [Text.RegularExpressions.RegexOptions]::IgnoreCase).Count
+    if ($count -eq 0) { throw 'pnpm-lock.yaml does not contain the official add command package path.' }
+    if ([Regex]::IsMatch($rewritten, [Regex]::Escape($absoluteFile), [Text.RegularExpressions.RegexOptions]::IgnoreCase)) { throw 'pnpm-lock.yaml still contains an absolute seed package path.' }
+    return [pscustomobject]@{ content=$rewritten; replacements=$count; relativeSpecifier=$relativeFile }
 }
 
-function Get-SeedRelativeDependencyPath {
-    param(
-        [Parameter(Mandatory=$true)][string]$ProfileDirectory,
-        [Parameter(Mandatory=$true)][string]$SeedPackagePath
-    )
-    $profilePath = [IO.Path]::GetFullPath($ProfileDirectory).TrimEnd('\') + '\'
-    $packagePath = [IO.Path]::GetFullPath($SeedPackagePath)
-    $profileUri = [Uri]::new($profilePath)
-    $packageUri = [Uri]::new($packagePath)
-    return [Uri]::UnescapeDataString($profileUri.MakeRelativeUri($packageUri).ToString())
+function Rewrite-SeedVirtualStorePath {
+    param([AllowEmptyString()][string]$Content)
+    $pattern = '(?m)^(?<prefix>\s*(?:"virtualStoreDir"|virtualStoreDir)\s*:\s*)(?:"[^"\r\n]*"|''[^''\r\n]*''|[^\r\n#]+)'
+    $count = [Regex]::Matches($Content, $pattern).Count
+    if ($count -ne 1) { throw 'pnpm node_modules metadata must contain exactly one virtualStoreDir value.' }
+    $rewritten = [Regex]::Replace($Content, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($match) $match.Groups['prefix'].Value + '".pnpm"' })
+    return [pscustomobject]@{ content=$rewritten; replacements=$count }
 }
 
 function Get-SeedNodeModulesSnapshot {
@@ -180,4 +178,20 @@ function Write-SeedJsonAtomic {
     }
 }
 
-Export-ModuleMember -Function Get-SeedReadiness, Get-SeedSha512, Test-SeedRecordedName, Merge-SeedCordisPatch, Add-SeedBundleName, Get-SeedRelativeDependencyPath, Get-SeedNodeModulesSnapshot, Restore-SeedNodeModules, Remove-SeedPath, Write-SeedJsonAtomic
+function Write-SeedTextAtomic {
+    param([Parameter(Mandatory=$true)][string]$Path, [AllowEmptyString()][string]$Value)
+    $directory = Split-Path -Parent $Path
+    if (-not (Test-Path -LiteralPath $directory -PathType Container)) { New-Item -ItemType Directory -Path $directory -Force | Out-Null }
+    $temp = "$Path.$([Guid]::NewGuid().ToString('N')).tmp"
+    $backup = "$Path.$([Guid]::NewGuid().ToString('N')).bak"
+    try {
+        [IO.File]::WriteAllText($temp, $Value, [Text.UTF8Encoding]::new($false))
+        if (Test-Path -LiteralPath $Path -PathType Leaf) { [IO.File]::Replace($temp, $Path, $backup); if (Test-Path -LiteralPath $backup) { [IO.File]::Delete($backup) } }
+        else { [IO.File]::Move($temp, $Path) }
+    } finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+        if (Test-Path -LiteralPath $backup) { Remove-Item -LiteralPath $backup -Force }
+    }
+}
+
+Export-ModuleMember -Function Get-SeedReadiness, Get-SeedSha512, Test-SeedRecordedName, Merge-SeedCordisPatch, Rewrite-SeedLockfilePackagePath, Rewrite-SeedVirtualStorePath, Get-SeedNodeModulesSnapshot, Restore-SeedNodeModules, Remove-SeedPath, Write-SeedJsonAtomic, Write-SeedTextAtomic
