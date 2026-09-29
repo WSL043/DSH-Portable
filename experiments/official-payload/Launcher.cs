@@ -186,14 +186,26 @@ internal static class PortableLauncher {
     }
 
     private static void CheckExternalOfficialOrPort(string executable) {
+        // A previous run's processes can still be exiting (Windows reports an unreadable path meanwhile), for example when the
+        // user quits and relaunches at once, so give a genuine leftover a short time to disappear before refusing.
+        DateTime deadline = DateTime.UtcNow.AddSeconds(20);
+        string conflict;
+        while ((conflict = FindOfficialConflict()) != null) {
+            if (DateTime.UtcNow >= deadline) throw new IOException(conflict);
+            Thread.Sleep(500);
+        }
+    }
+
+    private static string FindOfficialConflict() {
         if (IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p => p.Port == 19387))
-            throw new IOException("Port 19387 is already occupied. Close the other application before starting Portable. / 端口 19387 已被占用，请先关闭其他应用。");
+            return "Port 19387 is already occupied. Close the other application before starting Portable. / 端口 19387 已被占用，请先关闭其他应用。";
         using (var query = new ManagementObjectSearcher("SELECT Name, ExecutablePath FROM Win32_Process WHERE Name='DeepSeek Harness.exe'"))
         using (var rows = query.Get()) foreach (ManagementObject row in rows) using (row) {
             string path = row["ExecutablePath"] as string;
             if (String.IsNullOrEmpty(path) || !path.StartsWith(AppRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
-                throw new IOException("Another official DeepSeek Harness is running. Close it before starting Portable. / 检测到另一份官方桌面端正在运行，请先退出。");
+                return "Another official DeepSeek Harness is running. Close it before starting Portable. / 检测到另一份官方桌面端正在运行，请先退出。";
         }
+        return null;
     }
 
     private static string ReadCacheName() {

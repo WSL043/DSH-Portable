@@ -127,3 +127,9 @@ test('update engine survives Windows PowerShell 5.1 quirks and a hostile parent 
   // A parent PowerShell 7 shell leaks its module path and breaks core cmdlets such as Get-FileHash in 5.1.
   assert.match(source, /ps\.EnvironmentVariables\.Remove\("PSModulePath"\);/);
 });
+
+test('launcher waits briefly for leftovers of a previous run before refusing to start', async () => {
+  const source = await readFile(launcherPath, 'utf8');
+  assert.match(source, /DateTime deadline = DateTime\.UtcNow\.AddSeconds\(20\);\s*string conflict;\s*while \(\(conflict = FindOfficialConflict\(\)\) != null\)/);
+  assert.match(source, /if \(DateTime\.UtcNow >= deadline\) throw new IOException\(conflict\);\s*Thread\.Sleep\(500\);/);
+});
