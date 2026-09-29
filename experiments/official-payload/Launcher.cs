@@ -55,6 +55,8 @@ internal static class PortableLauncher {
         string engine = Path.Combine(root, "launcher", "apply-update.ps1");
         string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
         var ps = new ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
+        // A parent PowerShell 7 shell leaks its module path, which breaks core cmdlets in Windows PowerShell 5.1.
+        ps.EnvironmentVariables.Remove("PSModulePath");
         ps.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(engine) + " -Root " + Quote(root) + " -Version " + Quote(version) + " -SelfPath " + Quote(selfPath);
         int code = 1;
         try { using (Process child = Process.Start(ps)) { child.WaitForExit(); code = child.ExitCode; } }

@@ -21,7 +21,7 @@ function Write-Atomic([string]$Path, $Value) {
         $bytes = [Text.UTF8Encoding]::new($false).GetBytes(($Value | ConvertTo-Json -Depth 10))
         $stream = [IO.File]::Open($temp, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None)
         try { $stream.Write($bytes, 0, $bytes.Length); $stream.Flush($true) } finally { $stream.Dispose() }
-        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp, $Path, $null) } else { [IO.File]::Move($temp, $Path) }
+        if (Test-Path -LiteralPath $Path) { [IO.File]::Replace($temp, $Path, [NullString]::Value) } else { [IO.File]::Move($temp, $Path) }
     } finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
 }
 
@@ -72,7 +72,7 @@ function Update-RootLauncher([string]$Source) {
     try { [IO.File]::Replace($newFile, $destination, $backup) }
     catch {
         if (Test-Path $backup) {
-            try { [IO.File]::Replace($backup, $destination, $null) } catch { }
+            try { [IO.File]::Replace($backup, $destination, [NullString]::Value) } catch { }
         }
         if (Test-Path $newFile) { Remove-Item $newFile -Force }
         throw 'Could not atomically replace the portable launcher'

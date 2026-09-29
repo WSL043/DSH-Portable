@@ -116,3 +116,14 @@ test('launcher fixes found by the real end-to-end run stay in place', async () =
   assert.match(engine, /rejected/);
   assert.match(engine, /rolled back within the last 24 hours/);
 });
+
+// Found by running the real update chain on Windows PowerShell 5.1 against real official installers.
+test('update engine survives Windows PowerShell 5.1 quirks and a hostile parent environment', async () => {
+  const engine = await readFile(resolve(root, 'experiments/official-payload/apply-update.ps1'), 'utf8');
+  const source = await readFile(launcherPath, 'utf8');
+  // PowerShell 5.1 turns $null into "" for string parameters, which makes File.Replace throw "path is not of a legal form".
+  assert.doesNotMatch(engine, /File\]::Replace\([^)]*,\s*\$null\)/);
+  assert.match(engine, /File\]::Replace\(\$temp, \$Path, \[NullString\]::Value\)/);
+  // A parent PowerShell 7 shell leaks its module path and breaks core cmdlets such as Get-FileHash in 5.1.
+  assert.match(source, /ps\.EnvironmentVariables\.Remove\("PSModulePath"\);/);
+});
