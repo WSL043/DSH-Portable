@@ -759,7 +759,10 @@ export function MarketSection(props: MarketSectionProps) {
       .then(table => {
         if (controller.signal.aborted) return
         const container = bodyRef.current
-        if (container !== null) {
+        // Keep the reader's place only after they have scrolled. At the top of the list the new ranking
+        // must simply appear; anchoring the old first card would jump them to a later page and can move
+        // the sticky category row.
+        if (container !== null && container.scrollTop > 24) {
           const containerTop = container.getBoundingClientRect().top
           const containerBottom = container.getBoundingClientRect().bottom
           const anchor = Array.from(container.querySelectorAll<HTMLElement>('[data-market-card][data-market-key]'))

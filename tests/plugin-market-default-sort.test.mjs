@@ -83,3 +83,11 @@ test('total sorting keeps counted plugins first, then orders missing totals by 3
   assert.match(routes, /path: '\/dsh-market\/download-totals'/)
   assert.match(routes, /getDownloadTotalsTable\(registry\.plugins, registryCacheFile\)/)
 })
+
+test('the cumulative table only keeps the reader place after they scrolled', async () => {
+  const section = await read('src/client/MarketSection.tsx')
+  const capture = section.slice(section.indexOf('.then(table => {'), section.indexOf('setDownloadTotals(table)'))
+  assert.match(capture, /container\.scrollTop > 24/, 'a reader still at the top must see the new ranking, not be moved to the old first card')
+  const bundle = await read('client/client.js')
+  assert.match(bundle, /scrollTop>24/, 'the shipped client bundle must contain the same guard')
+})
