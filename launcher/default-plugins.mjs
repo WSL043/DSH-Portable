@@ -402,6 +402,12 @@ export async function seedDefaultPlugins(layout, adapters = {}) {
   if (plugins.length === 0) return { status: 'skipped', profile, reason: 'no-compatible-defaults' }
   const recoveringInterruptedSeed = exists(profileRoot) && exists(seedMarker)
   if (exists(profileRoot) && !recoveringInterruptedSeed) {
+    // Test-only: lets native acceptance keep historical plugins so the plugin page's own Update flow can be
+    // exercised. Ignored unless the automation harness is active; the product never sets it.
+    const environment = adapters.env ?? process.env
+    if (environment.DSH_PORTABLE_TEST_AUTOMATION === '1' && environment.DSH_PORTABLE_TEST_SKIP_DEFAULT_PLUGIN_REFRESH === '1') {
+      return { status: 'skipped', profile, reason: 'test-refresh-disabled' }
+    }
     return refreshInstalledDefaults(layout, profileRoot, profile, plugins, adapters)
   }
 

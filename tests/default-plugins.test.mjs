@@ -349,3 +349,24 @@ test('refreshing a disabled default never silently re-enables it through officia
   assert.equal(updated.dependencies['dsh-image-viewer'], imageVersion)
   assert.equal(updated.dependencies['user-plugin'], '1.0.0')
 })
+
+test('the test-only refresh skip needs the automation flag and never applies to normal starts', async (t) => {
+  const layout = await fixture(t)
+  await writeReviewedArchives(layout)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  const packageDir = path.join(profileRoot, 'node_modules', 'dsh-image-viewer')
+  await mkdir(packageDir, { recursive: true })
+  await writeFile(path.join(packageDir, 'package.json'), JSON.stringify({ version: '0.1.1' }))
+  await writeFile(path.join(profileRoot, 'package.json'), JSON.stringify({ dependencies: { 'dsh-image-viewer': '0.1.1' } }))
+  const skipOnly = { DSH_PORTABLE_TEST_SKIP_DEFAULT_PLUGIN_REFRESH: '1' }
+  let calls = 0
+  const failing = { verifyArchive: async () => {}, spawnSync() { calls++; return { status: 1, stdout: '', stderr: 'offline' } } }
+  await seedDefaultPlugins(layout, { ...failing, env: skipOnly })
+  assert.equal(calls, 1, 'the skip flag alone must not disable a real refresh')
+  const both = await seedDefaultPlugins(layout, {
+    spawnSync() { assert.fail('automation skip must not run the refresh') },
+    env: { ...skipOnly, DSH_PORTABLE_TEST_AUTOMATION: '1' },
+  })
+  assert.equal(both.status, 'skipped')
+  assert.equal(both.reason, 'test-refresh-disabled')
+})

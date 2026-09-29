@@ -73,6 +73,9 @@ const host = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], {
     ...env,
     DSH_PORTABLE_TEST_HIDDEN: '1',
     DSH_PORTABLE_TEST_AUTOMATION: '1',
+    // The startup refresh is covered by the release upgrade smoke; here the historical plugins must stay
+    // so the plugin page's own Update flow (and its writer lock) is what gets exercised.
+    ...(mode === '--upgrade-defaults' ? { DSH_PORTABLE_TEST_SKIP_DEFAULT_PLUGIN_REFRESH: '1' } : {}),
     DSH_PORTABLE_TEST_WEBVIEW2_ARGUMENTS: `--remote-debugging-port=${debugPort}`,
   },
 })
