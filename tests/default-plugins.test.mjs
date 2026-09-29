@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { writeFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -101,6 +101,85 @@ test('a product upgrade refreshes installed defaults from reviewed archives with
   assert.equal(manifest.dependencies['dsh-image-viewer'], imageVersion)
   assert.equal(manifest.dependencies['user-selected-plugin'], '3.1.4')
 })
+
+for (const [oldVersions, release] of [
+  [{ 'dsh-image-viewer': '0.1.3', 'dsh-chat-manager': '1.5.2' }, '0.7.8'],
+  [{ 'dsh-image-viewer': '0.1.2', 'dsh-chat-manager': '1.5.1' }, '0.7.5'],
+]) {
+  for (const moved of [false, true]) {
+    test(`refreshes ${release} default plugins offline ${moved ? 'after a portable-directory move' : 'in place'}`, async (t) => {
+      const layout = await fixture(t)
+      await writeReviewedArchives(layout)
+      const paths = layout.platform === 'win32' ? path.win32 : path.posix
+      const profileRoot = paths.join(layout.dshHome, 'profiles', 'web')
+      const modulesRoot = paths.join(profileRoot, 'node_modules')
+      const virtualStore = paths.join(modulesRoot, '.pnpm')
+      const storeVersion = 'v11'
+      const previousProduct = paths.join(layout.root, 'previous-product')
+      const expectedStore = paths.join(layout.packageManagerStore, storeVersion)
+      const previousStore = moved ? paths.join(previousProduct, 'data', 'pnpm-store', storeVersion) : expectedStore
+      const previousVirtualStore = moved
+        ? paths.join(previousProduct, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', '.pnpm')
+        : virtualStore
+      await mkdir(paths.join(layout.packageManagerStore, storeVersion), { recursive: true })
+      await mkdir(virtualStore, { recursive: true })
+      await mkdir(modulesRoot, { recursive: true })
+      const archiveSpecs = Object.fromEntries(DEFAULT_PLUGINS.map(plugin => [
+        plugin.name,
+        `file:.dsh-portable-archives/${plugin.filename}`,
+      ]))
+      const originalManifest = {
+        dependencies: { ...oldVersions, 'user-selected-plugin': '3.1.4' },
+        dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-codex-subscription'] } },
+      }
+      await writeFile(paths.join(profileRoot, 'package.json'), JSON.stringify(originalManifest))
+      for (const [name, version] of Object.entries(oldVersions)) {
+        const pluginRoot = paths.join(modulesRoot, name)
+        await mkdir(pluginRoot, { recursive: true })
+        await writeFile(paths.join(pluginRoot, 'package.json'), JSON.stringify({ name, version }))
+      }
+      await writeFile(paths.join(profileRoot, 'user-session-proof'), 'preserve session data')
+      await writeFile(paths.join(modulesRoot, '.modules.yaml'), `${JSON.stringify({
+        layoutVersion: 5,
+        storeDir: previousStore,
+        virtualStoreDir: previousVirtualStore,
+      }, null, 2)}\n`)
+      let calls = 0
+
+      const result = await seedDefaultPlugins(layout, {
+        verifyArchive: async () => true,
+        spawnSync(command, args, options) {
+          calls++
+          assert.equal(command, layout.nodeExe)
+          const manifestBeforeAdd = JSON.parse(readFileSync(paths.join(profileRoot, 'package.json'), 'utf8'))
+          assert.deepEqual(
+            Object.fromEntries(DEFAULT_PLUGINS.map(plugin => [plugin.name, manifestBeforeAdd.dependencies[plugin.name]])),
+            archiveSpecs,
+          )
+          assert.equal(manifestBeforeAdd.dependencies['user-selected-plugin'], '3.1.4')
+          assert.deepEqual(args.filter(value => String(value).startsWith('file:')), Object.values(archiveSpecs))
+          assert.equal(options.env.pnpm_config_offline, 'true')
+          const modules = JSON.parse(readFileSync(paths.join(modulesRoot, '.modules.yaml'), 'utf8'))
+          assert.equal(modules.storeDir, moved ? expectedStore : previousStore)
+          assert.equal(modules.virtualStoreDir, moved ? virtualStore : previousVirtualStore)
+          return { status: 0 }
+        },
+      })
+
+      assert.equal(calls, 1)
+      assert.equal(result.status, 'updated')
+      const manifestAfter = JSON.parse(await readFile(paths.join(profileRoot, 'package.json'), 'utf8'))
+      assert.equal(manifestAfter.dependencies['dsh-image-viewer'], imageVersion)
+      assert.equal(manifestAfter.dependencies['dsh-chat-manager'], chatVersion)
+      assert.equal(manifestAfter.dependencies['user-selected-plugin'], '3.1.4')
+      assert.deepEqual(manifestAfter.dsh, originalManifest.dsh)
+      assert.equal(await readFile(paths.join(profileRoot, 'user-session-proof'), 'utf8'), 'preserve session data')
+      const modulesAfter = JSON.parse(await readFile(paths.join(modulesRoot, '.modules.yaml'), 'utf8'))
+      assert.equal(modulesAfter.storeDir, expectedStore)
+      assert.equal(modulesAfter.virtualStoreDir, virtualStore)
+    })
+  }
+}
 
 test('startup repairs an older exact dependency pin without downgrading the installed default', async t => {
   const layout = await fixture(t)

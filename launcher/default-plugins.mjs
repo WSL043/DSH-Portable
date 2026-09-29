@@ -190,6 +190,88 @@ async function bundledInstallEnvironment(layout, adapters) {
     npm_config_cache_dir: path.join(layout.packageManagerStore, 'metadata') }
 }
 
+function sameResolvedPath(left, right, paths) {
+  const normalize = value => paths.resolve(value).replaceAll('\\', '/').replace(/\/$/, '')
+  const first = normalize(left)
+  const second = normalize(right)
+  return paths === path.win32 ? first.toLowerCase() === second.toLowerCase() : first === second
+}
+
+function portablePnpmStorePath(value, paths) {
+  if (typeof value !== 'string' || !/^v\d+$/.test(paths.basename(value))) return false
+  const storeRoot = paths.dirname(value)
+  return paths.basename(storeRoot) === 'pnpm-store'
+    && paths.basename(paths.dirname(storeRoot)) === 'data'
+}
+
+function portablePnpmVirtualStorePath(value, profileRoot, paths) {
+  if (typeof value !== 'string' || paths.basename(value) !== '.pnpm') return false
+  const nodeModules = paths.dirname(value)
+  const profile = paths.dirname(nodeModules)
+  return paths.basename(nodeModules) === 'node_modules'
+    && paths.basename(profile) === paths.basename(profileRoot)
+    && paths.basename(paths.dirname(profile)) === 'profiles'
+    && paths.basename(paths.dirname(paths.dirname(profile))) === 'dsh-home'
+    && paths.basename(paths.dirname(paths.dirname(paths.dirname(profile)))) === 'data'
+}
+
+async function rebasePortablePnpmModules(profileRoot, packageManagerStore, adapters = {}, paths = path) {
+  const exists = adapters.existsSync ?? existsSync
+  const load = adapters.readFile ?? readFile
+  const save = adapters.writeFile ?? writeFile
+  const move = adapters.rename ?? rename
+  const modulesPath = paths.join(profileRoot, 'node_modules', '.modules.yaml')
+  if (!exists(modulesPath)) return false
+
+  const source = await load(modulesPath, 'utf8')
+  const modules = JSON.parse(source)
+  let changed = false
+  const currentStoreRoot = paths.resolve(packageManagerStore)
+  const currentStoreIsPortable = paths.basename(currentStoreRoot) === 'pnpm-store'
+    && paths.basename(paths.dirname(currentStoreRoot)) === 'data'
+  if (currentStoreIsPortable && portablePnpmStorePath(modules.storeDir, paths)
+    && !sameResolvedPath(modules.storeDir, paths.join(currentStoreRoot, paths.basename(modules.storeDir)), paths)) {
+    const recordedStore = paths.resolve(modules.storeDir)
+    const relocatedStore = paths.resolve(paths.join(currentStoreRoot, paths.basename(recordedStore)))
+    if (!exists(recordedStore) && exists(relocatedStore)) {
+      modules.storeDir = relocatedStore
+      changed = true
+    }
+  }
+
+  const currentVirtualStore = paths.resolve(paths.join(profileRoot, 'node_modules', '.pnpm'))
+  if (portablePnpmVirtualStorePath(modules.virtualStoreDir, profileRoot, paths)
+    && !sameResolvedPath(modules.virtualStoreDir, currentVirtualStore, paths)) {
+    const recordedVirtualStore = paths.resolve(modules.virtualStoreDir)
+    if (!exists(recordedVirtualStore) && exists(currentVirtualStore)) {
+      modules.virtualStoreDir = currentVirtualStore
+      changed = true
+    }
+  }
+
+  if (!changed) return false
+  const temporary = `${modulesPath}.${process.pid}.tmp`
+  await save(temporary, `${JSON.stringify(modules, null, 2)}\n`, 'utf8')
+  await move(temporary, modulesPath)
+  return true
+}
+
+async function pinBundledPluginsToArchives(profileRoot, archiveRoot, plugins, adapters = {}, paths = path) {
+  const load = adapters.readFile ?? readFile
+  const save = adapters.writeFile ?? writeFile
+  const move = adapters.rename ?? rename
+  const manifestPath = paths.join(profileRoot, 'package.json')
+  const temporary = `${manifestPath}.${process.pid}.tmp`
+  const manifest = JSON.parse(await load(manifestPath, 'utf8'))
+  manifest.dependencies ??= {}
+  for (const plugin of plugins) {
+    const archivePath = paths.join(archiveRoot, plugin.filename)
+    manifest.dependencies[plugin.name] = `file:${paths.relative(profileRoot, archivePath).replaceAll('\\', '/')}`
+  }
+  await save(temporary, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+  await move(temporary, manifestPath)
+}
+
 function installedDefaultVersion(profileRoot, plugin, adapters = {}) {
   const exists = adapters.existsSync ?? existsSync
   const load = adapters.readFileSync ?? readFileSync
@@ -265,9 +347,12 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
       await copy(packagedArchive, profileArchive)
       relativeArchives.push(`file:${paths.relative(profileRoot, profileArchive).replaceAll('\\', '/')}`)
     }
+    await pinBundledPluginsToArchives(profileRoot, archiveRoot, candidates, adapters, paths)
+    const environment = await bundledInstallEnvironment(layout, adapters)
+    await rebasePortablePnpmModules(profileRoot, layout.packageManagerStore, adapters, paths)
     const result = run(layout.nodeExe, [layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives], {
       cwd: profileRoot,
-      env: await bundledInstallEnvironment(layout, adapters),
+      env: environment,
       encoding: 'utf8',
       windowsHide: true,
       timeout: 30000,

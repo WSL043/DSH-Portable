@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { execFile, spawn } from 'node:child_process'
-import { readFile, mkdir, mkdtemp, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { copyFile, readFile, mkdir, mkdtemp, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
+import { pathToFileURL } from 'node:url'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -16,6 +17,7 @@ const oldArchive = path.resolve(process.argv[2] || '')
 const artifacts = path.resolve(process.argv[3] || path.join(projectRoot, 'artifacts'))
 const allowChannelMigration = process.argv.includes('--allow-channel-migration')
 const runningHostUpgrade = process.argv.includes('--running-host')
+const sourceOverlay = process.argv.includes('--source-overlay')
 const simulateWebViewBusy = process.argv.includes('--simulate-webview-busy')
 const newArchive = path.join(artifacts, 'DSH-Portable-windows-x64-offline.zip')
 const componentArchive = path.join(artifacts, 'DSH-Portable-update-windows-x64.zip')
@@ -43,10 +45,14 @@ assert.equal(createHash('sha256').update(newArchiveBytes).digest('hex'), payload
 const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dsh-release-upgrade-')))
 const extracted = path.join(root, 'DSH-Portable')
 const destination = path.join(root, 'DSH Portable 旧版迁移 ü')
+const targetSourceRoot = path.join(root, 'target-source')
 const resultPath = path.join(root, 'upgrade-result.json')
+let activeProductRoot = destination
 let fullManifestBody = null
 let componentManifestBody = null
 let oldHost = null
+let productUpgradeLogOffset = 0
+let expectedPluginVersions = null
 
 async function waitFor(predicate, message, timeoutMs = 90_000) {
   const deadline = Date.now() + timeoutMs
@@ -57,12 +63,12 @@ async function waitFor(predicate, message, timeoutMs = 90_000) {
   throw new Error(message)
 }
 
-async function launcherLog() {
-  return readFile(path.join(destination, 'data', 'logs', 'launcher.log'), 'utf8').catch(() => '')
+async function launcherLog(productRoot = activeProductRoot) {
+  return readFile(path.join(productRoot, 'data', 'logs', 'launcher.log'), 'utf8').catch(() => '')
 }
 
 async function stopFinishedProduct({ bestEffort = false } = {}) {
-  const executable = path.join(destination, 'DeepSeek-Herness.exe')
+  const executable = path.join(activeProductRoot, 'DeepSeek-Herness.exe')
   if (!await stat(executable).then(() => true, () => false)) return
   try {
     await execFileAsync(executable, ['stop', '--no-browser', '--json'], {
@@ -78,7 +84,7 @@ async function stopFinishedProduct({ bestEffort = false } = {}) {
 async function failureDiagnostics() {
   const diagnostics = {}
   for (const relative of ['data/logs/launcher.log', 'data/logs/portable-errors.jsonl', 'data/runtime/process.json', 'data/runtime/desktop-host.pid']) {
-    try { diagnostics[relative] = readLogTail(path.join(destination, relative), 16000) } catch {}
+    try { diagnostics[relative] = readLogTail(path.join(activeProductRoot, relative), 16000) } catch {}
   }
   try {
     const { stdout } = await execFileAsync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
@@ -115,6 +121,12 @@ const server = createServer((request, response) => {
 })
 
 try {
+  await mkdir(targetSourceRoot, { recursive: true })
+  await execFileAsync('tar.exe', ['-x', '-f', newArchive, '-C', targetSourceRoot, 'DSH-Portable/launcher'], {
+    timeout: 5 * 60 * 1000, windowsHide: true,
+  })
+  const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(targetSourceRoot, 'DSH-Portable', 'launcher', 'default-plugins.mjs')).href)
+  expectedPluginVersions = Object.fromEntries(DEFAULT_PLUGINS.map(plugin => [plugin.name, plugin.version]))
   await execFileAsync('tar.exe', ['-x', '-f', oldArchive, '-C', root], { timeout: 5 * 60 * 1000, windowsHide: true })
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))
@@ -202,6 +214,11 @@ try {
       )
       launcherLogOffset = (await launcherLog()).length
     }
+    if (runningHostUpgrade && sourceOverlay) {
+      await stopFinishedProduct()
+      await waitFor(() => oldHost?.exitCode !== null, 'the old product host did not stop before the source-overlay upgrade', 30_000)
+    }
+    productUpgradeLogOffset = (await launcherLog()).length
     try {
       const updaterArguments = [
         '--upgrade-existing',
@@ -210,7 +227,7 @@ try {
         '--allow-http',
         '--result', resultPath,
       ]
-      if (!runningHostUpgrade) updaterArguments.push('--no-launch')
+      if (!runningHostUpgrade || sourceOverlay) updaterArguments.push('--no-launch')
       // A relaunched desktop can inherit redirected pipes from the old updater.
       // Await the updater's exit, not pipe EOF from the long-lived new desktop.
       const updater = spawn(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
@@ -294,7 +311,7 @@ try {
   }
   assert.ok((await stat(path.join(destination, 'DeepSeek-Herness.exe'))).isFile())
 
-  if (runningHostUpgrade && decision.delivery === 'full-package') {
+  if (runningHostUpgrade && !sourceOverlay && decision.delivery === 'full-package') {
     await waitFor(async () => {
       const currentLog = await launcherLog()
       return currentLog.slice(launcherLogOffset).includes('dsh-first-paint-ready')
@@ -327,10 +344,42 @@ try {
     }
   }
 
-  await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {
+  if (sourceOverlay) {
+    const launcherSource = path.join(projectRoot, 'launcher')
+    const launcherTarget = path.join(destination, 'launcher')
+    for (const entry of await readdir(launcherSource, { withFileTypes: true })) {
+      if (entry.isFile() && entry.name.endsWith('.mjs')) {
+        await copyFile(path.join(launcherSource, entry.name), path.join(launcherTarget, entry.name))
+      }
+    }
+  }
+
+  const { stdout: smokePortableOutput } = await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {
     timeout: 10 * 60 * 1000,
     windowsHide: true,
   })
+  const smokePortableResult = JSON.parse(smokePortableOutput.trim().split(/\r?\n/).at(-1))
+  activeProductRoot = smokePortableResult.movedRoot
+  const actualPluginVersions = {}
+  const pluginRefreshFailures = []
+  for (const name of ['dsh-image-viewer', 'dsh-chat-manager']) {
+    const manifestPath = path.join(activeProductRoot, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', name, 'package.json')
+    const installedManifest = await readFile(manifestPath, 'utf8').then(JSON.parse, () => null)
+    actualPluginVersions[name] = installedManifest?.version ?? null
+    if (actualPluginVersions[name] !== expectedPluginVersions[name]) {
+      pluginRefreshFailures.push(`${name}: expected ${expectedPluginVersions[name]}, found ${actualPluginVersions[name] ?? 'not installed'}`)
+    }
+  }
+  const updatedLauncherLog = (await launcherLog(activeProductRoot)).slice(productUpgradeLogOffset)
+  const pluginRefreshLogLines = updatedLauncherLog.split(/\r?\n/).filter(line => line.includes('phase=default-plugins-ready'))
+  if (pluginRefreshLogLines.length === 0) pluginRefreshFailures.push('launcher.log has no post-upgrade default-plugins-ready record')
+  if (updatedLauncherLog.includes('default_plugin_update_failed')) pluginRefreshFailures.push('launcher.log contains default_plugin_update_failed after upgrade')
+  if (pluginRefreshLogLines.some(line => /status=warning/.test(line))) pluginRefreshFailures.push('launcher.log contains default-plugins-ready status=warning after upgrade')
+  assert.deepEqual(pluginRefreshFailures, [], JSON.stringify({
+    expectedPluginVersions,
+    actualPluginVersions,
+    pluginRefreshLogLines,
+  }, null, 2))
   console.log(JSON.stringify({
     status: 'passed',
     from: oldComponents.portableVersion,
@@ -338,6 +387,9 @@ try {
     dshVersion: newComponents.dshVersion,
     preserved: markers.size,
     delivery: decision.delivery,
+    sourceOverlay,
+    pluginVersions: actualPluginVersions,
+    pluginRefreshLogLines,
   }))
 } catch (error) {
   console.error(await failureDiagnostics())
