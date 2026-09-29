@@ -80,19 +80,18 @@ internal static class PortableLauncher {
         CheckPath(Root);
         AppRoot = Path.Combine(Root, "app"); DataRoot = Path.Combine(Root, "data"); LauncherData = Path.Combine(DataRoot, "launcher");
         string link = null, probe = null; int restartPid = 0;
-        foreach (string arg in args) {
-            int value;
+        for (int i = 0; i < args.Length; i++) {
+            string arg = args[i]; int value;
             if (arg.StartsWith("--probe-port=") && probe == null && Int32.TryParse(arg.Substring(13), out value) && value >= 1024 && value <= 65535) probe = value.ToString();
             else if (arg.StartsWith("--restart-after=") && restartPid == 0 && Int32.TryParse(arg.Substring(16), out value) && value > 0) restartPid = value;
-            else if (arg == "--open" && link == null) { /* the next token is consumed below */ }
+            // The protocol handler registered by this launcher passes the link as the token after --open.
+            else if (arg == "--open") {
+                if (link != null || i + 1 >= args.Length || !IsValidLink(args[i + 1])) throw new IOException("Invalid dsh:// link.");
+                link = args[++i];
+            }
             else if (arg.StartsWith("dsh://", StringComparison.OrdinalIgnoreCase) && link == null && IsValidLink(arg)) link = arg;
             else throw new IOException("Unsupported portable launch argument. / 不支持此启动参数。");
         }
-        for (int i = 0; i + 1 < args.Length; i++) if (args[i] == "--open") {
-            if (link != null || !IsValidLink(args[i + 1])) throw new IOException("Invalid dsh:// link.");
-            link = args[i + 1];
-        }
-        if (args.Count(a => a == "--open") > 1 || args.Contains("--open") && link == null) throw new IOException("Invalid dsh:// link.");
 
         CheckPath(LauncherData); Directory.CreateDirectory(LauncherData);
         bool created;
@@ -130,8 +129,11 @@ internal static class PortableLauncher {
                 if (app.WaitForExit(20000)) {
                     int exitCode = app.ExitCode;
                     if (ShouldRollback(true, exitCode) && !String.IsNullOrEmpty(previous) && VersionPattern.IsMatch(previous) && previous != version) {
-                        state["version"] = previous; state["previous"] = version; state["pendingHealth"] = false; state["switchedAt"] = DateTime.UtcNow.ToString("o");
+                        state["version"] = previous; state["previous"] = ""; state["pendingHealth"] = false; state["switchedAt"] = DateTime.UtcNow.ToString("o");
+                        // The failed version must never become the rollback target, and the update engine must not retry it right away.
+                        state["rejected"] = new Dictionary<string, object> { { "version", version }, { "at", DateTime.UtcNow.ToString("o") } };
                         WriteJsonAtomic(Path.Combine(AppRoot, "current.json"), state);
+                        try { CheckPath(Path.Combine(AppRoot, version)); Directory.Delete(Path.Combine(AppRoot, version), true); } catch (Exception cleanupError) { Log("could not remove the rejected version: " + SafeMessage(cleanupError.Message)); }
                         WriteJsonAtomic(Path.Combine(LauncherData, "update-status.json"), new Dictionary<string, object> { { "status", "rolled-back" }, { "version", version }, { "error", "New version exited before the 20-second health window." } });
                         Log("health rollback version=" + version + " exit=" + exitCode);
                         version = previous; executable = AppExecutable(previous); EnsureApplication(executable);
@@ -145,14 +147,13 @@ internal static class PortableLauncher {
                     Log("health window passed version=" + version);
                 }
             }
-            DateTime nextProtocolRepair = DateTime.UtcNow.AddSeconds(60);
             while (!app.WaitForExit(1000)) {
-                if (DateTime.UtcNow >= nextProtocolRepair) { RegisterProtocol(); nextProtocolRepair = DateTime.UtcNow.AddSeconds(60); }
+                EnsureProtocolOwned();
             }
             // The official app may relaunch itself (settings restart, protocol hand-off); keep supervising while any of its processes remain.
             DateTime relaunchGrace = DateTime.UtcNow.AddSeconds(10);
             while (HasOwnedProcesses(AppRoot, false) || DateTime.UtcNow < relaunchGrace) {
-                if (DateTime.UtcNow >= nextProtocolRepair) { RegisterProtocol(); nextProtocolRepair = DateTime.UtcNow.AddSeconds(60); }
+                EnsureProtocolOwned();
                 Thread.Sleep(1000);
                 if (HasOwnedProcesses(AppRoot, false)) relaunchGrace = DateTime.UtcNow.AddSeconds(3);
             }
@@ -235,6 +236,17 @@ internal static class PortableLauncher {
             if (key != null) { result.ValueExisted = key.GetValueNames().Contains(""); if (result.ValueExisted) { result.Value = key.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames); result.ValueKind = key.GetValueKind(""); } }
             return result;
         }
+    }
+    // The official app re-registers dsh:// to its own exe on every start, so ownership is re-checked every second
+    // (one registry read) instead of on a slow timer; a link clicked in between would bypass the launcher.
+    private static void EnsureProtocolOwned() {
+        try {
+            string expected = "\"" + Process.GetCurrentProcess().MainModule.FileName + "\" --open \"%1\"";
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(ProtocolKey, false)) {
+                if (key != null && String.Equals(key.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames) as string, expected, StringComparison.Ordinal)) return;
+            }
+            RegisterProtocol();
+        } catch (Exception error) { Log("protocol ownership check failed: " + SafeMessage(error.Message)); }
     }
     private static void RegisterProtocol() {
         using (RegistryKey key = Registry.CurrentUser.CreateSubKey(ProtocolKey)) key.SetValue("", "\"" + Process.GetCurrentProcess().MainModule.FileName + "\" --open \"%1\"", RegistryValueKind.String);

@@ -96,3 +96,23 @@ test('pure package script only copies the pure allowlist and contains no adapter
   const source = await readFile(launcherPath, 'utf8');
   assert.doesNotMatch(source, /portable-adaptation|default-plugins|desktop-adapter|adapt-asar/);
 });
+
+// These behaviours were found only by running the real executable against the real official desktop.
+test('launcher fixes found by the real end-to-end run stay in place', async () => {
+  const source = await readFile(launcherPath, 'utf8');
+  const engine = await readFile(resolve(root, 'experiments/official-payload/apply-update.ps1'), 'utf8');
+  // `--open <link>` (the registered protocol command) must be accepted exactly once, not rejected as a duplicate.
+  assert.match(source, /arg == "--open"\)\s*\{\s*if \(link != null \|\| i \+ 1 >= args\.Length \|\| !IsValidLink\(args\[i \+ 1\]\)\) throw[^;]*;\s*link = args\[\+\+i\];/);
+  assert.doesNotMatch(source, /for \(int i = 0; i \+ 1 < args\.Length; i\+\+\) if \(args\[i\] == "--open"\)/);
+  // The official app re-registers dsh:// on every start, so ownership is verified every supervision tick.
+  assert.match(source, /while \(!app\.WaitForExit\(1000\)\)\s*\{\s*EnsureProtocolOwned\(\);/);
+  assert.doesNotMatch(source, /nextProtocolRepair/);
+  // The update root pointer is written only after the port and foreign-instance checks pass.
+  assert.ok(source.indexOf('CheckExternalOfficialOrPort(executable);') < source.indexOf('WritePortableRootPointer(ReadCacheName());'));
+  // A rolled-back version is never the rollback target, is removed, and is not retried for 24 hours.
+  assert.match(source, /state\["previous"\] = ""/);
+  assert.match(source, /state\["rejected"\]/);
+  assert.match(source, /Directory\.Delete\(Path\.Combine\(AppRoot, version\), true\)/);
+  assert.match(engine, /rejected/);
+  assert.match(engine, /rolled back within the last 24 hours/);
+});

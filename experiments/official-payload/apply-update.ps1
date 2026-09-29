@@ -97,6 +97,10 @@ try {
     $lock = [IO.File]::Open((Join-Path $storage 'update.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     $current = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
     $originalVersion = [string]$current.version
+    if ($null -ne $current.PSObject.Properties['rejected'] -and [string]$current.rejected.version -ceq $Version) {
+        $rejectedAt = [DateTime]::MinValue
+        if ([DateTime]::TryParse([string]$current.rejected.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$rejectedAt) -and ([DateTime]::UtcNow - $rejectedAt.ToUniversalTime()).TotalHours -lt 24) { throw 'This version was rolled back within the last 24 hours; not retrying yet' }
+    }
     if ($originalVersion -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$') { throw 'Current app version is invalid' }
     $follow = Get-Content -LiteralPath (Join-Path $launcherRoot 'follow.json') -Raw | ConvertFrom-Json
     Assert-FeedUrl ([string]$follow.indexUrl); Assert-FeedUrl ([string]$follow.feedUrl)
