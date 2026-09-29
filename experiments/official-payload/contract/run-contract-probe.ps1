@@ -269,16 +269,21 @@ try {
     if ($uiTimeout -lt 1000) { throw 'Insufficient time remains for the UI contract probe' }
     $uiArgs = @($uiScript, [string]$cdpPort, $feedVersion, $Locale, $uiResultPath, [string]$uiTimeout) | ForEach-Object { ConvertTo-NativeArgument $_ }
     $script:ProbeUi = Start-Process -FilePath $node -ArgumentList ([string]::Join(' ', $uiArgs)) -WindowStyle Hidden -PassThru -RedirectStandardOutput $script:UiLog -RedirectStandardError (Join-Path $script:WorkPath 'ui-probe-stderr.log')
+    # Reading Handle right away caches it; otherwise ExitCode stays null for a redirected -PassThru process.
+    $null = $script:ProbeUi.Handle
     if (-not $script:ProbeUi.WaitForExit($uiTimeout + 10000)) {
         Stop-Process -Id $script:ProbeUi.Id -Force -ErrorAction SilentlyContinue
         throw 'UI contract probe exceeded its 7-minute deadline'
     }
+    # Start-Process -PassThru only exposes ExitCode after a parameterless WaitForExit() (timeout overload leaves it null).
+    $script:ProbeUi.WaitForExit()
     if (Test-Path -LiteralPath $uiResultPath) {
         $ui = Get-Content -LiteralPath $uiResultPath -Raw | ConvertFrom-Json
         $script:Input.updateDialogShown = ($ui.updateDialogShown -eq $true)
-        $script:Input.updateDialogEvidence = [pscustomobject]@{ dialogText = $ui.dialogText; updateEntry = $ui.updateEntry; installButton = $ui.installButton; error = $ui.error }
+        $uiError = if ($ui.PSObject.Properties.Name -contains 'error') { $ui.error } else { $null }
+        $script:Input.updateDialogEvidence = [pscustomobject]@{ dialogText = $ui.dialogText; updateEntry = $ui.updateEntry; installButton = $ui.installButton; error = $uiError }
     }
-    if ($script:ProbeUi.ExitCode -ne 0) { throw "UI contract probe failed: $($script:Input.updateDialogEvidence.error)" }
+    if ($script:ProbeUi.ExitCode -ne 0) { throw "UI contract probe failed (exit $($script:ProbeUi.ExitCode)): $($script:Input.updateDialogEvidence.error)" }
 
     $exitDeadline = [DateTime]::UtcNow.AddSeconds(30)
     $remaining = @()
