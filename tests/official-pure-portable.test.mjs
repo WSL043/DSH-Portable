@@ -133,3 +133,18 @@ test('launcher waits briefly for leftovers of a previous run before refusing to 
   assert.match(source, /DateTime deadline = DateTime\.UtcNow\.AddSeconds\(20\);\s*string conflict;\s*while \(\(conflict = FindOfficialConflict\(\)\) != null\)/);
   assert.match(source, /if \(DateTime\.UtcNow >= deadline\) throw new IOException\(conflict\);\s*Thread\.Sleep\(500\);/);
 });
+
+test('PowerShell sources with non-ASCII text carry a UTF-8 BOM so Windows PowerShell 5.1 decodes them correctly', async () => {
+  const { readdir } = await import('node:fs/promises');
+  const dirs = ['experiments/official-payload', 'experiments/official-payload/e2e', 'experiments/official-payload/contract', 'launcher'];
+  const offenders = [];
+  for (const dir of dirs) {
+    for (const entry of await readdir(resolve(root, dir), { withFileTypes: true })) {
+      if (!entry.isFile() || !/\.psm?1$/.test(entry.name)) continue;
+      const bytes = await readFile(resolve(root, dir, entry.name));
+      const hasBom = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
+      if (bytes.some(byte => byte > 127) && !hasBom) offenders.push(`${dir}/${entry.name}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});

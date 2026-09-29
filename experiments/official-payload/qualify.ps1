@@ -1,4 +1,4 @@
-$ErrorActionPreference='Stop'
+﻿$ErrorActionPreference='Stop'
 if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted'){throw 'Disposable hosted Windows runner required'}
 $evidence=Join-Path $env:GITHUB_WORKSPACE 'build/official-payload-evidence'
 New-Item -ItemType Directory -Path $evidence -Force | Out-Null
