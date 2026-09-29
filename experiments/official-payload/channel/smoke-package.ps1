@@ -60,8 +60,16 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Official page did not render through the launcher probe port' }
     $page = Get-Content -LiteralPath $pageEvidence -Raw | ConvertFrom-Json
     if (-not $page.rendered -or $page.bodyTextLength -lt 5) { throw 'Official page rendering evidence is incomplete' }
-    $protocolWhileRunning = Get-ProtocolSnapshot
-    if (-not $protocolWhileRunning.value.Contains('DeepSeek Harness Portable.exe')) { throw 'The launcher did not retain dsh:// ownership during the smoke run' }
+    # The official app re-registers dsh:// on its own schedule and the launcher writes its command back within a second,
+    # so judge ownership over several samples instead of one instant.
+    $ownedSamples = 0; $protocolWhileRunning = $null
+    for ($sample = 0; $sample -lt 8; $sample++) {
+        $protocolWhileRunning = Get-ProtocolSnapshot
+        if ($protocolWhileRunning.value -and $protocolWhileRunning.value.Contains('DeepSeek Harness Portable.exe')) { $ownedSamples++ }
+        Start-Sleep -Milliseconds 750
+    }
+    if ($ownedSamples -lt 6) { throw "The launcher did not retain dsh:// ownership during the smoke run ($ownedSamples of 8 samples)" }
+    if (-not ($protocolWhileRunning.value -and $protocolWhileRunning.value.Contains('DeepSeek Harness Portable.exe'))) { $protocolWhileRunning = Get-ProtocolSnapshot }
     & $node (Join-Path $PSScriptRoot '..\e2e\close-app.mjs') $port
     if ($LASTEXITCODE -ne 0) { throw 'Could not request a normal official application exit over CDP' }
     if (-not $launcherProcess.WaitForExit(45000)) { throw 'Launcher did not exit normally after Browser.close' }
