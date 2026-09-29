@@ -9,6 +9,14 @@ on:
         type: string
 permissions:
   contents: read
+# Update each commit and version together when upgrading a bundled default plugin.
+env:
+  IMAGE_VIEWER_REPOSITORY: WSL043/dsh-image-viewer
+  IMAGE_VIEWER_COMMIT: 88e517e656d2e31159492eb6d7c98f5c37484766
+  IMAGE_VIEWER_VERSION: 0.1.5
+  CHAT_MANAGER_REPOSITORY: WSL043/dsh-chat-manager
+  CHAT_MANAGER_COMMIT: c7e9f5d82f58f311b1dbbd93c220d3a4e4b2fe06
+  CHAT_MANAGER_VERSION: 1.5.4
 concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
@@ -22,9 +30,22 @@ jobs:
       version: ${{ steps.select.outputs.version }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          repository: ${{ env.IMAGE_VIEWER_REPOSITORY }}
+          ref: ${{ env.IMAGE_VIEWER_COMMIT }}
+          path: build/orch-080/T32/plugins/dsh-image-viewer
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ env.CHAT_MANAGER_REPOSITORY }}
+          ref: ${{ env.CHAT_MANAGER_COMMIT }}
+          path: build/orch-080/T32/plugins/dsh-chat-manager
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.19.0
+          run_install: false
       - id: select
         name: Read the production channel and select an accepted official version
         shell: pwsh
@@ -33,19 +54,65 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           if ($env:REQUESTED_VERSION) {
-            $selection = node experiments/official-payload/channel/select-candidate.mjs $env:REQUESTED_VERSION 'build/orch-080/T28-alpha'
+            $selection = node experiments/official-payload/channel/select-candidate.mjs $env:REQUESTED_VERSION 'build/orch-080/T32'
           } else {
-            $selection = node experiments/official-payload/channel/select-candidate.mjs 'build/orch-080/T28-alpha'
+            $selection = node experiments/official-payload/channel/select-candidate.mjs 'build/orch-080/T32'
           }
           if ($LASTEXITCODE -ne 0) { throw 'Could not read the production qualified channel index' }
-          $candidate = Get-Content -LiteralPath 'build/orch-080/T28-alpha/candidate.json' -Raw | ConvertFrom-Json
+          $candidate = Get-Content -LiteralPath 'build/orch-080/T32/candidate.json' -Raw | ConvertFrom-Json
           "version=$($candidate.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - id: installer
         name: Download and validate the selected official installer
         uses: ./.github/workflows/official-payload-stage
         with:
-          candidate: build/orch-080/T28-alpha/candidate.json
+          candidate: build/orch-080/T32/candidate.json
           installer: ${{ runner.temp }}/official-alpha-installer.exe
+      - name: Checkout and pack the pinned default plugins
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $targets = @(
+            [pscustomobject]@{
+              directory = 'build/orch-080/T32/plugins/dsh-image-viewer'
+              name = 'dsh-image-viewer'
+              version = $env:IMAGE_VIEWER_VERSION
+              ignoreInstallScripts = $true
+            },
+            [pscustomobject]@{
+              directory = 'build/orch-080/T32/plugins/dsh-chat-manager'
+              name = 'dsh-chat-manager'
+              version = $env:CHAT_MANAGER_VERSION
+              ignoreInstallScripts = $false
+            }
+          )
+          foreach ($target in $targets) {
+            $manifestPath = Join-Path $target.directory 'package.json'
+            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+            if ($manifest.name -cne $target.name) { throw "Unexpected plugin package name at $manifestPath" }
+            if ([string]$manifest.version -cne [string]$target.version) { throw "Plugin $($target.name) package.json version $($manifest.version) does not match pinned version $($target.version)" }
+            Push-Location $target.directory
+            try {
+              $installArgs = @('install', '--frozen-lockfile')
+              if ($target.ignoreInstallScripts) { $installArgs += '--ignore-scripts' }
+              & pnpm @installArgs
+              if ($LASTEXITCODE -ne 0) { throw "pnpm install failed for $($target.name) with exit code $LASTEXITCODE" }
+              & pnpm run test:behavior
+              if ($LASTEXITCODE -ne 0) { throw "Behavior tests failed for $($target.name) with exit code $LASTEXITCODE" }
+              & pnpm run build
+              if ($LASTEXITCODE -ne 0) { throw "Build failed for $($target.name) with exit code $LASTEXITCODE" }
+              & git diff --exit-code -- lib
+              if ($LASTEXITCODE -ne 0) { throw "Generated lib output differs from the pinned CI source for $($target.name)" }
+              $packDirectory = Join-Path $env:GITHUB_WORKSPACE ('build/orch-080/T32/packages/' + $target.name)
+              New-Item -ItemType Directory -Path $packDirectory -Force | Out-Null
+              & pnpm pack --pack-destination $packDirectory
+              if ($LASTEXITCODE -ne 0) { throw "pnpm pack failed for $($target.name) with exit code $LASTEXITCODE" }
+              $archive = Join-Path $packDirectory ($target.name + '-' + $target.version + '.tgz')
+              if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "Expected packed plugin archive is missing: $archive" }
+              if (@(Get-ChildItem -LiteralPath $packDirectory -Filter '*.tgz' -File).Count -ne 1) { throw "Expected exactly one packed archive for $($target.name)" }
+            } finally {
+              Pop-Location
+            }
+          }
       - name: Package the pure portable layout against the production channel
         shell: pwsh
         env:
@@ -56,44 +123,56 @@ jobs:
           if (-not $urls.channelBaseUrl -or -not $urls.indexUrl) { throw 'Production channel constants are unavailable' }
           $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
           if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw 'GitHub Windows runner 7-Zip is required' }
+          $imageViewer = Join-Path $env:GITHUB_WORKSPACE 'build/orch-080/T32/packages/dsh-image-viewer/dsh-image-viewer-0.1.5.tgz'
+          $chatManager = Join-Path $env:GITHUB_WORKSPACE 'build/orch-080/T32/packages/dsh-chat-manager/dsh-chat-manager-1.5.4.tgz'
           ./experiments/official-payload/package-pure.ps1 `
             -Installer $env:INSTALLER `
-            -Output 'build/orch-080/T28-alpha/package' `
+            -Output 'build/orch-080/T32/package' `
             -SevenZip $sevenZip `
             -FeedUrl $urls.channelBaseUrl `
-            -IndexUrl $urls.indexUrl
+            -IndexUrl $urls.indexUrl `
+            -SeedPlugin $imageViewer `
+            -SeedPlugin $chatManager
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
-          $archive = 'build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
-          Compress-Archive -Path 'build/orch-080/T28-alpha/package/*' -DestinationPath $archive -CompressionLevel Optimal
-      - name: Smoke the extracted archive, health window, rendered page, and protocol restoration
+          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
+          Compress-Archive -Path 'build/orch-080/T32/package/*' -DestinationPath $archive -CompressionLevel Optimal
+      - name: Smoke first and second startup, seed state, disabled config, and moved root
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          ./experiments/official-payload/channel/smoke-package.ps1 `
-            -Archive 'build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip' `
-            -WorkRoot 'build/orch-080/T28-alpha/smoke-root'
+          ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
+            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip' `
+            -WorkRoot 'build/orch-080/T32/smoke-root' `
+            -EvidenceRoot 'build/orch-080/T32/evidence'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-pure-alpha-4-seed-smoke-evidence
+          path: build/orch-080/T32/evidence/
+          if-no-files-found: warn
+          retention-days: 14
       - name: Create checksums and source provenance
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $candidate = Get-Content -LiteralPath 'build/orch-080/T28-alpha/candidate.json' -Raw | ConvertFrom-Json
-          $archive = 'build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
-          $launcher = 'build/orch-080/T28-alpha/package/DeepSeek Harness Portable.exe'
+          $candidate = Get-Content -LiteralPath 'build/orch-080/T32/candidate.json' -Raw | ConvertFrom-Json
+          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
+          $launcher = 'build/orch-080/T32/package/DeepSeek Harness Portable.exe'
           $zipHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           $launcherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
-          @("$zipHash  DSH-Portable-1.0.0-alpha.4-windows-x64.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T28-alpha/checksums.txt' -Encoding ascii
+          @("$zipHash  DSH-Portable-1.0.0-alpha.4-windows-x64.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
           $source = @("# DSH-Portable 1.0.0-alpha.4 source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'This is a draft package assembled from the qualified channel. It does not replace the stable Native line.')
-          $source | Set-Content -LiteralPath 'build/orch-080/T28-alpha/SOURCE.md' -Encoding utf8
+          $source | Set-Content -LiteralPath 'build/orch-080/T32/SOURCE.md' -Encoding utf8
       - uses: actions/upload-artifact@v7
-        if: always()
+        if: success()
         with:
           name: official-pure-alpha-4-draft-assets
           path: |
-            build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip
-            build/orch-080/T28-alpha/checksums.txt
-            build/orch-080/T28-alpha/SOURCE.md
-            build/orch-080/T28-alpha/smoke-root/smoke-report.json
-            build/orch-080/T28-alpha/smoke-root/smoke-page.json
+            build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip
+            build/orch-080/T32/checksums.txt
+            build/orch-080/T32/SOURCE.md
+            build/orch-080/T32/smoke-root/smoke-report.json
+            build/orch-080/T32/smoke-root/smoke-page.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -118,12 +197,14 @@ jobs:
           RELEASE_TAG: v1.0.0-alpha.4
         run: |
           set -euo pipefail
-          RELEASE=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" 2>/dev/null || true)
-          if [ -z "$RELEASE" ]; then
+          # Draft releases have no tag yet, so the tags endpoint cannot see them: search the release list instead.
+          EXISTING=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | [.id, .draft] | join(\" \")" | head -n 1)
+          if [ -z "$EXISTING" ]; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'DSH-Portable 1.0.0-alpha.4 — Pure portable' --notes-file release-input/SOURCE.md
           else
-            DRAFT=$(printf '%s' "$RELEASE" | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).draft')
+            RELEASE_ID=${EXISTING%% *}
+            DRAFT=${EXISTING##* }
             if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.4 release' >&2; exit 1; fi
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft --title 'DSH-Portable 1.0.0-alpha.4 — Pure portable' --notes-file release-input/SOURCE.md
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f name='DSH-Portable 1.0.0-alpha.4 — Pure portable' -F body=@release-input/SOURCE.md -F draft=true -F prerelease=false > /dev/null
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.4-windows-x64.zip release-input/checksums.txt release-input/SOURCE.md --mutable
