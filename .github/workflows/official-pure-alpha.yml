@@ -1,0 +1,129 @@
+name: Package pure portable alpha.4 as a draft
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Accepted official desktop version (blank selects the newest channel version)
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: official-pure-alpha-draft
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.select.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - id: select
+        name: Read the production channel and select an accepted official version
+        shell: pwsh
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:REQUESTED_VERSION) {
+            $selection = node experiments/official-payload/channel/select-candidate.mjs $env:REQUESTED_VERSION 'build/orch-080/T28-alpha'
+          } else {
+            $selection = node experiments/official-payload/channel/select-candidate.mjs 'build/orch-080/T28-alpha'
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Could not read the production qualified channel index' }
+          $candidate = Get-Content -LiteralPath 'build/orch-080/T28-alpha/candidate.json' -Raw | ConvertFrom-Json
+          "version=$($candidate.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+      - id: installer
+        name: Download and validate the selected official installer
+        uses: ./.github/workflows/official-payload-stage
+        with:
+          candidate: build/orch-080/T28-alpha/candidate.json
+          installer: ${{ runner.temp }}/official-alpha-installer.exe
+      - name: Package the pure portable layout against the production channel
+        shell: pwsh
+        env:
+          INSTALLER: ${{ steps.installer.outputs.installer }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $urls = node experiments/official-payload/channel/constants.mjs | ConvertFrom-Json
+          if (-not $urls.channelBaseUrl -or -not $urls.indexUrl) { throw 'Production channel constants are unavailable' }
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw 'GitHub Windows runner 7-Zip is required' }
+          ./experiments/official-payload/package-pure.ps1 `
+            -Installer $env:INSTALLER `
+            -Output 'build/orch-080/T28-alpha/package' `
+            -SevenZip $sevenZip `
+            -FeedUrl $urls.channelBaseUrl `
+            -IndexUrl $urls.indexUrl
+          if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
+          $archive = 'build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
+          Compress-Archive -Path 'build/orch-080/T28-alpha/package/*' -DestinationPath $archive -CompressionLevel Optimal
+      - name: Smoke the extracted archive, health window, rendered page, and protocol restoration
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./experiments/official-payload/channel/smoke-package.ps1 `
+            -Archive 'build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip' `
+            -WorkRoot 'build/orch-080/T28-alpha/smoke-root'
+      - name: Create checksums and source provenance
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $candidate = Get-Content -LiteralPath 'build/orch-080/T28-alpha/candidate.json' -Raw | ConvertFrom-Json
+          $archive = 'build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
+          $launcher = 'build/orch-080/T28-alpha/package/DeepSeek Harness Portable.exe'
+          $zipHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $launcherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
+          @("$zipHash  DSH-Portable-1.0.0-alpha.4-windows-x64.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T28-alpha/checksums.txt' -Encoding ascii
+          $source = @("# DSH-Portable 1.0.0-alpha.4 source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'This is a draft package assembled from the qualified channel. It does not replace the stable Native line.')
+          $source | Set-Content -LiteralPath 'build/orch-080/T28-alpha/SOURCE.md' -Encoding utf8
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-pure-alpha-4-draft-assets
+          path: |
+            build/orch-080/T28-alpha/DSH-Portable-1.0.0-alpha.4-windows-x64.zip
+            build/orch-080/T28-alpha/checksums.txt
+            build/orch-080/T28-alpha/SOURCE.md
+            build/orch-080/T28-alpha/smoke-root/smoke-report.json
+            build/orch-080/T28-alpha/smoke-root/smoke-page.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  draft-release:
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-pure-alpha-4-draft-assets
+          path: release-input
+      - name: Create or update only the alpha.4 draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v1.0.0-alpha.4
+        run: |
+          set -euo pipefail
+          RELEASE=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" 2>/dev/null || true)
+          if [ -z "$RELEASE" ]; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title 'DSH-Portable 1.0.0-alpha.4 — Pure portable' --notes-file release-input/SOURCE.md
+          else
+            DRAFT=$(printf '%s' "$RELEASE" | node -p 'JSON.parse(require("fs").readFileSync(0,"utf8")).draft')
+            if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.4 release' >&2; exit 1; fi
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft --title 'DSH-Portable 1.0.0-alpha.4 — Pure portable' --notes-file release-input/SOURCE.md
+          fi
+          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.4-windows-x64.zip release-input/checksums.txt release-input/SOURCE.md --mutable
