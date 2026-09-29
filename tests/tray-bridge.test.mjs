@@ -969,7 +969,7 @@ test('Windows task completion notifications use the native action center with ex
   assert.match(handler, /session\.completed && !wasCompleted/)
   assert.match(handler, /if \(taskNotificationsEnabled\) completedThisFrame\.Add\(session\)/)
   assert.match(handler, /completedThisFrame\.Add\(session\)/)
-  assert.match(handler, /ShowTaskCompletionNotifications\(completedThisFrame\)/)
+  assert.match(handler, /ShowTaskCompletionNotifications\(completedThisFrame, fallbackNotifications\)/)
   assert.match(handler, /taskCompletionState\.Clear\(\)/, 'sessions absent from a later snapshot must lose their old completion bit')
 
   const notificationStart = source.indexOf('private void ShowTaskCompletionNotifications(')
@@ -1030,7 +1030,7 @@ test('Windows notifications distinguish background completion from tasks that ne
   assert.match(handler, /IsCurrentTaskVisibleAndFocused\(state, session\)/)
   assert.match(handler, /session\.completed && !wasCompleted && !currentTaskVisible/)
   assert.match(handler, /pendingInteraction[\s\S]+previousInteraction[\s\S]+attentionThisFrame\.Add\(session\)/)
-  assert.match(handler, /ShowTaskAttentionNotifications\(attentionThisFrame\)/)
+  assert.match(handler, /ShowTaskAttentionNotifications\(attentionThisFrame, fallbackNotifications\)/)
 
   const completionStart = source.indexOf('internal static bool ShowCompletion(')
   const completionEnd = source.indexOf('\n    }\n\n    internal sealed class DesktopWindowState', completionStart + 1)
