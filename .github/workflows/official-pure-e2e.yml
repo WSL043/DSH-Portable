@@ -43,7 +43,7 @@ jobs:
           $old = Get-Content -LiteralPath $oldCandidate -Raw | ConvertFrom-Json
           $new = Get-Content -LiteralPath $newCandidate -Raw | ConvertFrom-Json
           if ($old.version -cne '0.1.7-rc.2' -or $new.version -ceq $old.version) { throw 'Old/new official candidate identities are not a real upgrade pair' }
-          @('CANDIDATE_OLD=' + $oldCandidate, 'CANDIDATE_NEW=' + $newCandidate, 'CANDIDATE_VERSION=' + $new.version) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+          @(('CANDIDATE_OLD=' + $oldCandidate), ('CANDIDATE_NEW=' + $newCandidate), ('CANDIDATE_VERSION=' + $new.version)) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
       - name: Download and validate both official installers
         shell: powershell
         run: |
@@ -57,7 +57,7 @@ jobs:
           $installerNew = Join-Path $env:RUNNER_TEMP 'official-pure-e2e-new.exe'
           Get-OfficialInstaller -Destination $installerOld -Candidate $oldIdentity
           Get-OfficialInstaller -Destination $installerNew -Candidate $newIdentity
-          @('INSTALLER_OLD=' + $installerOld, 'INSTALLER_NEW=' + $installerNew) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+          @(('INSTALLER_OLD=' + $installerOld), ('INSTALLER_NEW=' + $installerNew)) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
       - name: Run full official old-to-new portable acceptance
         shell: powershell
         run: |
