@@ -62,8 +62,10 @@ jobs:
         continue-on-error: true
         env:
           VERSION: ${{ steps.preview.outputs.version }}
-          # The intake reads official tags through the GitHub CLI, which needs a token in Actions.
+          # The intake reads official tags through the GitHub CLI (GH_TOKEN) and the git tree API
+          # through fetch (GITHUB_TOKEN); unauthenticated calls are rate limited to 403 in Actions.
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           set +e
           node scripts/intake-upstream-core.mjs "$VERSION" --lock upstream.preview.lock.json --record-shape --markdown intake-report.md > intake-output.txt 2>&1
