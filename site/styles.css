@@ -419,6 +419,83 @@ h1 {
   border-bottom: 1px solid var(--line);
   padding-bottom: 5px;
 }
+.choice-grid,
+.line-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+.choice-card,
+.line-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: linear-gradient(140deg, var(--surface), var(--paper));
+}
+.choice-card {
+  padding: 30px;
+}
+.choice-card .eyebrow,
+.line-card > span {
+  font-size: 9px;
+  letter-spacing: 0.16em;
+  color: var(--muted);
+}
+.choice-card h3 {
+  margin: 13px 0 20px;
+  font-size: 23px;
+}
+.choice-card ul {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 22px;
+}
+.choice-card li {
+  border-top: 1px solid var(--line);
+  padding: 13px 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+.choice-card .text-link {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 5px;
+}
+.project-boundary {
+  margin: 22px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+.line-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 30px;
+  margin: 70px 0 22px;
+}
+.line-heading h3 {
+  margin: 0;
+  font-size: 20px;
+}
+.line-heading p {
+  max-width: 480px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.line-card {
+  padding: 24px 27px;
+}
+.line-card h4 {
+  margin: 13px 0 8px;
+  font-size: 18px;
+}
+.line-card p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--muted);
+}
 .viewer-showcase {
   display: grid;
   grid-template-columns: 1.55fr 1fr;
@@ -841,6 +918,20 @@ footer > p {
   .desktop-layout,
   .faq {
     display: block;
+  }
+  .choice-grid,
+  .line-grid {
+    grid-template-columns: 1fr;
+  }
+  .line-heading {
+    display: block;
+    margin-top: 52px;
+  }
+  .line-heading p {
+    margin-top: 12px;
+  }
+  .choice-card {
+    padding: 24px;
   }
   .folder-visual {
     padding: 26px;

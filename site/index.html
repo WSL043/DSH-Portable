@@ -5,17 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#050607">
   <meta name="dsh-page-language" content="zh">
-  <meta name="description" content="DSH-Portable：自带运行环境和插件市场的 DeepSeek Harness 桌面版，界面安装插件，会话与默认工作区随文件夹移动。">
-  <meta property="og:title" content="DSH-Portable｜可移动的 DeepSeek Harness 桌面版">
-  <meta property="og:description" content="自带运行环境和插件市场，界面安装插件；会话、设置与默认工作区方便移动和备份。">
+  <meta name="description" content="DSH-Portable 是 DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区；支持同平台整夹迁移与保留数据的更新恢复。">
+  <meta property="og:title" content="DSH-Portable｜DeepSeek Harness 便携版">
+  <meta property="og:description" content="一个文件夹带走会话、设置、插件和工作区；Portable 与内核分开更新，并提供保留数据的回滚与恢复工具。独立社区项目，非 DeepSeek 官方应用。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://wsl043.github.io/DSH-Portable/">
   <meta property="og:locale" content="zh_CN">
   <meta property="og:image" content="https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png">
   <meta property="og:image:alt" content="DSH-Portable desktop workspace">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="DSH-Portable｜可移动的 DeepSeek Harness 桌面版">
-  <meta name="twitter:description" content="自带运行环境和插件市场，界面安装插件；会话、设置与默认工作区方便移动和备份。">
+  <meta name="twitter:title" content="DSH-Portable｜DeepSeek Harness 便携版">
+  <meta name="twitter:description" content="一个文件夹带走会话、设置、插件和工作区；Portable 与内核分开更新，并提供保留数据的回滚与恢复工具。独立社区项目，非 DeepSeek 官方应用。">
   <meta name="twitter:image" content="https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png">
   <link rel="canonical" href="https://wsl043.github.io/DSH-Portable/">
   <link rel="alternate" hreflang="zh-CN" href="https://wsl043.github.io/DSH-Portable/">
@@ -26,19 +26,19 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "DSH-Portable",
-    "description": "无需 Node.js 的可移动 DeepSeek Harness 社区桌面发行版，支持 Windows、macOS 和 Linux。",
+    "description": "DeepSeek Harness 的便携版：一个文件夹带走会话、设置、插件和工作区。稳定版 0.x 支持 Windows、macOS 和 Linux；1.0 开发线仅 Windows，仍为开发构建与草稿。",
     "applicationCategory": "DeveloperApplication",
-    "operatingSystem": "Windows, macOS, Linux",
+    "operatingSystem": "Windows, macOS, Linux (stable 0.x); Windows (1.0 development line)",
     "license": "https://github.com/WSL043/DSH-Portable/blob/main/LICENSE",
     "url": "https://wsl043.github.io/DSH-Portable/",
     "downloadUrl": "https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe",
     "codeRepository": "https://github.com/WSL043/DSH-Portable",
     "screenshot": "https://wsl043.github.io/DSH-Portable/assets/dsh-interface-zh.png",
-    "softwareRequirements": "无需单独安装 Node.js",
+    "softwareRequirements": "稳定版 0.x：Windows、macOS 和 Linux；1.0 开发线：仅 Windows 开发构建与草稿，不在公开下载中。",
     "inLanguage": ["zh-CN", "en"]
   }
   </script>
-  <title>DSH-Portable｜无需 Node.js 的可移动 DeepSeek Harness 桌面版</title>
+  <title>DSH-Portable｜DeepSeek Harness 的便携版</title>
   <link rel="icon" href="assets/DSH-Portable.svg" type="image/svg+xml">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
@@ -53,6 +53,7 @@
     <a class="brand" href="#top" aria-label="DSH-Portable home"><img src="assets/DSH-Portable-white.svg" alt="" width="30" height="30">DSH-Portable</a>
     <nav aria-label="Primary navigation">
       <a class="nav-wide" href="#portable" data-i18n="navPortable">便携体验</a>
+      <a class="nav-wide" href="#which" data-i18n="navChoice">怎么选择</a>
       <a class="nav-wide" href="#plugins" data-i18n="navPlugins">插件</a>
       <a class="language-switch" href="en/" hreflang="en" lang="en" aria-label="Switch to English" data-language-switch>EN</a>
       <button class="theme-toggle" type="button" aria-label="切换到亮色" aria-pressed="false"><span class="theme-icon" aria-hidden="true">☼</span><span class="theme-label">亮色</span></button>
@@ -62,40 +63,53 @@
   </header>
   <div class="hero-copy">
     <p class="eyebrow">DEEPSEEK HARNESS / PORTABLE EDITION</p>
-    <h1 data-i18n="heroTitle">工作环境，<br>随你而行。</h1>
-    <p class="hero-lede" data-i18n="heroLede">运行环境与插件市场，已经准备好。<br>会话、设置和默认工作区，留在你自己的文件夹里。</p>
+    <h1 data-i18n="heroTitle">DeepSeek Harness<br>的便携版。</h1>
+    <p class="hero-lede" data-i18n="heroLede">一个文件夹，带走会话、设置、插件和工作区。<br>整夹迁移；Portable 与内核分开更新。</p>
     <div class="hero-actions"><a class="download-button" data-primary-download href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe"><span data-i18n="downloadFor">下载 Windows 便携版</span><span aria-hidden="true">↗</span></a><a class="text-link" href="#downloads" data-i18n="otherPlatforms">其他平台</a></div>
-    <p class="hero-note" data-i18n="heroNote">免配环境　 /　 界面装插件　 /　 内核独立更新</p>
+    <p class="hero-note" data-i18n="heroNote">不安装、不改 PATH　 /　 同平台整夹复制　 /　 保留数据的回滚与恢复</p>
   </div>
   <div class="product-stage" data-product-stage>
     <figure class="fallback-window"><img data-product-shot src="assets/dsh-interface-zh.png" alt="DSH-Portable 中的 DeepSeek Harness 桌面工作台" width="1440" height="900"><img class="fallback-light" src="assets/dsh-workspace-0.6.4.png" alt="" aria-hidden="true" width="1440" height="900"></figure>
   </div>
-  <div class="hero-caption"><span data-i18n="stageCaption">一个文件夹，一套完整的工作环境。</span><span data-i18n="stageBoundary">独立社区发行版 · 同平台移动</span></div>
+  <div class="hero-caption"><span data-i18n="stageCaption">会话、设置、插件和工作区，留在一个文件夹。</span><span data-i18n="stageBoundary">独立社区项目 · 同平台迁移</span></div>
 </section>
 <div class="scene-controls"><span data-i18n="sceneHint">实际界面截图 · 悬停查看不同角度</span><div><button type="button" data-motion-control aria-pressed="true">动效开</button><button type="button" id="follow-system" data-i18n="followSystem">跟随系统外观</button></div></div>
 <section class="section portable" id="portable">
-  <div class="section-heading"><div><p class="eyebrow">01 / TAKE IT WITH YOU</p><h2 data-i18n="portableTitle">换个位置。<br>不用从头开始。</h2></div><p data-i18n="portableIntro">运行环境不必再装一遍，会话也不必从头找。完全退出后，复制整个目录，在相同系统与架构的电脑上继续。</p></div>
+  <div class="section-heading"><div><p class="eyebrow">01 / TAKE IT WITH YOU</p><h2 data-i18n="portableTitle">一个文件夹。<br>换位置继续。</h2></div><p data-i18n="portableIntro">会话、设置、插件和默认工作区集中保存。完全退出后，可把整个文件夹复制到 U 盘或另一台相同系统与架构的电脑。</p></div>
   <div class="folder-story">
     <div class="folder-visual"><div class="folder-label"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M3 7V5a1 1 0 0 1 1-1h5l3 3h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/></svg>DSH-Portable</div><div class="folder-rows"><div><code>runtime/</code><span data-i18n="folderRuntime">运行环境，随包准备</span></div><div><code>data/</code><span data-i18n="folderData">会话、设置与插件</span></div><div><code>workspace/</code><span data-i18n="folderWorkspace">你的默认工作区</span></div></div><span class="folder-foot" data-i18n="folderFoot">你的工作，留在你选择的位置。</span></div>
-    <div class="portable-copy"><dl class="portable-facts"><div><dt data-i18n="factNodeValue">无需 Node.js</dt><dd data-i18n="factLauncher">运行环境已内置，不必配置系统环境。</dd></div><div><dt data-i18n="factFilesTitle">移动与备份，一起完成</dt><dd data-i18n="factFiles">会话、设置与默认工作区集中保存在便携目录。</dd></div><div><dt data-i18n="factBoundaryTitle">边界清楚，迁移放心</dt><dd data-i18n="factBoundary">外部项目需单独搬迁；更换系统或架构时，请先查看迁移指南。</dd></div></dl><a class="text-link" data-migration-guide href="https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md" data-i18n="migrationGuide">查看完整迁移指南 ↗</a></div>
+    <div class="portable-copy"><dl class="portable-facts"><div><dt data-i18n="factNodeValue">一个文件夹</dt><dd data-i18n="factLauncher">会话、设置、插件和默认工作区集中保存在同一个便携目录。</dd></div><div><dt data-i18n="factFilesTitle">换位置继续</dt><dd data-i18n="factFiles">完全退出后整夹复制到 U 盘或相同系统与架构的电脑。</dd></div><div><dt data-i18n="factBoundaryTitle">更新不动数据</dt><dd data-i18n="factBoundary">Portable 与内核分开更新，可选内核版本；用户数据和工作区保留。</dd></div><div><dt data-i18n="factRecoveryTitle">出问题可恢复</dt><dd data-i18n="factRecovery">回滚、检查、精准修复与恢复工具帮助修复，同时保留个人数据。</dd></div></dl><a class="text-link" data-migration-guide href="https://github.com/WSL043/DSH-Portable/blob/main/docs/move-between-computers.md" data-i18n="migrationGuide">查看完整迁移指南 ↗</a></div>
+  </div>
+</section>
+<section class="section choice" id="which">
+  <div class="section-heading"><div><p class="eyebrow">02 / CHOOSE YOUR ROUTE</p><h2 data-i18n="choiceTitle">官方桌面端，还是便携版？</h2></div><p data-i18n="choiceIntro">两种交付方式各有侧重：按安装习惯、设备数量和更新控制需求选择。</p></div>
+  <div class="choice-grid">
+    <article class="choice-card"><p class="eyebrow" data-i18n="choiceOfficialLabel">OFFICIAL DESKTOP</p><h3 data-i18n="choiceOfficialTitle">DeepSeek 官方桌面端</h3><ul><li data-i18n="choiceOfficialInstall">安装式，提供 Windows 与 macOS 版本。</li><li data-i18n="choiceOfficialUpdates">跟随官方发布节奏。</li><li data-i18n="choiceOfficialFit">适合想装进系统、主要使用一台电脑。</li></ul><a class="text-link" href="https://www.deepseek.com/harness/" data-i18n="officialDesktopLink">了解官方桌面端 ↗</a></article>
+    <article class="choice-card"><p class="eyebrow" data-i18n="choicePortableLabel">DSH-PORTABLE</p><h3 data-i18n="choicePortableTitle">DeepSeek Harness 的便携版</h3><ul><li data-i18n="choicePortableInstall">稳定版 0.x 支持 Windows、macOS 和 Linux；不安装、不改系统 PATH。</li><li data-i18n="choicePortableUpdates">Portable 与内核分开更新，并可选择内核版本。</li><li data-i18n="choicePortableMove">完全退出后，可把整个文件夹复制到 U 盘或另一台相同平台的电脑。</li><li data-i18n="choicePortableFit">适合想带走、多设备使用或控制更新节奏。</li></ul><a class="text-link" href="#downloads" data-i18n="portableDownloadsLink">查看稳定版下载 ↗</a></article>
+  </div>
+  <p class="project-boundary" data-i18n="projectBoundary">DSH-Portable 是独立社区项目，不是 DeepSeek 官方应用，也未获 DeepSeek 背书。</p>
+  <div class="line-heading"><h3 data-i18n="linesTitle">两条开发与发布线</h3><p data-i18n="linesIntro">日常使用请选择稳定版；开发线状态与公开下载分开说明。</p></div>
+  <div class="line-grid">
+    <article class="line-card"><span data-i18n="stableLineLabel">CURRENT DOWNLOAD</span><h4 data-i18n="stableLineTitle">稳定版 0.x（Native）</h4><p data-i18n="stableLineText">当前公开下载，支持 Windows、macOS 和 Linux。</p></article>
+    <article class="line-card"><span data-i18n="developmentLineLabel">DEVELOPMENT ONLY</span><h4 data-i18n="developmentLineTitle">1.0 开发线</h4><p data-i18n="developmentLineText">基于官方桌面成品的纯便携化，仅 Windows；目前是开发构建与草稿，不在公开下载中。</p></article>
   </div>
 </section>
 <section class="section plugins" id="plugins">
- <div class="section-heading"><div><p class="eyebrow">02 / MAKE ROOM FOR MORE</p><h2 data-i18n="pluginsTitle">想要的工具。<br>在界面里装好。</h2></div><div class="section-description"><p data-i18n="marketText">设置 → 插件 → 插件市场。搜索、安装与管理，都在界面完成。Portable 融入上游 dsh-market，无需手动输入安装命令。</p><a class="text-link" href="https://github.com/dsh-market/dsh-market">dsh-market ↗</a></div></div>
+ <div class="section-heading"><div><p class="eyebrow">03 / MAKE ROOM FOR MORE</p><h2 data-i18n="pluginsTitle">插件工具，<br>也在你的文件夹里。</h2></div><div class="section-description"><p data-i18n="marketText">沿用 DSH 插件管理，可从设置 → 插件 → 插件市场搜索、安装或更新；插件状态随便携目录保留。</p><a class="text-link" href="https://github.com/dsh-market/dsh-market">dsh-market ↗</a></div></div>
  <div class="viewer-showcase"><button class="image-button" type="button" data-screenshot aria-label="Image Viewer screenshot"><img src="assets/viewer-dark.png" loading="lazy" width="1440" height="900" alt="Image Viewer with image zoom and region annotations"></button><div class="viewer-copy"><span class="eyebrow">INCLUDED / IMAGE VIEWER</span><h3 data-i18n="viewerTitle">细节，值得看清。</h3><p data-i18n="viewerText">放大图片、下载原图，或用区域备注留住想法。图片查看器默认提供，也可以独立卸载。</p><div class="plugin-companion"><span class="eyebrow">ALSO INCLUDED / CHAT MANAGER</span><p data-i18n="managerText">整理与查找会话，找回之前的工作。两个默认插件独立维护与更新。</p></div></div></div>
 </section>
 <section class="section desktop" id="desktop">
- <div class="section-heading"><div><p class="eyebrow">03 / AT HOME ON YOUR DESKTOP</p><h2 data-i18n="desktopTitle">从打开，到每天使用。</h2></div><p data-i18n="desktopIntro">桌面窗口、键盘操作和更新管理，组成完整的便携体验。</p></div>
- <div class="desktop-layout"><div class="desktop-shot"><button type="button" class="image-button" data-screenshot aria-label="Desktop navigation screenshot"><img src="assets/windows-navigation-dark.png" loading="lazy" alt="Portable dark desktop navigation and menu"></button><div class="shortcuts"><span data-i18n="shortcutSidebar">侧栏</span><kbd>Ctrl B</kbd><span data-i18n="shortcutFullscreen">全屏</span><kbd>F11</kbd></div></div><div class="desktop-notes"><article><span>01</span><div><h3 data-i18n="nativeTitle">操作顺手，细节一致。</h3><p data-i18n="nativeText">侧栏折叠、前进后退与快捷键；亮暗外观随你的习惯。</p></div></article><article><span>02</span><div><h3 data-i18n="updateTitle">内核与桌面，各自更新。</h3><p data-i18n="updateText">在更新设置里选择 Portable 与兼容内核版本。稳定版或候选版，由你决定。</p></div></article><article><span>03</span><div><h3 data-i18n="repairTitle">遇到问题，有迹可循。</h3><p data-i18n="repairText">启动记录与支持报告帮助定位问题；修复工具重建可再生组件，保留用户数据。</p></div></article></div></div>
+ <div class="section-heading"><div><p class="eyebrow">04 / AT HOME ON YOUR DESKTOP</p><h2 data-i18n="desktopTitle">可控更新，数据留在原处。</h2></div><p data-i18n="desktopIntro">Portable 与内核可分开更新，可选兼容内核版本；回滚与恢复工具帮助保留个人数据。</p></div>
+ <div class="desktop-layout"><div class="desktop-shot"><button type="button" class="image-button" data-screenshot aria-label="Desktop navigation screenshot"><img src="assets/windows-navigation-dark.png" loading="lazy" alt="Portable dark desktop navigation and menu"></button><div class="shortcuts"><span data-i18n="shortcutSidebar">侧栏</span><kbd>Ctrl B</kbd><span data-i18n="shortcutFullscreen">全屏</span><kbd>F11</kbd></div></div><div class="desktop-notes"><article><span>01</span><div><h3 data-i18n="nativeTitle">操作顺手，细节一致。</h3><p data-i18n="nativeText">侧栏折叠、前进后退与快捷键；亮暗外观随你的习惯。</p></div></article><article><span>02</span><div><h3 data-i18n="updateTitle">Portable 与内核，分开更新。</h3><p data-i18n="updateText">在设置中选择兼容内核版本；更新保留数据，需要时可回滚或恢复。</p></div></article><article><span>03</span><div><h3 data-i18n="repairTitle">遇到问题，有迹可循。</h3><p data-i18n="repairText">启动记录与支持报告帮助定位问题；修复工具重建可再生组件，保留用户数据。</p></div></article></div></div>
 </section>
-<section class="section guide-links" id="guides"><div class="section-heading"><div><p class="eyebrow">GET STARTED</p><h2 data-i18n="guidesTitle">从你的问题开始。</h2></div></div><div class="guide-link-grid"><a href="guides/get-started.html"><span>01</span><h3 data-i18n="guideStart">不想配置环境，怎么开始用 DSH？</h3><p data-i18n="guideStartText">下载、连接模型、在界面安装插件。</p></a><a href="guides/move-workspace.html"><span>02</span><h3 data-i18n="guideMove">换电脑，会话和插件怎么办？</h3><p data-i18n="guideMoveText">同平台迁移与备份，先看清哪些文件要带走。</p></a></div></section>
+<section class="section guide-links" id="guides"><div class="section-heading"><div><p class="eyebrow">GET STARTED</p><h2 data-i18n="guidesTitle">从你的问题开始。</h2></div></div><div class="guide-link-grid"><a href="guides/get-started.html"><span>01</span><h3 data-i18n="guideStart">如何开始使用便携版？</h3><p data-i18n="guideStartText">选择下载包、连接模型服务，并按需管理插件。</p></a><a href="guides/move-workspace.html"><span>02</span><h3 data-i18n="guideMove">换电脑，会话和插件怎么办？</h3><p data-i18n="guideMoveText">同平台迁移与备份，先看清哪些文件要带走。</p></a></div></section>
     <section class="downloads section" id="downloads">
       <div class="section-heading"><div><p class="section-kicker" data-i18n="downloadsKicker">获取 DSH-Portable</p><h2 data-i18n="downloadsTitle">选择你的平台</h2></div><p data-i18n="downloadsIntro">选择系统与架构，下载适合你的便携包。所有文件托管于 GitHub Releases。</p></div>
       <div class="download-shell">
         <div class="platform-tabs" role="tablist" aria-label="Operating system"><button id="tab-windows" type="button" role="tab" aria-selected="true" aria-controls="panel-windows" data-platform-tab="windows">Windows</button><button id="tab-macos" type="button" role="tab" aria-selected="false" aria-controls="panel-macos" data-platform-tab="macos">macOS</button><button id="tab-linux" type="button" role="tab" aria-selected="false" aria-controls="panel-linux" data-platform-tab="linux">Linux</button></div>
         <div id="panel-windows" class="download-panel" role="tabpanel" aria-labelledby="tab-windows" data-platform-panel="windows">
           <div class="recommended-download"><div><span data-i18n="recommended">推荐</span><h3 data-i18n="windowsPortable">Windows 便携版</h3><p data-i18n="windowsPortableText">把小体积启动器放到希望保存的位置，它会在旁边准备完整目录。</p></div><a class="panel-download" href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe" data-i18n="downloadNow">下载</a></div>
-          <div class="download-options"><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip"><strong data-i18n="offlineEdition">完整离线 ZIP</strong><span data-i18n="offlineText">离线电脑或手动解压</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong data-i18n="completeArchive">全部文件</strong><span data-i18n="archiveText">版本说明与其他构建</span></a></div>
+          <div class="download-options"><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip"><strong data-i18n="offlineEdition">标准 ZIP</strong><span data-i18n="offlineText">自行下载并解压</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-complete-offline.zip"><strong data-i18n="completeOfflineArchive">完整离线 ZIP</strong><span data-i18n="completeOfflineText">目标电脑缺少 WebView2 且无法联网补装</span></a><a href="https://github.com/WSL043/DSH-Portable/releases/latest"><strong data-i18n="completeArchive">全部文件</strong><span data-i18n="archiveText">版本说明与其他构建</span></a></div>
         </div>
         <div id="panel-macos" class="download-panel" role="tabpanel" aria-labelledby="tab-macos" data-platform-panel="macos" hidden>
           <div class="architecture-switch" role="group" aria-label="Mac architecture"><button type="button" class="is-active" data-arch="arm64">Apple Silicon</button><button type="button" data-arch="x64">Intel</button></div>
@@ -114,10 +128,10 @@
     <section class="faq section">
       <div class="section-heading compact"><div><p class="section-kicker">FAQ</p><h2 data-i18n="faqTitle">常见问题</h2></div></div>
       <div class="faq-list">
-        <details><summary data-i18n="faqOfficialQ">这是 DeepSeek 官方桌面应用吗？</summary><p data-i18n="faqOfficialA">不是。DSH-Portable 是独立社区发行版，内置经过成品测试的官方 DeepSeek Harness 预览版本。</p></details>
-        <details><summary data-i18n="faqNodeQ">需要先安装 Node.js 吗？</summary><p data-i18n="faqNodeA">不需要。运行环境和插件管理工具都包含在产品里，不会修改系统 PATH。</p></details>
-        <details><summary data-i18n="faqDataQ">复制文件夹会丢会话吗？</summary><p data-i18n="faqDataA">从托盘完全退出，再复制整个 DSH-Portable 文件夹；会话、设置、插件和默认工作区会一起移动。</p></details>
-        <details><summary data-i18n="faqUpdateQ">更新会覆盖数据吗？</summary><p data-i18n="faqUpdateA">不会。更新只替换程序组件，用户数据与工作区保持原样。</p></details>
+        <details><summary data-i18n="faqOfficialQ">这是 DeepSeek 官方桌面应用吗？</summary><p data-i18n="faqOfficialA">不是。DSH-Portable 是独立社区项目，不是 DeepSeek 官方应用，也未获 DeepSeek 背书。官方桌面端采用安装式发布；<a href="https://www.deepseek.com/harness/">查看官方桌面端</a>。</p></details>
+        <details><summary data-i18n="faqNodeQ">使用便携包需要单独安装 Node.js 吗？</summary><p data-i18n="faqNodeA">使用已构建的稳定版 0.x 便携包时，无需单独安装 Node.js。这是运行事实，不是 Portable 与官方安装版的主要区别。</p></details>
+        <details><summary data-i18n="faqDataQ">复制文件夹会丢会话吗？</summary><p data-i18n="faqDataA">完全退出后，再把整个 DSH-Portable 文件夹复制到 U 盘或另一台相同系统与架构的电脑；会话、设置、插件和默认工作区会一起移动。</p></details>
+        <details><summary data-i18n="faqUpdateQ">更新会覆盖数据吗？</summary><p data-i18n="faqUpdateA">Portable 与内核分开更新，可选择内核版本；更新保留用户数据和工作区，并提供保留数据的回滚与恢复工具。</p></details>
       </div>
     </section>
 

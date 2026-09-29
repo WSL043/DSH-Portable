@@ -3,8 +3,8 @@ const releaseBase =
 const copy = {
   en: {
     guidesTitle: "Start with your question.",
-    guideStart: "How do I start without runtime setup?",
-    guideStartText: "Download, connect a model, and install plugins visually. Guide in Chinese.",
+    guideStart: "How do I start with the portable edition?",
+    guideStartText: "Choose a download, connect a model service, and manage plugins as needed. Guide in Chinese.",
     guideMove: "What happens to my sessions when I move?",
     guideMoveText: "Same-platform migration and backup: what to take with you. Guide in Chinese.",
     starProject: "GitHub ↗",
@@ -18,22 +18,24 @@ const copy = {
       "Sidebar controls, back and forward, and keyboard shortcuts. Light or dark, the way you prefer.",
     skip: "Skip to content",
     navPortable: "Portable",
+    navChoice: "Which to choose",
     navDownload: "Download",
-    heroTitle: "Your workspace.<br>Where you go.",
+    heroTitle: "DeepSeek Harness<br>in a portable folder.",
     heroLede:
-      "Runtime and plugin market, ready to use.<br>Sessions, settings, and your default workspace stay in your own folder.",
+      "One folder for your sessions, settings, plugins, and workspace.<br>Move it on the same platform; update Portable and core separately.",
     downloadFor: "Download for Windows",
     otherPlatforms: "Other platforms",
-    heroNote: "No runtime setup / Visual plugins / Independent kernel updates",
-    stageCaption: "One folder. Your complete working environment.",
-    portableTitle: "A new location.<br>The same workspace.",
+    heroNote: "No installation or PATH changes / Copy the folder on the same platform / Data-preserving rollback and recovery",
+    stageCaption: "Sessions, settings, plugins, and workspace in one folder.",
+    portableTitle: "One folder.<br>Pick up where you left off.",
     portableIntro:
-      "No runtime to reinstall. No sessions to hunt down. Exit fully, copy the whole folder, and continue on a computer with the same OS and architecture.",
+      "Sessions, settings, plugins, and the default workspace stay together. Fully exit, then copy the folder to a USB drive or another computer with the same OS and architecture.",
     migrationGuide: "Read the migration guide ↗",
-    factNodeValue: "No Node.js required",
-    factLauncher: "Runtime included. No system environment to configure.",
+    factNodeValue: "One folder",
+    factLauncher:
+      "Sessions, settings, plugins, and the default workspace stay together in the portable directory.",
     factFiles:
-      "Sessions, settings, and your default workspace stay in the portable directory.",
+      "After fully exiting, copy the whole folder to a USB drive or a computer with the same OS and architecture.",
     downloadsKicker: "Get DSH-Portable",
     downloadsTitle: "Choose your platform",
     downloadsIntro:
@@ -43,8 +45,10 @@ const copy = {
     windowsPortableText:
       "Place the small bootstrap where you want the product; it prepares the complete folder beside itself.",
     downloadNow: "Download",
-    offlineEdition: "Complete offline ZIP",
-    offlineText: "For an offline computer or manual extraction",
+    offlineEdition: "Standard ZIP",
+    offlineText: "Download and extract it yourself",
+    completeOfflineArchive: "Complete offline ZIP",
+    completeOfflineText: "For a target without WebView2 that cannot install it online",
     completeArchive: "All files",
     archiveText: "Release notes and other builds",
     portableZip: "Portable ZIP",
@@ -57,23 +61,23 @@ const copy = {
     allDownloads: "View Release",
     checksums: "Checksums",
     marketText:
-      "Settings → Plugins → Plugin Market. Search, install, and manage visually. Portable integrates upstream dsh-market, with no install commands to type.",
+      "Use DSH plugin management to search, install, or update from Settings → Plugins → Plugin Market. Plugin state stays with the portable folder.",
     repairTitle: "A clearer path to diagnosis.",
     repairText:
       "Startup records and support reports help trace problems. Repair tools rebuild reproducible components while keeping user data.",
     faqTitle: "Common questions",
     faqOfficialQ: "Is this an official DeepSeek desktop app?",
     faqOfficialA:
-      "No. DSH-Portable is an independent community distribution that packages a product-tested preview of official DeepSeek Harness.",
-    faqNodeQ: "Do I need Node.js first?",
+      'No. DSH-Portable is an independent community project, not an official DeepSeek app, and is not endorsed by DeepSeek. The official desktop app is installer-based; <a href="https://www.deepseek.com/harness/">see the official desktop app</a>.',
+    faqNodeQ: "Do I need to install Node.js separately to use a portable package?",
     faqNodeA:
-      "No. The runtime and plugin tools are included and do not modify the system PATH.",
+      "No separate Node.js installation is needed to use a packaged stable 0.x build. That is a runtime fact, not the main difference from the official installer.",
     faqDataQ: "Will copying the folder lose my sessions?",
     faqDataA:
-      "Fully exit from the tray, then copy the whole DSH-Portable folder. Sessions, settings, plugins, and the default workspace move together.",
+      "Fully exit, then copy the whole folder to a USB drive or a computer with the same OS and architecture. Sessions, settings, plugins, and the default workspace move together.",
     faqUpdateQ: "Will an update overwrite my data?",
     faqUpdateA:
-      "No. Updates replace application components while user data and workspace remain in place.",
+      "Portable and core update separately, and you can choose a core version. Updates keep user data and the workspace in place; data-preserving rollback and recovery tools are included.",
     footerCommunity: "Independent community distribution",
     sourceCode: "Source code",
     support: "Support",
@@ -83,28 +87,64 @@ const copy = {
     footerLegal:
       "DeepSeek Harness, the DeepSeek name, and its marks belong to DeepSeek. DSH-Portable is independently maintained by WSL043 and is not endorsed by DeepSeek.",
     navPlugins: "Plugins",
-    stageBoundary: "Independent community edition · Same-platform moves",
+    stageBoundary: "Independent community project · Same-platform moves",
     sceneHint: "Actual interface captures · Hover to change the viewing angle",
     followSystem: "Use system appearance",
-    folderRuntime: "The bundled runtime",
+    folderRuntime: "Program components and runtime",
     folderData: "Sessions, settings, and plugins",
     folderWorkspace: "Your default workspace",
     folderFoot: "Your work stays where you choose.",
-    factFilesTitle: "Move and back up together",
-    factBoundaryTitle: "Know what moves with you",
+    factFilesTitle: "Move and resume",
+    factBoundaryTitle: "Updates keep your data",
     factBoundary:
-      "Move external projects separately. Read the migration guide before changing OS or architecture.",
-    pluginsTitle: "The tools you want.<br>Installed right here.",
+      "Portable and core update separately, with core-version choice; user data and workspace remain in place.",
+    factRecoveryTitle: "Recovery when needed",
+    factRecovery:
+      "Rollback, checks, targeted repair, and recovery tools help fix issues while preserving personal data.",
+    choiceTitle: "Official desktop or portable?",
+    choiceIntro:
+      "Each delivery model has a different focus. Choose based on installation preferences, number of devices, and update control.",
+    choiceOfficialLabel: "OFFICIAL DESKTOP",
+    choiceOfficialTitle: "DeepSeek official desktop app",
+    choiceOfficialInstall: "Installer-based, available for Windows and macOS.",
+    choiceOfficialUpdates: "Follows the official release schedule.",
+    choiceOfficialFit: "A good fit if you want an installed app on one computer.",
+    officialDesktopLink: "Explore the official desktop app ↗",
+    choicePortableLabel: "DSH-PORTABLE",
+    choicePortableTitle: "The portable edition of DeepSeek Harness",
+    choicePortableInstall:
+      "Stable 0.x supports Windows, macOS, and Linux, without installation or PATH changes.",
+    choicePortableUpdates:
+      "Portable and core update separately, with core-version choice.",
+    choicePortableMove:
+      "After fully exiting, copy the folder to a USB drive or a computer on the same platform.",
+    choicePortableFit:
+      "A good fit if you want to carry it between devices or control update timing.",
+    portableDownloadsLink: "View stable downloads ↗",
+    projectBoundary:
+      "DSH-Portable is an independent community project, not an official DeepSeek app, and is not endorsed by DeepSeek.",
+    linesTitle: "Two product lines",
+    linesIntro:
+      "Choose the stable line for everyday use. The development line is separate from public downloads.",
+    stableLineLabel: "CURRENT DOWNLOAD",
+    stableLineTitle: "Stable 0.x (Native)",
+    stableLineText:
+      "The current public download, supporting Windows, macOS, and Linux.",
+    developmentLineLabel: "DEVELOPMENT ONLY",
+    developmentLineTitle: "1.0 development line",
+    developmentLineText:
+      "Pure portability work based on the official desktop product, for Windows only. It remains development builds and drafts, outside public downloads.",
+    pluginsTitle: "Plugin tools,<br>kept in your folder.",
     managerText:
       "Organize and find sessions to pick up earlier work. Both default plugins are maintained and updated independently.",
-    desktopTitle: "From the first launch to every day.",
+    desktopTitle: "Controlled updates. Your data stays put.",
     desktopIntro:
-      "Desktop controls, keyboard navigation, and update management complete the portable experience.",
+      "Portable and core can update separately, with compatible core versions to choose from. Rollback and recovery tools help preserve personal data.",
     shortcutSidebar: "Sidebar",
     shortcutFullscreen: "Full screen",
-    updateTitle: "The shell and kernel update separately.",
+    updateTitle: "Portable and core update separately.",
     updateText:
-      "Choose Portable and compatible kernel versions in update settings. Use stable or preview releases at your own pace.",
+      "Choose a compatible core version in update settings. Data-preserving rollback and recovery tools keep your work in place.",
   },
 };
 
