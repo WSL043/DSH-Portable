@@ -29,6 +29,7 @@ jobs:
         with:
           node-version: 24.19.0
       - name: Resolve the official desktop candidate and current channel index
+        id: identity
         env:
           GH_TOKEN: ${{ github.token }}
           FORCE_VERSION: ${{ inputs.force_version }}

@@ -87,3 +87,18 @@ test('generator CLI writes an index, generic feed, and launcher copies from a mi
     assert.deepEqual(result.stdout && JSON.parse(result.stdout).launcherFiles, ['deepseek-harness-0.2.0-rc.2-win-x64.exe']);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
+
+test('every step output a workflow reads has a step with that id', async () => {
+  const { readdir, readFile: read } = await import('node:fs/promises');
+  const { resolve: join } = await import('node:path');
+  const dir = join(process.cwd(), '.github/workflows');
+  const problems = [];
+  for (const name of (await readdir(dir)).filter(item => /^official-.*\.yml$/.test(item))) {
+    const text = await read(join(dir, name), 'utf8');
+    const ids = new Set([...text.matchAll(/^\s*(?:-\s+)?id:\s*([A-Za-z0-9_-]+)\s*$/gm)].map(match => match[1]));
+    for (const match of text.matchAll(/steps\.([A-Za-z0-9_-]+)\.outputs/g)) {
+      if (!ids.has(match[1])) problems.push(`${name}: steps.${match[1]}.outputs has no step id`);
+    }
+  }
+  assert.deepEqual(problems, []);
+});
