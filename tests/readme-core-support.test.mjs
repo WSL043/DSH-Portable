@@ -1,4 +1,5 @@
 import test from 'node:test'
+import { readFile } from 'node:fs/promises'
 import assert from 'node:assert/strict'
 import { supportedVersions, replaceSupport } from '../scripts/update-readme-core-support.mjs'
 
@@ -14,4 +15,13 @@ test('generated table preserves surrounding README and fails on absent markers',
   assert.equal(next, 'before\n<!-- core-support:start -->\nnew\n<!-- core-support:end -->\nafter')
   assert.equal(replaceSupport(next, 'new'), next)
   assert.throws(() => replaceSupport('no markers', 'new'))
+})
+
+test('the core-support updater accepts both compact landing pages without network access', async () => {
+  for (const name of ['../README.md', '../README.en.md']) {
+    const source = await readFile(new URL(name, import.meta.url), 'utf8')
+    const next = replaceSupport(source, 'generated support fixture')
+    assert.match(next, /<!-- core-support:start -->\ngenerated support fixture\n<!-- core-support:end -->/)
+    assert.equal((next.match(/<!-- core-support:start -->/g) || []).length, 1)
+  }
 })

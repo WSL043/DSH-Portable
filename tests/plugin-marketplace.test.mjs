@@ -109,8 +109,8 @@ test('the current product line pins one live visual catalog and no curated exten
     read('app/package.json').then(JSON.parse),
     read('app/package-lock.json').then(JSON.parse),
     read('desktop-bridge/cordis.patch.yml'),
-    read('README.md'),
-    read('README.en.md'),
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
   ])
 
   assert.match(product.version, /^\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/)

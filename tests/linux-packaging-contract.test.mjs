@@ -225,9 +225,11 @@ test('release staging exposes two obvious Linux choices per architecture', async
 })
 
 test('Chinese-first product docs explain Linux launch, portable data, plugins, and CPU choice', async () => {
-  const [chinese, english, bundled, notes] = await Promise.all([
+  const [chinese, english, chineseGuide, englishGuide, bundled, notes] = await Promise.all([
     read('README.md'),
     read('README.en.md'),
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
     read('templates/USER-README.zh-CN.txt'),
     read('templates/RELEASE-NOTES.md'),
   ])
@@ -237,8 +239,8 @@ test('Chinese-first product docs explain Linux launch, portable data, plugins, a
     assert.match(source, /DSH-Portable-linux-x64\.tar\.gz/)
     assert.match(source, /DSH-Portable-linux-arm64\.tar\.gz/)
   }
-  assert.match(chinese, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
-  assert.match(english, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
+  assert.match(chineseGuide, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
+  assert.match(englishGuide, /Linux[\s\S]+AppImage[\s\S]+DSH-Portable-data/)
   assert.match(bundled, /Linux[\s\S]+DSH 终端[\s\S]+dsh plugin/)
   assert.match(bundled, /Linux[\s\S]+\.\/dsh/)
 })

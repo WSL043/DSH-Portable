@@ -144,23 +144,31 @@ test('redistribution metadata keeps the canonical project discoverable without a
 })
 
 test('Simplified Chinese is the default GitHub landing page and English is a complete peer', async () => {
-  const chinese = await read('README.md')
-  const english = await read('README.en.md')
+  const [chinese, english, chineseGuide, englishGuide] = await Promise.all([
+    read('README.md'),
+    read('README.en.md'),
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
+  ])
   assert.equal(await exists('README.zh-CN.md'), false)
   assert.match(chinese.slice(0, 1400), /<strong>简体中文<\/strong>.+README\.en\.md/s)
   assert.match(english.slice(0, 1400), /README\.md.+<strong>English<\/strong>/s)
-  assert.equal((english.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
-  assert.equal((chinese.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
-  assert.equal((english.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
-  assert.equal((chinese.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
-  assert.doesNotMatch(`${chinese}\n${english}`, /assets\/(?:dsh-interface|dsh-portable-folder)\.png/)
+  assert.equal((englishGuide.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
+  assert.equal((chineseGuide.match(/assets\/dsh-workspace-0\.6\.4\.png/g) || []).length, 1)
+  assert.equal((englishGuide.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
+  assert.equal((chineseGuide.match(/assets\/dsh-portable-extensions-en\.png/g) || []).length, 0)
+  assert.doesNotMatch(chinese + '\n' + english, /assets\/(?:dsh-interface|dsh-portable-folder)\.png/)
+  for (const screenshot of ['assets/dsh-workspace-0.6.4.png', 'assets/portable-updates.png', 'assets/windows-navigation-dark.png']) {
+    assert.match(chineseGuide, new RegExp(screenshot.replaceAll('.', '\\.')))
+    assert.match(englishGuide, new RegExp(screenshot.replaceAll('.', '\\.')))
+  }
   for (const asset of ['assets/dsh-workspace-0.6.4.png', 'assets/windows-navigation-dark.png']) {
     assert.equal(await exists(asset), true, `${asset} must be shipped with the repository`)
   }
   assert.equal(await exists('assets/dsh-portable-extensions-en.png'), false)
   assert.equal(await exists('assets/dsh-portable-folder.png'), false, 'the README must not ship a decorative folder screenshot')
-  for (const heading of ['Start in 3 steps', 'Portable data', 'Updates', 'Security']) assert.match(english, new RegExp(`## ${heading}`, 'i'))
-  for (const heading of ['三步启动', '便携数据', '更新', '安全']) assert.match(chinese, new RegExp(`## ${heading}`))
+  for (const heading of ['Start in 3 steps', 'How portability works', 'Security']) assert.match(english, new RegExp('## ' + heading, 'i'))
+  for (const heading of ['三步启动', '它怎么做便携', '安全']) assert.match(chinese, new RegExp('## ' + heading))
   assert.doesNotMatch(english, /三步启动|下载 Windows|便携数据与安全/)
 })
 
@@ -182,11 +190,17 @@ test('README status badges stay compact, useful, and visually consistent', async
 })
 
 test('update guidance describes the component update path without exposing internals', async () => {
-  const chinese = await read('README.md')
-  const english = await read('README.en.md')
-  const userReadme = await read('templates/USER-README.zh-CN.txt')
-  const userReadmeEnglish = await read('templates/USER-README.en.txt')
-  const releaseNotes = renderReleaseNotes(await read('templates/RELEASE-NOTES.md'), 'v0.4.0-rc.2', '0.1.1-rc.1')
+  const [chinese, english, landingChinese, landingEnglish, userReadme, userReadmeEnglish, releaseTemplate] = await Promise.all([
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
+    read('README.md'),
+    read('README.en.md'),
+    read('templates/USER-README.zh-CN.txt'),
+    read('templates/USER-README.en.txt'),
+    read('templates/RELEASE-NOTES.md'),
+  ])
+  const releaseNotes = renderReleaseNotes(releaseTemplate, 'v0.4.0-rc.2', '0.1.1-rc.1')
+  const docs = [landingChinese, landingEnglish, chinese, english, userReadme, userReadmeEnglish, releaseNotes].join('\n')
 
   assert.match(chinese, /启动时检查更新/)
   assert.match(chinese, /产品更新.+DeepSeek Harness 内核更新.+独立.+默认关闭/s)
@@ -215,7 +229,9 @@ test('update guidance describes the component update path without exposing inter
   assert.match(userReadmeEnglish, /Before replacing the core, it composes existing profiles\s+and plugins/i)
   assert.match(releaseNotes, /Linux x64 与 ARM64/)
   assert.match(releaseNotes, /保留会话、设置、凭据、插件和工作区/)
-  assert.doesNotMatch(`${chinese}\n${english}\n${userReadme}\n${userReadmeEnglish}\n${releaseNotes}`, /update-core|updaterSchema|shellSchema|journal/i)
+  assert.match(landingChinese, /用户指南/)
+  assert.match(landingEnglish, /User guide/)
+  assert.doesNotMatch(docs, /update-core|updaterSchema|shellSchema|journal/i)
 })
 
 test('GitHub gives Chinese and English users direct, privacy-safe feedback forms', async () => {
@@ -443,10 +459,12 @@ test('installable official updates use a short-lived PR, full product gates, and
 })
 
 test('plugins beyond the two reviewed defaults remain market-discovered', async () => {
-  const [workflow, ci, publish, chinese, english] = await Promise.all([
+  const [workflow, ci, publish, chinese, english, landingChinese, landingEnglish] = await Promise.all([
     read('.github/workflows/upstream-watch.yml'),
     readNativeWorkflow(),
     read('.github/workflows/publish.yml'),
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
     read('README.md'),
     read('README.en.md'),
   ])
@@ -468,6 +486,8 @@ test('plugins beyond the two reviewed defaults remain market-discovered', async 
   assert.match(english, /Fresh installs include only two reviewed, removable defaults/i)
   assert.match(english, /Other community plugins remain opt-in through the Plugin Market/i)
   assert.match(english, /plugin market/i)
+  assert.match(landingChinese, /两个可卸载插件/)
+  assert.match(landingEnglish, /two removable defaults/i)
 })
 
 test('desktop icons are derived from the pinned official DSH mark', async () => {
@@ -608,7 +628,9 @@ test('Windows package exposes real GUI executables with matching icon and an iso
 })
 
 test('plugin management is a generic finished-product capability and release gate', async () => {
-  const [chinese, english, userReadme, releaseNotes, workflow, smoke] = await Promise.all([
+  const [chinese, english, landingChinese, landingEnglish, userReadme, releaseNotes, workflow, smoke] = await Promise.all([
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
     read('README.md'),
     read('README.en.md'),
     read('templates/USER-README.zh-CN.txt'),
@@ -616,14 +638,14 @@ test('plugin management is a generic finished-product capability and release gat
     readNativeWorkflow(),
     read('scripts/smoke-windows-plugins.ps1'),
   ])
-  const docs = `${chinese}\n${english}\n${userReadme}\n${releaseNotes}`
+  const docs = [landingChinese, landingEnglish, chinese, english, userReadme, releaseNotes].join('\n')
   const genericProductDocs = `${userReadme}\n${releaseNotes}`
   assert.match(chinese, /dsh plugin --profile web add <插件>/)
   assert.match(chinese, /dsh plugin --profile web (?:list|remove|update)/)
   assert.match(chinese, /dsh --profile web --dump-config/)
-  assert.match(chinese, /DSH 终端[\s\S]+不会修改系统 `PATH`/)
+  assert.match(chinese, /DSH 终端[\s\S]+不会修改系统.{0,4}PATH/)
   assert.match(english, /dsh plugin --profile web add <plugin>/i)
-  assert.match(english, /DSH Terminal[\s\S]+never changes the system `PATH`/i)
+  assert.match(english, /DSH Terminal[\s\S]+never changes the system\s+\x60PATH\x60/i)
   assert.match(docs, /不会自动重启|never restarts/i)
   assert.doesNotMatch(genericProductDocs, /codex|chatgpt|openai-codex|zen\s*free/i)
 
@@ -659,8 +681,8 @@ test('macOS and Linux finished products verify official bare dsh syntax in an is
     readNativeWorkflow(),
     read('scripts/smoke-macos-desktop-host.sh'),
     read('scripts/smoke-linux-plugins.sh'),
-    read('README.md'),
-    read('README.en.md'),
+    read('docs/user-guide.zh-CN.md'),
+    read('docs/user-guide.en.md'),
   ])
   assert.match(smoke, /command -v dsh/)
   assert.match(smoke, /dsh --version/)
