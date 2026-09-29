@@ -26,16 +26,7 @@ function Write-Atomic([string]$Path, $Value) {
 }
 
 function Get-StrictJson([string]$Url) {
-    Assert-FeedUrl $Url
-    $request = [Net.HttpWebRequest]::Create($Url); $request.AllowAutoRedirect = $false; $request.Timeout = 15000; $request.ReadWriteTimeout = 15000
-    $response = $request.GetResponse()
-    try {
-        if ([int]$response.StatusCode -ne 200 -or $response.ContentLength -gt 1048576) { throw 'Index response is invalid or too large' }
-        $reader = New-Object IO.StreamReader($response.GetResponseStream(), [Text.Encoding]::UTF8)
-        try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
-        if ($text.Length -gt 1048576) { throw 'Index response is too large' }
-        return ($text | ConvertFrom-Json)
-    } finally { $response.Dispose() }
+    return ((Read-BoundedHttpText $Url) | ConvertFrom-Json)
 }
 
 function Get-Processes([string]$Kind) {

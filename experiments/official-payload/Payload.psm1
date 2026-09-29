@@ -22,6 +22,36 @@ function Assert-FeedUrl([string]$Url) {
     if (-not $localAllowed) { throw 'Update feed must use HTTPS (local loopback requires the explicit test switch)' }
 }
 
+function Read-BoundedHttpText([string]$Url) {
+    # The production index lives in a GitHub Release, whose download URL answers with a redirect to GitHub's asset hosts.
+    # Follow at most three redirects, each one HTTPS on a GitHub host (or the loopback test feed), and cap the body at 1 MiB.
+    $current = $Url
+    for ($hop = 0; $hop -le 3; $hop++) {
+        Assert-FeedUrl $current
+        $uri = [Uri]$current
+        if ($hop -gt 0 -and $uri.Scheme -ceq 'https' -and $uri.Host -cne 'github.com' -and -not $uri.Host.EndsWith('.githubusercontent.com', [StringComparison]::Ordinal)) { throw 'Index redirect left the allowed GitHub hosts' }
+        $request = [Net.HttpWebRequest]::Create($current); $request.AllowAutoRedirect = $false; $request.Timeout = 15000; $request.ReadWriteTimeout = 15000
+        try { $response = $request.GetResponse() } catch [Net.WebException] { if ($null -eq $_.Exception.Response) { throw }; $response = $_.Exception.Response }
+        try {
+            $status = [int]$response.StatusCode
+            if ($status -in 301, 302, 303, 307, 308) {
+                $location = [string]$response.Headers['Location']
+                if ([string]::IsNullOrWhiteSpace($location)) { throw 'Index redirect has no location' }
+                $next = $null
+                if (-not [Uri]::TryCreate($uri, $location, [ref]$next)) { throw 'Index redirect location is invalid' }
+                $current = $next.AbsoluteUri
+                continue
+            }
+            if ($status -ne 200 -or $response.ContentLength -gt 1048576) { throw 'Index response is invalid or too large' }
+            $reader = New-Object IO.StreamReader($response.GetResponseStream(), [Text.Encoding]::UTF8)
+            try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
+            if ($text.Length -gt 1048576) { throw 'Index response is too large' }
+            return $text
+        } finally { $response.Dispose() }
+    }
+    throw 'Index redirected too many times'
+}
+
 function Assert-Candidate($Candidate) {
     if ($Candidate.version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$') { throw 'Unsupported official version' }
     $uri = $null
@@ -198,4 +228,4 @@ function Remove-PortableScratch([string]$Path, [string]$Boundary) {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
-Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Assert-Candidate,Get-AcceptedIndexCandidate,Assert-Installer,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch
+Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Assert-Installer,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch

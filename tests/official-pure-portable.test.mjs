@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execFile as execFileAsync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { assessHealth, isValidDshLink, parseUpdatedVersion } from '../experiments/official-payload/launcher/state.mjs';
@@ -148,3 +148,33 @@ test('PowerShell sources with non-ASCII text carry a UTF-8 BOM so Windows PowerS
   }
   assert.deepEqual(offenders, []);
 });
+
+test('the index reader follows GitHub-style redirects but refuses other hosts, loops and oversized bodies', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, async () => {
+  const { createServer } = await import('node:http');
+  const server = createServer((req, res) => {
+    if (req.url === '/index.json') { res.writeHead(302, { Location: '/asset/index-body.json' }); res.end(); }
+    else if (req.url === '/asset/index-body.json') { res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); res.end('{"versions":[]}'); }
+    else if (req.url === '/evil') { res.writeHead(302, { Location: 'https://example.test/index.json' }); res.end(); }
+    else if (req.url === '/loop') { res.writeHead(302, { Location: '/loop' }); res.end(); }
+    else if (req.url === '/big') { res.writeHead(200); res.end('x'.repeat(1_100_000)); }
+    else { res.writeHead(404); res.end(); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const source = `
+      ${psModule}
+      $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_FEED='1'
+      $checks=[ordered]@{}
+      $checks.followed = (Read-BoundedHttpText '${base}/index.json') -ceq '{"versions":[]}'
+      foreach ($case in 'evil','loop','big','missing') { try { Read-BoundedHttpText ('${base}/' + $case) | Out-Null; $checks[$case]=$false } catch { $checks[$case]=$true } }
+      ConvertTo-Json $checks -Compress
+    `;
+    const checks = JSON.parse(await new Promise((resolvePromise, reject) => {
+      
+      execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : resolvePromise(stdout.trim().split(/\r?\n/).at(-1)));
+    }));
+    assert.deepEqual(checks, { followed: true, evil: true, loop: true, big: true, missing: true });
+  } finally { server.close(); }
+});
+

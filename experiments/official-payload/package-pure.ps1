@@ -24,14 +24,7 @@ if ($SeedPlugin.Count -gt 0) {
     $seedManifest = New-SeedManifest -ArchivePath $SeedPlugin
 }
 if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw 'Official installer is missing' }
-$request = [Net.HttpWebRequest]::Create($IndexUrl); $request.AllowAutoRedirect = $false; $request.Timeout = 15000
-$response = $request.GetResponse()
-try {
-    if ([int]$response.StatusCode -ne 200 -or $response.ContentLength -gt 1048576) { throw 'Index response is invalid or too large' }
-    $reader = New-Object IO.StreamReader($response.GetResponseStream(), [Text.Encoding]::UTF8)
-    try { $indexText = $reader.ReadToEnd() } finally { $reader.Dispose() }
-} finally { $response.Dispose() }
-if ($indexText.Length -gt 1048576) { throw 'Index response is too large' }
+$indexText = Read-BoundedHttpText $IndexUrl
 $index = $indexText | ConvertFrom-Json
 if ($null -eq $index.versions -or $index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
 $installerHash = (Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash
