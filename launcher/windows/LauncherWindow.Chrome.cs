@@ -32,6 +32,33 @@ namespace DshPortable
             return uiLanguage.Equals("zh", StringComparison.OrdinalIgnoreCase) ? chinese : english;
         }
 
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool GetUserPreferredUILanguages(uint flags, out uint count, char[] buffer, ref uint size);
+
+        // Default language before the user chooses one in Settings: the first language the user
+        // preferred in Windows (a Chinese language pack on an English install is common), then the
+        // process UI culture, then the install language. A saved Settings choice still wins later.
+        private static string ResolveInitialUiLanguage()
+        {
+            try
+            {
+                const uint MuiLanguageName = 0x8;
+                uint count = 0, size = 0;
+                if (GetUserPreferredUILanguages(MuiLanguageName, out count, null, ref size) && size > 1)
+                {
+                    char[] buffer = new char[size];
+                    if (GetUserPreferredUILanguages(MuiLanguageName, out count, buffer, ref size))
+                    {
+                        string first = new string(buffer).Split('\0')[0];
+                        if (first.Length >= 2) return new CultureInfo(first).TwoLetterISOLanguageName;
+                    }
+                }
+            }
+            catch (Exception) { }
+            string current = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName;
+            return String.IsNullOrEmpty(current) ? CultureInfo.InstalledUICulture.TwoLetterISOLanguageName : current;
+        }
+
         private static string UiLanguageTag
         {
             get { return L("zh-CN", "en-US"); }

@@ -28,7 +28,7 @@ namespace DshPortable
     {
         private const int WmClose = 0x0010;
         private const uint GwOwner = 4;
-        private static string uiLanguage = CultureInfo.InstalledUICulture.TwoLetterISOLanguageName;
+        private static string uiLanguage = ResolveInitialUiLanguage();
         private const int DwmwaUseImmersiveDarkMode = 20;
         private const int DwmwaWindowCornerPreference = 33;
         private const int DwmwaBorderColor = 34;
