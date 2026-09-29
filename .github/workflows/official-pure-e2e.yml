@@ -1,0 +1,101 @@
+name: Official pure portable end-to-end acceptance
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_version:
+        description: 'Optional assertion for the version currently served by the official desktop feed'
+        required: false
+        default: ''
+        type: string
+permissions:
+  contents: read
+jobs:
+  pure-portable-e2e:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Resolve the real old and new official candidates
+        shell: powershell
+        env:
+          REQUESTED_CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $node = (Get-Command node.exe -ErrorAction Stop | Select-Object -First 1).Source
+          $helper = 'experiments/official-payload/e2e/report.mjs'
+          $oldSource = Join-Path $env:RUNNER_TEMP 'pure-e2e-old-source.json'
+          $oldCandidate = Join-Path $env:RUNNER_TEMP 'pure-e2e-old-candidate.json'
+          $newCandidate = Join-Path $env:RUNNER_TEMP 'pure-e2e-new-candidate.json'
+          Copy-Item -LiteralPath 'experiments/official-payload/candidate.json' -Destination $oldSource
+          & $node $helper candidate $oldSource $oldCandidate
+          if ($LASTEXITCODE -ne 0) { throw 'Could not normalize the checked-in 0.1.7-rc.2 candidate' }
+          & $node 'experiments/official-payload/resolve-candidate.mjs'
+          if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the current official desktop feed candidate' }
+          $resolved = Get-Content -LiteralPath 'experiments/official-payload/candidate.json' -Raw | ConvertFrom-Json
+          if ($env:REQUESTED_CANDIDATE_VERSION -and $resolved.version -cne $env:REQUESTED_CANDIDATE_VERSION) {
+            throw ('Requested candidate_version ' + $env:REQUESTED_CANDIDATE_VERSION + ' does not match the current official feed version ' + $resolved.version)
+          }
+          & $node $helper candidate 'experiments/official-payload/candidate.json' $newCandidate
+          if ($LASTEXITCODE -ne 0) { throw 'Could not normalize the current official candidate' }
+          $old = Get-Content -LiteralPath $oldCandidate -Raw | ConvertFrom-Json
+          $new = Get-Content -LiteralPath $newCandidate -Raw | ConvertFrom-Json
+          if ($old.version -cne '0.1.7-rc.2' -or $new.version -ceq $old.version) { throw 'Old/new official candidate identities are not a real upgrade pair' }
+          @('CANDIDATE_OLD=' + $oldCandidate, 'CANDIDATE_NEW=' + $newCandidate, 'CANDIDATE_VERSION=' + $new.version) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+      - name: Download and validate both official installers
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Import-Module './experiments/official-payload/Payload.psm1' -Force
+          $old = Get-Content -LiteralPath $env:CANDIDATE_OLD -Raw | ConvertFrom-Json
+          $new = Get-Content -LiteralPath $env:CANDIDATE_NEW -Raw | ConvertFrom-Json
+          $oldIdentity = [pscustomobject]@{ version = $old.version; installerUrl = $old.url; sha512 = $old.sha512; size = $old.size }
+          $newIdentity = [pscustomobject]@{ version = $new.version; installerUrl = $new.url; sha512 = $new.sha512; size = $new.size }
+          $installerOld = Join-Path $env:RUNNER_TEMP 'official-pure-e2e-old.exe'
+          $installerNew = Join-Path $env:RUNNER_TEMP 'official-pure-e2e-new.exe'
+          Get-OfficialInstaller -Destination $installerOld -Candidate $oldIdentity
+          Get-OfficialInstaller -Destination $installerNew -Candidate $newIdentity
+          @('INSTALLER_OLD=' + $installerOld, 'INSTALLER_NEW=' + $installerNew) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+      - name: Run full official old-to-new portable acceptance
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
+          if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw ('Runner 7-Zip not found: ' + $sevenZip) }
+          ./experiments/official-payload/e2e/run-pure-e2e.ps1 `
+            -InstallerOld $env:INSTALLER_OLD `
+            -CandidateOld $env:CANDIDATE_OLD `
+            -InstallerNew $env:INSTALLER_NEW `
+            -CandidateNew $env:CANDIDATE_NEW `
+            -SevenZip $sevenZip `
+            -WorkRoot 'build/orch-080/T27/work' `
+            -Locale en
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-pure-e2e-evidence
+          path: |
+            build/orch-080/T27/pure-e2e-report.json
+            build/orch-080/T27/stage.log
+            build/orch-080/T27/launcher.log
+            build/orch-080/T27/update-status.json
+            build/orch-080/T27/current.json
+            build/orch-080/T27/follow.json
+            build/orch-080/T27/receipts/*.json
+            build/orch-080/T27/request-log.jsonl
+            build/orch-080/T27/index-request-log.jsonl
+            build/orch-080/T27/ui-result.json
+            build/orch-080/T27/ui-probe-output.log
+            build/orch-080/T27/ui-probe-stderr.log
+            build/orch-080/T27/feed-start.json
+            build/orch-080/T27/feed-stderr.log
+            build/orch-080/T27/index-server-start.json
+            build/orch-080/T27/index-server-stderr.log
+            build/orch-080/T27/outside-writes.json
+            build/orch-080/T27/write-trace-summary.json
+            build/orch-080/T27/protocol-before.json
+            build/orch-080/T27/protocol-after.json
+          if-no-files-found: warn
+          retention-days: 14
