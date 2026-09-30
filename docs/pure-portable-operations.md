@@ -10,6 +10,13 @@
 - alpha.4 的 CI 冒烟要求首次启动成功、第二次启动完成两个插件播种并保持健康，之后用官方 `--dump-config` 检查关闭状态及整根搬动后的相对路径。配置和本地证据不等于 GitHub Windows runner 验收；CI 运行前不宣称通过。
 - 这些工作流目前等待 GitHub Windows runner 首次验证；配置存在不代表阶段 3 已验收。
 
+## 完整包与轻量包
+
+- 完整包保留已展开的 `app/<版本>/`，适合离线复制；新增的 `-Bootstrap` 轻量包省略官方桌面与 `current.json`，携带启动器、更新引擎、`follow.json`、`bootstrap.json`、7-Zip 和同一组可选插件种子。CI 必须断言无应用版本目录、无 `current.json`，并检查解压后体积小于 40 MiB。
+- 首次启动使用生产 `follow.json` 的索引选出最新已验收版本，再从官方 `download.deepseek.com` 下载。下载状态位于 `data/launcher/update-status.json`；`.part` 文件仅按 HTTP Range 续传，Range 不受支持时从头开始，SHA-512 或大小错误时丢弃部分文件。离线机器应使用完整包。
+- Windows CI 的轻量冒烟必须实际完成首次安装、官方页面渲染与正常退出，再运行第二次启动插件播种、disabled `--dump-config` 和搬根检查。静态检查、下载接受或绿色的非真实 runner 任务都不构成官方成品验收。
+- Bootstrap 标记在成功安装后保留；后续启动只检查 `current.json` 与应用文件是否完整，已安装根按原路径启动，不弹安装窗口。
+
 ## 需要人工介入的情况
 
 - 更新契约哨兵或完整 E2E 失败；检查对应 workflow artifact 和运行日志。
