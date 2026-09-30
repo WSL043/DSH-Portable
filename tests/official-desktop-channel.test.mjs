@@ -40,7 +40,11 @@ test('installer URL host and path exactly match the PowerShell official payload 
   assert.match(payload, /\$script:OfficialInstallerPrefix\s*=\s*'([^']+)'/);
   const prefix = payload.match(/\$script:OfficialInstallerPrefix\s*=\s*'([^']+)'/)[1];
   assert.equal(prefix, '/dsh-desk/bin/win-x64/');
-  assert.match(payload, /\$uri\.Host\s+-cne\s+'download\.deepseek\.com'/);
+  // The installer must come from exactly https://download.deepseek.com:443 under the prefix; the only other accepted form is the
+  // explicit loopback test switch (http, 127.0.0.1), the same kind of switch the feed URL policy already has.
+  assert.match(payload, /\$officialUrl\s*=\s*\$uri\.Scheme\s+-ceq\s+'https'\s+-and\s+\$uri\.Host\s+-ceq\s+'download\.deepseek\.com'\s+-and\s+\$uri\.Port\s+-eq\s+443/);
+  assert.match(payload, /\$testLocalUrl\s*=\s*\$env:DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER\s+-ceq\s+'1'\s+-and\s+\$uri\.Scheme\s+-ceq\s+'http'\s+-and\s+\$uri\.Host\s+-ceq\s+'127\.0\.0\.1'/);
+  assert.match(payload, /if\s+\(-not\s+\$officialUrl\s+-and\s+-not\s+\$testLocalUrl\)\s+\{\s+throw\s+'Untrusted installer URL'\s+\}/);
   assert.throws(() => generateChannel({ candidate: entry('0.2.0', { installerUrl: 'https://download.deepseek.com.evil.test/dsh-desk/bin/win-x64/a.exe' }), launcherBytes: Buffer.from('x') }), /Untrusted installer URL/);
   assert.throws(() => generateChannel({ candidate: entry('0.2.0', { installerUrl: 'https://download.deepseek.com/elsewhere/a.exe' }), launcherBytes: Buffer.from('x') }), /Untrusted installer URL/);
 });
