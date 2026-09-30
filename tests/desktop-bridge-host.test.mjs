@@ -27,7 +27,7 @@ function response() {
   }
 }
 
-test('desktop catalogs work without a CLI executable and reread channel preferences', async t => {
+test('desktop catalogs normalize legacy channel preferences to stable', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-inprocess-catalog-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   for (const directory of ['launcher', 'licenses', 'data']) await mkdir(path.join(root, directory))
@@ -47,7 +47,7 @@ test('desktop catalogs work without a CLI executable and reread channel preferen
       const result = response()
       await routes.get(`/dsh-portable/${scope}-versions`).handler(request('GET'), result)
       assert.equal(result.status, 200)
-      assert.equal(result.json().releaseChannel, channel)
+      assert.equal(result.json().releaseChannel, 'stable')
       assert.deepEqual(result.json().versions, [])
     }
   }
@@ -111,26 +111,29 @@ test('Portable settings routes default to privacy-safe updates and preserve unre
   assert.equal(saved.closeBehavior, 'tray')
 })
 
-test('Portable update channel is explicit, persistent, and defaults to the installed product channel', async (t) => {
+test('legacy candidate settings read as stable and POST channel fields are ignored', async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-channel-'))
   t.after(() => rm(root, { recursive: true, force: true }))
-  await writeFile(path.join(root, 'licenses-placeholder'), '')
+  await mkdir(path.join(root, 'data'), { recursive: true })
+  await writeFile(path.join(root, 'data', 'launcher-settings.json'), JSON.stringify({ updateChannel: 'candidate' }))
   const routes = new Map()
-  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root, stateRoot: root })
+  mountPortableRoutes({ register(route) { routes.set(route.path, route) } }, { root, stateRoot: root })
 
   const initial = response()
   await routes.get('/dsh-portable/settings').handler(request('GET'), initial)
+  assert.equal(initial.status, 200)
   assert.equal(initial.json().settings.updateChannel, 'stable')
 
   const changed = response()
   await routes.get('/dsh-portable/settings').handler(request('POST', { updateChannel: 'candidate' }), changed)
   assert.equal(changed.status, 200)
-  assert.equal(changed.json().settings.updateChannel, 'candidate')
-  assert.equal(JSON.parse(await readFile(path.join(root, 'data', 'launcher-settings.json'), 'utf8')).updateChannel, 'candidate')
+  assert.equal(changed.json().settings.updateChannel, 'stable')
+  assert.equal(JSON.parse(await readFile(path.join(root, 'data', 'launcher-settings.json'), 'utf8')).updateChannel, 'stable')
 
   const ignored = response()
   await routes.get('/dsh-portable/settings').handler(request('POST', { updateChannel: 'nightly' }), ignored)
-  assert.equal(ignored.json().settings.updateChannel, 'candidate')
+  assert.equal(ignored.status, 200)
+  assert.equal(ignored.json().settings.updateChannel, 'stable')
 })
 
 test('shared product preferences do not diverge across isolated environments', async (t) => {
@@ -143,7 +146,7 @@ test('shared product preferences do not diverge across isolated environments', a
   })
   const changed = response()
   await routes.get('/dsh-portable/settings').handler(request('POST', { updateChannel: 'candidate' }), changed)
-  assert.equal(JSON.parse(await readFile(path.join(root, 'data', 'launcher-settings.json'), 'utf8')).updateChannel, 'candidate')
+  assert.equal(JSON.parse(await readFile(path.join(root, 'data', 'launcher-settings.json'), 'utf8')).updateChannel, 'stable')
   await assert.rejects(readFile(path.join(environmentRoot, 'data', 'launcher-settings.json'), 'utf8'), /ENOENT/)
 })
 
@@ -422,8 +425,8 @@ test('Portable preferences use the official settings navigation', async () => {
   assert.match(client, /\/dsh-portable\/check-update/)
   assert.match(client, /channel-unpublished/)
   assert.match(client, /engine-follows-product/)
-  assert.match(client, /所选通道尚未提供内核更新包/)
-  assert.match(client, /所选通道尚未提供更新包/)
+  assert.match(client, /暂时没有匹配的内核更新包/)
+  assert.match(client, /暂时没有可用更新包/)
   assert.match(client, /taskNotificationsEnabled/)
   assert.match(client, /closeBehavior/)
   assert.match(client, /\/dsh-portable\/doctor/)

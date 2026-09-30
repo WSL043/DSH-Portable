@@ -905,14 +905,8 @@ async function update(options) {
   }
 }
 
-function preferredUpdateChannel(options) {
-  if (options.updateChannel) return options.updateChannel
-  try {
-    const settings = JSON.parse(readFileSync(layout.launcherSettings, 'utf8'))
-    return ['stable', 'candidate'].includes(settings.updateChannel) ? settings.updateChannel : undefined
-  } catch {
-    return undefined
-  }
+function preferredUpdateChannel() {
+  return 'stable'
 }
 
 function print(result, json, command) {

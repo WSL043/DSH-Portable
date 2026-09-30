@@ -237,14 +237,14 @@ test('platform update keys are explicit and unsupported targets fail closed', ()
   assert.throws(() => platformUpdateKey('linux', 'ia32'), /unsupported/i)
 })
 
-test('installed release channel selects an isolated machine update feed', () => {
+test('new clients route legacy candidate aliases to the stable machine feed', () => {
   assert.equal(
     defaultUpdateManifestUrl('stable', 'win32', 'x64'),
     'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-windows-x64.json',
   )
   assert.equal(
     defaultUpdateManifestUrl('candidate', 'darwin', 'arm64'),
-    'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-candidate/portable-update-macos-arm64.json',
+    'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-macos-arm64.json',
   )
   assert.throws(() => defaultUpdateManifestUrl('preview', 'linux', 'x64'), /release channel/i)
   assert.equal(
@@ -282,7 +282,6 @@ test('engine version catalog exposes only verified compatible manifests and pres
       schemaVersion: 1,
       versions: [
         { version: '0.1.1-rc.3', manifestUrl: 'https://updates.invalid/0.1.1-rc.3.json', manifest: compatible },
-        { version: '0.1.1-rc.1', manifestUrl: 'https://updates.invalid/0.1.1-rc.1.json', manifest: compatibleOlder },
         { version: '0.1.1-rc.4', manifestUrl: 'https://updates.invalid/0.1.1-rc.4.json', manifest: wrongShell },
         { version: '0.1.1-rc.2', manifestUrl: 'https://updates.invalid/0.1.1-rc.2.json',
           manifest: { ...wrongShell, component: { ...wrongShell.component, dshVersion: '0.1.1-rc.2' } } },
@@ -290,7 +289,7 @@ test('engine version catalog exposes only verified compatible manifests and pres
     }), { status: 200 }),
   })
   assert.equal(result.current, '0.1.1-rc.2')
-  assert.deepEqual(result.versions.map(item => item.version), ['0.1.1-rc.3', '0.1.1-rc.1'])
+  assert.deepEqual(result.versions.map(item => item.version), ['0.1.1-rc.3'])
   assert.equal(result.versions[0].manifestUrl, 'https://updates.invalid/0.1.1-rc.3.json')
   assert.deepEqual(result.unavailable, [{ version: '0.1.1-rc.4', status: 'full-package-required',
     reason: 'full-package-required', requiredPortableVersion: '0.4.10' }, { version: '0.1.1-rc.2', status: 'full-package-required',
@@ -365,7 +364,7 @@ test('each update feed fails closed when it serves the other update kind', async
   }
 })
 
-test('automatic checks derive the feed from installed channel metadata', async () => {
+test('automatic checks use the stable feed for legacy candidate metadata', async () => {
   const cases = [
     { releaseChannel: 'stable', installedVersion: '0.3.0', latestVersion: '0.4.0' },
     { releaseChannel: 'candidate', installedVersion: '0.4.0-rc.1', latestVersion: '0.4.0-rc.2' },
@@ -398,25 +397,21 @@ test('automatic checks derive the feed from installed channel metadata', async (
         },
       })
       assert.equal(requested.length, 1)
-      assert.match(requested[0], new RegExp(`/update-channel-${value.releaseChannel}/`))
+      assert.match(requested[0], /\/update-channel-stable\//)
     } finally {
       await rm(root, { recursive: true, force: true })
     }
   }
 })
 
-test('stable rejects candidates while candidates advance through rc and final stable', () => {
-  const base = {
-    dshVersion: '0.1.0-rc.8',
-    updaterSchema: 1,
-    shellSchema: 1,
-    nodeVersion: '24.19.0',
-  }
-  const rc2 = updateManifest({ portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' })
+test('single-line clients accept legacy candidate metadata without a channel-mismatch state', () => {
+  const base = { dshVersion: '0.1.0-rc.8', updaterSchema: 1, shellSchema: 1, nodeVersion: '24.19.0' }
+  const legacyCandidate = updateManifest({ portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' })
+  const stableClient = { ...base, portableVersion: '0.3.0', releaseChannel: 'stable' }
+  const result = evaluateUpdate(legacyCandidate, stableClient, 'windows-x64')
+  assert.equal(result.status, 'available')
+  assert.equal(result.releaseChannel, 'stable')
   const final = updateManifest({ portableVersion: '0.4.0', releaseChannel: 'stable' })
-
-  assert.equal(evaluateUpdate(rc2, { ...base, portableVersion: '0.3.0', releaseChannel: 'stable' }, 'windows-x64').status, 'channel-mismatch')
-  assert.equal(evaluateUpdate(rc2, { ...base, portableVersion: '0.4.0-rc.1', releaseChannel: 'candidate' }, 'windows-x64').status, 'available')
   assert.equal(evaluateUpdate(final, { ...base, portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' }, 'windows-x64').status, 'available')
 })
 
@@ -1222,7 +1217,7 @@ test('selected Portable version must match the downloaded manifest', async t => 
   assert.match(result.message, /Selected Portable version/)
 })
 
-test('shared catalog reader honors base preferences on every call and explicit channel overrides', async t => {
+test('shared catalog reader normalizes legacy preferences and explicit aliases to stable', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-catalog-service-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const baseStateRoot = path.join(root, 'state')
@@ -1230,25 +1225,35 @@ test('shared catalog reader honors base preferences on every call and explicit c
   await mkdir(path.join(baseStateRoot, 'data'), { recursive: true })
   await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.6.8', dshVersion: '0.1.5-rc.2' }))
   const urls = []
-  const options = { root, baseStateRoot, scope: 'engine', fetchImpl: async url => {
-    urls.push(String(url))
-    return new Response('', { status: 404 })
-  } }
+  const options = { root, baseStateRoot, scope: 'engine', fetchImpl: async url => { urls.push(String(url)); return new Response('', { status: 404 }) } }
   assert.equal((await listInstalledVersions(options)).releaseChannel, 'stable')
   await writeFile(path.join(baseStateRoot, 'data', 'launcher-settings.json'), JSON.stringify({ updateChannel: 'candidate' }))
-  assert.equal((await listInstalledVersions(options)).releaseChannel, 'candidate')
-  assert.equal((await listInstalledVersions({ ...options, releaseChannel: 'stable' })).releaseChannel, 'stable')
-  assert.match(urls[1], /candidate/)
+  assert.equal((await listInstalledVersions(options)).releaseChannel, 'stable')
+  assert.equal((await listInstalledVersions({ ...options, releaseChannel: 'candidate' })).releaseChannel, 'stable')
+  assert.match(urls[1], /update-channel-core-stable/)
+  assert.match(urls[2], /update-channel-core-stable/)
   await writeFile(path.join(baseStateRoot, 'data', 'launcher-settings.json'), '{incomplete')
   assert.equal((await listInstalledVersions(options)).releaseChannel, 'stable')
   await assert.rejects(listInstalledVersions({ ...options, scope: 'arbitrary' }), /Unsupported update scope/)
 })
 
-test('candidate shells use isolated core catalogs while stable clients retain their endpoint', () => {
-  assert.match(defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.5-rc.2'), /update-channel-core-candidate-0\.6\.5-rc\.2\/dsh-core-index-windows-x64\.json$/)
-  assert.match(defaultEngineUpdateManifestUrl('stable', 'win32', 'x64', '0.6.5-rc.2'), /update-channel-core-stable-0\.6\.5-rc\.2\/dsh-core-update-windows-x64\.json$/)
-  assert.equal(defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.4'), defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64'))
+test('candidate CLI aliases and prerelease shells still use stable core catalogs', () => {
+  const legacyAlias = defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.5-rc.2')
+  const stableRoute = 'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable-0.6.5-rc.2/dsh-core-index-windows-x64.json'
+  assert.equal(legacyAlias, stableRoute)
+  assert.equal(defaultEngineUpdateManifestUrl('candidate', 'win32', 'x64', '0.6.5-rc.2'), 'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable-0.6.5-rc.2/dsh-core-update-windows-x64.json')
+  assert.equal(defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.4'), defaultEngineUpdateIndexUrl('stable', 'win32', 'x64', '0.6.4'))
   assert.throws(() => defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '../other'))
+})
+
+test('engine catalogs reject more than the newest three entries', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-core-catalog-window-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const layout = layoutForRoot(root)
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.8.3', releaseChannel: 'candidate', dshVersion: '0.2.0-rc.2' }))
+  const fetchImpl = async () => new Response(JSON.stringify({ schemaVersion: 1, versions: [{}, {}, {}, {}] }))
+  await assert.rejects(listEngineVersions({ layout, fetchImpl }), /Unsupported engine version catalog/)
 })
 
 test('an unpublished default core catalog is distinct from a broken explicit URL', async t => {

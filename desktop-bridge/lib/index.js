@@ -39,7 +39,7 @@ async function readJson(request) {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}
 }
 
-function readSettings(filename, defaultUpdateChannel = 'stable') {
+function readSettings(filename) {
   let source = {}
   try { source = JSON.parse(readFileSync(filename, 'utf8')) } catch {}
   const legacyUpdateCheck = source.updateCheckEnabled === true
@@ -55,9 +55,7 @@ function readSettings(filename, defaultUpdateChannel = 'stable') {
     updateCheckEnabled: productUpdateCheckEnabled,
     productUpdateCheckEnabled,
     engineUpdateCheckEnabled,
-    updateChannel: ['stable', 'candidate'].includes(source.updateChannel)
-      ? source.updateChannel
-      : defaultUpdateChannel,
+    updateChannel: 'stable',
     taskNotificationsEnabled: source.taskNotificationsEnabled !== false,
     closeBehavior: source.closeBehavior === 'exit' ? 'exit' : 'tray',
   }
@@ -206,14 +204,9 @@ export function mountPortableRoutes(webServer, options = {}) {
   }
   const disposers = []
   const register = route => disposers.push(webServer.register(route))
-  const installedUpdateChannel = () => {
-    const components = readJsonFile(componentsFile)
-    return components?.releaseChannel === 'candidate' ? 'candidate' : 'stable'
-  }
-
   register({ kind: 'exact', path: '/dsh-portable/settings', handler: async (request, response) => {
     if (request.method === 'GET') return sendJson(response, 200, {
-      settings: readSettings(settingsFile, installedUpdateChannel()),
+      settings: readSettings(settingsFile),
       versions: (() => {
         const components = readJsonFile(componentsFile)
         return {
@@ -233,8 +226,7 @@ export function mountPortableRoutes(webServer, options = {}) {
     if (!sameOrigin(request)) return sendJson(response, 403, { error: 'untrusted origin' })
     try {
       const body = await readJson(request)
-      const current = readSettings(settingsFile, installedUpdateChannel())
-      if (body.updateChannel === 'stable' || body.updateChannel === 'candidate') current.updateChannel = body.updateChannel
+      const current = readSettings(settingsFile)
       if (typeof body.updateCheckEnabled === 'boolean') current.productUpdateCheckEnabled = body.updateCheckEnabled
       if (typeof body.productUpdateCheckEnabled === 'boolean') current.productUpdateCheckEnabled = body.productUpdateCheckEnabled
       if (typeof body.engineUpdateCheckEnabled === 'boolean') current.engineUpdateCheckEnabled = body.engineUpdateCheckEnabled

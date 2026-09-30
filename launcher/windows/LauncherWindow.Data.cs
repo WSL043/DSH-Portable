@@ -143,13 +143,6 @@ namespace DshPortable
                         if (hasProduct) updateCheckEnabled = (bool)value;
                         if (message.TryGetValue("engineUpdateCheckEnabled", out value) && value is bool)
                             engineUpdateCheckEnabled = (bool)value;
-                        if (message.TryGetValue("updateChannel", out value))
-                        {
-                            string requestedChannel = Convert.ToString(value);
-                            if (String.Equals(requestedChannel, "stable", StringComparison.OrdinalIgnoreCase)
-                                || String.Equals(requestedChannel, "candidate", StringComparison.OrdinalIgnoreCase))
-                                updateChannel = requestedChannel.ToLowerInvariant();
-                        }
                         if (!hasProduct && message.TryGetValue("updateCheckEnabled", out value) && value is bool)
                             updateCheckEnabled = engineUpdateCheckEnabled = (bool)value;
                         if (message.TryGetValue("taskNotificationsEnabled", out value) && value is bool)
@@ -831,19 +824,6 @@ namespace DshPortable
 
         private string LoadUpdateChannel()
         {
-            try
-            {
-                string source = File.ReadAllText(LauncherSettingsPath(), Encoding.UTF8);
-                Match explicitValue = Regex.Match(source, "\\\"updateChannel\\\"\\s*:\\s*\\\"(stable|candidate)\\\"", RegexOptions.IgnoreCase);
-                if (explicitValue.Success) return explicitValue.Groups[1].Value.ToLowerInvariant();
-            }
-            catch { }
-            try
-            {
-                string source = File.ReadAllText(Path.Combine(root, "licenses", "COMPONENTS.json"), Encoding.UTF8);
-                if (Regex.IsMatch(source, "\\\"releaseChannel\\\"\\s*:\\s*\\\"candidate\\\"", RegexOptions.IgnoreCase)) return "candidate";
-            }
-            catch { }
             return "stable";
         }
 
@@ -860,9 +840,7 @@ namespace DshPortable
             Directory.CreateDirectory(Path.GetDirectoryName(filename));
             string close = closeBehavior == WindowCloseBehavior.Exit ? "exit" : "tray";
             File.WriteAllText(temporary,
-                "{\"schemaVersion\":2,\"closeBehavior\":\"" + close + "\",\"updateChannel\":\""
-                    + (String.Equals(updateChannel, "candidate", StringComparison.OrdinalIgnoreCase) ? "candidate" : "stable")
-                    + "\",\"updateCheckEnabled\":"
+                "{\"schemaVersion\":2,\"closeBehavior\":\"" + close + "\",\"updateChannel\":\"stable\",\"updateCheckEnabled\":"
                     + (updateCheckEnabled ? "true" : "false") + ",\"productUpdateCheckEnabled\":"
                     + (updateCheckEnabled ? "true" : "false") + ",\"engineUpdateCheckEnabled\":"
                     + (engineUpdateCheckEnabled ? "true" : "false") + ",\"taskNotificationsEnabled\":"

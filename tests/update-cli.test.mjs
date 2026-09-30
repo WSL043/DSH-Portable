@@ -93,7 +93,7 @@ async function makeComponentArchive(root, version, portableVersion) {
   await writeFile(path.join(source, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
     product: 'DSH-Portable',
     portableVersion,
-    releaseChannel: 'candidate',
+    releaseChannel: 'stable',
     platform: platformUpdateKey(),
     dshVersion: version,
     dshCommit: 'b'.repeat(40),
@@ -110,7 +110,7 @@ async function makeComponentArchive(root, version, portableVersion) {
     schemaVersion: 1,
     kind: 'dsh-app',
     portableVersion,
-    releaseChannel: 'candidate',
+    releaseChannel: 'stable',
     dshVersion: version,
     dshCommit: 'b'.repeat(40),
   })}\n`)
@@ -125,7 +125,7 @@ async function makeComponentArchive(root, version, portableVersion) {
   return { archive, buildRoot }
 }
 
-test('portable CLI upgrades the app component, health-checks it, and leaves DSH running', async () => {
+test('legacy candidate Portable upgrades to the stable app component, health-checks it, and leaves DSH running', async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh update cli 中文 '))
   let componentBuildRoot
   let server
@@ -159,6 +159,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
     await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), `${JSON.stringify({
       product: 'DSH-Portable',
       portableVersion: '0.1.0-rc.6-portable.5',
+      releaseChannel: 'candidate',
       platform: platformUpdateKey(),
       dshVersion: '0.1.0-rc.6',
       dshCommit: 'a'.repeat(40),
@@ -177,7 +178,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
       peerDependencies: { '@deepseek-ai/dsh': '^0.0.1' },
     })}\n`)
 
-    const portableVersion = '0.1.0-rc.7-portable.1'
+    const portableVersion = '0.1.0'
     const componentBuild = await makeComponentArchive(root, '0.1.0-rc.7', portableVersion)
     const archive = componentBuild.archive
     componentBuildRoot = componentBuild.buildRoot
@@ -189,7 +190,7 @@ test('portable CLI upgrades the app component, health-checks it, and leaves DSH 
         const body = Buffer.from(JSON.stringify({
           schemaVersion: 1,
           portableVersion,
-          releaseChannel: 'candidate',
+          releaseChannel: 'stable',
           platform: platformUpdateKey(),
           minimumUpdaterSchema: 1,
           requiredShellSchema: 1,

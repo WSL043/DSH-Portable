@@ -362,7 +362,7 @@ test('CLI defaults to start and supports bounded automation flags', () => {
   })
   assert.equal(parseCli(['check-update', '--scope', 'engine', '--json']).updateScope, 'engine')
   assert.equal(parseCli(['list-updates', '--scope', 'engine', '--json']).command, 'list-updates')
-  assert.equal(parseCli(['check-update', '--channel', 'candidate', '--json']).updateChannel, 'candidate')
+  assert.equal(parseCli(['check-update', '--channel', 'candidate', '--json']).updateChannel, 'stable')
   assert.throws(() => parseCli(['check-update', '--channel', 'nightly']), /stable or candidate/)
   assert.equal(parseCli(['update', '--scope', 'product', '--json']).updateScope, 'product')
   assert.throws(() => parseCli(['check-update', '--scope', 'everything']), /product or engine/)

@@ -641,7 +641,6 @@ fn save_launcher_preferences(layout: &ProductLayout, message: &Value) -> Result<
         .expect("settings object was initialized");
     object.insert("schemaVersion".to_owned(), Value::from(2));
     for key in [
-        "updateChannel",
         "productUpdateCheckEnabled",
         "engineUpdateCheckEnabled",
         "taskNotificationsEnabled",
@@ -651,6 +650,7 @@ fn save_launcher_preferences(layout: &ProductLayout, message: &Value) -> Result<
             object.insert(key.to_owned(), field.clone());
         }
     }
+    object.insert("updateChannel".to_owned(), Value::from("stable"));
     if let Some(field) = object.get("productUpdateCheckEnabled").cloned() {
         object.insert("updateCheckEnabled".to_owned(), field);
     }

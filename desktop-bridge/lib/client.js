@@ -11,8 +11,6 @@ window.__ModuleLoader__.load({
         invalidResult: '未收到完整的操作结果，请重试或导出支持报告。',
         dataExport: '导出数据', exportFormat: '保护方式', exportPlain: '普通文件', exportEncrypted: '密码加密', continue: '继续',
         updates: '更新',
-        updateChannel: '更新通道', stableChannel: '稳定版', betaChannel: '候选版（Alpha / Beta / RC）',
-        updateChannelHint: '稳定版适合日常使用；候选版按成熟度提供 Alpha、Beta 或 RC，可能不完整或不稳定。切换不会自动降级当前版本。',
         updateRecovery: '启动检查默认关闭。新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。',
         updateRolledBack: '上次更新未通过启动验证，已自动恢复到 {0}。',
         previousVersion: '上一版本',
@@ -21,15 +19,14 @@ window.__ModuleLoader__.load({
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
-        incompatible: '此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本。', engineFollowsProduct: '所选通道尚未提供内核更新包，请稍后重试。', channelUnpublished: '所选通道尚未提供更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
+        incompatible: '此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
         engineUnavailableSummary: '另有 {0} 个版本正在验证或暂不适用',
         engineUnavailableCoreIncompatible: '版本 {0}：需要先把 Portable 升级到 {1}，才能使用这个内核版本。',
         engineUnavailableCoreAwaiting: '版本 {0}：尚未针对当前 Portable 完成验证，暂不能选用。',
         engineUnavailableFullPackage: '版本 {0}：需要匹配的完整 Portable 安装包。',
-        engineUnavailableChannelMismatch: '版本 {0}：需要切换候选通道。',
         engineUnavailableWrongPlatform: '版本 {0}：不适用于此系统。',
         engineUnavailableUnknown: '版本 {0}：尚未通过此版本兼容验证。', unknown: '未知',
-        engineCatalogInvalid: '内核目录响应无效。', engineCatalogChannelMismatch: '内核目录通道与已确认的更新通道不一致。',
+        engineCatalogInvalid: '内核目录响应无效。',
         notifications: '任务通知', notificationsHint: '任务在后台完成，或等待回答和批准时显示系统通知。', notificationsSystemDisabled: 'Windows 通知已关闭；开启后，后台任务完成和待处理提醒才会显示。',
         updateReady: '有可用更新', environmentActive: '当前独立环境：{0}',
         desktop: '桌面行为',
@@ -69,8 +66,6 @@ window.__ModuleLoader__.load({
         invalidResult: 'The operation returned an incomplete result. Retry or export a support report.',
         dataExport: 'Export data', exportFormat: 'Protection', exportPlain: 'Standard file', exportEncrypted: 'Password encrypted', continue: 'Continue',
         updates: 'Updates',
-        updateChannel: 'Update channel', stableChannel: 'Stable', betaChannel: 'Candidate (Alpha / Beta / RC)',
-        updateChannelHint: 'Stable is recommended for daily use. Candidates may be Alpha, Beta, or RC builds and may be incomplete or unstable. Switching never downgrades the installed version.',
         updateRecovery: 'Startup checks are off by default. If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact.',
         updateRolledBack: 'The last update failed startup verification and automatically restored {0}.',
         previousVersion: 'the previous version',
@@ -79,15 +74,14 @@ window.__ModuleLoader__.load({
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
-        incompatible: 'This core update package is not qualified for the current DSH-Portable. Select a verified version.', engineFollowsProduct: 'The selected channel has no engine update package yet. Please try again later.', channelUnpublished: 'The selected channel has no update package yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
+        incompatible: 'This core update package is not qualified for the current DSH-Portable. Select a verified version.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
         engineUnavailableSummary: 'Other versions are being verified or currently unavailable ({0}).',
         engineUnavailableCoreIncompatible: 'Version {0}: Update Portable to {1} first to use this core version.',
         engineUnavailableCoreAwaiting: 'Version {0}: Not yet verified for the current Portable, so it cannot be selected.',
         engineUnavailableFullPackage: 'Version {0}: A matching full Portable package is required.',
-        engineUnavailableChannelMismatch: 'Version {0}: Switch to the candidate channel.',
         engineUnavailableWrongPlatform: 'Version {0}: Not available for this system.',
         engineUnavailableUnknown: 'Version {0}: Compatibility with this version has not been verified.', unknown: 'Unknown',
-        engineCatalogInvalid: 'The engine catalog response is invalid.', engineCatalogChannelMismatch: 'The engine catalog channel does not match the confirmed update channel.',
+        engineCatalogInvalid: 'The engine catalog response is invalid.',
         notifications: 'Task notifications', notificationsHint: 'Show a system notification when a background task finishes or needs an answer or approval.', notificationsSystemDisabled: 'Windows notifications are turned off. Enable them to receive background completion and attention alerts.',
         updateReady: 'Update available', environmentActive: 'Current isolated environment: {0}',
         desktop: 'Desktop behavior',
@@ -430,10 +424,10 @@ window.__ModuleLoader__.load({
             return body
           }).then(body => {
             if (!active) return
-            const confirmedSettings = body.settings && { ...body.settings }
+            const confirmedSettings = body.settings && { ...body.settings, updateChannel: 'stable' }
             confirmedSettingsRef.current = confirmedSettings
             setSettings(confirmedSettings)
-            const channel = confirmedSettings?.updateChannel || ''
+            const channel = 'stable'
             persistedChannelRef.current = channel
             setPersistedChannel(channel)
             setSelectedChannel(channel)
@@ -470,8 +464,7 @@ window.__ModuleLoader__.load({
           catch (cause) { throw new Error(response.ok ? `Invalid engine version response: ${cause?.message || cause}` : `HTTP ${response.status}`) }
           if (!response.ok || body?.error) throw new Error(body?.error || `HTTP ${response.status}`)
           if (body?.schemaVersion !== 1 || !Array.isArray(body?.versions)) throw new Error(t('engineCatalogInvalid'))
-          if (typeof body.releaseChannel !== 'string') throw new Error(t('engineCatalogInvalid'))
-          if (body.releaseChannel !== persistedChannel) throw new Error(t('engineCatalogChannelMismatch'))
+          if (body.releaseChannel !== 'stable') throw new Error(t('engineCatalogInvalid'))
           return body
         }).then(body => {
           if (!current()) return
@@ -535,9 +528,8 @@ window.__ModuleLoader__.load({
             if (!response.ok || body?.error) throw new Error(body?.error || `HTTP ${response.status}`)
             if (!body?.settings || typeof body.settings !== 'object') throw new Error('Settings response is missing saved settings.')
             const previousConfirmed = confirmedSettingsRef.current || {}
-            const confirmedSettings = { ...previousConfirmed, ...body.settings }
-            const returnedChannel = Object.hasOwn(body.settings, 'updateChannel') ? body.settings.updateChannel : ''
-            const confirmedChannel = returnedChannel || (hasChannel ? patch.updateChannel : previousConfirmed.updateChannel || persistedChannelRef.current || '')
+            const confirmedSettings = { ...previousConfirmed, ...body.settings, updateChannel: 'stable' }
+            const confirmedChannel = 'stable'
             if (confirmedChannel) confirmedSettings.updateChannel = confirmedChannel
             confirmedSettingsRef.current = confirmedSettings
             if (sequence !== settingsSaveSequenceRef.current) return
@@ -555,7 +547,7 @@ window.__ModuleLoader__.load({
           } catch (error) {
             if (sequence !== settingsSaveSequenceRef.current) return
             const confirmedSettings = confirmedSettingsRef.current
-            const confirmedChannel = confirmedSettings?.updateChannel || persistedChannelRef.current || ''
+            const confirmedChannel = 'stable'
             const renderedChannel = persistedChannelRef.current
             if (confirmedSettings) {
               persistedChannelRef.current = confirmedChannel
@@ -582,7 +574,6 @@ window.__ModuleLoader__.load({
         if (status === 'core-incompatible') return format(t('engineUnavailableCoreIncompatible'), version, item.requiredPortableVersion || t('unknown'))
         if (status === 'core-awaiting-qualification') return format(t('engineUnavailableCoreAwaiting'), version)
         if (status === 'full-package-required') return format(t('engineUnavailableFullPackage'), version)
-        if (status === 'channel-mismatch') return format(t('engineUnavailableChannelMismatch'), version)
         if (status === 'wrong-platform') return format(t('engineUnavailableWrongPlatform'), version)
         return format(t('engineUnavailableUnknown'), version)
       }
@@ -829,35 +820,8 @@ window.__ModuleLoader__.load({
           })),
         details)
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
-        h('div', { style: styles.item },
-          h('div', { style: styles.text },
-            h('div', { style: styles.label }, t('updateChannel')),
-            h('div', { style: styles.hint }, t('updateChannelHint')),
-            lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
-              format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion')))),
-          h(PortableSelector, {
-            primitives, value: selectedChannel || persistedChannel || settings.updateChannel || 'stable', label: t('updateChannel'),
-            items: [{ id: 'stable', label: t('stableChannel') }, { id: 'candidate', label: t('betaChannel') }],
-            onSelect: updateChannel => {
-              if (updateChannel === (selectedChannel || persistedChannel || settings.updateChannel || 'stable')) return
-              setSelectedChannel(updateChannel)
-              ++productRequestSequenceRef.current
-              setProductCatalogLoaded(false)
-              setProductVersions([])
-              setProductVersion('')
-              ++updateRequestSequenceRef.current
-              setUpdateOffers({})
-              setBusy('')
-              catalogInvalidatedRef.current = true
-              setMessages(current => ({ ...current, 'update-product': '', 'update-engine': '' }))
-              ++engineVersionsRequestSequenceRef.current
-              setEngineVersions([])
-              setEngineVersion('')
-              setEngineVersionManifestUrls({})
-              setEngineUnavailable([])
-              update({ updateChannel })
-            },
-          })),
+        lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
+          format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion'))),
         updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
         updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint'),
           engineUnavailable.length > 0 && h('details', {

@@ -30,19 +30,17 @@ export function platformUpdateKey(platform = process.platform, arch = process.ar
   throw new Error(`Unsupported update platform: ${platform}-${arch}`)
 }
 
-function releaseChannelForVersion(value) {
-  return parseSemanticVersion(value).prerelease ? 'candidate' : 'stable'
-}
+
 
 function normalizeReleaseChannel(value, portableVersion) {
-  const releaseChannel = value || releaseChannelForVersion(portableVersion)
-  if (!['stable', 'candidate'].includes(releaseChannel)) throw new Error(`Unsupported release channel: ${releaseChannel}`)
-  return releaseChannel
+  if (value && !['stable', 'candidate'].includes(value)) throw new Error(`Unsupported release channel: ${value}`)
+  if (portableVersion) parseSemanticVersion(portableVersion)
+  return 'stable'
 }
 
 export function defaultUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
-  normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${releaseChannel}/portable-update-${platformUpdateKey(platform, arch)}.json`
+  const channel = normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${channel}/portable-update-${platformUpdateKey(platform, arch)}.json`
 }
 
 function engineChannelTag(releaseChannel, portableVersion) {
@@ -51,18 +49,18 @@ function engineChannelTag(releaseChannel, portableVersion) {
 }
 
 export function defaultEngineUpdateManifestUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch, portableVersion) {
-  normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/${engineChannelTag(releaseChannel, portableVersion)}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
+  const channel = normalizeReleaseChannel(releaseChannel, portableVersion || '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/${engineChannelTag(channel, portableVersion)}/dsh-core-update-${platformUpdateKey(platform, arch)}.json`
 }
 
 export function defaultEngineUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch, portableVersion) {
-  normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/${engineChannelTag(releaseChannel, portableVersion)}/dsh-core-index-${platformUpdateKey(platform, arch)}.json`
+  const channel = normalizeReleaseChannel(releaseChannel, portableVersion || '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable-Updates/releases/download/${engineChannelTag(channel, portableVersion)}/dsh-core-index-${platformUpdateKey(platform, arch)}.json`
 }
 
 export function defaultProductUpdateIndexUrl(releaseChannel = 'stable', platform = process.platform, arch = process.arch) {
-  normalizeReleaseChannel(releaseChannel, '0.0.0')
-  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${releaseChannel}/portable-index-${platformUpdateKey(platform, arch)}.json`
+  const channel = normalizeReleaseChannel(releaseChannel, '0.0.0')
+  return `https://github.com/WSL043/DSH-Portable/releases/download/update-channel-${channel}/portable-index-${platformUpdateKey(platform, arch)}.json`
 }
 
 function parseSemanticVersion(value) {
@@ -160,9 +158,6 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     },
   })
   if (manifest.platform !== platform) return describe('wrong-platform', 'none')
-  if (installedReleaseChannel === 'stable' && manifestReleaseChannel !== 'stable') {
-    return describe('channel-mismatch', 'none')
-  }
   const productComparison = comparePortableVersions(installed.portableVersion, manifest.portableVersion)
   let engineAlreadyCurrent = false
   if (updateKind === 'engine') {
@@ -490,7 +485,7 @@ export async function listEngineVersions({
     }
     throw error
   }
-  if (!index || index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 20) {
+  if (!index || index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 3) {
     throw new Error('Unsupported engine version catalog.')
   }
   const platform = platformUpdateKey(layout.platform, process.arch)
@@ -531,9 +526,10 @@ export async function listProductVersions({ layout, indexUrl, releaseChannel, al
   const versions = [], seen = new Set()
   for (const entry of index.versions) {
     const version = String(entry?.version || ''), manifest = entry?.manifest
-    parseSemanticVersion(version)
+    const parsedVersion = parseSemanticVersion(version)
     const url = new URL(String(entry?.manifestUrl || ''))
     if (url.origin !== 'https://github.com' || !['stable', 'candidate'].some(channel => url.pathname === `/WSL043/DSH-Portable/releases/download/update-channel-${channel}/portable-update-${platform}-${version}.json`) || url.search || url.hash) throw new Error('Untrusted Portable version manifest.')
+    if (parsedVersion.prerelease) continue
     if (manifest?.portableVersion !== version || (manifest.updateKind || 'product') !== 'product') throw new Error('Portable catalog version mismatch.')
     if (seen.has(version)) continue
     seen.add(version)

@@ -722,7 +722,7 @@ export function parseCli(argv) {
     else if (arg === '--channel') {
       const value = argv[index + 1]
       if (!['stable', 'candidate'].includes(value)) throw new Error('--channel requires stable or candidate.')
-      updateChannel = value
+      updateChannel = 'stable'
       index += 1
     }
     else if (arg === '--output') {
