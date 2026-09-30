@@ -129,11 +129,19 @@ function textContent(node) {
   return textContent(node.children || [])
 }
 
+function visibleTextContent(node) {
+  if (node === null || node === undefined || node === false) return ''
+  if (Array.isArray(node)) return node.map(visibleTextContent).join('')
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (node.type === 'details' && !node.props?.open) return visibleTextContent(node.children?.[0] ?? [])
+  return visibleTextContent(node.children || [])
+}
+
 async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -150,7 +158,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
   let definition
   let productChannel = 'stable'
   const document = {
-    documentElement: { lang: 'en' },
+    documentElement: { lang },
     head: { appendChild() {} },
     getElementById() { return null },
     createElement() { return {} },
@@ -189,7 +197,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
   })
   const ctx = {
     effect: (native || webCacheHost) ? () => {} : undefined,
-    locale: { getLocale: () => ({ active: 'en' }) },
+    locale: { getLocale: () => ({ active: lang }) },
     theme: { getTheme: () => ({ active: { colorScheme: 'light' } }) },
     slots: {
       inject(_name, factory) { return factory() },
@@ -350,15 +358,27 @@ test('channel catalog state follows the final confirmed save and localizes unava
     ],
   }))
   await settle()
-  const initialText = textContent(mounted.tree)
-  assert.match(initialText, /Version 0\.1\.1: Update Portable to 0\.6\.2 first to use this core version\./)
-  assert.match(initialText, /Version 0\.1\.0: A matching full Portable package is required\./)
-  assert.match(initialText, /Version 0\.1\.05: Not yet verified for the current Portable, so it cannot be selected\./)
-  assert.doesNotMatch(initialText, /Version 0\.1\.05: Update Portable/)
-  assert.match(initialText, /Version 0\.0\.9: Switch to the candidate channel\./)
-  assert.match(initialText, /Version 0\.0\.8: Not available for this system\./)
-  assert.match(initialText, /Version 0\.0\.7: Compatibility with this version has not been verified\./)
-  assert.doesNotMatch(initialText, /core-incompatible|core-awaiting-qualification|full-package-required|channel-mismatch|wrong-platform|future-status/)
+  const unavailableDetails = findNode(mounted.tree, node => node.type === 'details')
+  assert.ok(unavailableDetails)
+  assert.equal(unavailableDetails.props.open, undefined, 'unavailable reasons are collapsed by default')
+  assert.equal(visibleTextContent(unavailableDetails), textContent(unavailableDetails.children[0]), 'the collapsed row exposes only its summary')
+  const initialText = visibleTextContent(mounted.tree)
+  assert.match(initialText, /Other versions are being verified or currently unavailable \(6\)\./)
+  assert.doesNotMatch(initialText, /Version 0\.1\.1:|Version 0\.1\.0:|Version 0\.1\.05:|Version 0\.0\.9:|Version 0\.0\.8:|Version 0\.0\.7:/)
+  const engineSelector = findNode(mounted.tree, node => node.props?.label === 'Engine version')
+  assert.deepEqual(Array.from(engineSelector.props.items, item => item.id), ['0.1.2'], 'the selector contains only available versions')
+
+  unavailableDetails.props.open = true
+  const expandedText = visibleTextContent(mounted.tree)
+  assert.match(expandedText, /Version 0\.1\.1: Update Portable to 0\.6\.2 first to use this core version\./)
+  assert.match(expandedText, /Version 0\.1\.0: A matching full Portable package is required\./)
+  assert.match(expandedText, /Version 0\.1\.05: Not yet verified for the current Portable, so it cannot be selected\./)
+  assert.doesNotMatch(expandedText, /Version 0\.1\.05: Update Portable/)
+  assert.match(expandedText, /Version 0\.0\.9: Switch to the candidate channel\./)
+  assert.match(expandedText, /Version 0\.0\.8: Not available for this system\./)
+  assert.match(expandedText, /Version 0\.0\.7: Compatibility with this version has not been verified\./)
+  assert.doesNotMatch(expandedText, /core-incompatible|core-awaiting-qualification|full-package-required|channel-mismatch|wrong-platform|future-status/)
+  unavailableDetails.props.open = false
 
   let channel = findNode(mounted.tree, node => node.props?.label === 'Update channel')
   channel.props.onSelect('candidate')
@@ -607,6 +627,34 @@ test('installed core is not shown as an unavailable install target', async () =>
   await settle()
   assert.doesNotMatch(textContent(mounted.tree), /Version 0\.1\.2-rc\.1:/)
   assert.match(textContent(mounted.tree), /Version 0\.1\.3:/)
+  mounted.unmount()
+})
+
+
+test('an empty unavailable-core list does not render a summary row', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings(), versions: { portable: '0.6.4', engine: '0.1.2' } }
+    : { schemaVersion: 1, releaseChannel: 'stable', current: '0.1.2', versions: [], unavailable: [] }))
+  const mounted = client.mount()
+  await settle()
+  assert.equal(findNode(mounted.tree, node => node.type === 'details'), null)
+  assert.doesNotMatch(visibleTextContent(mounted.tree), /Other versions are being verified/)
+  mounted.unmount()
+})
+
+
+test('unavailable-core summary is localized in Chinese', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings(), versions: { portable: '0.6.4', engine: '0.1.2' } }
+    : { schemaVersion: 1, releaseChannel: 'stable', current: '0.1.2', versions: [], unavailable: [
+        { version: '0.1.1', status: 'core-awaiting-qualification' },
+      ] }), { lang: 'zh-CN' })
+  const mounted = client.mount()
+  await settle()
+  const details = findNode(mounted.tree, node => node.type === 'details')
+  assert.ok(details)
+  assert.equal(textContent(details.children[0]), '另有 1 个版本正在验证或暂不适用')
+  assert.equal(visibleTextContent(details), '另有 1 个版本正在验证或暂不适用')
   mounted.unmount()
 })
 

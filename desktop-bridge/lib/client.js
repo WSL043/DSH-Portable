@@ -22,6 +22,7 @@ window.__ModuleLoader__.load({
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
         incompatible: '此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本。', engineFollowsProduct: '所选通道尚未提供内核更新包，请稍后重试。', channelUnpublished: '所选通道尚未提供更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
+        engineUnavailableSummary: '另有 {0} 个版本正在验证或暂不适用',
         engineUnavailableCoreIncompatible: '版本 {0}：需要先把 Portable 升级到 {1}，才能使用这个内核版本。',
         engineUnavailableCoreAwaiting: '版本 {0}：尚未针对当前 Portable 完成验证，暂不能选用。',
         engineUnavailableFullPackage: '版本 {0}：需要匹配的完整 Portable 安装包。',
@@ -79,6 +80,7 @@ window.__ModuleLoader__.load({
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
         incompatible: 'This core update package is not qualified for the current DSH-Portable. Select a verified version.', engineFollowsProduct: 'The selected channel has no engine update package yet. Please try again later.', channelUnpublished: 'The selected channel has no update package yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
+        engineUnavailableSummary: 'Other versions are being verified or currently unavailable ({0}).',
         engineUnavailableCoreIncompatible: 'Version {0}: Update Portable to {1} first to use this core version.',
         engineUnavailableCoreAwaiting: 'Version {0}: Not yet verified for the current Portable, so it cannot be selected.',
         engineUnavailableFullPackage: 'Version {0}: A matching full Portable package is required.',
@@ -858,9 +860,15 @@ window.__ModuleLoader__.load({
           })),
         updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
         updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint'),
-          engineUnavailable.map((item, index) => h('div', {
-            key: `${item.version}-${index}`, style: styles.status, role: 'status',
-          }, unavailableMessage(item)))))
+          engineUnavailable.length > 0 && h('details', {
+            style: { ...styles.hint, marginTop: 8 },
+          },
+          h('summary', { style: { cursor: 'pointer' } },
+            format(t('engineUnavailableSummary'), engineUnavailable.length)),
+          h('div', { style: { display: 'grid', gap: 4, marginTop: 8 } },
+            engineUnavailable.map((item, index) => h('div', {
+              key: `${item.version}-${index}`, style: styles.status, role: 'status',
+            }, unavailableMessage(item)))))))
       if (page === 'updates') return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('updates')),
         inlineStatus('portable'), updatesSection,
