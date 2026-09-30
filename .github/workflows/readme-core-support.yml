@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
-      - name: Read published catalogs and update both languages
+      - name: Read the stable core catalog and update both languages
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/update-readme-core-support.mjs

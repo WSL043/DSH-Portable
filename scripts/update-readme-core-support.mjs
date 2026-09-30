@@ -1,16 +1,26 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { defaultEngineUpdateIndexUrl, platformUpdateKey } from '../launcher/update-core.mjs'
+import { comparePortableVersions, defaultEngineUpdateIndexUrl, platformUpdateKey } from '../launcher/update-core.mjs'
 
-export function supportedVersions(index, baseline, platform, channel) {
-  if (index.schemaVersion !== 1 || index.platform !== platform || index.channel !== channel || !Array.isArray(index.versions)) throw new Error('Invalid published core index')
+export function supportedVersions(index, baseline, platform) {
+  if (index.schemaVersion !== 1 || index.platform !== platform || index.channel !== 'stable' || !Array.isArray(index.versions)) throw new Error('Invalid published core index')
   return [...new Set(index.versions.filter(entry => {
     const m = entry.manifest
-    return m?.updateKind === 'engine' && m.portableVersion === baseline && m.platform === platform && m.releaseChannel === channel && m.component?.dshVersion === entry.version
+    return m?.updateKind === 'engine' && m.portableVersion === baseline && m.platform === platform && m.releaseChannel === 'stable' && m.component?.dshVersion === entry.version
   }).map(entry => {
     if (!/^\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?$/.test(entry.version)) throw new Error('Invalid core version')
     return entry.version
-  }))]
+  }))].sort((left, right) => comparePortableVersions(right, left)).slice(0, 3)
+}
+
+export function renderSupportSection(baseline, rows, zh) {
+  const intro = zh
+    ? '**可选内核（最新 3 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。'
+    : '**Optional cores (latest 3 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).'
+  const summary = zh ? `查看 Portable ${baseline} 的可选内核` : `View available cores for Portable ${baseline}`
+  const table = zh ? '| 平台 | 可选内核 |' : '| Platform | Available cores |'
+  const note = zh ? '每小时同步 stable 目录中最新 3 个已验收内核；— 表示暂无匹配版本。' : 'Synced hourly from the newest three qualified cores in the stable catalog; — means no matching version.'
+  return `${intro}\n\n<details>\n<summary>${summary}</summary>\n\n${table}\n| --- | --- |\n${rows.join('\n')}\n\n${note}\n\n</details>\n`
 }
 
 const begin = '<!-- core-support:start -->'
@@ -34,23 +44,14 @@ export async function updateReadmes() {
   const baseline = release.tag_name.slice(1)
   const platforms = [['Windows x64', 'win32', 'x64'], ['macOS arm64', 'darwin', 'arm64'], ['macOS x64', 'darwin', 'x64'], ['Linux x64', 'linux', 'x64'], ['Linux arm64', 'linux', 'arm64']]
   const rows = await Promise.all(platforms.map(async ([label, platform, arch]) => {
-    const channels = await Promise.all(['stable', 'candidate'].map(async channel => {
-      const url = defaultEngineUpdateIndexUrl(channel, platform, arch, baseline)
-      const versions = supportedVersions(await json(url), baseline, platformUpdateKey(platform, arch), channel)
-      return versions.length ? versions.map(v => `[${v}](${url})`).join(', ') : '—'
-    }))
-    return `| ${label} | ${channels.join(' | ')} |`
+    const url = defaultEngineUpdateIndexUrl('stable', platform, arch, baseline)
+    const versions = supportedVersions(await json(url), baseline, platformUpdateKey(platform, arch))
+    return `| ${label} | ${versions.length ? versions.map(v => `[${v}](${url})`).join(', ') : '—'} |`
   }))
   // Fetch and validate every platform before touching either document.
   const updates = await Promise.all(['README.md', 'README.en.md'].map(async (name, i) => {
     const zh = i === 0
-    const intro = zh
-      ? '**内核版本可选** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。'
-      : '**Choose your core version** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).'
-    const summary = zh ? `查看 Portable ${baseline} 的可选内核` : `View available cores for Portable ${baseline}`
-    const table = zh ? '| 平台 | 稳定通道 | 候选通道 |' : '| Platform | Stable channel | Candidate channel |'
-    const note = zh ? '每小时同步已验收的发布目录。旧版及 RC 以应用内兼容检查为准；— 表示暂无匹配版本。' : 'Synced hourly from qualified catalogs. Older and RC builds depend on in-app compatibility checks; — means no matching version.'
-    const content = `${intro}\n\n<details>\n<summary>${summary}</summary>\n\n${table}\n| --- | --- | --- |\n${rows.join('\n')}\n\n${note}\n\n</details>\n`
+    const content = renderSupportSection(baseline, rows, zh)
     const url = new URL(`../${name}`, import.meta.url)
     const original = await readFile(url, 'utf8')
     return { url, original, next: replaceSupport(original, content) }
