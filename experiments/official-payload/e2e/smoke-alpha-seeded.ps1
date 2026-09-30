@@ -174,12 +174,13 @@ function Assert-DisabledDump([string]$Root, [string]$Prefix, $Plugins) {
     $outputPath = Join-Path $EvidenceRoot ($Prefix + '.dump.stdout.log')
     $errorPath = Join-Path $EvidenceRoot ($Prefix + '.dump.stderr.log')
     $dump = Invoke-DumpConfig $Root $outputPath $errorPath
+    # "Off" as the official Plugins page records it: installed as a dependency, absent from profile bundles,
+    # so the plugin is not composed at all and the page shows its switch off.
+    $package = Read-SharedText (Join-Path $Root 'data/dsh-home/profiles/desktop/package.json') | ConvertFrom-Json
     foreach ($plugin in $Plugins) {
-        $index = $dump.IndexOf([string]$plugin.entryId, [StringComparison]::Ordinal)
-        if ($index -lt 0) { throw "Dump config is missing Cordis entry '$($plugin.entryId)'; see $outputPath." }
-        $start = [Math]::Max(0, $index - 120)
-        $length = [Math]::Min(600, $dump.Length - $start)
-        if ($dump.Substring($start, $length) -notmatch 'disabled["'']?\s*:\s*true|disabled:\s*true') { throw "Dump config does not mark '$($plugin.entryId)' disabled; see $outputPath." }
+        if ($null -eq $package.dependencies.PSObject.Properties[[string]$plugin.name]) { throw "Seeded plugin '$($plugin.name)' is not installed." }
+        if (@($package.dsh.profile.bundles) -contains [string]$plugin.name) { throw "Seeded plugin '$($plugin.name)' is enabled in profile bundles." }
+        if ($dump.IndexOf([string]$plugin.entryId, [StringComparison]::Ordinal) -ge 0) { throw "Seeded plugin entry '$($plugin.entryId)' is composed although the plugin is off; see $outputPath." }
     }
     return $true
 }

@@ -119,6 +119,9 @@ function Invoke-SeedPlugin {
         $resolvedDependencyPath = if ([IO.Path]::IsPathRooted($dependencyPath)) { [IO.Path]::GetFullPath($dependencyPath) } else { [IO.Path]::GetFullPath((Join-Path $ProfileDirectory $dependencyPath)) }
         if (-not [String]::Equals($resolvedDependencyPath, [IO.Path]::GetFullPath($profileSeedFile), [StringComparison]::OrdinalIgnoreCase)) { throw "Official plugin add referenced an unexpected archive for '$name'." }
         $dependency.Value = 'file:' + $relativePackage
+        # Ship it installed but off, exactly as the official Plugins page records "off": the package stays a
+        # dependency and leaves dsh.profile.bundles. The page then shows it disabled and one click enables it.
+        $package.dsh.profile.bundles = @(@($package.dsh.profile.bundles) | Where-Object { $_ -cne $name })
         Write-SeedJsonAtomic -Path $packagePath -Value $package
         if (Test-Path -LiteralPath $lockPath -PathType Leaf) {
             $lockContent = [IO.File]::ReadAllText($lockPath, [Text.Encoding]::UTF8)
@@ -137,16 +140,12 @@ function Invoke-SeedPlugin {
         $installed = [IO.File]::ReadAllText($installedPackagePath, [Text.Encoding]::UTF8) | ConvertFrom-Json
         if ($installed.name -cne $name -or $installed.version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$') { throw "Installed plugin metadata does not match '$name'." }
 
-        $patchContent = if ($patchExisted) { [Text.UTF8Encoding]::new($false, $true).GetString($patchBytes) } else { '' }
-        $mergedPatch = Merge-SeedCordisPatch -Content $patchContent -EntryId ([string]$Plugin.entryId)
-        if (-not $mergedPatch.existed) { [IO.File]::WriteAllText($patchPath, $mergedPatch.content, [Text.UTF8Encoding]::new($false)) }
-
         $records = @($Seeded.plugins)
         $records += [pscustomobject]@{ name=$name; version=[string]$installed.version; nameVersion=($name + '@' + $installed.version); entryId=[string]$Plugin.entryId }
         $Seeded.plugins = $records
         Write-SeedJsonAtomic -Path $seededPath -Value $Seeded
         Remove-SeedPath -Path $backupDirectory
-        return [pscustomobject]@{ name=$name; version=[string]$installed.version; status='seeded'; patchPreserved=$mergedPatch.existed }
+        return [pscustomobject]@{ name=$name; version=[string]$installed.version; status='seeded'; disabledBy='profile-bundles' }
     } catch {
         $failure = $_.Exception.Message
         try {

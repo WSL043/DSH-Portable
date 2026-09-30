@@ -23,7 +23,9 @@ test('alpha seed smoke preserves the first launch and verifies seeding, health, 
   assert.match(source, /close-app\.mjs/);
   assert.match(source, /Copy-Item -LiteralPath \$desktop -Destination \$probe -Recurse/);
   assert.match(source, /--profile probe --dump-config/);
-  assert.match(source, /disabled\["''\]\?\\s\*:\\s\*true/);
+  // Off means installed but outside profile bundles, so the entry is not composed at all.
+  assert.match(source, /is enabled in profile bundles/);
+  assert.match(source, /is composed although the plugin is off/);
   assert.match(source, /\[IO\.Directory\]::Move\(\$WorkRoot, \$MovedRoot\)/);
   assert.match(source, /Assert-DisabledDump \$MovedRoot 'after-move'/);
   assert.match(source, /\[IO\.FileShare\]::ReadWrite -bor \[IO\.FileShare\]::Delete/);
