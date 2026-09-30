@@ -49,7 +49,7 @@
 
 ## Downloads
 
-For everyday use, choose the stable 0.x (Native) line. The 1.0 development line remains drafts and development builds, outside public Releases and is not an upgrade path.
+For everyday use, choose the stable 0.x (Native) line. The 1.0 line has a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4) for early adopters; it is not an upgrade path from 0.x.
 
 ### Windows
 
@@ -124,7 +124,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 ## Roadmap
 
 - **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
-- **1.0 development line:** Turns the official desktop app itself into a portable folder that follows official releases automatically; currently a draft for internal trials, outside public Releases and not an upgrade path.
+- **1.0 line:** Turns the official desktop app itself into a portable folder that follows official releases automatically; currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4), not an upgrade path from 0.x.
 - See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
 
 ## Get help

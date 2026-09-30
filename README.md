@@ -49,7 +49,7 @@
 
 ## 下载
 
-日常使用请选择稳定版 0.x（Native）；1.0 开发线仍是草稿与开发构建，不在公开 Releases，也不是升级路径。
+日常使用请选择稳定版 0.x（Native）。1.0 线有一个仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4)，供想尝鲜的用户试用，不是 0.x 的升级路径。
 
 ### Windows
 
@@ -124,7 +124,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 ## 路线
 
 - **稳定版 0.x（Native）**：当前公开下载；接下来聚焦打磨与稳定。
-- **1.0 开发线**：直接把官方桌面成品做成便携文件夹，自动跟随官方版本；目前是内部试用的草稿，不在公开 Releases，也不作为升级路径。
+- **1.0 线**：直接把官方桌面成品做成便携文件夹，自动跟随官方版本；目前是仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4)，不是 0.x 的升级路径。
 - 详见[1.0 路线图](docs/roadmap-toward-1.0.md)与[官方桌面成品实验线](experiments/official-payload/README.md)。
 
 ## 获取帮助

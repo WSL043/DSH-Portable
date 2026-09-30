@@ -130,10 +130,10 @@ const copy = {
     stableLineTitle: "Stable 0.x (Native)",
     stableLineText:
       "The current public download, supporting Windows, macOS, and Linux.",
-    developmentLineLabel: "DEVELOPMENT ONLY",
-    developmentLineTitle: "1.0 development line",
+    developmentLineLabel: "ALPHA PREVIEW",
+    developmentLineTitle: "1.0 line",
     developmentLineText:
-      "Pure portability work based on the official desktop product, for Windows only. It remains development builds and drafts, outside public downloads.",
+      'Turns the official desktop app itself into a portable folder, for Windows only. It is an alpha preview you can try from <a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4">Releases</a>; it is not an upgrade path from 0.x.',
     pluginsTitle: "Plugin tools,<br>kept in your folder.",
     managerText:
       "Organize and find sessions to pick up earlier work. Both default plugins are maintained and updated independently.",
