@@ -44,10 +44,8 @@
 | Installation and platforms | Installer; Windows and macOS | Portable; Windows, macOS, and Linux, with no installation or PATH changes |
 | Update cadence | Follows the official release schedule | Portable and core update separately; choose a core version |
 | Moving and maintenance | Standard desktop installation | After fully exiting, copy the whole folder to a USB drive or another computer with the same OS and architecture; data-preserving rollback and recovery tools are included |
-| Plugins | Official desktop app | Built-in Plugin Market entry, using DSH plugin management |
+| Plugins | Official plugin management | The same plugin management, plus a Plugin Market entry and two default plugins |
 | A good fit if… | You want an installed app on one computer | You want to carry it between devices or control updates |
-
-Choose the [official installer](https://www.deepseek.com/harness/) if you want a system installation for one computer; choose DSH-Portable if you want to carry it, use multiple devices, or manage update timing.
 
 ## Downloads
 
@@ -82,6 +80,8 @@ See the [Linux guide](docs/user-guide.en.md#linux) for AppImage launch details, 
 2. Put it where you want the app to live and run it; it prepares the complete DSH-Portable folder beside it.
 3. Connect a model service; next time, run DeepSeek-Herness.exe from that folder.
 
+On macOS and Linux, extract and run; see the [guide](docs/user-guide.en.md#macos) for first-launch notes.
+
 The close button sends the app to the tray, so tasks continue. To quit, use **File → Exit DeepSeek Harness**; on Windows press Ctrl+Q. The tray menu is an alternate exit path.
 
 ## How portability works
@@ -93,11 +93,9 @@ The close button sends the app to the tray, so tasks continue. To quit, use **Fi
 
 ## Plugins
 
-Open **Settings → Plugins → Plugin Market** to search, install, update, or remove plugins; see the [plugin guide](docs/user-guide.en.md#plugins).
+Fresh installs include two removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) (zoom, gallery, original downloads, region annotations) and [Chat Manager](https://github.com/WSL043/dsh-chat-manager) (search archives, restore and safely delete sessions).
 
-Fresh installs include two removable defaults: [Image Viewer](https://github.com/WSL043/dsh-image-viewer) and [Chat Manager](https://github.com/WSL043/dsh-chat-manager).
-
-In **Plugins → Add plugin**, enter a package name or address—not a terminal command. See the [guide](docs/user-guide.en.md#plugins) for advanced use and default-plugin details.
+Find more in **Settings → Plugins → Plugin Market**; to add one manually, enter a package name or address in **Plugins → Add plugin**—not a terminal command. See the [plugin guide](docs/user-guide.en.md#plugins).
 
 ## Choose your core version
 
@@ -126,7 +124,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 ## Roadmap
 
 - **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
-- **1.0 development line:** Portable adaptation of the official desktop product; still development builds and drafts, outside public Releases and not an upgrade path.
+- **1.0 development line:** Turns the official desktop app itself into a portable folder that follows official releases automatically; currently a draft for internal trials, outside public Releases and not an upgrade path.
 - See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
 
 ## Get help

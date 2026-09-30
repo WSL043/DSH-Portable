@@ -44,10 +44,8 @@
 | 安装与平台 | 安装式；Windows、macOS | 绿色便携；Windows、macOS、Linux，不安装、不改系统 PATH |
 | 更新节奏 | 跟随官方发布节奏 | Portable 与内核分开更新，可选内核版本 |
 | 携带与维护 | 常规桌面安装 | 完全退出后可把整个文件夹复制到 U 盘或另一台相同平台的电脑；提供保留数据的回滚与恢复工具 |
-| 插件 | 官方桌面应用 | 内置插件市场入口，沿用 DSH 插件管理 |
+| 插件 | 官方插件管理 | 同样的插件管理，另带插件市场入口和两个默认插件 |
 | 适合你，如果… | 想装进系统、主要使用一台电脑 | 想带走、多设备使用，或需要可控更新 |
-
-想装进系统、只用一台电脑，可选[官方安装版](https://www.deepseek.com/harness/)；想带走、多设备使用或控制更新节奏，可选 DSH-Portable。
 
 ## 下载
 
@@ -82,6 +80,8 @@ AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/use
 2. 将它放到希望保存的位置并运行；它会在旁边准备完整的 DSH-Portable 文件夹。
 3. 连接模型服务；以后运行文件夹里的 DeepSeek-Herness.exe。
 
+macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指南](docs/user-guide.zh-CN.md#macos)。
+
 关闭按钮默认将应用收进托盘，任务会继续。完全退出请用 **文件 → 退出 DeepSeek Harness**；Windows 可按 Ctrl+Q，托盘菜单提供备用退出。
 
 ## 它怎么做便携
@@ -93,11 +93,9 @@ AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/use
 
 ## 插件
 
-从 **设置 → 插件 → 插件市场** 搜索、安装、更新或卸载插件；详见[插件指南](docs/user-guide.zh-CN.md#插件)。
+全新安装默认附带两个可卸载插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer)（缩放、图库、原图下载与区域标注）和 [Chat Manager](https://github.com/WSL043/dsh-chat-manager)（搜索归档、恢复与安全删除会话）。
 
-全新安装默认附带两个可卸载插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer) 与 [Chat Manager](https://github.com/WSL043/dsh-chat-manager)。
-
-在 **插件 → 添加插件** 中填写包名或地址，不要粘贴终端命令。高级用法与默认插件说明见[用户指南](docs/user-guide.zh-CN.md#插件)。
+更多插件在 **设置 → 插件 → 插件市场** 搜索安装；手动添加时在 **插件 → 添加插件** 填包名或地址，不要粘贴终端命令。详见[插件指南](docs/user-guide.zh-CN.md#插件)。
 
 ## 内核版本可选
 
@@ -126,7 +124,7 @@ AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/use
 ## 路线
 
 - **稳定版 0.x（Native）**：当前公开下载；接下来聚焦打磨与稳定。
-- **1.0 开发线**：基于官方桌面成品的便携化，目前仍是开发构建与草稿，不在公开 Releases，也不作为升级路径。
+- **1.0 开发线**：直接把官方桌面成品做成便携文件夹，自动跟随官方版本；目前是内部试用的草稿，不在公开 Releases，也不作为升级路径。
 - 详见[1.0 路线图](docs/roadmap-toward-1.0.md)与[官方桌面成品实验线](experiments/official-payload/README.md)。
 
 ## 获取帮助
