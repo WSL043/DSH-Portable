@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory=$true)][string]$Archive,
-    [Parameter(Mandatory=$true)][string]$WorkRoot
+    [Parameter(Mandatory=$true)][string]$WorkRoot,
+    [switch]$Bootstrap
 )
 $ErrorActionPreference = 'Stop'
 $Archive = [IO.Path]::GetFullPath($Archive)
@@ -24,6 +25,15 @@ function Get-ProtocolSnapshot {
     } finally { $key.Dispose() }
 }
 
+function Read-SharedJson([string]$Path) {
+    for ($attempt = 1; $attempt -le 40; $attempt++) {
+        try {
+            $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)
+            try { $reader = New-Object IO.StreamReader($stream, [Text.Encoding]::UTF8); return ($reader.ReadToEnd() | ConvertFrom-Json) } finally { $stream.Dispose() }
+        } catch { if ($attempt -eq 40) { throw }; Start-Sleep -Milliseconds 100 }
+    }
+}
+
 $protocolBefore = Get-ProtocolSnapshot
 $launcherProcess = $null
 $normalExit = $false
@@ -31,28 +41,40 @@ try {
     New-Item -ItemType Directory -Path $WorkRoot -Force | Out-Null
     Expand-Archive -LiteralPath $Archive -DestinationPath $WorkRoot
     $currentPath = Join-Path $WorkRoot 'app\current.json'
-    $current = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
-    if (-not $current.version) { throw 'Packaged current.json does not identify its official version' }
-    $current.previous = [string]$current.version
-    $current.pendingHealth = $true
-    [IO.File]::WriteAllText($currentPath, (($current | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+    if ($Bootstrap) {
+        if (-not (Test-Path -LiteralPath (Join-Path $WorkRoot 'launcher/bootstrap.json') -PathType Leaf) -or (Test-Path -LiteralPath $currentPath)) { throw 'Lite package must contain a bootstrap marker and no current.json' }
+        $appRoot = Join-Path $WorkRoot 'app'
+        if ((Test-Path -LiteralPath $appRoot) -and @(Get-ChildItem -LiteralPath $appRoot -Directory).Count -ne 0) { throw 'Lite package contains an application version directory' }
+    } else {
+        $current = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
+        if (-not $current.version) { throw 'Packaged current.json does not identify its official version' }
+        $current.previous = [string]$current.version
+        $current.pendingHealth = $true
+        [IO.File]::WriteAllText($currentPath, (($current | ConvertTo-Json -Depth 8) + "`n"), [Text.UTF8Encoding]::new($false))
+    }
     $launcher = Join-Path $WorkRoot 'DeepSeek Harness Portable.exe'
     $listener = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
     $listener.Start()
     try { $port = [int]$listener.LocalEndpoint.Port } finally { $listener.Stop() }
     $launcherProcess = Start-Process -FilePath $launcher -WorkingDirectory $WorkRoot -ArgumentList "--probe-port=$port" -WindowStyle Hidden -PassThru
     $logPath = Join-Path $WorkRoot 'data\launcher\launcher.log'
-    $deadline = [DateTime]::UtcNow.AddMinutes(3)
+    $deadline = if ($Bootstrap) { [DateTime]::UtcNow.AddMinutes(45) } else { [DateTime]::UtcNow.AddMinutes(3) }
     $protocolReady = $false
+    $currentReady = -not $Bootstrap
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($launcherProcess.HasExited) { throw "Portable launcher exited early with code $($launcherProcess.ExitCode)" }
+        if ($Bootstrap -and (Test-Path -LiteralPath $currentPath -PathType Leaf)) {
+            $current = Read-SharedJson $currentPath
+            if ($current.version -and (Test-Path -LiteralPath (Join-Path $WorkRoot ("app/$($current.version)/DeepSeek Harness.exe")) -PathType Leaf)) { $currentReady = $true }
+        }
         $snapshot = Get-ProtocolSnapshot
         if ($snapshot.value -and $snapshot.value.Contains('DeepSeek Harness Portable.exe') -and $snapshot.value.Contains('--open')) { $protocolReady = $true }
         $log = if (Test-Path -LiteralPath $logPath) { Get-Content -LiteralPath $logPath -Raw } else { '' }
-        if ($protocolReady -and $log.Contains('health window passed')) { break }
+        if ($protocolReady -and $currentReady -and $log.Contains('health window passed')) { break }
         Start-Sleep -Milliseconds 500
     }
     if (-not $protocolReady) { throw 'dsh:// protocol was not transferred to the extracted launcher' }
+    if (-not $currentReady) { throw 'Lite bootstrap did not install the accepted official version within 45 minutes.' }
     if (-not (Test-Path -LiteralPath $logPath) -or -not (Get-Content -LiteralPath $logPath -Raw).Contains('health window passed')) { throw 'The 20-second health window did not pass' }
     $node = (Get-Command node.exe -ErrorAction Stop | Select-Object -First 1).Source
     $pageEvidence = Join-Path $WorkRoot 'smoke-page.json'
@@ -76,7 +98,11 @@ try {
     $normalExit = $true
     $protocolAfter = Get-ProtocolSnapshot
     if ((ConvertTo-Json $protocolAfter -Compress) -cne (ConvertTo-Json $protocolBefore -Compress)) { throw 'The dsh:// registry command was not restored after normal exit' }
-    $report = [ordered]@{ overallPassed=$true; officialVersion=[string]$current.version; page=$page; healthWindowPassed=$true; protocolBefore=$protocolBefore; protocolDuring=$protocolWhileRunning; protocolAfter=$protocolAfter; launcherExitCode=$launcherProcess.ExitCode }
+    $updateStatus = $null
+    $statusPath = Join-Path $WorkRoot 'data/launcher/update-status.json'
+    if (Test-Path -LiteralPath $statusPath) { try { $updateStatus = Read-SharedJson $statusPath } catch {} }
+    if ($Bootstrap -and [string]$updateStatus.status -cne 'applied') { throw 'Lite bootstrap status did not report a completed install.' }
+    $report = [ordered]@{ overallPassed=$true; bootstrapInstallPassed=[bool]$Bootstrap; officialVersion=[string]$current.version; updateStatus=$updateStatus; page=$page; healthWindowPassed=$true; protocolBefore=$protocolBefore; protocolDuring=$protocolWhileRunning; protocolAfter=$protocolAfter; launcherExitCode=$launcherProcess.ExitCode }
     [IO.File]::WriteAllText((Join-Path $WorkRoot 'smoke-report.json'), (($report | ConvertTo-Json -Depth 12) + "`n"), [Text.UTF8Encoding]::new($false))
     Write-Output ($report | ConvertTo-Json -Depth 12 -Compress)
 } finally {

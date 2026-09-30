@@ -23,7 +23,7 @@ concurrency:
 jobs:
   package:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     permissions:
       contents: read
     outputs:
@@ -136,6 +136,25 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
           $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
           Compress-Archive -Path 'build/orch-080/T32/package/*' -DestinationPath $archive -CompressionLevel Optimal
+          ./experiments/official-payload/package-pure.ps1 `
+            -Bootstrap `
+            -Output 'build/orch-080/T32/package-lite' `
+            -SevenZip $sevenZip `
+            -FeedUrl $urls.channelBaseUrl `
+            -IndexUrl $urls.indexUrl `
+            -SeedPlugin @($imageViewer, $chatManager)
+          if ($LASTEXITCODE -ne 0) { throw 'Lite portable packaging failed' }
+          $liteRoot = 'build/orch-080/T32/package-lite'
+          $liteFiles = @(Get-ChildItem -LiteralPath $liteRoot -Recurse -File)
+          $liteBytes = [long](($liteFiles | Measure-Object Length -Sum).Sum)
+          if ($liteBytes -ge 40MB) { throw "Lite package exceeds the 40 MiB limit: $liteBytes bytes" }
+          foreach ($required in @('DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe', 'launcher/seed/seed.json')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $liteRoot $required) -PathType Leaf)) { throw "Lite package is missing $required" }
+          }
+          if ((Test-Path -LiteralPath (Join-Path $liteRoot 'app/current.json')) -or @(Get-ChildItem -LiteralPath (Join-Path $liteRoot 'app') -Directory).Count -ne 0) { throw 'Lite package contains a preinstalled official app' }
+          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip'
+          Compress-Archive -Path 'build/orch-080/T32/package-lite/*' -DestinationPath $liteArchive -CompressionLevel Optimal
+          [IO.File]::WriteAllText('build/orch-080/T32/lite-package-size.txt', ($liteBytes.ToString() + "`n"), [Text.Encoding]::ASCII)
       - name: Smoke first and second startup, seed state, disabled config, and moved root
         shell: powershell
         run: |
@@ -144,6 +163,22 @@ jobs:
             -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-root' `
             -EvidenceRoot 'build/orch-080/T32/evidence'
+      - name: Smoke lite bootstrap install from the accepted channel and official CDN
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
+            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip' `
+            -WorkRoot 'build/orch-080/T32/smoke-lite-root' `
+            -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
+            -Bootstrap
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-pure-alpha-4-lite-smoke-evidence
+          path: build/orch-080/T32/lite-evidence/
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -157,11 +192,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $candidate = Get-Content -LiteralPath 'build/orch-080/T32/candidate.json' -Raw | ConvertFrom-Json
           $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
+          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip'
           $launcher = 'build/orch-080/T32/package/DeepSeek Harness Portable.exe'
           $zipHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          $liteZipHash = (Get-FileHash -LiteralPath $liteArchive -Algorithm SHA256).Hash.ToLowerInvariant()
           $launcherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
-          @("$zipHash  DSH-Portable-1.0.0-alpha.4-windows-x64.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
-          $source = @("# DSH-Portable 1.0.0-alpha.4 source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'This is a draft package assembled from the qualified channel. It does not replace the stable Native line.')
+          @("$zipHash  DSH-Portable-1.0.0-alpha.4-windows-x64.zip", "$liteZipHash  DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
+          $source = @("# DSH-Portable 1.0.0-alpha.4 source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Full package SHA-256: $zipHash", "- Lite package SHA-256: $liteZipHash", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'The lite package downloads the accepted official desktop from the official CDN on first launch. Both packages are draft assets and do not replace the stable Native line.')
           $source | Set-Content -LiteralPath 'build/orch-080/T32/SOURCE.md' -Encoding utf8
       - uses: actions/upload-artifact@v7
         if: success()
@@ -169,8 +206,10 @@ jobs:
           name: official-pure-alpha-4-draft-assets
           path: |
             build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip
+            build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip
             build/orch-080/T32/checksums.txt
             build/orch-080/T32/SOURCE.md
+            build/orch-080/T32/lite-package-size.txt
             build/orch-080/T32/smoke-root-moved/smoke-report.json
             build/orch-080/T32/smoke-root-moved/smoke-page.json
           if-no-files-found: warn
@@ -207,4 +246,4 @@ jobs:
             if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.4 release' >&2; exit 1; fi
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f name='DSH-Portable 1.0.0-alpha.4 — Pure portable' -F body=@release-input/SOURCE.md -F draft=true -F prerelease=true > /dev/null
           fi
-          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.4-windows-x64.zip release-input/checksums.txt release-input/SOURCE.md --mutable
+          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.4-windows-x64.zip release-input/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable

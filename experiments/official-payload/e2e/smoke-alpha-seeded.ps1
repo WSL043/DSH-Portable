@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Archive,
     [Parameter(Mandatory=$true)][string]$WorkRoot,
-    [Parameter(Mandatory=$true)][string]$EvidenceRoot
+    [Parameter(Mandatory=$true)][string]$EvidenceRoot,
+    [switch]$Bootstrap
 )
 
 $ErrorActionPreference = 'Stop'
@@ -192,7 +193,7 @@ function Save-TextEvidence([string]$Source, [string]$Name) {
 try {
     New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
     if (Test-Path -LiteralPath $MovedRoot) { throw "Smoke move destination already exists: $MovedRoot" }
-    & $SmokePackage -Archive $Archive -WorkRoot $WorkRoot
+    & $SmokePackage -Archive $Archive -WorkRoot $WorkRoot -Bootstrap:$Bootstrap
     if ($LASTEXITCODE -ne 0) { throw 'First-start package smoke failed.' }
     $script:FirstStartPassed = $true
 
@@ -239,6 +240,7 @@ try {
     if (Test-Path -LiteralPath $MovedRoot) { $movedReportRoot = $MovedRoot }
     $report = [ordered]@{
         firstStartSmokePassed = $script:FirstStartPassed
+        bootstrapInstallExpected = [bool]$Bootstrap
         secondStartSeedPassed = $script:SeedPassed
         secondStartHealthPassed = $script:SecondStartHealthPassed
         secondStartNormalExitPassed = $script:NormalExitPassed

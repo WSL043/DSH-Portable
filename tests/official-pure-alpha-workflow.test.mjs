@@ -19,6 +19,19 @@ test('alpha.4 workflow parses, uses production channel constants, smoke-tests, a
   assert.match(selector, /redirect:\s*'follow'/);
   assert.match(source, /-FeedUrl \$urls\.channelBaseUrl[\s\S]*-IndexUrl \$urls\.indexUrl/);
   assert.match(source, /smoke-alpha-seeded\.ps1/);
+  assert.match(source, /DSH-Portable-1\.0\.0-alpha\.4-windows-x64-lite\.zip/);
+  assert.match(source, /\$liteBytes -ge 40MB/);
+  assert.match(source, /launcher\/bootstrap\.json/);
+  assert.match(source, /-Bootstrap/);
+  assert.match(source, /\$zipHash  DSH-Portable-1\.0\.0-alpha\.4-windows-x64\.zip/);
+  assert.match(source, /\$liteZipHash  DSH-Portable-1\.0\.0-alpha\.4-windows-x64-lite\.zip/);
+  assert.equal(workflow.jobs.package['timeout-minutes'], 90);
+  const packageStep = workflow.jobs.package.steps.find(step => step.name === 'Package the pure portable layout against the production channel');
+  for (const path of ['DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe', 'launcher/seed/seed.json']) {
+    assert.ok(packageStep.run.includes(path), `lite package allowlist assertion is missing ${path}`);
+  }
+  assert.match(packageStep.run, /app\/current\.json/);
+  assert.match(packageStep.run, /Get-ChildItem -LiteralPath \(Join-Path \$liteRoot 'app'\) -Directory/);
   assert.match(source, /--draft/);
   // An alpha is always a draft AND a prerelease, so publishing it can never make it the repository's Latest release.
   assert.match(source, /--draft --prerelease --latest=false/);
@@ -49,7 +62,7 @@ test('alpha.4 pins the two default plugin sources and packages their asserted CI
   assert.match(source, /pnpm run build/);
   assert.match(source, /pnpm pack --pack-destination/);
   // PowerShell rejects a repeated parameter: both archives must travel in one array argument.
-  assert.equal((source.match(/-SeedPlugin\b/g) ?? []).length, 1);
+  assert.equal((source.match(/-SeedPlugin\b/g) ?? []).length, 2);
   assert.match(source, /-SeedPlugin @\(\$imageViewer, \$chatManager\)/);
 });
 
@@ -66,6 +79,7 @@ test('alpha.4 failure evidence upload excludes the official payload', async () =
   assert.ok(releaseAssets);
   assert.equal(releaseAssets.if, 'success()');
   assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.4-windows-x64\.zip/);
+  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.4-windows-x64-lite\.zip/);
   assert.match(releaseAssets.with.path, /smoke-root-moved\/smoke-report\.json/);
 });
 
