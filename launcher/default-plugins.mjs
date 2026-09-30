@@ -82,24 +82,24 @@ const PREVIOUS_DEFAULT_PLUGINS = Object.freeze([Object.freeze({
 export const DEFAULT_PLUGINS = Object.freeze([
   {
     "name": "dsh-image-viewer",
-    "version": "0.1.5",
-    "spec": "0.1.5",
-    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.5.tgz",
-    "sha256": "e873e3094136287ec58f5cc0aa96627a1b9355c828b93d6c8ad09561a76b7304",
-    "integrity": "sha512-N4j9My6R81UcN4MfNqQU9KE4sy21oiFDaq7kUnOshmlxIGvUhhEF9LMYBDV8JGhmBWZyemcP/sFR5Z/mjfbxQQ==",
+    "version": "0.1.6",
+    "spec": "0.1.6",
+    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.6.tgz",
+    "sha256": "da57831698fdbff386d5547ca39a69cbf1fc102cefa97dbae2a4f1ad195e4e9a",
+    "integrity": "sha512-j1c0FxP2IG6IyKrBGllZzq0bEesbtWKU4Aunrl4OztdUyasN6WZGQkMd8yRMuTMLSBkZmZg9mcOu9dITariM/A==",
     "license": "MIT",
-    "reviewedCommit": "88e517e656d2e31159492eb6d7c98f5c37484766",
+    "reviewedCommit": "4e3c8ea44ccc71b88db04d51431d381a51d2b233",
     "filename": "dsh-image-viewer.tgz"
   },
   {
     "name": "dsh-chat-manager",
-    "version": "1.5.4",
-    "spec": "1.5.4",
-    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.4.tgz",
-    "sha256": "68880a517f078576dc27df0b63a201220537b246a4b75bfea39375ad755f6baa",
-    "integrity": "sha512-joGykcD4kSfaClbY4nXHHkAb0w8zvjyobO6unOxLiB1QPuZKiavWqaHRzBzUwQQz5ZFeP/8ep/s/gLQNxOxJDw==",
+    "version": "1.5.6",
+    "spec": "1.5.6",
+    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.6.tgz",
+    "sha256": "b3b565bf782b51b2d1b1c513bb5592c9aadaa7260d5ba5f6571e040f6666002c",
+    "integrity": "sha512-Wv4EvtTo7iN6vB3UpLh85NzlGxeK9uuXkrNTp0Y6n33KpRn4lAM6r0EXL7EePrXGUnx6nOwx2SjbgRkXTg+G9Q==",
     "license": "MIT",
-    "reviewedCommit": "c7e9f5d82f58f311b1dbbd93c220d3a4e4b2fe06",
+    "reviewedCommit": "8f4f81828ad275bbbf4b884ad801a4c7be98804d",
     "filename": "dsh-chat-manager.tgz"
   }
 ].map(Object.freeze))
