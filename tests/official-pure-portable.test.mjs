@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { assessHealth, isValidDshLink, parseUpdatedVersion } from '../experiments/official-payload/launcher/state.mjs';
+import { shouldBootstrap } from '../experiments/official-payload/launcher/bootstrap-state.mjs';
 import { rewriteAppUpdateYml } from '../experiments/official-payload/contract/update-config.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -41,8 +42,21 @@ test('updated-copy filename, protocol link whitelist and launcher protocol comma
   assert.match(source, /Software\\Classes\\dsh\\shell\\open\\command/);
   assert.match(source, /--open \\\"%1\\\"/);
   assert.match(source, /WritePortableRootPointer\(ReadCacheName\(\)\)/);
-  assert.match(source, /1\.0\.0\.4/);
-  assert.match(source, /1\.0\.0-alpha\.4/);
+  assert.match(source, /1\.0\.0\.5/);
+  assert.match(source, /1\.0\.0-alpha\.5/);
+});
+
+test('bootstrap marker installs only when current state or its application is missing', async () => {
+  assert.equal(shouldBootstrap({ markerExists: false, currentJsonExists: false, versionDirectoryExists: false }), false);
+  assert.equal(shouldBootstrap({ markerExists: true, currentJsonExists: false, versionDirectoryExists: false }), true);
+  assert.equal(shouldBootstrap({ markerExists: true, currentJsonExists: true, versionDirectoryExists: false }), true);
+  assert.equal(shouldBootstrap({ markerExists: true, currentJsonExists: true, versionDirectoryExists: true }), false);
+  const source = await readFile(launcherPath, 'utf8');
+  assert.match(source, /launcher", "bootstrap\.json/);
+  assert.match(source, /if \(!File\.Exists\(current\)\) return true;/);
+  assert.match(source, /return !Directory\.Exists\(Path\.Combine\(AppRoot, version\)\);/);
+  const engine = await readFile(resolve(root, 'experiments/official-payload/apply-update.ps1'), 'utf8');
+  for (const field of ['downloadedBytes', 'totalBytes', 'progress', 'reading-index', 'downloading', 'verifying', 'extracting', 'switching']) assert.ok(engine.includes(field), `missing update status field or phase ${field}`);
 });
 
 test('follow and accepted-index URL policy rejects downgrade and host/path confusion', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, () => {
@@ -60,10 +74,12 @@ test('follow and accepted-index URL policy rejects downgrade and host/path confu
     try { $checks.valid=(Get-AcceptedIndexCandidate $index '0.2.0-rc.3').version -eq '0.2.0-rc.3' } catch { $checks.validError=$_.Exception.Message }
     try { Get-AcceptedIndexCandidate $index '0.2.0-rc.4' | Out-Null; $checks.missingRejected=$false } catch { $checks.missingRejected=$_.Exception.Message -eq 'Requested version is absent from the accepted index' }
     try { Get-AcceptedIndexCandidate @{versions=@($good,$good)} '0.2.0-rc.3' | Out-Null; $checks.duplicateRejected=$false } catch { $checks.duplicateRejected=$_.Exception.Message -eq 'Accepted index contains duplicate versions' }
+    $newer=$good | Select-Object *; $newer.version='0.2.0-rc.4'
+    $checks.latest=(Get-LatestAcceptedIndexCandidate @{versions=@($good,$newer)}).version -eq '0.2.0-rc.4'
     ConvertTo-Json $checks -Compress
   `;
   const checks = JSON.parse(ps(source).split(/\r?\n/).at(-1));
-  assert.deepEqual(checks, { valid: true, missingRejected: true, duplicateRejected: true });
+  assert.deepEqual(checks, { valid: true, missingRejected: true, duplicateRejected: true, latest: true });
 });
 
 test('PowerShell app-update.yml rewrite matches phase-1 contract semantics', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, () => {
@@ -95,6 +111,9 @@ test('pure package script only copies the pure allowlist and contains no adapter
   const copies = script.match(/Copy-Item[^\r\n]*/g) ?? [];
   assert.ok(copies.every(line => !/adapt-asar|desktop-adapter|update-bridge|default-plugins|prepare-defaults|market/i.test(line)));
   assert.match(script, /pendingHealth=\$false/);
+  assert.match(script, /\[switch\]\$Bootstrap/);
+  assert.match(script, /Get-LatestAcceptedIndexCandidate/);
+  assert.match(script, /mode='bootstrap'/);
   const source = await readFile(launcherPath, 'utf8');
   assert.doesNotMatch(source, /portable-adaptation|default-plugins|desktop-adapter|adapt-asar/);
 });

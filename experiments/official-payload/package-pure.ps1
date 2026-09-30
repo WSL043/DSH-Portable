@@ -1,11 +1,12 @@
 ﻿param(
-    [Parameter(Mandatory=$true)][string]$Installer,
+    [string]$Installer,
     [Parameter(Mandatory=$true)][string]$Output,
     [Parameter(Mandatory=$true)][string]$SevenZip,
     [Parameter(Mandatory=$true)][string]$FeedUrl,
     [Parameter(Mandatory=$true)][string]$IndexUrl,
     [string]$CacheDirName='@deepseek-aidsh-desktop-updater-portable',
-    [string[]]$SeedPlugin=@()
+    [string[]]$SeedPlugin=@(),
+    [switch]$Bootstrap
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Payload.psm1') -Force
@@ -23,27 +24,33 @@ if ($SeedPlugin.Count -gt 0) {
     Import-Module (Join-Path $PSScriptRoot 'SeedPluginPackaging.psm1') -Force
     $seedManifest = New-SeedManifest -ArchivePath $SeedPlugin
 }
-if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw 'Official installer is missing' }
 $indexText = Read-BoundedHttpText $IndexUrl
 $index = $indexText | ConvertFrom-Json
 if ($null -eq $index.versions -or $index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
-$installerHash = (Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash
-$installerSize = (Get-Item -LiteralPath $Installer).Length
 $candidate = $null
-foreach ($entry in $index.versions) {
-    Assert-Candidate $entry
-    if ([long]$entry.size -eq $installerSize -and [BitConverter]::ToString([Convert]::FromBase64String([string]$entry.sha512)).Replace('-', '') -ceq $installerHash) { $candidate = $entry }
+if ($Bootstrap) {
+    $candidate = Get-LatestAcceptedIndexCandidate $index
+} else {
+    if (-not $Installer -or -not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw 'Official installer is missing' }
+    $installerHash = (Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash
+    $installerSize = (Get-Item -LiteralPath $Installer).Length
+    foreach ($entry in $index.versions) {
+        Assert-Candidate $entry
+        if ([long]$entry.size -eq $installerSize -and [BitConverter]::ToString([Convert]::FromBase64String([string]$entry.sha512)).Replace('-', '') -ceq $installerHash) { $candidate = $entry }
+    }
+    if ($null -eq $candidate) { throw 'Installer identity does not match any accepted index entry' }
+    Assert-Installer $Installer $candidate
 }
-if ($null -eq $candidate) { throw 'Installer identity does not match any accepted index entry' }
-Assert-Installer $Installer $candidate
 $appRoot = Join-Path $Output 'app'; $launcherRoot = Join-Path $Output 'launcher'; $dataRoot = Join-Path $Output 'data'
 New-Item -ItemType Directory -Path $appRoot, $launcherRoot, (Join-Path $launcherRoot 'receipts'), (Join-Path $dataRoot 'dsh-home'), (Join-Path $dataRoot 'electron'), (Join-Path $dataRoot 'launcher') -Force | Out-Null
 $partial = Join-Path $appRoot ($candidate.version + '.partial')
 try {
-    $receipt = Expand-OfficialPayload $Installer $candidate $partial $SevenZip $FeedUrl $CacheDirName
-    [IO.Directory]::Move($partial, (Join-Path $appRoot $candidate.version))
-    $receiptPath = Join-Path $launcherRoot ('receipts/' + $candidate.version + '.json')
-    [IO.File]::WriteAllText($receiptPath, (($receipt | ConvertTo-Json -Depth 8) + "`n"), (New-Object Text.UTF8Encoding($false)))
+    if (-not $Bootstrap) {
+        $receipt = Expand-OfficialPayload $Installer $candidate $partial $SevenZip $FeedUrl $CacheDirName
+        [IO.Directory]::Move($partial, (Join-Path $appRoot $candidate.version))
+        $receiptPath = Join-Path $launcherRoot ('receipts/' + $candidate.version + '.json')
+        [IO.File]::WriteAllText($receiptPath, (($receipt | ConvertTo-Json -Depth 8) + "`n"), (New-Object Text.UTF8Encoding($false)))
+    }
     & (Join-Path $PSScriptRoot 'build-launcher.ps1') -Output (Join-Path $Output 'DeepSeek Harness Portable.exe')
     foreach ($file in @('apply-update.ps1', 'Payload.psm1')) { Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination (Join-Path $launcherRoot $file) }
     if ($null -ne $seedManifest) {
@@ -61,8 +68,13 @@ try {
     }
     $follow = [ordered]@{ indexUrl=$IndexUrl; feedUrl=$FeedUrl; cacheDirName=$CacheDirName }
     [IO.File]::WriteAllText((Join-Path $launcherRoot 'follow.json'), (($follow | ConvertTo-Json -Depth 4) + "`n"), (New-Object Text.UTF8Encoding($false)))
-    $current = [ordered]@{ version=[string]$candidate.version; previous=$null; pendingHealth=$false; switchedAt=$null }
-    [IO.File]::WriteAllText((Join-Path $appRoot 'current.json'), (($current | ConvertTo-Json -Depth 4) + "`n"), (New-Object Text.UTF8Encoding($false)))
+    if ($Bootstrap) {
+        $marker = [ordered]@{ schemaVersion=1; mode='bootstrap' }
+        [IO.File]::WriteAllText((Join-Path $launcherRoot 'bootstrap.json'), (($marker | ConvertTo-Json -Depth 4) + "`n"), (New-Object Text.UTF8Encoding($false)))
+    } else {
+        $current = [ordered]@{ version=[string]$candidate.version; previous=$null; pendingHealth=$false; switchedAt=$null }
+        [IO.File]::WriteAllText((Join-Path $appRoot 'current.json'), (($current | ConvertTo-Json -Depth 4) + "`n"), (New-Object Text.UTF8Encoding($false)))
+    }
     $readme = @'
 # DeepSeek Harness Portable / 纯便携版
 
@@ -93,6 +105,12 @@ try {
         $readme = $readme.Replace('No plugins or marketplace are bundled.', 'Seed plugins are preinstalled but disabled by default; the first launch creates the official profile and the seed step runs before the second launch. No marketplace is bundled.')
         $readme = $readme.Replace('也不包含适配器、默认插件或市场文件。', '也不包含适配器或市场文件。')
         $readme = $readme.Replace('and ships no adapters, default plugins or marketplace files.', 'and ships no adapters or marketplace files.')
+    }
+    if ($Bootstrap) {
+        $readme = $readme.Replace('本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。', '轻量包不含官方桌面文件。首次启动从已验收索引选择最新版本，从官方 CDN 下载并校验安装包，再使用随包更新引擎完成解包与切换。')
+        $readme = $readme.Replace('Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`.', 'This lite package excludes the official desktop payload. On first launch it selects the newest accepted version, downloads and verifies the installer from the official CDN, then installs it with the bundled update engine.')
+        $readme = $readme.Replace('**便携数据：**', "**首次安装：** 下载进度和阶段写入 `data/launcher/update-status.json`；中断后使用 HTTP Range 续传，校验失败会丢弃不完整下载。`n`n**便携数据：**")
+        $readme = $readme.Replace('**Portable data:**', "**First launch:** Download progress and stages are recorded in `data/launcher/update-status.json`; interrupted downloads resume with HTTP Range, while failed integrity checks discard the partial file.`n`n**Portable data:**")
     }
     [IO.File]::WriteAllText((Join-Path $Output 'README.md'), ($readme + "`n"), (New-Object Text.UTF8Encoding($false)))
     $forbidden = @(Get-ChildItem -LiteralPath $Output -Recurse -Force | Where-Object { $_.Name -match 'adapt-asar|desktop-adapter|update-bridge|default-plugins|prepare-defaults|market' })

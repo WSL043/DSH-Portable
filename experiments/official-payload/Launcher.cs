@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -15,8 +16,8 @@ using System.Windows.Forms;
 using Microsoft.Win32;
 [assembly: System.Reflection.AssemblyTitle("DeepSeek Harness Portable")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable official-payload")]
-[assembly: System.Reflection.AssemblyVersion("1.0.0.4")]
-[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0-alpha.4")]
+[assembly: System.Reflection.AssemblyVersion("1.0.0.5")]
+[assembly: System.Reflection.AssemblyInformationalVersion("1.0.0-alpha.5")]
 
 internal static class PortableLauncher {
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
@@ -102,8 +103,35 @@ internal static class PortableLauncher {
                 if (link != null) { StartOfficial(link, probe, false); return 0; }
                 return 0;
             }
-            try { return Supervise(link, probe, restartPid); }
+            try {
+                if (NeedsBootstrap() && !RunBootstrapInstall()) return 1;
+                return Supervise(link, probe, restartPid);
+            }
             finally { mutex.ReleaseMutex(); }
+        }
+    }
+
+    private static bool NeedsBootstrap() {
+        string marker = Path.Combine(Root, "launcher", "bootstrap.json");
+        if (!File.Exists(marker)) return false;
+        Dictionary<string, object> bootstrap = ReadJson(marker);
+        if (GetString(bootstrap, "mode") != "bootstrap") throw new IOException("Portable bootstrap marker is invalid.");
+        string current = Path.Combine(AppRoot, "current.json");
+        if (!File.Exists(current)) return true;
+        Dictionary<string, object> state = ReadJson(current);
+        string version = GetString(state, "version");
+        if (!VersionPattern.IsMatch(version)) throw new IOException("Invalid app/current.json version.");
+        return !Directory.Exists(Path.Combine(AppRoot, version));
+    }
+
+    private static bool RunBootstrapInstall() {
+        string selfPath = Process.GetCurrentProcess().MainModule.FileName;
+        string cancelPath = Path.Combine(LauncherData, "bootstrap-cancel.request");
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
+        using (var form = new BootstrapInstallForm(Root, selfPath, cancelPath)) {
+            Application.Run(form);
+            return form.Installed;
         }
     }
 
@@ -222,6 +250,130 @@ internal static class PortableLauncher {
         }
     }
     private static void SeedLog(string message) { try { Log(message); } catch { } }
+
+    private sealed class BootstrapInstallForm : Form {
+        private readonly string _root, _selfPath, _cancelPath, _statusPath;
+        private readonly Label _stage, _detail;
+        private readonly ProgressBar _progress;
+        private readonly Button _retry, _cancel;
+        private readonly System.Windows.Forms.Timer _timer;
+        private Process _engine;
+        private bool _allowClose, _cancelRequested;
+        public bool Installed { get; private set; }
+
+        public BootstrapInstallForm(string root, string selfPath, string cancelPath) {
+            _root = root; _selfPath = selfPath; _cancelPath = cancelPath;
+            _statusPath = Path.Combine(root, "data", "launcher", "update-status.json");
+            Text = "DeepSeek Harness Portable - 首次安装";
+            ClientSize = new Size(470, 154); FormBorderStyle = FormBorderStyle.FixedDialog;
+            StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false; MinimizeBox = false;
+            _stage = new Label { AutoSize = false, Location = new Point(18, 16), Size = new Size(434, 24), Text = "正在准备首次安装..." };
+            _detail = new Label { AutoSize = false, Location = new Point(18, 43), Size = new Size(434, 38), Text = "首次启动将从官方 CDN 下载并验证官方桌面端。" };
+            _progress = new ProgressBar { Location = new Point(18, 88), Size = new Size(434, 18), Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
+            _retry = new Button { Location = new Point(282, 116), Size = new Size(80, 26), Text = "重试", Visible = false, Enabled = false };
+            _cancel = new Button { Location = new Point(372, 116), Size = new Size(80, 26), Text = "取消" };
+            Controls.AddRange(new Control[] { _stage, _detail, _progress, _retry, _cancel });
+            _retry.Click += delegate { StartAttempt(); };
+            _cancel.Click += delegate { RequestCancel(); };
+            _timer = new System.Windows.Forms.Timer { Interval = 350 };
+            _timer.Tick += delegate { PollEngine(); };
+            Shown += delegate { StartAttempt(); _timer.Start(); };
+            FormClosing += OnFormClosing;
+        }
+
+        private void StartAttempt() {
+            if (_engine != null) { _engine.Dispose(); _engine = null; }
+            try {
+                if (File.Exists(_cancelPath)) File.Delete(_cancelPath);
+                _cancelRequested = false; _retry.Visible = false; _retry.Enabled = false;
+                _cancel.Visible = true; _cancel.Enabled = true; _cancel.Text = "取消";
+                _stage.Text = "正在读取已验收版本索引...";
+                _detail.Text = "连接官方服务并准备下载。";
+                _progress.Value = 0;
+                string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
+                string engine = Path.Combine(_root, "launcher", "apply-update.ps1");
+                var start = new ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = _root };
+                start.EnvironmentVariables.Remove("PSModulePath");
+                start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(engine) + " -Root " + Quote(_root) + " -Install -SelfPath " + Quote(_selfPath) + " -CancelFile " + Quote(_cancelPath);
+                _engine = Process.Start(start);
+                if (_engine == null) throw new IOException("Could not start the Windows PowerShell update engine.");
+            } catch (Exception error) { ShowFailure(error.Message); }
+        }
+
+        private void RequestCancel() {
+            if (_engine == null || _engine.HasExited) { _allowClose = true; Close(); return; }
+            _cancelRequested = true; _cancel.Enabled = false; _cancel.Text = "正在取消...";
+            _stage.Text = "正在安全取消...";
+            try { File.WriteAllText(_cancelPath, "cancel\n", Encoding.UTF8); }
+            catch (Exception error) { _detail.Text = "无法写入取消请求：" + SafeMessage(error.Message); }
+        }
+
+        private void PollEngine() {
+            Dictionary<string, object> status = null;
+            try { if (File.Exists(_statusPath)) status = ReadJson(_statusPath); } catch { }
+            if (status != null) {
+                string phase = GetString(status, "phase");
+                long downloaded = GetLong(status, "downloadedBytes"), total = GetLong(status, "totalBytes");
+                int percent = (int)Math.Max(0, Math.Min(100, GetLong(status, "progress")));
+                _stage.Text = StageText(phase);
+                if (total > 0) _detail.Text = FormatBytes(downloaded) + " / " + FormatBytes(total) + "  (" + percent.ToString() + "%)";
+                else if (!String.IsNullOrEmpty(GetString(status, "error"))) _detail.Text = GetString(status, "error");
+                _progress.Value = percent;
+            }
+            if (_engine == null || !_engine.HasExited) return;
+            int code = _engine.ExitCode;
+            if (code == 0 && IsInstalled()) {
+                Installed = true; _allowClose = true; _timer.Stop(); Close(); return;
+            }
+            string state = status == null ? "" : GetString(status, "status");
+            if (_cancelRequested || state == "cancelled") {
+                _timer.Stop(); _allowClose = true; Close(); return;
+            }
+            string errorText = status == null ? "Update engine exited with code " + code + "." : GetString(status, "error");
+            ShowFailure(errorText);
+        }
+
+        private bool IsInstalled() {
+            try {
+                Dictionary<string, object> state = ReadJson(Path.Combine(_root, "app", "current.json"));
+                string version = GetString(state, "version");
+                if (!VersionPattern.IsMatch(version)) return false;
+                string executable = Path.Combine(_root, "app", version, "DeepSeek Harness.exe");
+                return File.Exists(executable) && File.Exists(Path.Combine(Path.GetDirectoryName(executable), "resources", "app.asar"));
+            } catch { return false; }
+        }
+
+        private void ShowFailure(string detail) {
+            _stage.Text = "首次安装失败";
+            _detail.Text = FriendlyFailure(detail);
+            _progress.Value = 0; _cancel.Visible = false;
+            _retry.Visible = true; _retry.Enabled = true;
+        }
+
+        private static string StageText(string phase) {
+            if (phase == "downloading") return "下载中...";
+            if (phase == "verifying") return "校验中...";
+            if (phase == "extracting") return "解包中...";
+            if (phase == "switching" || phase == "waiting-for-exit") return "切换中...";
+            if (phase == "reading-index") return "正在读取已验收版本索引...";
+            return "正在准备首次安装...";
+        }
+
+        private static string FormatBytes(long value) { return (Math.Max(0, value) / (1024.0 * 1024.0)).ToString("0.0") + " MiB"; }
+        private static long GetLong(Dictionary<string, object> value, string key) { object raw; long result; return value != null && value.TryGetValue(key, out raw) && Int64.TryParse(Convert.ToString(raw), out result) ? result : 0; }
+        private static string FriendlyFailure(string detail) {
+            string lower = (detail ?? "").ToLowerInvariant();
+            string kind = lower.Contains("digest") || lower.Contains("signature") || lower.Contains("hash") || lower.Contains("size mismatch") || lower.Contains("invalid") || lower.Contains("untrusted") || lower.Contains("archive") || lower.Contains("bound") || lower.Contains("校验") ? "校验失败。" :
+                lower.Contains("disk") || lower.Contains("space") || lower.Contains("0x70") || lower.Contains("not enough") ? "磁盘空间不足。" :
+                lower.Contains("timeout") || lower.Contains("network") || lower.Contains("remote name") || lower.Contains("connection") || lower.Contains("download") ? "网络连接失败。" : "安装过程失败。";
+            return kind + "\r\n" + (String.IsNullOrWhiteSpace(detail) ? "请检查网络和磁盘空间后重试。" : SafeMessage(detail));
+        }
+
+        private void OnFormClosing(object sender, FormClosingEventArgs args) {
+            if (_allowClose || _engine == null || _engine.HasExited) { _timer.Stop(); return; }
+            args.Cancel = true; RequestCancel();
+        }
+    }
 
     private static string FindOfficialConflict() {
         if (IPGlobalProperties.GetIPGlobalProperties().GetActiveTcpListeners().Any(p => p.Port == 19387))
