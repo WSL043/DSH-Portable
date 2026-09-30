@@ -67,14 +67,20 @@ function Write-Stage([string]$Message) {
 }
 
 function Test-ForbiddenOfficialExternalWrite([string]$Path) {
-    if ($Path -notmatch '^[A-Za-z]:\\') { return $false }
-    $normalizedPath = [IO.Path]::GetFullPath($Path).TrimEnd('\')
-    $forbiddenRoots = @(
-        (Join-Path $env:LOCALAPPDATA 'node-addon-native-custom-loader\native-cache'),
-        (Join-Path $env:USERPROFILE 'Documents\deepseek-harness')
-    )
+    if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+    $candidate = $Path.Trim()
+    if ($candidate.StartsWith('\\?\UNC\', [StringComparison]::OrdinalIgnoreCase)) { $candidate = '\\' + $candidate.Substring(8) }
+    elseif ($candidate.StartsWith('\\?\', [StringComparison]::OrdinalIgnoreCase)) { $candidate = $candidate.Substring(4) }
+    elseif ($candidate.StartsWith('\\.\', [StringComparison]::OrdinalIgnoreCase)) { return $false }
+    if ($candidate -notmatch '^[A-Za-z]:\\') { return $false }
+    $streamSeparator = $candidate.IndexOf(':', 2)
+    if ($streamSeparator -ge 0) { $candidate = $candidate.Substring(0, $streamSeparator) }
+    try { $normalizedPath = [IO.Path]::GetFullPath($candidate).TrimEnd('\') }
+    catch { return $false }
+    $forbiddenRoots = @((Join-Path $env:LOCALAPPDATA 'node-addon-native-custom-loader\native-cache'))
     foreach ($root in $forbiddenRoots) {
-        $normalizedRoot = [IO.Path]::GetFullPath($root).TrimEnd('\')
+        try { $normalizedRoot = [IO.Path]::GetFullPath($root).TrimEnd('\') }
+        catch { continue }
         if ($normalizedPath.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase) -or $normalizedPath.StartsWith($normalizedRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
     return $false

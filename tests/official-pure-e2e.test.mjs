@@ -92,10 +92,11 @@ test('package follow.json feed and cache values must match the app-update.yml ar
   assert.equal(bad.passed, false);
 });
 
-test('outside-write audit rejects leaked native-addon caches and Documents workspaces', async () => {
+test('outside-write audit rejects a leaked native-addon cache and tolerates unusual trace paths', async () => {
   const source = await readFile(new URL('../experiments/official-payload/e2e/run-pure-e2e.ps1', import.meta.url), 'utf8');
   assert.match(source, /function Test-ForbiddenOfficialExternalWrite\(/);
   assert.match(source, /node-addon-native-custom-loader\\native-cache/);
-  assert.match(source, /Documents\\deepseek-harness/);
+  assert.doesNotMatch(source.match(/function Test-ForbiddenOfficialExternalWrite[\s\S]*?\n\}/)[0], /Documents/);
+  assert.match(source, /catch \{ return \$false \}/);
   assert.match(source, /-and -not \$forbiddenOfficialExternalWrite/);
 });
