@@ -1020,7 +1020,9 @@ test('CI upgrades the immediate prior Windows release through the declared compo
   ])
   assert.match(workflow, /^  windows-version-upgrade-smoke:/m)
   assert.match(workflow, /gh release list --repo "\$env:GITHUB_REPOSITORY"[\s\S]+isPrerelease/)
-  assert.match(workflow, /-not \$_\.isPrerelease[\s\S]+\$_\.tagName -match '\^v\\d\+[\s\S]+\$_\.tagName -ne "v\$CandidateVersion"/)
+  assert.match(workflow, /-not \$_\.isPrerelease[\s\S]+\$_\.tagName -match '\^v0\\\.[\s\S]+\$_\.tagName -ne "v\$CandidateVersion"/)
+  // The 1.0 pure-portable alpha is a side-by-side package, never the prior release of the 0.x line.
+  assert.match(workflow, /\$_\.isPrerelease -and \$_\.tagName -match '\^v0\\\./)
   assert.match(workflow, /alpha\|beta\|rc/)
   assert.match(workflow, /Target\.releaseChannel -ne 'stable'/)
   assert.match(workflow, /Upgrade a legacy candidate user to the single release line/)
