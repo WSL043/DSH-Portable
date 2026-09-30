@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "4878cdabd87d4041bdaff61d04c966883b9fd07a",
-  "dshNpmIntegrity": "sha512-F6hKNVoGgBDIzSiyRaIlobq4UD6cwxUjh+nwXqcDmufDh87TE1izsYzs8L5cZNpF2JmPnFM1mXRNnRJ0cs43ng==",
+  "dshReviewedCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
+  "dshNpmIntegrity": "sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==",
   "historicalSessionMigration": {
     "status": "passed",
-    "evidence": "docs/upstream-0.2.0-rc.1-intake.md; scripts/verify-historical-session.mjs",
+    "evidence": "build/orch-080/T34/historical-result.json; docs/core-rc2-migration-2026-09-28.md; scripts/verify-historical-session.mjs",
     "compatibilityPatch": {
       "id": "released-v0-descriptor-v2-read-v1",
-      "dshVersion": "0.2.0-rc.1",
+      "dshVersion": "0.2.0-rc.2",
       "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
       "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
     },
-    "reason": "Exact 0.2.0-rc.1 identity passed historical writer reading, AgentLoop continuation, persisted JSONL reopen and interrupted journal recovery in an independent staged app. Product release still requires full CI."
+    "reason": "Exact official DSH 0.2.0-rc.2 identity passed the staged historical migration probe (commit 639ed015397290b3745d163aafe02ffee4aa3f84; npm integrity sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==). The T34 result also records continuation, persisted reopen, and interrupted-journal recovery as true. This is migration-probe evidence only, not product or release acceptance: the writer subprobe has qualifiesRelease=false and real AgentLoop continuation, the official persistence save path, and final packaged native acceptance remain open. Physical power loss was not tested; full CI is still required."
   }
 }
