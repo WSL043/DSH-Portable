@@ -297,3 +297,41 @@ test('the first-install window starts its download when it loads, not when it is
   assert.match(source, /Load \+= delegate \{ StartAttempt\(\); _timer\.Start\(\); \};/);
   assert.doesNotMatch(source, /Shown \+= delegate \{ StartAttempt/);
 });
+
+test('a first install runs the update engine without a version and reaches the download of the newest accepted one', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, async () => {
+  const { createServer } = await import('node:http');
+  const { mkdtemp, mkdir, writeFile: write, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const installerBytes = Buffer.alloc(1_500_000, 7);
+  let base = '';
+  const server = createServer((req, res) => {
+    if (req.url === '/index.json') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ schemaVersion: 1, versions: [{ version: '9.9.9', installerUrl: `${base}/dsh-desk/bin/win-x64/deepseek-harness-9.9.9-win-x64.exe`, sha512: Buffer.alloc(64, 1).toString('base64'), size: installerBytes.length }] }));
+    } else if (req.url === '/dsh-desk/bin/win-x64/deepseek-harness-9.9.9-win-x64.exe') { res.writeHead(200, { 'Content-Length': installerBytes.length }); res.end(installerBytes); }
+    else { res.writeHead(404); res.end(); }
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  base = `http://127.0.0.1:${server.address().port}`;
+  const rootDir = await mkdtemp(join(tmpdir(), 'dsh-first-install-'));
+  try {
+    await mkdir(join(rootDir, 'app'), { recursive: true });
+    await mkdir(join(rootDir, 'launcher'), { recursive: true });
+    await mkdir(join(rootDir, 'data', 'launcher'), { recursive: true });
+    await write(join(rootDir, 'launcher', 'follow.json'), JSON.stringify({ indexUrl: `${base}/index.json`, feedUrl: `${base}/`, cacheDirName: 'dsh-first-install-test' }));
+    const engine = resolve(root, 'experiments/official-payload/apply-update.ps1');
+    const env = { ...process.env, DSH_PORTABLE_TEST_ALLOW_LOCAL_FEED: '1', DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER: '1' };
+    delete env.PSModulePath;
+    await new Promise(resolvePromise => execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', engine, '-Root', rootDir, '-Install', '-SelfPath', process.execPath], { env }, () => resolvePromise()));
+    const status = JSON.parse((await readFile(join(rootDir, 'data', 'launcher', 'update-status.json'), 'utf8')).replace(/^﻿/, ''));
+    assert.equal(status.version, '9.9.9');
+    assert.notEqual(status.phase, 'initializing');
+    assert.doesNotMatch(String(status.error ?? ''), /Invalid update root or version/);
+    // The fake installer is not a signed official package, so the run must stop at verification, not before reading the index.
+    assert.equal(status.status, 'failed');
+  } finally {
+    server.close();
+    await rm(rootDir, { recursive: true, force: true });
+  }
+});

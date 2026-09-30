@@ -9,7 +9,9 @@ $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Payload.psm1') -Force
 $Root = [IO.Path]::GetFullPath($Root).TrimEnd('\')
 Assert-PlainPath $Root
-if ($Root.Length -le 3 -or $Version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$') { throw 'Invalid update root or version' }
+# A first install (-Install) picks the newest accepted version from the index, so only an update needs a version up front.
+$versionPattern = '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$'
+if ($Root.Length -le 3 -or (-not $Install -and $Version -notmatch $versionPattern) -or ($Install -and $Version -and $Version -notmatch $versionPattern)) { throw 'Invalid update root or version' }
 $appRoot = Join-Path $Root 'app'; $launcherRoot = Join-Path $Root 'launcher'; $storage = Join-Path $Root 'data/launcher'
 foreach ($path in @($appRoot, $launcherRoot, $storage)) { Assert-PlainPath $path }
 $statusPath = Join-Path $storage 'update-status.json'; $currentPath = Join-Path $appRoot 'current.json'
