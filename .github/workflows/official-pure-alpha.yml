@@ -7,6 +7,12 @@ on:
         required: false
         default: ''
         type: string
+      smoke:
+        description: Which package smokes to run; a draft release is only created after both ran (all)
+        required: false
+        default: all
+        type: choice
+        options: [all, full, lite, none]
 permissions:
   contents: read
 # Update each commit and version together when upgrading a bundled default plugin.
@@ -21,7 +27,41 @@ concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
 jobs:
+  # A few minutes of static checks that stop the mistakes a 25-minute real run would otherwise find one at a time
+  # (a missing checkout, a step output without an id, a repeated PowerShell parameter, a script Windows PowerShell 5.1 cannot parse).
+  preflight:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Parse every packaged PowerShell source with Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bad = @()
+          foreach ($file in Get-ChildItem -Path 'experiments/official-payload', 'launcher' -Recurse -File -Include *.ps1, *.psm1) {
+            $errors = $null; $tokens = $null
+            [void][Management.Automation.Language.Parser]::ParseFile($file.FullName, [ref]$tokens, [ref]$errors)
+            if ($errors.Count -gt 0) { $bad += ($file.FullName + ': ' + $errors[0].Message) }
+          }
+          if ($bad.Count -gt 0) { throw ($bad -join [Environment]::NewLine) }
+      - name: Provide js-yaml for the static workflow tests
+        shell: pwsh
+        run: |
+          npm pack js-yaml@4.1.0 --silent --pack-destination $env:RUNNER_TEMP
+          New-Item -ItemType Directory -Force app/node_modules | Out-Null
+          tar -xzf (Join-Path $env:RUNNER_TEMP 'js-yaml-4.1.0.tgz') -C $env:RUNNER_TEMP
+          Move-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'package') -Destination app/node_modules/js-yaml
+      - name: Run the official payload static and contract tests
+        shell: pwsh
+        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-pure-alpha-seed-smoke.test.mjs tests/official-desktop-channel.test.mjs tests/official-seed-plugins.test.mjs tests/official-seed-launcher.test.mjs
   package:
+    needs: preflight
     runs-on: windows-latest
     timeout-minutes: 90
     permissions:
@@ -156,6 +196,7 @@ jobs:
           Compress-Archive -Path 'build/orch-080/T32/package-lite/*' -DestinationPath $liteArchive -CompressionLevel Optimal
           [IO.File]::WriteAllText('build/orch-080/T32/lite-package-size.txt', ($liteBytes.ToString() + "`n"), [Text.Encoding]::ASCII)
       - name: Smoke first and second startup, seed state, disabled config, and moved root
+        if: inputs.smoke == 'all' || inputs.smoke == 'full'
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -164,6 +205,7 @@ jobs:
             -WorkRoot 'build/orch-080/T32/smoke-root' `
             -EvidenceRoot 'build/orch-080/T32/evidence'
       - name: Smoke lite bootstrap install from the accepted channel and official CDN
+        if: inputs.smoke == 'all' || inputs.smoke == 'lite'
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
@@ -217,6 +259,8 @@ jobs:
 
   draft-release:
     needs: package
+    # Never publish a draft from a run that skipped a smoke.
+    if: inputs.smoke == 'all'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

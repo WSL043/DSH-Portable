@@ -90,3 +90,19 @@ test('the alpha workflow checks out this repository first, before the plugin rep
   assert.match(first.uses, /^actions\/checkout@/);
   assert.equal(first.with, undefined);
 });
+
+test('a static preflight gates the package job, and a draft is only created after every smoke ran', async () => {
+  const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
+  const workflow = yaml.load(await readFile(file, 'utf8'));
+  assert.equal(workflow.jobs.package.needs, 'preflight');
+  assert.equal(workflow.jobs['draft-release'].if, "inputs.smoke == 'all'");
+  const steps = workflow.jobs.package.steps;
+  const full = steps.find(step => /Smoke first and second startup/.test(step.name ?? ''));
+  const lite = steps.find(step => /Smoke lite bootstrap/.test(step.name ?? ''));
+  assert.equal(full.if, "inputs.smoke == 'all' || inputs.smoke == 'full'");
+  assert.equal(lite.if, "inputs.smoke == 'all' || inputs.smoke == 'lite'");
+  assert.deepEqual(workflow.on.workflow_dispatch.inputs.smoke.options, ['all', 'full', 'lite', 'none']);
+  const preflightSource = JSON.stringify(workflow.jobs.preflight.steps);
+  assert.match(preflightSource, /Parser\]::ParseFile/);
+  assert.match(preflightSource, /node --test/);
+});

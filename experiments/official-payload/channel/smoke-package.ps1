@@ -59,7 +59,7 @@ try {
     try { $port = [int]$listener.LocalEndpoint.Port } finally { $listener.Stop() }
     $launcherProcess = Start-Process -FilePath $launcher -WorkingDirectory $WorkRoot -ArgumentList "--probe-port=$port" -WindowStyle Hidden -PassThru
     $logPath = Join-Path $WorkRoot 'data\launcher\launcher.log'
-    $deadline = if ($Bootstrap) { [DateTime]::UtcNow.AddMinutes(20) } else { [DateTime]::UtcNow.AddMinutes(3) }
+    $deadline = if ($Bootstrap) { [DateTime]::UtcNow.AddMinutes(10) } else { [DateTime]::UtcNow.AddMinutes(3) }
     $protocolReady = $false
     $currentReady = -not $Bootstrap
     while ([DateTime]::UtcNow -lt $deadline) {
