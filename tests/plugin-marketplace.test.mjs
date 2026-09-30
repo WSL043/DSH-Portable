@@ -1059,8 +1059,9 @@ test('release candidates never replace the stable automatic-update channel', asy
     import('../scripts/version-policy.mjs'),
   ])
   assert.equal(policy.classifyProductVersion('0.4.0').updateChannelTag, 'update-channel-stable')
-  assert.equal(policy.classifyProductVersion('0.4.0-rc.2').updateChannelTag, 'update-channel-candidate')
-  assert.match(workflow, /UPDATE_CHANNEL_TAG:\s*\$\{\{ steps\.version\.outputs\.updateChannelTag \}\}/)
+  assert.equal(policy.classifyProductVersion('0.4.0-rc.2').channel, 'candidate')
+  assert.equal(policy.classifyProductVersion('0.4.0-rc.2').updateChannelTag, 'update-channel-stable')
+  assert.match(workflow, /UPDATE_CHANNEL_TAG:\s*update-channel-stable/)
   assert.match(workflow, /if \[ "\$RELEASE_CHANNEL" = stable \]; then[\s\S]+update-channel-candidate/)
 })
 

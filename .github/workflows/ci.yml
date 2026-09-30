@@ -700,7 +700,7 @@ jobs:
         with:
           name: windows-x64-build
           path: artifacts
-      - name: Upgrade the immediate prior same-channel release through its declared delivery path
+      - name: Upgrade a legacy candidate user to the single release line
         shell: powershell
         env:
           GH_TOKEN: ${{ github.token }}
@@ -708,18 +708,12 @@ jobs:
           $CandidateVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $Policy = node scripts/version-policy.mjs $CandidateVersion | ConvertFrom-StringData
           $Target = Get-Content artifacts/portable-update-windows-x64.json -Raw | ConvertFrom-Json
+          if ([string]$Target.releaseChannel -ne 'stable') { throw 'The Windows migration smoke must target the stable single release line.' }
           $Releases = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts `
             --limit 100 --json tagName,isPrerelease,publishedAt | ConvertFrom-Json
-          $Eligible = @()
-          if ($Policy.channel -eq 'candidate') {
-            $CandidateMatch = [regex]::Match($CandidateVersion, '^(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
-            $Eligible = $Releases | Where-Object {
-              $ReleaseMatch = [regex]::Match($_.tagName, '^v(?<base>\d+\.\d+\.\d+)-rc\.(?<rc>\d+)$')
-              $_.isPrerelease -and $ReleaseMatch.Success -and `
-                $ReleaseMatch.Groups['base'].Value -eq $CandidateMatch.Groups['base'].Value -and `
-                [int]$ReleaseMatch.Groups['rc'].Value -lt [int]$CandidateMatch.Groups['rc'].Value
-            } | Sort-Object publishedAt -Descending
-          }
+          $Eligible = $Releases | Where-Object {
+            $_.isPrerelease -and $_.tagName -match '^v\d+\.\d+\.\d+-(alpha|beta|rc)\.\d+$'
+          } | Sort-Object publishedAt -Descending
           if (-not $Eligible) {
             $Eligible = $Releases | Where-Object {
               -not $_.isPrerelease -and $_.tagName -match '^v\d+\.\d+\.\d+$' -and $_.tagName -ne "v$CandidateVersion"
@@ -728,7 +722,7 @@ jobs:
           $Prior = $Eligible | Select-Object -First 1
           $PriorTag = $Prior.tagName
           if (-not $PriorTag) {
-            Write-Host 'No immediate prior release exists for this channel; nothing to test.'
+            Write-Host 'No prior candidate or stable release exists; nothing to test.'
             exit 0
           }
           $TagDir = Join-Path $env:RUNNER_TEMP ("prior-release-" + $PriorTag.TrimStart('v'))
@@ -768,6 +762,7 @@ jobs:
             throw "Could not read COMPONENTS.json from ${PriorTag}: ZIP entry was empty."
           }
           $Components = $ComponentsJson | ConvertFrom-Json
+          if ([string]$Components.releaseChannel -notin @('stable', 'candidate')) { throw 'The prior package has an unsupported legacy channel.' }
           Write-Host "Testing declared upgrade path from $PriorTag to $CandidateVersion."
           $UpgradeArguments = @(
             'scripts/smoke-windows-version-upgrade.mjs',
@@ -776,12 +771,6 @@ jobs:
             '--running-host',
             '--simulate-webview-busy'
           )
-          if ([string]$Components.releaseChannel -ne [string]$Target.releaseChannel) {
-            if ([string]$Target.releaseChannel -ne 'candidate') {
-              throw "Refusing an implicit release-channel migration to $($Target.releaseChannel)."
-            }
-            $UpgradeArguments += '--allow-channel-migration'
-          }
           node @UpgradeArguments
 
   windows-extractor-smoke:

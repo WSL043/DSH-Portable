@@ -20,16 +20,25 @@ export function classifyProductVersion(value) {
     tag: `v${version}`,
     channel,
     stage,
-    updateChannelTag: `update-channel-${channel}`,
+    updateChannelTag: 'update-channel-stable',
     prerelease: stage !== 'stable',
     windowsVersion: `${numbers.join('.')}.${stage === 'stable' ? 65534 : windowsStageBase[stage] + prereleaseNumber}`,
     macBuildVersion: String(numbers[0] * 1_000_000_000 + numbers[1] * 1_000_000 + numbers[2] * 1000 + (stage === 'stable' ? 999 : macStageBase[stage] + prereleaseNumber)),
   }
 }
 
+export function classifyPublicProductVersion(value) {
+  const policy = classifyProductVersion(value)
+  if (policy.prerelease) throw new Error(`Prerelease version ${policy.version} is not allowed for a public Portable release.`)
+  return policy
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const policy = classifyProductVersion(process.argv[2])
-  const suppliedTag = String(process.argv[3] ?? '')
+  const args = process.argv.slice(2)
+  const publicRelease = args.includes('--public-release')
+  const positional = args.filter(value => value !== '--public-release')
+  const policy = publicRelease ? classifyPublicProductVersion(positional[0]) : classifyProductVersion(positional[0])
+  const suppliedTag = String(positional[1] ?? '')
   if (suppliedTag && suppliedTag !== policy.tag) {
     throw new Error(`Release tag ${suppliedTag} does not match product version ${policy.version}; expected ${policy.tag}.`)
   }

@@ -15,7 +15,6 @@ const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const oldArchive = path.resolve(process.argv[2] || '')
 const artifacts = path.resolve(process.argv[3] || path.join(projectRoot, 'artifacts'))
-const allowChannelMigration = process.argv.includes('--allow-channel-migration')
 const runningHostUpgrade = process.argv.includes('--running-host')
 const sourceOverlay = process.argv.includes('--source-overlay')
 const simulateWebViewBusy = process.argv.includes('--simulate-webview-busy')
@@ -167,32 +166,28 @@ try {
     component: { ...componentManifestSource.component, urls: [`${origin}/component.zip`] },
   }))
 
-  let decision = { status: 'full-package-required', delivery: 'full-package' }
-  if (!allowChannelMigration) {
-    const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
-    const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
-    const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(
-      () => [path.join(destination, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs'],
-      () => [oldCli],
-    )
-    const { stdout: decisionText } = await execFileAsync(oldNode, [
-      ...oldEntry,
-      'check-update',
-      '--update-manifest', `${origin}/portable-update-windows-x64.json`,
-      '--allow-http',
-      '--force',
-      '--json',
-    ], { timeout: 60 * 1000, windowsHide: true })
-    decision = JSON.parse(decisionText)
-    assert.ok(['available', 'full-package-required'].includes(decision.status), `unexpected update decision: ${decision.status}`)
-    assert.equal(decision.delivery, decision.status === 'available' ? 'component' : 'full-package')
-  } else {
-    assert.notEqual(
-      oldComponents.releaseChannel,
-      fullManifestSource.releaseChannel,
-      '--allow-channel-migration is only for exercising the updater across a local release-channel boundary',
-    )
-  }
+  assert.ok(
+    oldComponents.releaseChannel === fullManifestSource.releaseChannel
+      || (oldComponents.releaseChannel === 'candidate' && fullManifestSource.releaseChannel === 'stable'),
+    'only legacy candidate-to-stable migration or same-line upgrades are supported',
+  )
+  const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
+  const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')
+  const oldEntry = await stat(path.join(destination, 'runtime-capsule.json')).then(
+    () => [path.join(destination, 'launcher', 'runtime-entry.mjs'), 'portable-cli.mjs'],
+    () => [oldCli],
+  )
+  const { stdout: decisionText } = await execFileAsync(oldNode, [
+    ...oldEntry,
+    'check-update',
+    '--update-manifest', `${origin}/portable-update-windows-x64.json`,
+    '--allow-http',
+    '--force',
+    '--json',
+  ], { timeout: 60 * 1000, windowsHide: true })
+  const decision = JSON.parse(decisionText)
+  assert.ok(['available', 'full-package-required'].includes(decision.status), `unexpected update decision: ${decision.status}`)
+  assert.equal(decision.delivery, decision.status === 'available' ? 'component' : 'full-package')
 
   let launcherLogOffset = 0
   if (decision.delivery === 'full-package') {

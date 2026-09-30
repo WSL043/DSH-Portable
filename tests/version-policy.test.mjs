@@ -5,7 +5,7 @@ import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-import { classifyProductVersion } from '../scripts/version-policy.mjs'
+import { classifyProductVersion, classifyPublicProductVersion } from '../scripts/version-policy.mjs'
 import { renderReleaseNotes, upstreamLockNameForTag } from '../scripts/render-release-notes.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -28,7 +28,7 @@ test('stable, alpha, beta, and release-candidate versions preserve their convent
     tag: 'v0.6.0-alpha.1',
     channel: 'candidate',
     stage: 'alpha',
-    updateChannelTag: 'update-channel-candidate',
+    updateChannelTag: 'update-channel-stable',
     prerelease: true,
     windowsVersion: '0.6.0.10001',
     macBuildVersion: '6000101',
@@ -38,7 +38,7 @@ test('stable, alpha, beta, and release-candidate versions preserve their convent
     tag: 'v0.6.0-beta.2',
     channel: 'candidate',
     stage: 'beta',
-    updateChannelTag: 'update-channel-candidate',
+    updateChannelTag: 'update-channel-stable',
     prerelease: true,
     windowsVersion: '0.6.0.30002',
     macBuildVersion: '6000402',
@@ -48,13 +48,20 @@ test('stable, alpha, beta, and release-candidate versions preserve their convent
     tag: 'v0.3.0-rc.4',
     channel: 'candidate',
     stage: 'rc',
-    updateChannelTag: 'update-channel-candidate',
+    updateChannelTag: 'update-channel-stable',
     prerelease: true,
     windowsVersion: '0.3.0.50004',
     macBuildVersion: '3000704',
   })
   for (const invalid of ['v0.2.0', '0.2', '0.2.0-rc', '0.2.0-rc.0', '0.2.0-preview.1', '0.2.0-alpha.200']) {
     assert.throws(() => classifyProductVersion(invalid), /stable, alpha, beta, or release-candidate version/i)
+  }
+})
+
+test('public Portable publishing rejects alpha, beta, and release-candidate versions', () => {
+  assert.equal(classifyPublicProductVersion('0.8.3').tag, 'v0.8.3')
+  for (const value of ['0.8.3-alpha.1', '0.8.3-beta.1', '0.8.3-rc.1']) {
+    assert.throws(() => classifyPublicProductVersion(value), /not allowed for a public Portable release/i)
   }
 })
 
@@ -149,6 +156,9 @@ test('publishing derives prerelease state from the product version instead of us
   const workflow = await read('.github/workflows/publish.yml')
   assert.doesNotMatch(workflow, /^\s{6}prerelease:/m)
   assert.match(workflow, /scripts\/version-policy\.mjs/)
+  assert.match(workflow, /--public-release/)
+  assert.match(workflow, /update-channel-stable/)
+  assert.match(workflow, /legacy candidate mirror/)
   assert.match(workflow, /--draft/)
   assert.match(workflow, /--draft=false/)
   assert.match(workflow, /--prerelease=false/)

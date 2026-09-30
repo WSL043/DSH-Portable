@@ -8,7 +8,7 @@ on:
         required: true
         type: string
       tag:
-        description: Stable or conventional vX.Y.Z-alpha.N, beta.N, or rc.N tag matching package.json
+        description: Final vX.Y.Z tag matching package.json; prerelease tags are not publicly published
         required: true
         type: string
 
@@ -36,7 +36,7 @@ jobs:
         id: version
         env:
           RELEASE_TAG: ${{ inputs.tag }}
-        run: node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" "$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+        run: node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" "$RELEASE_TAG" --public-release >> "$GITHUB_OUTPUT"
       - name: Require historical-session acceptance for the exact selected core
         run: node scripts/assert-publish-readiness.mjs
       - name: Require a successful main build for this commit and version
@@ -93,7 +93,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
-          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           VERIFY_FLAGS=()
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
@@ -103,21 +102,15 @@ jobs:
               VERIFY_FLAGS=(--verify-only)
             fi
           else
-            FLAGS=(--draft)
-            if [ "$PRERELEASE" = true ]; then FLAGS+=(--prerelease); fi
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file release-staging/RELEASE-NOTES.md "${FLAGS[@]}"
+            gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file release-staging/RELEASE-NOTES.md
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" "${VERIFY_FLAGS[@]}" release-staging/user-assets/*
-          if [ "$PRERELEASE" = true ]; then
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease
-          else
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
-          fi
-      - name: Publish the isolated machine-readable update channel
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+      - name: Publish the stable update feed and legacy candidate mirror
         env:
           GH_TOKEN: ${{ github.token }}
-          UPDATE_CHANNEL_TAG: ${{ steps.version.outputs.updateChannelTag }}
-          RELEASE_CHANNEL: ${{ steps.version.outputs.channel }}
+          UPDATE_CHANNEL_TAG: update-channel-stable
+          RELEASE_CHANNEL: stable
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           gh release view "$UPDATE_CHANNEL_TAG" >/dev/null 2>&1 || \
