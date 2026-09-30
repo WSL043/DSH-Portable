@@ -193,7 +193,7 @@ function Save-TextEvidence([string]$Source, [string]$Name) {
 try {
     New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
     if (Test-Path -LiteralPath $MovedRoot) { throw "Smoke move destination already exists: $MovedRoot" }
-    & $SmokePackage -Archive $Archive -WorkRoot $WorkRoot -Bootstrap:$Bootstrap
+    & $SmokePackage -Archive $Archive -WorkRoot $WorkRoot -Bootstrap:$Bootstrap -EvidenceRoot $EvidenceRoot
     if ($LASTEXITCODE -ne 0) { throw 'First-start package smoke failed.' }
     $script:FirstStartPassed = $true
 

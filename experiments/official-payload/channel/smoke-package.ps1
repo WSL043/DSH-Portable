@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Archive,
     [Parameter(Mandatory=$true)][string]$WorkRoot,
-    [switch]$Bootstrap
+    [switch]$Bootstrap,
+    [string]$EvidenceRoot
 )
 $ErrorActionPreference = 'Stop'
 $Archive = [IO.Path]::GetFullPath($Archive)
@@ -58,11 +59,18 @@ try {
     try { $port = [int]$listener.LocalEndpoint.Port } finally { $listener.Stop() }
     $launcherProcess = Start-Process -FilePath $launcher -WorkingDirectory $WorkRoot -ArgumentList "--probe-port=$port" -WindowStyle Hidden -PassThru
     $logPath = Join-Path $WorkRoot 'data\launcher\launcher.log'
-    $deadline = if ($Bootstrap) { [DateTime]::UtcNow.AddMinutes(45) } else { [DateTime]::UtcNow.AddMinutes(3) }
+    $deadline = if ($Bootstrap) { [DateTime]::UtcNow.AddMinutes(20) } else { [DateTime]::UtcNow.AddMinutes(3) }
     $protocolReady = $false
     $currentReady = -not $Bootstrap
     while ([DateTime]::UtcNow -lt $deadline) {
         if ($launcherProcess.HasExited) { throw "Portable launcher exited early with code $($launcherProcess.ExitCode)" }
+        if ($Bootstrap) {
+            $bootStatusPath = Join-Path $WorkRoot 'data/launcher/update-status.json'
+            if (Test-Path -LiteralPath $bootStatusPath -PathType Leaf) {
+                try { $bootStatus = Read-SharedJson $bootStatusPath } catch { $bootStatus = $null }
+                if ($null -ne $bootStatus -and [string]$bootStatus.status -ceq 'failed') { throw ('Lite bootstrap install failed: ' + [string]$bootStatus.error) }
+            }
+        }
         if ($Bootstrap -and (Test-Path -LiteralPath $currentPath -PathType Leaf)) {
             $current = Read-SharedJson $currentPath
             if ($current.version -and (Test-Path -LiteralPath (Join-Path $WorkRoot ("app/$($current.version)/DeepSeek Harness.exe")) -PathType Leaf)) { $currentReady = $true }
@@ -112,6 +120,15 @@ try {
             $null = $launcherProcess.WaitForExit(45000)
         }
         try { $null = $launcherProcess.CloseMainWindow(); $null = $launcherProcess.WaitForExit(15000) } catch {}
+    }
+    if (-not $normalExit -and $EvidenceRoot -and (Test-Path -LiteralPath (Join-Path $WorkRoot 'data/launcher'))) {
+        # Keep the launcher's own records so a failed run can be diagnosed without re-running it.
+        $keep = Join-Path ([IO.Path]::GetFullPath($EvidenceRoot)) 'launcher-state'
+        New-Item -ItemType Directory -Path $keep -Force | Out-Null
+        foreach ($file in @(Get-ChildItem -LiteralPath (Join-Path $WorkRoot 'data/launcher') -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -lt 2MB })) {
+            try { $in = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete); try { $out = [IO.File]::Create((Join-Path $keep $file.Name)); try { $in.CopyTo($out) } finally { $out.Dispose() } } finally { $in.Dispose() } } catch {}
+        }
+        foreach ($name in @('app/current.json', 'launcher/follow.json', 'launcher/bootstrap.json')) { $src = Join-Path $WorkRoot $name; if (Test-Path -LiteralPath $src -PathType Leaf) { try { Copy-Item -LiteralPath $src -Destination (Join-Path $keep ($name -replace '[\/]', '_')) -Force } catch {} } }
     }
     if (-not $normalExit -and $WorkRoot -and (Test-Path -LiteralPath $WorkRoot)) {
         $failure = [ordered]@{ overallPassed=$false; normalExit=$normalExit; protocolBefore=$protocolBefore; protocolAfter=(Get-ProtocolSnapshot) }
