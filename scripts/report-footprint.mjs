@@ -3,16 +3,18 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const OFFICE_RUNTIME_PACKAGE_PREFIX = '@deepseek-ai/libreoffice-kit-'
+const FOOTPRINT_GROWTH_LIMIT = 0.05
+const ABSOLUTE_BUDGET_MULTIPLIER = 1.15
 
 function parseArgs(argv) {
-  const result = { root: '', archive: '', platform: '', budget: '', baseline: '', output: '' }
+  const result = { root: '', archive: '', platform: '', budget: '', baseline: '', relativeBaseline: '', output: '' }
   for (let index = 0; index < argv.length; index += 1) {
     const value = argv[index]
     if (!value.startsWith('--') && result.root === '') {
       result.root = value
       continue
     }
-    const key = value.slice(2)
+    const key = value.slice(2).replace(/-([a-z])/g, (_match, letter) => letter.toUpperCase())
     if (!Object.hasOwn(result, key)) throw new Error(`unknown option: ${value}`)
     const next = argv[index + 1]
     if (!next || next.startsWith('--')) throw new Error(`missing value for ${value}`)
@@ -20,7 +22,7 @@ function parseArgs(argv) {
     index += 1
   }
   if (result.root === '') {
-    throw new Error('usage: node report-footprint.mjs <product-root> --platform <id> [--archive <file>] [--budget <file>] [--baseline <file>] [--output <file>]')
+    throw new Error('usage: node report-footprint.mjs <product-root> --platform <id> [--archive <file>] [--budget <file>] [--relative-baseline <file>] [--baseline <file>] [--output <file>]')
   }
   return result
 }
@@ -69,7 +71,7 @@ async function packageBreakdown(nodeModules) {
   return rows.sort((left, right) => right.bytes - left.bytes || right.files - left.files || left.name.localeCompare(right.name))
 }
 
-function metric(report, key) {
+function collectMetrics(report) {
   const app = report.sections.find((item) => item.name === 'app')
   const appBytes = app?.bytes ?? 0
   const officeRuntimeBytes = report.packages
@@ -78,7 +80,7 @@ function metric(report, key) {
   const speechRuntimeBytes = report.packages
     .filter((item) => /^sherpa-onnx-(?:win|darwin|linux)-/.test(item.name))
     .reduce((total, item) => total + item.bytes, 0)
-  const values = {
+  return {
     archiveBytes: report.archiveBytes,
     extractedBytes: report.total.bytes,
     files: report.total.files,
@@ -99,26 +101,75 @@ function metric(report, key) {
     appBytesWithoutOfficeRuntime: Math.max(0, appBytes - officeRuntimeBytes),
     extractedBytesWithoutOfficeRuntime: Math.max(0, report.total.bytes - officeRuntimeBytes),
   }
-  return values[key]
 }
 
-async function verifyBudget(report, filename, platform) {
+function formatGrowthPercent(actual, baseline) {
+  if (baseline === 0) return actual === 0 ? '0.00%' : 'Infinity%'
+  return `${(((actual - baseline) / baseline) * 100).toFixed(2)}%`
+}
+
+async function readGrowthBaseline(filename, platform) {
+  let document
+  try {
+    document = JSON.parse(await readFile(filename, 'utf8'))
+  } catch (error) {
+    throw new Error(`invalid footprint baseline ${filename}: ${error.message}`, { cause: error })
+  }
+  if (!isRecord(document) || document.schemaVersion !== 1 || !isRecord(document.platforms)) {
+    throw new Error(`invalid footprint baseline ${filename}: expected schemaVersion 1 and a platforms object`)
+  }
+  const baseline = document.platforms[platform]
+  if (baseline === undefined) return null
+  if (!isRecord(baseline)) throw new Error(`invalid footprint baseline ${filename}: ${platform} must be an object`)
+  for (const [key, value] of Object.entries(baseline)) validateNonNegativeInteger(value, `${platform}.${key}`)
+  return baseline
+}
+
+export async function verifyFootprintBudget(report, filename, platform = report.platform, relativeBaselineFilename = '') {
+  if (!isRecord(report)) throw new Error('invalid footprint report: expected a JSON object')
+  validateReport(report, platform, 'footprint report')
   const document = JSON.parse(await readFile(filename, 'utf8'))
   const budget = document.platforms?.[platform]
   if (!budget) throw new Error(`footprint budget has no platform entry: ${platform}`)
+  const baseline = relativeBaselineFilename
+    ? await readGrowthBaseline(path.resolve(relativeBaselineFilename), platform)
+    : null
+  if (baseline) {
+    const budgetKeys = Object.keys(budget).sort()
+    const baselineKeys = Object.keys(baseline).sort()
+    if (JSON.stringify(budgetKeys) !== JSON.stringify(baselineKeys)) {
+      throw new Error(`invalid footprint baseline for ${platform}: metric keys must match the absolute budget`)
+    }
+  }
+  const metrics = collectMetrics(report)
   const failures = []
   for (const [key, maximum] of Object.entries(budget)) {
-    const actual = metric(report, key)
+    const actual = metrics[key]
     if (!Number.isFinite(actual)) throw new Error(`unsupported footprint budget metric: ${key}`)
     if (!Number.isFinite(maximum) || maximum < 0) throw new Error(`invalid footprint budget for ${key}`)
-    if (actual > maximum) failures.push(`${key}=${actual} exceeds ${maximum}`)
+    if (baseline) {
+      const baselineValue = baseline[key]
+      const relativeMaximum = baselineValue * (1 + FOOTPRINT_GROWTH_LIMIT)
+      const absoluteMaximum = Number((maximum * ABSOLUTE_BUDGET_MULTIPLIER).toFixed(8))
+      if (actual > relativeMaximum || actual > absoluteMaximum) {
+        failures.push(`${key}: baseline=${baselineValue}, actual=${actual}, growth=${formatGrowthPercent(actual, baselineValue)}, 5% limit=${relativeMaximum}, absolute guard=${absoluteMaximum}`)
+      }
+    } else if (actual > maximum) {
+      failures.push(`${key}=${actual} exceeds ${maximum}`)
+    }
   }
   report.budget = { file: path.resolve(filename), platform, passed: failures.length === 0, failures }
+  if (baseline) {
+    report.budget.relativeBaselineFile = path.resolve(relativeBaselineFilename)
+    report.budget.growthLimitPercent = FOOTPRINT_GROWTH_LIMIT * 100
+    report.budget.absoluteBudgetMultiplier = ABSOLUTE_BUDGET_MULTIPLIER
+  }
   if (failures.length > 0) {
     const error = new Error(`footprint budget failed: ${failures.join('; ')}`)
     error.report = report
     throw error
   }
+  return report.budget
 }
 
 function isRecord(value) {
@@ -165,6 +216,12 @@ function validateReport(document, platform, kind) {
   if (document.archiveBytes !== null) validateNonNegativeInteger(document.archiveBytes, 'archiveBytes', kind)
   validateBreakdown(document, 'sections', kind)
   validateBreakdown(document, 'packages', kind)
+}
+
+export function footprintMetrics(report) {
+  if (!isRecord(report)) throw new Error('invalid footprint report: expected a JSON object')
+  validateReport(report, report.platform, 'footprint report')
+  return collectMetrics(report)
 }
 
 async function readBaseline(filename, platform) {
@@ -243,7 +300,8 @@ export async function createFootprintReport(options) {
     sections: await childBreakdown(root),
     packages: await packageBreakdown(path.join(root, 'app', 'node_modules')),
   }
-  if (options.budget) await verifyBudget(report, path.resolve(options.budget), report.platform)
+  if (options.budget) await verifyFootprintBudget(report, path.resolve(options.budget), report.platform, options.relativeBaseline)
+  else if (options.relativeBaseline) throw new Error('a relative footprint baseline requires an absolute budget')
   if (options.baseline) {
     const baseline = await readBaseline(path.resolve(options.baseline), report.platform)
     report.comparison = compareFootprintReports(report, baseline)

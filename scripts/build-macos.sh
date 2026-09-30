@@ -293,9 +293,10 @@ printf '%s  %s\n' "$HASH" "$(basename "$ZIP")" > "$ZIP.sha256"
 FOOTPRINT="$OUTPUT_DIR/footprint-macos-$ARCH.json"
 FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets.json"
 [[ "$RELEASE_CHANNEL" != candidate ]] || FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets-preview.json"
+FOOTPRINT_BASELINE="$PROJECT_ROOT/config/footprint-baseline.json"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/report-footprint.mjs" "$STAGE" \
   --platform "macos-$ARCH" --archive "$ZIP" \
-  --budget "$FOOTPRINT_BUDGET" --output "$FOOTPRINT"
+  --budget "$FOOTPRINT_BUDGET" --relative-baseline "$FOOTPRINT_BASELINE" --output "$FOOTPRINT"
 
 printf '{"archive":"%s","sha256":"%s","updateComponent":"%s","updateComponentSha256":"%s","updateManifest":"%s","footprint":"%s","architecture":"%s"}\n' \
   "$ZIP" "$HASH" "$UPDATE_COMPONENT" "$UPDATE_COMPONENT_HASH" "$UPDATE_MANIFEST" "$FOOTPRINT" "$ARCH"

@@ -299,9 +299,10 @@ printf '%s  %s\n' "$TAR_HASH" "$(basename "$TAR")" > "$TAR.sha256"
 FOOTPRINT="$OUTPUT_DIR/footprint-linux-$ARCH.json"
 FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets.json"
 [[ "$RELEASE_CHANNEL" != candidate ]] || FOOTPRINT_BUDGET="$PROJECT_ROOT/config/footprint-budgets-preview.json"
+FOOTPRINT_BASELINE="$PROJECT_ROOT/config/footprint-baseline.json"
 "$NODE_EXE" "$PROJECT_ROOT/scripts/report-footprint.mjs" "$STAGE" \
   --platform "linux-$ARCH" --archive "$TAR" \
-  --budget "$FOOTPRINT_BUDGET" --output "$FOOTPRINT"
+  --budget "$FOOTPRINT_BUDGET" --relative-baseline "$FOOTPRINT_BASELINE" --output "$FOOTPRINT"
 
 APPIMAGE_SOURCE="$(find "$PROJECT_ROOT/launcher/linux/target/release/bundle/appimage" -maxdepth 1 -type f -name '*.AppImage' -print -quit)"
 [[ -n "$APPIMAGE_SOURCE" && -f "$APPIMAGE_SOURCE" ]] || { echo "Tauri did not create an AppImage" >&2; exit 1; }

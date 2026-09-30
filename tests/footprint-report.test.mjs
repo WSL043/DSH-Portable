@@ -1,10 +1,16 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
+import { promisify } from 'node:util'
+import { fileURLToPath } from 'node:url'
 
 import { createFootprintReport } from '../scripts/report-footprint.mjs'
+import { updateFootprintBaseline } from '../scripts/update-footprint-baseline.mjs'
+
+const execFileAsync = promisify(execFile)
 
 async function fixtureFile(root, relative, bytes) {
   const filename = path.join(root, ...relative.split('/'))
@@ -228,6 +234,158 @@ test('unchanged footprint baseline produces zero deltas and no rows', async (t) 
     sections: { added: [], removed: [], changed: [] },
     packages: { added: [], removed: [], changed: [] },
   })
+})
+
+test('relative footprint budget accepts growth through five percent', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-growth-pass-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 105)
+  const budget = path.join(root, 'budget.json')
+  const baseline = path.join(root, 'baseline.json')
+  await writeFile(budget, JSON.stringify({ platforms: { test: { extractedBytes: 1000000 } } }))
+  await writeFile(baseline, JSON.stringify({ schemaVersion: 1, platforms: { test: { extractedBytes: 100 } } }))
+
+  const report = await createFootprintReport({ root: product, platform: 'test', budget, relativeBaseline: baseline })
+  assert.equal(report.budget.passed, true)
+  assert.equal(report.budget.growthLimitPercent, 5)
+  assert.equal(report.budget.absoluteBudgetMultiplier, 1.15)
+})
+
+test('report-footprint CLI accepts the relative-baseline option', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-cli-growth-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 105)
+  const budget = path.join(root, 'budget.json')
+  const baseline = path.join(root, 'baseline.json')
+  await writeFile(budget, JSON.stringify({ platforms: { test: { extractedBytes: 1000000 } } }))
+  await writeFile(baseline, JSON.stringify({ schemaVersion: 1, platforms: { test: { extractedBytes: 100 } } }))
+
+  const script = fileURLToPath(new URL('../scripts/report-footprint.mjs', import.meta.url))
+  const { stdout } = await execFileAsync(process.execPath, [
+    script, product, '--platform', 'test', '--budget', budget, '--relative-baseline', baseline,
+  ])
+  assert.equal(JSON.parse(stdout).budget.passed, true)
+})
+
+test('relative footprint budget rejects growth above five percent with baseline, actual, and growth', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-growth-fail-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 106)
+  const budget = path.join(root, 'budget.json')
+  const baseline = path.join(root, 'baseline.json')
+  await writeFile(budget, JSON.stringify({ platforms: { test: { extractedBytes: 1000000 } } }))
+  await writeFile(baseline, JSON.stringify({ schemaVersion: 1, platforms: { test: { extractedBytes: 100 } } }))
+
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget, relativeBaseline: baseline }),
+    (error) => {
+      assert.match(error.message, /extractedBytes: baseline=100, actual=106, growth=6\.00%/)
+      return true
+    },
+  )
+
+})
+
+test('relative footprint budget rejects an accidentally bundled 50 MB file', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-growth-large-file-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 100)
+  await fixtureFile(product, 'app/node_modules/example/unexpected.bin', 50 * 1024 * 1024)
+  const budget = path.join(root, 'budget.json')
+  const baseline = path.join(root, 'baseline.json')
+  await writeFile(budget, JSON.stringify({ platforms: { test: { extractedBytes: 100000000 } } }))
+  await writeFile(baseline, JSON.stringify({ schemaVersion: 1, platforms: { test: { extractedBytes: 100 } } }))
+
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget, relativeBaseline: baseline }),
+    (error) => {
+      assert.match(error.message, /extractedBytes: baseline=100, actual=52428900, growth=/)
+      return true
+    },
+  )
+})
+
+test('relative footprint budget retains its absolute guard at 115 percent of the existing budget', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-absolute-guard-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 116)
+  const budget = path.join(root, 'budget.json')
+  const baseline = path.join(root, 'baseline.json')
+  await writeFile(budget, JSON.stringify({ platforms: { test: { extractedBytes: 100 } } }))
+  await writeFile(baseline, JSON.stringify({ schemaVersion: 1, platforms: { test: { extractedBytes: 200 } } }))
+
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget, relativeBaseline: baseline }),
+    (error) => {
+      assert.match(error.message, /extractedBytes: baseline=200, actual=116, growth=-42\.00%/)
+      assert.match(error.message, /absolute guard=115/)
+      return true
+    },
+  )
+
+  await fixtureFile(product, 'app/node_modules/example/index.js', 115)
+  const atAbsoluteLimit = await createFootprintReport({ root: product, platform: 'test', budget, relativeBaseline: baseline })
+  assert.equal(atAbsoluteLimit.budget.passed, true)
+})
+
+test('a platform without a footprint baseline retains its exact absolute-budget behavior', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-baseline-fallback-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 100)
+  const budget = path.join(root, 'budget.json')
+  const baseline = path.join(root, 'baseline.json')
+  await writeFile(budget, JSON.stringify({ platforms: { test: { extractedBytes: 99 } } }))
+  await writeFile(baseline, JSON.stringify({ schemaVersion: 1, platforms: { 'macos-arm64': { extractedBytes: 1 } } }))
+
+  await assert.rejects(
+    createFootprintReport({ root: product, platform: 'test', budget, relativeBaseline: baseline }),
+    /extractedBytes=100 exceeds 99/,
+  )
+})
+
+test('explicit baseline update writes all stable metrics and preserves other platforms', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-footprint-baseline-update-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const product = path.join(root, 'product')
+  const archive = path.join(root, 'portable.zip')
+  await fixtureFile(product, 'app/node_modules/example/index.js', 100)
+  await writeFile(archive, Buffer.alloc(200, 1))
+  const report = await createFootprintReport({ root: product, platform: 'windows-x64', archive })
+  report.budget = { platform: 'windows-x64', passed: true }
+  const reportFile = path.join(root, 'footprint-windows-x64.json')
+  const baselineFile = path.join(root, 'footprint-baseline.json')
+  await writeFile(reportFile, JSON.stringify(report))
+
+  const budgets = JSON.parse(await readFile(new URL('../config/footprint-budgets.json', import.meta.url), 'utf8'))
+  const macosMetrics = Object.fromEntries(Object.keys(budgets.platforms['macos-arm64']).map((key) => [key, 0]))
+  await writeFile(baselineFile, JSON.stringify({ schemaVersion: 1, platforms: { 'macos-arm64': macosMetrics } }))
+  await updateFootprintBaseline(reportFile, baselineFile)
+
+  const updated = JSON.parse(await readFile(baselineFile, 'utf8'))
+  assert.deepEqual(Object.keys(updated.platforms['windows-x64']).sort(), Object.keys(budgets.platforms['windows-x64']).sort())
+  assert.deepEqual(updated.platforms['macos-arm64'], macosMetrics)
+
+  report.budget.passed = false
+  await writeFile(reportFile, JSON.stringify(report))
+  await assert.rejects(updateFootprintBaseline(reportFile, baselineFile), /must have a passing budget result/)
+})
+
+test('relative footprint baselines match each platform absolute-budget metric set', async () => {
+  const [baseline, budgets] = await Promise.all([
+    readFile(new URL('../config/footprint-baseline.json', import.meta.url), 'utf8').then(JSON.parse),
+    readFile(new URL('../config/footprint-budgets.json', import.meta.url), 'utf8').then(JSON.parse),
+  ])
+  assert.ok(baseline.platforms['windows-x64'], 'Windows starts from the supplied T35 measurement')
+  for (const [platform, metrics] of Object.entries(baseline.platforms)) {
+    assert.ok(budgets.platforms[platform], `${platform} has an absolute guard`)
+    assert.deepEqual(Object.keys(metrics).sort(), Object.keys(budgets.platforms[platform]).sort())
+  }
 })
 
 test('every distributed platform has a bounded 0.5.0 footprint budget', async () => {

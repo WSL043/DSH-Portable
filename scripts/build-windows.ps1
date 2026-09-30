@@ -563,10 +563,12 @@ try {
     } else {
         Join-Path $ProjectRoot 'config\footprint-budgets.json'
     }
+    $FootprintBaseline = Join-Path $ProjectRoot 'config\footprint-baseline.json'
     & $NodeExe (Join-Path $ProjectRoot 'scripts\report-footprint.mjs') $Stage `
         --platform windows-x64 `
         --archive $Zip `
         --budget $FootprintBudget `
+        --relative-baseline $FootprintBaseline `
         --output $FootprintReport
     if ($LASTEXITCODE -ne 0) { throw 'Windows product footprint exceeded its reviewed budget.' }
 

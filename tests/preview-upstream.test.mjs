@@ -122,6 +122,28 @@ test('macOS and Linux packaging fail closed unless the staged official source pa
   }
 })
 
+test('all product builds use measured relative baselines and defer baseline updates until release', async () => {
+  const [windows, macos, linux, baseline, budgets, releaseNotes, updater] = await Promise.all([
+    readFile(path.join(root, 'scripts', 'build-windows.ps1'), 'utf8'),
+    readFile(path.join(root, 'scripts', 'build-macos.sh'), 'utf8'),
+    readFile(path.join(root, 'scripts', 'build-linux.sh'), 'utf8'),
+    readFile(path.join(root, 'config', 'footprint-baseline.json'), 'utf8').then(JSON.parse),
+    readFile(path.join(root, 'config', 'footprint-budgets.json'), 'utf8').then(JSON.parse),
+    readFile(path.join(root, 'docs', 'release-writing.md'), 'utf8'),
+    readFile(path.join(root, 'scripts', 'update-footprint-baseline.mjs'), 'utf8'),
+  ])
+  assert.ok(baseline.platforms['windows-x64'])
+  for (const [platform, metrics] of Object.entries(baseline.platforms)) {
+    assert.deepEqual(Object.keys(metrics).sort(), Object.keys(budgets.platforms[platform]).sort())
+  }
+  assert.match(windows, /--relative-baseline \$FootprintBaseline/)
+  assert.match(macos, /--relative-baseline "\$FOOTPRINT_BASELINE"/)
+  assert.match(linux, /--relative-baseline "\$FOOTPRINT_BASELINE"/)
+  for (const build of [windows, macos, linux]) assert.doesNotMatch(build, /update-footprint-baseline/)
+  assert.match(releaseNotes, /发布成功后[\s\S]+node scripts\/update-footprint-baseline\.mjs <footprint\.json>/)
+  assert.match(updater, /usage: node scripts\/update-footprint-baseline\.mjs <footprint\.json>/)
+})
+
 test('CI builds one immutable official source package set and stages it natively on every platform', async () => {
   const workflow = await readFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8')
   assert.match(workflow, /preview-packed-runtime:/)
