@@ -45,8 +45,8 @@ test('alpha.4 pins the two default plugin sources and packages their asserted CI
   const workflow = yaml.load(source);
   assert.match(workflow.env.IMAGE_VIEWER_COMMIT, /^[0-9a-f]{40}$/);
   assert.match(workflow.env.CHAT_MANAGER_COMMIT, /^[0-9a-f]{40}$/);
-  assert.equal(workflow.env.IMAGE_VIEWER_VERSION, '0.1.5');
-  assert.equal(workflow.env.CHAT_MANAGER_VERSION, '1.5.4');
+  assert.equal(workflow.env.IMAGE_VIEWER_VERSION, '0.1.6');
+  assert.equal(workflow.env.CHAT_MANAGER_VERSION, '1.5.6');
   const pluginCheckouts = workflow.jobs.package.steps.filter(step => step.uses === 'actions/checkout@v7' && step.with?.repository);
   assert.deepEqual(pluginCheckouts.map(step => [step.with.repository, step.with.ref]), [
     ['${{ env.IMAGE_VIEWER_REPOSITORY }}', '${{ env.IMAGE_VIEWER_COMMIT }}'],
