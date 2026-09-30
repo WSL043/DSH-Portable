@@ -278,16 +278,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: v1.0.0-alpha.4
+          RELEASE_NAME: DSH-Portable 1.0.0-alpha.4 — Pure portable
         run: |
           set -euo pipefail
           # Draft releases have no tag yet, so the tags endpoint cannot see them: search the release list instead.
-          EXISTING=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$RELEASE_TAG\") | [.id, .draft] | join(\" \")" | head -n 1)
+          # A draft whose tag does not exist yet is reported as "untagged-..."; match it by title too.
+          EXISTING=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" or (.draft and .name == \"$RELEASE_NAME\")) | [.id, .draft] | join(\" \")" | head -n 1)
           if [ -z "$EXISTING" ]; then
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --latest=false --title 'DSH-Portable 1.0.0-alpha.4 — Pure portable' --notes-file release-input/SOURCE.md
           else
             RELEASE_ID=${EXISTING%% *}
             DRAFT=${EXISTING##* }
             if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.4 release' >&2; exit 1; fi
-            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f name='DSH-Portable 1.0.0-alpha.4 — Pure portable' -F body=@release-input/SOURCE.md -F draft=true -F prerelease=true > /dev/null
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" -f name="$RELEASE_NAME" -F body=@release-input/SOURCE.md -F draft=true -F prerelease=true > /dev/null
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.4-windows-x64.zip release-input/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable
