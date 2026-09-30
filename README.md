@@ -105,15 +105,15 @@ AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/use
 **内核版本可选** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
 
 <details>
-<summary>查看 Portable 0.8.1 的可选内核</summary>
+<summary>查看 Portable 0.8.2 的可选内核</summary>
 
 | 平台 | 稳定通道 | 候选通道 |
 | --- | --- | --- |
-| Windows x64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json) |
-| macOS arm64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json) |
-| macOS x64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-x64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json) |
-| Linux x64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json) |
-| Linux arm64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json) |
+| Windows x64 | — | — |
+| macOS arm64 | — | — |
+| macOS x64 | — | — |
+| Linux x64 | — | — |
+| Linux arm64 | — | — |
 
 每小时同步已验收的发布目录。旧版及 RC 以应用内兼容检查为准；— 表示暂无匹配版本。
 
