@@ -158,7 +158,7 @@ try {
   await en.goto(base + "/en/");
   await en.waitForSelector(".scene-ready");
   assert.equal(await en.locator("html").getAttribute("lang"), "en");
-  assert.match(await en.locator("h1").innerText(), /Your workspace/);
+  assert.match(await en.locator("h1").innerText(), /in a portable folder/);
   assert.equal(
     await en.locator("[data-language-switch]").getAttribute("href"),
     "../",
