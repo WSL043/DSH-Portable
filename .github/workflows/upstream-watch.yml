@@ -92,13 +92,20 @@ jobs:
           name: default-plugin-intake
           path: default-plugin-intake.json
           if-no-files-found: warn
+      - id: plugins
+        name: Adopt default plugin releases that support the locked core
+        # The plugins' own autopilots publish a release for each new core; the core usually lands hours
+        # earlier, so a missing compatible release keeps the reviewed pin and is retried on the next run.
+        run: |
+          npm ci --prefix app --ignore-scripts
+          node scripts/adopt-default-plugins.mjs --write
       - id: market
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/check-market-upstream.mjs
       - id: proposal
         name: Skip an identical dependency proposal awaiting review
-        if: steps.upstream.outputs.changed == 'true'
+        if: steps.upstream.outputs.changed == 'true' || steps.plugins.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -107,7 +114,7 @@ jobs:
           PR=$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')
           if [ -n "$PR" ]; then
             git fetch --no-tags origin "$BRANCH:refs/remotes/origin/$BRANCH"
-            if git diff --quiet "origin/$BRANCH" -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json; then
+            if git diff --quiet "origin/$BRANCH" -- app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json launcher/default-plugins.mjs scripts/default-plugin-store/pnpm-lock.yaml; then
               echo 'changed=false' >> "$GITHUB_OUTPUT"
               echo 'An identical dependency proposal is awaiting manual review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
               exit 0
@@ -170,13 +177,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DSH_VERSION: ${{ steps.upstream.outputs.version }}
           DSH_CHANGED: ${{ steps.upstream.outputs.changed }}
+          PLUGINS: ${{ steps.plugins.outputs.plugins }}
+          PLUGINS_WAITING: ${{ steps.plugins.outputs.waiting }}
         run: |
           set -euo pipefail
           BRANCH=automation/verified-dependencies
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git checkout -B "$BRANCH"
-          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json
+          git add app/package.json app/package-lock.json app/vendor/dsh-portable-plugin-market/package.json upstream.lock.json launcher/default-plugins.mjs scripts/default-plugin-store/pnpm-lock.yaml
           git commit -m "chore: verify current DSH dependencies"
           git push --force origin "$BRANCH"
           BODY=$(mktemp)
@@ -184,6 +193,7 @@ jobs:
           Keeps the packaged dependency closure current without coupling it to a DSH-Portable feature release.
 
           - DeepSeek Harness: ${DSH_VERSION} (changed: ${DSH_CHANGED})
+          - Default plugins: ${PLUGINS}${PLUGINS_WAITING:+ (waiting for a compatible release: ${PLUGINS_WAITING})}
 
           Manual review and merge are required by a human after the full Windows, macOS, and Linux product gate succeeds. This workflow never merges or publishes automatically.
 
