@@ -7,6 +7,10 @@ on:
       - 'docs/**'
       - 'README.md'
       - 'README.en.md'
+      # The 1.0 pure-portable line has its own preflight, e2e and alpha workflows.
+      - 'experiments/**'
+      - '.github/actions/**'
+      - '.github/workflows/official-*.yml'
   pull_request:
   workflow_dispatch:
 
