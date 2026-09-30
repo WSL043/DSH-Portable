@@ -37,6 +37,9 @@ function Merge-SeedCordisPatch {
         $value = if ($match.Groups['double'].Success) { $match.Groups['double'].Value } elseif ($match.Groups['single'].Success) { $match.Groups['single'].Value } else { $match.Groups['plain'].Value }
         if ($value -ceq $EntryId) { return [pscustomobject]@{ content=$Content; existed=$true } }
     }
+    # The official app creates this file as an empty YAML list (a bare `[]` line under its header comments).
+    # Entries appended after it would make the document invalid, so the empty list is replaced, not extended.
+    $Content = [Regex]::Replace($Content, '(?m)^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|\z)', '')
     $newline = if ($Content.Contains("`r`n")) { "`r`n" } else { "`n" }
     $separator = if ($Content.Length -eq 0 -or $Content.EndsWith("`n") -or $Content.EndsWith("`r")) { '' } else { $newline }
     $addition = "- id: $EntryId${newline}  disabled: true${newline}"

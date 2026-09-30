@@ -7,6 +7,7 @@ import { gzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 
 const root = resolve(import.meta.dirname ?? fileURLToPath(new URL('.', import.meta.url)), '..')
 const powershell = process.env.SystemRoot
@@ -285,4 +286,23 @@ test('packaging gates all seed payload changes on the optional SeedPlugin parame
   assert.match(packageScript, /\[string\[\]\]\$SeedPlugin=@\(\)/)
   assert.match(packageScript, /if \(\$SeedPlugin\.Count -gt 0\)[\s\S]+New-SeedManifest/)
   assert.match(packageScript, /if \(\$null -ne \$seedManifest\)[\s\S]+seed\.json[\s\S]+seed-plugins\.ps1/)
+})
+
+test('the official first-run patch file (header comments plus an empty list) stays valid YAML after seeding', { skip: !onWindows }, () => {
+  const module = resolve(root, 'experiments/official-payload/seed-plugins-core.psm1')
+  const output = runPowerShell(`
+    Import-Module ${literal(module)} -Force
+    $official = ([string]::Join([char]10, @('# Your patch layer for this dsh profile, applied after every bundle layer:', '# a top-level YAML array of load overrides, disables, and inserts.', '[]')) + [char]10)
+    $one = Merge-SeedCordisPatch -Content $official -EntryId 'first-entry'
+    $two = Merge-SeedCordisPatch -Content $one.content -EntryId 'second-entry'
+    $crlf = Merge-SeedCordisPatch -Content ($official.Replace([string][char]10, [string][char]13 + [char]10)) -EntryId 'first-entry'
+    [ordered]@{ one=$one.content; two=$two.content; crlf=$crlf.content } | ConvertTo-Json -Compress
+  `)
+  const result = JSON.parse(output.split(/\r?\n/).at(-1))
+  assert.equal(result.two, '# Your patch layer for this dsh profile, applied after every bundle layer:\n# a top-level YAML array of load overrides, disables, and inserts.\n- id: first-entry\n  disabled: true\n- id: second-entry\n  disabled: true\n')
+  assert.doesNotMatch(result.one, /^\[\]/m)
+  assert.doesNotMatch(result.crlf, /^\[\]/m)
+  const requireApp = createRequire(new URL('../app/package.json', import.meta.url))
+  const parsed = requireApp('js-yaml').load(result.two)
+  assert.deepEqual(parsed, [{ id: 'first-entry', disabled: true }, { id: 'second-entry', disabled: true }])
 })
