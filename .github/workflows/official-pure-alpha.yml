@@ -104,7 +104,7 @@ jobs:
           "version=$($candidate.version)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
       - id: installer
         name: Download and validate the selected official installer
-        uses: ./.github/workflows/official-payload-stage
+        uses: ./.github/actions/official-payload-stage
         with:
           candidate: build/orch-080/T32/candidate.json
           installer: ${{ runner.temp }}/official-alpha-installer.exe

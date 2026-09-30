@@ -98,13 +98,13 @@ jobs:
           if ($old.version -cne '0.1.7-rc.2' -or $new.version -ceq $old.version) { throw 'Qualification requires the checked-in 0.1.7-rc.2 baseline and a distinct official candidate' }
       - id: stage-old
         name: Download and validate the baseline installer
-        uses: ./.github/workflows/official-payload-stage
+        uses: ./.github/actions/official-payload-stage
         with:
           candidate: build/orch-080/T28/input/old-candidate.json
           installer: ${{ runner.temp }}/official-desktop-old.exe
       - id: stage-new
         name: Download, validate, and unpack the candidate installer
-        uses: ./.github/workflows/official-payload-stage
+        uses: ./.github/actions/official-payload-stage
         with:
           candidate: build/orch-080/T28/input/new-candidate.json
           installer: ${{ runner.temp }}/official-desktop-new.exe

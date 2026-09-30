@@ -32,7 +32,7 @@ test('hourly channel YAML is valid, read-only until gated publishing, and least-
     const source = await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8');
     assert.match(source, /\.\/\.github\/workflows\/official-payload-stage/);
   }
-  const action = await readFile(new URL('../.github/workflows/official-payload-stage/action.yml', import.meta.url), 'utf8');
+  const action = await readFile(new URL('../.github/actions/official-payload-stage/action.yml', import.meta.url), 'utf8');
   assert.match(action, /Get-OfficialInstaller/);
   assert.match(action, /7-Zip\\7z\.exe/);
 });

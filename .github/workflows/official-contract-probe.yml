@@ -61,7 +61,7 @@ jobs:
       - id: official-payload
         name: Download, validate, and unpack the official installer
         if: steps.success-cache.outputs.cache-hit != 'true'
-        uses: ./.github/workflows/official-payload-stage
+        uses: ./.github/actions/official-payload-stage
         with:
           candidate: experiments/official-payload/candidate.json
           installer: ${{ runner.temp }}\official-desktop-installer.exe
