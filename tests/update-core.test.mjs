@@ -101,6 +101,8 @@ test('explicit engine catalogs check compatibility even when the DSH version mat
   const options = { allowEngineVersionChange: true }
   assert.equal(evaluateUpdate(manifest, installed, 'windows-x64', options).status, 'current')
   assert.equal(evaluateUpdate({ ...manifest, portableVersion: '0.4.11' }, installed, 'windows-x64', options).status, 'core-incompatible')
+  assert.equal(evaluateUpdate({ ...manifest, portableVersion: '0.4.9' }, installed, 'windows-x64', options).status, 'core-awaiting-qualification',
+    'a newer installed Portable is not told to update to an older required version')
   assert.equal(evaluateUpdate({ ...manifest, requiredShellFingerprint: 'a'.repeat(64) }, installed, 'windows-x64', options).status, 'full-package-required')
   assert.equal(evaluateUpdate({ ...manifest, component: { ...manifest.component, requiredNodeVersion: '25.0.0' } }, installed, 'windows-x64', options).status, 'full-package-required')
   assert.equal(evaluateUpdate({ ...manifest, portableVersion: '0.4.11' }, installed, 'windows-x64').status, 'current',

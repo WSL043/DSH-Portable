@@ -343,6 +343,7 @@ test('channel catalog state follows the final confirmed save and localizes unava
     unavailable: [
       { version: '0.1.1', status: 'core-incompatible', reason: 'core-incompatible', requiredPortableVersion: '0.6.2' },
       { version: '0.1.0', status: 'full-package-required', reason: 'full-package-required', requiredPortableVersion: '0.6.2' },
+      { version: '0.1.05', status: 'core-awaiting-qualification', reason: 'core-awaiting-qualification', requiredPortableVersion: '0.6.2' },
       { version: '0.0.9', status: 'channel-mismatch', reason: 'channel-mismatch' },
       { version: '0.0.8', status: 'wrong-platform', reason: 'wrong-platform' },
       { version: '0.0.7', status: 'future-status', reason: 'future-status' },
@@ -352,10 +353,12 @@ test('channel catalog state follows the final confirmed save and localizes unava
   const initialText = textContent(mounted.tree)
   assert.match(initialText, /Version 0\.1\.1: Update Portable to 0\.6\.2 first to use this core version\./)
   assert.match(initialText, /Version 0\.1\.0: A matching full Portable package is required\./)
+  assert.match(initialText, /Version 0\.1\.05: Not yet verified for the current Portable, so it cannot be selected\./)
+  assert.doesNotMatch(initialText, /Version 0\.1\.05: Update Portable/)
   assert.match(initialText, /Version 0\.0\.9: Switch to the candidate channel\./)
   assert.match(initialText, /Version 0\.0\.8: Not available for this system\./)
   assert.match(initialText, /Version 0\.0\.7: Compatibility with this version has not been verified\./)
-  assert.doesNotMatch(initialText, /core-incompatible|full-package-required|channel-mismatch|wrong-platform|future-status/)
+  assert.doesNotMatch(initialText, /core-incompatible|core-awaiting-qualification|full-package-required|channel-mismatch|wrong-platform|future-status/)
 
   let channel = findNode(mounted.tree, node => node.props?.label === 'Update channel')
   channel.props.onSelect('candidate')

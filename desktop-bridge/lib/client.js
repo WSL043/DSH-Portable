@@ -23,6 +23,7 @@ window.__ModuleLoader__.load({
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
         incompatible: '此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本。', engineFollowsProduct: '所选通道尚未提供内核更新包，请稍后重试。', channelUnpublished: '所选通道尚未提供更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
         engineUnavailableCoreIncompatible: '版本 {0}：需要先把 Portable 升级到 {1}，才能使用这个内核版本。',
+        engineUnavailableCoreAwaiting: '版本 {0}：尚未针对当前 Portable 完成验证，暂不能选用。',
         engineUnavailableFullPackage: '版本 {0}：需要匹配的完整 Portable 安装包。',
         engineUnavailableChannelMismatch: '版本 {0}：需要切换候选通道。',
         engineUnavailableWrongPlatform: '版本 {0}：不适用于此系统。',
@@ -79,6 +80,7 @@ window.__ModuleLoader__.load({
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
         incompatible: 'This core update package is not qualified for the current DSH-Portable. Select a verified version.', engineFollowsProduct: 'The selected channel has no engine update package yet. Please try again later.', channelUnpublished: 'The selected channel has no update package yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
         engineUnavailableCoreIncompatible: 'Version {0}: Update Portable to {1} first to use this core version.',
+        engineUnavailableCoreAwaiting: 'Version {0}: Not yet verified for the current Portable, so it cannot be selected.',
         engineUnavailableFullPackage: 'Version {0}: A matching full Portable package is required.',
         engineUnavailableChannelMismatch: 'Version {0}: Switch to the candidate channel.',
         engineUnavailableWrongPlatform: 'Version {0}: Not available for this system.',
@@ -576,6 +578,7 @@ window.__ModuleLoader__.load({
         const version = item.version || t('unknown')
         const status = item.status || item.reason
         if (status === 'core-incompatible') return format(t('engineUnavailableCoreIncompatible'), version, item.requiredPortableVersion || t('unknown'))
+        if (status === 'core-awaiting-qualification') return format(t('engineUnavailableCoreAwaiting'), version)
         if (status === 'full-package-required') return format(t('engineUnavailableFullPackage'), version)
         if (status === 'channel-mismatch') return format(t('engineUnavailableChannelMismatch'), version)
         if (status === 'wrong-platform') return format(t('engineUnavailableWrongPlatform'), version)
@@ -667,7 +670,7 @@ window.__ModuleLoader__.load({
             setUpdateOffers(current => ({ ...current, [scope]: true }))
             setStatus(name, format(t('available'), (scope === 'engine' ? body.engineLatest : body.latest) || ''))
           }
-          else if (body.status === 'core-incompatible') setStatus(name, t('incompatible'))
+          else if (body.status === 'core-incompatible' || body.status === 'core-awaiting-qualification') setStatus(name, t('incompatible'))
           else if (body.status === 'engine-follows-product') setStatus(name, t('engineFollowsProduct'))
           else if (body.status === 'channel-unpublished') setStatus(name, t('channelUnpublished'))
           else setStatus(name, t('updateUnavailable'))

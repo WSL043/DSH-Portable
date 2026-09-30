@@ -169,6 +169,9 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     const engineComparison = engineCurrent ? comparePortableVersions(engineCurrent, engineLatest) : -1
     engineAlreadyCurrent = engineComparison === 0
     if (!allowEngineVersionChange && engineComparison >= 0) return describe('current', 'none')
+    // A core package is qualified for exactly one Portable shell. A newer installed Portable simply has not
+    // been qualified against this core yet; only an older one needs a Portable update first.
+    if (productComparison > 0) return describe('core-awaiting-qualification', 'none')
     if (productComparison !== 0) return describe('core-incompatible', 'none')
   } else if (productComparison === 0 || (productComparison > 0 && !allowProductVersionChange)) {
     return describe('current', 'none')
