@@ -14,11 +14,11 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 350000000,
-      "extractedBytesWithoutOfficeRuntime": 260000000,
+      "extractedBytesWithoutOfficeRuntime": 261500000,
       "appBytesWithoutOfficeRuntime": 165000000,
       "speechRuntimeBytes": 24000000,
       "extractedBytesWithoutOfficeAndSpeechRuntime": 237000000,
-      "appBytesWithoutOfficeAndSpeechRuntime": 141000000
+      "appBytesWithoutOfficeAndSpeechRuntime": 142500000
     },
     "macos-x64": {
       "archiveBytes": 202000000,
