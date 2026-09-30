@@ -14,3 +14,10 @@ test('launcher seeds only after conflict checks and before app launch, failing o
   assert.match(launcher, /EnvironmentVariables\.Remove\("PSModulePath"\)/)
   assert.match(launcher, /continuing official app startup/)
 })
+
+test('launcher confines the official native-addon cache to the portable data root', async () => {
+  const launcher = await readFile(resolve(root, 'experiments/official-payload/Launcher.cs'), 'utf8')
+  assert.match(launcher, /string nativeAddonCache = Path\.Combine\(DataRoot, "cache", "native-addons"\);/)
+  assert.match(launcher, /EnvironmentVariables\["NARB_NATIVE_CACHE_DIR"\] = nativeAddonCache;/)
+  assert.match(launcher, /Directory\.CreateDirectory\(nativeAddonCache\)/)
+})

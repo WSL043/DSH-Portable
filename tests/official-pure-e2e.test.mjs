@@ -91,3 +91,11 @@ test('package follow.json feed and cache values must match the app-update.yml ar
   const bad = packageFeedContract(follow, 'provider: generic\nurl: http://127.0.0.1:49999/\nchannel: nightly\nupdaterCacheDirName: dsh-pure-e2e-abc123\n');
   assert.equal(bad.passed, false);
 });
+
+test('outside-write audit rejects leaked native-addon caches and Documents workspaces', async () => {
+  const source = await readFile(new URL('../experiments/official-payload/e2e/run-pure-e2e.ps1', import.meta.url), 'utf8');
+  assert.match(source, /function Test-ForbiddenOfficialExternalWrite\(/);
+  assert.match(source, /node-addon-native-custom-loader\\native-cache/);
+  assert.match(source, /Documents\\deepseek-harness/);
+  assert.match(source, /-and -not \$forbiddenOfficialExternalWrite/);
+});

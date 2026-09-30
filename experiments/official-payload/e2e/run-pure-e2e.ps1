@@ -66,6 +66,20 @@ function Write-Stage([string]$Message) {
     Write-Host $line
 }
 
+function Test-ForbiddenOfficialExternalWrite([string]$Path) {
+    if ($Path -notmatch '^[A-Za-z]:\\') { return $false }
+    $normalizedPath = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    $forbiddenRoots = @(
+        (Join-Path $env:LOCALAPPDATA 'node-addon-native-custom-loader\native-cache'),
+        (Join-Path $env:USERPROFILE 'Documents\deepseek-harness')
+    )
+    foreach ($root in $forbiddenRoots) {
+        $normalizedRoot = [IO.Path]::GetFullPath($root).TrimEnd('\')
+        if ($normalizedPath.Equals($normalizedRoot, [StringComparison]::OrdinalIgnoreCase) -or $normalizedPath.StartsWith($normalizedRoot + '\', [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
 function Assert-E2ETime([string]$Stage) {
     if ([DateTime]::UtcNow -ge $script:Deadline) { throw ('Total 25-minute E2E deadline exceeded during ' + $Stage) }
 }
@@ -650,7 +664,8 @@ try {
                     # Only the Portable components (launcher, update copy, update engine's PowerShell and 7-Zip) are audited; the official app and Windows' own helpers it triggers (for example directxdatabaseupdater.exe on a fresh machine) are recorded, not asserted.
                     $processName = [string]$_.process
                     $isPortableComponent = $processName -ceq 'DeepSeek Harness Portable.exe' -or $processName -like 'deepseek-harness-*-win-x64.exe' -or $processName -ceq 'powershell.exe' -or $processName -ceq '7z.exe'
-                    $isOfficialOwn = -not $isPortableComponent -and -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor)
+                    $forbiddenOfficialExternalWrite = Test-ForbiddenOfficialExternalWrite $writePath
+                    $isOfficialOwn = -not $isPortableComponent -and -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor) -and -not $forbiddenOfficialExternalWrite
                     if ($isOfficialOwn) { $officialOwn.Add($_) }
                     -not ($cacheAllowed -or $protocolAllowed -or $systemNoise -or $rootAncestor -or $isOfficialOwn)
                 })

@@ -413,7 +413,9 @@ internal static class PortableLauncher {
         if (link != null) start.Arguments += " " + Quote(link);
         start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
         start.EnvironmentVariables["DSH_HOME"] = Path.Combine(DataRoot, "dsh-home");
-        Directory.CreateDirectory(Path.Combine(DataRoot, "electron")); Directory.CreateDirectory(Path.Combine(DataRoot, "dsh-home"));
+        string nativeAddonCache = Path.Combine(DataRoot, "cache", "native-addons");
+        start.EnvironmentVariables["NARB_NATIVE_CACHE_DIR"] = nativeAddonCache;
+        Directory.CreateDirectory(Path.Combine(DataRoot, "electron")); Directory.CreateDirectory(Path.Combine(DataRoot, "dsh-home")); Directory.CreateDirectory(nativeAddonCache);
         return Process.Start(start);
     }
     private static void StartOfficial(string link, string probe, bool unused) {
