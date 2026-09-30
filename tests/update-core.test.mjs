@@ -1246,13 +1246,13 @@ test('candidate CLI aliases and prerelease shells still use stable core catalogs
   assert.throws(() => defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '../other'))
 })
 
-test('engine catalogs reject more than the newest three entries', async t => {
+test('oversized engine catalogs are still rejected', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-core-catalog-window-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root)
   await mkdir(path.join(root, 'licenses'), { recursive: true })
   await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ portableVersion: '0.8.3', releaseChannel: 'candidate', dshVersion: '0.2.0-rc.2' }))
-  const fetchImpl = async () => new Response(JSON.stringify({ schemaVersion: 1, versions: [{}, {}, {}, {}] }))
+  const fetchImpl = async () => new Response(JSON.stringify({ schemaVersion: 1, versions: Array.from({ length: 21 }, () => ({})) }))
   await assert.rejects(listEngineVersions({ layout, fetchImpl }), /Unsupported engine version catalog/)
 })
 

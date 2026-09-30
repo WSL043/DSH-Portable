@@ -485,7 +485,7 @@ export async function listEngineVersions({
     }
     throw error
   }
-  if (!index || index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 3) {
+  if (!index || index.schemaVersion !== 1 || !Array.isArray(index.versions) || index.versions.length > 20) {
     throw new Error('Unsupported engine version catalog.')
   }
   const platform = platformUpdateKey(layout.platform, process.arch)
@@ -509,6 +509,8 @@ export async function listEngineVersions({
     versions.push({ version, manifestUrl, status: evaluated.status })
   }
   versions.sort((left, right) => comparePortableVersions(right.version, left.version))
+  // Offer only the newest three; a catalog that briefly lists more must not break update checks.
+  versions.splice(3)
   unavailable.sort((left, right) => comparePortableVersions(right.version, left.version))
   return { schemaVersion: 1, current: installed.dshVersion, releaseChannel: installed.releaseChannel, versions, unavailable }
 }
