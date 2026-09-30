@@ -20,7 +20,10 @@ test('alpha.4 workflow parses, uses production channel constants, smoke-tests, a
   assert.match(source, /-FeedUrl \$urls\.channelBaseUrl[\s\S]*-IndexUrl \$urls\.indexUrl/);
   assert.match(source, /smoke-alpha-seeded\.ps1/);
   assert.match(source, /--draft/);
-  assert.doesNotMatch(source, /--prerelease|--latest\b/);
+  // An alpha is always a draft AND a prerelease, so publishing it can never make it the repository's Latest release.
+  assert.match(source, /--draft --prerelease --latest=false/);
+  assert.match(source, /-F draft=true -F prerelease=true/);
+  assert.doesNotMatch(source, /prerelease=false|--latest(?!=false)/);
 });
 
 test('alpha.4 pins the two default plugin sources and packages their asserted CI-built versions', async () => {
