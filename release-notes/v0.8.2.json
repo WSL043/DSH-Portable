@@ -1,0 +1,33 @@
+{
+  "version": "0.8.2",
+  "zh": {
+    "summary": "升级官方 DSH 内核与默认插件，并改进插件兼容提示、更新恢复和 Windows 桌面反馈。",
+    "highlights": [
+      "稳定线运行时锁定官方 DSH 0.2.0-rc.2；默认会话管理器和图片查看器更新至 1.5.4 与 0.1.5。",
+      "升级预检现在依据目标内核判断将被禁用的插件，并在提示中列明插件名称。",
+      "更新失败后的桌面恢复流程得到改进，异步恢复异常会继续保留传递。",
+      "Windows 桌面反馈更稳：通知不可用时回退、桥接断开后刷新托盘菜单，并将恢复窗口限制在可见工作区。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.1 升级后，运行时使用官方 DSH 0.2.0-rc.2，默认插件锁定为会话管理器 1.5.4 和图片查看器 0.1.5；内核仍为官方预发布候选版本。"
+    ],
+    "knownIssues": [
+      "完整原生打包验收与 CI 尚待完成；完整多屏/混合 DPI、物理断电恢复及 120 分钟长稳专项未完成本候选验证。"
+    ]
+  },
+  "en": {
+    "summary": "Update the official DSH core and default plugins, with better compatibility notices, update recovery, and Windows desktop feedback.",
+    "highlights": [
+      "The stable-line runtime now pins official DSH 0.2.0-rc.2; the default Session Manager and Image Viewer move to 1.5.4 and 0.1.5.",
+      "Update preflight now checks compatibility with the target core and names plugins that will be disabled.",
+      "Update-failure recovery better restores the desktop surface and preserves asynchronous recovery exceptions.",
+      "Windows feedback is more resilient: toast failures fall back, tray menus refresh after bridge loss, and restored windows stay within a visible work area."
+    ],
+    "upgradeNotes": [
+      "After upgrading from 0.8.1, the runtime uses official DSH 0.2.0-rc.2 and pins Session Manager 1.5.4 and Image Viewer 0.1.5 as defaults; the core remains an official prerelease candidate."
+    ],
+    "knownIssues": [
+      "Full native-package and CI qualification is still pending; the full multi-monitor/mixed-DPI matrix, physical power-loss recovery, and 120-minute soak are not qualified for this candidate."
+    ]
+  }
+}
