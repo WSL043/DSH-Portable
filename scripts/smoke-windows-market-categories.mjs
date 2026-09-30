@@ -133,7 +133,9 @@ try {
   await until(`document.body.innerText.includes('Check and repair') || document.body.innerText.includes('检查与修复')`, Boolean, 'Portable maintenance without update controls')
   assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`), false)
   await until(click(['Updates', '更新']), Boolean, 'dedicated Updates navigation')
-  await until(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`, Boolean, 'update channel control')
+  await until(`Boolean(document.querySelector('button[aria-label="Engine version"],button[aria-label="内核版本"]'))`, Boolean, 'core version control')
+  // Portable has a single release channel, so the Updates page must not offer a channel choice.
+  assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`), false)
   const updateNavigation = await evaluate(`(() => {
     const button = labels => [...document.querySelectorAll('button')].find(node => labels.includes((node.textContent || '').trim()))
     const general = button(['General', '通用设置']), updates = button(['Updates', '更新']), models = button(['Models', '模型'])

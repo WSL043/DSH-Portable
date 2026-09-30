@@ -200,7 +200,7 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
   const cycles = soak ? 100 : 3
   for (let cycle = 1; cycle <= cycles; cycle++) {
     await until(click(['Updates', '更新']), Boolean, 'updates navigation')
-    await until(`Boolean(document.querySelector('button[aria-label="Update channel"],button[aria-label="更新通道"]'))`, Boolean, 'updates mounted')
+    await until(`Boolean(document.querySelector('button[aria-label="Engine version"],button[aria-label="内核版本"]'))`, Boolean, 'updates mounted')
     await navigate()
     if (cycle % 20 === 0) { await scan(); await sample(`maintenance-cycle-${cycle}`) }
   }
