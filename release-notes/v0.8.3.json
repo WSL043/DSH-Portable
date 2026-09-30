@@ -1,0 +1,35 @@
+{
+  "version": "0.8.3",
+  "zh": {
+    "summary": "收敛为单一 Portable 更新线，展示最新 3 个已验收官方内核，并改进更新兼容提示与体积基线说明。",
+    "highlights": [
+      "Portable 仅使用 stable 更新目录；旧 candidate 设置会静默归一，旧候选用户可升级到正式单线版本。",
+      "设置页移除 Stable/Candidate 选择器，保留内核版本选择和其他不可用版本的折叠说明；README 改为单列展示最新 3 个已验证内核。",
+      "当 Portable 版本比目标内核要求更新时，提示改为说明该内核尚未针对当前 Portable 完成验证，不再错误要求升级 Portable（3911879）。",
+      "footprint 评估以最近正式版基线作相对比较，而不使用固定体积阈值（bae534b）。"
+    ],
+    "upgradeNotes": [
+      "旧 launcher-settings.json 中的 stable/candidate 值会静默规范为 stable；旧 --channel candidate 参数继续作为兼容别名。设置与用户数据保持不变。",
+      "内核目录最多展示 3 个已验收版本。"
+    ],
+    "knownIssues": [
+      "全平台 Build and smoke test 与旧 candidate 用户升级验收仍需在 GitHub CI 完成。"
+    ]
+  },
+  "en": {
+    "summary": "Consolidate Portable onto one release line, show the newest three qualified official cores, and improve update-compatibility messaging and footprint baselines.",
+    "highlights": [
+      "Portable now uses only the stable update feed; legacy candidate settings are silently normalized, allowing existing candidate users to upgrade to the single public line.",
+      "The Settings page removes the Stable/Candidate selector while retaining core selection and the expandable unavailable-version summary; the README now uses one column for the newest three verified cores.",
+      "When Portable is newer than a core target, the message now says that core is not yet verified for the current Portable instead of incorrectly asking users to upgrade Portable (3911879).",
+      "Footprint evaluation compares against the previous stable release baseline instead of fixed size limits (bae534b)."
+    ],
+    "upgradeNotes": [
+      "Legacy stable/candidate values in launcher-settings.json are silently normalized to stable. The old --channel candidate argument remains a compatibility alias. Settings and user data are preserved.",
+      "The core catalog is limited to the newest three qualified versions."
+    ],
+    "knownIssues": [
+      "The all-platform Build and smoke test and legacy candidate-to-single-line upgrade acceptance still require GitHub CI verification."
+    ]
+  }
+}
