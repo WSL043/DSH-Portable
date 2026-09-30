@@ -1,9 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { execFileSync, execFile as execFileAsync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { assessHealth, isValidDshLink, parseUpdatedVersion } from '../experiments/official-payload/launcher/state.mjs';
 import { rewriteAppUpdateYml } from '../experiments/official-payload/contract/update-config.mjs';
 
@@ -178,3 +180,95 @@ test('the index reader follows GitHub-style redirects but refuses other hosts, l
   } finally { server.close(); }
 });
 
+test('official installer transfer resumes Range downloads, restarts unsupported Range, and discards bad hashes', { skip: process.platform !== 'win32' && 'requires Windows PowerShell' }, async () => {
+  const { createServer } = await import('node:http');
+  const payload = Buffer.alloc(1_250_000);
+  for (let i = 0; i < payload.length; i++) payload[i] = (i * 37 + 11) & 0xff;
+  const wrongHashPayload = Buffer.from(payload);
+  wrongHashPayload[0] ^= 0xff;
+  const rangeRequests = [];
+  let interruptedRequests = 0;
+  let unsupportedRequests = 0;
+  const server = createServer((req, res) => {
+    if (req.url === '/dsh-desk/bin/win-x64/resume.exe') {
+      interruptedRequests++;
+      rangeRequests.push(req.headers.range ?? null);
+      if (interruptedRequests === 1) {
+        res.writeHead(200, { 'Content-Length': payload.length });
+        res.write(payload.subarray(0, 500_000));
+        setTimeout(() => res.destroy(), 100);
+      } else {
+        const start = Number(/^bytes=(\d+)-/.exec(req.headers.range ?? '')?.[1] ?? 0);
+        res.writeHead(start ? 206 : 200, start ? { 'Content-Range': `bytes ${start}-${payload.length - 1}/${payload.length}`, 'Content-Length': payload.length - start } : { 'Content-Length': payload.length });
+        res.end(payload.subarray(start));
+      }
+    } else if (req.url === '/dsh-desk/bin/win-x64/no-range.exe') {
+      unsupportedRequests++;
+      rangeRequests.push(req.headers.range ?? null);
+      res.writeHead(200, { 'Content-Length': payload.length });
+      res.end(payload);
+    } else if (req.url === '/dsh-desk/bin/win-x64/bad.exe') {
+      res.writeHead(200, { 'Content-Length': payload.length });
+      res.end(payload);
+    } else { res.writeHead(404); res.end(); }
+  });
+  await new Promise(resolvePromise => server.listen(0, '127.0.0.1', resolvePromise));
+  const base = `http://127.0.0.1:${server.address().port}/dsh-desk/bin/win-x64/`;
+  const directory = await mkdtemp(join(tmpdir(), 'dsh-resume-test-'));
+  const psQuote = value => `'${value.replaceAll("'", "''")}'`;
+  const candidate = url => ({ version: '0.2.0-rc.3', installerUrl: base + url, sha512: createHash('sha512').update(payload).digest('base64'), size: payload.length });
+  const runPowerShell = source => new Promise((resolvePromise, reject) => {
+    const env = { ...process.env, DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER: '1' };
+    delete env.PSModulePath;
+    execFileAsync(powershell, ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], {
+      encoding: 'utf8', env,
+    }, (error, stdout, stderr) => error ? reject(new Error(`${error.message}\n${stderr}`)) : resolvePromise(stdout.trim().split(/\r?\n/).at(-1)));
+  });
+  try {
+    const resumePath = join(directory, 'resume.exe');
+    const resumeCandidate = JSON.stringify(candidate('resume.exe'));
+    const resumeSource = `${psModule}
+      $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER='1'
+      $destination=${psQuote(resumePath)}; $candidate=${psQuote(resumeCandidate)} | ConvertFrom-Json
+      $firstError=''; try { Receive-OfficialInstallerBytes $destination $candidate $null '' | Out-Null } catch { $firstError=$_.Exception.Message }
+      $partPath=$destination+'.part'; $partBytes=if(Test-Path -LiteralPath $partPath){(Get-Item -LiteralPath $partPath).Length}else{0}
+      $result=Receive-OfficialInstallerBytes $destination $candidate $null ''
+      $checks=[ordered]@{ firstInterrupted=([string]::IsNullOrEmpty($firstError)-eq $false); partBytes=$partBytes; completed=($result -eq $partPath); hash=(Get-FileHash -LiteralPath $result -Algorithm SHA512).Hash }
+      ConvertTo-Json $checks -Compress`;
+    const resumed = JSON.parse(await runPowerShell(resumeSource));
+    assert.equal(resumed.firstInterrupted, true);
+    assert.ok(resumed.partBytes > 0 && resumed.partBytes < payload.length);
+    assert.equal(resumed.completed, true);
+    assert.equal(resumed.hash, createHash('sha512').update(payload).digest('hex').toUpperCase());
+    assert.match(rangeRequests[1] ?? '', /^bytes=\d+-$/);
+
+    const noRangePath = join(directory, 'no-range.exe');
+    await writeFile(noRangePath + '.part', payload.subarray(0, 180_000));
+    const noRangeSource = `${psModule}
+      $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER='1'
+      $candidate=${psQuote(JSON.stringify(candidate('no-range.exe')))} | ConvertFrom-Json
+      $result=Receive-OfficialInstallerBytes ${psQuote(noRangePath)} $candidate $null ''
+      ConvertTo-Json @{ completed=($result -eq (${psQuote(noRangePath)}+'.part')); length=(Get-Item -LiteralPath $result).Length } -Compress`;
+    const restarted = JSON.parse(await runPowerShell(noRangeSource));
+    assert.equal(restarted.completed, true);
+    assert.equal(restarted.length, payload.length);
+    assert.equal(unsupportedRequests, 2);
+    assert.match(rangeRequests.at(-2) ?? '', /^bytes=\d+-$/);
+    assert.equal(rangeRequests.at(-1), null);
+
+    const badPath = join(directory, 'bad.exe');
+    const badCandidate = { ...candidate('bad.exe'), sha512: createHash('sha512').update(wrongHashPayload).digest('base64') };
+    const badSource = `${psModule}
+      $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER='1'
+      $candidate=${psQuote(JSON.stringify(badCandidate))} | ConvertFrom-Json
+      $destination=${psQuote(badPath)}; $message=''
+      try { Receive-OfficialInstallerBytes $destination $candidate $null '' | Out-Null } catch { $message=$_.Exception.Message }
+      ConvertTo-Json @{ digestRejected=$message.Contains('digest'); partialRemoved=(-not (Test-Path -LiteralPath ($destination+'.part'))) } -Compress`;
+    const rejected = JSON.parse(await runPowerShell(badSource));
+    assert.deepEqual(rejected, { digestRejected: true, partialRemoved: true });
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise(resolvePromise => server.close(resolvePromise));
+    await rm(directory, { recursive: true, force: true });
+  }
+});

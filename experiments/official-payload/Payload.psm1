@@ -55,7 +55,10 @@ function Read-BoundedHttpText([string]$Url) {
 function Assert-Candidate($Candidate) {
     if ($Candidate.version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$') { throw 'Unsupported official version' }
     $uri = $null
-    if (-not [Uri]::TryCreate([string]$Candidate.installerUrl, [UriKind]::Absolute, [ref]$uri) -or $uri.Scheme -cne 'https' -or $uri.Host -cne 'download.deepseek.com' -or $uri.Port -ne 443 -or $uri.UserInfo -or -not $uri.AbsolutePath.StartsWith($script:OfficialInstallerPrefix, [StringComparison]::Ordinal)) { throw 'Untrusted installer URL' }
+    if (-not [Uri]::TryCreate([string]$Candidate.installerUrl, [UriKind]::Absolute, [ref]$uri) -or $uri.UserInfo -or -not $uri.AbsolutePath.StartsWith($script:OfficialInstallerPrefix, [StringComparison]::Ordinal)) { throw 'Untrusted installer URL' }
+    $officialUrl = $uri.Scheme -ceq 'https' -and $uri.Host -ceq 'download.deepseek.com' -and $uri.Port -eq 443
+    $testLocalUrl = $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER -ceq '1' -and $uri.Scheme -ceq 'http' -and $uri.Host -ceq '127.0.0.1' -and $uri.Port -gt 0
+    if (-not $officialUrl -and -not $testLocalUrl) { throw 'Untrusted installer URL' }
     if ([Convert]::FromBase64String([string]$Candidate.sha512).Length -ne 64 -or [long]$Candidate.size -lt 1000000 -or [long]$Candidate.size -gt 2147483648) { throw 'Invalid official package identity' }
 }
 
@@ -73,6 +76,19 @@ function Get-AcceptedIndexCandidate($Index, [string]$RequestedVersion) {
     return $found
 }
 
+function Get-LatestAcceptedIndexCandidate($Index) {
+    if ($null -eq $Index.versions -or $Index.versions.Count -lt 1 -or $Index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
+    $seen = @{}
+    foreach ($entry in $Index.versions) {
+        Assert-Candidate $entry
+        $version = [string]$entry.version
+        if ($seen.ContainsKey($version)) { throw 'Accepted index contains duplicate versions' }
+        $seen[$version] = $true
+    }
+    # The channel builder emits the bounded list in semver ascending order.
+    return $Index.versions[$Index.versions.Count - 1]
+}
+
 function Assert-Publisher([string]$File) {
     $signature = Get-AuthenticodeSignature -LiteralPath $File
     if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -cne $script:OfficialPublisher) { throw 'Official signature validation failed' }
@@ -88,29 +104,88 @@ function Assert-Installer([string]$File, $Candidate) {
     Assert-Publisher $File
 }
 
-function Get-OfficialInstaller([string]$Destination, $Candidate, [scriptblock]$Progress) {
+function Receive-OfficialInstallerBytes([string]$Destination, $Candidate, [scriptblock]$Progress, [string]$CancelFile) {
     Assert-Candidate $Candidate
     Assert-PlainPath $Destination
     if (Test-Path -LiteralPath $Destination) { throw 'Download destination already exists' }
+    $partial = $Destination + '.part'
+    Assert-PlainPath $partial
+    if (Test-Path -LiteralPath $partial) {
+        if ((Get-Item -LiteralPath $partial).Length -gt [long]$Candidate.size) { Remove-Item -LiteralPath $partial -Force }
+    }
+    if ((Test-Path -LiteralPath $partial) -and (Get-Item -LiteralPath $partial).Length -eq [long]$Candidate.size) {
+        if ($Progress) { & $Progress ([long]$Candidate.size) ([long]$Candidate.size) }
+        $actual = (Get-FileHash -LiteralPath $partial -Algorithm SHA512).Hash
+        $expected = [BitConverter]::ToString([Convert]::FromBase64String([string]$Candidate.sha512)).Replace('-', '')
+        if ($actual -cne $expected) { Remove-Item -LiteralPath $partial -Force; throw 'Installer digest mismatch; partial download discarded' }
+        return $partial
+    }
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $request = [Net.HttpWebRequest]::Create([string]$Candidate.installerUrl)
-    $request.AllowAutoRedirect = $false; $request.Timeout = 15000; $request.ReadWriteTimeout = 15000
-    $response = $request.GetResponse()
-    try {
-        if ([int]$response.StatusCode -ne 200) { throw 'Unexpected installer response; redirects require review' }
-        $inputStream = $response.GetResponseStream(); $outputStream = [IO.File]::Open($Destination, [IO.FileMode]::CreateNew)
+    $restarted = $false
+    while ($true) {
+        if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
+        $offset = if (Test-Path -LiteralPath $partial) { [long](Get-Item -LiteralPath $partial).Length } else { 0L }
+        $request = [Net.HttpWebRequest]::Create([string]$Candidate.installerUrl)
+        $request.AllowAutoRedirect = $false; $request.Timeout = 15000; $request.ReadWriteTimeout = 15000
+        if ($offset -gt 0) { $request.AddRange($offset) }
+        try { $response = $request.GetResponse() } catch [Net.WebException] { if ($null -eq $_.Exception.Response) { throw }; $response = $_.Exception.Response }
         try {
-            [byte[]]$buffer = New-Object byte[] 131072; [long]$total = 0; $deadline = [DateTime]::UtcNow.AddMinutes(15); $lastProgress = [DateTime]::MinValue
-            while (($length = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
-                $total += $length
-                if ($total -gt [long]$Candidate.size -or [DateTime]::UtcNow -gt $deadline) { throw 'Download exceeded bounds' }
-                $outputStream.Write($buffer, 0, $length)
-                if ($Progress -and ([DateTime]::UtcNow - $lastProgress).TotalMilliseconds -ge 500) { & $Progress ([Math]::Floor(100 * $total / [long]$Candidate.size)); $lastProgress = [DateTime]::UtcNow }
+            $code = [int]$response.StatusCode
+            if ($offset -gt 0 -and ($code -eq 200 -or $code -eq 416)) {
+                if ($restarted) { throw 'Installer server did not honor a clean restart' }
+                Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue
+                $restarted = $true
+                continue
             }
-            $outputStream.Flush($true)
-        } finally { $outputStream.Dispose(); $inputStream.Dispose() }
-    } finally { $response.Dispose() }
-    Assert-Installer $Destination $Candidate
+            if (($offset -eq 0 -and $code -ne 200) -or ($offset -gt 0 -and $code -ne 206)) { throw 'Unexpected installer response; redirects require review' }
+            if ($code -eq 206) {
+                $range = [Regex]::Match([string]$response.Headers['Content-Range'], '^bytes (\d+)-(\d+)/(\d+)$')
+                if (-not $range.Success -or [long]$range.Groups[1].Value -ne $offset -or [long]$range.Groups[3].Value -ne [long]$Candidate.size) { throw 'Installer server returned an invalid byte range' }
+            }
+            $inputStream = $response.GetResponseStream()
+            $mode = if ($offset -gt 0) { [IO.FileMode]::Append } else { [IO.FileMode]::CreateNew }
+            $outputStream = [IO.File]::Open($partial, $mode, [IO.FileAccess]::Write, [IO.FileShare]::None)
+            try {
+                [byte[]]$buffer = New-Object byte[] 131072; [long]$total = $offset; $deadline = [DateTime]::UtcNow.AddMinutes(15); $lastProgress = [DateTime]::MinValue
+                while (($length = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
+                    $total += $length
+                    if ($total -gt [long]$Candidate.size -or [DateTime]::UtcNow -gt $deadline) { throw 'Download exceeded bounds' }
+                    $outputStream.Write($buffer, 0, $length)
+                    if ($Progress -and ([DateTime]::UtcNow - $lastProgress).TotalMilliseconds -ge 300) { & $Progress $total ([long]$Candidate.size); $lastProgress = [DateTime]::UtcNow }
+                }
+                $outputStream.Flush($true)
+            } finally { $outputStream.Dispose(); $inputStream.Dispose() }
+        } finally { $response.Dispose() }
+        break
+    }
+    if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
+    $actualSize = (Get-Item -LiteralPath $partial).Length
+    if ($actualSize -ne [long]$Candidate.size) { throw 'Download is incomplete; retry will resume the partial file' }
+    if ($Progress) { & $Progress $actualSize ([long]$Candidate.size) }
+    $actual = (Get-FileHash -LiteralPath $partial -Algorithm SHA512).Hash
+    $expected = [BitConverter]::ToString([Convert]::FromBase64String([string]$Candidate.sha512)).Replace('-', '')
+    if ($actual -cne $expected) { Remove-Item -LiteralPath $partial -Force; throw 'Installer digest mismatch; partial download discarded' }
+    if ($Progress) { & $Progress ([long]$Candidate.size) ([long]$Candidate.size) }
+    return $partial
+}
+
+function Get-OfficialInstaller([string]$Destination, $Candidate, [scriptblock]$Progress, [string]$CancelFile) {
+    Assert-Candidate $Candidate
+    Assert-PlainPath $Destination
+    if (Test-Path -LiteralPath $Destination) {
+        try { Assert-Installer $Destination $Candidate; if ($Progress) { & $Progress ([long]$Candidate.size) ([long]$Candidate.size) }; return $Destination }
+        catch { Remove-Item -LiteralPath $Destination -Force }
+    }
+    $partial = Receive-OfficialInstallerBytes $Destination $Candidate $Progress $CancelFile
+    try {
+        Assert-Publisher $partial
+        [IO.File]::Move($partial, $Destination)
+        return $Destination
+    } catch {
+        if (Test-Path -LiteralPath $partial) { Remove-Item -LiteralPath $partial -Force }
+        throw
+    }
 }
 
 function Assert-Archive([string]$Archive, [string]$SevenZip) {
@@ -228,4 +303,4 @@ function Remove-PortableScratch([string]$Path, [string]$Boundary) {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
-Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Assert-Installer,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch
+Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch

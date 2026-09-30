@@ -1,7 +1,9 @@
 param(
     [Parameter(Mandatory=$true)][string]$Root,
-    [Parameter(Mandatory=$true)][string]$Version,
-    [Parameter(Mandatory=$true)][string]$SelfPath
+    [string]$Version,
+    [Parameter(Mandatory=$true)][string]$SelfPath,
+    [switch]$Install,
+    [string]$CancelFile
 )
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Payload.psm1') -Force
@@ -11,8 +13,8 @@ if ($Root.Length -le 3 -or $Version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:
 $appRoot = Join-Path $Root 'app'; $launcherRoot = Join-Path $Root 'launcher'; $storage = Join-Path $Root 'data/launcher'
 foreach ($path in @($appRoot, $launcherRoot, $storage)) { Assert-PlainPath $path }
 $statusPath = Join-Path $storage 'update-status.json'; $currentPath = Join-Path $appRoot 'current.json'
-$lock = $null; $stage = $null; $partial = Join-Path $appRoot ($Version + '.partial'); $candidatePath = Join-Path $appRoot $Version
-$originalVersion = $null; $committed = $false; $status = [ordered]@{ status='failed'; version=$Version }
+$lock = $null; $stage = $null; $partial = $null; $candidatePath = $null
+$originalVersion = $null; $committed = $false; $status = [ordered]@{ status='starting'; phase='initializing'; version=$Version; downloadedBytes=0; totalBytes=0; progress=0 }
 
 function Write-Atomic([string]$Path, $Value) {
     Assert-PlainPath $Path
@@ -84,47 +86,64 @@ function Clear-OlderVersions([string]$KeepCurrent, [string]$KeepPrevious) {
 }
 
 try {
-    if (-not (Test-Path -LiteralPath $statusPath)) { New-Item -ItemType Directory -Path $storage -Force | Out-Null }
+    foreach ($path in @($appRoot, $launcherRoot, $storage, (Join-Path $storage 'downloads'))) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
     $lock = [IO.File]::Open((Join-Path $storage 'update.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
-    $current = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
-    $originalVersion = [string]$current.version
-    if ($null -ne $current.PSObject.Properties['rejected'] -and [string]$current.rejected.version -ceq $Version) {
-        $rejectedAt = [DateTime]::MinValue
-        if ([DateTime]::TryParse([string]$current.rejected.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$rejectedAt) -and ([DateTime]::UtcNow - $rejectedAt.ToUniversalTime()).TotalHours -lt 24) { throw 'This version was rolled back within the last 24 hours; not retrying yet' }
+    $current = $null
+    if (Test-Path -LiteralPath $currentPath) {
+        $current = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
+        $currentVersion = [string]$current.version
+        if ($currentVersion -match '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$' -and (Test-Path -LiteralPath (Join-Path $appRoot ($currentVersion + '/DeepSeek Harness.exe')))) { $originalVersion = $currentVersion }
     }
-    if ($originalVersion -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$') { throw 'Current app version is invalid' }
+    if (-not $Install) {
+        if (-not $current -or -not $originalVersion) { throw 'Current app version is missing or incomplete' }
+        $Version = [string]$Version
+        if ($null -ne $current.PSObject.Properties['rejected'] -and [string]$current.rejected.version -ceq $Version) {
+            $rejectedAt = [DateTime]::MinValue
+            if ([DateTime]::TryParse([string]$current.rejected.at, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind, [ref]$rejectedAt) -and ([DateTime]::UtcNow - $rejectedAt.ToUniversalTime()).TotalHours -lt 24) { throw 'This version was rolled back within the last 24 hours; not retrying yet' }
+        }
+        if ($Version -notmatch '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$') { throw 'Invalid update version' }
+    }
     $follow = Get-Content -LiteralPath (Join-Path $launcherRoot 'follow.json') -Raw | ConvertFrom-Json
     Assert-FeedUrl ([string]$follow.indexUrl); Assert-FeedUrl ([string]$follow.feedUrl)
     if ([string]$follow.cacheDirName -notmatch '^[A-Za-z0-9._@-]{1,100}$' -or [string]$follow.cacheDirName -in @('.', '..') -or -not ([string]$follow.feedUrl).EndsWith('/')) { throw 'Invalid updater cache directory name or feed URL' }
+    $status.status = 'reading-index'; $status.phase = 'reading-index'; Write-Atomic $statusPath $status
     $index = Get-StrictJson ([string]$follow.indexUrl)
-    $candidate = Get-AcceptedIndexCandidate $index $Version
+    if ($Install) { $candidate = Get-LatestAcceptedIndexCandidate $index; $Version = [string]$candidate.version; $status.version = $Version }
+    else { $candidate = Get-AcceptedIndexCandidate $index $Version }
+    $partial = Join-Path $appRoot ($Version + '.partial'); $candidatePath = Join-Path $appRoot $Version
     if (Test-Path -LiteralPath $candidatePath) { throw 'Target application directory already exists; preserving current state' }
     if (Test-Path -LiteralPath $partial) { throw 'Stale partial directory exists; refusing to overwrite it' }
     $stage = Join-Path $storage ('staging/' + $Version + '-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
-    $installer = Join-Path $stage ('deepseek-harness-' + $Version + '-win-x64.exe')
-    $status.status = 'downloading'; $status.progress = 0; Write-Atomic $statusPath $status
-    Get-OfficialInstaller $installer $candidate { param($percent) $status.progress = $percent; Write-Atomic $statusPath $status }
-    $status.status = 'extracting'; $status.Remove('progress'); Write-Atomic $statusPath $status
+    $installer = Join-Path (Join-Path $storage 'downloads') ('deepseek-harness-' + $Version + '-win-x64.exe')
+    $status.status = 'downloading'; $status.phase = 'downloading'; $status.downloadedBytes = 0; $status.totalBytes = [long]$candidate.size; $status.progress = 0; Write-Atomic $statusPath $status
+    Get-OfficialInstaller $installer $candidate { param($downloaded,$total) $status.downloadedBytes = [long]$downloaded; $status.totalBytes = [long]$total; $status.progress = [Math]::Floor(100 * $downloaded / $total); if ($downloaded -ge $total) { $status.phase = 'verifying' }; Write-Atomic $statusPath $status } $CancelFile | Out-Null
+    if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
+    $status.status = 'extracting'; $status.phase = 'extracting'; Write-Atomic $statusPath $status
     $receipt = Expand-OfficialPayload $installer $candidate $partial (Join-Path $launcherRoot '7z.exe') ([string]$follow.feedUrl) ([string]$follow.cacheDirName)
-    $status.status = 'waiting-for-exit'; Write-Atomic $statusPath $status
-    Wait-NoOwnedProcesses
+    if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
+    $status.status = 'switching'; $status.phase = 'switching'; Write-Atomic $statusPath $status
+    if (-not $Install) { $status.status = 'waiting-for-exit'; $status.phase = 'waiting-for-exit'; Write-Atomic $statusPath $status; Wait-NoOwnedProcesses }
     $receiptPath = Join-Path $launcherRoot ('receipts/' + $Version + '.json')
     if (-not (Test-Path (Split-Path -Parent $receiptPath))) { New-Item -ItemType Directory -Path (Split-Path -Parent $receiptPath) -Force | Out-Null }
     Write-Atomic $receiptPath $receipt
     [IO.Directory]::Move($partial, $candidatePath)
     try {
+        if ($Install -and $CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
         Update-RootLauncher $SelfPath
-        $previous = [string]$originalVersion
+        $previous = if ($originalVersion) { [string]$originalVersion } else { $null }
         $next = [ordered]@{ version=$Version; previous=$previous; pendingHealth=$true; switchedAt=[DateTime]::UtcNow.ToString('o') }
+        if ($Install -and $CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
         Write-Atomic $currentPath $next
         $committed = $true
         Clear-OlderVersions $Version $previous
         Remove-PortableScratch $stage $storage; $stage = $null
-        $status.status = 'applied'; $status.Remove('progress'); Write-Atomic $statusPath $status
+        if (Test-Path -LiteralPath $installer) { Remove-Item -LiteralPath $installer -Force }
+        if (Test-Path -LiteralPath ($installer + '.part')) { Remove-Item -LiteralPath ($installer + '.part') -Force }
+        $status.status = 'applied'; $status.phase = 'applied'; Write-Atomic $statusPath $status
     } catch {
         if ($committed) {
-            try { Write-Atomic $currentPath $current; $committed = $false } catch { }
+            try { if ($current) { Write-Atomic $currentPath $current } else { Remove-Item -LiteralPath $currentPath -Force -ErrorAction SilentlyContinue }; $committed = $false } catch { }
         }
         if (-not $committed -and (Test-Path $candidatePath)) { Remove-PortableScratch $candidatePath $appRoot }
         if (-not $committed -and (Test-Path $receiptPath)) { Remove-Item $receiptPath -Force }
@@ -134,9 +153,9 @@ try {
     $message = $_.Exception.Message
     if (-not [string]::IsNullOrEmpty($Root)) { $message = $message.Replace($Root, '<portable-root>') }
     $message = $message -replace '(?i)(token|password|secret|authorization)\s*[:=]\s*\S+', '$1=<redacted>'
-    $status.status = 'failed'; $status.error = $message
+    $status.status = if ($message -match '(?i)cancelled') { 'cancelled' } else { 'failed' }; $status.phase = $status.status; $status.error = $message
 } finally {
-    if (-not $committed -and (Test-Path -LiteralPath $partial)) {
+    if (-not $committed -and $partial -and (Test-Path -LiteralPath $partial)) {
         try { Remove-PortableScratch $partial $appRoot } catch { }
     }
     if ($stage -and (Test-Path -LiteralPath $stage)) { try { Remove-PortableScratch $stage $storage } catch { } }
