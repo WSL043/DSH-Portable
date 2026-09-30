@@ -277,7 +277,7 @@ internal static class PortableLauncher {
             _cancel.Click += delegate { RequestCancel(); };
             _timer = new System.Windows.Forms.Timer { Interval = 350 };
             _timer.Tick += delegate { PollEngine(); };
-            Shown += delegate { StartAttempt(); _timer.Start(); };
+            Load += delegate { StartAttempt(); _timer.Start(); };
             FormClosing += OnFormClosing;
         }
 

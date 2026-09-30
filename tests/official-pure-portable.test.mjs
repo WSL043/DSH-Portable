@@ -291,3 +291,9 @@ test('official installer transfer resumes Range downloads, restarts unsupported 
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+test('the first-install window starts its download when it loads, not when it is shown, so a hidden launch still installs', async () => {
+  const source = await readFile(launcherPath, 'utf8');
+  assert.match(source, /Load \+= delegate \{ StartAttempt\(\); _timer\.Start\(\); \};/);
+  assert.doesNotMatch(source, /Shown \+= delegate \{ StartAttempt/);
+});
