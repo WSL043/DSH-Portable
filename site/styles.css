@@ -708,7 +708,9 @@ kbd {
 }
 .faq summary:after {
   content: "+";
+  flex: none;
   font-size: 20px;
+  line-height: 24px;
 }
 .faq details[open] summary:after {
   content: "−";
@@ -876,7 +878,7 @@ footer > p {
     height: 26%;
   }
   .hero-caption {
-    font-size: 9px;
+    font-size: 11px;
     bottom: 22px;
     gap: 12px;
   }
@@ -1137,11 +1139,12 @@ html[data-motion="reduced"] .image-button img {
 #page-mist.is-on { opacity: 1; }
 .hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: linear-gradient(to bottom, transparent, var(--paper)); pointer-events: none; z-index: 0; }
 .hero-caption { z-index: 1; }
+html, body { overflow-x: clip; }
 .section + .section { position: relative; border-top-color: transparent; }
 .section + .section::before { content: ""; position: absolute; top: 0; left: 6%; right: 6%; height: 1px; background: linear-gradient(90deg, transparent, var(--line) 12%, var(--line) 88%, transparent); }
 .section + .section::after { content: ""; position: absolute; top: 0; left: 6%; width: 22%; height: 1px; background: linear-gradient(90deg, transparent, var(--ink), transparent); opacity: 0.38; animation: shore-glint 9s cubic-bezier(.45,0,.25,1) infinite; }
 .section + .section:nth-of-type(even)::after { animation-delay: -4s; }
-@keyframes shore-glint { 0% { transform: translateX(-30%); opacity: 0; } 18% { opacity: 0.38; } 82% { opacity: 0.38; } 100% { transform: translateX(380%); opacity: 0; } }
+@keyframes shore-glint { 0% { transform: translateX(-30%); opacity: 0; } 18% { opacity: 0.38; } 82% { opacity: 0.38; } 100% { transform: translateX(300%); opacity: 0; } }
 html[data-motion="reduced"] .section + .section::after { animation: none; opacity: 0; }
 .folder-visual, .viewer-showcase .image-button, .desktop-shot { -webkit-box-reflect: below 10px linear-gradient(to bottom, transparent 68%, rgba(255, 255, 255, 0.13)); margin-bottom: 70px; }
 [data-theme="light"] .folder-visual, [data-theme="light"] .viewer-showcase .image-button, [data-theme="light"] .desktop-shot { -webkit-box-reflect: below 10px linear-gradient(to bottom, transparent 70%, rgba(0, 0, 0, 0.10)); }

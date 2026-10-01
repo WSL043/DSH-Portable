@@ -83,6 +83,12 @@ const copy = {
     faqDataQ: "Will copying the folder lose my sessions?",
     faqDataA:
       "Fully exit, then copy the whole folder to a USB drive or a computer with the same OS and architecture. Sessions, settings, plugins, and the default workspace move together.",
+    faqLineQ: "Stable 0.x or the 1.0 preview?",
+    faqLineA:
+      'For everyday use, choose stable 0.x, available for Windows, macOS, and Linux. The 1.0 preview runs the official desktop app itself; it is Windows only, still an alpha, and can sit next to 0.x. <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a> (in Chinese).',
+    faqDefenderQ: "What if Windows Security removed the program?",
+    faqDefenderA:
+      'Release files are not digitally signed yet and are occasionally misjudged. Download only from GitHub Releases and compare the checksums; the <a href="https://github.com/WSL043/DSH-Portable/blob/main/docs/user-guide.en.md#windows-security-removed-the-program-or-blocked-it">user guide</a> covers restoring the file and reporting the false positive.',
     faqUpdateQ: "Will an update overwrite my data?",
     faqUpdateA:
       "Portable and core update separately, and you can choose a core version. Updates keep user data and the workspace in place; data-preserving rollback and recovery tools are included.",
