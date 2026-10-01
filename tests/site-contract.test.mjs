@@ -214,9 +214,9 @@ test("website publishes truthful privacy and code-signing boundaries", () => {
   assert.match(app, /Privacy/);
   assert.match(app, /Code signing/);
   assert.match(privacy, /does not operate a telemetry or analytics service/i);
-  assert.match(signing, /application is in progress/i);
-  assert.match(signing, /current release files are unsigned/i);
-  assert.match(signing, /Free code signing provided by SignPath\.io, certificate by SignPath Foundation/);
+  assert.match(signing, /not digitally signed/i);
+  assert.match(signing, /was not approved/i);
+  assert.doesNotMatch(signing, /Free code signing provided by SignPath/i);
 });
 
 

@@ -308,9 +308,17 @@ On Windows, `runtime/DSH-App.dshpack` carries the compressed runtime. First laun
 
 DSH can execute local code, so use trusted models, plugins, and projects. The local service binds only to `127.0.0.1`, and the Portable shell disables DSH telemetry by default. `data` may contain API credentials and private conversations; protect it accordingly and prefer NTFS on removable Windows drives.
 
-Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and [code-signing policy](CODE_SIGNING.md). Current Windows releases are unsigned while the open-source signing application with SignPath Foundation is in progress.
+Read the full [privacy notice](PRIVACY.md), [security policy](SECURITY.md), and [code-signing policy](CODE_SIGNING.md). Current Windows releases are not digitally signed: the SignPath Foundation open-source signing application was not approved, and this free, volunteer-maintained project does not buy a certificate. If Windows Security flags a file, see the steps below.
 
 
+
+### Windows Security removed the program or blocked it
+
+Windows files are unsigned, and Microsoft Defender sometimes flags a freshly published unsigned program with a machine-learning guess (for example `Trojan:Win32/Bearfoos.A!ml`) and removes `DeepSeek-Herness.exe` right after you extract or start it. This is a false positive, but you cannot tell that from the alert alone, so verify first:
+
+1. Download only from [GitHub Releases](https://github.com/WSL043/DSH-Portable/releases) and compare the SHA-256 in `checksums.txt` (`Get-FileHash .\file.zip -Algorithm SHA256`).
+2. If you trust the file, open Windows Security → Virus & threat protection → Protection history, select the item, and choose Actions → Restore (or Allow on device). Then extract again and start it.
+3. Please report the exact threat name and Portable version in an [issue](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml); the file can then be submitted to Microsoft for re-analysis.
 
 ## Get help
 

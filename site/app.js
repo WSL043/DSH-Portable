@@ -57,7 +57,7 @@ const copy = {
       "Grant execute permission and run. Data stays in the adjacent directory.",
     completeFolder: "Complete portable directory",
     downloadTrust:
-      'Windows files are currently unsigned and may trigger SmartScreen; the project is applying for open-source code signing provided by SignPath Foundation. User data stays in <code>data/</code> and the default workspace in <code>workspace/</code>. <a href="https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md">Read the code-signing policy</a>.',
+      'Windows files are not digitally signed and may trigger SmartScreen or a Windows Security false positive; download only from GitHub Releases, compare the checksums, and see the <a href=\"https://github.com/WSL043/DSH-Portable/blob/main/docs/user-guide.en.md#windows-security-removed-the-program-or-blocked-it\">user guide</a> if a file is removed. User data stays in <code>data/</code> and the default workspace in <code>workspace/</code>. <a href="https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md">Read the code-signing policy</a>.',
     allDownloads: "View Release",
     checksums: "Checksums",
     marketText:

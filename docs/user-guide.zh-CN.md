@@ -316,9 +316,17 @@ Windows 压缩运行时保存在 `runtime/DSH-App.dshpack`，首次启动会在 
 
 DSH 具备本地代码执行能力，请只使用可信模型、插件和项目。本地服务只绑定 `127.0.0.1`，便携外壳默认关闭 DSH 遥测。`data` 可能包含 API 凭据和私人会话；请妥善保管，Windows 移动盘优先使用 NTFS。
 
-查看完整的[隐私说明](PRIVACY.md)、[安全策略](SECURITY.md)和[代码签名策略](CODE_SIGNING.md)。当前 Windows Release 尚未签名；SignPath Foundation 的开源签名申请正在进行中。
+查看完整的[隐私说明](PRIVACY.md)、[安全策略](SECURITY.md)和[代码签名策略](CODE_SIGNING.md)。当前 Windows Release 没有数字签名；曾申请 SignPath Foundation 的开源签名，未获通过，本项目免费无偿维护，暂不购买证书。若被 Windows 安全中心误报，见下文处理方法。
 
 
+
+### Windows 安全中心删除了程序或拦截启动
+
+Windows 文件目前没有数字签名，Microsoft Defender 有时会对刚发布的未签名程序做机器学习判断（例如 `Trojan:Win32/Bearfoos.A!ml`），在你解压或首次启动后删除 `DeepSeek-Herness.exe`。这是误报，但仅凭提示无法分辨，请先核对：
+
+1. 只从 [GitHub Releases](https://github.com/WSL043/DSH-Portable/releases) 下载，并把 `checksums.txt` 中的 SHA-256 与本地文件比对（`Get-FileHash .\文件.zip -Algorithm SHA256`）。
+2. 确认可信后，打开 Windows 安全中心 → 病毒和威胁防护 → 保护历史记录，选中该项，选择“操作”→“还原”（或“允许在设备上”），再重新解压并启动。
+3. 请在 [Issue](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml) 中告知具体的威胁名称和 Portable 版本，我们会把文件提交给微软重新分析。
 
 ## 获取帮助
 
