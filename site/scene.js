@@ -36,6 +36,7 @@ const fogUniforms = {
   time: { value: 0 },
   light: { value: 0 },
   aspect: { value: 1 },
+  shore: { value: 0.255 },
   photo: { value: atmosphere },
 };
 const fogMaterial = new THREE.ShaderMaterial({
@@ -44,7 +45,7 @@ const fogMaterial = new THREE.ShaderMaterial({
   uniforms: fogUniforms,
   vertexShader: `varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.,1.);}`,
   fragmentShader: `
-varying vec2 v;uniform sampler2D photo;uniform float time,light,aspect;
+varying vec2 v;uniform sampler2D photo;uniform float time,light,aspect,shore;
 float hash(vec3 p){p=fract(p*.3183+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
 float noise(vec3 p){vec3 q=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(hash(q),hash(q+vec3(1,0,0)),f.x),mix(hash(q+vec3(0,1,0)),hash(q+vec3(1,1,0)),f.x),f.y),mix(mix(hash(q+vec3(0,0,1)),hash(q+vec3(1,0,1)),f.x),mix(hash(q+vec3(0,1,1)),hash(q+vec3(1,1,1)),f.x),f.y),f.z);}
 float field(vec3 p){return noise(p)*.6+noise(p*2.07)*.28+noise(p*4.1)*.12;}
@@ -67,9 +68,17 @@ scatter+=trans*alpha*lighting;trans*=1.-alpha;
 }
 // One density field: luminous haze on charcoal, ink haze on paper.
 float haze=clamp((1.-trans)*.48+scatter*.8,0.,.65);
-float night=original*.12+haze*.065;
-float day=.96-original*.20-haze*.72;
+// Mist banks lift off the water and thin out toward the top; a faint glow sits on the horizon.
+float rise=smoothstep(1.,shore,v.y)*.55+.45;
+float shoreGlow=exp(-pow((v.y-shore-.06)/.115,2.))*(.7+.3*noise(vec3(v.x*3.2-time*.05,v.y*5.,time*.04)));
+vec2 off=(v-.5)*vec2(aspect*.62,1.);
+float vignette=smoothstep(.2,.95,dot(off,off)*1.7);
+float night=original*.12+haze*.105*rise+shoreGlow*.05;
+night*=1.-vignette*.55;
+float day=.965-original*.20-haze*.78*rise-shoreGlow*.05;
+day=mix(day,.985,vignette*.45);
 float value=mix(night,day,light);
+value+=(hash(vec3(gl_FragCoord.xy,floor(time*24.)))-.5)/255.;
 gl_FragColor=vec4(vec3(value),1.);
 }`,
 });
@@ -104,12 +113,16 @@ waterScene.add(
   float wave=sin(v.y*210.+sin(v.x*14.+time*.38)*1.8-time*.9);
   float fine=sin(v.y*470.+v.x*24.+time*.65);
   vec2 reflected=vec2(v.x+(wave+fine*.35)*.003*depth,shore+(shore-v.y)*.86+wave*.0015*depth);
-  vec3 reflection=texture2D(image,reflected).rgb;
+  float spread=.004+depth*.018;
+  vec3 reflection=(texture2D(image,reflected).rgb*2.+texture2D(image,reflected+vec2(spread,0.)).rgb+texture2D(image,reflected-vec2(spread,0.)).rgb)*.25;
   vec3 water=vec3(mix(.007,.79,light));
-  float strength=.52*pow(1.-depth,1.5);
+  float strength=.56*pow(1.-depth,1.35);
   vec3 surface=mix(water,reflection,strength);
-  float glint=pow(max(0.,wave*.65+fine*.35),12.)*.013*depth;
-  surface+=vec3(glint)*mix(1.,.4,light);
+  float glint=pow(max(0.,wave*.65+fine*.35),12.)*.016*depth;
+  float drift=pow(max(0.,sin(v.x*38.+sin(v.y*90.+time*.5)*2.4-time*.32)),18.)*.011*(1.-depth)*(1.-depth);
+  surface+=vec3(glint+drift)*mix(1.,.4,light);
+  float horizon=exp(-pow((v.y-shore)/.0014,2.));
+  surface+=vec3(horizon*mix(.14,-.07,light));
   color=mix(color,surface,smoothstep(0.,.035,shore-v.y));
  }
  gl_FragColor=vec4(color,1.);
@@ -204,6 +217,7 @@ stage.addEventListener("pointerleave", () => {
   targetX = targetY = 0;
   wake();
 });
+const mobile_shore = (width) => (width <= 760 ? 0.205 : 0.255);
 function size() {
   const width = canvas.clientWidth,
     height = canvas.clientHeight;
@@ -221,6 +235,7 @@ function size() {
     Math.round((fogWidth * height) / width),
   );
   fogUniforms.aspect.value = width / height;
+  fogUniforms.shore.value = mobile_shore(width);
   const mobile = width <= 760;
   const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 8;
   const viewWidth = viewHeight * camera.aspect;

@@ -473,3 +473,5 @@ screenshotDialog.addEventListener("click", (event) => {
 import("./scene.js").catch(() =>
   document.querySelector("[data-hero]").classList.add("scene-unavailable"),
 );
+// The mist keeps drifting behind the rest of the page; the page stays fully readable without it.
+import("./mist.js").catch(() => {});
