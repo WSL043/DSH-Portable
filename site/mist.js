@@ -54,6 +54,8 @@ function heroCovers() {
 function draw(now, force) {
   frame = 0;
   if (document.hidden) return;
+  // About 30 frames per second is plenty for slow mist.
+  if (!force && now - last < 30) { frame = requestAnimationFrame(draw); return; }
   const dt = Math.min(0.1, Math.max(0, (now - last) / 1000));
   last = now;
   const target = root.dataset.theme === "light" ? 1 : 0;

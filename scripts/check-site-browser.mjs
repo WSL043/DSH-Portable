@@ -56,7 +56,8 @@ async function pageFor(options = {}) {
     for (const name of ['drawArrays','drawElements']) {
       const draw = WebGL2RenderingContext.prototype[name];
       WebGL2RenderingContext.prototype[name] = function(...args) {
-        window.sceneDraws++;
+        // Only the hero scene must stop when it is offscreen; the low-cost page mist keeps drifting behind the content.
+        if (this.canvas && this.canvas.id === 'volume-scene') window.sceneDraws++;
         return draw.apply(this, args);
       };
     }
