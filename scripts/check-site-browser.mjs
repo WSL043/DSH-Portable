@@ -204,7 +204,7 @@ try {
   );
   await fallback.close();
   const guide = await pageFor({viewport:{width:390,height:844}});
-  for (const slug of ['get-started','move-workspace']) {
+  for (const slug of ['get-started','move-workspace','official-desktop-portable']) {
     const response = await guide.goto(base + '/guides/' + slug + '.html');
     assert.equal(response.status(),200);
     assert.equal(await guide.locator('article, .guide-article').count(),1);

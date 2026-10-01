@@ -2,7 +2,7 @@
   {
     "slug": "get-started",
     "title": "不想配置环境，怎么开始用 DeepSeek Harness？",
-    "description": "用 DSH-Portable 准备 DeepSeek Harness 工作环境，在界面连接模型、安装插件，并了解稳定版与候选版的区别。",
+    "description": "用 DSH-Portable 准备 DeepSeek Harness 工作环境，在界面连接模型、安装插件，并了解 Portable 与内核如何分开更新。",
     "date": "2026-09-10",
     "body": [
       {
@@ -69,7 +69,7 @@
       },
       {
         "type": "p",
-        "text": "Portable 桌面部分与官方 DeepSeek Harness 内核分别管理。日常使用优先选择稳定版；候选通道提供经过相应兼容检查的预览版本。不同产品版本的设置入口可能不同，以当前页面提示和 Release 说明为准；不是所有上游版本都适用于当前 Portable。"
+        "text": "Portable 桌面部分与官方 DeepSeek Harness 内核分别管理。在设置 → 更新里，可以从最新的三个已验证内核版本中选择；不同产品版本的设置入口可能不同，以当前页面提示和 Release 说明为准，不是所有上游版本都适用于当前 Portable。"
       },
       {
         "type": "p",
@@ -156,6 +156,95 @@
         "type": "link",
         "text": "还没开始使用？查看免配环境入门指南",
         "url": "https://wsl043.github.io/DSH-Portable/guides/get-started.html"
+      }
+    ]
+  },
+  {
+    "slug": "official-desktop-portable",
+    "title": "官方 DeepSeek Harness 桌面版，怎样变成可以带走的文件夹？",
+    "description": "DSH-Portable 1.0 预览线直接运行官方桌面应用：解压即用，会话、设置、插件和登录状态都在文件夹里，官方发布新版本后在应用内更新。",
+    "date": "2026-10-02",
+    "body": [
+      {
+        "type": "p",
+        "text": "官方 DeepSeek Harness 桌面版装在一台电脑里，换电脑就要重新登录、重新装插件，会话也留在原来的机器上。DSH-Portable 的 1.0 预览线换了一种做法：不再另做外壳，而是直接运行官方桌面应用，只改变它存放数据的位置。"
+      },
+      {
+        "type": "h2",
+        "text": "它和 0.x 稳定版有什么不同"
+      },
+      {
+        "type": "p",
+        "text": "0.x 稳定版是社区维护的桌面外壳，支持 Windows、macOS 和 Linux，Portable 与 DSH 内核分开更新。1.0 预览线运行的是官方桌面应用本身：界面、更新提示和插件页都是官方的，官方文件保持原样，唯一允许的改动是更新源配置。目前只提供 Windows x64 的 alpha 预览版，不是 0.x 的升级路径，两者可以并存。"
+      },
+      {
+        "type": "h2",
+        "text": "开始使用"
+      },
+      {
+        "type": "steps",
+        "items": [
+          "到 Releases 下载 1.0.0-alpha 预览版：完整包约 400 MB，解压即用；轻量包约 1 MB，首次启动时从官方下载站下载并校验官方应用。",
+          "解压到一个独立文件夹，运行 DeepSeek Harness Portable.exe。运行前请先退出已安装的官方桌面应用，同一台电脑同一时间只能运行一个官方实例。",
+          "首次启动在欢迎页点击“登录”，在浏览器里完成官方授权；也可以改用 API Key。登录状态保存在文件夹内，不需要重复登录。",
+          "预装的图片查看器和会话管理默认关闭，在官方“插件”页打开即可。打开会话管理后重启一次应用，之后已有会话才能永久删除。"
+        ]
+      },
+      {
+        "type": "link",
+        "text": "前往 1.0.0 预览版下载页",
+        "url": "https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4"
+      },
+      {
+        "type": "h2",
+        "text": "带着它换一台电脑"
+      },
+      {
+        "type": "steps",
+        "items": [
+          "在系统托盘选择退出，等待程序完全退出。官方应用关闭窗口时只是收进托盘，运行中的任务不会中断。",
+          "复制整个文件夹到 U 盘或新电脑，保持目录结构。会话、设置、插件、登录状态和运行缓存都在这个文件夹里。",
+          "在新位置运行 DeepSeek Harness Portable.exe。同一份数据不要同时在两台电脑上运行。"
+        ]
+      },
+      {
+        "type": "p",
+        "text": "我们在真实 Windows 上把已登录的文件夹整体复制到另一个路径，启动后仍是登录状态，没有再弹出登录窗口。跨机器、跨登录环境的更多情形仍在验证，因此目前标为 alpha。"
+      },
+      {
+        "type": "h2",
+        "text": "官方发布新版本之后"
+      },
+      {
+        "type": "p",
+        "text": "官方的更新提示和“安装并重启”按钮照常工作。点击后，启动器从已验收的更新索引取得官方安装包，核对大小、SHA-512 和 Authenticode 发布者，再解包到新的版本目录；只保留当前版本和上一个版本，新版本首次启动 20 秒内异常退出时，会自动回到上一个版本。"
+      },
+      {
+        "type": "h2",
+        "text": "先了解这些限制"
+      },
+      {
+        "type": "steps",
+        "items": [
+          "仅 Windows x64，处于 alpha 预览阶段；旧版 0.x 的数据不会自动迁移。",
+          "官方默认工作区建在系统“文档”文件夹里（文档\\deepseek-harness），与官方安装版一致，不随便携文件夹搬走；你自己的项目可以放在任何位置。",
+          "运行期间，dsh:// 链接由便携版接管，正常退出后还原。除此之外，写到文件夹外面的只有官方更新器使用的缓存目录。",
+          "Windows 文件目前没有数字签名，Windows 安全中心偶尔会误报。只从 GitHub Releases 下载并核对校验值，被误删时的处理方法见用户指南。"
+        ]
+      },
+      {
+        "type": "link",
+        "text": "查看用户指南中的误报处理方法",
+        "url": "https://github.com/WSL043/DSH-Portable/blob/main/docs/user-guide.zh-CN.md#windows-安全中心删除了程序或拦截启动"
+      },
+      {
+        "type": "p",
+        "text": "DSH-Portable 是独立社区项目，不是 DeepSeek 官方应用，也未获 DeepSeek 背书。"
+      },
+      {
+        "type": "link",
+        "text": "想继续使用 0.x 稳定版？查看换电脑迁移指南",
+        "url": "https://wsl043.github.io/DSH-Portable/guides/move-workspace.html"
       }
     ]
   }

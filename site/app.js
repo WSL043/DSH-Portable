@@ -133,7 +133,7 @@ const copy = {
     developmentLineLabel: "ALPHA PREVIEW",
     developmentLineTitle: "1.0 line",
     developmentLineText:
-      'Turns the official desktop app itself into a portable folder, for Windows only. It is an alpha preview you can try from <a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4">Releases</a>; it is not an upgrade path from 0.x.',
+      'Runs the official desktop app itself and only moves its data into the folder: sessions, settings, plugins, and sign-in travel together, and new official releases install from the app\'s own "Install and Restart". Windows only; an alpha preview you can try from <a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4">Releases</a>; it is not an upgrade path from 0.x. <a href="../guides/official-desktop-portable.html">Read about the 1.0 preview</a>',
     pluginsTitle: "Plugin tools,<br>kept in your folder.",
     managerText:
       "Organize and find sessions to pick up earlier work. Both default plugins are maintained and updated independently.",
