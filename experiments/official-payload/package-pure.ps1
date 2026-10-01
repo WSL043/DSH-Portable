@@ -86,7 +86,7 @@ try {
 
 **`dsh://`：** 启动器驻留时临时接管当前用户的 `HKCU\Software\Classes\dsh\shell\open\command`，退出时还原启动前的默认命令值。外部目录写入仅包括 `%LOCALAPPDATA%\<cacheDirName>\pending`（官方更新器管理的启动器副本及其缓存）和上述用户协议注册表项；日志、应用数据、下载暂存与版本均在本目录。
 
-**运行限制：** 固定端口 19387 不能与已安装官方版或另一 Portable 实例同时运行；启动器检测到冲突时只提示、不结束进程。使用纯便携版前请先关闭其他 DeepSeek Harness 桌面进程。启动器不修改官方 EXE、ASAR 或运行库，也不包含适配器、默认插件或市场文件。
+**运行限制：** 固定端口 19387 不能与已安装官方版或另一 Portable 实例同时运行；启动器检测到冲突时只提示、不结束进程。使用纯便携版前请先关闭其他 DeepSeek Harness 桌面进程。官方默认工作区创建在系统“文档”文件夹（`文档\deepseek-harness`），与官方安装版一致，不随本目录搬走；你自己的项目可放在任何位置。启动器不修改官方 EXE、ASAR 或运行库，也不包含适配器、默认插件或市场文件。
 
 ---
 
@@ -98,7 +98,7 @@ try {
 
 **`dsh://`:** While resident, the launcher temporarily owns `HKCU\Software\Classes\dsh\shell\open\command` and restores the original default command value on exit. Writes outside the portable root are limited to `%LOCALAPPDATA%\<cacheDirName>\pending` (the official updater-managed launcher copy/cache) and that per-user protocol key. Logs, user data, staging and version directories remain inside the root.
 
-**Runtime limits:** Fixed port 19387 cannot be shared with an installed official app or another Portable instance. A conflict produces a bilingual message; no process is terminated. Close other DeepSeek Harness desktop processes first. The launcher does not patch the official EXE, ASAR or runtime and ships no adapters, default plugins or marketplace files.
+**Runtime limits:** Fixed port 19387 cannot be shared with an installed official app or another Portable instance. A conflict produces a bilingual message; no process is terminated. Close other DeepSeek Harness desktop processes first. The official default workspace is created in your system Documents folder (`Documents\deepseek-harness`), as with the installed app, and does not move with this folder; your own projects can live anywhere. The launcher does not patch the official EXE, ASAR or runtime and ships no adapters, default plugins or marketplace files.
 '@
     if ($null -ne $seedManifest) {
         $readme = $readme.Replace('不预装插件、不带市场。', '预装的插件默认关闭，不带市场。首次启动创建官方 profile 后，第二次启动前完成播种。')
