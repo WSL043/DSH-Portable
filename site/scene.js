@@ -48,7 +48,7 @@ const fogMaterial = new THREE.ShaderMaterial({
 varying vec2 v;uniform sampler2D photo;uniform float time,light,aspect,shore;
 float hash(vec3 p){p=fract(p*.3183+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
 float noise(vec3 p){vec3 q=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(hash(q),hash(q+vec3(1,0,0)),f.x),mix(hash(q+vec3(0,1,0)),hash(q+vec3(1,1,0)),f.x),f.y),mix(mix(hash(q+vec3(0,0,1)),hash(q+vec3(1,0,1)),f.x),mix(hash(q+vec3(0,1,1)),hash(q+vec3(1,1,1)),f.x),f.y),f.z);}
-float field(vec3 p){return noise(p)*.6+noise(p*2.07)*.28+noise(p*4.1)*.12;}
+float field(vec3 p){return noise(p)*.64+noise(p*2.07)*.28+noise(p*4.1)*.08;}
 void main(){
 vec2 sampleUV=v;float imageAspect=1.8;if(aspect>imageAspect)sampleUV.y=(v.y-.5)*imageAspect/aspect+.5;else sampleUV.x=(v.x-.5)*aspect/imageAspect+.5;
 float original=dot(texture2D(photo,sampleUV).rgb,vec3(.2126,.7152,.0722));
@@ -78,7 +78,6 @@ night*=1.-vignette*.55;
 float day=.965-original*.20-haze*.78*rise-shoreGlow*.05;
 day=mix(day,.985,vignette*.45);
 float value=mix(night,day,light);
-value+=(hash(vec3(gl_FragCoord.xy,floor(time*24.)))-.5)/255.;
 gl_FragColor=vec4(vec3(value),1.);
 }`,
 });
