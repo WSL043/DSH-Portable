@@ -11,7 +11,7 @@ await rm(output, { recursive: true, force: true });
 await mkdir(path.join(output, "assets"), { recursive: true });
 await cp(path.join(root, "site"), output, { recursive: true });
 
-for (const asset of ["DSH-Portable.svg", "DSH-Portable-white.svg", "DSH-Portable-512.png", "dsh-interface-zh.png", "dsh-interface-en.png", "hero-atmosphere.png", "viewer-dark.png", "windows-navigation-dark.png", "dsh-workspace-0.6.4.png"]) {
+for (const asset of ["DSH-Portable.svg", "DSH-Portable-white.svg", "DSH-Portable-512.png", "dsh-interface-zh.png", "dsh-interface-en.png", "hero-atmosphere.png", "viewer-dark.png", "windows-navigation-dark.png", "dsh-workspace-0.6.4.png", "dsh-interface-zh-light.png"]) {
   await cp(path.join(root, "assets", asset), path.join(output, "assets", asset));
 }
 
@@ -40,7 +40,8 @@ for (const [from, to] of [
   ['"softwareRequirements": "稳定版 0.x：Windows、macOS 和 Linux；1.0 线：仅 Windows alpha 预览版。"', '"softwareRequirements": "Stable 0.x: Windows, macOS, and Linux; 1.0 line: Windows-only alpha preview."'],
   ['<title>DSH-Portable｜DeepSeek Harness 的便携版</title>', '<title>DSH-Portable | Portable DeepSeek Harness in a folder</title>'],
   ['<a class="language-switch" href="en/" hreflang="en" lang="en" aria-label="Switch to English" data-language-switch>EN</a>', '<a class="language-switch" href="../" hreflang="zh-CN" lang="zh-CN" aria-label="切换到中文" data-language-switch>中</a>'],
-  ['src="assets/dsh-interface-zh.png"', 'src="../assets/dsh-interface-en.png"']
+  ['src="assets/dsh-interface-zh.png"', 'src="../assets/dsh-interface-en.png"'],
+  ['src="assets/dsh-interface-zh-light.png"', 'src="../assets/dsh-workspace-0.6.4.png"']
 ]) english = replaceRequired(english, from, to);
 
 english = english

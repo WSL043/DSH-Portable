@@ -17,7 +17,7 @@ const loader = new THREE.TextureLoader();
 const screenshot =
   root.lang === "en" ? "dsh-interface-en.png" : "dsh-interface-zh.png";
 const [dark, bright, atmosphere] = await Promise.all(
-  [screenshot, "dsh-workspace-0.6.4.png", "hero-atmosphere.png"].map((file) =>
+  [screenshot, root.lang === "en" ? "dsh-workspace-0.6.4.png" : "dsh-interface-zh-light.png", "hero-atmosphere.png"].map((file) =>
     loader.loadAsync(new URL(`./assets/${file}`, import.meta.url).href),
   ),
 );
