@@ -71,3 +71,8 @@ jobs:
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v5
+      - name: Tell Bing and other IndexNow engines the site changed
+        # Public, key-verified notification for our own pages; a failure never blocks the deploy.
+        continue-on-error: true
+        run: |
+          curl --fail --silent --show-error --max-time 30 -X POST https://api.indexnow.org/indexnow             -H 'Content-Type: application/json; charset=utf-8'             -d '{"host":"wsl043.github.io","key":"6d203f8b1cef0e9f2d632ad627993e9d","keyLocation":"https://wsl043.github.io/DSH-Portable/6d203f8b1cef0e9f2d632ad627993e9d.txt","urlList":["https://wsl043.github.io/DSH-Portable/","https://wsl043.github.io/DSH-Portable/en/","https://wsl043.github.io/DSH-Portable/guides/get-started.html","https://wsl043.github.io/DSH-Portable/guides/move-workspace.html"]}'
