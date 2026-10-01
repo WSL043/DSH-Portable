@@ -5,7 +5,8 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  <strong>The portable edition of DeepSeek Harness: take sessions, settings, plugins, and your workspace in one folder.</strong>
+  <strong>Portable DeepSeek Harness: copy one folder to a USB drive and keep working on another computer.</strong><br>
+  Sessions, settings, plugins, and workspace live in the folder. No install, no system changes; Windows, macOS, Linux.
 </p>
 
 <p align="center">

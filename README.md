@@ -5,7 +5,8 @@
 <h1 align="center">DSH-Portable</h1>
 
 <p align="center">
-  <strong>DeepSeek Harness 的便携版：一个文件夹，带走会话、设置、插件和工作区。</strong>
+  <strong>DeepSeek Harness 便携版：整个文件夹拷到 U 盘，换一台电脑接着用。</strong><br>
+  会话、设置、插件和工作区都在文件夹里；不安装、不改系统，Windows / macOS / Linux。
 </p>
 
 <p align="center">
