@@ -1077,3 +1077,57 @@ html[data-motion="reduced"] .image-button img {
 .guide-article img { width:100%;border:1px solid var(--line);border-radius:8px; }
 .guide-article figcaption { margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7; }
 @media(max-width:760px) { .guide-link-grid { grid-template-columns:1fr;gap:30px; }.guide-article { padding:40px 7% 65px; } }
+
+/* Refinement layer: a readable type scale, a featured 1.0 card, and the folder hand-off strip. */
+.section-heading .eyebrow, .section-kicker { font-size: 12px; letter-spacing: 0.16em; }
+.section-heading > p, .section-description { font-size: 16px; line-height: 1.75; max-width: 420px; }
+.portable-facts dt { font-size: 20px; }
+.portable-facts dd { font-size: 15px; line-height: 1.8; }
+.folder-label { font-size: 20px; }
+.folder-rows > div { font-size: 14px; }
+.folder-rows code { font-size: 15px; }
+.folder-foot { font-size: 13px; }
+.choice-card .eyebrow, .line-card > span { font-size: 11px; }
+.choice-card h3 { font-size: 26px; }
+.choice-card li { font-size: 15px; line-height: 1.75; }
+.project-boundary { font-size: 13px; }
+.line-heading h3 { font-size: 22px; }
+.line-heading p { font-size: 15px; }
+.line-card { padding: 30px 32px; }
+.line-card h4 { font-size: 22px; margin: 14px 0 12px; }
+.line-card p { font-size: 15px; line-height: 1.8; }
+.line-card.is-next { border-color: var(--ink); background: var(--surface); }
+.line-card.is-next > span { color: var(--ink); }
+.line-points { list-style: none; margin: 0 0 16px; padding: 0; }
+.line-points li { position: relative; padding: 9px 0 9px 22px; border-top: 1px solid var(--line); font-size: 15px; line-height: 1.7; color: var(--muted); }
+.line-points li::before { content: ""; position: absolute; left: 2px; top: 21px; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); }
+.line-card p a { border-bottom: 1px solid var(--line); padding-bottom: 2px; color: var(--ink); }
+.guide-link-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 36px; }
+.guide-link-grid h3 { font-size: 22px; line-height: 1.4; }
+.guide-link-grid p { font-size: 15px; line-height: 1.8; color: var(--muted); }
+.guide-link-grid a { transition: border-color 0.25s; }
+.guide-link-grid a:hover { border-top-color: var(--ink); }
+.handoff { list-style: none; margin: 64px 0 0; padding: 30px 34px; display: grid; grid-template-columns: 1fr minmax(48px, 0.45fr) 1fr minmax(48px, 0.45fr) 1fr; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(140deg, var(--surface), var(--paper)); }
+.handoff li { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.handoff strong { font-size: 19px; font-weight: 500; }
+.handoff li > span:not(.handoff-step) { font-size: 14px; line-height: 1.7; color: var(--muted); }
+.handoff-step { font: 11px/1 ui-monospace, monospace; letter-spacing: 0.12em; color: var(--muted); }
+.handoff-link { position: relative; height: 1px; background: var(--line); align-self: center; }
+.handoff-link i { position: absolute; top: -3px; left: 0; width: 7px; height: 7px; border-radius: 50%; background: var(--ink); animation: handoff-travel 3.2s cubic-bezier(.45,0,.2,1) infinite; }
+.handoff-link:nth-of-type(4) i { animation-delay: 1.6s; }
+@keyframes handoff-travel { 0% { left: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { left: calc(100% - 7px); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .handoff-link i { animation: none; left: calc(50% - 3px); } }
+@media (max-width: 900px) {
+  .guide-link-grid { grid-template-columns: 1fr; gap: 30px; }
+  .handoff { grid-template-columns: 1fr; padding: 24px; gap: 8px; }
+  .handoff-link { width: 1px; height: 30px; margin-left: 4px; }
+  .handoff-link i { left: -3px; top: 0; animation-name: handoff-travel-v; }
+  @keyframes handoff-travel-v { 0% { top: 0; opacity: 0; } 15% { opacity: 1; } 85% { opacity: 1; } 100% { top: calc(100% - 7px); opacity: 0; } }
+}
+
+.hero-lede { font-size: 17px; line-height: 1.75; max-width: 440px; }
+.desktop-notes h3 { font-size: 20px; }
+.desktop-notes p { font-size: 15px; line-height: 1.8; color: var(--muted); }
+.desktop-notes article > span { font-size: 11px; }
+.faq-list p { font-size: 15px; line-height: 1.8; }
+@media (max-width: 760px) { .hero-lede { font-size: 15px; max-width: 360px; } }
