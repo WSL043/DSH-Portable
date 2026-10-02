@@ -49,6 +49,7 @@ const fogUniforms = {
   light: { value: 0 },
   aspect: { value: 1 },
   shore: { value: 0.255 },
+  pointer: { value: new THREE.Vector3(0.5, 0.5, 0) },
   photo: { value: atmosphere },
 };
 const fogMaterial = new THREE.ShaderMaterial({
@@ -57,7 +58,7 @@ const fogMaterial = new THREE.ShaderMaterial({
   uniforms: fogUniforms,
   vertexShader: `varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.,1.);}`,
   fragmentShader: `
-varying vec2 v;uniform sampler2D photo;uniform float time,light,aspect,shore;
+varying vec2 v;uniform sampler2D photo;uniform float time,light,aspect,shore;uniform vec3 pointer;
 float hash(vec3 p){p=fract(p*.3183+vec3(.1,.2,.3));p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
 float noise(vec3 p){vec3 q=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(mix(hash(q),hash(q+vec3(1,0,0)),f.x),mix(hash(q+vec3(0,1,0)),hash(q+vec3(1,1,0)),f.x),f.y),mix(mix(hash(q+vec3(0,0,1)),hash(q+vec3(1,0,1)),f.x),mix(hash(q+vec3(0,1,1)),hash(q+vec3(1,1,1)),f.x),f.y),f.z);}
 float field(vec3 p){return noise(p)*.64+noise(p*2.07)*.28+noise(p*4.1)*.08;}
@@ -80,14 +81,19 @@ scatter+=trans*alpha*lighting;trans*=1.-alpha;
 }
 // One density field: luminous haze on charcoal, ink haze on paper.
 float haze=clamp((1.-trans)*.48+scatter*.8,0.,.65);
+// The pointer carries a soft lamp: the mist thins around it and catches a little light.
+vec2 pd=(v-pointer.xy)*vec2(aspect,1.);
+float near=exp(-dot(pd,pd)/.028)*pointer.z;
+float halo=exp(-dot(pd,pd)/.16)*pointer.z;
+haze*=1.-near*.65;
 // Mist banks lift off the water and thin out toward the top; a faint glow sits on the horizon.
 float rise=smoothstep(1.,shore,v.y)*.55+.45;
 float shoreGlow=exp(-pow((v.y-shore-.06)/.115,2.))*(.7+.3*noise(vec3(v.x*3.2-time*.05,v.y*5.,time*.04)));
 vec2 off=(v-.5)*vec2(aspect*.62,1.);
 float vignette=smoothstep(.2,.95,dot(off,off)*1.7);
-float night=original*.12+haze*.105*rise+shoreGlow*.05;
+float night=original*.12+haze*.105*rise+shoreGlow*.05+halo*.06+near*.035;
 night*=1.-vignette*.55;
-float day=.965-original*.20-haze*.78*rise-shoreGlow*.05;
+float day=.965-original*.20-haze*.78*rise-shoreGlow*.05+halo*.03;
 day=mix(day,.985,vignette*.45);
 float value=mix(night,day,light);
 gl_FragColor=vec4(vec3(value),1.);
@@ -106,6 +112,8 @@ const waterUniforms = {
   time: { value: 0 },
   light: { value: 0 },
   shore: { value: 0.255 },
+  aspect: { value: 1 },
+  ripples: { value: Array.from({ length: 6 }, () => new THREE.Vector4(0, 0, -99, 0)) },
 };
 waterScene.add(
   new THREE.Mesh(
@@ -115,7 +123,7 @@ waterScene.add(
       depthWrite: false,
       uniforms: waterUniforms,
       vertexShader: `varying vec2 v;void main(){v=uv;gl_Position=vec4(position.xy,0.,1.);}`,
-      fragmentShader: `varying vec2 v;uniform sampler2D image;uniform float time,light,shore;
+      fragmentShader: `varying vec2 v;uniform sampler2D image;uniform float time,light,shore,aspect;uniform vec4 ripples[6];
  void main(){
  vec3 color=texture2D(image,v).rgb;
 
@@ -124,6 +132,18 @@ waterScene.add(
   float wave=sin(v.y*210.+sin(v.x*14.+time*.38)*1.8-time*.9);
   float fine=sin(v.y*470.+v.x*24.+time*.65);
   vec2 reflected=vec2(v.x+(wave+fine*.35)*.003*depth,shore+(shore-v.y)*.86+wave*.0015*depth);
+  // Rings spread from where the pointer touched the water; flattened, as a surface seen at a low angle.
+  vec2 push=vec2(0.);float ring=0.;
+  for(int i=0;i<6;i++){
+   vec4 r=ripples[i];float age=time-r.z;
+   if(r.w>0.&&age>0.&&age<4.5){
+    vec2 d=(v-r.xy)*vec2(aspect,3.2);float dist=length(d);float front=age*.24;
+    float band=exp(-pow((dist-front)/.05,2.))*exp(-age*.95)*r.w;
+    float w=sin((dist-front)*95.)*band;
+    push+=d/(dist+.0001)*w*.011;ring+=w;
+   }
+  }
+  reflected+=push;
   float spread=.004+depth*.018;
   vec3 reflection=(texture2D(image,reflected).rgb*2.+texture2D(image,reflected+vec2(spread,0.)).rgb+texture2D(image,reflected-vec2(spread,0.)).rgb)*.25;
   vec3 water=vec3(mix(.007,.79,light));
@@ -132,6 +152,7 @@ waterScene.add(
   float glint=pow(max(0.,wave*.65+fine*.35),12.)*.016*depth;
   float drift=pow(max(0.,sin(v.x*38.+sin(v.y*90.+time*.5)*2.4-time*.32)),18.)*.011*(1.-depth)*(1.-depth);
   surface+=vec3(glint+drift)*mix(1.,.4,light);
+  surface+=vec3(max(ring,0.)*mix(.07,-.06,light));
   float horizon=exp(-pow((v.y-shore)/.0014,2.));
   surface+=vec3(horizon*mix(.14,-.07,light));
   color=mix(color,surface,smoothstep(0.,.035,shore-v.y));
@@ -262,6 +283,52 @@ stage.addEventListener("pointerleave", () => {
   targetX = targetY = 0;
   wake();
 });
+// Lamp and ripples follow the pointer anywhere in the hero (not on touch, not with reduced motion).
+const lamp = { x: 0.5, y: 0.5, tx: 0.5, ty: 0.5, on: 0, target: 0, idle: 0 };
+let rippleIndex = 0,
+  lastRipple = { x: -1, y: -1, t: 0 };
+function addRipple(x, y, strength) {
+  const slot = waterUniforms.ripples.value[rippleIndex++ % 6];
+  slot.set(x, y, clock, strength);
+}
+function heroPoint(event) {
+  const rect = hero.getBoundingClientRect();
+  return [(event.clientX - rect.left) / rect.width, 1 - (event.clientY - rect.top) / rect.height];
+}
+hero.addEventListener(
+  "pointermove",
+  (event) => {
+    if (paused || event.pointerType === "touch") return;
+    const [x, y] = heroPoint(event);
+    lamp.tx = x;
+    lamp.ty = y;
+    lamp.target = 1;
+    lamp.idle = performance.now();
+    const shore = waterUniforms.shore.value;
+    const moved = Math.hypot((x - lastRipple.x) * 1.6, y - lastRipple.y);
+    if (y < shore - 0.01 && moved > 0.05 && clock - lastRipple.t > 0.16) {
+      addRipple(x, y, 0.55);
+      lastRipple = { x, y, t: clock };
+    }
+    wake();
+  },
+  { passive: true },
+);
+hero.addEventListener("pointerleave", () => {
+  lamp.target = 0;
+  wake();
+});
+hero.addEventListener("pointerdown", (event) => {
+  if (paused || event.target.closest("a, button")) return;
+  const [x, y] = heroPoint(event);
+  if (y < waterUniforms.shore.value - 0.005) {
+    addRipple(x, y, 1.4);
+    wake();
+  }
+});
+let baseY = 0,
+  sinkDepth = 0;
+addEventListener("scroll", () => !paused && wake(), { passive: true });
 const mobile_shore = (width) => (width <= 760 ? 0.205 : 0.255);
 function size() {
   const width = canvas.clientWidth,
@@ -280,6 +347,7 @@ function size() {
     Math.round((fogWidth * height) / width),
   );
   fogUniforms.aspect.value = width / height;
+  waterUniforms.aspect.value = width / height;
   fogUniforms.shore.value = mobile_shore(width);
   const mobile = width <= 760;
   const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 8;
@@ -287,11 +355,9 @@ function size() {
   const panelScale = (viewWidth * (mobile ? 0.86 : 0.52)) / w;
   const shoreline = mobile ? 0.205 : 0.255;
   panel.scale.setScalar(panelScale);
-  panel.position.set(
-    mobile ? 0 : viewWidth * 0.175,
-    viewHeight * (shoreline - 0.5 + 0.015) + h * panelScale / 2,
-    0,
-  );
+  baseY = viewHeight * (shoreline - 0.5 + 0.015) + h * panelScale / 2;
+  sinkDepth = h * panelScale * 0.55;
+  panel.position.set(mobile ? 0 : viewWidth * 0.175, baseY, 0);
   waterUniforms.shore.value = shoreline;
   wake();
 }
@@ -319,7 +385,18 @@ function render(now) {
   fogUniforms.time.value = clock;
   fogUniforms.light.value = level;
   faceUniforms.light.value = level;
-  panel.rotation.set(0.012 + tiltX, -0.07 + tiltY, 0);
+  // Scrolling away tips the window back and lets it settle toward the water.
+  const out = paused ? 0 : Math.min(1, Math.max(0, scrollY / Math.max(1, hero.offsetHeight)));
+  const ease = out * out * (3 - 2 * out);
+  panel.rotation.set(0.012 + tiltX - ease * 0.42, -0.07 + tiltY, 0);
+  panel.position.y = baseY - ease * sinkDepth;
+  if (!paused && performance.now() - lamp.idle > 2600) lamp.target = 0;
+  if (paused) lamp.target = lamp.on = 0;
+  lamp.x = THREE.MathUtils.damp(lamp.x, lamp.tx, 5, dt);
+  lamp.y = THREE.MathUtils.damp(lamp.y, lamp.ty, 5, dt);
+  lamp.on = THREE.MathUtils.damp(lamp.on, lamp.target, 2.4, dt);
+  if (lamp.on < 0.001 && lamp.target === 0) lamp.on = 0;
+  fogUniforms.pointer.value.set(lamp.x, lamp.y, lamp.on);
   renderer.setRenderTarget(fogTarget);
   renderer.render(fogScene, fogCamera);
   // Reflect this frame, including the current tilt, rather than a separate image.

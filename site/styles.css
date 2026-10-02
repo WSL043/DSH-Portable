@@ -1224,3 +1224,19 @@ html[data-motion="full"] .desktop-shot.is-in kbd:last-of-type { animation-delay:
 
 html[data-motion="reduced"] .tab-ink, html[data-motion="reduced"] .guide-link-grid a::before, html[data-motion="reduced"] .faq-list details::details-content { transition: none; }
 .faq-list p a { color: var(--ink); border-bottom: 1px solid var(--line); padding-bottom: 1px; }
+
+/* Interaction layer: scroll-out hero copy, tilt and glare, magnetic buttons with a sheen. */
+html[data-motion="full"] .hero-copy { transform: translateY(calc(var(--out, 0) * -90px)); opacity: calc(1 - var(--out, 0) * 1.5); filter: blur(calc(var(--out, 0) * 10px)); will-change: transform; }
+html[data-motion="full"] .hero-caption { opacity: calc(1 - var(--out, 0) * 2.4); }
+
+.tilt { transform: perspective(1200px) rotateX(var(--rx, 0deg)) rotateY(var(--ry, 0deg)); transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.tilt.is-tilting { transition-duration: 0.18s; }
+.image-button .glare { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.16), transparent 55%); mix-blend-mode: soft-light; opacity: 0; transition: opacity 0.6s ease; z-index: 1; }
+.image-button.is-tilting .glare { opacity: 1; }
+
+.magnetic { position: relative; overflow: hidden; transform: translate(var(--tx, 0px), var(--ty, 0px)); transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), color var(--duration) ease, background-color var(--duration) ease, border-color var(--duration) ease; }
+.magnetic::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; pointer-events: none; background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--paper) 26%, transparent), transparent); transform: translateX(-130%) skewX(-18deg); }
+.nav-download.magnetic::after { background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--ink) 16%, transparent), transparent); }
+@media (hover: hover) { html[data-motion="full"] .magnetic:hover::after { transform: translateX(330%) skewX(-18deg); transition: transform 0.9s cubic-bezier(0.3, 0.6, 0.2, 1); } }
+.magnetic:hover { opacity: 1; }
+html[data-motion="reduced"] .tilt, html[data-motion="reduced"] .magnetic { transform: none; }

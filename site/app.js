@@ -672,3 +672,104 @@ new MutationObserver(moveTabInk).observe(tabList, { attributes: true, subtree: t
 new ResizeObserver(moveTabInk).observe(tabList);
 moveTabInk();
 requestAnimationFrame(() => tabList.classList.add("has-ink"));
+
+const fullMotion = () => html.dataset.motion === "full";
+const finePointer = matchMedia("(hover: hover) and (pointer: fine)");
+
+// The hero copy drifts up and dissolves as the page scrolls away from it.
+const heroSection = document.querySelector("[data-hero]");
+let outFrame = 0;
+function heroOut() {
+  outFrame = 0;
+  const out = fullMotion() ? Math.min(1, Math.max(0, scrollY / heroSection.offsetHeight)) : 0;
+  html.style.setProperty("--out", out.toFixed(4));
+}
+addEventListener("scroll", () => (outFrame ||= requestAnimationFrame(heroOut)), { passive: true });
+heroOut();
+
+// Small labels resolve like a signal coming through.
+const glyphs = "ABCDEFGHJKLMNPQRSTUVWXYZ0123456789/_·";
+function decode(element) {
+  if (!fullMotion() || element.dataset.decoded) return;
+  element.dataset.decoded = "1";
+  const final = element.textContent;
+  const start = performance.now();
+  const duration = 260 + final.length * 22;
+  const step = (now) => {
+    const progress = Math.min(1, (now - start) / duration);
+    let text = "";
+    for (let index = 0; index < final.length; index++) {
+      const char = final[index];
+      if (char === " " || index / final.length < progress) text += char;
+      else text += glyphs[(Math.random() * glyphs.length) | 0];
+    }
+    element.textContent = progress < 1 ? text : final;
+    if (progress < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+const decodeSelector = ".eyebrow:not([data-i18n]), .section-kicker:not([data-i18n])";
+if ("IntersectionObserver" in window) {
+  const decoder = new IntersectionObserver(
+    (entries) =>
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        decoder.unobserve(entry.target);
+        setTimeout(() => decode(entry.target), 260);
+      }),
+    { rootMargin: "0px 0px -10% 0px" },
+  );
+  document.querySelectorAll(decodeSelector).forEach((element) => decoder.observe(element));
+}
+
+// Showcase surfaces tilt toward the pointer and catch a glare.
+document.querySelectorAll(".viewer-showcase .image-button, .folder-visual").forEach((surface) => {
+  surface.classList.add("tilt");
+  if (surface.matches(".image-button")) {
+    const glare = document.createElement("span");
+    glare.className = "glare";
+    glare.setAttribute("aria-hidden", "true");
+    surface.append(glare);
+  }
+  surface.addEventListener(
+    "pointermove",
+    (event) => {
+      if (!fullMotion() || !finePointer.matches) return;
+      const box = surface.getBoundingClientRect();
+      const x = (event.clientX - box.left) / box.width;
+      const y = (event.clientY - box.top) / box.height;
+      surface.style.setProperty("--mx", `${x * box.width}px`);
+      surface.style.setProperty("--my", `${y * box.height}px`);
+      surface.style.setProperty("--rx", `${((0.5 - y) * 5).toFixed(2)}deg`);
+      surface.style.setProperty("--ry", `${((x - 0.5) * 7).toFixed(2)}deg`);
+      surface.classList.add("is-tilting");
+    },
+    { passive: true },
+  );
+  surface.addEventListener("pointerleave", () => {
+    surface.classList.remove("is-tilting");
+    surface.style.setProperty("--rx", "0deg");
+    surface.style.setProperty("--ry", "0deg");
+  });
+});
+
+// Download buttons lean toward the pointer.
+document.querySelectorAll(".download-button, .panel-download, .nav-download").forEach((button) => {
+  button.classList.add("magnetic");
+  button.addEventListener(
+    "pointermove",
+    (event) => {
+      if (!fullMotion() || !finePointer.matches) return;
+      const box = button.getBoundingClientRect();
+      const dx = event.clientX - (box.left + box.width / 2);
+      const dy = event.clientY - (box.top + box.height / 2);
+      button.style.setProperty("--tx", `${Math.max(-7, Math.min(7, dx * 0.22)).toFixed(1)}px`);
+      button.style.setProperty("--ty", `${Math.max(-5, Math.min(5, dy * 0.3)).toFixed(1)}px`);
+    },
+    { passive: true },
+  );
+  button.addEventListener("pointerleave", () => {
+    button.style.setProperty("--tx", "0px");
+    button.style.setProperty("--ty", "0px");
+  });
+});
