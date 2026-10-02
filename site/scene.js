@@ -238,11 +238,11 @@ function size() {
   const mobile = width <= 760;
   const viewHeight = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * 8;
   const viewWidth = viewHeight * camera.aspect;
-  const panelScale = (viewWidth * (mobile ? 0.84 : 0.47)) / w;
+  const panelScale = (viewWidth * (mobile ? 0.86 : 0.52)) / w;
   const shoreline = mobile ? 0.205 : 0.255;
   panel.scale.setScalar(panelScale);
   panel.position.set(
-    mobile ? 0 : viewWidth * 0.16,
+    mobile ? 0 : viewWidth * 0.175,
     viewHeight * (shoreline - 0.5 + 0.015) + h * panelScale / 2,
     0,
   );
