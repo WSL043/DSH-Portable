@@ -166,6 +166,32 @@ try {
   );
   await en.screenshot({ path: path.join(evidence, "english.png") });
   await en.close();
+  // The language link swaps the copy in place: no reload, correct URL, links still resolve, Back returns.
+  const swap = await pageFor();
+  await swap.goto(base);
+  await swap.waitForSelector(".scene-ready");
+  await swap.evaluate(() => (window.samePage = true));
+  const settled = (lang) =>
+    swap.waitForFunction(
+      (expected) =>
+        document.documentElement.lang === expected &&
+        !document.documentElement.matches(".lang-out, .lang-in"),
+      lang,
+    );
+  await swap.locator("[data-language-switch]").click();
+  await settled("en");
+  assert.equal(await swap.evaluate(() => window.samePage), true, "Language switch must not reload");
+  assert.match(new URL(swap.url()).pathname, /\/en\/$/);
+  assert.match(await swap.locator("h1").innerText(), /in a portable folder/);
+  assert.equal(await swap.locator("[data-language-switch]").getAttribute("href"), "../");
+  const guideHref = await swap.locator(".guide-link-grid a").first().evaluate((a) => a.href);
+  assert.equal(new URL(guideHref).pathname, "/guides/get-started.html");
+  await swap.evaluate(() => history.back());
+  await settled("zh-CN");
+  assert.match(await swap.locator("h1").innerText(), /便携版/);
+  assert.equal(await swap.evaluate(() => window.samePage), true);
+  await swap.close();
+  results.push("In-place language switch keeps the page, its links, and Back");
   for (const width of [360, 390, 768, 1024]) {
     const mobile = await pageFor({
       viewport: { width, height: 844 },

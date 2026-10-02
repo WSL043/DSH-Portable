@@ -248,7 +248,6 @@ function primaryLabel(language, currentPlatform) {
 
 function setLanguage(language) {
   const lang = language === "en" ? "en" : "zh";
-  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
   document.querySelectorAll("[data-i18n]").forEach((element) => {
     const key = element.dataset.i18n;
     element.innerHTML =
@@ -256,6 +255,12 @@ function setLanguage(language) {
         ? (copy.en[key] ?? element.innerHTML)
         : (zhCopy.get(key) ?? element.innerHTML);
   });
+  applyLanguageChrome(lang);
+}
+
+function applyLanguageChrome(lang) {
+  pageLanguage = lang;
+  document.documentElement.lang = lang === "en" ? "en" : "zh-CN";
   document.querySelector("[data-i18n='downloadFor']").textContent =
     primaryLabel(lang, platform);
   languageSwitch.textContent = lang === "en" ? "中" : "EN";
@@ -388,6 +393,7 @@ const initialLanguage =
   document.querySelector("meta[name='dsh-page-language']")?.content === "en"
     ? "en"
     : "zh";
+let pageLanguage = initialLanguage;
 setLanguage(initialLanguage);
 const themeToggle = document.querySelector(".theme-toggle");
 const systemTheme = matchMedia("(prefers-color-scheme: light)");
@@ -401,7 +407,7 @@ function applyTheme(save = false) {
     themeMode === "light" || (themeMode === "system" && systemTheme.matches);
   document.documentElement.dataset.theme = light ? "light" : "dark";
   document.documentElement.style.colorScheme = light ? "light" : "dark";
-  const english = initialLanguage === "en";
+  const english = pageLanguage === "en";
   themeToggle.querySelector(".theme-icon").textContent = light ? "☾" : "☼";
   themeToggle.querySelector(".theme-label").textContent = english
     ? light
@@ -481,3 +487,188 @@ import("./scene.js").catch(() =>
 );
 // The mist keeps drifting behind the rest of the page; the page stays fully readable without it.
 import("./mist.js").catch(() => {});
+
+// Switch language in place, like the theme: fetch the other route, fade its copy in, keep the scene running.
+const html = document.documentElement;
+const languagePages = new Map();
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+function absolutize(scope, base) {
+  scope.querySelectorAll("[href], [src]").forEach((element) => {
+    for (const name of ["href", "src"]) {
+      const value = element.getAttribute(name);
+      if (value && !value.startsWith("#") && !/^[a-z][a-z0-9+.-]*:/i.test(value))
+        element.setAttribute(name, new URL(value, base).href);
+    }
+  });
+}
+function languagePage(url) {
+  if (!languagePages.has(url))
+    languagePages.set(
+      url,
+      fetch(url)
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.text();
+        })
+        .then((source) => {
+          const next = new DOMParser().parseFromString(source, "text/html");
+          absolutize(next, url);
+          return next;
+        })
+        .catch((error) => {
+          languagePages.delete(url);
+          throw error;
+        }),
+    );
+  return languagePages.get(url);
+}
+const headFields = [
+  ['meta[name="description"]', "content"],
+  ['meta[property="og:title"]', "content"],
+  ['meta[property="og:description"]', "content"],
+  ['meta[property="og:url"]', "content"],
+  ['meta[property="og:locale"]', "content"],
+  ['link[rel="canonical"]', "href"],
+  ['meta[name="dsh-page-language"]', "content"],
+];
+async function switchLanguage(url, push) {
+  const next = await languagePage(url);
+  const lang = next.documentElement.lang.startsWith("en") ? "en" : "zh";
+  const animate = motionEnabled();
+  const current = [...document.querySelectorAll("[data-i18n]")];
+  const incoming = [...next.querySelectorAll("[data-i18n]")];
+  try {
+    if (animate) {
+      // Copy on screen changes in a short wave from the top; everything else changes at once.
+      let order = 0;
+      current.forEach((element) => {
+        const box = element.getBoundingClientRect();
+        const onScreen = box.bottom > 0 && box.top < innerHeight && box.width > 0;
+        element.style.setProperty("--ld", onScreen ? `${Math.min(order++, 14) * 28}ms` : "0ms");
+      });
+      html.classList.add("lang-out");
+      await wait(260);
+    }
+    absolutize(document, location.href);
+    if (push) history.pushState({ lang }, "", url);
+    current.forEach((element, index) => {
+      const key = element.dataset.i18n;
+      const source =
+        incoming[index]?.dataset.i18n === key
+          ? incoming[index]
+          : next.querySelector(`[data-i18n="${key}"]`);
+      if (source) element.innerHTML = source.innerHTML;
+    });
+    document.title = next.title;
+    for (const [selector, name] of headFields) {
+      const from = next.querySelector(selector);
+      const to = document.querySelector(selector);
+      if (from && to) to.setAttribute(name, from.getAttribute(name));
+    }
+    applyLanguageChrome(lang);
+    applyTheme();
+    if (animate) {
+      html.classList.replace("lang-out", "lang-in");
+      await wait(1100);
+    }
+  } finally {
+    html.classList.remove("lang-out", "lang-in");
+  }
+}
+let languageBusy = false;
+function goToLanguage(url, push) {
+  if (languageBusy) return;
+  languageBusy = true;
+  switchLanguage(url, push)
+    .catch(() => location.assign(url))
+    .finally(() => (languageBusy = false));
+}
+languageSwitch.addEventListener("click", (event) => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  if (!("fetch" in window) || !history.pushState || location.protocol === "file:") return;
+  event.preventDefault();
+  goToLanguage(languageSwitch.href, true);
+});
+for (const type of ["pointerenter", "focus", "touchstart"])
+  languageSwitch.addEventListener(type, () => languagePage(languageSwitch.href).catch(() => {}), { passive: true });
+addEventListener("popstate", () => {
+  const lang = /\/en\/(index\.html)?$/.test(location.pathname) ? "en" : "zh";
+  if (lang !== pageLanguage) goToLanguage(location.href, false);
+});
+
+// The hero copy plays its entrance once; later language switches use their own fade.
+setTimeout(() => html.classList.add("hero-settled"), 2400);
+
+// Sections surface out of the mist as they scroll into view.
+const revealSelector = [
+  ".section-heading > div > *",
+  ".section-heading > p",
+  ".section-description",
+  ".folder-visual",
+  ".portable-facts > div",
+  ".portable-copy > .text-link",
+  ".handoff",
+  ".choice-card",
+  ".project-boundary",
+  ".line-heading",
+  ".line-card",
+  ".viewer-showcase .image-button",
+  ".viewer-copy > *",
+  ".desktop-shot",
+  ".desktop-notes article",
+  ".guide-link-grid a",
+  ".download-shell",
+  ".faq-list details",
+].join(",");
+if ("IntersectionObserver" in window) {
+  const revealer = new IntersectionObserver(
+    (entries) =>
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-in");
+        revealer.unobserve(entry.target);
+      }),
+    { rootMargin: "0px 0px -8% 0px" },
+  );
+  document.querySelectorAll(revealSelector).forEach((element) => {
+    const siblings = [...element.parentElement.children].filter((child) => child.matches(revealSelector));
+    element.style.setProperty("--rd", `${Math.min(siblings.indexOf(element), 6) * 110}ms`);
+    element.dataset.reveal = "";
+    element.addEventListener("animationend", (event) => {
+      if (event.target === element && event.animationName === "surface") element.classList.add("revealed");
+    });
+    revealer.observe(element);
+  });
+  html.classList.add("reveal-ready");
+}
+
+// A soft light follows the pointer across cards and lights the nearest stretch of their border.
+document.querySelectorAll(".folder-visual, .choice-card, .line-card, .download-shell").forEach((card) => {
+  card.classList.add("spot");
+  card.addEventListener(
+    "pointermove",
+    (event) => {
+      const box = card.getBoundingClientRect();
+      card.style.setProperty("--mx", `${event.clientX - box.left}px`);
+      card.style.setProperty("--my", `${event.clientY - box.top}px`);
+    },
+    { passive: true },
+  );
+});
+
+// The platform tab underline slides to the selected tab.
+const tabList = document.querySelector(".platform-tabs");
+const tabInk = document.createElement("i");
+tabInk.className = "tab-ink";
+tabInk.setAttribute("aria-hidden", "true");
+tabList.append(tabInk);
+function moveTabInk() {
+  const selected = tabList.querySelector('[aria-selected="true"]');
+  if (!selected || !selected.offsetWidth) return;
+  tabInk.style.width = `${selected.offsetWidth}px`;
+  tabInk.style.transform = `translateX(${selected.offsetLeft}px)`;
+}
+new MutationObserver(moveTabInk).observe(tabList, { attributes: true, subtree: true, attributeFilter: ["aria-selected"] });
+new ResizeObserver(moveTabInk).observe(tabList);
+moveTabInk();
+requestAnimationFrame(() => tabList.classList.add("has-ink"));

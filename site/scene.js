@@ -14,17 +14,29 @@ const scene = new THREE.Scene(),
   camera = new THREE.PerspectiveCamera(36, 1, 0.1, 50);
 camera.position.set(0, 0, 8);
 const loader = new THREE.TextureLoader();
-const screenshot =
-  root.lang === "en" ? "dsh-interface-en.png" : "dsh-interface-zh.png";
-const [dark, bright, atmosphere] = await Promise.all(
-  [screenshot, root.lang === "en" ? "dsh-workspace-0.6.4.png" : "dsh-interface-zh-light.png", "hero-atmosphere.png"].map((file) =>
-    loader.loadAsync(new URL(`./assets/${file}`, import.meta.url).href),
-  ),
-);
-for (const t of [dark, bright, atmosphere]) {
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+const languageOf = () => (root.lang.startsWith("en") ? "en" : "zh");
+const shots = {
+  zh: ["dsh-interface-zh.png", "dsh-interface-zh-light.png"],
+  en: ["dsh-interface-en.png", "dsh-workspace-0.6.4.png"],
+};
+const loaded = new Map();
+function load(file) {
+  if (!loaded.has(file))
+    loaded.set(
+      file,
+      loader.loadAsync(new URL(`./assets/${file}`, import.meta.url).href).then((t) => {
+        t.colorSpace = THREE.SRGBColorSpace;
+        t.anisotropy = Math.min(renderer.capabilities.getMaxAnisotropy(), 8);
+        return t;
+      }),
+    );
+  return loaded.get(file);
 }
+const loadShots = (language) => Promise.all(shots[language].map(load));
+const [[dark, bright], atmosphere] = await Promise.all([
+  loadShots(languageOf()),
+  load("hero-atmosphere.png"),
+]);
 const fogTarget = new THREE.WebGLRenderTarget(640, 400, {
   depthBuffer: false,
   stencilBuffer: false,
@@ -151,6 +163,9 @@ const w = 4.1,
 const faceUniforms = {
   dark: { value: dark },
   bright: { value: bright },
+  nextDark: { value: dark },
+  nextBright: { value: bright },
+  swap: { value: 0 },
   light: { value: 0 },
 };
 const face = new THREE.Mesh(
@@ -158,10 +173,15 @@ const face = new THREE.Mesh(
   new THREE.ShaderMaterial({
     uniforms: faceUniforms,
     vertexShader: `varying vec2 v;void main(){v=position.xy/vec2(${w},${h})+.5;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:
-      `varying vec2 v;uniform sampler2D dark,bright;uniform float light;void main(){gl_FragColor=mix(texture2D(dark,v),texture2D(bright,v),light); #include <colorspace_fragment> }`
-        .replace("; #include", ";\n#include")
-        .replace("fragment> }", "fragment>\n}"),
+    // The language switch crossfades to the other screenshot pair, the same way the theme fades.
+    fragmentShader: `varying vec2 v;uniform sampler2D dark,bright,nextDark,nextBright;uniform float light,swap;
+void main(){
+float focus=sin(swap*3.14159)*3.2;
+vec4 now=mix(texture2D(dark,v,focus),texture2D(bright,v,focus),light);
+vec4 next=mix(texture2D(nextDark,v,focus),texture2D(nextBright,v,focus),light);
+gl_FragColor=mix(now,next,swap);
+#include <colorspace_fragment>
+}`,
   }),
 );
 face.position.z = 0.071;
@@ -179,6 +199,32 @@ let paused = root.dataset.motion !== "full",
 let from = level,
   transitionStart = 0,
   transitioning = false;
+let shown = languageOf(),
+  swapStart = 0,
+  swapping = false;
+function finishSwap() {
+  faceUniforms.dark.value = faceUniforms.nextDark.value;
+  faceUniforms.bright.value = faceUniforms.nextBright.value;
+  faceUniforms.swap.value = 0;
+  swapping = false;
+}
+new MutationObserver(async () => {
+  const language = languageOf();
+  if (language === shown) return;
+  shown = language;
+  const [nextDark, nextBright] = await loadShots(language);
+  if (language !== shown) return;
+  if (swapping) finishSwap();
+  faceUniforms.nextDark.value = nextDark;
+  faceUniforms.nextBright.value = nextBright;
+  swapStart = performance.now();
+  swapping = true;
+  wake();
+}).observe(root, { attributes: true, attributeFilter: ["lang"] });
+// Warm the other language's screenshots before the switch is clicked.
+document
+  .querySelector("[data-language-switch]")
+  ?.addEventListener("pointerenter", () => loadShots(languageOf() === "en" ? "zh" : "en"), { once: true });
 let targetX = 0,
   targetY = 0,
   tiltX = 0,
@@ -261,6 +307,11 @@ function render(now) {
     level = from + (desired - from) * ease;
     if (t === 1) transitioning = false;
   }
+  if (swapping) {
+    const t = paused ? 1 : Math.min(1, (now - swapStart) / 1300);
+    faceUniforms.swap.value = t * t * (3 - 2 * t);
+    if (t === 1) finishSwap();
+  }
   tiltX = THREE.MathUtils.damp(tiltX, targetX, 7, dt);
   tiltY = THREE.MathUtils.damp(tiltY, targetY, 7, dt);
   if (Math.abs(tiltX - targetX) < 0.0001) tiltX = targetX;
@@ -279,7 +330,7 @@ function render(now) {
   renderer.setRenderTarget(null);
   renderer.render(waterScene, fogCamera);
   hero.classList.add("scene-ready");
-  if (!paused || transitioning || tiltX !== targetX || tiltY !== targetY)
+  if (!paused || transitioning || swapping || tiltX !== targetX || tiltY !== targetY)
     frame = requestAnimationFrame(render);
 }
 function stop() {

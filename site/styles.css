@@ -1154,3 +1154,73 @@ html[data-motion="reduced"] .section + .section::after { animation: none; opacit
 .viewer-showcase .image-button::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse 62% 74% at 50% 48%, transparent 42%, color-mix(in srgb, var(--paper) 58%, transparent) 100%); }
 @media (prefers-reduced-motion: reduce) { .section + .section::after { animation: none; opacity: 0; } }
 [data-theme="light"] .viewer-showcase .image-button::after { background: radial-gradient(ellipse 62% 74% at 50% 48%, transparent 46%, color-mix(in srgb, var(--paper) 38%, transparent) 100%); }
+
+/* Motion layer. Everything here is decoration: with reduced motion the page is complete and still. */
+html.lang-out :is([data-i18n], [data-language-switch], .theme-label, [data-motion-control]) { animation: lang-out 0.26s ease-in forwards; animation-delay: calc(var(--ld, 0ms) * 0.4); }
+html.lang-in :is([data-i18n], [data-language-switch], .theme-label, [data-motion-control]) { animation: lang-in 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; animation-delay: var(--ld, 0ms); }
+@keyframes lang-out { to { opacity: 0; filter: blur(6px); transform: translateY(-3px); } }
+@keyframes lang-in { from { opacity: 0; filter: blur(8px); transform: translateY(6px); } }
+
+html.reveal-ready[data-motion="full"] [data-reveal]:not(.is-in) { opacity: 0; }
+html.reveal-ready[data-motion="full"] [data-reveal].is-in:not(.revealed) { animation: surface 1.15s cubic-bezier(0.16, 0.8, 0.24, 1) both; animation-delay: var(--rd, 0ms); }
+@keyframes surface { from { opacity: 0; filter: blur(12px); transform: translateY(28px); } to { opacity: 1; filter: blur(0); transform: none; } }
+
+/* The hero copy settles out of the haze on load. */
+html[data-motion="full"]:not(.hero-settled) .hero-copy > *, html[data-motion="full"]:not(.hero-settled) .site-header { animation: surface 1.4s cubic-bezier(0.16, 0.8, 0.24, 1) both; }
+html[data-motion="full"]:not(.hero-settled) .site-header { animation-duration: 1.8s; }
+html[data-motion="full"] .hero-copy > :nth-child(2) { animation-delay: 0.12s; }
+html[data-motion="full"] .hero-copy > :nth-child(3) { animation-delay: 0.26s; }
+html[data-motion="full"] .hero-copy > :nth-child(4) { animation-delay: 0.38s; }
+html[data-motion="full"] .hero-copy > :nth-child(5) { animation-delay: 0.5s; }
+
+/* Folder rows "copy" one after another when the folder comes into view. */
+.folder-rows > div { position: relative; }
+.folder-rows > div::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, var(--ink) 70%, var(--ink)); transform: scaleX(0); transform-origin: left; opacity: 0; }
+html[data-motion="full"] .folder-visual.is-in .folder-rows > div::after { animation: copy-row 1.6s cubic-bezier(0.6, 0, 0.2, 1) both; animation-delay: calc(var(--rd, 0ms) + 0.5s); }
+html[data-motion="full"] .folder-visual.is-in .folder-rows > div:nth-child(2)::after { animation-delay: calc(var(--rd, 0ms) + 0.85s); }
+html[data-motion="full"] .folder-visual.is-in .folder-rows > div:nth-child(3)::after { animation-delay: calc(var(--rd, 0ms) + 1.2s); }
+@keyframes copy-row { 0% { transform: scaleX(0); opacity: 0.9; } 62% { transform: scaleX(1); opacity: 0.9; } 100% { transform: scaleX(1); opacity: 0; } }
+
+/* Pointer light on cards. */
+.spot { position: relative; isolation: isolate; }
+.spot::before, .spot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity 0.6s ease; }
+.spot::before { z-index: -1; background: radial-gradient(420px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--ink) 7%, transparent), transparent 65%); }
+.spot::after { inset: -1px; padding: 1px; background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), color-mix(in srgb, var(--ink) 55%, transparent), transparent 70%); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+@media (hover: hover) { .spot:hover::before, .spot:hover::after { opacity: 1; } }
+
+/* Platform tabs: one underline that slides. */
+.platform-tabs { position: relative; }
+.platform-tabs.has-ink button, .platform-tabs.has-ink [aria-selected="true"] { border-bottom-color: transparent; }
+.platform-tabs button { transition: color 0.35s ease; }
+.tab-ink { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: var(--ink); border-radius: 2px; transition: transform 0.55s cubic-bezier(0.3, 0.9, 0.2, 1), width 0.55s cubic-bezier(0.3, 0.9, 0.2, 1); }
+.platform-tabs:not(.has-ink) .tab-ink { transition: none; }
+html[data-motion="full"] .download-panel:not([hidden]) { animation: panel-in 0.6s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+@keyframes panel-in { from { opacity: 0; transform: translateY(8px); filter: blur(4px); } }
+
+/* Keycaps press in turn while the desktop section is on screen. */
+kbd { box-shadow: 0 2px 0 var(--line); display: inline-block; }
+html[data-motion="full"] .desktop-shot.is-in kbd { animation: key-press 5s ease-in-out infinite 1.4s; }
+html[data-motion="full"] .desktop-shot.is-in kbd:last-of-type { animation-delay: 3.9s; }
+@keyframes key-press { 0%, 84%, 100% { transform: none; box-shadow: 0 2px 0 var(--line); } 88%, 92% { transform: translateY(2px); box-shadow: 0 0 0 var(--line); background: color-mix(in srgb, var(--ink) 12%, transparent); } }
+
+/* Guides: the top rule draws across on hover and the number steps forward. */
+.guide-link-grid a { position: relative; }
+.guide-link-grid a::before { content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: var(--ink); transform: scaleX(0); transform-origin: left; transition: transform 0.7s cubic-bezier(0.3, 0.9, 0.2, 1); }
+.guide-link-grid a:hover { opacity: 1; }
+.guide-link-grid a:hover::before { transform: scaleX(1); }
+.guide-link-grid a > span { display: inline-block; transition: transform 0.5s cubic-bezier(0.3, 0.9, 0.2, 1), color 0.5s; }
+.guide-link-grid a:hover > span { transform: translateX(6px); color: var(--ink); }
+.guide-link-grid h3 { transition: transform 0.6s cubic-bezier(0.3, 0.9, 0.2, 1); }
+.guide-link-grid a:hover h3 { transform: translateX(3px); }
+
+/* FAQ answers open smoothly where the browser supports animating to auto height. */
+@supports (interpolate-size: allow-keywords) {
+  .faq-list { interpolate-size: allow-keywords; }
+  .faq-list details::details-content { height: 0; overflow: hidden; opacity: 0; transition: height 0.5s cubic-bezier(0.3, 0.9, 0.2, 1), opacity 0.4s ease, content-visibility 0.5s allow-discrete; }
+  .faq-list details[open]::details-content { height: auto; opacity: 1; }
+}
+.faq summary::after { transition: transform 0.45s cubic-bezier(0.3, 0.9, 0.2, 1); }
+.faq details[open] summary::after { transform: rotate(180deg); }
+
+html[data-motion="reduced"] .tab-ink, html[data-motion="reduced"] .guide-link-grid a::before, html[data-motion="reduced"] .faq-list details::details-content { transition: none; }
+.faq-list p a { color: var(--ink); border-bottom: 1px solid var(--line); padding-bottom: 1px; }
