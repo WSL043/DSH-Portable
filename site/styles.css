@@ -1234,9 +1234,25 @@ html[data-motion="full"] .hero-caption { opacity: calc(1 - var(--out, 0) * 2.4);
 .image-button .glare { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(520px circle at var(--mx, 50%) var(--my, 50%), rgba(255, 255, 255, 0.16), transparent 55%); mix-blend-mode: soft-light; opacity: 0; transition: opacity 0.6s ease; z-index: 1; }
 .image-button.is-tilting .glare { opacity: 1; }
 
-.magnetic { position: relative; overflow: hidden; transform: translate(var(--tx, 0px), var(--ty, 0px)); transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), color var(--duration) ease, background-color var(--duration) ease, border-color var(--duration) ease; }
-.magnetic::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; pointer-events: none; background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--paper) 26%, transparent), transparent); transform: translateX(-130%) skewX(-18deg); }
-.nav-download.magnetic::after { background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--ink) 16%, transparent), transparent); }
-@media (hover: hover) { html[data-motion="full"] .magnetic:hover::after { transform: translateX(330%) skewX(-18deg); transition: transform 0.9s cubic-bezier(0.3, 0.6, 0.2, 1); } }
-.magnetic:hover { opacity: 1; }
-html[data-motion="reduced"] .tilt, html[data-motion="reduced"] .magnetic { transform: none; }
+.sheen { position: relative; overflow: hidden; }
+.sheen::after { content: ""; position: absolute; top: 0; bottom: 0; left: 0; width: 45%; pointer-events: none; background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--paper) 26%, transparent), transparent); transform: translateX(-130%) skewX(-18deg); }
+.nav-download.sheen::after { background: linear-gradient(100deg, transparent, color-mix(in srgb, var(--ink) 16%, transparent), transparent); }
+@media (hover: hover) { html[data-motion="full"] .sheen:hover::after { transform: translateX(330%) skewX(-18deg); transition: transform 0.9s cubic-bezier(0.3, 0.6, 0.2, 1); } }
+.sheen:hover { opacity: 1; }
+html[data-motion="reduced"] .tilt { transform: none; }
+
+/* Floating bar after the hero. */
+.float-bar { position: fixed; z-index: 30; top: 14px; left: 50%; display: flex; align-items: center; gap: 28px; padding: 8px 8px 8px 18px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--paper) 72%, transparent); -webkit-backdrop-filter: blur(16px) saturate(1.2); backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 10px 40px -18px #000a; transform: translate(-50%, -140%); opacity: 0; pointer-events: none; transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.4s ease, background-color var(--duration) ease, border-color var(--duration) ease; overflow: hidden; }
+.float-bar.is-shown { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
+.float-bar .brand { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; white-space: nowrap; }
+.float-bar .brand img { width: 22px; height: 22px; }
+.float-bar .float-links { display: flex; align-items: center; gap: 22px; font-size: 13px; }
+.float-bar .nav-wide { position: relative; color: var(--muted); white-space: nowrap; transition: color 0.3s ease; }
+.float-bar .nav-wide::after { content: ""; position: absolute; left: 0; right: 0; bottom: -6px; height: 1px; background: var(--ink); transform: scaleX(0); transition: transform 0.45s cubic-bezier(0.3, 0.9, 0.2, 1); }
+.float-bar .nav-wide.is-current { color: var(--ink); }
+.float-bar .nav-wide.is-current::after { transform: scaleX(1); }
+.float-bar .nav-download { display: inline-flex; padding: 8px 14px; background: var(--ink); color: var(--inverse); border-color: transparent; border-radius: 7px; white-space: nowrap; }
+.float-progress { position: absolute; left: 0; bottom: 0; height: 1px; width: 100%; background: var(--ink); opacity: 0.5; transform-origin: left; transform: scaleX(var(--progress, 0)); }
+@media (max-width: 760px) { .float-bar { gap: 16px; top: 10px; width: calc(100% - 32px); justify-content: space-between; } .float-bar .nav-wide { display: none; } }
+html[data-motion="full"] { scroll-behavior: smooth; }
+html[data-motion="reduced"] .float-bar { transition: none; }

@@ -753,23 +753,53 @@ document.querySelectorAll(".viewer-showcase .image-button, .folder-visual").forE
   });
 });
 
-// Download buttons lean toward the pointer.
-document.querySelectorAll(".download-button, .panel-download, .nav-download").forEach((button) => {
-  button.classList.add("magnetic");
-  button.addEventListener(
-    "pointermove",
-    (event) => {
-      if (!fullMotion() || !finePointer.matches) return;
-      const box = button.getBoundingClientRect();
-      const dx = event.clientX - (box.left + box.width / 2);
-      const dy = event.clientY - (box.top + box.height / 2);
-      button.style.setProperty("--tx", `${Math.max(-7, Math.min(7, dx * 0.22)).toFixed(1)}px`);
-      button.style.setProperty("--ty", `${Math.max(-5, Math.min(5, dy * 0.3)).toFixed(1)}px`);
-    },
-    { passive: true },
+// Download buttons stay exactly where they are; a band of light crosses them on hover.
+document.querySelectorAll(".download-button, .panel-download, .nav-download").forEach((button) => button.classList.add("sheen"));
+
+// After the hero, a slim bar keeps navigation and the download one click away.
+const bar = document.createElement("div");
+bar.className = "float-bar";
+bar.setAttribute("role", "navigation");
+bar.setAttribute("aria-label", "Quick navigation");
+bar.inert = true;
+const barLinks = [...document.querySelectorAll(".site-header nav .nav-wide")]
+  .map((link) => link.cloneNode(true))
+  .concat(document.querySelector(".site-header .nav-download").cloneNode(true));
+const barBrand = document.querySelector(".site-header .brand").cloneNode(true);
+barBrand.removeAttribute("aria-label");
+const barNav = document.createElement("div");
+barNav.className = "float-links";
+barNav.append(...barLinks);
+const barProgress = document.createElement("i");
+barProgress.className = "float-progress";
+bar.append(barBrand, barNav, barProgress);
+document.body.append(bar);
+let barFrame = 0;
+function updateBar() {
+  barFrame = 0;
+  const shown = scrollY > heroSection.offsetHeight * 0.82;
+  bar.classList.toggle("is-shown", shown);
+  bar.inert = !shown;
+  const max = document.documentElement.scrollHeight - innerHeight;
+  bar.style.setProperty("--progress", max > 0 ? (scrollY / max).toFixed(4) : "0");
+}
+addEventListener("scroll", () => (barFrame ||= requestAnimationFrame(updateBar)), { passive: true });
+addEventListener("resize", updateBar);
+updateBar();
+if ("IntersectionObserver" in window) {
+  const sectionLinks = new Map(
+    barLinks.map((link) => [link.getAttribute("href").replace(/^.*#/, ""), link]),
   );
-  button.addEventListener("pointerleave", () => {
-    button.style.setProperty("--tx", "0px");
-    button.style.setProperty("--ty", "0px");
+  const currentObserver = new IntersectionObserver(
+    (entries) =>
+      entries.forEach((entry) => {
+        const link = sectionLinks.get(entry.target.id);
+        if (link) link.classList.toggle("is-current", entry.isIntersecting);
+      }),
+    { rootMargin: "-45% 0px -50% 0px" },
+  );
+  sectionLinks.forEach((_, id) => {
+    const section = document.getElementById(id);
+    if (section) currentObserver.observe(section);
   });
-});
+}
