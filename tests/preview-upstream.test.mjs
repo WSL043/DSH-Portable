@@ -19,6 +19,9 @@ test('stable and candidate cores have independently pinned official source locks
     'the RC Office kit must retain the reviewed ZIP parser fix')
   assert.equal(app.overrides['@deepseek-ai/libreoffice-kit@0.1.1']?.fflate, '0.8.3',
     'the newer RC Office kit must retain the reviewed ZIP parser fix')
+  // 0.1.5 (DSH 0.2.1-alpha.1) imports the same fflate API (strFromU8, unzipSync, zlibSync) as 0.1.1.
+  assert.equal(app.overrides['@deepseek-ai/libreoffice-kit@0.1.5']?.fflate, '0.8.3',
+    'the alpha Office kit must use the reviewed ZIP parser fix')
   assert.equal(stable.dsh.version, app.dependencies['@deepseek-ai/dsh'])
   assert.match(stable.dsh.integrity, /^sha512-/)
   assert.match(stable.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
