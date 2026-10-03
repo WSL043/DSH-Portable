@@ -18,11 +18,11 @@ permissions:
 # Update each commit and version together when upgrading a bundled default plugin.
 env:
   IMAGE_VIEWER_REPOSITORY: WSL043/dsh-image-viewer
-  IMAGE_VIEWER_COMMIT: 4e3c8ea44ccc71b88db04d51431d381a51d2b233
-  IMAGE_VIEWER_VERSION: 0.1.6
+  IMAGE_VIEWER_COMMIT: 3ab07431f66b0dee5ae0497ef3ed53566a15aae8
+  IMAGE_VIEWER_VERSION: 0.1.7
   CHAT_MANAGER_REPOSITORY: WSL043/dsh-chat-manager
-  CHAT_MANAGER_COMMIT: 8f4f81828ad275bbbf4b884ad801a4c7be98804d
-  CHAT_MANAGER_VERSION: 1.5.6
+  CHAT_MANAGER_COMMIT: 07561e9e489ae014556a3e334f0acdcaa1580cca
+  CHAT_MANAGER_VERSION: 1.5.7
 concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
