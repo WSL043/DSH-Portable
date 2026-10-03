@@ -1,0 +1,27 @@
+{
+  "version": "0.8.4",
+  "zh": {
+    "summary": "默认插件更新到图片查看器 0.1.7 和会话管理 1.5.7，跟上官方新内核 0.2.1-alpha.1。",
+    "highlights": [
+      "默认插件更新：图片查看器 0.1.7、会话管理 1.5.7，均在官方最新 3 个内核 0.2.1-alpha.1、0.2.0-rc.2、0.2.0-rc.1 上验收通过。",
+      "内核目录跟随官方最新 3 个版本：0.2.1-alpha.1 验收通过后即可在设置中选择，0.1.7-rc.2 退出列表。",
+      "安装包自带的内核保持为 0.2.0-rc.2。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.3 升级会保留设置、会话、插件和默认工作区。",
+      "正在使用 0.1.7-rc.2 内核的用户不会被强制切换，可以随时在设置中改选列表里的内核。"
+    ]
+  },
+  "en": {
+    "summary": "Default plugins move to Image Viewer 0.1.7 and Chat Manager 1.5.7, keeping up with the official 0.2.1-alpha.1 core.",
+    "highlights": [
+      "Default plugins: Image Viewer 0.1.7 and Chat Manager 1.5.7, both accepted on the newest three official cores 0.2.1-alpha.1, 0.2.0-rc.2, and 0.2.0-rc.1.",
+      "The core catalog follows the newest three official versions: 0.2.1-alpha.1 becomes selectable in Settings once it qualifies, and 0.1.7-rc.2 leaves the list.",
+      "The core bundled with the package stays at 0.2.0-rc.2."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.3 keeps settings, sessions, plugins, and the default workspace.",
+      "Users on the 0.1.7-rc.2 core are not switched automatically and can pick any listed core in Settings at any time."
+    ]
+  }
+}
