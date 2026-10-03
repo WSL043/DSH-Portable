@@ -2,10 +2,9 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 
-// The standalone market build runs `pnpm install --frozen-lockfile`
-// (official-payload-alpha.yml). A package.json specifier change without a
-// regenerated lockfile fails that workflow only on the schedule, hours later,
-// so compare the two here where every push sees it.
+// The standalone market build runs `pnpm install --frozen-lockfile`. A
+// package.json specifier change without a regenerated lockfile would only fail
+// that build later, so compare the two here where every push sees it.
 const root = new URL('../app/vendor/dsh-portable-plugin-market/', import.meta.url)
 
 function lockfileRootSpecifiers(text) {

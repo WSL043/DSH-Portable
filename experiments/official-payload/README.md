@@ -4,7 +4,7 @@
 
 官方桌面成品零改动（仅按架构约定改写 `resources/app-update.yml`）；纯模式不调用、不打包旧 ASAR adapter、desktop adapter、更新桥、默认插件或市场文件。仓库中的旧适配路线保留到阶段 3 统一删除，不再作为默认或交付路线。稳定版 Native 线不受影响。纯便携实现仍处于阶段 2 开发状态，不能据此宣称架构已验收。
 
-The official desktop payload remains byte-for-byte unchanged except the permitted `resources/app-update.yml` rewrite. Pure packaging does not invoke or ship the legacy ASAR/desktop adapters, update bridge, default plugins or marketplace. Those legacy files remain only until their planned Phase 3 removal; they are no longer the default or delivery path. The stable Native line is separate. Phase 2 remains under development and is not yet architecture acceptance.
+The official desktop payload remains byte-for-byte unchanged except the permitted `resources/app-update.yml` rewrite. Pure packaging does not invoke or ship the legacy ASAR/desktop adapters, update bridge, default plugins or marketplace. Those legacy adapters and their hourly workflow were removed in Phase 3. The stable Native line is separate. Phase 2 remains under development and is not yet architecture acceptance.
 
 ## 自动交付 / Automated delivery
 
