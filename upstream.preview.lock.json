@@ -3,16 +3,16 @@
   "channel": "beta",
   "dsh": {
     "package": "@deepseek-ai/dsh",
-    "version": "0.2.0-rc.2",
-    "tag": "dsh-v0.2.0-rc.2",
-    "npmIntegrity": "sha512-EAJ3gPNcVt/uv8X19PMm9NkVhWgT7xXNMk0UKCVm+IQ5rpSQOcsMUa0HWlnYYVybKMsccjcRB21vVVsaXQ6IdA==",
+    "version": "0.2.1-alpha.1",
+    "tag": "dsh-v0.2.1-alpha.1",
+    "npmIntegrity": "sha512-DJ8pwG/XqzwDrYQTgJXuIga6ku153Z4vJI/B3MzNtudVCkDaOf4O2pUQh1ToroLHPPe4mxhhFeNJ7ttNculqMw==",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
-    "reviewedCommit": "639ed015397290b3745d163aafe02ffee4aa3f84",
-    "noticesSha256": "c120aadac50ca6679ec5abe51eb94178fd038b29a1237d7a748dd0095a110670",
+    "reviewedCommit": "5badb15009ae1756c3afe0ae0cef1faafc290ccc",
+    "noticesSha256": "a8879c4c694423f0837acc8234150b286643ad3112a792448a1448ce21a12d64",
     "buildProfile": "official",
     "packageManager": "pnpm@11.7.0",
     "packedFamilies": {
-      "dsh": 318,
+      "dsh": 321,
       "vendor": 9,
       "landlock": 0
     }
