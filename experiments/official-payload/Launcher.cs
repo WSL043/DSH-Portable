@@ -3,10 +3,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net.NetworkInformation;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -27,8 +29,16 @@ internal static class PortableLauncher {
     private static RegistrySnapshot ProtocolBefore;
     private static string Root, AppRoot, DataRoot, LauncherData;
 
+    // Chinese UI on Chinese Windows, English elsewhere; diagnostics stay in English.
+    private static readonly bool Chinese = CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "zh";
+    private static string T(string zh, string en) { return Chinese ? zh : en; }
+
+    [DllImport("user32.dll")] private static extern bool SetProcessDPIAware();
+
     [STAThread]
     private static int Main(string[] args) {
+        // Without this, Windows bitmap-stretches the dialogs on scaled displays and the text turns blurry.
+        try { SetProcessDPIAware(); } catch { }
         try {
             string updateVersion;
             if (TryUpdatedVersion(Path.GetFileName(Process.GetCurrentProcess().MainModule.FileName), args, out updateVersion))
@@ -36,7 +46,7 @@ internal static class PortableLauncher {
             return Run(args);
         } catch (Exception error) {
             try { Log("fatal: " + SafeMessage(error.Message)); } catch { }
-            MessageBox.Show(error.Message + "\r\n\r\n便携启动失败。", "DeepSeek Harness Portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            MessageBox.Show(error.Message + "\r\n\r\n" + T("便携启动失败。", "Portable could not start."), "DeepSeek Harness Portable", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
     }
@@ -264,15 +274,21 @@ internal static class PortableLauncher {
         public BootstrapInstallForm(string root, string selfPath, string cancelPath) {
             _root = root; _selfPath = selfPath; _cancelPath = cancelPath;
             _statusPath = Path.Combine(root, "data", "launcher", "update-status.json");
-            Text = "DeepSeek Harness Portable - 首次安装";
+            Text = "DeepSeek Harness Portable - " + T("首次安装", "First-time setup");
+            // Lay out at 96 DPI in the system UI font, then let WinForms scale to the display.
+            SuspendLayout();
+            Font = SystemFonts.MessageBoxFont;
+            AutoScaleDimensions = new SizeF(96F, 96F); AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(470, 154); FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false; MinimizeBox = false;
-            _stage = new Label { AutoSize = false, Location = new Point(18, 16), Size = new Size(434, 24), Text = "正在准备首次安装..." };
-            _detail = new Label { AutoSize = false, Location = new Point(18, 43), Size = new Size(434, 38), Text = "首次启动将从官方 CDN 下载并验证官方桌面端。" };
+            _stage = new Label { AutoSize = false, Location = new Point(18, 16), Size = new Size(434, 24), Text = T("正在准备首次安装...", "Preparing first-time setup...") };
+            _detail = new Label { AutoSize = false, Location = new Point(18, 43), Size = new Size(434, 38), Text = T("首次启动将从官方 CDN 下载并验证官方桌面端。", "The official desktop app is downloaded from the official CDN and verified on first launch.") };
             _progress = new ProgressBar { Location = new Point(18, 88), Size = new Size(434, 18), Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
-            _retry = new Button { Location = new Point(282, 116), Size = new Size(80, 26), Text = "重试", Visible = false, Enabled = false };
-            _cancel = new Button { Location = new Point(372, 116), Size = new Size(80, 26), Text = "取消" };
+            _retry = new Button { Location = new Point(282, 116), Size = new Size(80, 26), Text = T("重试", "Retry"), Visible = false, Enabled = false };
+            _cancel = new Button { Location = new Point(372, 116), Size = new Size(80, 26), Text = T("取消", "Cancel") };
+            _stage.Font = new Font(Font, FontStyle.Bold);
             Controls.AddRange(new Control[] { _stage, _detail, _progress, _retry, _cancel });
+            ResumeLayout(false);
             _retry.Click += delegate { StartAttempt(); };
             _cancel.Click += delegate { RequestCancel(); };
             _timer = new System.Windows.Forms.Timer { Interval = 350 };
@@ -286,9 +302,9 @@ internal static class PortableLauncher {
             try {
                 if (File.Exists(_cancelPath)) File.Delete(_cancelPath);
                 _cancelRequested = false; _retry.Visible = false; _retry.Enabled = false;
-                _cancel.Visible = true; _cancel.Enabled = true; _cancel.Text = "取消";
-                _stage.Text = "正在读取已验收版本索引...";
-                _detail.Text = "连接官方服务并准备下载。";
+                _cancel.Visible = true; _cancel.Enabled = true; _cancel.Text = T("取消", "Cancel");
+                _stage.Text = T("正在读取已验收版本索引...", "Reading the accepted version index...");
+                _detail.Text = T("连接官方服务并准备下载。", "Connecting to the official service.");
                 _progress.Value = 0;
                 string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
                 string engine = Path.Combine(_root, "launcher", "apply-update.ps1");
@@ -302,10 +318,10 @@ internal static class PortableLauncher {
 
         private void RequestCancel() {
             if (_engine == null || _engine.HasExited) { _allowClose = true; Close(); return; }
-            _cancelRequested = true; _cancel.Enabled = false; _cancel.Text = "正在取消...";
-            _stage.Text = "正在安全取消...";
+            _cancelRequested = true; _cancel.Enabled = false; _cancel.Text = T("正在取消...", "Cancelling...");
+            _stage.Text = T("正在安全取消...", "Cancelling safely...");
             try { File.WriteAllText(_cancelPath, "cancel\n", Encoding.UTF8); }
-            catch (Exception error) { _detail.Text = "无法写入取消请求：" + SafeMessage(error.Message); }
+            catch (Exception error) { _detail.Text = T("无法写入取消请求：", "Could not request cancellation: ") + SafeMessage(error.Message); }
         }
 
         private void PollEngine() {
@@ -344,29 +360,31 @@ internal static class PortableLauncher {
         }
 
         private void ShowFailure(string detail) {
-            _stage.Text = "首次安装失败";
+            _stage.Text = T("首次安装失败", "First-time setup failed");
             _detail.Text = FriendlyFailure(detail);
             _progress.Value = 0; _cancel.Visible = false;
+            // Retry takes Cancel's place so the only action sits at the right edge.
+            _retry.Location = _cancel.Location;
             _retry.Visible = true; _retry.Enabled = true;
         }
 
         private static string StageText(string phase) {
-            if (phase == "downloading") return "下载中...";
-            if (phase == "verifying") return "校验中...";
-            if (phase == "extracting") return "解包中...";
-            if (phase == "switching" || phase == "waiting-for-exit") return "切换中...";
-            if (phase == "reading-index") return "正在读取已验收版本索引...";
-            return "正在准备首次安装...";
+            if (phase == "downloading") return T("下载中...", "Downloading...");
+            if (phase == "verifying") return T("校验中...", "Verifying...");
+            if (phase == "extracting") return T("解包中...", "Extracting...");
+            if (phase == "switching" || phase == "waiting-for-exit") return T("切换中...", "Switching...");
+            if (phase == "reading-index") return T("正在读取已验收版本索引...", "Reading the accepted version index...");
+            return T("正在准备首次安装...", "Preparing first-time setup...");
         }
 
         private static string FormatBytes(long value) { return (Math.Max(0, value) / (1024.0 * 1024.0)).ToString("0.0") + " MiB"; }
         private static long GetLong(Dictionary<string, object> value, string key) { object raw; long result; return value != null && value.TryGetValue(key, out raw) && Int64.TryParse(Convert.ToString(raw), out result) ? result : 0; }
         private static string FriendlyFailure(string detail) {
             string lower = (detail ?? "").ToLowerInvariant();
-            string kind = lower.Contains("digest") || lower.Contains("signature") || lower.Contains("hash") || lower.Contains("size mismatch") || lower.Contains("invalid") || lower.Contains("untrusted") || lower.Contains("archive") || lower.Contains("bound") || lower.Contains("校验") ? "校验失败。" :
-                lower.Contains("disk") || lower.Contains("space") || lower.Contains("0x70") || lower.Contains("not enough") ? "磁盘空间不足。" :
-                lower.Contains("timeout") || lower.Contains("network") || lower.Contains("remote name") || lower.Contains("connection") || lower.Contains("download") ? "网络连接失败。" : "安装过程失败。";
-            return kind + "\r\n" + (String.IsNullOrWhiteSpace(detail) ? "请检查网络和磁盘空间后重试。" : SafeMessage(detail));
+            string kind = lower.Contains("digest") || lower.Contains("signature") || lower.Contains("hash") || lower.Contains("size mismatch") || lower.Contains("invalid") || lower.Contains("untrusted") || lower.Contains("archive") || lower.Contains("bound") || lower.Contains("校验") ? T("校验失败。", "Verification failed.") :
+                lower.Contains("disk") || lower.Contains("space") || lower.Contains("0x70") || lower.Contains("not enough") ? T("磁盘空间不足。", "Not enough disk space.") :
+                lower.Contains("timeout") || lower.Contains("network") || lower.Contains("remote name") || lower.Contains("connection") || lower.Contains("download") ? T("网络连接失败。", "Network connection failed.") : T("安装过程失败。", "Setup failed.");
+            return kind + "\r\n" + (String.IsNullOrWhiteSpace(detail) ? T("请检查网络和磁盘空间后重试。", "Check the network and free disk space, then retry.") : SafeMessage(detail));
         }
 
         private void OnFormClosing(object sender, FormClosingEventArgs args) {
