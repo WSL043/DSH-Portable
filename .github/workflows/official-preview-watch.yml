@@ -52,8 +52,12 @@ jobs:
         if: steps.preview.outputs.blocked == 'true'
         run: |
           echo 'Official DSH ${{ steps.preview.outputs.rejectedVersion }} was previously rejected by historical-session qualification. Waiting for a new immutable upstream release.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Wait for the official source tag of a newly published candidate
+        if: steps.preview.outputs.waitingVersion != ''
+        run: |
+          echo 'Official DSH ${{ steps.preview.outputs.waitingVersion }} is on npm, but its source tag dsh-v${{ steps.preview.outputs.waitingVersion }} is not published yet. The next run will review it once the immutable tag exists.' >> "$GITHUB_STEP_SUMMARY"
       - name: Keep an identical candidate review unchanged
-        if: steps.preview.outputs.changed == 'false' && steps.preview.outputs.blocked != 'true'
+        if: steps.preview.outputs.changed == 'false' && steps.preview.outputs.blocked != 'true' && steps.preview.outputs.waitingVersion == ''
         run: |
           echo 'No newer unshipped candidate needs review; no new commit or product qualification was requested.' >> "$GITHUB_STEP_SUMMARY"
       - id: intake

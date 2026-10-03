@@ -12,7 +12,7 @@ async function json(url) {
   const response = await fetch(url, {
     headers: upstreamRequestHeaders(url),
   })
-  if (!response.ok) throw new Error(`${url} returned HTTP ${response.status}`)
+  if (!response.ok) throw Object.assign(new Error(`${url} returned HTTP ${response.status}`), { status: response.status })
   return response.json()
 }
 
@@ -55,10 +55,21 @@ const provisional = evaluatePreviewUpstream({
   packageCommit: { sha: lock.dsh.reviewedCommit },
   rejectedCandidates: rejected.candidates,
 })
-const packageCommit = provisional.changed
-  ? await officialTagCommit(provisional.version)
-  : { sha: lock.dsh.reviewedCommit }
-const state = evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates: rejected.candidates, stableLock })
+// Upstream sometimes publishes to npm before it pushes the source tag. Wait for the tag instead of failing;
+// the next scheduled run picks the candidate up once the immutable source exists.
+let waitingVersion = ''
+let packageCommit = { sha: lock.dsh.reviewedCommit }
+if (provisional.changed) {
+  try {
+    packageCommit = await officialTagCommit(provisional.version)
+  } catch (error) {
+    if (error.status !== 404) throw error
+    waitingVersion = provisional.version
+  }
+}
+const state = waitingVersion
+  ? { changed: false, waitingVersion, version: lock.dsh.version, integrity: lock.dsh.npmIntegrity, commit: lock.dsh.reviewedCommit }
+  : evaluatePreviewUpstream({ lock, registry, packageCommit, rejectedCandidates: rejected.candidates, stableLock })
 
 if (state.changed) {
   const sourceMetadata = await readOfficialSourceMetadata(state.commit, { json, text })
@@ -89,6 +100,7 @@ if (process.env.GITHUB_OUTPUT) {
     `changed=${state.changed}`,
     `blocked=${state.blocked === true}`,
     `rejectedVersion=${state.rejectedVersion ?? ''}`,
+    `waitingVersion=${waitingVersion}`,
     `selectedTag=${state.selectedTag ?? ''}`,
     `version=${state.version}`,
     `commit=${state.commit}`,

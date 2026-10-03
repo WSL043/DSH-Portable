@@ -25,6 +25,9 @@ test('official DSH candidate discovery opens a review-only pull request', async 
   assert.match(state, /dist-tags/)
   assert.match(updater, /officialTagCommit/)
   assert.match(updater, /provisional\.version/)
+  // A candidate published to npm before its source tag waits for the tag instead of failing the run.
+  assert.match(updater, /error\.status !== 404/)
+  assert.match(workflow, /steps\.preview\.outputs\.waitingVersion != ''/)
   assert.doesNotMatch(updater, /const alphaVersion/)
   assert.match(updater, /upstream\.preview\.lock\.json/)
   // Stable identity is a read-only floor; writes remain confined to the preview lock.
