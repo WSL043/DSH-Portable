@@ -74,18 +74,18 @@ async function adoptOne(pin, coreVersion) {
   }
 }
 
-/** Rewrite the DEFAULT_PLUGINS literal, keeping its field order and formatting. */
-export function rewriteDefaultPluginsModule(source, pins) {
-  const start = source.indexOf('export const DEFAULT_PLUGINS = Object.freeze([')
+/** Rewrite the DEFAULT_PLUGINS (or PREVIEW_DEFAULT_PLUGINS) literal, keeping its field order and formatting. */
+export function rewriteDefaultPluginsModule(source, pins, literalName = 'DEFAULT_PLUGINS') {
+  const start = source.indexOf(`export const ${literalName} = Object.freeze([`)
   const end = source.indexOf('].map(Object.freeze))', start)
-  if (start < 0 || end < 0) throw new Error('DEFAULT_PLUGINS literal not found')
+  if (start < 0 || end < 0) throw new Error(`${literalName} literal not found`)
   const entries = pins.map(pin => ({ name: pin.package, version: pin.version, spec: pin.spec, url: pin.url, sha256: pin.sha256,
     integrity: pin.integrity, license: pin.license, reviewedCommit: pin.reviewedCommit, filename: pin.filename }))
   const literal = JSON.stringify(entries, null, 2).slice(1, -1).replace(/^\n/, '').replace(/\n$/, '')
-  return `${source.slice(0, start)}export const DEFAULT_PLUGINS = Object.freeze([\n${literal}\n${source.slice(end)}`
+  return `${source.slice(0, start)}export const ${literalName} = Object.freeze([\n${literal}\n${source.slice(end)}`
 }
 
-async function refreshStoreLock(pins, archives) {
+async function refreshStoreLock(pins, archives, lockName = 'pnpm-lock.yaml') {
   const pnpmRoot = path.join(root, 'app/node_modules/pnpm')
   const pnpm = path.join(pnpmRoot, JSON.parse(await readFile(path.join(pnpmRoot, 'package.json'), 'utf8')).bin.pnpm)
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-adopt-plugins-'))
@@ -97,7 +97,7 @@ async function refreshStoreLock(pins, archives) {
       dependencies[pin.package] = `file:.dsh-portable-archives/${pin.filename}`
     }
     await writeFile(path.join(temporary, 'package.json'), JSON.stringify({ private: true, dependencies }))
-    const lockFile = path.join(root, 'scripts/default-plugin-store/pnpm-lock.yaml')
+    const lockFile = path.join(root, 'scripts/default-plugin-store', lockName)
     await copyFile(lockFile, path.join(temporary, 'pnpm-lock.yaml'))
     const result = spawnSync(process.execPath, [pnpm, 'install', '--lockfile-only', '--ignore-scripts',
       '--config.auto-install-peers=false', '--config.minimum-release-age=0'], { cwd: temporary, encoding: 'utf8', timeout: 180_000, windowsHide: true })
@@ -127,14 +127,17 @@ async function main() {
   keys.forEach((key, index) => { lock.defaultPlugins[key] = results[index].pin })
   await writeFile(lockPath, `${JSON.stringify(lock, null, 2)}\n`)
   const modulePath = path.join(root, 'launcher/default-plugins.mjs')
-  await writeFile(modulePath, rewriteDefaultPluginsModule(await readFile(modulePath, 'utf8'), results.map(result => result.pin)))
+  // The candidate lock pins its own reviewed plugins and offline store lock; the stable ones stay untouched.
+  const preview = path.basename(lockPath) === 'upstream.preview.lock.json'
+  await writeFile(modulePath, rewriteDefaultPluginsModule(await readFile(modulePath, 'utf8'), results.map(result => result.pin),
+    preview ? 'PREVIEW_DEFAULT_PLUGINS' : 'DEFAULT_PLUGINS'))
   const archives = new Map()
   for (const result of results) {
     const bytes = result.bytes ?? Buffer.from(await (await fetch(result.pin.url, { signal: AbortSignal.timeout(60_000) })).arrayBuffer())
     if (createHash('sha256').update(bytes).digest('hex') !== result.pin.sha256) throw new Error(`${result.pin.package}@${result.pin.version} archive does not match its pin`)
     archives.set(result.pin.package, bytes)
   }
-  await refreshStoreLock(results.map(result => result.pin), archives)
+  await refreshStoreLock(results.map(result => result.pin), archives, preview ? 'pnpm-lock.preview.yaml' : 'pnpm-lock.yaml')
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()

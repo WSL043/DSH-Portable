@@ -55,3 +55,12 @@ test('rewriting DEFAULT_PLUGINS keeps the reviewed module shape and is idempoten
   const pins = Object.values(lock.defaultPlugins)
   assert.equal(rewriteDefaultPluginsModule(source.replace(/\r\n/g, '\n'), pins), source.replace(/\r\n/g, '\n'))
 })
+
+test('a candidate lock rewrites only the preview plugin literal', () => {
+  const source = "export const DEFAULT_PLUGINS = Object.freeze([\n  { name: 'stable' },\n].map(Object.freeze))\nexport const PREVIEW_DEFAULT_PLUGINS = Object.freeze([\n  { name: 'old' },\n].map(Object.freeze))\n"
+  const pin = { package: 'dsh-image-viewer', version: '0.1.8', spec: '0.1.8', url: 'u', sha256: 's', integrity: 'i', license: 'MIT', reviewedCommit: 'c', filename: 'f' }
+  const rewritten = rewriteDefaultPluginsModule(source, [pin], 'PREVIEW_DEFAULT_PLUGINS')
+  assert.ok(rewritten.includes("{ name: 'stable' }"))
+  assert.ok(!rewritten.includes("{ name: 'old' }"))
+  assert.match(rewritten, /PREVIEW_DEFAULT_PLUGINS = Object\.freeze\(\[\n  \{\n    "name": "dsh-image-viewer"/u)
+})
