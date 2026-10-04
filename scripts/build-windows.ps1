@@ -563,7 +563,12 @@ try {
     } else {
         Join-Path $ProjectRoot 'config\footprint-budgets.json'
     }
-    $FootprintBaseline = Join-Path $ProjectRoot 'config\footprint-baseline.json'
+    # A candidate core is judged against its own reviewed baseline; stable growth stays bounded by the last release.
+    $FootprintBaseline = if ($ReleaseChannel -eq 'candidate') {
+        Join-Path $ProjectRoot 'config\footprint-baseline-preview.json'
+    } else {
+        Join-Path $ProjectRoot 'config\footprint-baseline.json'
+    }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\report-footprint.mjs') $Stage `
         --platform windows-x64 `
         --archive $Zip `

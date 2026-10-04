@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "platforms": {
+    "windows-x64": {
+      "archiveBytes": 125916900,
+      "extractedBytes": 475309529,
+      "files": 10353,
+      "directories": 2436,
+      "items": 12879,
+      "appBytes": 379835672,
+      "appFiles": 10225,
+      "appDirectories": 2162,
+      "appItems": 12477,
+      "marketBytes": 401977,
+      "marketFiles": 13,
+      "officeRuntimeBytes": 190865379,
+      "extractedBytesWithoutOfficeRuntime": 284440789,
+      "appBytesWithoutOfficeRuntime": 188966932,
+      "speechRuntimeBytes": 23453149,
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 260987640,
+      "appBytesWithoutOfficeAndSpeechRuntime": 165513783
+    }
+  }
+}

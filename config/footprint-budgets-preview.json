@@ -14,11 +14,11 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 350000000,
-      "extractedBytesWithoutOfficeRuntime": 261500000,
-      "appBytesWithoutOfficeRuntime": 166500000,
+      "extractedBytesWithoutOfficeRuntime": 270000000,
+      "appBytesWithoutOfficeRuntime": 174000000,
       "speechRuntimeBytes": 24000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 237500000,
-      "appBytesWithoutOfficeAndSpeechRuntime": 142500000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 246000000,
+      "appBytesWithoutOfficeAndSpeechRuntime": 150000000
     },
     "macos-x64": {
       "archiveBytes": 202000000,
@@ -29,9 +29,9 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 285000000,
-      "extractedBytesWithoutOfficeRuntime": 304000000,
+      "extractedBytesWithoutOfficeRuntime": 335000000,
       "speechRuntimeBytes": 38000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 266000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 297000000
     },
     "macos-arm64": {
       "archiveBytes": 191000000,
@@ -42,35 +42,35 @@
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 275000000,
-      "extractedBytesWithoutOfficeRuntime": 296000000,
+      "extractedBytesWithoutOfficeRuntime": 326000000,
       "speechRuntimeBytes": 35000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 261000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 292000000
     },
     "linux-x64": {
       "archiveBytes": 169000000,
       "extractedBytes": 574000000,
-      "files": 14250,
+      "files": 14650,
       "directories": 3975,
-      "items": 18250,
+      "items": 18650,
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 200000000,
-      "extractedBytesWithoutOfficeRuntime": 380000000,
+      "extractedBytesWithoutOfficeRuntime": 412000000,
       "speechRuntimeBytes": 34000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 346000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 378000000
     },
     "linux-arm64": {
       "archiveBytes": 171000000,
       "extractedBytes": 576000000,
-      "files": 14250,
+      "files": 14650,
       "directories": 3975,
-      "items": 18250,
+      "items": 18650,
       "marketBytes": 2100000,
       "marketFiles": 230,
       "officeRuntimeBytes": 200000000,
-      "extractedBytesWithoutOfficeRuntime": 382000000,
+      "extractedBytesWithoutOfficeRuntime": 413000000,
       "speechRuntimeBytes": 41000000,
-      "extractedBytesWithoutOfficeAndSpeechRuntime": 341000000
+      "extractedBytesWithoutOfficeAndSpeechRuntime": 372000000
     }
   }
 }
