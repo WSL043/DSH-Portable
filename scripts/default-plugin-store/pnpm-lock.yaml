@@ -22,11 +22,11 @@ packages:
     engines: {node: '>=6'}
 
   dsh-chat-manager@file:.dsh-portable-archives/dsh-chat-manager.tgz:
-    resolution: {integrity: sha512-mQvnAutzJhSZ1qDuzfzGgdlyRmLhazgzMJ3arjLqFgnCcuYrCH9Y5lwmm0pcei5GQtcq32ZJjaDtvwrUzOQ7Jg==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
-    version: 1.5.7
+    resolution: {integrity: sha512-Wp+X6Iy32m2yjIW/jOzy+PwzzrriTf3jf7WCXZjNiOPKwIHgG2wTLzrFzTXPPFASQ3yJ2Kcp0eYcK1EHA7Ou/Q==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
+    version: 1.5.8
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
-      '@deepseek-ai/cordis': 4.0.3 || 4.0.4
+      '@deepseek-ai/cordis': 4.0.3 || 4.0.4 || 4.0.5-alpha.1
       '@deepseek-ai/dsh-client-connection': 0.2.1-alpha.1 || 0.2.0-rc.2 || 0.2.0-rc.1
       '@deepseek-ai/dsh-client-locale': 0.2.1-alpha.1 || 0.2.0-rc.2 || 0.2.0-rc.1
       '@deepseek-ai/dsh-client-ui-conversation': 0.2.1-alpha.1 || 0.2.0-rc.2 || 0.2.0-rc.1
@@ -56,11 +56,11 @@ packages:
         optional: true
 
   dsh-image-viewer@file:.dsh-portable-archives/dsh-image-viewer.tgz:
-    resolution: {integrity: sha512-OIexBhLBl331qUwn5VDl7Bm6yvkBNnak0Tv1Cma8ikSKYKMHf3v/5hM1t58rraSj8qK3+BNaQgR+8I9scBLrjA==, tarball: file:.dsh-portable-archives/dsh-image-viewer.tgz}
-    version: 0.1.7
+    resolution: {integrity: sha512-w7ScwqLxrR3JtXNCNbQYkCP8ftkPbpp4+kxDvzRQ/SRVtUhSI3cozs20p7rgqqsW3bv8Obmo+F0LyGwJCSwdzA==, tarball: file:.dsh-portable-archives/dsh-image-viewer.tgz}
+    version: 0.1.8
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
-      '@deepseek-ai/cordis': 4.0.1 || 4.0.2 || 4.0.3 || 4.0.4
+      '@deepseek-ai/cordis': 4.0.1 || 4.0.2 || 4.0.3 || 4.0.4 || 4.0.5-alpha.1
       '@deepseek-ai/dsh-client-locale': 0.2.1-alpha.1 || 0.2.0-rc.2 || 0.2.0-rc.1
       '@deepseek-ai/dsh-client-ui-layout': 0.2.1-alpha.1 || 0.2.0-rc.2 || 0.2.0-rc.1
       '@deepseek-ai/dsh-client-ui-primitives': 0.2.1-alpha.1 || 0.2.0-rc.2 || 0.2.0-rc.1
