@@ -1,0 +1,27 @@
+{
+  "version": "0.8.5",
+  "zh": {
+    "summary": "默认插件更新到图片查看器 0.1.8 和会话管理 1.5.8，插件市场支持官方新内核 0.2.1-alpha.1。",
+    "highlights": [
+      "默认插件更新：图片查看器 0.1.8、会话管理 1.5.8，均支持官方最新 3 个内核 0.2.1-alpha.1、0.2.0-rc.2、0.2.0-rc.1。",
+      "插件市场接受 0.2.1-alpha.1 内核及其新的 Cordis 宿主版本，切换到该内核后市场和插件可以正常加载。",
+      "为 0.2.1-alpha.1 内核附带的 Office 组件 0.1.5 补上审查过的压缩包解析修正。",
+      "安装包自带的内核保持为 0.2.0-rc.2；0.2.1-alpha.1 验收通过后即可在设置中选择。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.4 升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Default plugins move to Image Viewer 0.1.8 and Chat Manager 1.5.8, and the plugin market supports the official 0.2.1-alpha.1 core.",
+    "highlights": [
+      "Default plugins: Image Viewer 0.1.8 and Chat Manager 1.5.8, both supporting the newest three official cores 0.2.1-alpha.1, 0.2.0-rc.2, and 0.2.0-rc.1.",
+      "The plugin market accepts the 0.2.1-alpha.1 core and its new Cordis host, so the market and plugins load after switching to it.",
+      "The Office kit 0.1.5 shipped with the 0.2.1-alpha.1 core gets the reviewed ZIP parser fix.",
+      "The core bundled with the package stays at 0.2.0-rc.2; 0.2.1-alpha.1 becomes selectable in Settings once it qualifies."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.4 keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}
