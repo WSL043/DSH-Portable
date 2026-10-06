@@ -1,0 +1,23 @@
+{
+  "version": "0.8.6",
+  "zh": {
+    "summary": "修复 0.8.5 无法验收官方新内核 0.2.1-alpha.1 的问题。",
+    "highlights": [
+      "补上 0.2.1-alpha.1 的旧会话兼容记录：该内核读取旧版本保存的子代理会话时使用与 0.2.0-rc.2 相同的、审查过的兼容修正，验收通过后即可在设置中选择。",
+      "默认插件仍为图片查看器 0.1.8、会话管理 1.5.8；安装包自带的内核保持为 0.2.0-rc.2。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.5 升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes 0.8.5 being unable to qualify the official 0.2.1-alpha.1 core.",
+    "highlights": [
+      "Records 0.2.1-alpha.1 for the historical session compatibility fix: it restores subagent sessions saved by older versions with the same reviewed fix as 0.2.0-rc.2, and becomes selectable in Settings once it qualifies.",
+      "Default plugins stay at Image Viewer 0.1.8 and Chat Manager 1.5.8; the core bundled with the package stays at 0.2.0-rc.2."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.5 keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}
