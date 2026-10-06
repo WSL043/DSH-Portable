@@ -50,7 +50,7 @@
 
 ## Downloads
 
-For everyday use, choose the stable 0.x (Native) line. The 1.0 line has a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4) for early adopters; it is not an upgrade path from 0.x.
+For everyday use, choose the stable 0.x (Native) line. The 1.0 line has a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5) for early adopters; it is not an upgrade path from 0.x.
 
 ### Windows
 
@@ -125,7 +125,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 ## Roadmap
 
 - **Stable 0.x (Native):** The current public download; near-term work focuses on polish and stability.
-- **1.0 line:** Runs the official desktop app itself and only moves its data into the folder. Currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4), not an upgrade path from 0.x:
+- **1.0 line:** Runs the official desktop app itself and only moves its data into the folder. Currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5), not an upgrade path from 0.x:
   - Official files stay unchanged; when the official app ships a new version, "Install and Restart" inside the app follows it, with verification first and an automatic return to the previous version if the new one fails to start.
   - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
   - Image Viewer and Chat Manager are preinstalled but off; turn them on in the official Plugins page.

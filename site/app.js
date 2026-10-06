@@ -147,7 +147,7 @@ const copy = {
     developmentLineLabel: "ALPHA PREVIEW",
     developmentLineTitle: "1.0 line: runs the official desktop app itself",
     developmentLineText:
-      '<ul class="line-points"><li>Sessions, settings, plugins, and sign-in travel with the folder.</li><li>When the official app ships a new version, "Install and Restart" inside the app follows it.</li><li>Windows only, currently an alpha preview, not an upgrade path from 0.x.</li></ul><p><a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4">Try the alpha</a> · <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a></p>',
+      '<ul class="line-points"><li>Sessions, settings, plugins, and sign-in travel with the folder.</li><li>When the official app ships a new version, "Install and Restart" inside the app follows it.</li><li>Windows only, currently an alpha preview, not an upgrade path from 0.x.</li></ul><p><a href="https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5">Try the alpha</a> · <a href="../guides/official-desktop-portable.html">About the 1.0 preview</a></p>',
     pluginsTitle: "Plugin tools,<br>kept in your folder.",
     managerText:
       "Organize and find sessions to pick up earlier work. Both default plugins are maintained and updated independently.",

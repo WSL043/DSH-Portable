@@ -50,7 +50,7 @@
 
 ## 下载
 
-日常使用请选择稳定版 0.x（Native）。1.0 线有一个仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4)，供想尝鲜的用户试用，不是 0.x 的升级路径。
+日常使用请选择稳定版 0.x（Native）。1.0 线有一个仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，供想尝鲜的用户试用，不是 0.x 的升级路径。
 
 ### Windows
 
@@ -125,7 +125,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 ## 路线
 
 - **稳定版 0.x（Native）**：当前公开下载；接下来聚焦打磨与稳定。
-- **1.0 线**：直接运行官方桌面应用，只把数据放进文件夹。目前是仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.4)，不是 0.x 的升级路径：
+- **1.0 线**：直接运行官方桌面应用，只把数据放进文件夹。目前是仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，不是 0.x 的升级路径：
   - 官方文件保持原样；官方发布新版本后，在应用内“安装并重启”即可跟上，更新前会校验，新版本异常时自动回到上一版。
   - 会话、设置、插件和登录状态都在文件夹里，整夹复制到另一台 Windows 电脑即可接着用。
   - 预装图片查看器和会话管理，默认关闭，在官方插件页打开。
