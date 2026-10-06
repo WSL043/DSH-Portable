@@ -1,4 +1,4 @@
-name: Package pure portable alpha.4 as a draft
+name: Package pure portable alpha.5 as a draft
 on:
   workflow_dispatch:
     inputs:
@@ -18,11 +18,11 @@ permissions:
 # Update each commit and version together when upgrading a bundled default plugin.
 env:
   IMAGE_VIEWER_REPOSITORY: WSL043/dsh-image-viewer
-  IMAGE_VIEWER_COMMIT: 3ab07431f66b0dee5ae0497ef3ed53566a15aae8
-  IMAGE_VIEWER_VERSION: 0.1.7
+  IMAGE_VIEWER_COMMIT: d938bc35906784e253aca15903547068463907f0
+  IMAGE_VIEWER_VERSION: 0.1.8
   CHAT_MANAGER_REPOSITORY: WSL043/dsh-chat-manager
-  CHAT_MANAGER_COMMIT: 07561e9e489ae014556a3e334f0acdcaa1580cca
-  CHAT_MANAGER_VERSION: 1.5.7
+  CHAT_MANAGER_COMMIT: 7a0af0120fb62beb96c8ba0da1b43c42127029e0
+  CHAT_MANAGER_VERSION: 1.5.8
 concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
@@ -174,7 +174,7 @@ jobs:
             -IndexUrl $urls.indexUrl `
             -SeedPlugin @($imageViewer, $chatManager)
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
-          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
+          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64.zip'
           Compress-Archive -Path 'build/orch-080/T32/package/*' -DestinationPath $archive -CompressionLevel Optimal
           ./experiments/official-payload/package-pure.ps1 `
             -Bootstrap `
@@ -192,7 +192,7 @@ jobs:
             if (-not (Test-Path -LiteralPath (Join-Path $liteRoot $required) -PathType Leaf)) { throw "Lite package is missing $required" }
           }
           if ((Test-Path -LiteralPath (Join-Path $liteRoot 'app/current.json')) -or @(Get-ChildItem -LiteralPath (Join-Path $liteRoot 'app') -Directory).Count -ne 0) { throw 'Lite package contains a preinstalled official app' }
-          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip'
+          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64-lite.zip'
           Compress-Archive -Path 'build/orch-080/T32/package-lite/*' -DestinationPath $liteArchive -CompressionLevel Optimal
           [IO.File]::WriteAllText('build/orch-080/T32/lite-package-size.txt', ($liteBytes.ToString() + "`n"), [Text.Encoding]::ASCII)
       - name: Smoke first and second startup, seed state, disabled config, and moved root
@@ -201,7 +201,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
-            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip' `
+            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-root' `
             -EvidenceRoot 'build/orch-080/T32/evidence'
       - name: Smoke lite bootstrap install from the accepted channel and official CDN
@@ -210,21 +210,21 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
-            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip' `
+            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64-lite.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-lite-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
             -Bootstrap
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: official-pure-alpha-4-lite-smoke-evidence
+          name: official-pure-alpha-5-lite-smoke-evidence
           path: build/orch-080/T32/lite-evidence/
           if-no-files-found: warn
           retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: official-pure-alpha-4-seed-smoke-evidence
+          name: official-pure-alpha-5-seed-smoke-evidence
           path: build/orch-080/T32/evidence/
           if-no-files-found: warn
           retention-days: 14
@@ -233,22 +233,22 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $candidate = Get-Content -LiteralPath 'build/orch-080/T32/candidate.json' -Raw | ConvertFrom-Json
-          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip'
-          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip'
+          $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64.zip'
+          $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64-lite.zip'
           $launcher = 'build/orch-080/T32/package/DeepSeek Harness Portable.exe'
           $zipHash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
           $liteZipHash = (Get-FileHash -LiteralPath $liteArchive -Algorithm SHA256).Hash.ToLowerInvariant()
           $launcherHash = (Get-FileHash -LiteralPath $launcher -Algorithm SHA256).Hash.ToLowerInvariant()
-          @("$zipHash  DSH-Portable-1.0.0-alpha.4-windows-x64.zip", "$liteZipHash  DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
-          $source = @("# DSH-Portable 1.0.0-alpha.4 source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Full package SHA-256: $zipHash", "- Lite package SHA-256: $liteZipHash", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'The lite package downloads the accepted official desktop from the official CDN on first launch. Both packages are draft assets and do not replace the stable Native line.')
+          @("$zipHash  DSH-Portable-1.0.0-alpha.5-windows-x64.zip", "$liteZipHash  DSH-Portable-1.0.0-alpha.5-windows-x64-lite.zip", "$launcherHash  DeepSeek Harness Portable.exe") | Set-Content -LiteralPath 'build/orch-080/T32/checksums.txt' -Encoding ascii
+          $source = @("# DSH-Portable 1.0.0-alpha.5 source", '', "- Official desktop version: $($candidate.version)", "- Official installer URL: $($candidate.installerUrl)", "- Official installer SHA-512 (base64): $($candidate.sha512)", "- Full package SHA-256: $zipHash", "- Lite package SHA-256: $liteZipHash", "- Launcher SHA-256: $launcherHash", "- Source commit: $env:GITHUB_SHA", '', 'The lite package downloads the accepted official desktop from the official CDN on first launch. Both packages are draft assets and do not replace the stable Native line.')
           $source | Set-Content -LiteralPath 'build/orch-080/T32/SOURCE.md' -Encoding utf8
       - uses: actions/upload-artifact@v7
         if: success()
         with:
-          name: official-pure-alpha-4-draft-assets
+          name: official-pure-alpha-5-draft-assets
           path: |
-            build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64.zip
-            build/orch-080/T32/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip
+            build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64.zip
+            build/orch-080/T32/DSH-Portable-1.0.0-alpha.5-windows-x64-lite.zip
             build/orch-080/T32/checksums.txt
             build/orch-080/T32/SOURCE.md
             build/orch-080/T32/lite-package-size.txt
@@ -272,24 +272,24 @@ jobs:
           node-version: 24.19.0
       - uses: actions/download-artifact@v8
         with:
-          name: official-pure-alpha-4-draft-assets
+          name: official-pure-alpha-5-draft-assets
           path: release-input
-      - name: Create or update only the alpha.4 draft release
+      - name: Create or update only the alpha.5 draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v1.0.0-alpha.4
-          RELEASE_NAME: DSH-Portable 1.0.0-alpha.4 — Pure portable
+          RELEASE_TAG: v1.0.0-alpha.5
+          RELEASE_NAME: DSH-Portable 1.0.0-alpha.5 — Pure portable
         run: |
           set -euo pipefail
           # Draft releases have no tag yet, so the tags endpoint cannot see them: search the release list instead.
           # A draft whose tag does not exist yet is reported as "untagged-..."; match it by title too.
           EXISTING=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq ".[] | select(.tag_name == \"$RELEASE_TAG\" or (.draft and .name == \"$RELEASE_NAME\")) | [.id, .draft] | join(\" \")" | head -n 1)
           if [ -z "$EXISTING" ]; then
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --latest=false --title 'DSH-Portable 1.0.0-alpha.4 — Pure portable' --notes-file release-input/SOURCE.md
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --prerelease --latest=false --title 'DSH-Portable 1.0.0-alpha.5 — Pure portable' --notes-file release-input/SOURCE.md
           else
             RELEASE_ID=${EXISTING%% *}
             DRAFT=${EXISTING##* }
-            if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.4 release' >&2; exit 1; fi
+            if [ "$DRAFT" != true ]; then echo 'Refusing to mutate an existing non-draft alpha.5 release' >&2; exit 1; fi
             gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" -f name="$RELEASE_NAME" -F body=@release-input/SOURCE.md -F draft=true -F prerelease=true > /dev/null
           fi
-          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.4-windows-x64.zip release-input/DSH-Portable-1.0.0-alpha.4-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable
+          node scripts/upload-release-assets.mjs "$RELEASE_TAG" release-input/DSH-Portable-1.0.0-alpha.5-windows-x64.zip release-input/DSH-Portable-1.0.0-alpha.5-windows-x64-lite.zip release-input/checksums.txt release-input/SOURCE.md --mutable

@@ -78,7 +78,7 @@ try {
     $readme = @'
 # DeepSeek Harness Portable / 纯便携版
 
-**1.0.0-alpha.4 · Windows x64 · 解压到独立目录。** 本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。不预装插件、不带市场。
+**1.0.0-alpha.5 · Windows x64 · 解压到独立目录。** 本包使用官方桌面安装包的原始文件；唯一允许的官方文件差异是 `app/<版本>/resources/app-update.yml`。不预装插件、不带市场。
 
 **便携数据：** `data/dsh-home/`（官方 `DSH_HOME`）、`data/electron/`（Chromium/Electron user data）、`data/launcher/`（日志、更新状态与暂存）。搬动时完全退出并移动整个根目录。
 
@@ -90,7 +90,7 @@ try {
 
 ---
 
-**1.0.0-alpha.4 · Windows x64 · Extract to a dedicated folder.** Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`. No plugins or marketplace are bundled.
+**1.0.0-alpha.5 · Windows x64 · Extract to a dedicated folder.** Official desktop files are preserved byte-for-byte except `app/<version>/resources/app-update.yml`. No plugins or marketplace are bundled.
 
 **Portable data:** `data/dsh-home/` (`DSH_HOME`), `data/electron/` (Chromium/Electron user data), and `data/launcher/` (logs, update status and staging). Exit fully before moving the complete root folder.
 

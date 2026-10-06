@@ -1,6 +1,6 @@
 # Official payload / 官方成品便携化
 
-**1.0.0-alpha.4 · Windows x64 · 纯便携模式为默认 / pure portable mode is the default.**
+**1.0.0-alpha.5 · Windows x64 · 纯便携模式为默认 / pure portable mode is the default.**
 
 官方桌面成品零改动（仅按架构约定改写 `resources/app-update.yml`）；纯模式不调用、不打包旧 ASAR adapter、desktop adapter、更新桥、默认插件或市场文件。仓库中的旧适配路线保留到阶段 3 统一删除，不再作为默认或交付路线。稳定版 Native 线不受影响。纯便携实现仍处于阶段 2 开发状态，不能据此宣称架构已验收。
 
