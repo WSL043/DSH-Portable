@@ -104,7 +104,7 @@ Find more in **Settings → Plugins → Plugin Market**; to add one manually, en
 **Optional cores (latest 3 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).
 
 <details>
-<summary>View available cores for Portable 0.8.6</summary>
+<summary>View available cores for Portable 0.8.7</summary>
 
 | Platform | Available cores |
 | --- | --- |
