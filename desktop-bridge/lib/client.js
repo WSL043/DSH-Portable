@@ -17,7 +17,7 @@ window.__ModuleLoader__.load({
         product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。',
         engine: 'DeepSeek Harness', engineHint: '官方内核，独立于 Portable 更新。选择通过兼容验证的版本。',
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
-        currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。',
+        currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。', currentTag: '{0}（当前）', testCoreTag: '{0}（官方测试版）',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
         incompatible: '此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
         engineUnavailableSummary: '另有 {0} 个版本正在验证或暂不适用',
@@ -72,7 +72,7 @@ window.__ModuleLoader__.load({
         product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations.',
         engine: 'DeepSeek Harness', engineHint: 'The official core updates independently. Choose a compatible, verified version.',
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
-        currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.',
+        currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.', currentTag: '{0} (current)', testCoreTag: '{0} (official test build)',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
         incompatible: 'This core update package is not qualified for the current DSH-Portable. Select a verified version.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
         engineUnavailableSummary: 'Other versions are being verified or currently unavailable ({0}).',
@@ -120,6 +120,19 @@ window.__ModuleLoader__.load({
 
     function format(template, ...values) {
       return String(template).replace(/\{(\d+)\}/g, (_match, index) => String(values[index] ?? ''))
+    }
+
+    // Official alpha and beta cores are test builds; rc and final releases are labelled by number only.
+    const isTestCore = version => /-(?:alpha|beta)\.\d+$/.test(String(version))
+    function compareCoreVersions(left, right) {
+      const parse = version => {
+        const [core, pre = ''] = String(version).split('-')
+        const [tag = '', number = '0'] = pre.split('.')
+        return [...core.split('.').map(Number), pre ? ['alpha', 'beta', 'rc'].indexOf(tag) : 3, Number(number)]
+      }
+      const a = parse(left), b = parse(right)
+      for (let index = 0; index < a.length; index += 1) if (a[index] !== b[index]) return a[index] - b[index]
+      return 0
     }
 
     let dataExportRequestSequence = 0
@@ -371,6 +384,7 @@ window.__ModuleLoader__.load({
       const useState = React.useState
       const lang = localeOf(ctx)
       const t = key => copy[lang][key] || key
+      const coreLabel = version => isTestCore(version) ? format(t('testCoreTag'), version) : version
       const [settings, setSettings] = useState(null)
       const [versions, setVersions] = useState({ portable: '', engine: '' })
       const [lastUpdate, setLastUpdate] = useState(null)
@@ -661,7 +675,7 @@ window.__ModuleLoader__.load({
           if (body.status === 'current') setStatus(name, t('current'))
           else if (body.status === 'available' || body.status === 'full-package-required') {
             setUpdateOffers(current => ({ ...current, [scope]: true }))
-            setStatus(name, format(t('available'), (scope === 'engine' ? body.engineLatest : body.latest) || ''))
+            setStatus(name, format(t('available'), scope === 'engine' ? coreLabel(body.engineLatest || '') : body.latest || ''))
           }
           else if (body.status === 'core-incompatible' || body.status === 'core-awaiting-qualification') setStatus(name, t('incompatible'))
           else if (body.status === 'engine-follows-product') setStatus(name, t('engineFollowsProduct'))
@@ -790,7 +804,7 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.updateHeader },
           h('div', { style: styles.text }, h('div', { style: styles.heading }, title),
             h('div', { style: styles.hint }, hint),
-            version && h('div', { style: styles.version }, format(t('currentVersion'), version)),
+            version && h('div', { style: styles.version }, format(t('currentVersion'), scope === 'engine' ? coreLabel(version) : version)),
             inlineStatus(`update-${scope}`)),
           h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
             busy === `update-${scope}` ? t('checking') : (scope === 'engine' && engineVersion && engineVersion !== version) || (scope === 'product' && productVersion && productVersion !== version)
@@ -808,7 +822,9 @@ window.__ModuleLoader__.load({
           h('div', { style: styles.label }, t('versionChoice')),
           h(PortableSelector, {
             primitives, value: engineVersion || version, label: t('versionChoice'),
-            items: [{ id: version, label: version }, ...engineVersions.filter(item => item.version !== version).map(item => ({ id: item.version, label: item.version }))],
+            items: [version, ...engineVersions.map(item => item.version).filter(item => item !== version)]
+              .sort((left, right) => compareCoreVersions(right, left))
+              .map(item => ({ id: item, label: item === version ? format(t('currentTag'), coreLabel(item)) : coreLabel(item) })),
             onSelect: setEngineVersion,
           })),
         h('div', { style: styles.updateHeader },

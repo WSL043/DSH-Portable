@@ -400,8 +400,22 @@ export function mountPortableRoutes(webServer, options = {}) {
   return () => { for (const dispose of disposers.reverse()) dispose?.() }
 }
 
+// The official first-use step creates a default Workspace under the system Documents folder when the
+// registry and Session history are both empty. Registering the portable workspace first keeps a new
+// folder's first Workspace and Session inside the folder, where root moves already migrate it.
+export async function registerPortableWorkspace(registry, sessions, stateRoot = process.env.DSH_PORTABLE_STATE_ROOT) {
+  if (!stateRoot) return false
+  if (registry.list().length > 0 || sessions.list().length > 0) return false
+  await registry.create(path.join(stateRoot, 'workspace'))
+  return true
+}
+
 export function apply(ctx) {
   ctx.effect(() => mountPortableRoutes(ctx.webServer), 'dsh-portable: settings and maintenance routes')
+  ctx.inject?.(['workspaceRegistry', 'sessions'], child => {
+    registerPortableWorkspace(child.workspaceRegistry, child.sessions)
+      .catch(error => child.logger?.('dsh-portable')?.warn?.(`portable workspace registration skipped: ${error?.message || error}`))
+  })
   ctx.inject?.(['pluginManager'], child => {
     child.effect(() => installOfficialPnpmRecovery(child.pluginManager),
       'dsh-portable: official package manager release-age recovery')

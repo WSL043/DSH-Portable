@@ -6,3 +6,8 @@
       config:
         profile: web
         allowRestart: false
+# The official first-use Workspace lives under the system Documents folder. Point that lookup at the
+# portable state root so a first-use default stays inside the folder if it is ever created.
+- id: workspace-controller
+  config:
+    documentsDirectory: !!js process.env.DSH_PORTABLE_STATE_ROOT || undefined

@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { mountPortableRoutes } from '../desktop-bridge/lib/index.js'
+import { mountPortableRoutes, registerPortableWorkspace } from '../desktop-bridge/lib/index.js'
 
 function request(method, body = null) {
   const source = body === null ? [] : [Buffer.from(JSON.stringify(body))]
@@ -615,4 +615,23 @@ test('dependency cleanup is same-origin POST, coalesces work, and sanitizes fail
   assert.equal(failed.status, 409)
   assert.equal(failed.json().code, 'STORE_OFFLINE_PREPARE_FAILED')
   assert.doesNotMatch(JSON.stringify(failed.json()), /secret|private path/)
+})
+
+test('a new folder registers its portable workspace before the official Documents default can be created', async () => {
+  const created = []
+  const empty = { list: () => [], create: async directory => { created.push(directory) } }
+  const noSessions = { list: () => [] }
+  assert.equal(await registerPortableWorkspace(empty, noSessions, path.join('P:', 'DSH-Portable')), true)
+  assert.deepEqual(created, [path.join('P:', 'DSH-Portable', 'workspace')])
+
+  // Existing folders keep whatever the user registered or removed.
+  assert.equal(await registerPortableWorkspace({ ...empty, list: () => [{}] }, noSessions, 'P:/x'), false)
+  assert.equal(await registerPortableWorkspace(empty, { list: () => [{}] }, 'P:/x'), false)
+  assert.equal(await registerPortableWorkspace(empty, noSessions, ''), false)
+  assert.equal(created.length, 1)
+})
+
+test('the bridge points the official first-use Documents lookup at the portable state root', async () => {
+  const patch = await readFile(new URL('../desktop-bridge/cordis.patch.yml', import.meta.url), 'utf8')
+  assert.match(patch, /- id: workspace-controller\n  config:\n    documentsDirectory: !!js process\.env\.DSH_PORTABLE_STATE_ROOT \|\| undefined/)
 })
