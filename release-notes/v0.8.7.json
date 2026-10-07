@@ -1,0 +1,27 @@
+{
+  "version": "0.8.7",
+  "zh": {
+    "summary": "新文件夹的第一个工作区留在便携文件夹内；内核列表标明官方测试版；会话管理更新到 1.5.9。",
+    "highlights": [
+      "全新解压的便携版第一次启动时，不再在系统“文档”文件夹里创建默认工作区，第一个工作区和会话都留在便携文件夹内。",
+      "设置 → 更新的内核列表从新到旧排列，官方 alpha/beta 版本标注“官方测试版”，正在使用的版本标注“当前”。",
+      "会话管理更新到 1.5.9：修复新装后第一次启动时删除和归档会话未生效、需要重启一次的问题。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.6 升级会保留设置、会话、插件和默认工作区。",
+      "之前已经在“文档”文件夹里创建的默认工作区不会被移动或删除；不需要的话可以在侧栏移除它，文件仍保留在原处。"
+    ]
+  },
+  "en": {
+    "summary": "A new folder's first workspace stays inside the portable folder, the core list marks official test builds, and Chat Manager moves to 1.5.9.",
+    "highlights": [
+      "A freshly extracted folder no longer creates a default workspace in the system Documents folder on first start; the first workspace and session stay inside the portable folder.",
+      "Settings → Updates lists cores newest first, marks official alpha/beta versions as official test builds, and marks the one in use as current.",
+      "Chat Manager 1.5.9: delete and archive now work on the first start after a fresh install instead of needing one restart."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.6 keeps settings, sessions, plugins, and the default workspace.",
+      "A default workspace already created in the Documents folder is not moved or deleted; remove it from the sidebar if you do not need it, and its files stay where they are."
+    ]
+  }
+}
