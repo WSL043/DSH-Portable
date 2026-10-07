@@ -93,13 +93,13 @@ export const DEFAULT_PLUGINS = Object.freeze([
   },
   {
     "name": "dsh-chat-manager",
-    "version": "1.5.8",
-    "spec": "1.5.8",
-    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.8.tgz",
-    "sha256": "2af1df39251c8c7d88664819a51be0d44de3d4663417aab53f1688ca25899e5c",
-    "integrity": "sha512-Wp+X6Iy32m2yjIW/jOzy+PwzzrriTf3jf7WCXZjNiOPKwIHgG2wTLzrFzTXPPFASQ3yJ2Kcp0eYcK1EHA7Ou/Q==",
+    "version": "1.5.9",
+    "spec": "1.5.9",
+    "url": "https://registry.npmjs.org/dsh-chat-manager/-/dsh-chat-manager-1.5.9.tgz",
+    "sha256": "1aafd7601e3b860d21b5d3982b842a0c8246455032ed9263534ba02df4bbca90",
+    "integrity": "sha512-RFTVpWm2EZCu2eps+Z2NHO/8OB0455XR/+lr7+Vqouwj8EU5jutL76soRrh0TfRY3Rbl99OzsmH8S2Q04CX+Bw==",
     "license": "MIT",
-    "reviewedCommit": "7a0af0120fb62beb96c8ba0da1b43c42127029e0",
+    "reviewedCommit": "9e654f8b6fc8515ff4e6f1b2155593ae6b29e4c2",
     "filename": "dsh-chat-manager.tgz"
   }
 ].map(Object.freeze))
