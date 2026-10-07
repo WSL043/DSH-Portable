@@ -344,6 +344,30 @@ test('single-channel catalog state keeps unavailable versions collapsed and loca
   } finally { mounted.unmount() }
 })
 
+test('core versions list newest first, mark the current one, and label official test builds', async () => {
+  const client = await loadSettingsComponent(async url => {
+    if (url === '/dsh-portable/settings') return jsonResponse({ settings: settings('stable'), versions: { portable: '0.8.6', engine: '0.2.0-rc.2' } })
+    if (url === '/dsh-portable/engine-versions') return jsonResponse({
+      schemaVersion: 1, current: '0.2.0-rc.2', releaseChannel: 'stable',
+      versions: [
+        { version: '0.2.0-rc.2', manifestUrl: '/rc2.json', status: 'current' },
+        { version: '0.2.1-alpha.1', manifestUrl: '/alpha1.json', status: 'available' },
+        { version: '0.2.0-rc.1', manifestUrl: '/rc1.json', status: 'available' },
+      ],
+      unavailable: [],
+    })
+    throw Error(url)
+  })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const selector = findNode(mounted.tree, node => node.props?.label === 'Engine version')
+    assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.2.1-alpha.1', '0.2.0-rc.2', '0.2.0-rc.1'])
+    assert.deepEqual(Array.from(selector.props.items, item => item.label),
+      ['0.2.1-alpha.1 (official test build)', '0.2.0-rc.2 (current)', '0.2.0-rc.1'])
+  } finally { mounted.unmount() }
+})
+
 test('non-channel preference saves remain ordered and do not reload the stable catalog', async () => {
   const calls = []
   const saves = []
