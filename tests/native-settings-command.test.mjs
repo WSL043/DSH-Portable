@@ -49,6 +49,18 @@ test('official 0.2.0-rc.1 plugin refresh action uses an exact aria-label anchor'
   assert.throws(() => patchPluginManagerActions(source.replace(currentRefreshAnchor, `${currentRefreshAnchor}\n${currentRefreshAnchor}`)), /expected one exact anchor, found 2/)
 })
 
+// DSH 0.2.1-alpha.2 lists the card tags one per line; the slot must still land before the first tag.
+test('official 0.2.1-alpha.2 plugin card keeps the update summary slot with its multi-line tag list', () => {
+  const alpha2Tags = 'children: [\n\t\t\t\t\t\tbeta ? null : null,\n\t\t\t\t\t\tupdateAvailable(pkg) ? null : null\n\t\t\t\t\t] }'
+  const source = pluginManagerFixture(currentRefreshAnchor).replace('children: [beta ? null : null] }', alpha2Tags)
+  assert.ok(source.includes(alpha2Tags), 'fixture uses the alpha.2 tag layout')
+  const patched = patchPluginManagerActions(source)
+  assert.match(patched, /children: \[renderSlot\("plugins\.portable\.update", \{ name: pkg\.name, busy, view: "summary" \}\), \n\t+beta \?/)
+  assert.match(patched, /renderSlot\("plugins\.portable\.update", \{ name: pkg\.name, busy, view: "action" \}\)/)
+  assert.equal(patchPluginManagerActions(patched), patched)
+  assert.throws(() => patchPluginManagerActions(source.replace('beta ?', 'preview ?')), /plugin version summary: expected 1 match, found 0/)
+})
+
 test('official plugin management retires only the recognized legacy installation copy', () => {
   const modern = 'Inspect the plugins this deployment ships.\n查看内置部署的插件列表'
   assert.equal(patchPluginInstallationGuidance(modern), modern)

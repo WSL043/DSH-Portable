@@ -223,8 +223,12 @@ export function patchPluginManagerActions(source) {
   const end = source.indexOf('function ItemCard(', start)
   if (start < 0 || end < start) throw new Error('plugin card boundaries changed upstream')
   let card = source.slice(start, end)
-  card = replaceRequired(card, 'children: [beta ?',
-    'children: [renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "summary" }), beta ?', 'plugin version summary')
+  // 0.2.1-alpha.2 formats the tag list one item per line; the anchor tolerates either layout.
+  const summaryAnchor = /children: \[(\s*)beta \?/g
+  const summaryMatches = card.match(summaryAnchor)?.length ?? 0
+  if (summaryMatches !== 1) throw new Error(`plugin version summary: expected 1 match, found ${summaryMatches}`)
+  card = card.replace(summaryAnchor,
+    'children: [renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "summary" }), $1beta ?')
   card = replaceRequired(card, 'end: (0, react_jsx_runtime.jsx)(EnableSwitch, {',
     'end: (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "action" }), (0, react_jsx_runtime.jsx)(EnableSwitch, {', 'plugin update action')
   card = replaceRequired(card, '\n\t\t\t\t\t})\n\t\t\t\t})',
