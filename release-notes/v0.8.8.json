@@ -1,0 +1,27 @@
+{
+  "version": "0.8.8",
+  "zh": {
+    "summary": "跟上官方新内核 0.2.1-alpha.2；默认插件更新到图片查看器 0.1.9 和会话管理 1.5.10。",
+    "highlights": [
+      "适配官方 0.2.1-alpha.2：官方调整了插件管理页卡片的排版，Portable 在卡片上加的“插件版本与更新”入口现在两种排版都能识别；验收通过后可在设置 → 更新中选择这个内核。",
+      "默认插件更新：图片查看器 0.1.9、会话管理 1.5.10，均支持官方最新 3 个内核 0.2.1-alpha.2、0.2.1-alpha.1、0.2.0-rc.2。",
+      "安装包自带的内核保持为 0.2.0-rc.2。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.7 升级会保留设置、会话、插件和默认工作区。",
+      "内核目录跟随官方最新 3 个版本：0.2.0-rc.1 退出列表；正在使用它的用户不会被强制切换。"
+    ]
+  },
+  "en": {
+    "summary": "Keeps up with the official 0.2.1-alpha.2 core; default plugins move to Image Viewer 0.1.9 and Chat Manager 1.5.10.",
+    "highlights": [
+      "Adapted to official 0.2.1-alpha.2: the official plugin card changed its layout, and Portable's plugin version and update entry on each card now works with both layouts; once it qualifies, select this core in Settings → Updates.",
+      "Default plugins: Image Viewer 0.1.9 and Chat Manager 1.5.10, supporting the newest three official cores 0.2.1-alpha.2, 0.2.1-alpha.1, and 0.2.0-rc.2.",
+      "The core bundled with the package stays at 0.2.0-rc.2."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.7 keeps settings, sessions, plugins, and the default workspace.",
+      "The core catalog follows the newest three official versions: 0.2.0-rc.1 leaves the list; users on it are not switched automatically."
+    ]
+  }
+}
