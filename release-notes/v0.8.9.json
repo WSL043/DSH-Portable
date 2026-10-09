@@ -1,0 +1,25 @@
+{
+  "version": "0.8.9",
+  "zh": {
+    "summary": "修复内核里的一个安全问题：连接 MCP 服务时，登录凭据可能被发往服务器指定的授权地址。",
+    "highlights": [
+      "官方内核 0.2.0-rc.2 自带的 MCP 客户端 2.0.0 存在安全问题（GHSA-6qxp-vccf-f47h）：连接某个 MCP 服务并使用 OAuth 登录时，登录凭据可能被发往该服务指定的授权服务器。现在换用官方已修复的 2.2.0；官方 0.2.1-alpha.2 内核也是同样的更换。",
+      "同样的处理也适用于内核列表里的 0.2.0-rc.1 和 0.2.1-alpha.1，它们验收通过后会带上修复。",
+      "没有改动任何功能；只连接自己信任的 MCP 服务，也是减少这类风险的好办法。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.8 升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes a security issue in the core: when connecting to an MCP server, sign-in credentials could be sent to an authorization address chosen by that server.",
+    "highlights": [
+      "The MCP client 2.0.0 bundled with the official 0.2.0-rc.2 core has a flaw (GHSA-6qxp-vccf-f47h): when you connect to an MCP server and sign in with OAuth, the credentials could be sent to the authorization server that MCP server names. It now uses the fixed 2.2.0; the official 0.2.1-alpha.2 core makes the same change.",
+      "The same fix applies to 0.2.0-rc.1 and 0.2.1-alpha.1 in the core list and ships with them once they qualify.",
+      "No features changed; connecting only to MCP servers you trust also reduces this kind of risk."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.8 keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}
