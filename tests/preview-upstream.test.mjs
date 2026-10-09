@@ -22,6 +22,15 @@ test('stable and candidate cores have independently pinned official source locks
   // 0.1.5 (DSH 0.2.1-alpha.1) imports the same fflate API (strFromU8, unzipSync, zlibSync) as 0.1.1.
   assert.equal(app.overrides['@deepseek-ai/libreoffice-kit@0.1.5']?.fflate, '0.8.3',
     'the alpha Office kit must use the reviewed ZIP parser fix')
+  // GHSA-6qxp-vccf-f47h: the official MCP client 2.0.0 (pinned exactly by dsh-mcp-client up to 0.2.1-alpha.1) can send
+  // OAuth credentials to a server-chosen authorization server; 2.2.0 fixes it. dsh-mcp-client's lib is byte-identical
+  // in 0.2.1-alpha.2, which only bumps this dependency, so older cores take the same version.
+  for (const core of ['0.2.0-rc.1', '0.2.0-rc.2', '0.2.1-alpha.1']) {
+    assert.equal(app.overrides[`@deepseek-ai/dsh-mcp-client@${core}`]?.['@modelcontextprotocol/client'], '2.2.0',
+      `${core} must use the patched MCP client`)
+  }
+  const lock = JSON.parse(await readFile(path.join(root, 'app/package-lock.json'), 'utf8'))
+  assert.equal(lock.packages['node_modules/@modelcontextprotocol/client'].version, '2.2.0')
   assert.equal(stable.dsh.version, app.dependencies['@deepseek-ai/dsh'])
   assert.match(stable.dsh.integrity, /^sha512-/)
   assert.match(stable.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
