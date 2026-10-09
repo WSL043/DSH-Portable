@@ -61,7 +61,7 @@ sleep 20
 PUBLISH="$(gh run list -R "$REPOSITORY" -w publish.yml --limit 1 --json databaseId -q '.[0].databaseId')"
 gh run watch "$PUBLISH" -R "$REPOSITORY" --exit-status --interval 30 >/dev/null 2>&1 \
   || { echo "publish run $PUBLISH failed" >&2; exit 1; }
-gh release view "$TAG" -R "$REPOSITORY" --json tagName,isLatest,isPrerelease -q '"published " + .tagName + " latest=" + (.isLatest|tostring)'
+gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'
 
 [ "$QUALIFY" = 1 ] || exit 0
 echo "qualifying the newest official cores on $TAG"
