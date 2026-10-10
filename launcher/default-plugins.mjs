@@ -8,6 +8,8 @@ import { buildDshEnv } from './portable-core.mjs'
 import { comparePortableVersions } from './update-core.mjs'
 import { redactDiagnosticText } from './diagnostic-policy.mjs'
 
+const OFFLINE_CACHE_MISS = /ERR_PNPM_NO_OFFLINE_(?:META|TARBALL)/
+
 function pluginInstallError(result) {
   const detail = redactDiagnosticText(`${result?.stdout ?? ''}\n${result?.stderr ?? ''}`).trim().slice(-8192)
   return new Error(`Official DSH plugin add exited with status ${result?.status ?? 'unknown'}.${detail ? `\n${detail}` : ''}`)
@@ -350,13 +352,21 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     await pinBundledPluginsToArchives(profileRoot, archiveRoot, candidates, adapters, paths)
     const environment = await bundledInstallEnvironment(layout, adapters)
     await rebasePortablePnpmModules(profileRoot, layout.packageManagerStore, adapters, paths)
-    const result = run(layout.nodeExe, [layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives], {
+    const add = (env, timeout) => run(layout.nodeExe, [layout.dshBin, 'plugin', '--profile', profile, 'add', ...relativeArchives], {
       cwd: profileRoot,
-      env: environment,
+      env,
       encoding: 'utf8',
       windowsHide: true,
-      timeout: 30000,
+      timeout,
     })
+    let result = add(environment, 30000)
+    // pnpm re-resolves every direct dependency of the profile. A plugin the user installed from the registry has no
+    // metadata in the bundled offline mirror, so the offline add fails for the whole profile and the defaults stay old.
+    // Retry once with the network allowed; the reviewed archives are still installed from the local files.
+    if (!result?.error && result?.status !== 0 && OFFLINE_CACHE_MISS.test(`${result?.stdout ?? ''}\n${result?.stderr ?? ''}`)) {
+      result = add({ ...environment, pnpm_config_offline: 'false', npm_config_offline: 'false',
+        pnpm_config_prefer_offline: 'true', npm_config_prefer_offline: 'true' }, 120000)
+    }
     if (result?.error) throw result.error
     if (result?.status !== 0) throw pluginInstallError(result)
     await promoteBundledPluginsToRegistryLifecycle(profileRoot, candidates, adapters, disabledNames)

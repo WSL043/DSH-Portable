@@ -244,6 +244,52 @@ test('a failed reviewed-default refresh restores the original profile manifest',
   assert.equal(await readFile(path.join(profileRoot, 'package.json'), 'utf8'), packageJson)
 })
 
+test('a user plugin missing from the offline mirror no longer blocks the reviewed default refresh', async (t) => {
+  const layout = await fixture(t)
+  await writeReviewedArchives(layout)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  const packageJson = `${JSON.stringify({
+    dependencies: { 'dsh-image-viewer': '0.1.0-beta.7', 'dsh-codex-subscription': '3.0.0-beta.1' },
+  }, null, 2)}\n`
+  await mkdir(profileRoot, { recursive: true })
+  await writeFile(path.join(profileRoot, 'package.json'), packageJson)
+  const attempts = []
+
+  const result = await seedDefaultPlugins(layout, {
+    verifyArchive: async () => true,
+    spawnSync(command, args, options) {
+      attempts.push({ offline: options.env.pnpm_config_offline, preferOffline: options.env.pnpm_config_prefer_offline, timeout: options.timeout })
+      return attempts.length === 1
+        ? { status: 1, stderr: '[ERR_PNPM_NO_OFFLINE_META] Failed to resolve dsh-codex-subscription@3.0.0-beta.1 in package mirror' }
+        : { status: 0 }
+    },
+  })
+
+  assert.deepEqual(result, { status: 'updated', profile: 'web', plugins: ['dsh-image-viewer'] })
+  assert.deepEqual(attempts, [
+    { offline: 'true', preferOffline: undefined, timeout: 30000 },
+    { offline: 'false', preferOffline: 'true', timeout: 120000 },
+  ])
+  const manifest = JSON.parse(await readFile(path.join(profileRoot, 'package.json'), 'utf8'))
+  assert.equal(manifest.dependencies['dsh-image-viewer'], imageVersion)
+  assert.equal(manifest.dependencies['dsh-codex-subscription'], '3.0.0-beta.1')
+})
+
+test('other offline refresh failures are not retried with the network', async (t) => {
+  const layout = await fixture(t)
+  await writeReviewedArchives(layout)
+  const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+  await mkdir(profileRoot, { recursive: true })
+  await writeFile(path.join(profileRoot, 'package.json'), '{"dependencies":{"dsh-image-viewer":"0.1.0-beta.7"}}\n')
+  let calls = 0
+  const result = await seedDefaultPlugins(layout, {
+    verifyArchive: async () => true,
+    spawnSync() { calls += 1; return { status: 1, stderr: 'install failed: peer dependency conflict' } },
+  })
+  assert.equal(result.status, 'warning')
+  assert.equal(calls, 1)
+})
+
 for (const [core, installed] of [['0.1.6-alpha.2', '1.3.5'], ['0.1.5-rc.2', '1.3.5'], ['0.1.7-alpha.1', '1.3.5'], ['0.1.7-alpha.1', '1.4.0-beta.3']]) {
   test(`failed offline default refresh preserves data and isolates only the known incompatible core (${core}, ${installed})`, async (t) => {
     const layout = await fixture(t)
