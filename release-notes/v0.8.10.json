@@ -1,0 +1,25 @@
+{
+  "version": "0.8.10",
+  "zh": {
+    "summary": "修复升级后默认插件（图片查看器、会话管理）没有自动更新、显示为异常的问题。",
+    "highlights": [
+      "如果你自己装过不在内置离线缓存里的插件（比如从插件市场装的其他插件），升级后默认插件的自动更新会失败，图片查看器、会话管理停留在旧版本，插件页显示“异常”。现在遇到这种情况会自动联网重试一次，重试成功后默认插件会更新到新版本；没有网络时仍保持原样，不会损坏数据。",
+      "只在这种缓存缺失的情况下才联网，其他失败不会重试。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.9 升级会保留设置、会话、插件和默认工作区。",
+      "如果升级后默认插件仍显示旧版本，重启一次应用即可自动更新；也可以在插件页点“更新”。"
+    ]
+  },
+  "en": {
+    "summary": "Fixes default plugins (Image Viewer, Chat Manager) not updating after an upgrade and showing as abnormal.",
+    "highlights": [
+      "If you installed a plugin that is not in the bundled offline cache (for example another plugin from the plugin market), the automatic default-plugin update failed after an upgrade, leaving Image Viewer and Chat Manager on old versions with an abnormal status in the Plugins page. It now retries once with the network allowed; on success the default plugins update, and without a network nothing is changed or damaged.",
+      "The network is used only for this cache-miss case; other failures are not retried."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.9 keeps settings, sessions, plugins, and the default workspace.",
+      "If the default plugins still show old versions after upgrading, restart the app once to update them automatically, or press Update in the Plugins page."
+    ]
+  }
+}
