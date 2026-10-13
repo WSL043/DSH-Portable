@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 
 const [rootArg, driverArg, outputArg, mode] = process.argv.slice(2)
 assert.ok(rootArg && driverArg && outputArg && ['--probe', '--qualify'].includes(mode),
@@ -104,6 +105,7 @@ async function dismissOnboarding() {
       const button = page.getByRole('button', { name }).first()
       if (await button.isVisible() && await button.isEnabled()) await button.click()
     }
+    await page.evaluate(dismissOfficialOnboardingExpression)
     await delay(200)
   }
 }

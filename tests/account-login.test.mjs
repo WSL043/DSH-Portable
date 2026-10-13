@@ -30,3 +30,10 @@ test('every product builder applies the account login patch', async () => {
     assert.match(await readFile(new URL(`../scripts/${file}`, import.meta.url), 'utf8'), /patch-account-login\.mjs/)
   }
 })
+
+test('smoke helpers recognise and close the account sign-in step shown on first use', async () => {
+  const { dismissOfficialOnboardingExpression: expression } = await import('../scripts/lib/official-onboarding.mjs')
+  assert.match(expression, /登录 DeepSeek 账号，或添加 API Key/)
+  assert.match(expression, /add an API Key to get started/)
+  assert.match(expression, /\["Close","关闭"\]/)
+})

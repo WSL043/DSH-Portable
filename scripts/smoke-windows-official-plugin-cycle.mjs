@@ -6,6 +6,7 @@ import { cp, mkdir, readFile, writeFile, utimes, access } from 'node:fs/promises
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { verifiedPackageFile } from './verified-package-file.mjs'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { createHash, randomBytes } from 'node:crypto'
 
 const [rootArg, driverPackage, evidenceArg, disposable, mode, concurrency, historicalSeedArg] = process.argv.slice(2)
@@ -127,6 +128,7 @@ try {
       await configureLater.click()
       continue
     }
+    if ((await page.evaluate(dismissOfficialOnboardingExpression))?.clicked) continue
     await page.waitForTimeout(500)
   }
 
@@ -311,6 +313,7 @@ try {
 
   const configureAfterRestart = page.getByRole('button', { name: /^(Configure later|稍后配置)$/i })
   if (await configureAfterRestart.isVisible()) await configureAfterRestart.click()
+  else await page.evaluate(dismissOfficialOnboardingExpression)
   await page.getByRole('button', { name: /^(新会话|新建会话|New session)$/ }).first().click()
   const composer = page.locator('[contenteditable="true"][role="textbox"]').first()
   await composer.fill('Disposable official plugin lifecycle check')

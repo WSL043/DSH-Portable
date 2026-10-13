@@ -6,6 +6,7 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { assessStartupHandoff } from './startup-handoff-evidence.mjs'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -160,7 +161,7 @@ async function dismissBlockingOnboarding(client, timeoutMs = 5000) {
     const clicked = await evaluate(client, `(() => {
       const button = [...document.querySelectorAll('button')].find(node => /^(Continue|继续|Configure later|稍后配置|Set up later)$/.test(String(node.textContent || '').trim()))
       button?.click()
-      return Boolean(button)
+      return Boolean(button) || Boolean(${dismissOfficialOnboardingExpression}?.clicked)
     })()`)
     quietPasses = clicked ? 0 : quietPasses + 1
     await new Promise(resolve => setTimeout(resolve, 200))
@@ -341,7 +342,7 @@ try {
   assert.ok(workspaceSample, 'the settled DSH workspace did not remain stable after native handoff')
   const dismissedWelcome = await evaluate(client, `(() => {
     const button = [...document.querySelectorAll('button')].find(node => /^(Continue|继续)$/.test(String(node.textContent || '').trim()))
-    if (!button) return false
+    if (!button) return Boolean(${dismissOfficialOnboardingExpression}?.clicked)
     button.click()
     return true
   })()`)
@@ -355,7 +356,7 @@ try {
   }
   const dismissedProvider = await evaluate(client, `(() => {
     const button = [...document.querySelectorAll('button')].find(node => /^(Configure later|稍后配置)$/.test(String(node.textContent || '').trim()))
-    if (!button) return false
+    if (!button) return Boolean(${dismissOfficialOnboardingExpression}?.clicked)
     button.click()
     return true
   })()`)

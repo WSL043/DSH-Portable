@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 const execFileAsync = promisify(execFile)
@@ -137,6 +138,11 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
 
 const clickButton = names => `(() => {
   const names = ${JSON.stringify(names)}
+  // The account sign-in step has no "configure later" button; the shared helper closes it.
+  if (names.includes('稍后配置')) {
+    const step = ${dismissOfficialOnboardingExpression}
+    if (step?.clicked) return { clicked: true }
+  }
   const button = [...document.querySelectorAll('button,[role="button"]')].find(item => {
     const label = item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || ''
     if (!names.includes(label.trim()) || item.disabled || item.getAttribute('aria-disabled') === 'true') return false
