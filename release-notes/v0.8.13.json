@@ -1,0 +1,29 @@
+{
+  "version": "0.8.13",
+  "zh": {
+    "summary": "没有代理也能更新：更新会跟随系统代理，GitHub 连不上时自动改用国内可用的镜像。",
+    "highlights": [
+      "检查更新、下载内核、安装插件会跟随 Windows 或 macOS 的系统代理，浏览器能上的地方它也能上。",
+      "GitHub 连不上时，会自动改用公共镜像下载。镜像只是备用线路：版本信息必须带有我们的签名才会采用，下载的安装包也会用签名信息里的校验值核对，镜像最坏只是连不上，改不了你装进去的内容。",
+      "发布流程现在会给更新信息签名；软件内置对应的公钥用来验证。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。",
+      "想关闭镜像备用线路，可设置环境变量 DSH_PORTABLE_UPDATE_MIRRORS=off；也可以填成你自己的镜像地址（用逗号分隔）。",
+      "镜像服务能看到你下载了哪些更新文件，看不到你的会话和设置。"
+    ]
+  },
+  "en": {
+    "summary": "Updates work without a proxy: they follow the system proxy and fall back to public mirrors when GitHub is unreachable.",
+    "highlights": [
+      "Update checks, core downloads and plugin installs follow the Windows or macOS system proxy, so they work wherever your browser does.",
+      "When GitHub cannot be reached, downloads fall back to public mirrors. Mirrors are only a backup route: version information is accepted only with our signature, and downloaded packages are checked against the digest in that signed information, so a mirror can at worst fail, never change what you install.",
+      "Releases now sign the update information, and the application carries the matching public key to verify it."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace.",
+      "To turn the mirror fallback off, set the environment variable DSH_PORTABLE_UPDATE_MIRRORS=off; you can also set it to your own mirror addresses, comma-separated.",
+      "A mirror can see which update files you download, not your sessions or settings."
+    ]
+  }
+}
