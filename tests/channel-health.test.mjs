@@ -40,3 +40,12 @@ test('the default-plugin UI verifier ships with the shell it verifies', async ()
   assert.doesNotMatch(ci, /Legacy core uses its existing plugin qualification/)
   await readFile(new URL('../scripts/verify-default-plugin-ui.mjs', import.meta.url), 'utf8')
 })
+
+test('a feed whose signature does not verify, or is missing on a signing release, is a problem', () => {
+  const base = { latestRelease: release, feedVersion: '0.8.11', state: allGood, now: soon }
+  assert.equal(evaluateChannelHealth({ ...base, signature: 'invalid' }).healthy, false)
+  assert.equal(evaluateChannelHealth({ ...base, signature: 'missing' }).healthy, true, 'releases before signing are fine')
+  const signing = { ...base, feedVersion: '0.8.13', latestRelease: { ...release, tag: 'v0.8.13' } }
+  assert.match(evaluateChannelHealth({ ...signing, signature: 'missing' }).problems.join(), /no signature/)
+  assert.equal(evaluateChannelHealth({ ...signing, signature: 'valid' }).healthy, true)
+})
