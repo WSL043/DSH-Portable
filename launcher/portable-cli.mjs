@@ -53,6 +53,7 @@ import { recoverInterruptedImport } from './data-import-journal.mjs'
 import { createDataArchive, inspectDataArchive, restoreDataArchiveAllowingPluginFailure } from './data-transfer.mjs'
 import { rehydrateImportedProfiles, repairIncompleteProfileDependencies } from './data-import-preflight.mjs'
 import { pauseIncompatibleProfileBundles } from './profile-compatibility.mjs'
+import { installSystemProxy } from './system-proxy.mjs'
 import { inspectStartupProfile, pauseStartupProfileBundle, restoreStartupProfileBundle } from './startup-profile-recovery.mjs'
 import { cleanUnusedRuntimeCaches, ensureRuntimeCapsule, runtimeCacheStatus } from './runtime-capsule.mjs'
 import { preflightStagedDshProfiles } from './update-preflight.mjs'
@@ -952,6 +953,8 @@ function print(result, json, command) {
 }
 
 async function main() {
+  // Update checks and downloads must work wherever the user's browser works, so follow the same proxy.
+  try { installSystemProxy() } catch { /* a proxy lookup problem must never stop a command */ }
   if (!['win32', 'darwin', 'linux'].includes(process.platform)) throw new Error('DSH-Portable supports Windows, macOS, and Linux.')
   const options = parseCli(process.argv.slice(2))
   activeOptions = options

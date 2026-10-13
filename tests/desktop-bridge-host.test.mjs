@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { access, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
+import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 import { mountPortableRoutes, registerPortableWorkspace } from '../desktop-bridge/lib/index.js'
@@ -39,7 +40,10 @@ test('desktop catalogs normalize legacy channel preferences to stable', async t 
   globalThis.fetch = async () => new Response('', { status: 404 })
   t.after(() => { globalThis.fetch = originalFetch })
   const routes = new Map()
-  const dispose = mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root })
+  // The host reads catalogs through the CLI process (which follows the system proxy); run the same code in-process.
+  const { listInstalledVersions } = await import(pathToFileURL(path.join(root, 'launcher', 'update-core.mjs')).href)
+  const runCli = async args => listInstalledVersions({ root, baseStateRoot: root, scope: args[args.indexOf('--scope') + 1] })
+  const dispose = mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root, runCli })
   t.after(dispose)
   for (const channel of ['stable', 'candidate']) {
     await writeFile(path.join(root, 'data', 'launcher-settings.json'), JSON.stringify({ updateChannel: channel }))

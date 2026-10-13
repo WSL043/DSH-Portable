@@ -14,6 +14,7 @@ import {
   layoutForRoot,
   normalizeEnvironmentId,
 } from './portable-core.mjs'
+import { proxyEnvOverlay } from './system-proxy.mjs'
 
 function platformPaths(platform) {
   return platform === 'win32' ? path.win32 : path.posix
@@ -219,7 +220,7 @@ export function buildPluginCliSpec(
     command: layout.nodeExe,
     args: [layout.dshBin, ...forwardedArgv],
     cwd: process.cwd(),
-    env: buildDshEnv(layout, source),
+    env: { ...buildDshEnv(layout, source), ...(argv.includes('plugin') ? proxyEnvOverlay() : {}) },
     layout,
   }
 }
