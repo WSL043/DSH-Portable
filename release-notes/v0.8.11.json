@@ -1,0 +1,29 @@
+{
+  "version": "0.8.11",
+  "zh": {
+    "summary": "新增官方账号登录：现在可以用 DeepSeek 账号一键登录，不再只能填 API 密钥。",
+    "highlights": [
+      "首次启动出现“开始使用”，可以选择“登录”或“添加 API Key”。登录会在系统浏览器里打开官方授权页，点一次授权即可，不需要在本软件里输入密码。",
+      "侧边栏左下角变成账号菜单，里面有“设置”“意见反馈”和“登录”。登录后可以查看账号状态和用量。",
+      "登录凭据保存在软件文件夹内的数据目录里，随文件夹一起移动；整个文件夹请自己保管，不要分享给别人。"
+    ],
+    "upgradeNotes": [
+      "从 0.8.10 升级会保留设置、会话、插件和默认工作区。",
+      "“设置”现在在左下角“更多”菜单里，位置比以前多一步。",
+      "已经填好 API Key 的用户不受影响，仍可继续使用。"
+    ]
+  },
+  "en": {
+    "summary": "Adds official account sign-in: you can now sign in with your DeepSeek account instead of only entering an API key.",
+    "highlights": [
+      "First start shows \"Get started\" with Sign in or Add API Key. Sign-in opens the official authorization page in your system browser; one click authorizes and no password is typed into this app.",
+      "The sidebar footer is now an account menu with Settings, Feedback and Sign in. After signing in it shows account status and usage.",
+      "Sign-in credentials are stored in the data folder inside the app folder and move with it; keep the whole folder private and do not share it."
+    ],
+    "upgradeNotes": [
+      "Upgrading from 0.8.10 keeps settings, sessions, plugins, and the default workspace.",
+      "Settings is now inside the More menu at the bottom left, one step further than before.",
+      "Users who already entered an API key are not affected and can keep using it."
+    ]
+  }
+}
