@@ -1,25 +1,27 @@
 {
   "version": "0.8.12",
   "zh": {
-    "summary": "升级 Portable 时保留你选的内核，不再悄悄换回安装包自带的版本。",
+    "summary": "记住你选用的内核：以后升级 Portable 时，会在新版本验证通过后自动换回。",
     "highlights": [
-      "之前升级会把你选的测试版内核换回安装包自带的内核，用测试版创建的会话会显示异常（对话空白、输入框跑到顶部）。现在升级完成后，如果你原来的内核已经在新版本上验证通过，会自动换回去。",
-      "如果新版本还没验证好你原来的内核，升级结果里会提示“等待验证”，验证完成后在 设置 → 更新 → 内核版本 里重新选择即可。"
+      "之前升级 Portable 会把你选的测试版内核换回安装包自带的内核，用测试版创建的会话会显示异常（对话空白、输入框跑到顶部）。现在会记住你选的内核，升级后第一次启动时，如果它已经在新版本上验证通过，就自动换回去。",
+      "如果新版本还没验证好，会先用自带内核，隔一会儿再试，验证通过后自动换回。",
+      "发布方式也改了：新版本要等最新三个内核都验证通过，才会出现在应用内更新里。"
     ],
     "upgradeNotes": [
-      "从 0.8.11 升级会保留设置、会话、插件和默认工作区。",
-      "想先避免显示异常，可以等内核验证完成后再升级。"
+      "只有在 0.8.12 里选过内核，之后的升级才会被记住。从 0.8.11 升到 0.8.12 这一步不会自动换回：升级后请在 设置 → 更新 → 内核版本 重新选择你要的内核，之后就会被记住。",
+      "升级会保留设置、会话、插件和默认工作区。"
     ]
   },
   "en": {
-    "summary": "Upgrading Portable now keeps the core you selected instead of silently switching back to the bundled one.",
+    "summary": "Remembers the core you chose: after a future Portable upgrade it is restored once the new version has verified it.",
     "highlights": [
-      "Upgrades used to replace a test core you had selected with the one bundled in the package, and sessions created on the test core then rendered wrongly (blank conversation, composer at the top). After an upgrade, if your previous core is already verified for the new version, it is restored automatically.",
-      "If the new version has not verified your previous core yet, the upgrade result says it is awaiting verification; choose it again under Settings → Update → Core version once it is ready."
+      "Upgrading Portable used to replace a test core you had selected with the one bundled in the package, and sessions created on the test core then rendered wrongly (blank conversation, composer at the top). The chosen core is now remembered, and on the first start after an upgrade it is restored automatically if it is already verified for the new version.",
+      "If the new version has not verified it yet, the bundled core is used for now and the restore is retried a little later.",
+      "Releases also changed: a new version only appears in the in-app updater after the newest three cores are verified on it."
     ],
     "upgradeNotes": [
-      "Upgrading from 0.8.11 keeps settings, sessions, plugins, and the default workspace.",
-      "To avoid the display problem entirely, wait until your core is verified before upgrading."
+      "Only a core chosen in 0.8.12 or later is remembered. The 0.8.11 to 0.8.12 step does not restore it: after upgrading, choose your core again under Settings → Update → Core version, and it will be remembered from then on.",
+      "Upgrading keeps settings, sessions, plugins, and the default workspace."
     ]
   }
 }

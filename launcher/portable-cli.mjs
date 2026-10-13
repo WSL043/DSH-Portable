@@ -40,8 +40,9 @@ import {
   installAvailableAppUpdate,
   listInstalledVersions,
   listProductVersions,
-  planCoreRestore,
   readInstalledUpdateState,
+  reconcilePreferredCore,
+  recordPreferredCore,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
 import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
@@ -460,6 +461,25 @@ function tailSince(filename, offset, maxBytes = 8000) {
   }
 }
 
+let coreReconciled = false
+
+// A Portable upgrade starts on its bundled core. Put the core the user had chosen back before the host first runs
+// on their data, once per process (the restore itself starts the host again).
+async function reconcileCoreAtStart() {
+  if (coreReconciled || process.env.DSH_PORTABLE_SKIP_CORE_RECONCILE === '1') return
+  coreReconciled = true
+  try {
+    const outcome = await reconcilePreferredCore({
+      layout,
+      releaseChannel: preferredUpdateChannel(),
+      apply: plan => update({ updateScope: 'engine', updateManifest: plan.manifestUrl, noBrowser: true, json: true }),
+    })
+    if (!['none', 'in-sync'].includes(outcome.status)) startupLog(Date.now(), 'core-reconcile', { status: outcome.status, version: outcome.version ?? 'none' })
+  } catch (error) {
+    startupLog(Date.now(), 'core-reconcile-failed', { type: error?.constructor?.name || 'Error', code: error?.code || 'none' })
+  }
+}
+
 async function start(noBrowser, portRetry = 0) {
   const startedAt = Number(process.env.DSH_PORTABLE_STARTUP_STARTED_AT) || Date.now()
   if (!startupTrace) {
@@ -470,6 +490,7 @@ async function start(noBrowser, portRetry = 0) {
   }
   startupLog(startedAt, 'begin', { portRetry })
   try {
+    await reconcileCoreAtStart()
     const result = await startAttempt(noBrowser, portRetry, startedAt)
     startupLog(startedAt, 'complete', { status: result.status, port: result.port })
     return result
@@ -827,7 +848,6 @@ async function update(options) {
     : () => {}
 
   let stoppedForApply = false
-  const previousCore = options.updateScope === 'engine' ? '' : (await readInstalledUpdateState(layout).catch(() => null))?.dshVersion
   try {
     const applied = await installAvailableAppUpdate({
       layout,
@@ -875,25 +895,10 @@ async function update(options) {
         code: error?.code || error?.name || 'unknown',
       }),
     })
-    let coreRestore = null
-    if (applied.updateKind === 'product') {
-      coreRestore = await planCoreRestore({
-        layout, previousCore, appliedCore: applied.dshVersion,
-        releaseChannel: preferredUpdateChannel(options), allowHttp: options.allowHttp,
-      })
-      if (coreRestore.status === 'ready') {
-        reportProgress({ phase: 'restoring-core', version: coreRestore.version })
-        try {
-          await update({ ...options, updateScope: 'engine', updateManifest: coreRestore.manifestUrl, noBrowser: true })
-          coreRestore = { status: 'restored', version: coreRestore.version }
-        } catch (error) {
-          coreRestore = { status: 'failed', version: coreRestore.version, reason: String(error?.message ?? error).slice(0, 200) }
-        }
-      }
-    }
     const running = await status()
     const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null
-    return { ...applied, warnings: applied.warnings ?? [], running, browser, ...(coreRestore ? { coreRestore } : {}) }
+    if (options.updateScope === 'engine' && applied.dshVersion) await recordPreferredCore(layout, applied.dshVersion).catch(() => {})
+    return { ...applied, warnings: applied.warnings ?? [], running, browser }
   } catch (error) {
     await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     if (!stoppedForApply) throw error
