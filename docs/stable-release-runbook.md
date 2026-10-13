@@ -17,9 +17,19 @@ node scripts/set-product-version.mjs x.y.z           # 同步所有版本号
 scripts/ship-stable.sh x.y.z
 ```
 
-`ship-stable.sh` 会等待 main 上对应提交的构建通过，触发“Publish tested release”，等 GitHub Release 出现，再触发更新仓库的“Sync verified DSH core”，最后打印各内核的验收状态。GitHub 的触发接口偶尔连续返回 HTTP 500，脚本每分钟重试一次。
+`ship-stable.sh` 的顺序是**先验内核、后让用户看到新版**：
+
+1. 等 main 上对应提交的构建通过（构建里有一项靠重跑才过，不算数，先查原因）。
+2. 触发“Publish tested release”，但 `publish_feed=false`：Release 和下载包已发布，应用内更新源**不翻**，已安装的用户还停在上一个版本。
+3. 触发更新仓库的“Sync verified DSH core”，反复触发直到**最新三个内核**在这个提交上全部 `success`；任何一个 `failed`/`blocked` 就退出，更新源保持不变。
+4. 全部通过后再用 `publish_feed=true` 翻更新源。
+
+内核验收失败时：修原因（多半是更新仓库的验收脚本或补丁锚点），再运行 `scripts/ship-stable.sh x.y.z --resume`。只有紧急情况才用 `--skip-gate`（发布并立刻翻更新源）。
+
+背景：Portable 的整包更新会整体替换程序，内核只对一个特定的 Portable 版本验收；用户在新内核验收完之前升级，会丢掉自己选的内核，已有会话可能显示异常（issue #163）。GitHub 的触发接口偶尔连续返回 HTTP 500，脚本每分钟重试一次。
 
 ## 3. 注意
 
+- 验收脚本放在更新仓库（`scripts/verify-default-plugin-ui.mjs`）。界面新增弹窗、改按钮位置的改动，要在同一次发版前同步改它；否则内核验收会失败。
 - 新内核只能在**已发布**的稳定版上验收：更新仓库用已发布版本的源码构建，所以补丁、名单和默认插件的改动要随下一个稳定版一起发布。
 - 候选（preview）渠道已退役；候选 PR 的更新检查按设计会失败，不要修。

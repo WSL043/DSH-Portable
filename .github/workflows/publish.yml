@@ -11,6 +11,11 @@ on:
         description: Final vX.Y.Z tag matching package.json; prerelease tags are not publicly published
         required: true
         type: string
+      publish_feed:
+        description: Flip the in-app update feed. Run once with false, qualify the official cores on the published shell, then run again with true.
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   actions: read
@@ -107,6 +112,7 @@ jobs:
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" "${VERIFY_FLAGS[@]}" release-staging/user-assets/*
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
       - name: Publish the stable update feed and legacy candidate mirror
+        if: ${{ inputs.publish_feed }}
         env:
           GH_TOKEN: ${{ github.token }}
           UPDATE_CHANNEL_TAG: update-channel-stable

@@ -1,0 +1,27 @@
+{
+  "version": "0.8.12",
+  "zh": {
+    "summary": "记住你选用的内核：以后升级 Portable 时，会在新版本验证通过后自动换回。",
+    "highlights": [
+      "之前升级 Portable 会把你选的测试版内核换回安装包自带的内核，用测试版创建的会话会显示异常（对话空白、输入框跑到顶部）。现在会记住你选的内核，升级后第一次启动时，如果它已经在新版本上验证通过，就自动换回去。",
+      "如果新版本还没验证好，会先用自带内核，隔一会儿再试，验证通过后自动换回。",
+      "发布方式也改了：新版本要等最新三个内核都验证通过，才会出现在应用内更新里。"
+    ],
+    "upgradeNotes": [
+      "只有在 0.8.12 里选过内核，之后的升级才会被记住。从 0.8.11 升到 0.8.12 这一步不会自动换回：升级后请在 设置 → 更新 → 内核版本 重新选择你要的内核，之后就会被记住。",
+      "升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Remembers the core you chose: after a future Portable upgrade it is restored once the new version has verified it.",
+    "highlights": [
+      "Upgrading Portable used to replace a test core you had selected with the one bundled in the package, and sessions created on the test core then rendered wrongly (blank conversation, composer at the top). The chosen core is now remembered, and on the first start after an upgrade it is restored automatically if it is already verified for the new version.",
+      "If the new version has not verified it yet, the bundled core is used for now and the restore is retried a little later.",
+      "Releases also changed: a new version only appears in the in-app updater after the newest three cores are verified on it."
+    ],
+    "upgradeNotes": [
+      "Only a core chosen in 0.8.12 or later is remembered. The 0.8.11 to 0.8.12 step does not restore it: after upgrading, choose your core again under Settings → Update → Core version, and it will be remembered from then on.",
+      "Upgrading keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}

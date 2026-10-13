@@ -1,6 +1,6 @@
 {
   "name": "dsh-portable",
-  "version": "0.8.11",
+  "version": "0.8.12",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",

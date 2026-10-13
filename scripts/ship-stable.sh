@@ -1,21 +1,30 @@
 #!/usr/bin/env bash
-# Publish a tested stable Portable release and qualify the newest official cores on it.
+# Publish a tested stable Portable release, but only show it to the in-app updater once the newest official
+# cores are qualified on it.
 #
-#   scripts/ship-stable.sh <version> [--no-qualify]
+#   scripts/ship-stable.sh <version>             full flow
+#   scripts/ship-stable.sh <version> --resume    shell already published with the feed held: qualify, then flip
+#   scripts/ship-stable.sh <version> --skip-gate publish and flip the feed immediately (emergency only)
+#
+# Why the feed is held: Portable's updater replaces the whole package, and a core is qualified for exactly one
+# shell. A shell that reaches users before its cores are qualified silently drops the core they selected
+# (issue #163). So the order is: publish the release assets with the feed held (publish_feed=false), run
+# "Sync verified DSH core" in the Updates repository until the newest three cores succeed on this exact commit,
+# and only then flip the update feed. If any core fails, the feed stays on the previous shell and the script
+# exits non-zero; fix the cause, then rerun with --resume.
 #
 # Run it from a clean checkout of main after the release commit (version bump + release-notes/v<version>.json)
-# is pushed. It waits for the main CI run of HEAD, dispatches "Publish tested release" with that run, waits
-# for the GitHub Release, then starts "Sync verified DSH core" in the Updates repository so the newest cores
-# qualify for the new shell. GitHub's workflow-dispatch API sometimes answers HTTP 500 for a while, so every
-# dispatch is retried once a minute. Requires an authenticated gh CLI with access to both repositories.
+# is pushed. GitHub's workflow-dispatch API sometimes answers HTTP 500 for a while, so every dispatch is retried
+# once a minute. Requires an authenticated gh CLI with access to both repositories.
 set -euo pipefail
 
-VERSION="${1:?usage: scripts/ship-stable.sh <version> [--no-qualify]}"
-QUALIFY=1
-[ "${2:-}" = "--no-qualify" ] && QUALIFY=0
+VERSION="${1:?usage: scripts/ship-stable.sh <version> [--resume|--skip-gate]}"
+MODE="${2:-full}"
+case "$MODE" in full|--resume|--skip-gate) ;; *) echo "unknown option $MODE" >&2; exit 2 ;; esac
 TAG="v${VERSION}"
 REPOSITORY="WSL043/DSH-Portable"
 UPDATES="WSL043/DSH-Portable-Updates"
+GATE_TIMEOUT_MINUTES="${GATE_TIMEOUT_MINUTES:-120}"
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
@@ -26,7 +35,11 @@ cd "$ROOT"
 git fetch -q origin main
 HEAD_SHA="$(git rev-parse HEAD)"
 [ "$HEAD_SHA" = "$(git rev-parse origin/main)" ] || { echo "HEAD is not origin/main; push the release commit first" >&2; exit 2; }
-gh release view "$TAG" -R "$REPOSITORY" >/dev/null 2>&1 && { echo "$TAG is already published" >&2; exit 2; }
+if [ "$MODE" = --resume ]; then
+  gh release view "$TAG" -R "$REPOSITORY" >/dev/null 2>&1 || { echo "$TAG is not published yet; run without --resume" >&2; exit 2; }
+else
+  gh release view "$TAG" -R "$REPOSITORY" >/dev/null 2>&1 && { echo "$TAG is already published (use --resume if its feed is still held)" >&2; exit 2; }
+fi
 
 dispatch() {
   for _ in $(seq 1 60); do
@@ -45,31 +58,82 @@ for _ in $(seq 1 30); do
   sleep 20
 done
 [ -n "$RUN" ] || { echo "no main CI run found for ${HEAD_SHA:0:7}" >&2; exit 1; }
-echo "waiting for CI run $RUN (${HEAD_SHA:0:7})"
-gh run watch "$RUN" -R "$REPOSITORY" --interval 60 >/dev/null 2>&1 || true
-CONCLUSION="$(gh run view "$RUN" -R "$REPOSITORY" --json conclusion -q .conclusion)"
-if [ "$CONCLUSION" != success ]; then
-  echo "CI $CONCLUSION; failed jobs:" >&2
-  gh run view "$RUN" -R "$REPOSITORY" --json jobs -q '.jobs[] | select(.conclusion == "failure") | .name' >&2
-  exit 1
+
+publish() { # $1 = true|false: whether the in-app update feed is flipped by this run
+  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref main -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" \
+    || { echo "could not dispatch the publish workflow" >&2; exit 1; }
+  sleep 20
+  local publish_run
+  publish_run="$(gh run list -R "$REPOSITORY" -w publish.yml --limit 1 --json databaseId -q '.[0].databaseId')"
+  gh run watch "$publish_run" -R "$REPOSITORY" --exit-status --interval 30 >/dev/null 2>&1 \
+    || { echo "publish run $publish_run failed" >&2; exit 1; }
+}
+
+if [ "$MODE" != --resume ]; then
+  echo "waiting for CI run $RUN (${HEAD_SHA:0:7})"
+  gh run watch "$RUN" -R "$REPOSITORY" --interval 60 >/dev/null 2>&1 || true
+  CONCLUSION="$(gh run view "$RUN" -R "$REPOSITORY" --json conclusion -q .conclusion)"
+  if [ "$CONCLUSION" != success ]; then
+    echo "CI $CONCLUSION; failed jobs:" >&2
+    gh run view "$RUN" -R "$REPOSITORY" --json jobs -q '.jobs[] | select(.conclusion == "failure") | .name' >&2
+    exit 1
+  fi
+  if [ "$MODE" = --skip-gate ]; then
+    echo "publishing $TAG with the feed flipped immediately (gate skipped)"
+    publish true
+    gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'
+    exit 0
+  fi
+  echo "publishing $TAG with the update feed held"
+  publish false
+  gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'
 fi
 
-echo "publishing $TAG"
-dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref main -f run_id="$RUN" -f tag="$TAG" \
-  || { echo "could not dispatch the publish workflow" >&2; exit 1; }
-sleep 20
-PUBLISH="$(gh run list -R "$REPOSITORY" -w publish.yml --limit 1 --json databaseId -q '.[0].databaseId')"
-gh run watch "$PUBLISH" -R "$REPOSITORY" --exit-status --interval 30 >/dev/null 2>&1 \
-  || { echo "publish run $PUBLISH failed" >&2; exit 1; }
-gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'
+# Qualification gate: the newest three official cores must each succeed on this exact commit.
+gate_state() {
+  gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null \
+    | HEAD_SHORT="${HEAD_SHA:0:7}" node --input-type=module -e "
+      import { comparePortableVersions } from './launcher/update-core.mjs'
+      let s = ''
+      for await (const chunk of process.stdin) s += chunk
+      const rows = JSON.parse(s)
+      const versions = [...new Set(rows.map(row => row.version))].sort((a, b) => comparePortableVersions(b, a)).slice(0, 3)
+      const here = rows.filter(row => row.sourceSha.startsWith(process.env.HEAD_SHORT))
+      const lines = versions.map(version => {
+        const row = here.find(item => item.version === version)
+        return version + ' ' + (row ? row.status : 'pending')
+      })
+      console.log(lines.join('; '))
+      const bad = lines.filter(line => /(failed|blocked)\$/.test(line))
+      process.exit(bad.length ? 3 : lines.every(line => line.endsWith('success')) ? 0 : 1)
+    "
+}
 
-[ "$QUALIFY" = 1 ] || exit 0
-echo "qualifying the newest official cores on $TAG"
-dispatch gh workflow run "Sync verified DSH core" -R "$UPDATES" \
-  || { echo "could not dispatch the core qualification" >&2; exit 1; }
-sleep 20
-CORE="$(gh run list -R "$UPDATES" -w "Sync verified DSH core" --limit 1 --json databaseId -q '.[0].databaseId')"
-gh run watch "$CORE" -R "$UPDATES" --interval 60 >/dev/null 2>&1 || true
-gh run view "$CORE" -R "$UPDATES" --json jobs -q '.jobs[] | [.name, .conclusion] | @tsv'
-gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null \
-  | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const x of JSON.parse(s).slice(0,4))console.log(x.version,x.status,x.sourceSha.slice(0,7),x.attemptedAt.slice(0,16))})"
+echo "qualifying the newest official cores on $TAG (feed stays on the previous shell until all pass)"
+DEADLINE=$(( $(date +%s) + GATE_TIMEOUT_MINUTES * 60 ))
+LAST_DISPATCH=0
+while true; do
+  set +e
+  STATE="$(gate_state)"
+  CODE=$?
+  set -e
+  [ -n "$STATE" ] && echo "gate: $STATE"
+  if [ "$CODE" = 0 ]; then break; fi
+  if [ "$CODE" = 3 ]; then
+    echo "GATE FAILED: a core did not qualify on ${HEAD_SHA:0:7}; the update feed was NOT flipped, users stay on the previous shell." >&2
+    echo "Fix the cause (usually the Updates repo verifier or a patch anchor), then run: scripts/ship-stable.sh $VERSION --resume" >&2
+    exit 3
+  fi
+  [ "$(date +%s)" -lt "$DEADLINE" ] || { echo "GATE TIMED OUT after ${GATE_TIMEOUT_MINUTES} minutes; the update feed was NOT flipped." >&2; exit 3; }
+  # One core is qualified per run and the runs chain through the queue; start another when nothing is running.
+  ACTIVE="$(gh run list -R "$UPDATES" -w "Sync verified DSH core" --limit 5 --json status -q '[.[] | select(.status != "completed")] | length')"
+  if [ "${ACTIVE:-0}" = 0 ] && [ $(( $(date +%s) - LAST_DISPATCH )) -gt 300 ]; then
+    dispatch gh workflow run "Sync verified DSH core" -R "$UPDATES" || echo "could not dispatch the core qualification yet" >&2
+    LAST_DISPATCH="$(date +%s)"
+  fi
+  sleep 60
+done
+
+echo "all cores qualified; flipping the update feed"
+publish true
+gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'

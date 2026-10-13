@@ -465,6 +465,70 @@ export async function listInstalledVersions({ root, baseStateRoot = root, scope,
   })
 }
 
+// A full Portable update ships its own bundled core, so upgrading would silently replace a newer core the user
+// had selected, and sessions written by that core then render wrongly. Decide whether the previous core can be
+// put back on the new shell: only a core already qualified for it (listed by the catalog) is restored.
+export async function planCoreRestore({ layout, previousCore, appliedCore, releaseChannel, allowHttp = false, list = listEngineVersions }) {
+  if (!previousCore || !appliedCore || comparePortableVersions(previousCore, appliedCore) <= 0) return { status: 'not-needed' }
+  let catalog
+  try { catalog = await list({ layout, releaseChannel, allowHttp }) } catch (error) {
+    return { status: 'catalog-unavailable', version: previousCore, reason: String(error?.message ?? error).slice(0, 200) }
+  }
+  const entry = catalog?.versions?.find(item => item.version === previousCore && item.status === 'available')
+  if (!entry) return { status: 'awaiting-qualification', version: previousCore }
+  return { status: 'ready', version: previousCore, manifestUrl: entry.manifestUrl }
+}
+
+const CORE_RESTORE_BACKOFF_MS = 15 * 60 * 1000
+
+async function writeLauncherSettings(layout, change) {
+  const settings = (await readJson(layout.launcherSettings, null).catch(() => null)) ?? {}
+  const next = { ...settings, ...change }
+  for (const key of Object.keys(next)) if (next[key] === undefined) delete next[key]
+  await writeJsonAtomic(layout.launcherSettings, next)
+}
+
+// Remember which core the user chose. A later Portable upgrade, by any route (in-app component update, the full
+// package updater, a re-extracted folder), starts on its bundled core; the preference is what lets it go back.
+export async function recordPreferredCore(layout, version) {
+  if (!version) return
+  const settings = await readJson(layout.launcherSettings, null).catch(() => null)
+  if (settings?.preferredCore === version && !settings.coreRestore) return
+  await writeLauncherSettings(layout, { preferredCore: version, coreRestore: undefined })
+}
+
+// Called at every start. When the installed core is older than the one the user chose, put the chosen core back,
+// but only if the catalog already lists it as qualified for this Portable. Otherwise remember why and retry
+// later, so an upgrade never leaves the user on the wrong core without a record.
+export async function reconcilePreferredCore({ layout, releaseChannel, allowHttp = false, now = Date.now(), list, apply }) {
+  const settings = await readJson(layout.launcherSettings, null).catch(() => null)
+  const preferred = settings?.preferredCore
+  if (!preferred) return { status: 'none' }
+  const installed = await readInstalledUpdateState(layout)
+  const order = comparePortableVersions(preferred, installed.dshVersion)
+  if (order === 0) return { status: 'in-sync' }
+  if (order < 0) {
+    // The bundled core is newer than the old choice: follow it instead of downgrading.
+    await recordPreferredCore(layout, installed.dshVersion)
+    return { status: 'preference-advanced', version: installed.dshVersion }
+  }
+  const last = settings.coreRestore
+  if (last?.version === preferred && last.status !== 'ready' && now - Number(last.checkedAt) < CORE_RESTORE_BACKOFF_MS) {
+    return { status: 'backoff', version: preferred, last: last.status }
+  }
+  const remember = status => writeLauncherSettings(layout, { coreRestore: { status, version: preferred, checkedAt: now } })
+  const plan = await planCoreRestore({ layout, previousCore: preferred, appliedCore: installed.dshVersion, releaseChannel, allowHttp, list })
+  if (plan.status !== 'ready') { await remember(plan.status); return plan }
+  let result
+  try { result = await apply(plan) } catch (error) { result = { status: 'failed', reason: String(error?.message ?? error).slice(0, 200) } }
+  if (result?.status !== 'updated') {
+    await remember('failed')
+    return { status: 'failed', version: preferred, reason: result?.reason ?? result?.status ?? 'not-applied' }
+  }
+  await recordPreferredCore(layout, preferred)
+  return { status: 'restored', version: preferred }
+}
+
 export async function listEngineVersions({
   layout,
   indexUrl,

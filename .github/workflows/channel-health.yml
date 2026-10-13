@@ -1,0 +1,57 @@
+name: Update channel health
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: channel-health
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Check that the feed offers a shell whose newest cores are qualified
+        id: health
+        continue-on-error: true
+        run: node scripts/channel-health.mjs | tee health.json
+      - name: Open or update the channel-health issue when unhealthy
+        if: steps.health.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo 'The stable update channel is not healthy, so users upgrading now may lose the core they selected.'
+            echo
+            echo '~~~json'
+            cat health.json 2>/dev/null || echo '{"healthy":false,"problems":["the health check itself failed"]}'
+            echo '~~~'
+            echo
+            echo 'See docs/stable-release-runbook.md. This issue closes itself when the channel recovers.'
+          } > body.md
+          number="$(gh issue list --label channel-health --state open --json number -q '.[0].number')"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body-file body.md
+          else
+            gh label create channel-health --color B60205 --description "Stable update channel needs attention" 2>/dev/null || true
+            gh issue create --title "Update channel needs attention" --label channel-health --body-file body.md
+          fi
+      - name: Close the channel-health issue when healthy
+        if: steps.health.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for number in $(gh issue list --label channel-health --state open --json number -q '.[].number'); do
+            gh issue close "$number" --comment "The update channel is healthy again."
+          done

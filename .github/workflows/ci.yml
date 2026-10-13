@@ -625,19 +625,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Market startup support export failed.' }
           node scripts/report-startup-performance.mjs (Join-Path $MarketRoot 'evidence/support.json') --output (Join-Path $MarketRoot 'evidence/startup-performance.json')
           if ($LASTEXITCODE -ne 0) { throw 'Startup performance summary failed.' }
-      - uses: actions/checkout@v7
-        if: matrix.label == 'windows-2025'
-        with:
-          repository: WSL043/DSH-Portable-Updates
-          ref: 9f297511457490378945dac799e328aea00c9376
-          path: qualification-tools
-          persist-credentials: false
       - name: Verify packaged default plugins in native WebView2
         if: matrix.label == 'windows-2025'
         shell: powershell
         run: |
           $DshVersion = node -e "const v=require('./package.json').version;console.log(require(v.includes('-')?'./upstream.preview.lock.json':'./upstream.lock.json').dsh.version)"
-          if ($DshVersion -notmatch '^0\.1\.[67]-') { Write-Host 'Legacy core uses its existing plugin qualification.'; exit 0 }
           $PluginRoot = Join-Path $env:RUNNER_TEMP 'dsh-default-plugin-ui'
           $DriverRoot = Join-Path $env:RUNNER_TEMP 'dsh-default-plugin-driver'
           New-Item -ItemType Directory -Force -Path $PluginRoot | Out-Null
@@ -646,8 +638,9 @@ jobs:
           npm install --prefix $DriverRoot --ignore-scripts --no-audit --no-fund playwright@1.63.0
           if ($LASTEXITCODE -ne 0) { throw 'Default plugin driver installation failed.' }
           $env:DSH_PORTABLE_RUNTIME_CACHE = Join-Path $PluginRoot 'runtime-cache'
-          $env:DSH_CHAT_TEST_STALE_ARCHIVE = '1'
-          node qualification-tools/scripts/verify-default-plugin-ui.mjs (Join-Path $PluginRoot 'DSH-Portable') (Join-Path $DriverRoot 'package.json') --disposable
+          # The historical-archive upgrade case only exists for the 0.1.x cores.
+          if ($DshVersion -match '^0\.1\.[67]-') { $env:DSH_CHAT_TEST_STALE_ARCHIVE = '1' }
+          node scripts/verify-default-plugin-ui.mjs (Join-Path $PluginRoot 'DSH-Portable') (Join-Path $DriverRoot 'package.json') --disposable
           if ($LASTEXITCODE -ne 0) { throw 'Default plugin native acceptance failed.' }
       - uses: actions/upload-artifact@v7
         if: always() && matrix.label == 'windows-2025'
