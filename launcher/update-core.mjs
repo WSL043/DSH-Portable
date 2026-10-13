@@ -465,6 +465,20 @@ export async function listInstalledVersions({ root, baseStateRoot = root, scope,
   })
 }
 
+// A full Portable update ships its own bundled core, so upgrading would silently replace a newer core the user
+// had selected, and sessions written by that core then render wrongly. Decide whether the previous core can be
+// put back on the new shell: only a core already qualified for it (listed by the catalog) is restored.
+export async function planCoreRestore({ layout, previousCore, appliedCore, releaseChannel, allowHttp = false, list = listEngineVersions }) {
+  if (!previousCore || !appliedCore || comparePortableVersions(previousCore, appliedCore) <= 0) return { status: 'not-needed' }
+  let catalog
+  try { catalog = await list({ layout, releaseChannel, allowHttp }) } catch (error) {
+    return { status: 'catalog-unavailable', version: previousCore, reason: String(error?.message ?? error).slice(0, 200) }
+  }
+  const entry = catalog?.versions?.find(item => item.version === previousCore && item.status === 'available')
+  if (!entry) return { status: 'awaiting-qualification', version: previousCore }
+  return { status: 'ready', version: previousCore, manifestUrl: entry.manifestUrl }
+}
+
 export async function listEngineVersions({
   layout,
   indexUrl,

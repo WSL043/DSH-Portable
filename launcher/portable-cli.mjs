@@ -40,6 +40,7 @@ import {
   installAvailableAppUpdate,
   listInstalledVersions,
   listProductVersions,
+  planCoreRestore,
   readInstalledUpdateState,
   rollbackPendingAppUpdate,
 } from './update-core.mjs'
@@ -826,6 +827,7 @@ async function update(options) {
     : () => {}
 
   let stoppedForApply = false
+  const previousCore = options.updateScope === 'engine' ? '' : (await readInstalledUpdateState(layout).catch(() => null))?.dshVersion
   try {
     const applied = await installAvailableAppUpdate({
       layout,
@@ -873,9 +875,25 @@ async function update(options) {
         code: error?.code || error?.name || 'unknown',
       }),
     })
+    let coreRestore = null
+    if (applied.updateKind === 'product') {
+      coreRestore = await planCoreRestore({
+        layout, previousCore, appliedCore: applied.dshVersion,
+        releaseChannel: preferredUpdateChannel(options), allowHttp: options.allowHttp,
+      })
+      if (coreRestore.status === 'ready') {
+        reportProgress({ phase: 'restoring-core', version: coreRestore.version })
+        try {
+          await update({ ...options, updateScope: 'engine', updateManifest: coreRestore.manifestUrl, noBrowser: true })
+          coreRestore = { status: 'restored', version: coreRestore.version }
+        } catch (error) {
+          coreRestore = { status: 'failed', version: coreRestore.version, reason: String(error?.message ?? error).slice(0, 200) }
+        }
+      }
+    }
     const running = await status()
     const browser = !options.noBrowser && running.status === 'running' ? await openBrowser(running.url) : null
-    return { ...applied, warnings: applied.warnings ?? [], running, browser }
+    return { ...applied, warnings: applied.warnings ?? [], running, browser, ...(coreRestore ? { coreRestore } : {}) }
   } catch (error) {
     await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     if (!stoppedForApply) throw error
