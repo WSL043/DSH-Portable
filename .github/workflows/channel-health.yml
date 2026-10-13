@@ -31,13 +31,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          body="$(printf 'The stable update channel is not healthy, so users upgrading now may lose the core they selected.\n\n```json\n%s\n```\n\nSee docs/stable-release-runbook.md. This issue closes itself when the channel recovers.' "$(cat health.json 2>/dev/null || echo '{"healthy":false,"problems":["the health check itself failed"]}')")"
+          {
+            echo 'The stable update channel is not healthy, so users upgrading now may lose the core they selected.'
+            echo
+            echo '~~~json'
+            cat health.json 2>/dev/null || echo '{"healthy":false,"problems":["the health check itself failed"]}'
+            echo '~~~'
+            echo
+            echo 'See docs/stable-release-runbook.md. This issue closes itself when the channel recovers.'
+          } > body.md
           number="$(gh issue list --label channel-health --state open --json number -q '.[0].number')"
           if [ -n "$number" ]; then
-            gh issue comment "$number" --body "$body"
+            gh issue comment "$number" --body-file body.md
           else
             gh label create channel-health --color B60205 --description "Stable update channel needs attention" 2>/dev/null || true
-            gh issue create --title "Update channel needs attention" --label channel-health --body "$body"
+            gh issue create --title "Update channel needs attention" --label channel-health --body-file body.md
           fi
       - name: Close the channel-health issue when healthy
         if: steps.health.outcome == 'success'
