@@ -31,3 +31,12 @@ test('a held feed is expected shortly after release and a problem once it overst
 test('missing release data is reported instead of passing', () => {
   assert.equal(evaluateChannelHealth({ latestRelease: null, feedVersion: '0.8.11', state: allGood }).healthy, false)
 })
+
+test('the default-plugin UI verifier ships with the shell it verifies', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8')
+  assert.match(ci, /node scripts\/verify-default-plugin-ui\.mjs/)
+  assert.doesNotMatch(ci, /qualification-tools/)
+  assert.doesNotMatch(ci, /Legacy core uses its existing plugin qualification/)
+  await readFile(new URL('../scripts/verify-default-plugin-ui.mjs', import.meta.url), 'utf8')
+})
