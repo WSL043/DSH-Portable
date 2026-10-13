@@ -376,7 +376,7 @@ try {
   await waitForValue(client, `(() => {
     const labels = [...document.querySelectorAll('button')].map(item => (item.textContent || '').trim())
     return {
-      ready: labels.some(label => ['Settings', '设置', 'More', '更多', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label)),
+      ready: labels.some(label => ['Settings', '设置', 'More', '更多', 'Account menu', '账号菜单', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label)),
       labels: labels.slice(0, 20),
       url: location.href,
       title: document.title,
@@ -664,7 +664,7 @@ try {
         await waitForValue(client, 'document.readyState', value => value === 'complete', 'reloaded DSH document readiness')
         await waitForValue(client, `(() => {
           const labels = [...document.querySelectorAll('button')].map(item => (item.textContent || '').trim())
-          return labels.some(label => ['Settings', '设置', 'More', '更多', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label))
+          return labels.some(label => ['Settings', '设置', 'More', '更多', 'Account menu', '账号菜单', '打开侧边栏', 'Open sidebar', 'Expand sidebar'].includes(label))
         })()`, Boolean, 'reloaded DSH shell controls', 60_000)
         let reopened = await evaluate(client, clickButton(['Settings', '设置']))
         if (!reopened?.clicked) {

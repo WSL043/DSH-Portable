@@ -363,7 +363,7 @@ try {
   }
 
   await waitForValue(client, `(() => {
-    const names = new Set(['Settings', '设置', 'More', '更多', '打开侧边栏', 'Open sidebar', 'Expand sidebar'])
+    const names = new Set(['Settings', '设置', 'More', '更多', 'Account menu', '账号菜单', '打开侧边栏', 'Open sidebar', 'Expand sidebar'])
     return [...document.querySelectorAll('button,[role="button"]')].some(item => {
       const label = (item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || '').trim()
       const rect = item.getBoundingClientRect()

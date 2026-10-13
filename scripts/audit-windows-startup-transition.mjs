@@ -480,7 +480,7 @@ try {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updateChannel: 'candidate' }),
       }).then(response => response.json())`)
       await evaluate(client, 'location.reload()')
-      await waitForValue(client, `(() => document.readyState === 'complete' && [...document.querySelectorAll('button')].some(node => /^(Settings|设置|More|更多)$/.test(String(node.textContent || '').trim())))()`, Boolean, 'reloaded DSH shell', 30000)
+      await waitForValue(client, `(() => document.readyState === 'complete' && [...document.querySelectorAll('button')].some(node => /^(Settings|设置|More|更多|Account menu|账号菜单)$/.test(String(node.textContent || '').trim())))()`, Boolean, 'reloaded DSH shell', 30000)
       await dismissBlockingOnboarding(client)
       const settingsOpened = Boolean((await waitForValue(client, `(() => {
         const button = [...document.querySelectorAll('button')].find(node => /^(Settings|设置)$/.test(String(node.textContent || '').trim()))
