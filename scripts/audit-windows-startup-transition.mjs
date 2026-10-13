@@ -7,6 +7,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { assessStartupHandoff } from './startup-handoff-evidence.mjs'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
+import { settingsMenuFallbackExpression } from './lib/settings-entry.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -479,13 +480,13 @@ try {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updateChannel: 'candidate' }),
       }).then(response => response.json())`)
       await evaluate(client, 'location.reload()')
-      await waitForValue(client, `(() => document.readyState === 'complete' && [...document.querySelectorAll('button')].some(node => /^(Settings|设置)$/.test(String(node.textContent || '').trim())))()`, Boolean, 'reloaded DSH shell', 30000)
+      await waitForValue(client, `(() => document.readyState === 'complete' && [...document.querySelectorAll('button')].some(node => /^(Settings|设置|More|更多)$/.test(String(node.textContent || '').trim())))()`, Boolean, 'reloaded DSH shell', 30000)
       await dismissBlockingOnboarding(client)
-      const settingsOpened = await evaluate(client, `(() => {
+      const settingsOpened = Boolean((await waitForValue(client, `(() => {
         const button = [...document.querySelectorAll('button')].find(node => /^(Settings|设置)$/.test(String(node.textContent || '').trim()))
-        button?.click()
-        return Boolean(button)
-      })()`)
+        if (button) { button.click(); return { clicked: true } }
+        return ${settingsMenuFallbackExpression}
+      })()`, value => value?.clicked, 'Settings entry', 15000))?.clicked)
       assert.equal(settingsOpened, true, 'Settings button was unavailable for the update implementation audit')
       await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(node => /Settings|设置/.test(node.textContent || '')))`, Boolean, 'Settings dialog')
       await evaluate(client, `(() => {
