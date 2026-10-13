@@ -6,6 +6,8 @@ import { createServer } from 'node:net'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { assessStartupHandoff } from './startup-handoff-evidence.mjs'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
+import { settingsMenuFallbackExpression } from './lib/settings-entry.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -160,7 +162,7 @@ async function dismissBlockingOnboarding(client, timeoutMs = 5000) {
     const clicked = await evaluate(client, `(() => {
       const button = [...document.querySelectorAll('button')].find(node => /^(Continue|继续|Configure later|稍后配置|Set up later)$/.test(String(node.textContent || '').trim()))
       button?.click()
-      return Boolean(button)
+      return Boolean(button) || Boolean(${dismissOfficialOnboardingExpression}?.clicked)
     })()`)
     quietPasses = clicked ? 0 : quietPasses + 1
     await new Promise(resolve => setTimeout(resolve, 200))
@@ -341,7 +343,7 @@ try {
   assert.ok(workspaceSample, 'the settled DSH workspace did not remain stable after native handoff')
   const dismissedWelcome = await evaluate(client, `(() => {
     const button = [...document.querySelectorAll('button')].find(node => /^(Continue|继续)$/.test(String(node.textContent || '').trim()))
-    if (!button) return false
+    if (!button) return Boolean(${dismissOfficialOnboardingExpression}?.clicked)
     button.click()
     return true
   })()`)
@@ -355,7 +357,7 @@ try {
   }
   const dismissedProvider = await evaluate(client, `(() => {
     const button = [...document.querySelectorAll('button')].find(node => /^(Configure later|稍后配置)$/.test(String(node.textContent || '').trim()))
-    if (!button) return false
+    if (!button) return Boolean(${dismissOfficialOnboardingExpression}?.clicked)
     button.click()
     return true
   })()`)
@@ -478,13 +480,13 @@ try {
         method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ updateChannel: 'candidate' }),
       }).then(response => response.json())`)
       await evaluate(client, 'location.reload()')
-      await waitForValue(client, `(() => document.readyState === 'complete' && [...document.querySelectorAll('button')].some(node => /^(Settings|设置)$/.test(String(node.textContent || '').trim())))()`, Boolean, 'reloaded DSH shell', 30000)
+      await waitForValue(client, `(() => document.readyState === 'complete' && [...document.querySelectorAll('button')].some(node => /^(Settings|设置|More|更多|Account menu|账号菜单)$/.test(String(node.textContent || '').trim())))()`, Boolean, 'reloaded DSH shell', 30000)
       await dismissBlockingOnboarding(client)
-      const settingsOpened = await evaluate(client, `(() => {
+      const settingsOpened = Boolean((await waitForValue(client, `(() => {
         const button = [...document.querySelectorAll('button')].find(node => /^(Settings|设置)$/.test(String(node.textContent || '').trim()))
-        button?.click()
-        return Boolean(button)
-      })()`)
+        if (button) { button.click(); return { clicked: true } }
+        return ${settingsMenuFallbackExpression}
+      })()`, value => value?.clicked, 'Settings entry', 15000))?.clicked)
       assert.equal(settingsOpened, true, 'Settings button was unavailable for the update implementation audit')
       await waitForValue(client, `Boolean([...document.querySelectorAll('[role="dialog"]')].find(node => /Settings|设置/.test(node.textContent || '')))`, Boolean, 'Settings dialog')
       await evaluate(client, `(() => {

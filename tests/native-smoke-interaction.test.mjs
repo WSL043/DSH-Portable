@@ -38,7 +38,7 @@ test('native acceptance waits for an actionable control after a tab change', asy
   const start = source.indexOf('const clickButton =')
   const end = source.indexOf('const clickChoice =', start)
   assert.ok(start >= 0 && end > start)
-  const expression = vm.runInNewContext(`${source.slice(start, end)}; clickButton(['Light'])`)
+  const expression = vm.runInNewContext(`${source.slice(start, end)}; clickButton(['Light'])`, { settingsMenuFallbackExpression: 'null' })
   let clicks = 0
   const button = overrides => ({
     textContent: 'Light',

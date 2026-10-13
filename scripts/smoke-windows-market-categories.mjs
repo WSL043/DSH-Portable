@@ -115,7 +115,7 @@ try {
       .filter(item => item.getBoundingClientRect().width > 0)
     if (dialogs.length) return false
     const settings = [...document.querySelectorAll('button')].find(item =>
-      ['Settings', '设置'].includes((item.textContent || '').trim()))
+      ['Settings', '设置', 'More', '更多', 'Account menu', '账号菜单'].includes((item.textContent || '').trim()))
     return Boolean(settings && settings.getBoundingClientRect().width > 0 && !settings.closest('[inert]'))
   })()`, ready => ready && completedCredentialOnboarding, 'credential onboarding finishes before settings navigation')
   await until(nativeStateExpression(), state => state.nativeLoadingVisible === false, 'native workspace handoff completes')

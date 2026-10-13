@@ -7,6 +7,8 @@ import { promisify } from 'node:util'
 import { performance } from 'node:perf_hooks'
 import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
+import { settingsMenuFallbackExpression } from './lib/settings-entry.mjs'
 
 const [rootArg, driverArg, outputArg, mode] = process.argv.slice(2)
 assert.ok(rootArg && driverArg && outputArg && ['--probe', '--qualify'].includes(mode),
@@ -104,12 +106,18 @@ async function dismissOnboarding() {
       const button = page.getByRole('button', { name }).first()
       if (await button.isVisible() && await button.isEnabled()) await button.click()
     }
+    await page.evaluate(dismissOfficialOnboardingExpression)
     await delay(200)
   }
 }
 const composer = () => page.locator('[contenteditable="true"][role="textbox"]').first()
 async function navigation() {
-  await page.getByRole('button', { name: /^(Settings|设置)$/ }).first().click()
+  const settingsButton = page.getByRole('button', { name: /^(Settings|设置)$/ }).first()
+  if (await settingsButton.count()) await settingsButton.click()
+  else for (let attempt = 0; attempt < 20; attempt++) {
+    if ((await page.evaluate(settingsMenuFallbackExpression)).clicked) break
+    await delay(250)
+  }
   await page.getByRole('button', { name: /^(Desktop & data|桌面与数据)$/ }).click()
   const dialog = page.getByRole('dialog').last()
   await dialog.getByRole('button', { name: /^(Close|关闭)$/ }).click()

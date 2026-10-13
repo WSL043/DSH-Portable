@@ -7,6 +7,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { pathToFileURL } from 'node:url'
+import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
+import { settingsMenuFallbackExpression } from './lib/settings-entry.mjs'
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
 
 const execFileAsync = promisify(execFile)
@@ -137,6 +139,11 @@ async function waitForValue(client, expression, predicate, label, timeoutMs = 30
 
 const clickButton = names => `(() => {
   const names = ${JSON.stringify(names)}
+  // The account sign-in step has no "configure later" button; the shared helper closes it.
+  if (names.includes('稍后配置')) {
+    const step = ${dismissOfficialOnboardingExpression}
+    if (step?.clicked) return { clicked: true }
+  }
   const button = [...document.querySelectorAll('button,[role="button"]')].find(item => {
     const label = item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || ''
     if (!names.includes(label.trim()) || item.disabled || item.getAttribute('aria-disabled') === 'true') return false
@@ -146,6 +153,10 @@ const clickButton = names => `(() => {
     const point = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2)
     return Boolean(point && (point === item || item.contains(point)))
   })
+  if (!button && names.includes('设置')) {
+    const viaMenu = ${settingsMenuFallbackExpression}
+    if (viaMenu.clicked) return viaMenu
+  }
   if (!button) return { clicked: false, labels: [...document.querySelectorAll('button,[role="button"]')].slice(0, 80).map(item => (item.textContent || item.getAttribute('aria-label') || '').trim()) }
   button.click()
   return { clicked: true }
@@ -352,7 +363,7 @@ try {
   }
 
   await waitForValue(client, `(() => {
-    const names = new Set(['Settings', '设置', '打开侧边栏', 'Open sidebar', 'Expand sidebar'])
+    const names = new Set(['Settings', '设置', 'More', '更多', 'Account menu', '账号菜单', '打开侧边栏', 'Open sidebar', 'Expand sidebar'])
     return [...document.querySelectorAll('button,[role="button"]')].some(item => {
       const label = (item.getAttribute('aria-label') || item.textContent || item.getAttribute('title') || '').trim()
       const rect = item.getBoundingClientRect()
