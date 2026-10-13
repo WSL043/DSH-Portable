@@ -8,6 +8,8 @@ import { pipeline } from 'node:stream/promises'
 import { promisify } from 'node:util'
 
 import { acquireLaunchLockWithWait, writeJsonAtomic } from './portable-core.mjs'
+import { mirrorUrls } from './update-mirrors.mjs'
+import { verifyUpdateSignature } from './update-signature.mjs'
 
 export const UPDATE_SCHEMA_VERSION = 1
 export const UPDATE_CHECK_TTL_MS = 12 * 60 * 60 * 1000
@@ -215,6 +217,15 @@ function validateRemoteUrl(value, allowHttp) {
   throw new Error(`Update URL must use HTTPS: ${url}`)
 }
 
+// GitHub first, then the mirror routes. The archive digest in the verified manifest decides what is accepted.
+export function withMirrorRoutes(urls, mirrors) {
+  const routes = [...(urls ?? [])]
+  for (const url of urls ?? []) {
+    for (const mirror of mirrorUrls(url, mirrors)) if (!routes.includes(mirror)) routes.push(mirror)
+  }
+  return routes
+}
+
 export async function downloadVerifiedComponent({
   urls,
   destination,
@@ -223,6 +234,7 @@ export async function downloadVerifiedComponent({
   allowHttp = false,
   fetchImpl = fetch,
   timeoutMs = 120000,
+  firstByteTimeoutMs = 20000,
   onProgress = () => {},
 }) {
   if (!Array.isArray(urls) || urls.length === 0) throw new Error('No update download routes are available.')
@@ -234,9 +246,12 @@ export async function downloadVerifiedComponent({
     await rm(temporary, { force: true })
     const controller = new AbortController()
     let timer
+    let started = false
     const armInactivityTimeout = () => {
       clearTimeout(timer)
-      timer = setTimeout(() => controller.abort(), timeoutMs)
+      // With fallback routes available, a route that sends nothing is abandoned quickly instead of after minutes.
+      const limit = !started && urls.length > 1 ? Math.min(timeoutMs, firstByteTimeoutMs) : timeoutMs
+      timer = setTimeout(() => controller.abort(), limit)
     }
     armInactivityTimeout()
     const report = (receivedBytes) => onProgress({
@@ -255,6 +270,7 @@ export async function downloadVerifiedComponent({
       let received = 0
       const meter = new Transform({
         transform(chunk, _encoding, callback) {
+          started = true
           armInactivityTimeout()
           received += chunk.length
           if (received > Number(bytes)) {
@@ -411,8 +427,7 @@ export async function cleanStaleUpdateOperationDirectories(layout, { now = Date.
   return { removed, deferred: false }
 }
 
-async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs }) {
-  const url = freshUpdateMetadataUrl(validateRemoteUrl(urlValue, allowHttp))
+async function fetchMetadataBytes(url, { fetchImpl, timeoutMs }) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -429,11 +444,29 @@ async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs }) {
         chunks.push(chunk)
       }
     }
-    const bytes = Buffer.concat(chunks, size)
-    return JSON.parse(bytes.toString('utf8'))
+    return Buffer.concat(chunks, size)
   } finally {
     clearTimeout(timer)
     controller.abort()
+  }
+}
+
+export async function fetchJson(urlValue, { allowHttp, fetchImpl, timeoutMs, mirrors }) {
+  const url = freshUpdateMetadataUrl(validateRemoteUrl(urlValue, allowHttp))
+  try {
+    return JSON.parse((await fetchMetadataBytes(url, { fetchImpl, timeoutMs })).toString('utf8'))
+  } catch (error) {
+    // GitHub answering (a 404, a 403) is final. Only a failure to reach it, or a server error, moves on to mirrors.
+    if (/^HTTP \d+$/.test(error?.message) && !/^HTTP 5\d\d$/.test(error.message)) throw error
+    for (const mirror of mirrorUrls(urlValue, mirrors)) {
+      try {
+        const bytes = await fetchMetadataBytes(mirror, { fetchImpl, timeoutMs: Math.max(timeoutMs, 8000) })
+        const signature = (await fetchMetadataBytes(`${mirror}.sig`, { fetchImpl, timeoutMs: Math.max(timeoutMs, 8000) })).toString('utf8')
+        // A mirror is untrusted: the bytes are only used when the release signature over them verifies.
+        if (verifyUpdateSignature(bytes, signature)) return JSON.parse(bytes.toString('utf8'))
+      } catch { /* try the next route */ }
+    }
+    throw error
   }
 }
 
@@ -1019,7 +1052,7 @@ export async function installAvailableAppUpdate({
   try {
     onProgress({ phase: 'preparing' })
     await download({
-      urls: update.component.urls,
+      urls: withMirrorRoutes(update.component.urls),
       destination: archive,
       bytes: update.component.bytes,
       sha256: update.component.sha256,

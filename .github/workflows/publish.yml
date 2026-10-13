@@ -111,6 +111,11 @@ jobs:
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" "${VERIFY_FLAGS[@]}" release-staging/user-assets/*
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+      - name: Sign the update metadata so mirrors can serve it safely
+        if: ${{ inputs.publish_feed }}
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: node scripts/sign-update-metadata.mjs product-catalog release-staging/update-assets
       - name: Publish the stable update feed and legacy candidate mirror
         if: ${{ inputs.publish_feed }}
         env:
@@ -122,13 +127,21 @@ jobs:
           gh release view "$UPDATE_CHANNEL_TAG" >/dev/null 2>&1 || \
             gh release create "$UPDATE_CHANNEL_TAG" --prerelease --title "DSH-Portable $RELEASE_CHANNEL update channel" --notes "Machine-readable update assets used by tested DSH-Portable builds."
           # Upload each component once; legacy latest manifests use immutable URLs.
-          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" product-catalog/immutable/*
+          # Signatures are randomized, so a resumed run produces new ones for unchanged files: replace those, keep the rest immutable.
+          mapfile -t immutable_assets < <(find product-catalog/immutable -type f ! -name '*.sig' | sort)
+          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" "${immutable_assets[@]}"
+          mapfile -t immutable_signatures < <(find product-catalog/immutable -type f -name '*.sig' | sort)
+          if [ "${#immutable_signatures[@]}" -gt 0 ]; then
+            node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable "${immutable_signatures[@]}"
+          fi
           mkdir -p product-catalog/latest
           for file in product-catalog/immutable/portable-update-*.json; do
             name="$(basename "$file")"
-            cp "$file" "product-catalog/latest/${name%-"${RELEASE_TAG#v}".json}.json"
+            latest="${name%-"${RELEASE_TAG#v}".json}.json"
+            cp "$file" "product-catalog/latest/$latest"
+            cp "$file.sig" "product-catalog/latest/$latest.sig"
           done
-          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json
+          node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json release-staging/update-assets/portable-manifest.json.sig
           # Advertise only after every component and manifest is verified.
           node scripts/upload-release-assets.mjs "$UPDATE_CHANNEL_TAG" --mutable "product-catalog/$RELEASE_CHANNEL/"*
           if [ "$RELEASE_CHANNEL" = stable ]; then

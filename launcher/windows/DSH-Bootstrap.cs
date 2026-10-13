@@ -24,8 +24,8 @@ using Microsoft.Win32.SafeHandles;
 [assembly: System.Reflection.AssemblyCompany("WSL043")]
 [assembly: System.Reflection.AssemblyProduct("DSH-Portable")]
 [assembly: System.Reflection.AssemblyCopyright("Copyright © WSL043 2026")]
-[assembly: System.Reflection.AssemblyVersion("0.8.12.65534")]
-[assembly: System.Reflection.AssemblyFileVersion("0.8.12.65534")]
+[assembly: System.Reflection.AssemblyVersion("0.8.13.65534")]
+[assembly: System.Reflection.AssemblyFileVersion("0.8.13.65534")]
 
 namespace DshPortableBootstrap
 {
@@ -90,6 +90,76 @@ namespace DshPortableBootstrap
         {
             if (disposing) animationTimer.Dispose();
             base.Dispose(disposing);
+        }
+    }
+
+    // Public GitHub proxies used only when github.com cannot be reached. Metadata from a mirror must carry a valid
+    // ECDSA P-256 release signature, and archives are checked against the SHA-256 in that signed metadata, so a mirror
+    // can fail but cannot change what is installed. Keep in step with launcher/update-mirrors.mjs and update-signature.mjs.
+    internal static class UpdateMirrors
+    {
+        private static readonly string[] DefaultPrefixes = new string[]
+        {
+            "https://gh-proxy.com/", "https://ghfast.top/", "https://ghproxy.net/", "https://gh.llkk.cc/"
+        };
+        private static readonly Regex ReleaseAsset = new Regex(
+            @"^https://github\.com/WSL043/DSH-Portable(?:-Updates)?/releases/download/[^/?#]+/[^/?#]+$",
+            RegexOptions.CultureInvariant);
+        private const string PublicKeyX = "0d2eb3e1976e1a6dfb122f6a8a5c78297533bcf89f877ecc5ac75c47214ce7aa";
+        private const string PublicKeyY = "1ea010ffa67b7d5784bba7dfc47b3618fe73a5e7e7ce952aadb9afaaa4fac7de";
+
+        internal static string[] Prefixes()
+        {
+            string configured = (Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_MIRRORS") ?? String.Empty).Trim();
+            if (Regex.IsMatch(configured, "^(off|none|0|false)$", RegexOptions.IgnoreCase)) return new string[0];
+            if (configured.Length == 0) return DefaultPrefixes;
+            System.Collections.Generic.List<string> list = new System.Collections.Generic.List<string>();
+            foreach (string item in configured.Split(','))
+            {
+                string value = item.Trim();
+                if (!value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) continue;
+                list.Add(value.EndsWith("/") ? value : value + "/");
+            }
+            return list.ToArray();
+        }
+
+        internal static System.Collections.Generic.List<string> RoutesFor(string url)
+        {
+            System.Collections.Generic.List<string> routes = new System.Collections.Generic.List<string>();
+            if (String.IsNullOrEmpty(url) || !ReleaseAsset.IsMatch(url)) return routes;
+            foreach (string prefix in Prefixes()) routes.Add(prefix + url);
+            return routes;
+        }
+
+        private static byte[] FromHex(string hex)
+        {
+            byte[] bytes = new byte[hex.Length / 2];
+            for (int index = 0; index < bytes.Length; index++) bytes[index] = Convert.ToByte(hex.Substring(index * 2, 2), 16);
+            return bytes;
+        }
+
+        internal static bool VerifySignature(byte[] data, string signatureBase64)
+        {
+            try
+            {
+                byte[] signature = Convert.FromBase64String((signatureBase64 ?? String.Empty).Trim());
+                if (signature.Length != 64) return false;
+                // BCRYPT_ECCKEY_BLOB for an ECDSA P-256 public key: magic "ECS1", key length 32, then X and Y.
+                byte[] blob = new byte[8 + 64];
+                blob[0] = 0x45; blob[1] = 0x43; blob[2] = 0x53; blob[3] = 0x31; blob[4] = 32;
+                Array.Copy(FromHex(PublicKeyX), 0, blob, 8, 32);
+                Array.Copy(FromHex(PublicKeyY), 0, blob, 40, 32);
+                using (CngKey key = CngKey.Import(blob, CngKeyBlobFormat.EccPublicBlob))
+                using (ECDsaCng verifier = new ECDsaCng(key))
+                {
+                    verifier.HashAlgorithm = CngAlgorithm.Sha256;
+                    return verifier.VerifyData(data, signature);
+                }
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
     }
 
@@ -1010,30 +1080,100 @@ namespace DshPortableBootstrap
             else TryDeleteFile(value);
         }
 
+        // GitHub answered with a client error (for example 404): that is the answer, mirrors are not consulted.
+        private sealed class DefinitiveHttpException : HttpRequestException
+        {
+            internal DefinitiveHttpException(int status) : base("HTTP " + status) { }
+        }
+
+        private static async Task<byte[]> FetchMetadataBytesAsync(string url, CancellationToken cancellationToken, TimeSpan? timeout)
+        {
+            using (HttpClient client = CreateClient(timeout))
+            using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false))
+            {
+                int status = (int)response.StatusCode;
+                if (status >= 400 && status < 500) throw new DefinitiveHttpException(status);
+                response.EnsureSuccessStatusCode();
+                byte[] bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                if (bytes.Length == 0 || bytes.Length > 1024 * 1024)
+                    throw new InvalidDataException(BootstrapText.L("版本信息大小无效。", "The version information has an invalid size."));
+                return bytes;
+            }
+        }
+
+        private static PortableManifest ParseManifest(byte[] bytes)
+        {
+            using (MemoryStream stream = new MemoryStream(bytes))
+            {
+                DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(PortableManifest));
+                return (PortableManifest)serializer.ReadObject(stream);
+            }
+        }
+
         private static async Task<PortableManifest> DownloadManifestAsync(
             string url,
             CancellationToken cancellationToken,
             TimeSpan? timeout = null)
         {
-            using (HttpClient client = CreateClient(timeout))
-            using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken).ConfigureAwait(false))
+            Exception unreachable;
+            try
             {
-                response.EnsureSuccessStatusCode();
-                byte[] bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                if (bytes.Length == 0 || bytes.Length > 1024 * 1024)
-                    throw new InvalidDataException(BootstrapText.L("版本信息大小无效。", "The version information has an invalid size."));
-                using (MemoryStream stream = new MemoryStream(bytes))
+                return ParseManifest(await FetchMetadataBytesAsync(url, cancellationToken, timeout).ConfigureAwait(false));
+            }
+            catch (DefinitiveHttpException)
+            {
+                throw;
+            }
+            catch (Exception error)
+            {
+                if (cancellationToken.IsCancellationRequested) throw;
+                unreachable = error;
+            }
+            // GitHub could not be reached. A mirror is untrusted, so its manifest is only used with a valid release signature.
+            foreach (string route in UpdateMirrors.RoutesFor(url))
+            {
+                try
                 {
-                    DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(PortableManifest));
-                    return (PortableManifest)serializer.ReadObject(stream);
+                    TimeSpan mirrorTimeout = TimeSpan.FromSeconds(10);
+                    byte[] bytes = await FetchMetadataBytesAsync(route, cancellationToken, mirrorTimeout).ConfigureAwait(false);
+                    byte[] signature = await FetchMetadataBytesAsync(route + ".sig", cancellationToken, mirrorTimeout).ConfigureAwait(false);
+                    if (UpdateMirrors.VerifySignature(bytes, Encoding.UTF8.GetString(signature))) return ParseManifest(bytes);
+                }
+                catch (Exception)
+                {
+                    if (cancellationToken.IsCancellationRequested) throw;
+                }
+            }
+            throw unreachable;
+        }
+
+        // GitHub first, then the mirrors. Whatever route delivers the archive, its SHA-256 from the verified manifest decides.
+        private async Task DownloadFileAsync(string url, string destination, long expectedBytes, CancellationToken cancellationToken)
+        {
+            System.Collections.Generic.List<string> routes = new System.Collections.Generic.List<string>();
+            routes.Add(url);
+            routes.AddRange(UpdateMirrors.RoutesFor(url));
+            for (int index = 0; index < routes.Count; index++)
+            {
+                try
+                {
+                    TryDeleteFile(destination);
+                    await DownloadFileFromRouteAsync(routes[index], destination, expectedBytes, routes.Count > 1 ? (TimeSpan?)TimeSpan.FromSeconds(20) : null, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                catch (Exception)
+                {
+                    TryDeleteFile(destination);
+                    if (cancellationToken.IsCancellationRequested || index == routes.Count - 1) throw;
                 }
             }
         }
 
-        private async Task DownloadFileAsync(string url, string destination, long expectedBytes, CancellationToken cancellationToken)
+        private async Task DownloadFileFromRouteAsync(string url, string destination, long expectedBytes, TimeSpan? headerTimeout, CancellationToken cancellationToken)
         {
             using (HttpClient client = CreateClient())
-            using (HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken).ConfigureAwait(false))
+            using (CancellationTokenSource headerSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken))
+            using (HttpResponseMessage response = await GetHeadersAsync(client, url, headerTimeout, headerSource, cancellationToken).ConfigureAwait(false))
             {
                 response.EnsureSuccessStatusCode();
                 long? contentLength = response.Content.Headers.ContentLength;
@@ -1060,6 +1200,15 @@ namespace DshPortableBootstrap
                         throw new EndOfStreamException(BootstrapText.L("下载未完成；没有修改目标目录。", "The download did not finish. The destination was not changed."));
                 }
             }
+        }
+
+        private static async Task<HttpResponseMessage> GetHeadersAsync(HttpClient client, string url, TimeSpan? headerTimeout, CancellationTokenSource source, CancellationToken cancellationToken)
+        {
+            // With fallback routes, a route that sends no response headers is abandoned quickly instead of after minutes.
+            if (headerTimeout.HasValue) source.CancelAfter(headerTimeout.Value);
+            HttpResponseMessage response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, source.Token).ConfigureAwait(false);
+            source.CancelAfter(Timeout.InfiniteTimeSpan);
+            return response;
         }
 
         private static HttpClient CreateClient(TimeSpan? timeout = null)
