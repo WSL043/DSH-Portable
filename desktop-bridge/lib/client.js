@@ -19,10 +19,10 @@ window.__ModuleLoader__.load({
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。', currentTag: '{0}（当前）', testCoreTag: '{0}（官方测试版）',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
-        incompatible: '此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
-        engineUnavailableSummary: '另有 {0} 个版本正在验证或暂不适用',
+        incompatible: '这个内核需要先把 Portable 升级到匹配的版本才能使用。', awaitingQualification: '这个内核还在等待测试，不需要你做什么。通过后会自动出现在可选列表里，稍后再点“检查更新”即可。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
+        engineUnavailableSummary: '另有 {0} 个更新的内核版本暂时不能选，点开看原因',
         engineUnavailableCoreIncompatible: '版本 {0}：需要先把 Portable 升级到 {1}，才能使用这个内核版本。',
-        engineUnavailableCoreAwaiting: '版本 {0}：尚未针对当前 Portable 完成验证，暂不能选用。',
+        engineUnavailableCoreAwaiting: '版本 {0}：新内核需要先通过测试，才能和当前 Portable 一起使用。不需要你做什么，通过后会自动出现在上面的列表里。',
         engineUnavailableFullPackage: '版本 {0}：需要匹配的完整 Portable 安装包。',
         engineUnavailableWrongPlatform: '版本 {0}：不适用于此系统。',
         engineUnavailableUnknown: '版本 {0}：尚未通过此版本兼容验证。', unknown: '未知',
@@ -74,10 +74,10 @@ window.__ModuleLoader__.load({
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.', currentTag: '{0} (current)', testCoreTag: '{0} (official test build)',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
-        incompatible: 'This core update package is not qualified for the current DSH-Portable. Select a verified version.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
-        engineUnavailableSummary: 'Other versions are being verified or currently unavailable ({0}).',
+        incompatible: 'This core needs a matching Portable version first.', awaitingQualification: 'This core is still being tested. You do not need to do anything; it will appear in the list when it passes. Check for updates again later.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
+        engineUnavailableSummary: '{0} newer core version(s) cannot be selected yet; open to see why.',
         engineUnavailableCoreIncompatible: 'Version {0}: Update Portable to {1} first to use this core version.',
-        engineUnavailableCoreAwaiting: 'Version {0}: Not yet verified for the current Portable, so it cannot be selected.',
+        engineUnavailableCoreAwaiting: 'Version {0}: The new core must pass testing before it can be used with this Portable. You do not need to do anything; it will appear in the list above when it passes.',
         engineUnavailableFullPackage: 'Version {0}: A matching full Portable package is required.',
         engineUnavailableWrongPlatform: 'Version {0}: Not available for this system.',
         engineUnavailableUnknown: 'Version {0}: Compatibility with this version has not been verified.', unknown: 'Unknown',
@@ -677,7 +677,8 @@ window.__ModuleLoader__.load({
             setUpdateOffers(current => ({ ...current, [scope]: true }))
             setStatus(name, format(t('available'), scope === 'engine' ? coreLabel(body.engineLatest || '') : body.latest || ''))
           }
-          else if (body.status === 'core-incompatible' || body.status === 'core-awaiting-qualification') setStatus(name, t('incompatible'))
+          else if (body.status === 'core-awaiting-qualification') setStatus(name, t('awaitingQualification'))
+          else if (body.status === 'core-incompatible') setStatus(name, t('incompatible'))
           else if (body.status === 'engine-follows-product') setStatus(name, t('engineFollowsProduct'))
           else if (body.status === 'channel-unpublished') setStatus(name, t('channelUnpublished'))
           else setStatus(name, t('updateUnavailable'))

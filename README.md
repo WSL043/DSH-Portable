@@ -92,6 +92,14 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 - **更新不动数据**：Portable 与官方内核分别更新，内核版本可选；更新、跳过、回滚规则见[用户指南](docs/user-guide.zh-CN.md#更新与修复)。
 - **出问题可恢复**：检查、精准修复、支持报告和 DSH-Recovery.exe 保留个人数据；见[恢复说明](docs/user-guide.zh-CN.md#dsh-recoveryexe)。
 
+## 登录与账号
+
+首次启动会出现“开始使用”，可以**登录 DeepSeek 账号**，也可以**添加 API Key**。登录会在系统浏览器里打开官方授权页，点一次授权即可，不需要在软件里输入密码。登录后“设置”在左下角的账号菜单（登录前显示为“更多”）里。
+
+- 登录凭据以文件形式保存在文件夹的 `data` 目录里，**没有额外加密**：拿到整个文件夹的人可能直接使用你的账号。借给别人或存进 U 盘前，请先退出登录，或清空 `data` 目录；U 盘丢失时，到 DeepSeek 官网撤销授权。
+- 导出“完整迁移”会带上登录信息和密钥，请只保存在你信任的地方。
+- 软件自己的更新和内核下载走 GitHub，插件下载走 npm；如果浏览器能上网而应用内更新连不上，多半是软件没有用到系统代理，可先在系统里设置 `HTTPS_PROXY` 环境变量后重启。
+
 ## 插件
 
 全新安装默认附带两个可卸载插件：[Image Viewer](https://github.com/WSL043/dsh-image-viewer)（缩放、图库、原图下载与区域标注）和 [Chat Manager](https://github.com/WSL043/dsh-chat-manager)（搜索归档、恢复与安全删除会话）。
@@ -135,6 +143,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 ## 获取帮助
 
 - [提交 Bug 报告](https://github.com/WSL043/DSH-Portable/issues/new?template=bug-report.yml) · [提出功能建议](https://github.com/WSL043/DSH-Portable/issues/new?template=feature-request.yml) · [参与讨论](https://github.com/WSL043/DSH-Portable/discussions)
+- 刚升级后出现异常（对话空白、输入框在页面顶部）：先到 **设置 → 更新**，看“内核版本”是不是变成了自带版本；如果你之前用的是“官方测试版”，在同一页重新选它。仍然不行，再提交 Bug 报告，并写明升级前的版本。
 - 网络兼容问题与限制见[上游说明](https://github.com/deepseek-ai/deepseek-harness/discussions/5202)；请勿在 Issue 中粘贴 API Key、登录凭据或私人会话。
 
 ## 安全
