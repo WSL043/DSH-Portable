@@ -5,6 +5,7 @@ import { cp, copyFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/pr
 import path from 'node:path'
 
 import { buildDshEnv } from './portable-core.mjs'
+import { proxyEnvOverlay } from './system-proxy.mjs'
 import { comparePortableVersions } from './update-core.mjs'
 import { redactDiagnosticText } from './diagnostic-policy.mjs'
 
@@ -364,7 +365,7 @@ async function refreshInstalledDefaults(layout, profileRoot, profile, plugins, a
     // metadata in the bundled offline mirror, so the offline add fails for the whole profile and the defaults stay old.
     // Retry once with the network allowed; the reviewed archives are still installed from the local files.
     if (!result?.error && result?.status !== 0 && OFFLINE_CACHE_MISS.test(`${result?.stdout ?? ''}\n${result?.stderr ?? ''}`)) {
-      result = add({ ...environment, pnpm_config_offline: 'false', npm_config_offline: 'false',
+      result = add({ ...environment, ...proxyEnvOverlay(), pnpm_config_offline: 'false', npm_config_offline: 'false',
         pnpm_config_prefer_offline: 'true', npm_config_prefer_offline: 'true' }, 120000)
     }
     if (result?.error) throw result.error

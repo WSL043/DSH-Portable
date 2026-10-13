@@ -188,14 +188,9 @@ export function mountPortableRoutes(webServer, options = {}) {
   const repairResult = path.join(stateRoot, 'data', 'runtime', 'repair-result.json')
   const updateResult = path.join(stateRoot, 'data', 'runtime', 'last-update-result.json')
   const runCli = options.runCli || ((args) => defaultRunCli(root, baseStateRoot, currentEnvironment, args))
-  const listVersions = options.runCli
-    ? scope => runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
-    : async scope => {
-      const { listInstalledVersions } = await import(pathToFileURL(path.join(root, 'launcher', 'update-core.mjs')).href)
-      // An independently updated kernel can still be hosted by an older launcher.
-      if (typeof listInstalledVersions !== 'function') return runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
-      return listInstalledVersions({ root, baseStateRoot, scope })
-    }
+  // The catalog is read by the CLI process, which follows the system proxy; this host process must not, because
+  // its own traffic (model requests) keeps the user's routing.
+  const listVersions = scope => runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
   const probeNotifications = options.notificationAvailability || windowsNotificationAvailability
   let notificationProbe = null
   const notificationAvailability = () => {
