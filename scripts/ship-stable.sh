@@ -72,4 +72,4 @@ CORE="$(gh run list -R "$UPDATES" -w "Sync verified DSH core" --limit 1 --json d
 gh run watch "$CORE" -R "$UPDATES" --interval 60 >/dev/null 2>&1 || true
 gh run view "$CORE" -R "$UPDATES" --json jobs -q '.jobs[] | [.name, .conclusion] | @tsv'
 gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null \
-  | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{for(const x of JSON.parse(s).slice(0,4))console.log(x.version,x.status,x.sourceSha.slice(0,7),x.attemptedAt.slice(0,16))})"
+  | HEAD_SHORT="${HEAD_SHA:0:7}" node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const rows=JSON.parse(s).slice(0,4);for(const x of rows)console.log(x.version,x.status,x.sourceSha.slice(0,7),x.attemptedAt.slice(0,16));const bad=rows.filter(x=>x.sourceSha.startsWith(process.env.HEAD_SHORT)&&x.status!=='success');if(bad.length){console.error('WARNING: not qualified on this shell: '+bad.map(x=>x.version).join(', ')+'. Users upgrading now fall back to the bundled core. Fix the qualification scripts and rerun Sync verified DSH core.');process.exit(3)}})"
