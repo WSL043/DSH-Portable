@@ -49,3 +49,10 @@ test('a feed whose signature does not verify, or is missing on a signing release
   assert.match(evaluateChannelHealth({ ...signing, signature: 'missing' }).problems.join(), /no signature/)
   assert.equal(evaluateChannelHealth({ ...signing, signature: 'valid' }).healthy, true)
 })
+
+test('a newest core that was blocked and never qualified anywhere does not hold the channel back', () => {
+  const state = [row('0.2.1-alpha.3', 'blocked'), row('0.2.1-alpha.2'), row('0.2.0-rc.2')]
+  assert.deepEqual(evaluateChannelHealth({ latestRelease: release, feedVersion: '0.8.11', state, now: soon }), { healthy: true, problems: [] })
+  const lost = [row('0.2.1-alpha.3', 'blocked'), row('0.2.1-alpha.3', 'success', 'cce3165'), row('0.2.1-alpha.2'), row('0.2.0-rc.2')]
+  assert.equal(evaluateChannelHealth({ latestRelease: release, feedVersion: '0.8.11', state: lost, now: soon }).healthy, false, 'a core users could select must not be silently dropped')
+})

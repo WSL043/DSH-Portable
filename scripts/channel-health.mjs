@@ -27,6 +27,7 @@ export function evaluateChannelHealth({ latestRelease, feedVersion, state, signa
   for (const version of versions) {
     const row = here.find(item => item.version === version)
     if (!row) problems.push(`core ${version} has no qualification result on shell ${latest}`)
+    else if (row.status === 'blocked' && !(state ?? []).some(item => item.version === version && item.status === 'success')) continue
     else if (row.status !== 'success') problems.push(`core ${version} is ${row.status} on shell ${latest}`)
   }
   if (!versions.length) problems.push('the qualification state is empty')

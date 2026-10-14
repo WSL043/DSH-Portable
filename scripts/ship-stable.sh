@@ -34,10 +34,16 @@ cd "$ROOT"
 [ -z "$(git status --porcelain)" ] || { echo "working tree is not clean" >&2; exit 2; }
 git fetch -q origin main
 HEAD_SHA="$(git rev-parse HEAD)"
-[ "$HEAD_SHA" = "$(git rev-parse origin/main)" ] || { echo "HEAD is not origin/main; push the release commit first" >&2; exit 2; }
+PUBLISH_REF=main
 if [ "$MODE" = --resume ]; then
   gh release view "$TAG" -R "$REPOSITORY" >/dev/null 2>&1 || { echo "$TAG is not published yet; run without --resume" >&2; exit 2; }
+  # Later commits (docs syncs, script fixes) may have landed on main; the gate and the publish run belong to the
+  # commit the release was built from.
+  git fetch -q origin "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null || true
+  HEAD_SHA="$(git rev-parse "$TAG^{commit}")"
+  PUBLISH_REF="$TAG"
 else
+  [ "$HEAD_SHA" = "$(git rev-parse origin/main)" ] || { echo "HEAD is not origin/main; push the release commit first" >&2; exit 2; }
   gh release view "$TAG" -R "$REPOSITORY" >/dev/null 2>&1 && { echo "$TAG is already published (use --resume if its feed is still held)" >&2; exit 2; }
 fi
 
@@ -60,7 +66,7 @@ done
 [ -n "$RUN" ] || { echo "no main CI run found for ${HEAD_SHA:0:7}" >&2; exit 1; }
 
 publish() { # $1 = true|false: whether the in-app update feed is flipped by this run
-  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref main -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" \
+  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref "$PUBLISH_REF" -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" \
     || { echo "could not dispatch the publish workflow" >&2; exit 1; }
   sleep 20
   local publish_run
@@ -99,13 +105,18 @@ gate_state() {
       const rows = JSON.parse(s)
       const versions = coreWindow([...new Set(rows.map(row => row.version))].sort((a, b) => comparePortableVersions(b, a)))
       const here = rows.filter(row => row.sourceSha.startsWith(process.env.HEAD_SHORT))
+      // A core that was deliberately blocked and has never qualified on any shell was never offered to users, so
+      // this release cannot take it away: it is reported but does not hold the release back.
+      const everQualified = new Set(rows.filter(row => row.status === 'success').map(row => row.version))
       const lines = versions.map(version => {
         const row = here.find(item => item.version === version)
-        return version + ' ' + (row ? row.status : 'pending')
+        const status = row ? row.status : 'pending'
+        return version + ' ' + (status === 'blocked' && !everQualified.has(version) ? 'excused' : status)
       })
       console.log(lines.join('; '))
       const bad = lines.filter(line => /(failed|blocked)\$/.test(line))
-      process.exit(bad.length ? 3 : lines.every(line => line.endsWith('success')) ? 0 : 1)
+      const open = lines.filter(line => !/(success|excused)\$/.test(line))
+      process.exit(bad.length ? 3 : open.length === 0 && lines.some(line => line.endsWith('success')) ? 0 : 1)
     "
 }
 
