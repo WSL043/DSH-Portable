@@ -1,0 +1,23 @@
+{
+  "version": "0.8.14",
+  "zh": {
+    "summary": "可选内核不再被 alpha 挤掉 RC，并更新默认插件以支持最新内核。",
+    "highlights": [
+      "可选内核仍是最新三个，但当最新三个全是 alpha 时，会保留最新的 RC 或正式版，不再被挤出。",
+      "默认插件更新：图片查看 0.1.10、聊天管理 1.5.11，支持官方 0.2.1-alpha.3 内核。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Alphas no longer push the release candidate out of the selectable cores, and the default plugins now support the newest core.",
+    "highlights": [
+      "The selectable cores are still the newest three, but when all three newest are alphas the newest release candidate or final stays in the list.",
+      "Default plugins updated: Image Viewer 0.1.10 and Chat Manager 1.5.11, supporting the official 0.2.1-alpha.3 core."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}
