@@ -1,16 +1,16 @@
 import { readFile, writeFile } from 'node:fs/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { comparePortableVersions, defaultEngineUpdateIndexUrl, platformUpdateKey } from '../launcher/update-core.mjs'
+import { comparePortableVersions, coreWindow, defaultEngineUpdateIndexUrl, platformUpdateKey } from '../launcher/update-core.mjs'
 
 export function supportedVersions(index, baseline, platform) {
   if (index.schemaVersion !== 1 || index.platform !== platform || index.channel !== 'stable' || !Array.isArray(index.versions)) throw new Error('Invalid published core index')
-  return [...new Set(index.versions.filter(entry => {
+  return coreWindow([...new Set(index.versions.filter(entry => {
     const m = entry.manifest
     return m?.updateKind === 'engine' && m.portableVersion === baseline && m.platform === platform && m.releaseChannel === 'stable' && m.component?.dshVersion === entry.version
   }).map(entry => {
     if (!/^\d+\.\d+\.\d+(?:-[a-z]+\.\d+)?$/.test(entry.version)) throw new Error('Invalid core version')
     return entry.version
-  }))].sort((left, right) => comparePortableVersions(right, left)).slice(0, 3)
+  }))].sort((left, right) => comparePortableVersions(right, left)))
 }
 
 export function renderSupportSection(baseline, rows, zh) {

@@ -85,6 +85,18 @@ function compareIdentifier(left, right) {
   return left === right ? 0 : left < right ? -1 : 1
 }
 
+// The newest three core versions, except that alphas never push the newest release candidate or final out: when all
+// three are alphas, the third slot goes to the newest non-alpha version. Input must be sorted newest first.
+export function coreWindow(items, versionOf = item => item) {
+  const window = items.slice(0, 3)
+  const isAlpha = item => /-alpha[.]/.test(versionOf(item))
+  if (window.length === 3 && window.every(isAlpha)) {
+    const stable = items.find(item => !isAlpha(item))
+    if (stable !== undefined) window[2] = stable
+  }
+  return window
+}
+
 export function comparePortableVersions(leftValue, rightValue) {
   const left = parseSemanticVersion(leftValue)
   const right = parseSemanticVersion(rightValue)
@@ -606,8 +618,8 @@ export async function listEngineVersions({
     versions.push({ version, manifestUrl, status: evaluated.status })
   }
   versions.sort((left, right) => comparePortableVersions(right.version, left.version))
-  // Offer only the newest three; a catalog that briefly lists more must not break update checks.
-  versions.splice(3)
+  // Offer only the core window; a catalog that briefly lists more must not break update checks.
+  versions.splice(0, versions.length, ...coreWindow(versions, entry => entry.version))
   unavailable.sort((left, right) => comparePortableVersions(right.version, left.version))
   return { schemaVersion: 1, current: installed.dshVersion, releaseChannel: installed.releaseChannel, versions, unavailable }
 }

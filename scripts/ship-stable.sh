@@ -93,11 +93,11 @@ fi
 gate_state() {
   gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null \
     | HEAD_SHORT="${HEAD_SHA:0:7}" node --input-type=module -e "
-      import { comparePortableVersions } from './launcher/update-core.mjs'
+      import { comparePortableVersions, coreWindow } from './launcher/update-core.mjs'
       let s = ''
       for await (const chunk of process.stdin) s += chunk
       const rows = JSON.parse(s)
-      const versions = [...new Set(rows.map(row => row.version))].sort((a, b) => comparePortableVersions(b, a)).slice(0, 3)
+      const versions = coreWindow([...new Set(rows.map(row => row.version))].sort((a, b) => comparePortableVersions(b, a)))
       const here = rows.filter(row => row.sourceSha.startsWith(process.env.HEAD_SHORT))
       const lines = versions.map(version => {
         const row = here.find(item => item.version === version)

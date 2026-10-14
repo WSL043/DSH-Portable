@@ -2,7 +2,7 @@
 // three official cores are qualified on exactly that shell. Used by .github/workflows/channel-health.yml, which opens
 // an issue when this reports a problem, so a broken channel is noticed by us and not by a user (issue #163).
 import { pathToFileURL } from 'node:url'
-import { comparePortableVersions } from '../launcher/update-core.mjs'
+import { comparePortableVersions, coreWindow } from '../launcher/update-core.mjs'
 import { verifyUpdateSignature } from '../launcher/update-signature.mjs'
 
 const GRACE_MS = 3 * 60 * 60 * 1000
@@ -21,7 +21,8 @@ export function evaluateChannelHealth({ latestRelease, feedVersion, state, signa
   }
   if (signature === 'invalid') problems.push('the feed signature does not verify with the built-in public key, so mirrors cannot be used')
   else if (signature === 'missing' && comparePortableVersions(feedVersion, SIGNED_FROM) >= 0) problems.push(`the feed for ${feedVersion} has no signature`)
-  const versions = [...new Set((state ?? []).map(row => row.version))].sort((a, b) => comparePortableVersions(b, a)).slice(0, 3)
+  const allVersions = [...new Set((state ?? []).map(row => row.version))].sort((a, b) => comparePortableVersions(b, a))
+  const versions = coreWindow(allVersions)
   const here = (state ?? []).filter(row => latestRelease.sha.startsWith(String(row.sourceSha).slice(0, 7)))
   for (const version of versions) {
     const row = here.find(item => item.version === version)

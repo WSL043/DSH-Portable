@@ -90,3 +90,10 @@ test('the CLI reconciles the core before the host starts and remembers engine up
   assert.match(source, /await reconcileCoreAtStart\(\)\s+const result = await startAttempt/)
   assert.match(source, /recordPreferredCore\(layout, applied\.dshVersion\)/)
 })
+
+test('alphas never push the newest release candidate out of the core window', async () => {
+  const { coreWindow } = await import('../launcher/update-core.mjs')
+  assert.deepEqual(coreWindow(['0.2.1-alpha.3', '0.2.1-alpha.2', '0.2.1-alpha.1', '0.2.0-rc.2']), ['0.2.1-alpha.3', '0.2.1-alpha.2', '0.2.0-rc.2'])
+  assert.deepEqual(coreWindow(['0.2.1-alpha.2', '0.2.0-rc.2', '0.2.0-rc.1', '0.1.9']), ['0.2.1-alpha.2', '0.2.0-rc.2', '0.2.0-rc.1'])
+  assert.deepEqual(coreWindow(['0.2.1-alpha.3', '0.2.1-alpha.2', '0.2.1-alpha.1']), ['0.2.1-alpha.3', '0.2.1-alpha.2', '0.2.1-alpha.1'])
+})
