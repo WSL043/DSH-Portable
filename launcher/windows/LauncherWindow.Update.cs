@@ -182,7 +182,9 @@ namespace DshPortable
             catch (Exception error)
             {
                 if (!manual) return;
-                MessageBox.Show(this, error.Message,
+                MessageBox.Show(this,
+                    L("更新没有完成，你现在用的版本不受影响，可以稍后再试。", "The update did not finish. The version you use now is unaffected; you can try again later.")
+                        + Environment.NewLine + Environment.NewLine + L("详情：", "Details: ") + error.Message,
                     L("更新失败", "Update failed"), MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
