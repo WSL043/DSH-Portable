@@ -465,8 +465,13 @@ namespace DshPortable
                 {
                     statusLabel.Text = L("正在准备便携运行环境…", "Preparing the portable runtime…");
                     Task webViewInitialization = InitializeWebViewAsync();
-                    AppendStartupTrace("native-host", "portable-cli-begin", null);
-                    Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }, HandleStartupProgress));
+                    Tuple<int, string> started;
+                    if (earlyStart != null) started = await earlyStart;
+                    else
+                    {
+                        AppendStartupTrace("native-host", "portable-cli-begin", null);
+                        started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }, HandleStartupProgress));
+                    }
                     AppendStartupTrace("native-host", "portable-cli-complete", new Dictionary<string, object> { { "exitCode", started.Item1 } });
                     if (started.Item1 != 0)
                     {
