@@ -1,0 +1,27 @@
+{
+  "version": "0.8.16",
+  "zh": {
+    "summary": "登录会自动打开浏览器，官方 0.2.1-alpha.3 内核可选，更新页和数据导出更清楚。",
+    "highlights": [
+      "点击登录后会自动在默认浏览器里打开登录页，不用再手动复制链接，登录窗口也不会一直转圈等不到页面。",
+      "官方 0.2.1-alpha.3 内核通过验收，加入可选内核；可选内核仍保留最新的 RC。",
+      "更新页：Portable 更新后如果还没能恢复你选的内核，会说明原因；两个“启动时检查”分别写清是哪一个；安装按钮写明要装的版本；选了更旧的 Portable 或内核时会有提示。",
+      "导出数据时默认选“密码加密”。选普通文件且包含凭据时，会明确提醒凭据没有加密。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Sign-in opens your browser automatically, the official 0.2.1-alpha.3 engine is selectable, and the updates page and data export are clearer.",
+    "highlights": [
+      "Signing in now opens the sign-in page in your default browser by itself, so you no longer copy a link by hand and the dialog no longer spins with nothing to continue.",
+      "The official 0.2.1-alpha.3 engine passed acceptance and joins the selectable engines; the newest release candidate stays in the list.",
+      "Updates page: after a Portable update it explains why your chosen engine is not restored yet; the two startup checks say which one they control; the install button names the version; choosing an older Portable or engine shows a hint.",
+      "Export defaults to password encryption. Choosing a standard file that includes credentials clearly warns that the credentials are not encrypted."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}

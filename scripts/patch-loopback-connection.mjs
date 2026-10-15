@@ -1,4 +1,4 @@
-import { readFile, writeFile } from 'node:fs/promises'
+import { access, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -16,9 +16,18 @@ export function patchLoopbackConnection(source) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (!process.argv[2]) throw new Error('usage: node patch-loopback-connection.mjs <app root>')
   const appRoot = path.resolve(process.argv[2])
-  const filename = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-connection', 'lib', 'client.js')
-  const source = await readFile(filename, 'utf8')
-  const patched = patchLoopbackConnection(source)
-  if (patched !== source) await writeFile(filename, patched, 'utf8')
-  console.log(filename)
+  const lib = path.join(appRoot, 'node_modules', '@deepseek-ai', 'dsh-client-connection', 'lib')
+  // Older cores ship one client.js; newer ones split it into client.browser.js (the web UI) and client.node.js.
+  const present = []
+  for (const name of ['client.js', 'client.browser.js', 'client.node.js']) {
+    const filename = path.join(lib, name)
+    if (await access(filename).then(() => true, () => false)) present.push(filename)
+  }
+  if (present.length === 0) throw new Error(`Loopback connection client not found under ${lib}`)
+  for (const filename of present) {
+    const source = await readFile(filename, 'utf8')
+    const patched = patchLoopbackConnection(source)
+    if (patched !== source) await writeFile(filename, patched, 'utf8')
+    console.log(filename)
+  }
 }

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
+import { fileURLToPath } from 'node:url'
 import { patchLoopbackConnection } from '../scripts/patch-loopback-connection.mjs'
 
 const sourceFile = new URL('../app/node_modules/@deepseek-ai/dsh-client-connection/lib/client.js', import.meta.url)
@@ -64,4 +65,20 @@ test('the replacement skips network watching only for loopback and keeps cleanup
     calls: ['watch', 'cleanup'],
     stopType: 'function',
   })
+})
+
+test('the command patches a core that splits the client into browser and node files', async t => {
+  const { execFile } = await import('node:child_process')
+  const { mkdtemp, mkdir, rm, writeFile } = await import('node:fs/promises')
+  const os = await import('node:os')
+  const path = await import('node:path')
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-loopback-split-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const lib = path.join(root, 'node_modules', '@deepseek-ai', 'dsh-client-connection', 'lib')
+  await mkdir(lib, { recursive: true })
+  for (const name of ['client.browser.js', 'client.node.js']) await writeFile(path.join(lib, name), `const x = { ${original} }\n`)
+  const script = fileURLToPath(new URL('../scripts/patch-loopback-connection.mjs', import.meta.url))
+  await new Promise((resolve, reject) => execFile(process.execPath, [script, root], error => error ? reject(error) : resolve()))
+  for (const name of ['client.browser.js', 'client.node.js']) assert.match(await readFile(path.join(lib, name), 'utf8'), /dsh-portable-loopback-connection-v1/)
+  await assert.rejects(new Promise((resolve, reject) => execFile(process.execPath, [script, path.join(root, 'missing')], error => error ? reject(error) : resolve())))
 })
