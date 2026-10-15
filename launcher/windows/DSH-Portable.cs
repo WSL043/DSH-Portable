@@ -84,8 +84,6 @@ namespace DshPortable
         private bool allowClose;
         private bool backendStarted;
         private bool trayNoticeShown;
-        // The "start" run of the preparation process, begun in the constructor so it overlaps window construction.
-        private Task<Tuple<int, string>> earlyStart;
         private bool trayBridgeReady;
         private bool trayMenuOpen;
         private bool trayMenuRefreshPending;
@@ -170,12 +168,6 @@ namespace DshPortable
             {
                 BeginStartupTrace();
                 AppendStartupTrace("native-host", "process-start", null);
-                // Start preparing the runtime and the host right away. Building this window, the tray and the WebView2
-                // environment takes hundreds of milliseconds on a slow PC and has nothing to wait for; RunLauncherAsync
-                // picks the result up once the window is shown. Progress lines that arrive before the window handle
-                // exists are dropped by HandleStartupProgress, which only drives labels.
-                AppendStartupTrace("native-host", "portable-cli-begin", null);
-                earlyStart = Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }, HandleStartupProgress));
             }
 
             // The workspace already carries the product identity. Keep the native

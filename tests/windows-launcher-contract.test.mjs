@@ -138,11 +138,3 @@ test('the native updater explains core qualification and the core restore instea
   assert.match(ui, /phase == "core-restoring"/)
   assert.match(cli, /phase: 'core-restoring'/)
 })
-
-test('the native host starts the preparation process in its constructor and awaits it once the window is shown', async () => {
-  const main = await readFile(new URL('../launcher/windows/DSH-Portable.cs', import.meta.url), 'utf8')
-  const host = await readFile(new URL('../launcher/windows/LauncherWindow.Host.cs', import.meta.url), 'utf8')
-  assert.match(main, /earlyStart = Task\.Run\(\(\) => InvokePortableCli\(new\[\] \{ "start", "--no-browser", "--json", "--progress-json" \}, HandleStartupProgress\)\)/)
-  assert.ok(main.indexOf('earlyStart = Task.Run') < main.indexOf('Icon = Icon.ExtractAssociatedIcon'), 'it starts before the window is built')
-  assert.match(host, /if \(earlyStart != null\) started = await earlyStart;/)
-})
