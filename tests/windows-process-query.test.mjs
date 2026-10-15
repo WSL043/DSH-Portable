@@ -92,3 +92,13 @@ test('empty CIM metadata counts as stopped only when an independent PID probe co
   }
   assert.throws(() => queryWindowsProcess(2468, { ...createAdapter('{bad json'), pidExists: () => false }), /Could not inspect process/)
 })
+
+test('a host this process just spawned is trusted without a PowerShell identity query', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const source = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
+  assert.match(source, /host-process-query-skipped/)
+  assert.match(source, /child\.exitCode === null && child\.signalCode === null && Number\(child\.pid\) === Number\(state\.pid\)/)
+  assert.match(source, /\n      child,\n    \)/, 'start() hands its spawn handle to waitForHost')
+  // Reusing a host from an earlier run still verifies its command line.
+  assert.match(source, /waitForHost\(prior, 15000\)/)
+})

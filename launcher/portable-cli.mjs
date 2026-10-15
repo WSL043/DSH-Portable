@@ -174,7 +174,10 @@ function requestGracefulShutdown(state, timeout = 2500) {
   })
 }
 
-async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhase = null) {
+// `child` is the host this very process just spawned. While that handle is alive its PID cannot belong to anyone
+// else, so identity needs no process query: the PowerShell/CIM lookup it replaces costs 200-300 ms twice on a fast
+// machine and seconds on a slow one. Reused hosts (no handle) are still verified by command line.
+async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhase = null, child = null) {
   const deadline = Date.now() + timeoutMs
   const identityGraceDeadline = Date.now() + 3000
   let attempts = 0
@@ -182,6 +185,10 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
   let identityVerified = false
   let inspectionTimeoutRetried = false
   const inspectOwnership = () => {
+    if (child && child.exitCode === null && child.signalCode === null && Number(child.pid) === Number(state.pid)) {
+      if (onPhase) onPhase('host-process-query-skipped', { reason: 'spawned-by-this-process' })
+      return true
+    }
     const queryStarted = Date.now()
     if (onPhase) onPhase('host-process-query-begin', { final: identityVerified })
     try {
@@ -655,6 +662,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
       60000,
       { filename: stdoutLog, offset: stdoutOffset },
       (phase, fields) => startupLog(startedAt, phase, fields),
+      child,
     )
     const hostUnavailable = !url
     portReservation.release()
