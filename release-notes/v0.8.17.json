@@ -1,0 +1,23 @@
+{
+  "version": "0.8.17",
+  "zh": {
+    "summary": "补齐官方 0.2.1-alpha.3 内核的兼容检查，让它能正式进入可选内核。",
+    "highlights": [
+      "官方 0.2.1-alpha.3 内核换了内部文件结构，Portable 的连接补丁和会话兼容检查已经同步调整，通过验收后会出现在可选内核里。",
+      "0.8.15、0.8.16 中的登录自动打开浏览器、更新页提示、默认加密导出一并包含在这个版本里。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。"
+    ]
+  },
+  "en": {
+    "summary": "Completes the compatibility checks for the official 0.2.1-alpha.3 engine so it can join the selectable engines.",
+    "highlights": [
+      "The official 0.2.1-alpha.3 engine reorganised internal files; Portable's connection patch and session compatibility check were adjusted, and the engine appears in the list once it passes acceptance.",
+      "Automatic browser sign-in, the updates page hints and encrypted export by default from 0.8.15 and 0.8.16 are included in this version."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace."
+    ]
+  }
+}

@@ -21,7 +21,11 @@ try {
     ['dsh-system-prompt', { includeHarnessIdentity: false, includeRuntimeContext: false }],
     ['dsh-session-persistence-jsonl', { root: path.join(root, 'sessions'), compression: 'none' }],
     ['dsh-agent-loop', { agents: [], maxParallelToolCalls: 1 }],
-  ]) await ctx.plugin((await load(name)).default, config).await()
+  ]) {
+    // Newer cores export a plugin object ({ name, apply }) instead of a default export.
+    const plugin = await load(name)
+    await ctx.plugin(plugin.default ?? plugin, config).await()
+  }
   class DeterministicAdapter extends LlmAdapter {
     async *stream(options) {
       requests.push(structuredClone(options.messages))
