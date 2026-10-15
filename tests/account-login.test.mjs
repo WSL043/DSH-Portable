@@ -37,3 +37,20 @@ test('smoke helpers recognise and close the account sign-in step shown on first 
   assert.match(expression, /add an API Key to get started/)
   assert.match(expression, /\["Close","关闭"\]/)
 })
+
+test('cores that already register the account UI in plain Web need no guard removal', () => {
+  const native = `\t\tfunction apply(ctx) {\n\t\t\tconst desktop = "dshDesktop" in globalThis;\n\t\t\tctx.effect(() => {}, "account: dictionaries");\n\t\t}`
+  assert.equal(patchAccountLogin(native), native)
+})
+
+const dialog = `(0, react.useEffect)(() => {\n\t\t\t\tsetCopyResult(null);\n\t\t\t}, [attempt?.id, attempt?.authorizeUrl]);`
+
+test('the sign-in page opens once per attempt in the system browser, and a changed dialog is rejected', async () => {
+  const { patchLoginBrowserOpen } = await import('../scripts/patch-account-login.mjs')
+  const patched = patchLoginBrowserOpen(dialog)
+  assert.match(patched, /attempt\.phase === "waiting-browser"/)
+  assert.match(patched, /__dshPortableLoginOpened !== attempt\.id/)
+  assert.match(patched, /window\.open\(authorizeUrlWithTheme\(attempt\.authorizeUrl, colorScheme\), "_blank"\)/)
+  assert.equal(patchLoginBrowserOpen(patched), patched)
+  assert.throws(() => patchLoginBrowserOpen(''), /seam changed/)
+})
