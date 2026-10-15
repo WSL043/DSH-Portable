@@ -665,3 +665,16 @@ test('Portable settings tell the updates page which chosen core has not been res
   assert.match(client, /productDowngradeHint/)
   assert.match(client, /startupCheckEngine/)
 })
+
+test('a fresh install checks for neither product nor core updates at start', async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-fresh-checks-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route) } }, { root, stateRoot: root })
+  const initial = response()
+  await routes.get('/dsh-portable/settings').handler(request('GET'), initial)
+  const settings = initial.json().settings
+  assert.equal(settings.productUpdateCheckEnabled, false)
+  assert.equal(settings.engineUpdateCheckEnabled, false)
+  assert.equal(settings.updateCheckEnabled, false)
+})
