@@ -622,7 +622,11 @@ test('Portable export options live in the export dialog and HTTP failure keeps i
     const choices = []
     const walk = n => { if (!n || typeof n !== 'object') return; if (n.props?.items) choices.push(n); for (const c of n.children || []) Array.isArray(c) ? c.forEach(walk) : walk(c) }
     walk(modal)
+    const formatChoice = choices.find(n => n.props.items.some(i => i.id === 'private'))
+    assert.equal(formatChoice.props.value, 'private', 'exports are password-encrypted unless the user picks a plain file')
+    assert.ok(textContent(modal).includes('Not encrypted') === false)
     choices.find(n => n.props.items.some(i => i.id === 'data-only')).props.onSelect('data-only')
+    formatChoice.props.onSelect('standard')
     await settle()
     const updated = findNode(mounted.tree, n => n.props?.title === 'Export data' && n.props?.footer)
     findNode(updated.props.footer, n => typeof n.props?.onClick === 'function' && textContent(n) === 'Continue').props.onClick()

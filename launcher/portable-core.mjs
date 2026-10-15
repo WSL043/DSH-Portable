@@ -907,11 +907,17 @@ export function queryWindowsProcess(pid, adapters = {}) {
   try {
     const execute = adapters.execute ?? execFileSync
     const powershell = path.win32.join(process.env.SystemRoot || process.env.WINDIR || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe')
-    const output = String(execute(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
+    const run = () => String(execute(powershell, ['-NoProfile', '-NonInteractive', '-Command', script], {
       encoding: 'utf8',
       windowsHide: true,
-      timeout: 10000,
+      timeout: 15000,
     }) ?? '').trim()
+    // A loaded machine can stall PowerShell start-up past the timeout; one more attempt is cheap and safe.
+    let output
+    try { output = run() } catch (error) {
+      if (error?.code !== 'ETIMEDOUT' && !error?.killed) throw error
+      output = run()
+    }
     if (!output) return null
     const parsed = JSON.parse(output)
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || typeof parsed.commandLine !== 'string' || !parsed.commandLine.trim()) {

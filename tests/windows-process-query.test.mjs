@@ -25,7 +25,7 @@ test('queries an existing Windows process with bounded, fail-fast inspection', (
     commandLine: 'node.exe launcher\\portable-host.mjs',
   })
   assert.equal(calls.length, 1)
-  assert.equal(calls[0].options.timeout, 10000)
+  assert.equal(calls[0].options.timeout, 15000)
   assert.match(calls[0].args.at(-1), /^\$ErrorActionPreference = 'Stop';/)
   assert.match(calls[0].args.at(-1), /Get-CimInstance Win32_Process[\s\S]*-ErrorAction Stop/)
 })

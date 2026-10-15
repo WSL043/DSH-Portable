@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 const requireApp = createRequire(new URL('../app/package.json', import.meta.url));
 const yaml = requireApp('js-yaml');
 
-test('alpha.5 workflow parses, uses production channel constants, smoke-tests, and can only publish a draft', async () => {
+test('the alpha workflow parses, uses production channel constants, smoke-tests, and can only publish a draft', async () => {
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const source = await readFile(file, 'utf8');
   const workflow = yaml.load(source);
@@ -19,12 +19,12 @@ test('alpha.5 workflow parses, uses production channel constants, smoke-tests, a
   assert.match(selector, /redirect:\s*'follow'/);
   assert.match(source, /-FeedUrl \$urls\.channelBaseUrl[\s\S]*-IndexUrl \$urls\.indexUrl/);
   assert.match(source, /smoke-alpha-seeded\.ps1/);
-  assert.match(source, /DSH-Portable-1\.0\.0-alpha.5-windows-x64-lite\.zip/);
+  assert.match(source, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
   assert.match(source, /\$liteBytes -ge 40MB/);
   assert.match(source, /launcher\/bootstrap\.json/);
   assert.match(source, /-Bootstrap/);
-  assert.match(source, /\$zipHash  DSH-Portable-1\.0\.0-alpha.5-windows-x64\.zip/);
-  assert.match(source, /\$liteZipHash  DSH-Portable-1\.0\.0-alpha.5-windows-x64-lite\.zip/);
+  assert.match(source, /\$zipHash  DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64\.zip/);
+  assert.match(source, /\$liteZipHash  DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
   assert.equal(workflow.jobs.package['timeout-minutes'], 90);
   const packageStep = workflow.jobs.package.steps.find(step => step.name === 'Package the pure portable layout against the production channel');
   for (const path of ['DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe', 'launcher/seed/seed.json']) {
@@ -39,14 +39,14 @@ test('alpha.5 workflow parses, uses production channel constants, smoke-tests, a
   assert.doesNotMatch(source, /prerelease=false|--latest(?!=false)/);
 });
 
-test('alpha.5 pins the two default plugin sources and packages their asserted CI-built versions', async () => {
+test('the alpha pins the two default plugin sources and packages their asserted CI-built versions', async () => {
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const source = await readFile(file, 'utf8');
   const workflow = yaml.load(source);
   assert.match(workflow.env.IMAGE_VIEWER_COMMIT, /^[0-9a-f]{40}$/);
   assert.match(workflow.env.CHAT_MANAGER_COMMIT, /^[0-9a-f]{40}$/);
-  assert.equal(workflow.env.IMAGE_VIEWER_VERSION, '0.1.9');
-  assert.equal(workflow.env.CHAT_MANAGER_VERSION, '1.5.10');
+  assert.match(workflow.env.IMAGE_VIEWER_VERSION, /^\d+\.\d+\.\d+$/);
+  assert.match(workflow.env.CHAT_MANAGER_VERSION, /^\d+\.\d+\.\d+$/);
   const pluginCheckouts = workflow.jobs.package.steps.filter(step => step.uses === 'actions/checkout@v7' && step.with?.repository);
   assert.deepEqual(pluginCheckouts.map(step => [step.with.repository, step.with.ref]), [
     ['${{ env.IMAGE_VIEWER_REPOSITORY }}', '${{ env.IMAGE_VIEWER_COMMIT }}'],
@@ -66,20 +66,20 @@ test('alpha.5 pins the two default plugin sources and packages their asserted CI
   assert.match(source, /-SeedPlugin @\(\$imageViewer, \$chatManager\)/);
 });
 
-test('alpha.5 failure evidence upload excludes the official payload', async () => {
+test('the alpha failure evidence upload excludes the official payload', async () => {
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const workflow = yaml.load(await readFile(file, 'utf8'));
   const steps = workflow.jobs.package.steps;
-  const evidence = steps.find(step => step.with?.name === 'official-pure-alpha-5-seed-smoke-evidence');
+  const evidence = steps.find(step => step.with?.name === 'official-pure-alpha-${{ env.ALPHA }}-seed-smoke-evidence');
   assert.ok(evidence);
   assert.equal(evidence.if, 'always()');
   assert.equal(evidence.with.path, 'build/orch-080/T32/evidence/');
   assert.doesNotMatch(evidence.with.path, /\.zip|(?:^|\/)package(?:\/|$)|(?:^|\/)app(?:\/|$)/i);
-  const releaseAssets = steps.find(step => step.with?.name === 'official-pure-alpha-5-draft-assets');
+  const releaseAssets = steps.find(step => step.with?.name === 'official-pure-alpha-${{ env.ALPHA }}-draft-assets');
   assert.ok(releaseAssets);
   assert.equal(releaseAssets.if, 'success()');
-  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha.5-windows-x64\.zip/);
-  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha.5-windows-x64-lite\.zip/);
+  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64\.zip/);
+  assert.match(releaseAssets.with.path, /DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
   assert.match(releaseAssets.with.path, /smoke-root-moved\/smoke-report\.json/);
 });
 

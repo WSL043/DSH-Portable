@@ -71,13 +71,15 @@ publish() { # $1 = true|false: whether the in-app update feed is flipped by this
   sleep 20
   local publish_run
   publish_run="$(gh run list -R "$REPOSITORY" -w publish.yml --limit 1 --json databaseId -q '.[0].databaseId')"
-  gh run watch "$publish_run" -R "$REPOSITORY" --exit-status --interval 30 >/dev/null 2>&1 \
+  until [ "$(gh run view "$publish_run" -R "$REPOSITORY" --json status -q .status 2>/dev/null)" = completed ]; do sleep 30; done
+  [ "$(gh run view "$publish_run" -R "$REPOSITORY" --json conclusion -q .conclusion)" = success ] \
     || { echo "publish run $publish_run failed" >&2; exit 1; }
 }
 
 if [ "$MODE" != --resume ]; then
   echo "waiting for CI run $RUN (${HEAD_SHA:0:7})"
-  gh run watch "$RUN" -R "$REPOSITORY" --interval 60 >/dev/null 2>&1 || true
+  # Poll the run state itself: `gh run watch` also returns when the connection drops, long before CI is done.
+  until [ "$(gh run view "$RUN" -R "$REPOSITORY" --json status -q .status 2>/dev/null)" = completed ]; do sleep 60; done
   CONCLUSION="$(gh run view "$RUN" -R "$REPOSITORY" --json conclusion -q .conclusion)"
   if [ "$CONCLUSION" != success ]; then
     echo "CI $CONCLUSION; failed jobs:" >&2
@@ -97,7 +99,11 @@ fi
 
 # Qualification gate: the newest three official cores must each succeed on this exact commit.
 gate_state() {
-  gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null \
+  local state
+  # A dropped connection must read as "not known yet", never as a failed gate or a node crash.
+  state="$(gh release download update-channel-core -R "$UPDATES" -p qualification-state.json -O - 2>/dev/null)" || return 1
+  [ -n "$state" ] || return 1
+  printf '%s' "$state" \
     | HEAD_SHORT="${HEAD_SHA:0:7}" node --input-type=module -e "
       import { comparePortableVersions, coreWindow } from './launcher/update-core.mjs'
       let s = ''

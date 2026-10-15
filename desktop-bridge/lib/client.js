@@ -16,7 +16,7 @@ window.__ModuleLoader__.load({
         previousVersion: '上一版本',
         product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。',
         engine: 'DeepSeek Harness', engineHint: '官方内核，独立于 Portable 更新。选择通过兼容验证的版本。',
-        startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
+        startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', engineDowngradeHint: '所选内核比当前的旧。用较新内核创建的会话，在较旧内核里可能打不开；数据不会被删除，换回较新内核即可恢复。', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。', currentTag: '{0}（当前）', testCoreTag: '{0}（官方测试版）',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
         incompatible: '这个内核需要先把 Portable 升级到匹配的版本才能使用。', awaitingQualification: '这个内核还在等待测试，不需要你做什么。通过后会自动出现在可选列表里，稍后再点“检查更新”即可。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
@@ -50,7 +50,7 @@ window.__ModuleLoader__.load({
         storageNames: '插件依赖 / 导入备份 / 修复备份 / 日志', storageProtected: '按文件大小统计，可能与实际磁盘占用不同。依赖供运行及离线恢复使用；备份不是缓存，不自动删除。',
         report: '导出支持报告', more: '更多', cancel: '取消', exported: '支持报告已保存：{0}', failed: '操作失败：{0}',
         data: '数据', dataTitle: '迁移与备份', dataHint: '按所选范围导出；不包含缓存、运行环境和工作区文件。',
-        dataScope: '迁移内容', dataFull: '全部配置与会话（含插件和凭据）', dataOnly: '仅会话与设置（不含插件和凭据）', dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。',
+        dataScope: '迁移内容', dataFull: '全部配置与会话（含插件和凭据）', dataOnly: '仅会话与设置（不含插件和凭据）', dataStandard: '导出迁移包', dataStandardHint: '内容不加密，适合在你信任的设备之间迁移。', dataPlainCredentialsWarning: '注意：这个普通文件包含你的 API 凭据且没有加密，拿到文件的人可以直接使用。建议选择“密码加密”，或改为“仅会话与设置”。',
         dataPrivate: '导出加密私密包', dataPrivateHint: '内容与迁移包相同，恢复时需要密码。',
         dataPrivateDialogHint: '为会话、设置、插件和 API 凭据设置恢复密码。密码不会保存在 DSH-Portable 中。',
         dataPassword: '密码（至少 8 位）', dataPasswordConfirm: '确认密码', dataPasswordMismatch: '两次输入的密码不一致。',
@@ -71,7 +71,7 @@ window.__ModuleLoader__.load({
         previousVersion: 'the previous version',
         product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations.',
         engine: 'DeepSeek Harness', engineHint: 'The official core updates independently. Choose a compatible, verified version.',
-        startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
+        startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', engineDowngradeHint: 'The selected engine is older than the current one. Sessions created with a newer engine may not open in an older one; nothing is deleted, and switching back restores access.', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.', currentTag: '{0} (current)', testCoreTag: '{0} (official test build)',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
         incompatible: 'This core needs a matching Portable version first.', awaitingQualification: 'This core is still being tested. You do not need to do anything; it will appear in the list when it passes. Check for updates again later.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
@@ -105,7 +105,7 @@ window.__ModuleLoader__.load({
         storageNames: 'Plugin dependencies / Import backups / Recovery backups / Logs', storageProtected: 'File sizes may differ from disk space used. Dependencies support running plugins and offline recovery. Backups are not caches and are retained.',
         report: 'Export support report', more: 'More', cancel: 'Cancel', exported: 'Support report saved: {0}', failed: 'Operation failed: {0}',
         data: 'Data', dataTitle: 'Migration and backup', dataHint: 'Exports the selected contents; caches, runtimes, and workspace files stay out.',
-        dataScope: 'Migration contents', dataFull: 'Full migration (including plugins and credentials)', dataOnly: 'Sessions and settings only (no plugins or credentials)', dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.',
+        dataScope: 'Migration contents', dataFull: 'Full migration (including plugins and credentials)', dataOnly: 'Sessions and settings only (no plugins or credentials)', dataStandard: 'Export migration package', dataStandardHint: 'Not encrypted; use it only between devices you trust.', dataPlainCredentialsWarning: 'Note: this standard file contains your API credentials without encryption, so anyone who gets the file can use them. Prefer password encryption, or choose sessions and settings only.',
         dataPrivate: 'Export encrypted private package', dataPrivateHint: 'Contains the same data and requires its password to restore.',
         dataPrivateDialogHint: 'Set a recovery password for sessions, settings, plugins, and API credentials. DSH-Portable never stores it.',
         dataPassword: 'Password (8+ characters)', dataPasswordConfirm: 'Confirm password', dataPasswordMismatch: 'The passwords do not match.',
@@ -405,7 +405,7 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState('')
       const [messages, setMessages] = useState({})
       const [dataScope, setDataScope] = useState('full')
-      const [exportKind, setExportKind] = useState('standard')
+      const [exportKind, setExportKind] = useState('private')
       const [privatePassword, setPrivatePassword] = useState('')
       const [privatePasswordConfirm, setPrivatePasswordConfirm] = useState('')
       const [importPassword, setImportPassword] = useState('')
@@ -828,6 +828,8 @@ window.__ModuleLoader__.load({
               .map(item => ({ id: item, label: item === version ? format(t('currentTag'), coreLabel(item)) : coreLabel(item) })),
             onSelect: setEngineVersion,
           })),
+        scope === 'engine' && version && engineVersion && compareCoreVersions(engineVersion, version) < 0
+          && h('div', { style: styles.hint, role: 'status' }, t('engineDowngradeHint')),
         h('div', { style: styles.updateHeader },
           h('div', { style: styles.label }, t('startupCheck')),
           h(PortableSelector, {
@@ -1016,6 +1018,7 @@ window.__ModuleLoader__.load({
         h('div', { style: styles.modalLabel }, t('exportFormat')),
         h(PortableSelector, { primitives, label: t('exportFormat'), value: exportKind, disabled: Boolean(busy), items: [{ id: 'standard', label: t('exportPlain') }, { id: 'private', label: t('exportEncrypted') }], onSelect: setExportKind }),
         h('div', { style: styles.hint }, t(exportKind === 'private' ? 'dataPrivateHint' : 'dataStandardHint')),
+        exportKind !== 'private' && dataScope === 'full' && h('div', { style: styles.status, role: 'alert' }, t('dataPlainCredentialsWarning')),
         inlineStatus('data'))) : null
       return h('div', { style: styles.group },
         h('div', { style: styles.heading }, t('title')),
