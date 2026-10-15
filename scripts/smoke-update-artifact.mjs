@@ -191,7 +191,7 @@ async function main() {
         const { ensureRuntimeCapsule } = await import(pathToFileURL(path.join(root, 'launcher/runtime-capsule.mjs')));
         const prepared = await ensureRuntimeCapsule(root);
         const { default: Runtime } = await import(pathToFileURL(path.join(prepared.runtimeRoot, 'app/node_modules/@deepseek-ai/dsh-subprocess-local/lib/index.js')));
-        const runtime = new Runtime({ reflect: { provide: () => {} }, effect: () => () => {}, logger: { warn: message => console.error(message) } });
+        const runtime = new Runtime({ reflect: { provide: () => {} }, effect: () => () => {}, logger: { warn: message => console.error(message), debug: () => {}, info: () => {}, error: message => console.error(message) } });
         const handle = runtime.spawn({ argv: [process.execPath, '-e', 'process.stdout.write("portable-core-command-ok")'], cwd: root,
           stdio: { stdin: 'ignore', stdout: { maxBytes: 1024 }, stderr: { maxBytes: 1024 } }, graceMs: 1000 });
         const outcome = await handle.done;
