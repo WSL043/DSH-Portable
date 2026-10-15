@@ -473,7 +473,11 @@ async function reconcileCoreAtStart() {
     const outcome = await reconcilePreferredCore({
       layout,
       releaseChannel: preferredUpdateChannel(),
-      apply: plan => update({ updateScope: 'engine', updateManifest: plan.manifestUrl, noBrowser: true, json: true }),
+      apply: plan => {
+        // The restore can download and install a core while the launcher shows "starting": say so.
+        if (startupProgressJson) process.stdout.write(`${JSON.stringify({ type: 'startup-progress', phase: 'core-restoring', version: plan.version })}\n`)
+        return update({ updateScope: 'engine', updateManifest: plan.manifestUrl, noBrowser: true, json: true })
+      },
     })
     if (!['none', 'in-sync'].includes(outcome.status)) startupLog(Date.now(), 'core-reconcile', { status: outcome.status, version: outcome.version ?? 'none' })
   } catch (error) {

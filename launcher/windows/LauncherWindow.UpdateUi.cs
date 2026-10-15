@@ -49,7 +49,11 @@ namespace DshPortable
             string delivery = fullPackage
                 ? L("交付方式：完整更新", "Delivery: complete package")
                 : L("交付方式：轻量更新（仅下载已变更的 DSH 应用组件）", "Delivery: component update (only the changed DSH application component)");
-            return product + "\r\n" + engine + "\r\n" + delivery;
+            string chosenEngine = fullPackage
+                ? "\r\n" + L("你选过的内核会在更新后自动恢复（需已通过新版本的验收）。",
+                    "An engine you chose is restored after the update once it has passed testing for the new version.")
+                : "";
+            return product + "\r\n" + engine + "\r\n" + delivery + chosenEngine;
         }
 
         private async Task<int> ShowUpdateChoiceOverlayAsync(string current, string latest, string engineCurrent, string engineLatest, bool fullPackage, string scope = "product")
@@ -209,6 +213,8 @@ namespace DshPortable
                     ? L("正在准备运行环境…", "Preparing the runtime…")
                     : L("正在展开运行文件…", "Unpacking runtime files…")) + " " + percent + "%";
             }
+            else if (phase == "core-restoring")
+                statusLabel.Text = L("正在恢复你选择的内核 ", "Restoring your chosen engine ") + JsonString(jsonLine, "version") + "…";
             else if (phase == "runtime-finalizing")
                 statusLabel.Text = L("正在完成运行环境准备…", "Finishing runtime preparation…");
             else if (phase == "runtime-ready")

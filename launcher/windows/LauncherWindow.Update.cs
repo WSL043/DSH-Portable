@@ -88,6 +88,15 @@ namespace DshPortable
                         L("内核更新包不兼容", "Incompatible core update package"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
+                if (updateStatus == "core-awaiting-qualification")
+                {
+                    if (!manual) return;
+                    MessageBox.Show(this,
+                        L("这个内核还在等待测试，不需要你做什么。通过后会自动出现在可选列表里，稍后再检查更新即可。",
+                          "This core is still being tested. You do not need to do anything; it appears in the list when it passes. Check for updates again later."),
+                        L("内核更新", "Core update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
                 if (updateStatus == "unavailable")
                 {
                     if (!manual) return;

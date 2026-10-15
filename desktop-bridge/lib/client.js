@@ -23,7 +23,7 @@ window.__ModuleLoader__.load({
         startupCheck: '启动时检查', checkUpdate: '检查更新', installVersion: '安装所选版本', versionChoice: '内核版本', engineDowngradeHint: '所选内核比当前的旧。用较新内核创建的会话，在较旧内核里可能打不开；数据不会被删除，换回较新内核即可恢复。', productVersionChoice: 'Portable 版本', noProductVersions: '暂无其他通过验收的版本。',
         currentVersion: '当前 {0}', current: '已是最新版本', available: '{0} 可用，可在此安装。', currentTag: '{0}（当前）', testCoreTag: '{0}（官方测试版）',
         installUpdate: '安装更新', desktopRequired: '请在 Portable 桌面窗口中安装更新。',
-        incompatible: '这个内核需要先把 Portable 升级到匹配的版本才能使用。', awaitingQualification: '这个内核还在等待测试，不需要你做什么。通过后会自动出现在可选列表里，稍后再点“检查更新”即可。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。',
+        incompatible: '这个内核需要先把 Portable 升级到匹配的版本才能使用。', awaitingQualification: '这个内核还在等待测试，不需要你做什么。通过后会自动出现在可选列表里，稍后再点“检查更新”即可。', engineFollowsProduct: '暂时没有匹配的内核更新包，请稍后重试。', channelUnpublished: '暂时没有可用更新包，请稍后重试。', updateUnavailable: '暂时无法连接更新服务。请检查网络或代理，稍后再试。', updateBusy: '另一个更新检查还在进行，请稍等片刻再试。',
         engineUnavailableSummary: '另有 {0} 个更新的内核版本暂时不能选，点开看原因',
         engineUnavailableCoreIncompatible: '版本 {0}：需要先把 Portable 升级到 {1}，才能使用这个内核版本。',
         engineUnavailableCoreAwaiting: '版本 {0}：新内核需要先通过测试，才能和当前 Portable 一起使用。不需要你做什么，通过后会自动出现在上面的列表里。',
@@ -82,7 +82,7 @@ window.__ModuleLoader__.load({
         startupCheck: 'Check at startup', checkUpdate: 'Check for updates', installVersion: 'Install selected version', versionChoice: 'Engine version', engineDowngradeHint: 'The selected engine is older than the current one. Sessions created with a newer engine may not open in an older one; nothing is deleted, and switching back restores access.', productVersionChoice: 'Portable version', noProductVersions: 'No other qualified versions are available.',
         currentVersion: 'Current {0}', current: 'Already up to date', available: '{0} is available to install here.', currentTag: '{0} (current)', testCoreTag: '{0} (official test build)',
         installUpdate: 'Install update', desktopRequired: 'Open the Portable desktop window to install updates.',
-        incompatible: 'This core needs a matching Portable version first.', awaitingQualification: 'This core is still being tested. You do not need to do anything; it will appear in the list when it passes. Check for updates again later.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now.',
+        incompatible: 'This core needs a matching Portable version first.', awaitingQualification: 'This core is still being tested. You do not need to do anything; it will appear in the list when it passes. Check for updates again later.', engineFollowsProduct: 'No matching core update is available yet. Please try again later.', channelUnpublished: 'No update package is available yet. Please try again later.', updateUnavailable: 'The update service is unavailable right now. Check your network or proxy and try again later.', updateBusy: 'Another update check is still running; try again in a moment.',
         engineUnavailableSummary: '{0} newer core version(s) cannot be selected yet; open to see why.',
         engineUnavailableCoreIncompatible: 'Version {0}: Update Portable to {1} first to use this core version.',
         engineUnavailableCoreAwaiting: 'Version {0}: The new core must pass testing before it can be used with this Portable. You do not need to do anything; it will appear in the list above when it passes.',
@@ -132,6 +132,14 @@ window.__ModuleLoader__.load({
 
     // Official alpha and beta cores are test builds; rc and final releases are labelled by number only.
     const isTestCore = version => /-(?:alpha|beta)\.\d+$/.test(String(version))
+    // Update errors are shown to people, not developers: network and catalog problems get one plain sentence and the
+    // raw detail stays in the log. Messages that are already plain (busy, desktop required) pass through.
+    function updateErrorText(t, error) {
+      const message = String(error?.message || error || '')
+      if (/another update check is still running/i.test(message)) return t('updateBusy')
+      if (/HTTP \d{3}|fetch failed|timed? ?out|ENOTFOUND|ECONN|EAI_AGAIN|certificate|untrusted|invalid .*(response|catalog|manifest)|unexpected token|JSON/i.test(message)) return t('updateUnavailable')
+      return format(t('failed'), message)
+    }
     function compareCoreVersions(left, right) {
       const parse = version => {
         const [core, pre = ''] = String(version).split('-')
@@ -507,7 +515,7 @@ window.__ModuleLoader__.load({
           setEngineVersionManifestUrls(Object.fromEntries(items.map(item => [item.version, item.manifestUrl])))
           setEngineUnavailable(unavailable)
         }).catch(error => {
-          if (current()) setStatus('update-engine', format(t('failed'), error.message || error))
+          if (current()) setStatus('update-engine', updateErrorText(t, error))
         })
         return () => { active = false }
       }, [persistedChannel, catalogRevision])
@@ -529,7 +537,7 @@ window.__ModuleLoader__.load({
           setProductCatalogLoaded(true)
           setProductVersion(body.versions.some(item => item.version === body.current) ? body.current : body.versions[0]?.version || '')
         }).catch(error => {
-          if (active && sequence === productRequestSequenceRef.current) setStatus('update-product', format(t('failed'), error.message || error))
+          if (active && sequence === productRequestSequenceRef.current) setStatus('update-product', updateErrorText(t, error))
         })
         return () => { active = false }
       }, [persistedChannel, catalogRevision])
@@ -692,7 +700,7 @@ window.__ModuleLoader__.load({
           else if (body.status === 'engine-follows-product') setStatus(name, t('engineFollowsProduct'))
           else if (body.status === 'channel-unpublished') setStatus(name, t('channelUnpublished'))
           else setStatus(name, t('updateUnavailable'))
-        }).catch(error => { if (isCurrent()) setStatus(name, format(t('failed'), error.message || error)) })
+        }).catch(error => { if (isCurrent()) setStatus(name, name.startsWith('update-') ? updateErrorText(t, error) : format(t('failed'), error.message || error)) })
           .finally(() => { if (sequence === updateRequestSequenceRef.current) setBusy('') })
       }
       const closePrivateDialog = () => {
@@ -855,7 +863,9 @@ window.__ModuleLoader__.load({
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
         restoreKey && h('div', { style: styles.status, role: 'status' },
           format(t(restoreKey), coreLabel(coreRestore.preferredCore), coreLabel(versions.engine))),
-        lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
+        // The notice is about the program that is running now; once a later update succeeded, or after two weeks, it is stale.
+        lastUpdate?.status === 'rolled-back' && (!lastUpdate.restoredVersion || lastUpdate.restoredVersion === versions.portable)
+          && !(Date.now() - Date.parse(lastUpdate.recordedAt) > 14 * 86400000) && h('div', { style: styles.status, role: 'status' },
           format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion'))),
         updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),
         updateRow('engine', 'engineUpdateCheckEnabled', t('engine'), versions.engine, t('engineHint'),

@@ -447,7 +447,7 @@ test('engine catalog HTTP and JSON failures surface in the engine status', async
     await settle()
     catalog.resolve(failure.response)
     await settle()
-    assert.match(textContent(mounted.tree), /Operation failed:/)
+    assert.match(textContent(mounted.tree), /Operation failed:|The update service is unavailable/)
     if (failure.forbiddenVersion) assert.doesNotMatch(textContent(mounted.tree), new RegExp(failure.forbiddenVersion))
     mounted.unmount()
   }
@@ -652,5 +652,48 @@ test('desktop settings render while supplementary notification status is pending
     pending.resolve(jsonResponse({ status: 'disabled-system' }))
     await settle()
     assert.ok(textContent(mounted.tree).includes('Windows notifications are turned off.'))
+  } finally { mounted.unmount() }
+})
+
+const mountUpdates = async (body, extra = {}) => {
+  const client = await loadSettingsComponent(async url => {
+    if (url === '/dsh-portable/settings') return jsonResponse({ settings: settings(), ...body })
+    if (url === '/dsh-portable/engine-versions') return extra.engine ?? jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: body.versions?.engine, versions: [] })
+    throw Error(`unexpected request: ${url}`)
+  }, { productFetch: async () => jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: body.versions?.portable, versions: [] }) })
+  const mounted = client.mount()
+  await settle()
+  return mounted
+}
+
+test('the rolled-back notice only describes the program that is running and fades with time', async () => {
+  const rolled = (restoredVersion, recordedAt) => ({ lastUpdate: { status: 'rolled-back', restoredVersion, recordedAt } })
+  const now = new Date().toISOString()
+  for (const [running, record, shown] of [
+    ['0.8.17', rolled('0.8.17', now), true],
+    ['0.8.18', rolled('0.8.17', now), false],
+    ['0.8.17', rolled('0.8.17', '2020-01-01T00:00:00Z'), false],
+  ]) {
+    const mounted = await mountUpdates({ versions: { portable: running, engine: '0.2.0-rc.2' }, ...record })
+    try { assert.equal(textContent(mounted.tree).includes('automatically restored'), shown) } finally { mounted.unmount() }
+  }
+})
+
+test('after an update that could not bring back the chosen core, the updates page says why', async () => {
+  const mounted = await mountUpdates({ versions: { portable: '0.8.17', engine: '0.2.0-rc.2' }, coreRestore: { preferredCore: '0.2.1-alpha.2', status: 'awaiting-qualification' } })
+  try {
+    const text = textContent(mounted.tree)
+    assert.match(text, /Your chosen engine .*alpha\.2.* is still being qualified/)
+  } finally { mounted.unmount() }
+  const restored = await mountUpdates({ versions: { portable: '0.8.17', engine: '0.2.1-alpha.2' }, coreRestore: { preferredCore: '0.2.1-alpha.2', status: 'awaiting-qualification' } })
+  try { assert.doesNotMatch(textContent(restored.tree), /still being qualified/) } finally { restored.unmount() }
+})
+
+test('catalog failures read as a plain sentence, not as HTTP codes', async () => {
+  const mounted = await mountUpdates({ versions: { portable: '0.8.17', engine: '0.2.0-rc.2' } }, { engine: jsonResponse({ error: 'HTTP 502' }, { ok: false, status: 502 }) })
+  try {
+    const text = textContent(mounted.tree)
+    assert.match(text, /update service is unavailable/i)
+    assert.doesNotMatch(text, /HTTP 502/)
   } finally { mounted.unmount() }
 })
