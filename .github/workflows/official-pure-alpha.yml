@@ -20,15 +20,8 @@ on:
         options: [all, full, lite, none]
 permissions:
   contents: read
-# Update each commit and version together when upgrading a bundled default plugin.
 env:
   ALPHA: ${{ inputs.alpha || '5' }}
-  IMAGE_VIEWER_REPOSITORY: WSL043/dsh-image-viewer
-  IMAGE_VIEWER_COMMIT: 11e82e485f2f6249d553b86c2062ef2c5315d1b6
-  IMAGE_VIEWER_VERSION: 0.1.10
-  CHAT_MANAGER_REPOSITORY: WSL043/dsh-chat-manager
-  CHAT_MANAGER_COMMIT: 098d6f2dc0c52e6c538f46e38a9d0d687ab8174b
-  CHAT_MANAGER_VERSION: 1.5.11
 concurrency:
   group: official-pure-alpha-draft
   cancel-in-progress: false
@@ -79,23 +72,9 @@ jobs:
       version: ${{ steps.select.outputs.version }}
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/checkout@v7
-        with:
-          repository: ${{ env.IMAGE_VIEWER_REPOSITORY }}
-          ref: ${{ env.IMAGE_VIEWER_COMMIT }}
-          path: build/orch-080/T32/plugins/dsh-image-viewer
-      - uses: actions/checkout@v7
-        with:
-          repository: ${{ env.CHAT_MANAGER_REPOSITORY }}
-          ref: ${{ env.CHAT_MANAGER_COMMIT }}
-          path: build/orch-080/T32/plugins/dsh-chat-manager
       - uses: actions/setup-node@v7
         with:
           node-version: 24.19.0
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.19.0
-          run_install: false
       - id: select
         name: Read the production channel and select an accepted official version
         shell: pwsh
@@ -117,52 +96,6 @@ jobs:
         with:
           candidate: build/orch-080/T32/candidate.json
           installer: ${{ runner.temp }}/official-alpha-installer.exe
-      - name: Checkout and pack the pinned default plugins
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $targets = @(
-            [pscustomobject]@{
-              directory = 'build/orch-080/T32/plugins/dsh-image-viewer'
-              name = 'dsh-image-viewer'
-              version = $env:IMAGE_VIEWER_VERSION
-              ignoreInstallScripts = $true
-            },
-            [pscustomobject]@{
-              directory = 'build/orch-080/T32/plugins/dsh-chat-manager'
-              name = 'dsh-chat-manager'
-              version = $env:CHAT_MANAGER_VERSION
-              ignoreInstallScripts = $false
-            }
-          )
-          foreach ($target in $targets) {
-            $manifestPath = Join-Path $target.directory 'package.json'
-            $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-            if ($manifest.name -cne $target.name) { throw "Unexpected plugin package name at $manifestPath" }
-            if ([string]$manifest.version -cne [string]$target.version) { throw "Plugin $($target.name) package.json version $($manifest.version) does not match pinned version $($target.version)" }
-            Push-Location $target.directory
-            try {
-              $installArgs = @('install', '--frozen-lockfile')
-              if ($target.ignoreInstallScripts) { $installArgs += '--ignore-scripts' }
-              & pnpm @installArgs
-              if ($LASTEXITCODE -ne 0) { throw "pnpm install failed for $($target.name) with exit code $LASTEXITCODE" }
-              & pnpm run test:behavior
-              if ($LASTEXITCODE -ne 0) { throw "Behavior tests failed for $($target.name) with exit code $LASTEXITCODE" }
-              & pnpm run build
-              if ($LASTEXITCODE -ne 0) { throw "Build failed for $($target.name) with exit code $LASTEXITCODE" }
-              & git diff --exit-code -- lib
-              if ($LASTEXITCODE -ne 0) { throw "Generated lib output differs from the pinned CI source for $($target.name)" }
-              $packDirectory = Join-Path $env:GITHUB_WORKSPACE ('build/orch-080/T32/packages/' + $target.name)
-              New-Item -ItemType Directory -Path $packDirectory -Force | Out-Null
-              & pnpm pack --pack-destination $packDirectory
-              if ($LASTEXITCODE -ne 0) { throw "pnpm pack failed for $($target.name) with exit code $LASTEXITCODE" }
-              $archive = Join-Path $packDirectory ($target.name + '-' + $target.version + '.tgz')
-              if (-not (Test-Path -LiteralPath $archive -PathType Leaf)) { throw "Expected packed plugin archive is missing: $archive" }
-              if (@(Get-ChildItem -LiteralPath $packDirectory -Filter '*.tgz' -File).Count -ne 1) { throw "Expected exactly one packed archive for $($target.name)" }
-            } finally {
-              Pop-Location
-            }
-          }
       - name: Package the pure portable layout against the production channel
         shell: pwsh
         env:
@@ -173,15 +106,12 @@ jobs:
           if (-not $urls.channelBaseUrl -or -not $urls.indexUrl) { throw 'Production channel constants are unavailable' }
           $sevenZip = Join-Path $env:ProgramFiles '7-Zip\7z.exe'
           if (-not (Test-Path -LiteralPath $sevenZip -PathType Leaf)) { throw 'GitHub Windows runner 7-Zip is required' }
-          $imageViewer = Join-Path $env:GITHUB_WORKSPACE ('build/orch-080/T32/packages/dsh-image-viewer/dsh-image-viewer-' + $env:IMAGE_VIEWER_VERSION + '.tgz')
-          $chatManager = Join-Path $env:GITHUB_WORKSPACE ('build/orch-080/T32/packages/dsh-chat-manager/dsh-chat-manager-' + $env:CHAT_MANAGER_VERSION + '.tgz')
           ./experiments/official-payload/package-pure.ps1 `
             -Installer $env:INSTALLER `
             -Output 'build/orch-080/T32/package' `
             -SevenZip $sevenZip `
             -FeedUrl $urls.channelBaseUrl `
-            -IndexUrl $urls.indexUrl `
-            -SeedPlugin @($imageViewer, $chatManager)
+            -IndexUrl $urls.indexUrl
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable packaging failed' }
           $archive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip'
           Compress-Archive -Path 'build/orch-080/T32/package/*' -DestinationPath $archive -CompressionLevel Optimal
@@ -190,21 +120,20 @@ jobs:
             -Output 'build/orch-080/T32/package-lite' `
             -SevenZip $sevenZip `
             -FeedUrl $urls.channelBaseUrl `
-            -IndexUrl $urls.indexUrl `
-            -SeedPlugin @($imageViewer, $chatManager)
+            -IndexUrl $urls.indexUrl
           if ($LASTEXITCODE -ne 0) { throw 'Lite portable packaging failed' }
           $liteRoot = 'build/orch-080/T32/package-lite'
           $liteFiles = @(Get-ChildItem -LiteralPath $liteRoot -Recurse -File)
           $liteBytes = [long](($liteFiles | Measure-Object Length -Sum).Sum)
           if ($liteBytes -ge 40MB) { throw "Lite package exceeds the 40 MiB limit: $liteBytes bytes" }
-          foreach ($required in @('DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe', 'launcher/seed/seed.json')) {
+          foreach ($required in @('DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe')) {
             if (-not (Test-Path -LiteralPath (Join-Path $liteRoot $required) -PathType Leaf)) { throw "Lite package is missing $required" }
           }
           if ((Test-Path -LiteralPath (Join-Path $liteRoot 'app/current.json')) -or @(Get-ChildItem -LiteralPath (Join-Path $liteRoot 'app') -Directory).Count -ne 0) { throw 'Lite package contains a preinstalled official app' }
           $liteArchive = 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip'
           Compress-Archive -Path 'build/orch-080/T32/package-lite/*' -DestinationPath $liteArchive -CompressionLevel Optimal
           [IO.File]::WriteAllText('build/orch-080/T32/lite-package-size.txt', ($liteBytes.ToString() + "`n"), [Text.Encoding]::ASCII)
-      - name: Smoke first and second startup, seed state, disabled config, and moved root
+      - name: Smoke first and second startup, plugin-free config, and moved root
         if: inputs.smoke == 'all' || inputs.smoke == 'full'
         shell: powershell
         run: |
@@ -212,7 +141,8 @@ jobs:
           ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
             -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-root' `
-            -EvidenceRoot 'build/orch-080/T32/evidence'
+            -EvidenceRoot 'build/orch-080/T32/evidence' `
+            -NoSeed
       - name: Smoke lite bootstrap install from the accepted channel and official CDN
         if: inputs.smoke == 'all' || inputs.smoke == 'lite'
         shell: powershell
@@ -222,7 +152,8 @@ jobs:
             -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip' `
             -WorkRoot 'build/orch-080/T32/smoke-lite-root' `
             -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
-            -Bootstrap
+            -Bootstrap `
+            -NoSeed
       - uses: actions/upload-artifact@v7
         if: always()
         with:

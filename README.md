@@ -136,7 +136,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 - **1.0 线**：直接运行官方桌面应用，只把数据放进文件夹。目前是仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，不是 0.x 的升级路径：
   - 官方文件保持原样；官方发布新版本后，在应用内“安装并重启”即可跟上，更新前会校验，新版本异常时自动回到上一版。
   - 会话、设置、插件和登录状态都在文件夹里，整夹复制到另一台 Windows 电脑即可接着用。
-  - 预装图片查看器和会话管理，默认关闭，在官方插件页打开。
+  - 不再预装插件（预装会让每次启动先多跑一步）。需要时在官方“插件 → 添加插件”里安装：[会话管理 Chat Manager](https://github.com/WSL043/dsh-chat-manager#安装)、[图片查看器 Image Viewer](https://github.com/WSL043/dsh-image-viewer#安装)，按各自说明里的版本安装。alpha.5 仍带有这两个插件（默认关闭）。
   - 详细说明见[1.0 预览线指南](https://wsl043.github.io/DSH-Portable/guides/official-desktop-portable.html)。
 - 详见[1.0 路线图](docs/roadmap-toward-1.0.md)与[官方桌面成品实验线](experiments/official-payload/README.md)。
 

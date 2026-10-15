@@ -27,7 +27,7 @@ test('the alpha workflow parses, uses production channel constants, smoke-tests,
   assert.match(source, /\$liteZipHash  DSH-Portable-1\.0\.0-alpha\.\$\{\{ env\.ALPHA \}\}-windows-x64-lite\.zip/);
   assert.equal(workflow.jobs.package['timeout-minutes'], 90);
   const packageStep = workflow.jobs.package.steps.find(step => step.name === 'Package the pure portable layout against the production channel');
-  for (const path of ['DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe', 'launcher/seed/seed.json']) {
+  for (const path of ['DeepSeek Harness Portable.exe', 'launcher/apply-update.ps1', 'launcher/Payload.psm1', 'launcher/follow.json', 'launcher/bootstrap.json', 'launcher/7z.exe']) {
     assert.ok(packageStep.run.includes(path), `lite package allowlist assertion is missing ${path}`);
   }
   assert.match(packageStep.run, /app\/current\.json/);
@@ -39,31 +39,19 @@ test('the alpha workflow parses, uses production channel constants, smoke-tests,
   assert.doesNotMatch(source, /prerelease=false|--latest(?!=false)/);
 });
 
-test('the alpha pins the two default plugin sources and packages their asserted CI-built versions', async () => {
+test('the 1.0 alpha preinstalls no plugins: no plugin sources, no seed packaging, and a plugin-free smoke', async () => {
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const source = await readFile(file, 'utf8');
   const workflow = yaml.load(source);
-  assert.match(workflow.env.IMAGE_VIEWER_COMMIT, /^[0-9a-f]{40}$/);
-  assert.match(workflow.env.CHAT_MANAGER_COMMIT, /^[0-9a-f]{40}$/);
-  assert.match(workflow.env.IMAGE_VIEWER_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.match(workflow.env.CHAT_MANAGER_VERSION, /^\d+\.\d+\.\d+$/);
+  // The two plugins (Chat Manager, Image Viewer) are offered through the README instead of being bundled; bundling made
+  // every start run a PowerShell seeding pass before the official app could open.
+  assert.doesNotMatch(source, /IMAGE_VIEWER|CHAT_MANAGER|SeedPlugin|pnpm|dsh-image-viewer|dsh-chat-manager/);
+  assert.equal(workflow.env.IMAGE_VIEWER_COMMIT, undefined);
   const pluginCheckouts = workflow.jobs.package.steps.filter(step => step.uses === 'actions/checkout@v7' && step.with?.repository);
-  assert.deepEqual(pluginCheckouts.map(step => [step.with.repository, step.with.ref]), [
-    ['${{ env.IMAGE_VIEWER_REPOSITORY }}', '${{ env.IMAGE_VIEWER_COMMIT }}'],
-    ['${{ env.CHAT_MANAGER_REPOSITORY }}', '${{ env.CHAT_MANAGER_COMMIT }}'],
-  ]);
-  assert.match(source, /version = \$env:IMAGE_VIEWER_VERSION/);
-  assert.match(source, /version = \$env:CHAT_MANAGER_VERSION/);
-  assert.match(source, /\[string\]\$manifest\.version -cne \[string\]\$target\.version/);
-  assert.match(source, /dsh-image-viewer-' \+ \$env:IMAGE_VIEWER_VERSION \+ '\.tgz/);
-  assert.match(source, /dsh-chat-manager-' \+ \$env:CHAT_MANAGER_VERSION \+ '\.tgz/);
-  assert.doesNotMatch(source, /dsh-image-viewer-0\.1\.5\.tgz|dsh-chat-manager-1\.5\.4\.tgz/);
-  assert.match(source, /pnpm run test:behavior/);
-  assert.match(source, /pnpm run build/);
-  assert.match(source, /pnpm pack --pack-destination/);
-  // PowerShell rejects a repeated parameter: both archives must travel in one array argument.
-  assert.equal((source.match(/-SeedPlugin\b/g) ?? []).length, 2);
-  assert.match(source, /-SeedPlugin @\(\$imageViewer, \$chatManager\)/);
+  assert.deepEqual(pluginCheckouts, []);
+  const smokes = workflow.jobs.package.steps.filter(step => /smoke-alpha-seeded\.ps1/.test(step.run ?? ''));
+  assert.equal(smokes.length, 2);
+  for (const step of smokes) assert.match(step.run, /-NoSeed/);
 });
 
 test('the alpha failure evidence upload excludes the official payload', async () => {
@@ -83,7 +71,7 @@ test('the alpha failure evidence upload excludes the official payload', async ()
   assert.match(releaseAssets.with.path, /smoke-root-moved\/smoke-report\.json/);
 });
 
-test('the alpha workflow checks out this repository first, before the plugin repositories', async () => {
+test('the alpha workflow checks out this repository first', async () => {
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const workflow = yaml.load(await readFile(file, 'utf8'));
   const first = workflow.jobs.package.steps[0];
@@ -105,4 +93,10 @@ test('a static preflight gates the package job, and a draft is only created afte
   const preflightSource = JSON.stringify(workflow.jobs.preflight.steps);
   assert.match(preflightSource, /Parser\]::ParseFile/);
   assert.match(preflightSource, /node --test/);
+});
+
+test('the alpha number comes from one workflow-level variable', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
+  assert.equal(workflow.env.ALPHA, "${{ inputs.alpha || '5' }}");
+  assert.equal(workflow.on.workflow_dispatch.inputs.alpha.default, '5');
 });

@@ -9,7 +9,7 @@ const yaml = requireApp('js-yaml');
 test('alpha seed smoke preserves the first launch and verifies seeding, health, disabled config, and relocation on Windows PowerShell 5.1', async () => {
   const source = await readFile(new URL('../experiments/official-payload/e2e/smoke-alpha-seeded.ps1', import.meta.url), 'utf8');
   const workflow = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
-  const smokeStep = workflow.jobs.package.steps.find(step => step.name === 'Smoke first and second startup, seed state, disabled config, and moved root');
+  const smokeStep = workflow.jobs.package.steps.find(step => step.name === 'Smoke first and second startup, plugin-free config, and moved root');
   assert.equal(smokeStep.shell, 'powershell');
   assert.match(source, /PSEdition -ne 'Desktop'/);
   assert.match(source, /channel[\\/]smoke-package\.ps1/);
@@ -18,6 +18,8 @@ test('alpha seed smoke preserves the first launch and verifies seeding, health, 
   assert.match(source, /\$status\.status -cne 'complete'/);
   assert.match(source, /\$_\.status -ceq 'seeded'/);
   assert.match(source, /dsh-chat-manager\|dsh-image-viewer/);
+  assert.match(source, /\[switch\]\$NoSeed/);
+  assert.match(source, /A plugin-free package must not contain or create seed state/);
   assert.match(source, /AddSeconds\(20\)/);
   assert.match(source, /verify-smoke-page\.mjs/);
   assert.match(source, /close-app\.mjs/);

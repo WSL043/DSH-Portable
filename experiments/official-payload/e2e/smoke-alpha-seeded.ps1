@@ -3,7 +3,10 @@ param(
     [Parameter(Mandatory=$true)][string]$Archive,
     [Parameter(Mandatory=$true)][string]$WorkRoot,
     [Parameter(Mandatory=$true)][string]$EvidenceRoot,
-    [switch]$Bootstrap
+    [switch]$Bootstrap,
+    # 1.0 packages no longer preinstall plugins: nothing is seeded, no seed manifest is packaged and the profile must
+    # stay plugin-free; the second start and the moved-root dump still have to work.
+    [switch]$NoSeed
 )
 
 $ErrorActionPreference = 'Stop'
@@ -100,15 +103,20 @@ function Start-SecondPortableRun([string]$Root) {
     if (-not (Test-Path -LiteralPath $launcher -PathType Leaf)) { throw 'Extracted Portable launcher is missing before the second startup.' }
     $script:ProbePort = Get-FreeLoopbackPort
     $script:LauncherProcess = Start-Process -FilePath $launcher -WorkingDirectory $Root -ArgumentList ("--probe-port=" + $script:ProbePort) -WindowStyle Hidden -PassThru
-    $seedDeadline = [DateTime]::UtcNow.AddMinutes(4)
-    $seedReady = $false
-    while ([DateTime]::UtcNow -lt $seedDeadline) {
-        if ($script:LauncherProcess.HasExited) { throw "Portable launcher exited during the second startup with code $($script:LauncherProcess.ExitCode)." }
-        if (Assert-SeedState $Root) { $seedReady = $true; break }
-        Start-Sleep -Milliseconds 250
+    if ($NoSeed) {
+        if ((Test-Path -LiteralPath (Join-Path $Root 'launcher/seed/seed.json')) -or (Test-Path -LiteralPath (Join-Path $Root 'data/launcher/seeded.json'))) { throw 'A plugin-free package must not contain or create seed state.' }
+        $script:SeedPassed = $true
+    } else {
+        $seedDeadline = [DateTime]::UtcNow.AddMinutes(4)
+        $seedReady = $false
+        while ([DateTime]::UtcNow -lt $seedDeadline) {
+            if ($script:LauncherProcess.HasExited) { throw "Portable launcher exited during the second startup with code $($script:LauncherProcess.ExitCode)." }
+            if (Assert-SeedState $Root) { $seedReady = $true; break }
+            Start-Sleep -Milliseconds 250
+        }
+        if (-not $seedReady) { throw 'Second startup did not complete plugin seeding within four minutes.' }
+        $script:SeedPassed = $true
     }
-    if (-not $seedReady) { throw 'Second startup did not complete plugin seeding within four minutes.' }
-    $script:SeedPassed = $true
 
     $healthDeadline = [DateTime]::UtcNow.AddSeconds(20)
     while ([DateTime]::UtcNow -lt $healthDeadline) {
@@ -205,13 +213,17 @@ try {
     if (-not (Test-Path -LiteralPath $desktop -PathType Container)) { throw 'Official desktop profile is missing after the second startup.' }
     if (Test-Path -LiteralPath $probe) { throw 'Probe profile already exists; refusing to overwrite it.' }
     Copy-Item -LiteralPath $desktop -Destination $probe -Recurse -Force -ErrorAction Stop
-    $manifest = Read-SharedJson (Join-Path $WorkRoot 'launcher/seed/seed.json')
-    if ($null -eq $manifest -or @($manifest.plugins).Count -ne 2) { throw 'The packaged seed manifest is missing or does not contain two plugins.' }
-    $script:BeforeMoveDumpPassed = Assert-DisabledDump $WorkRoot 'before-move' $manifest.plugins
+    if ($NoSeed) { $seededPlugins = @() }
+    else {
+        $manifest = Read-SharedJson (Join-Path $WorkRoot 'launcher/seed/seed.json')
+        if ($null -eq $manifest -or @($manifest.plugins).Count -ne 2) { throw 'The packaged seed manifest is missing or does not contain two plugins.' }
+        $seededPlugins = $manifest.plugins
+    }
+    $script:BeforeMoveDumpPassed = Assert-DisabledDump $WorkRoot 'before-move' $seededPlugins
 
     [IO.Directory]::Move($WorkRoot, $MovedRoot)
     $script:PortableRoot = $MovedRoot
-    $script:AfterMoveDumpPassed = Assert-DisabledDump $MovedRoot 'after-move' $manifest.plugins
+    $script:AfterMoveDumpPassed = Assert-DisabledDump $MovedRoot 'after-move' $seededPlugins
     Write-Host 'Second-start seed, disabled dump-config, and moved-root checks passed.'
 } catch {
     $script:Failure = $_.Exception.Message

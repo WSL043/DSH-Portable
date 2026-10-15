@@ -128,7 +128,7 @@ See the [updates and repair guide](docs/user-guide.en.md#updates-and-repair) for
 - **1.0 line:** Runs the official desktop app itself and only moves its data into the folder. Currently a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5), not an upgrade path from 0.x:
   - Official files stay unchanged; when the official app ships a new version, "Install and Restart" inside the app follows it, with verification first and an automatic return to the previous version if the new one fails to start.
   - Sessions, settings, plugins, and sign-in live in the folder; copy it whole to another Windows PC and keep working.
-  - Image Viewer and Chat Manager are preinstalled but off; turn them on in the official Plugins page.
+  - No plugins are preinstalled any more (bundling made every start run an extra step first). Install them when you need them from the official Plugins → Add plugin page: [Chat Manager](https://github.com/WSL043/dsh-chat-manager#install) and [Image Viewer](https://github.com/WSL043/dsh-image-viewer#install), using the version their pages list. alpha.5 still ships both (off by default).
 - See the [1.0 roadmap](docs/roadmap-toward-1.0.md) and the [official desktop payload experiment](experiments/official-payload/README.md).
 
 ## Get help
