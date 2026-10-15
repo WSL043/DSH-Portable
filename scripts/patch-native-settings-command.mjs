@@ -167,10 +167,11 @@ function patchPluginManagerToolbar(source) {
   source = replaceRequired(source, '"plugins.bundle.config": {',
     `/* ${marker} */\n                    "plugins.portable.actions": { kind: "list", scope: "root" },\n                    "plugins.bundle.config": {`,
     'official plugin manager action declaration changed upstream')
-  return replaceRequired(source,
-    'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [',
-    'className: PluginManagerPage_module_css_default.toolbar,\n\t\t\t\t\t\t\tchildren: [renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec }), ',
-    'official plugin manager toolbar changed upstream')
+  // Newer cores add props (for example `hidden`) between className and children; accept any simple prop lines.
+  const toolbar = /(className: PluginManagerPage_module_css_default\.toolbar,\n(?:\t+[A-Za-z]+: [^\n]*,\n)*?\t+children: \[)/g
+  const toolbarMatches = source.match(toolbar)?.length ?? 0
+  if (toolbarMatches !== 1) throw new Error(`official plugin manager toolbar changed upstream: expected 1 match, found ${toolbarMatches}`)
+  return source.replace(toolbar, '$1renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec }), ')
 }
 
 export function patchPluginManagerActions(source) {

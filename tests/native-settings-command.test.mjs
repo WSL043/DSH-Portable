@@ -280,3 +280,12 @@ test('Desktop and data adds its own monitor icon without changing existing tabs'
   assert.equal(context.icon('portable-updates'), 'download')
   assert.equal(patchPortableUpdatesIcon(output), output)
 })
+
+test('alpha.4 plugin manager toolbar with an extra hidden prop still gets the actions slot', () => {
+  const source = pluginManagerFixture('title: t("refresh"), disabled: !loaded, onClick: props.refresh,')
+    .replace('toolbar,\n\t\t\t\t\t\t\tchildren:', 'toolbar,\n\t\t\t\t\t\t\thidden: !onInstalled,\n\t\t\t\t\t\t\tchildren:')
+  assert.match(source, /hidden: !onInstalled/)
+  const patched = patchPluginManagerActions(source)
+  assert.match(patched, /children: \[renderSlot\("plugins.portable.actions"/)
+  assert.match(patched, /hidden: !onInstalled/)
+})
