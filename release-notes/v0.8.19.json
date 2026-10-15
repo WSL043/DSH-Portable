@@ -1,0 +1,27 @@
+{
+  "version": "0.8.19",
+  "zh": {
+    "summary": "启动明显更快，更新页和更新提示更清楚。",
+    "highlights": [
+      "启动更快：同一台电脑上后台就绪约快一半。第一次启动后会记住启动要用到的模块，之后每次不再整体解压运行包，也不再用 PowerShell 查询自己刚启动的进程。运行环境较慢、杀毒软件拖慢文件读取的电脑受益更多。",
+      "更新页：整包更新后如果还没能恢复你选的内核，会说明原因；两个“启动时检查”分别写清是哪一个；安装按钮写明要装的版本；选了更旧的 Portable 时会有降级提示。",
+      "更新提示：内核还在验收时托盘里会说明不需要你做什么；整包更新说明里写明你选的内核会自动恢复；恢复内核时启动画面会显示进度；网络问题显示为一句人话，不再显示 HTTP 代码；旧的“更新失败”横幅两周后或换版本后不再显示。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。",
+      "升级后的第一次启动和以前一样慢一点（要重新学习启动用到的模块），第二次起变快。"
+    ]
+  },
+  "en": {
+    "summary": "Noticeably faster start-up, and clearer update page and update messages.",
+    "highlights": [
+      "Faster start: on the same PC the background is ready about twice as fast. After the first start it remembers the modules start-up needs instead of unpacking the whole runtime every time, and it no longer asks PowerShell about the process it just started. PCs with slow disks or antivirus scanning gain more.",
+      "Updates page: after a full update it explains why your chosen engine is not restored yet; the two startup checks say which one they control; the install button names the version; choosing an older Portable shows a downgrade hint.",
+      "Update messages: the tray explains that a core still being tested needs nothing from you; the full-update description says your chosen engine is restored; the start-up screen shows the restore; network problems read as a plain sentence instead of an HTTP code; the old 'update failed' banner disappears after two weeks or a version change."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace.",
+      "The first start after upgrading is as slow as before while it learns the start-up modules; from the second start it is faster."
+    ]
+  }
+}

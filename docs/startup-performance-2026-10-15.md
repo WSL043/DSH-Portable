@@ -27,17 +27,14 @@ resolver recreating 515 junctions on every start up to 118 ms, native host launc
 shown about 110 ms, plugin-compatibility fingerprint 30 ms. Weak disks and antivirus scanning were not reproduced;
 `data/logs/startup-latest.jsonl` from such a machine shows where its time goes.
 
-## Native host, measured with the real executable (hidden window, 5 runs each)
+## Native host: starting the CLI from the constructor was tried and reverted
 
-| Build | CLI starts at | interactive |
-| --- | --- | --- |
-| shipped 0.8.17 exe, shipped JS | 118 ms | 3.7-3.8 s |
-| shipped exe, new JS | 118 ms | 3.1 s |
-| new exe (preparation process started from the constructor), new JS | 18 ms | 3.0 s |
-
-`launcher/windows/DSH-Portable.cs` now starts the `start` preparation process right after the startup trace begins; the
-window, tray and WebView2 environment are built beside it and `RunLauncherAsync` awaits the stored task. On a slow PC
-window construction takes longer, so the overlap is worth more there.
+Starting the preparation process before the window existed saved about 100 ms on a warm start (measured with the real
+executable, hidden window), but on a 2-core CI runner during the first start (runtime extraction of about 35,000 files)
+the extraction starved window and WebView2 construction: WebView2 started 30 s late and the first start took 77 s
+instead of finishing inside the 60 s smoke budget, which failed core qualification. Keep WebView2 initialisation
+before the CLI, as RunLauncherAsync does. The same trace shows what to watch for with any parallelism change: first
+start under load, not the warm start.
 
 ## Why slow PCs amplify some steps more than others
 

@@ -152,9 +152,15 @@ internal static class PortableLauncher {
         bool pendingHealth = GetBool(state, "pendingHealth");
         if (!VersionPattern.IsMatch(version)) throw new IOException("Invalid app/current.json version.");
         string executable = AppExecutable(version);
+        // Where the launcher's own time goes before the official app starts, so a slow machine can be diagnosed from
+        // data/launcher/launcher.log (one "startup-trace" line per start).
+        var phases = System.Diagnostics.Stopwatch.StartNew();
         EnsureApplication(executable);
+        long ensureMs = phases.ElapsedMilliseconds;
         CheckExternalOfficialOrPort(executable);
+        long conflictMs = phases.ElapsedMilliseconds - ensureMs;
         RunSeedPluginsBeforeLaunch();
+        long seedMs = phases.ElapsedMilliseconds - ensureMs - conflictMs;
         // Only one official desktop can run at a time (fixed port), so the root whose launcher passed these checks
         // is the only possible requester of an update. Writing the pointer earlier let a second Portable copy that
         // failed to start redirect another root's update to itself.
@@ -164,8 +170,14 @@ internal static class PortableLauncher {
         bool protocolChanged = false;
         try {
             protocolChanged = true; RegisterProtocol();
+            long protocolMs = phases.ElapsedMilliseconds - ensureMs - conflictMs - seedMs;
             Log("starting version=" + version);
             Process app = StartOfficialProcess(executable, initialLink, probe);
+            try {
+                double sinceLauncherStart = (DateTime.Now - Process.GetCurrentProcess().StartTime).TotalMilliseconds;
+                Log("startup-trace ensureMs=" + ensureMs + " conflictCheckMs=" + conflictMs + " seedMs=" + seedMs + " protocolMs=" + protocolMs
+                    + " launcherToOfficialMs=" + (long)sinceLauncherStart + " version=" + version);
+            } catch { }
             if (pendingHealth) {
                 if (app.WaitForExit(20000)) {
                     int exitCode = app.ExitCode;
@@ -332,6 +344,8 @@ internal static class PortableLauncher {
                 long downloaded = GetLong(status, "downloadedBytes"), total = GetLong(status, "totalBytes");
                 int percent = (int)Math.Max(0, Math.Min(100, GetLong(status, "progress")));
                 _stage.Text = StageText(phase);
+                long retry = GetLong(status, "retry");
+                if (retry > 0 && phase == "downloading") _stage.Text = T("网络不稳定，正在自动重试（第 ", "The connection is unstable; retrying automatically (attempt ") + retry.ToString() + T(" 次）...", ")...");
                 if (total > 0) _detail.Text = FormatBytes(downloaded) + " / " + FormatBytes(total) + "  (" + percent.ToString() + "%)";
                 else if (!String.IsNullOrEmpty(GetString(status, "error"))) _detail.Text = GetString(status, "error");
                 _progress.Value = percent;

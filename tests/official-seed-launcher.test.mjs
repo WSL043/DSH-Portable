@@ -8,7 +8,8 @@ const root = resolve(import.meta.dirname ?? fileURLToPath(new URL('.', import.me
 
 test('launcher seeds only after conflict checks and before app launch, failing open on timeout/errors', async () => {
   const launcher = await readFile(resolve(root, 'experiments/official-payload/Launcher.cs'), 'utf8')
-  assert.match(launcher, /CheckExternalOfficialOrPort\(executable\);\s*RunSeedPluginsBeforeLaunch\(\);/)
+  assert.match(launcher, /CheckExternalOfficialOrPort\(executable\);(?:\s*long conflictMs[^\n]*)?\s*RunSeedPluginsBeforeLaunch\(\);/)
+  assert.match(launcher, /startup-trace ensureMs=/, 'each start logs where the launcher spent its time')
   assert.match(launcher, /File\.Exists\(manifest\) \|\| !File\.Exists\(profile\) \|\| !File\.Exists\(script\)/)
   assert.match(launcher, /WaitForExit\(30000\)/)
   assert.match(launcher, /EnvironmentVariables\.Remove\("PSModulePath"\)/)

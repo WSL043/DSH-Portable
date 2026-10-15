@@ -18,6 +18,26 @@ $statusPath = Join-Path $storage 'update-status.json'; $currentPath = Join-Path 
 $lock = $null; $stage = $null; $partial = $null; $candidatePath = $null
 $originalVersion = $null; $committed = $false; $status = [ordered]@{ status='starting'; phase='initializing'; version=$Version; downloadedBytes=0; totalBytes=0; progress=0 }
 
+# A flaky connection (weak Wi-Fi, a proxy that drops idle sockets) should not make the user press Retry: resume the
+# partial download a few times with a growing pause. Cancellation, integrity and publisher failures are never retried.
+function Invoke-WithNetworkRetry([scriptblock]$Action, [int]$Attempts = 4) {
+    for ($attempt = 1; ; $attempt++) {
+        try { & $Action; return } catch {
+            $message = [string]$_.Exception.Message
+            $permanent = $message -match '(?i)cancelled|digest mismatch|publisher|size mismatch|redirects require|invalid byte range|unexpected installer response|server did not honor'
+            $transient = $message -match '(?i)timed out|timeout|unable to read|transport|connection|download is incomplete|exceeded bounds|could not be resolved|remote server|forcibly closed|reset'
+            if ($permanent -or -not $transient -or $attempt -ge $Attempts) { throw }
+            $script:status.retry = $attempt; Write-Atomic $statusPath $script:status
+            $until = [DateTime]::UtcNow.AddSeconds(2 * [Math]::Pow(2, $attempt - 1))
+            while ([DateTime]::UtcNow -lt $until) {
+                if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
+                Start-Sleep -Milliseconds 250
+            }
+            $script:status.retry = 0; Write-Atomic $statusPath $script:status
+        }
+    }
+}
+
 function Write-Atomic([string]$Path, $Value) {
     Assert-PlainPath $Path
     $temp = $Path + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
@@ -119,7 +139,7 @@ try {
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $installer = Join-Path (Join-Path $storage 'downloads') ('deepseek-harness-' + $Version + '-win-x64.exe')
     $status.status = 'downloading'; $status.phase = 'downloading'; $status.downloadedBytes = 0; $status.totalBytes = [long]$candidate.size; $status.progress = 0; Write-Atomic $statusPath $status
-    Get-OfficialInstaller $installer $candidate { param($downloaded,$total) $status.downloadedBytes = [long]$downloaded; $status.totalBytes = [long]$total; $status.progress = [Math]::Floor(100 * $downloaded / $total); if ($downloaded -ge $total) { $status.phase = 'verifying' }; Write-Atomic $statusPath $status } $CancelFile | Out-Null
+    Invoke-WithNetworkRetry { Get-OfficialInstaller $installer $candidate { param($downloaded,$total) $status.downloadedBytes = [long]$downloaded; $status.totalBytes = [long]$total; $status.progress = [Math]::Floor(100 * $downloaded / $total); if ($downloaded -ge $total) { $status.phase = 'verifying' }; Write-Atomic $statusPath $status } $CancelFile | Out-Null }
     if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
     $status.status = 'extracting'; $status.phase = 'extracting'; Write-Atomic $statusPath $status
     $receipt = Expand-OfficialPayload $installer $candidate $partial (Join-Path $launcherRoot '7z.exe') ([string]$follow.feedUrl) ([string]$follow.cacheDirName)
