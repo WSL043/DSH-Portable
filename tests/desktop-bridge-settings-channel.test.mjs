@@ -554,7 +554,7 @@ test('Portable version selection sends the exact approved stable manifest to the
   await settle()
   const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
   assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.4', '0.6.5'])
-  findNode(mounted.tree, node => textContent(node) === 'Install selected version' && typeof node.props?.onClick === 'function').props.onClick()
+  findNode(mounted.tree, node => textContent(node) === 'Install 0.6.5' && typeof node.props?.onClick === 'function').props.onClick()
   assert.equal(messages.at(-1).scope, 'product')
   assert.equal(messages.at(-1).manifestUrl, manifestUrl)
   mounted.unmount()

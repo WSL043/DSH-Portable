@@ -11,7 +11,11 @@ window.__ModuleLoader__.load({
         invalidResult: '未收到完整的操作结果，请重试或导出支持报告。',
         dataExport: '导出数据', exportFormat: '保护方式', exportPlain: '普通文件', exportEncrypted: '密码加密', continue: '继续',
         updates: '更新',
-        updateRecovery: '启动检查默认关闭。新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。',
+        updateRecovery: '新版本无法正常启动时，会自动恢复更新前的程序；会话、设置、插件和工作区保持不变。更新检查默认关闭，只在你手动点击时进行；也可以在上面分别打开“启动时检查”。',
+        startupCheckProduct: '启动时检查 Portable 更新', startupCheckEngine: '启动时检查内核更新', installVersionNamed: '安装 {0}',
+        productDowngradeHint: '所选 Portable 比当前的旧。降级后，你选过的内核可能暂时无法恢复；数据不会被删除。',
+        coreRestoreWaiting: '你选择的内核 {0} 还在为这个 Portable 做验收，通过后会在下次启动时自动恢复。现在使用的是 {1}。',
+        coreRestoreRetry: '暂时没能恢复你选择的内核 {0}（网络或下载失败），之后启动时会自动重试。现在使用的是 {1}。',
         updateRolledBack: '上次更新未通过启动验证，已自动恢复到 {0}。',
         previousVersion: '上一版本',
         product: 'DSH-Portable', productHint: '桌面窗口、便携运行环境与集成功能。',
@@ -66,7 +70,11 @@ window.__ModuleLoader__.load({
         invalidResult: 'The operation returned an incomplete result. Retry or export a support report.',
         dataExport: 'Export data', exportFormat: 'Protection', exportPlain: 'Standard file', exportEncrypted: 'Password encrypted', continue: 'Continue',
         updates: 'Updates',
-        updateRecovery: 'Startup checks are off by default. If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact.',
+        updateRecovery: 'If a new version cannot start normally, the previous program is restored automatically while sessions, settings, plugins, and workspaces stay intact. Update checks are off by default and only run when you click them; you can turn on a startup check above.',
+        startupCheckProduct: 'Check for Portable updates at startup', startupCheckEngine: 'Check for engine updates at startup', installVersionNamed: 'Install {0}',
+        productDowngradeHint: 'The selected Portable is older than the current one. After downgrading, the engine you chose may not be restorable for now; nothing is deleted.',
+        coreRestoreWaiting: 'Your chosen engine {0} is still being qualified for this Portable and will be restored automatically at the next start once it passes. You are on {1} for now.',
+        coreRestoreRetry: 'Your chosen engine {0} could not be restored yet (network or download problem); it is retried at each start. You are on {1} for now.',
         updateRolledBack: 'The last update failed startup verification and automatically restored {0}.',
         previousVersion: 'the previous version',
         product: 'DSH-Portable', productHint: 'Desktop host, portable runtime, and integrations.',
@@ -388,6 +396,7 @@ window.__ModuleLoader__.load({
       const [settings, setSettings] = useState(null)
       const [versions, setVersions] = useState({ portable: '', engine: '' })
       const [lastUpdate, setLastUpdate] = useState(null)
+      const [coreRestore, setCoreRestore] = useState(null)
       const [updateOffers, setUpdateOffers] = useState({})
       const [notificationAvailability, setNotificationAvailability] = useState('unknown')
       const [productVersions, setProductVersions] = useState([])
@@ -447,6 +456,7 @@ window.__ModuleLoader__.load({
             setSelectedChannel(channel)
             setVersions(body.versions || { portable: '', engine: '' })
             setLastUpdate(body.lastUpdate || null)
+            setCoreRestore(body.coreRestore || null)
             setNotificationAvailability(body.notificationAvailability?.status || 'unknown')
             if (body.environments) setEnvironments(body.environments)
             if (body.lastRepair?.needsFullPackage) setStatus('maintenance', t('fullPackage'))
@@ -809,7 +819,7 @@ window.__ModuleLoader__.load({
             inlineStatus(`update-${scope}`)),
           h(primitives.Button, { size: 'sm', variant: 'outline', disabled: Boolean(busy) || settingsSaving, onClick: () => checkUpdate(scope) },
             busy === `update-${scope}` ? t('checking') : (scope === 'engine' && engineVersion && engineVersion !== version) || (scope === 'product' && productVersion && productVersion !== version)
-              ? t('installVersion') : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))),
+              ? format(t('installVersionNamed'), scope === 'engine' ? coreLabel(engineVersion) : productVersion) : updateOffers[scope] ? t('installUpdate') : t('checkUpdate'))),
         scope === 'product' && h('div', { style: styles.updateHeader },
           h('div', { style: styles.label }, t('productVersionChoice')),
           h(PortableSelector, {
@@ -817,6 +827,8 @@ window.__ModuleLoader__.load({
             items: [...(version && !productVersions.some(item => item.version === version) ? [{ id: version, label: version }] : []), ...productVersions.map(item => ({ id: item.version, label: item.version }))],
             onSelect: setProductVersion,
           })),
+        scope === 'product' && version && productVersion && compareCoreVersions(productVersion, version) < 0
+          && h('div', { style: styles.hint, role: 'status' }, t('productDowngradeHint')),
         scope === 'product' && productCatalogLoaded && !productVersions.some(item => item.version !== version)
           && h('div', { style: styles.hint }, t('noProductVersions')),
         scope === 'engine' && version && h('div', { style: styles.updateHeader },
@@ -831,14 +843,18 @@ window.__ModuleLoader__.load({
         scope === 'engine' && version && engineVersion && compareCoreVersions(engineVersion, version) < 0
           && h('div', { style: styles.hint, role: 'status' }, t('engineDowngradeHint')),
         h('div', { style: styles.updateHeader },
-          h('div', { style: styles.label }, t('startupCheck')),
+          h('div', { style: styles.label }, t(scope === 'engine' ? 'startupCheckEngine' : 'startupCheckProduct')),
           h(PortableSelector, {
             primitives, value: settings[key] ? 'on' : 'off', label: `${title} · ${t('startupCheck')}`,
             items: [{ id: 'off', label: t('off') }, { id: 'on', label: t('on') }],
             onSelect: value => update({ [key]: value === 'on' }),
           })),
         details)
+      const restoreKey = coreRestore && versions.engine && compareCoreVersions(coreRestore.preferredCore, versions.engine) > 0
+        ? ({ 'awaiting-qualification': 'coreRestoreWaiting', 'catalog-unavailable': 'coreRestoreRetry', failed: 'coreRestoreRetry' })[coreRestore.status] : null
       const updatesSection = h('section', { style: styles.section, 'aria-label': t('updates') },
+        restoreKey && h('div', { style: styles.status, role: 'status' },
+          format(t(restoreKey), coreLabel(coreRestore.preferredCore), coreLabel(versions.engine))),
         lastUpdate?.status === 'rolled-back' && h('div', { style: styles.status, role: 'status' },
           format(t('updateRolledBack'), lastUpdate.restoredVersion || t('previousVersion'))),
         updateRow('product', 'productUpdateCheckEnabled', t('product'), versions.portable, t('productHint')),

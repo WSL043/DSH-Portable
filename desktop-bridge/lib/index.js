@@ -211,6 +211,13 @@ export function mountPortableRoutes(webServer, options = {}) {
       })(),
       lastRepair: readJsonFile(repairResult),
       lastUpdate: readJsonFile(updateResult),
+      // The core the user chose and why it is not installed yet, so the updates page can say so after a full-package update.
+      coreRestore: (() => {
+        const raw = readJsonFile(settingsFile)
+        if (typeof raw?.preferredCore !== 'string' || !raw.preferredCore) return null
+        const record = raw.coreRestore?.version === raw.preferredCore ? raw.coreRestore : null
+        return { preferredCore: raw.preferredCore, status: typeof record?.status === 'string' ? record.status : null }
+      })(),
       // New clients fetch the OS status separately; preserve older client behavior.
       notificationAvailability: request.headers?.['x-dsh-portable-settings'] === 'local-only'
         ? { status: 'unknown' } : await notificationAvailability(),

@@ -639,3 +639,29 @@ test('the bridge points the official first-use Documents lookup at the portable 
   const patch = await readFile(new URL('../desktop-bridge/cordis.patch.yml', import.meta.url), 'utf8')
   assert.match(patch, /- id: workspace-controller\n  config:\n    documentsDirectory: !!js process\.env\.DSH_PORTABLE_STATE_ROOT \|\| undefined/)
 })
+
+test('Portable settings tell the updates page which chosen core has not been restored and why', async (t) => {
+  const stateRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-portable-core-restore-'))
+  t.after(() => rm(stateRoot, { recursive: true, force: true }))
+  await mkdir(path.join(stateRoot, 'data'), { recursive: true })
+  await writeFile(path.join(stateRoot, 'data', 'launcher-settings.json'), JSON.stringify({
+    preferredCore: '0.2.1-alpha.2',
+    coreRestore: { status: 'awaiting-qualification', version: '0.2.1-alpha.2', checkedAt: 1 },
+  }))
+  const routes = new Map()
+  mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { root: stateRoot, stateRoot })
+  const settings = response()
+  await routes.get('/dsh-portable/settings').handler(request('GET'), settings)
+  assert.deepEqual(settings.json().coreRestore, { preferredCore: '0.2.1-alpha.2', status: 'awaiting-qualification' })
+
+  await writeFile(path.join(stateRoot, 'data', 'launcher-settings.json'), JSON.stringify({ preferredCore: '0.2.1-alpha.2', coreRestore: { status: 'failed', version: '0.2.0-rc.1' } }))
+  const stale = response()
+  await routes.get('/dsh-portable/settings').handler(request('GET'), stale)
+  assert.deepEqual(stale.json().coreRestore, { preferredCore: '0.2.1-alpha.2', status: null }, 'a record about another core is not reported')
+
+  const client = await readFile(new URL('../desktop-bridge/lib/client.js', import.meta.url), 'utf8')
+  assert.match(client, /你选择的内核 \{0\} 还在为这个 Portable 做验收/)
+  assert.match(client, /Your chosen engine \{0\} is still being qualified/)
+  assert.match(client, /productDowngradeHint/)
+  assert.match(client, /startupCheckEngine/)
+})
