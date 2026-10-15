@@ -1,0 +1,25 @@
+{
+  "version": "0.8.20",
+  "zh": {
+    "summary": "支持官方 DSH 0.2.1-alpha.4 内核。",
+    "highlights": [
+      "新增可选内核 0.2.1-alpha.4（官方最新测试版）。内核列表保留最新三个，其中始终包含最新的 RC 版 0.2.0-rc.2。",
+      "插件管理页的 Portable 按钮适配了官方 alpha.4 的新页面结构。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。",
+      "整包更新后会自动恢复你选的内核。"
+    ]
+  },
+  "en": {
+    "summary": "Support for the official DSH 0.2.1-alpha.4 core.",
+    "highlights": [
+      "Adds the selectable core 0.2.1-alpha.4 (the latest official test build). The list keeps the newest three and always includes the newest RC, 0.2.0-rc.2.",
+      "The Portable buttons on the plugin manager page are adapted to the page structure of official alpha.4."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace.",
+      "After a full update your chosen core is restored automatically."
+    ]
+  }
+}
