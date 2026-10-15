@@ -1,0 +1,27 @@
+{
+  "version": "0.8.21",
+  "zh": {
+    "summary": "新增官方 0.2.1-alpha.4 内核可选，预装插件同步升级。",
+    "highlights": [
+      "可选内核新增 0.2.1-alpha.4（官方最新测试版），列表保留最新三个，并始终包含最新的 RC 版 0.2.0-rc.2。",
+      "预装的图片查看器升到 0.1.11、会话管理升到 1.5.12，都已适配 alpha.4。",
+      "插件管理页的 Portable 按钮适配了官方 alpha.4 的新页面结构。"
+    ],
+    "upgradeNotes": [
+      "升级会保留设置、会话、插件和默认工作区。",
+      "整包更新后会自动恢复你选的内核。"
+    ]
+  },
+  "en": {
+    "summary": "Adds the official 0.2.1-alpha.4 core as a choice and upgrades the preinstalled plugins to match.",
+    "highlights": [
+      "Selectable cores now include 0.2.1-alpha.4 (the latest official test build); the list keeps the newest three and always includes the newest RC, 0.2.0-rc.2.",
+      "The preinstalled Image Viewer is now 0.1.11 and Chat Manager 1.5.12, both adapted to alpha.4.",
+      "The Portable buttons on the plugin manager page are adapted to the page structure of official alpha.4."
+    ],
+    "upgradeNotes": [
+      "Upgrading keeps settings, sessions, plugins, and the default workspace.",
+      "After a full update your chosen core is restored automatically."
+    ]
+  }
+}
