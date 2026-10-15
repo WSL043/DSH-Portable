@@ -242,7 +242,8 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
       if (onPhase) onPhase('host-url-discovered', { attempts, port: state.port })
     }
     if (!url) {
-      await new Promise((resolve) => setTimeout(resolve, 100))
+      // The host prints its URL within milliseconds of listening; a coarse poll adds its whole period to start-up.
+      await new Promise((resolve) => setTimeout(resolve, 25))
       continue
     }
     if (await httpReady(url, 1200, { preserveAccessToken: true })) {
@@ -257,7 +258,7 @@ async function waitForHost(state, timeoutMs = 60000, launchOutput = null, onPhas
       if (onPhase) onPhase('host-http-ready', { attempts, port: state.port })
       return url
     }
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await new Promise((resolve) => setTimeout(resolve, 60))
   }
   if (onPhase) onPhase('host-wait-timeout', { attempts, timeoutMs })
   return null

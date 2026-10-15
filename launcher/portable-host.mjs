@@ -115,7 +115,9 @@ await new Promise((resolve, reject) => {
 appendStartupTrace(startupTrace, 'portable-host', 'control-ready')
 
 process.argv = [process.execPath, path.resolve(dshBin), ...dshArgs]
-const sourceCache = startSourceCache(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), runtimeRoot)
+const sourceCache = startSourceCache(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'), runtimeRoot, process.env, {
+  cacheDir: stateRoot ? path.join(path.resolve(stateRoot), 'data', 'cache') : null,
+})
 appendStartupTrace(startupTrace, 'portable-host', 'startup-source-cache-ready', sourceCache.result)
 const finishStartupProfile = await startStartupProfile(logDirectory, startupTrace?.startupId || '',
   progress => healthPhase(null, progress))
