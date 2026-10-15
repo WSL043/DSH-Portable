@@ -66,7 +66,11 @@ done
 [ -n "$RUN" ] || { echo "no main CI run found for ${HEAD_SHA:0:7}" >&2; exit 1; }
 
 publish() { # $1 = true|false: whether the in-app update feed is flipped by this run
-  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref "$PUBLISH_REF" -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" \
+  # Flipping the feed happens after the tag exists, and main may have moved on (docs syncs): the publish run must
+  # belong to the commit CI tested, which is the tag's commit.
+  local ref="$PUBLISH_REF"
+  if [ "$1" = true ] && [ "$MODE" != --skip-gate ]; then ref="$TAG"; fi
+  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref "$ref" -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" \
     || { echo "could not dispatch the publish workflow" >&2; exit 1; }
   sleep 20
   local publish_run
