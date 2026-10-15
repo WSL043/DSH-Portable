@@ -26,3 +26,27 @@ Open items, unmeasured estimates from startup traces: startup profiler and hooks
 resolver recreating 515 junctions on every start up to 118 ms, native host launching the CLI only after the window is
 shown about 110 ms, plugin-compatibility fingerprint 30 ms. Weak disks and antivirus scanning were not reproduced;
 `data/logs/startup-latest.jsonl` from such a machine shows where its time goes.
+
+## Native host, measured with the real executable (hidden window, 5 runs each)
+
+| Build | CLI starts at | interactive |
+| --- | --- | --- |
+| shipped 0.8.17 exe, shipped JS | 118 ms | 3.7-3.8 s |
+| shipped exe, new JS | 118 ms | 3.1 s |
+| new exe (preparation process started from the constructor), new JS | 18 ms | 3.0 s |
+
+`launcher/windows/DSH-Portable.cs` now starts the `start` preparation process right after the startup trace begins; the
+window, tray and WebView2 environment are built beside it and `RunLauncherAsync` awaits the stored task. On a slow PC
+window construction takes longer, so the overlap is worth more there.
+
+## Why slow PCs amplify some steps more than others
+
+Amplified: process creation (antivirus scans every new executable and script host), many small file operations
+(unpacking about 9,400 runtime files, creating about 500 plugin links, reading manifests), CPU-bound work (hashing and
+inflating the capsule), anything done synchronously before the window can paint. Not amplified: the network and our
+fixed delays. Already handled by earlier work: a wider libuv pool for runtime preparation (set by the native host and
+cleared before the core starts), batched directory and file creation, a native loading surface shown immediately.
+
+Left alone on purpose: the startup profiler and module hooks (about 100 ms, but they feed the stalled-plugin recovery),
+clearing plugin links when the app closes (it keeps a copied folder from duplicating the runtime through junctions),
+the plugin-compatibility check (it skips quickly unless community plugins are installed).
