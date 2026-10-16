@@ -1,7 +1,7 @@
 import { writeDataFileAtomic } from './data-paths.mjs'
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
 import { lstat, mkdtemp, mkdir, open, readFile, readdir, realpath, rename, rm, rmdir, symlink, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { constants as zlibConstants, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
@@ -249,15 +249,38 @@ export async function ensureDesktopBridgeFallback(layout) {
   return bridgeChanged || marketChanged
 }
 
-function packageDirectoryFromAnchor(anchor, packageName) {
-  for (const searchRoot of createRequire(anchor).resolve.paths(packageName) ?? []) {
-    const candidate = path.join(searchRoot, packageName)
-    if (existsSync(path.join(candidate, 'package.json'))) return candidate
+// Finds the directory a package resolves to from an anchor manifest, with the same answer as probing every search root for
+// <root>/<name>/package.json. A dependency walk asks thousands of times, almost always about directories that do not exist,
+// and each probe is a filesystem call that antivirus scanning makes slow, so directory listings are shared across the walk
+// and a root that does not list the package's first path segment is skipped without a probe.
+export function createPackageLocator(platform = process.platform) {
+  const insensitive = platform === 'win32'
+  const normalise = name => (insensitive ? name.toLowerCase() : name)
+  const listings = new Map()
+  const requires = new Map()
+  const listing = directory => {
+    let names = listings.get(directory)
+    if (names === undefined) {
+      try { names = new Set(readdirSync(directory).map(normalise)) } catch { names = null }
+      listings.set(directory, names)
+    }
+    return names
   }
-  return null
+  return (anchor, packageName) => {
+    let anchored = requires.get(anchor)
+    if (anchored === undefined) { anchored = createRequire(anchor); requires.set(anchor, anchored) }
+    const first = normalise(packageName.split('/')[0])
+    for (const searchRoot of anchored.resolve.paths(packageName) ?? []) {
+      const names = listing(searchRoot)
+      if (names === null || !names.has(first)) continue
+      const candidate = path.join(searchRoot, packageName)
+      if (existsSync(path.join(candidate, 'package.json'))) return candidate
+    }
+    return null
+  }
 }
 
-async function packagedDshDependencyClosure(layout) {
+export async function packagedDshDependencyClosure(layout) {
   const paths = layout.platform === 'win32' ? path.win32 : path.posix
   const dshRoot = paths.join(layout.appDir, 'node_modules', '@deepseek-ai', 'dsh')
   const dshManifestPath = paths.join(dshRoot, 'package.json')
@@ -268,6 +291,7 @@ async function packagedDshDependencyClosure(layout) {
   const links = new Map([['@deepseek-ai/dsh', dshRoot]])
   const queue = [{ anchor: dshManifestPath, manifest: JSON.parse(await readFile(dshManifestPath, 'utf8')) }]
   const missing = []
+  const locate = createPackageLocator(layout.platform)
   while (queue.length) {
     const current = queue.shift()
     const requiredPeers = Object.keys(current.manifest.peerDependencies ?? {})
@@ -281,27 +305,34 @@ async function packagedDshDependencyClosure(layout) {
       ...Object.keys(current.manifest.peerDependencies ?? {})
         .filter(name => current.manifest.peerDependenciesMeta?.[name]?.optional === true),
     ])
+    // Decide in the original order (the first resolution of a name wins), but read the new manifests together.
+    const found = []
     for (const name of [...required, ...optional]) {
       // DefinitelyTyped packages describe source types only. Some production
       // packages publish them as dependencies or required peers even though
       // Node never loads them at runtime, and production pruning legitimately
       // removes them from a finished application bundle.
       if (name.startsWith('@types/')) continue
-      if (links.has(name)) continue
-      const target = packageDirectoryFromAnchor(current.anchor, name)
+      if (links.has(name) || found.some(item => item.name === name)) continue
+      const target = locate(current.anchor, name)
       if (!target) {
         if (required.has(name)) missing.push(name)
         continue
       }
       const manifestPath = paths.join(target, 'package.json')
+      found.push({ name, target, manifestPath, read: readFile(manifestPath, 'utf8').then(text => ({ text }), error => ({ error })) })
+    }
+    for (const item of found) {
+      const result = await item.read
       let manifest
       try {
-        manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+        if (result.error) throw result.error
+        manifest = JSON.parse(result.text)
       } catch (error) {
-        throw new Error(`The packaged DSH runtime is incomplete: ${name} has an unreadable package manifest (${manifestPath}).`, { cause: error })
+        throw new Error(`The packaged DSH runtime is incomplete: ${item.name} has an unreadable package manifest (${item.manifestPath}).`, { cause: error })
       }
-      links.set(name, target)
-      queue.push({ anchor: manifestPath, manifest })
+      links.set(item.name, item.target)
+      queue.push({ anchor: item.manifestPath, manifest })
     }
   }
   if (missing.length) {
