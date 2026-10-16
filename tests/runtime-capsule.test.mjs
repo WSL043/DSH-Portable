@@ -630,3 +630,42 @@ test('synchronous and parallel extraction produce the same runtime and report th
   assert.deepEqual(trees.sync, trees.parallel)
   assert.deepEqual(trees.auto, trees.parallel)
 })
+
+test('identical files are written once and hard linked, with a plain write where links are unavailable', async t => {
+  const { parent, root, app } = await fixture()
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  const shared = 'export const same = "a nested dependency copied under many packages"\n'.repeat(40)
+  for (let index = 0; index < 8; index++) {
+    const filename = path.join(app, 'node_modules', `pkg${index}`, 'node_modules', 'dep', 'index.js')
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, shared)
+  }
+  await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+    platform: process.platform, arch: process.arch, level: 1,
+  })
+  const copies = runtimeRoot => [...Array(8).keys()].map(index => path.join(runtimeRoot, 'app', 'node_modules', `pkg${index}`, 'node_modules', 'dep', 'index.js'))
+  for (const mode of ['sync', 'parallel']) {
+    const phases = []
+    const previous = process.env.DSH_PORTABLE_EXTRACT_MODE
+    process.env.DSH_PORTABLE_EXTRACT_MODE = mode
+    let prepared
+    try {
+      prepared = await ensureRuntimeCapsule(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(parent, `links-${mode}`) }, onProgress: (phase, fields) => phases.push([phase, fields]) })
+    } finally {
+      if (previous === undefined) delete process.env.DSH_PORTABLE_EXTRACT_MODE; else process.env.DSH_PORTABLE_EXTRACT_MODE = previous
+    }
+    for (const file of copies(prepared.runtimeRoot)) assert.equal(await readFile(file, 'utf8'), shared, `${mode} content`)
+    assert.equal(phases.find(([phase]) => phase === 'extract-index-verified')[1].links, 7, `${mode} reports its links`)
+    assert.equal((await stat(copies(prepared.runtimeRoot)[0])).nlink, 8, `${mode} links the copies`)
+    assert.ok(phases.some(([phase, fields]) => phase === 'extract-files-progress' && fields.completed === fields.total), `${mode} progress reaches 100 %`)
+  }
+  // Without hard links the same tree is still written, as separate files.
+  const fsModule = await import('node:fs')
+  const original = fsModule.default.linkSync
+  t.mock.method(fsModule.default, 'linkSync', () => { throw Object.assign(new Error('links unsupported'), { code: 'EPERM' }) })
+  syncBuiltinESMExports()
+  t.after(() => { fsModule.default.linkSync = original; syncBuiltinESMExports() })
+  const plain = await ensureRuntimeCapsule(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(parent, 'links-fallback') } })
+  for (const file of copies(plain.runtimeRoot)) assert.equal(await readFile(file, 'utf8'), shared, 'fallback content')
+  assert.equal((await stat(copies(plain.runtimeRoot)[0])).nlink, 1)
+})

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, open, opendir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -8,6 +8,8 @@ import { zstdDecompressSync } from 'node:zlib'
 // Below this hashing speed (MB/s of the whole capsule, measured during extraction) the PC is treated as constrained. A fast PC
 // hashes at well over 1,000 MB/s; the emulated slow PC (0.6 core) at about 380.
 const CONSTRAINED_HASH_MBPS = 600
+// NTFS allows 1,023 hard links to one file; stay well below it.
+const MAX_LINKS_PER_FILE = 1000
 const MAGIC = Buffer.from('DSHPACK1', 'ascii')
 const HEADER_BYTES = 12
 const READY_FILE = '.dsh-runtime-ready.json'
@@ -115,6 +117,7 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
   let offset = HEADER_BYTES + headerLength
   const files = []
   const directories = new Set()
+  const firstByHash = new Map()
   const verifyStarted = performance.now()
   let verifiedBytes = 0
   for (const entry of header.files) {
@@ -129,7 +132,14 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
     if (entry.sha256) verifiedBytes += size
     const filename = path.join(target, ...relative.split('/'))
     directories.add(path.dirname(filename))
-    files.push({ filename, bytes })
+    // Identical contents (a nested dependency copied under dozens of packages) are written once and hard linked.
+    let source = null
+    if (entry.sha256 && size > 0) {
+      const first = firstByHash.get(entry.sha256)
+      if (first && first.links < MAX_LINKS_PER_FILE) { source = first.filename; first.links++ }
+      else firstByHash.set(entry.sha256, { filename, links: 0 })
+    }
+    files.push({ filename, bytes, source })
   }
   if (offset !== payload.length) throw new Error('Runtime capsule contains trailing data.')
   // How fast this PC just hashed the whole capsule says how it will cope with thousands of tiny file writes (see below).
@@ -137,7 +147,8 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
   // DSH_PORTABLE_EXTRACT_MODE=sync|parallel forces a mode for diagnostics and tests; anything else decides by speed.
   const forcedMode = process.env.DSH_PORTABLE_EXTRACT_MODE
   const constrained = forcedMode === 'sync' ? true : forcedMode === 'parallel' ? false : hashMBps > 0 && hashMBps < CONSTRAINED_HASH_MBPS
-  progress('extract-index-verified', { files: files.length, directories: directories.size, hashMBps, writeMode: constrained ? 'sync' : 'parallel' })
+  const linkCount = files.reduce((count, item) => count + (item.source ? 1 : 0), 0)
+  progress('extract-index-verified', { files: files.length, directories: directories.size, links: linkCount, hashMBps, writeMode: constrained ? 'sync' : 'parallel' })
   // The extraction root is new. Create each ancestor once, parent levels first,
   // instead of repeatedly walking the same ancestor chain with recursive mkdir.
   const levels = new Map()
@@ -168,13 +179,15 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
   progress('extract-directories-ready')
   // Keep a bounded queue busy instead of waiting for the slowest write in each
   // batch. Drain in-flight writes before propagating errors and deleting staging.
+  const writes = files.filter(item => !item.source)
+  const links = files.filter(item => item.source)
   let next = 0
   let completed = 0
   let failure
   let lastFileReport = performance.now()
-  await Promise.all(Array.from({ length: Math.min(32, files.length) }, async () => {
-    while (!failure && next < files.length) {
-      const { filename, bytes } = files[next++]
+  await Promise.all(Array.from({ length: Math.min(32, writes.length) }, async () => {
+    while (!failure && next < writes.length) {
+      const { filename, bytes } = writes[next++]
       try { await writeFile(filename, bytes) } catch (error) { failure ??= error; return }
       completed++
       if (performance.now() - lastFileReport >= 500 || completed === files.length) {
@@ -184,6 +197,26 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
     }
   }))
   if (failure) throw failure
+  // Links come after every first copy exists. A link is a metadata call, so a plain loop in short slices is enough.
+  let sliceStart = performance.now()
+  for (const item of links) {
+    placeLink(item)
+    completed++
+    if (performance.now() - lastFileReport >= 500 || completed === files.length) {
+      progress('extract-files-progress', { completed, total: files.length })
+      lastFileReport = performance.now()
+    }
+    if (performance.now() - sliceStart >= 40) { await new Promise(resolve => setImmediate(resolve)); sliceStart = performance.now() }
+  }
+}
+
+// Hard link a duplicate to its first copy; where links are unavailable (FAT/exFAT volumes, restricted file systems) write it.
+function placeLink(item) {
+  try {
+    linkSync(item.source, item.filename)
+  } catch {
+    writeFileSync(item.filename, item.bytes)
+  }
 }
 
 // Extraction is a long run of tiny filesystem calls. On a slow or busy CPU the per-call cost of the promise API (thread-pool
@@ -212,8 +245,10 @@ async function extractSynchronously(levels, directoryCount, files, progress) {
   progress('extract-directories-ready')
   let completed = 0
   lastReport = performance.now()
-  for (const { filename, bytes } of files) {
-    writeFileSync(filename, bytes)
+  // Every first copy before any link to it.
+  for (const item of [...files.filter(entry => !entry.source), ...files.filter(entry => entry.source)]) {
+    if (item.source) placeLink(item)
+    else writeFileSync(item.filename, item.bytes)
     completed++
     if (performance.now() - lastReport >= 500 || completed === files.length) {
       progress('extract-files-progress', { completed, total: files.length })

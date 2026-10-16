@@ -85,3 +85,16 @@ away when the workspace opened).
   1,000 MB/s; the emulated slow PC reaches only about 380 under sustained load). `DSH_PORTABLE_EXTRACT_MODE=sync|parallel` forces a mode. Forced
   sync on the slow profile: first start 18.4 s -> about 12-13 s. Caveat: the emulation (job-object hard cap) barely slows a short burst,
   so the automatic decision itself was exercised only through the forced modes, not end to end on a really slow CPU.
+
+### Extraction: duplicates become hard links, 2026-10-16
+
+The engine (core) update capsules of 0.2.1-alpha.3/4 hold 35,730 files / 550 MB (the bundled rc.2 capsule 9,446 files / 340 MB). 25,798 of them
+(72 %, 184 MB) are byte-identical copies of 9,932 contents: a nested `zod` copied under every `@deepseek-ai/dsh-*` package (49 times) and the like.
+Between alpha.3 and alpha.4, 35,351 of 35,730 files are identical (only 379 files, 10.5 MB, differ), 296 of the changed ones just `package.json`.
+
+Extraction now writes each distinct content once and hard-links the other copies (the header already carries a sha256 per entry), falling
+back to a plain write where links are unavailable (FAT/exFAT, restricted volumes). Measured on the alpha.4 engine capsule: a link is about
+2.3x cheaper than a write (about 4,500 vs 1,800 per second), extraction 13.5-14.0 s -> 9.5-11.8 s (noisy PC), and the extracted runtime
+needs 184 MB less disk. Parallel versus single-threaded links made no difference. Not done: linking unchanged files from the previous runtime
+cache on update (alpha.3 -> alpha.4 would link 35,351 files and write 379); it would save about 3 s more but needs a stored index of the old cache.
+Also not done: removing the duplicates at build time by hoisting (junctions change how nested packages resolve their own dependencies).
