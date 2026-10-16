@@ -190,6 +190,76 @@ namespace DshPortable
             progressDetail.Visible = true;
         }
 
+        // The loading surface says what is happening, but a slow PC can sit on one step for many seconds. After a short
+        // while it says why the wait is long, so a patient user does not mistake it for a hang.
+        private System.Windows.Forms.Timer startupPatienceTimer;
+        private string startupStageFamily;
+        private DateTime startupStageSince;
+        private bool startupPatienceVisible;
+
+        private void NoteStartupStage(string phase)
+        {
+            string family = phase == "runtime-preparing" || phase == "runtime-directories" || phase == "runtime-files" || phase == "runtime-finalizing"
+                ? "unpack"
+                : phase == "workspace-ready" ? null : "start";
+            if (family == startupStageFamily) return;
+            startupStageFamily = family;
+            startupStageSince = DateTime.UtcNow;
+            SetStartupPatience(null);
+            if (family == null)
+            {
+                if (startupPatienceTimer != null) startupPatienceTimer.Stop();
+                return;
+            }
+            if (startupPatienceTimer == null)
+            {
+                startupPatienceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+                startupPatienceTimer.Tick += delegate { UpdateStartupPatience(); };
+            }
+            startupPatienceTimer.Start();
+        }
+
+        private void UpdateStartupPatience()
+        {
+            if (startupStageFamily == null || !launchPanel.Visible)
+            {
+                SetStartupPatience(null);
+                startupPatienceTimer.Stop();
+                return;
+            }
+            int seconds = (int)(DateTime.UtcNow - startupStageSince).TotalSeconds;
+            if (startupStageFamily == "unpack")
+            {
+                if (seconds >= 3) SetStartupPatience(L("首次启动需展开一次，之后会快很多。", "Unpacks once; later starts are much faster."));
+            }
+            else if (seconds >= 8)
+            {
+                SetStartupPatience(String.Format(CultureInfo.CurrentCulture,
+                    L("已等待 {0} 秒，电脑较慢时需要更久。", "Waited {0} s; slower PCs need longer."), seconds));
+            }
+        }
+
+        private void SetStartupPatience(string text)
+        {
+            if (text == null)
+            {
+                if (!startupPatienceVisible) return;
+                startupPatienceVisible = false;
+                progressDetail.Visible = false;
+                launchContent.Size = new Size(360, 140);
+                CenterLaunchContent();
+                return;
+            }
+            progressDetail.Text = text;
+            if (startupPatienceVisible) return;
+            startupPatienceVisible = true;
+            launchContent.Size = new Size(360, 164);
+            progressDetail.Location = new Point(0, 140);
+            progressDetail.Size = new Size(360, 20);
+            progressDetail.Visible = true;
+            CenterLaunchContent();
+        }
+
         private void HandleStartupProgress(string jsonLine)
         {
             if (!IsHandleCreated || IsDisposed || Disposing) return;
@@ -200,6 +270,7 @@ namespace DshPortable
                 return;
             }
             string phase = JsonString(jsonLine, "phase");
+            NoteStartupStage(phase);
             if (phase == "runtime-preparing")
                 statusLabel.Text = L("正在准备便携运行环境…", "Preparing the portable runtime…");
             else if (phase == "runtime-directories" || phase == "runtime-files")

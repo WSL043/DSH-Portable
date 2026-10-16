@@ -138,3 +138,14 @@ test('the native updater explains core qualification and the core restore instea
   assert.match(ui, /phase == "core-restoring"/)
   assert.match(cli, /phase: 'core-restoring'/)
 })
+
+test('the loading surface says why a long step takes long, and stops once the workspace opens or fails', async () => {
+  const ui = await readFile(path.join(projectRoot, 'launcher', 'windows', 'LauncherWindow.UpdateUi.cs'), 'utf8')
+  const host = await readFile(path.join(projectRoot, 'launcher', 'windows', 'LauncherWindow.Host.cs'), 'utf8')
+  assert.match(ui, /NoteStartupStage\(phase\);\r?\n\s+if \(phase == "runtime-preparing"\)/)
+  assert.match(ui, /seconds >= 3\) SetStartupPatience\(L\("首次启动需展开一次，之后会快很多。"/)
+  assert.match(ui, /else if \(seconds >= 8\)/)
+  assert.match(ui, /!launchPanel\.Visible/)
+  // Both a successful and a failed preparation end the hint before anything else is shown.
+  assert.match(host, /NoteStartupStage\("workspace-ready"\);\r?\n\s+AppendStartupTrace\("native-host", "portable-cli-complete"/)
+})

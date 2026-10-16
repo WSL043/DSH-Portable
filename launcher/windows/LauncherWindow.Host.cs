@@ -467,6 +467,7 @@ namespace DshPortable
                     Task webViewInitialization = InitializeWebViewAsync();
                     AppendStartupTrace("native-host", "portable-cli-begin", null);
                     Tuple<int, string> started = await Task.Run(() => InvokePortableCli(new[] { "start", "--no-browser", "--json", "--progress-json" }, HandleStartupProgress));
+                    NoteStartupStage("workspace-ready");
                     AppendStartupTrace("native-host", "portable-cli-complete", new Dictionary<string, object> { { "exitCode", started.Item1 } });
                     if (started.Item1 != 0)
                     {
