@@ -47,3 +47,29 @@ cleared before the core starts), batched directory and file creation, a native l
 Left alone on purpose: the startup profiler and module hooks (about 100 ms, but they feed the stalled-plugin recovery),
 clearing plugin links when the app closes (it keeps a copied folder from duplicating the runtime through junctions),
 the plugin-compatibility check (it skips quickly unless community plugins are installed).
+
+## Slow-PC emulation, 2026-10-16
+
+`scripts/measure-startup-slow.ps1 -PackageRoot <scratch package> -Kind cold|warm` runs the CLI start with a Windows job-object hard CPU cap
+(0.6 of one core by default) next to an uncapped run and prints per-phase times. Antivirus scanning stays as this PC has it; disk speed is
+not throttled.
+
+0.9.0, CLI path, same PC (ms):
+
+| | normal | slow (0.6 core) |
+| --- | --- | --- |
+| first start total | 9,100 | 18,100 |
+| capsule extraction | 3,600 | 9,800 (about 7 s is writing 8,700 files: per-file cost, not bytes) |
+| profile resolver (515 junctions, first start only) | 2,400 | 2,500 (kernel-bound, not amplified) |
+| default plugin seeding (first start) | 900 | 1,700 |
+| official core import | 2,100 | 3,700 |
+| warm start total | 1,950 | 3,400 (our part about 0.45 s; official core import about 2.9 s) |
+
+Findings: the official LibreOffice kit (182 MB) costs only about 1.5 s of the slow first start. A V8 compile cache (`module.enableCompileCache`,
+persisted on graceful exit) gives nothing even on the slow profile; the warm start is dominated by executing the official core's module
+graph, which is not ours. Remaining shell-side headroom on a warm start is at most about 0.2 s.
+
+Because slow PCs spend long on a few steps, the native loading surface now explains them: after 3 s of unpacking it says the unpack happens
+once and later starts are much faster, and after 8 s on any later step it shows the elapsed seconds and that slower PCs need longer. Verified
+with UI Automation text reads on the emulated slow PC (hint appeared at 4.4 s in the unpack stage and at 8 s in the start stage, and went
+away when the workspace opened).
