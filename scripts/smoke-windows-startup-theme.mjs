@@ -64,6 +64,12 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
       if (result.exceptionDetails) throw new Error(result.exceptionDetails.text)
       return result.result?.value
     }
+    // Register the colour probe before anything slow. The startup hold only lasts a few seconds from the moment the host is ready,
+    // and the native-window capture below takes several seconds on a busy runner; a faster start would otherwise navigate first
+    // and the probe would never run for the first document.
+    assert.ok(!String(await evaluate('location.href')).startsWith('http://127.0.0.1'), 'the colour probe must be attached before the workspace navigates')
+    await send('Page.enable')
+    await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__startupColors=[];const sample=()=>{if(document.body){const color=getComputedStyle(document.body).backgroundColor;if(!window.__startupColors.includes(color))window.__startupColors.push(color)}};document.addEventListener('DOMContentLoaded',sample);const timer=setInterval(sample,16);setTimeout(()=>clearInterval(timer),15000)` })
     await exec('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
       path.join(import.meta.dirname, 'capture-windows-native-window.ps1'), '-TargetProcessId', String(child.pid),
       '-OutputDirectory', path.join(root, 'acceptance', `native-${results.length}-${theme}`)],
@@ -84,8 +90,6 @@ for (const theme of ['dark', 'light', 'dark', 'system']) {
     assert.ok(animation.paintedFrames >= 10)
     assert.notEqual(animation.rotation, loading.rotation, 'native spinner advances')
     assert.equal(await evaluate(`document.querySelector('#portable-startup-loading') === null`), true, 'no second HTML loader')
-    await send('Page.enable')
-    await send('Page.addScriptToEvaluateOnNewDocument', { source: `window.__startupColors=[];const sample=()=>{if(document.body){const color=getComputedStyle(document.body).backgroundColor;if(!window.__startupColors.includes(color))window.__startupColors.push(color)}};document.addEventListener('DOMContentLoaded',sample);const timer=setInterval(sample,16);setTimeout(()=>clearInterval(timer),15000)` })
     let trace = []
     while (Date.now() < deadline) {
       trace = (await readFile(path.join(root, 'data/logs/startup-latest.jsonl'), 'utf8')).trim().split(/\r?\n/).map(line => JSON.parse(line))
