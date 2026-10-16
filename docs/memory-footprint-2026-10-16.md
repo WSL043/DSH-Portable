@@ -42,3 +42,9 @@ seeding 0.9 s, official core import 2.2 s. Later starts skip the first three.
 Where the real value is: engine (core) updates and full updates download the whole capsule; splitting the kit into its own optional pack
 would make a core update about 35 MB instead of 86 MB and a first install about 50 MB smaller. It touches the capsule builder, the update
 artifact, the extractor/updater and integrity checks, on every platform, so it is a deliberate project rather than a quick change.
+
+## Decision (2026-10-16)
+
+The LibreOffice kit is the official core's own dependency (`@deepseek-ai/libreoffice-kit`, pulled in by the official `dsh-office-to-pdf`
+and also installed by a plain `npm i @deepseek-ai/dsh`). Rule: what the official core ships, Portable ships. So the kit stays in the
+capsule and the split-pack project is shelved. Only non-core additions of ours (default plugins, our bridge) may be made optional.
