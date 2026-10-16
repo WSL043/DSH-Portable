@@ -1,10 +1,13 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { mkdir, open, opendir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { zstdDecompressSync } from 'node:zlib'
 
+// Below this hashing speed (MB/s of the whole capsule, measured during extraction) the PC is treated as constrained. A fast PC
+// hashes at well over 1,000 MB/s; the emulated slow PC (0.6 core) at about 380.
+const CONSTRAINED_HASH_MBPS = 600
 const MAGIC = Buffer.from('DSHPACK1', 'ascii')
 const HEADER_BYTES = 12
 const READY_FILE = '.dsh-runtime-ready.json'
@@ -112,6 +115,8 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
   let offset = HEADER_BYTES + headerLength
   const files = []
   const directories = new Set()
+  const verifyStarted = performance.now()
+  let verifiedBytes = 0
   for (const entry of header.files) {
     const relative = safeRelativePath(entry?.path)
     const size = Number(entry?.size)
@@ -121,12 +126,18 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
     const bytes = payload.subarray(offset, offset + size)
     offset += size
     if (entry.sha256 && sha256(bytes) !== entry.sha256) throw new Error(`Runtime capsule entry failed verification: ${relative}`)
+    if (entry.sha256) verifiedBytes += size
     const filename = path.join(target, ...relative.split('/'))
     directories.add(path.dirname(filename))
     files.push({ filename, bytes })
   }
   if (offset !== payload.length) throw new Error('Runtime capsule contains trailing data.')
-  progress('extract-index-verified', { files: files.length, directories: directories.size })
+  // How fast this PC just hashed the whole capsule says how it will cope with thousands of tiny file writes (see below).
+  const hashMBps = verifiedBytes > 0 ? Math.round(verifiedBytes / 1048576 / Math.max(0.001, (performance.now() - verifyStarted) / 1000)) : 0
+  // DSH_PORTABLE_EXTRACT_MODE=sync|parallel forces a mode for diagnostics and tests; anything else decides by speed.
+  const forcedMode = process.env.DSH_PORTABLE_EXTRACT_MODE
+  const constrained = forcedMode === 'sync' ? true : forcedMode === 'parallel' ? false : hashMBps > 0 && hashMBps < CONSTRAINED_HASH_MBPS
+  progress('extract-index-verified', { files: files.length, directories: directories.size, hashMBps, writeMode: constrained ? 'sync' : 'parallel' })
   // The extraction root is new. Create each ancestor once, parent levels first,
   // instead of repeatedly walking the same ancestor chain with recursive mkdir.
   const levels = new Map()
@@ -140,6 +151,7 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
       levels.get(depth).push(directory)
     }
   }
+  if (constrained) return extractSynchronously(levels, unique.size, files, progress)
   let preparedDirectories = 0
   let lastDirectoryReport = performance.now()
   progress('extract-directories-progress', { completed: 0, total: unique.size })
@@ -172,6 +184,43 @@ async function extractPayload(payload, target, expectedCount, progress = () => {
     }
   }))
   if (failure) throw failure
+}
+
+// Extraction is a long run of tiny filesystem calls. On a slow or busy CPU the per-call cost of the promise API (thread-pool
+// round trips, many threads competing for little CPU) is larger than the call itself: on an emulated slow PC (0.6 of one
+// core) the 9,446 files took about 7.5 s through the 32-wide async queue and about 3.5 s with plain synchronous calls, while
+// a fast PC needs the same 2.5 s either way. So when hashing ran slowly, write synchronously, in short slices that hand
+// control back to the event loop, which keeps the startup progress lines flowing to the native loading screen.
+async function extractSynchronously(levels, directoryCount, files, progress) {
+  const SLICE_MS = 40
+  const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve))
+  let sliceStart = performance.now()
+  let preparedDirectories = 0
+  let lastReport = performance.now()
+  progress('extract-directories-progress', { completed: 0, total: directoryCount })
+  for (const [, level] of [...levels].sort(([a], [b]) => a - b)) {
+    for (const directory of level) {
+      mkdirSync(directory)
+      preparedDirectories += 1
+      if (performance.now() - lastReport >= 500 || preparedDirectories === directoryCount) {
+        progress('extract-directories-progress', { completed: preparedDirectories, total: directoryCount })
+        lastReport = performance.now()
+      }
+      if (performance.now() - sliceStart >= SLICE_MS) { await yieldToEventLoop(); sliceStart = performance.now() }
+    }
+  }
+  progress('extract-directories-ready')
+  let completed = 0
+  lastReport = performance.now()
+  for (const { filename, bytes } of files) {
+    writeFileSync(filename, bytes)
+    completed++
+    if (performance.now() - lastReport >= 500 || completed === files.length) {
+      progress('extract-files-progress', { completed, total: files.length })
+      lastReport = performance.now()
+    }
+    if (performance.now() - sliceStart >= SLICE_MS) { await yieldToEventLoop(); sliceStart = performance.now() }
+  }
 }
 
 function processExists(pid) {

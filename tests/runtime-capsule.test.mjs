@@ -581,3 +581,52 @@ test('cache cleanup reclaims abandoned extraction directories but preserves rece
     await rm(parent, { recursive: true, force: true })
   }
 })
+
+async function treeHashes(directory) {
+  const entries = []
+  async function walk(current) {
+    for (const entry of await readdir(current, { withFileTypes: true })) {
+      const full = path.join(current, entry.name)
+      if (entry.isDirectory()) { entries.push(`${path.relative(directory, full)}/`); await walk(full) }
+      else entries.push(`${path.relative(directory, full)}:${(await readFile(full)).toString('base64')}`)
+    }
+  }
+  await walk(directory)
+  return entries.sort()
+}
+
+test('synchronous and parallel extraction produce the same runtime and report their mode', async t => {
+  const { parent, root, app } = await fixture()
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  for (let index = 0; index < 120; index++) {
+    const filename = path.join(app, 'node_modules', `pkg${index % 7}`, `nested${index % 3}`, `file${index}.js`)
+    await mkdir(path.dirname(filename), { recursive: true })
+    await writeFile(filename, `module.exports = ${index}\n`.repeat(index % 5 + 1))
+  }
+  await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+    platform: process.platform, arch: process.arch, level: 1,
+  })
+  const trees = {}
+  for (const mode of ['sync', 'parallel', undefined]) {
+    const cache = path.join(parent, `cache-${mode ?? 'auto'}`)
+    const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache }
+    if (mode) env.DSH_PORTABLE_EXTRACT_MODE = mode
+    else delete env.DSH_PORTABLE_EXTRACT_MODE
+    const previous = process.env.DSH_PORTABLE_EXTRACT_MODE
+    if (mode) process.env.DSH_PORTABLE_EXTRACT_MODE = mode; else delete process.env.DSH_PORTABLE_EXTRACT_MODE
+    const phases = []
+    try {
+      const prepared = await ensureRuntimeCapsule(root, { env, onProgress: (phase, fields) => phases.push([phase, fields]) })
+      trees[mode ?? 'auto'] = await treeHashes(prepared.runtimeRoot)
+    } finally {
+      if (previous === undefined) delete process.env.DSH_PORTABLE_EXTRACT_MODE; else process.env.DSH_PORTABLE_EXTRACT_MODE = previous
+    }
+    const verified = phases.find(([phase]) => phase === 'extract-index-verified')?.[1]
+    assert.ok(verified, `${mode ?? 'auto'} reports the index step`)
+    if (mode) assert.equal(verified.writeMode, mode)
+    assert.ok(['sync', 'parallel'].includes(verified.writeMode))
+    assert.ok(phases.some(([phase, fields]) => phase === 'extract-files-progress' && fields.completed === fields.total), 'file progress reaches 100 %')
+  }
+  assert.deepEqual(trees.sync, trees.parallel)
+  assert.deepEqual(trees.auto, trees.parallel)
+})

@@ -73,3 +73,15 @@ Because slow PCs spend long on a few steps, the native loading surface now expla
 once and later starts are much faster, and after 8 s on any later step it shows the elapsed seconds and that slower PCs need longer. Verified
 with UI Automation text reads on the emulated slow PC (hint appeared at 4.4 s in the unpack stage and at 8 s in the start stage, and went
 away when the workspace opened).
+
+### First-start changes, 2026-10-16 (measured on the emulated slow PC, 0.6 core, cold start, medians)
+
+- Dependency closure walk (`createPackageLocator`, `packagedDshDependencyClosure`): shared directory listings, overlapped manifest reads,
+  identical result (same 515 packages, same targets). Profile-resolver step 2.4 s -> about 1.0 s; first start 18.4 s -> 16.6 s (fast PC
+  9.2 s -> 7.8 s). What is left of that step is the first read of the freshly extracted manifests, paid by whoever reads them first.
+- Extraction writes: a 32-wide async queue took 7.5 s for 9,446 files on the slow profile, plain synchronous writes in 40 ms slices 3.5 s,
+  while a fast PC needs 2.5 s either way (two worker threads: 4.6 s slow, 2.5 s fast, but copying 350 MB to share it is not worth it).
+  Extraction now measures how fast the PC just hashed the capsule and writes synchronously below 600 MB/s (fast PCs run at well over
+  1,000 MB/s; the emulated slow PC reaches only about 380 under sustained load). `DSH_PORTABLE_EXTRACT_MODE=sync|parallel` forces a mode. Forced
+  sync on the slow profile: first start 18.4 s -> about 12-13 s. Caveat: the emulation (job-object hard cap) barely slows a short burst,
+  so the automatic decision itself was exercised only through the forced modes, not end to end on a really slow CPU.
