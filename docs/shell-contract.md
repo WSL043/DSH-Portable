@@ -8,7 +8,7 @@
 
 ## 接口指什么
 
-外壳（`launcher/`）和内核运行时（装进 capsule 的 app 目录）互相点名的东西，共五类：
+外壳（`launcher/`）和内核运行时（装进 capsule 的 app 目录）互相点名的东西，共七类：
 
 | 类别 | 内容 |
 | --- | --- |
@@ -17,6 +17,8 @@
 | `cli` | 内核里的桥接服务调用的 `portable-cli` 命令 |
 | `flag` | 这些命令用到的选项 |
 | `file` | 内核按路径找的 `launcher/*.mjs` |
+| `capsule` | 启动器能读的内核包文件格式，和打包脚本写出的格式 |
+| `layout` | 外壳要求内核目录里必须存在的路径（方向相反：外壳提问，内核回答） |
 
 冻结记录在 [`config/shell-contract.json`](../config/shell-contract.json)，由 [`scripts/shell-contract.mjs`](../scripts/shell-contract.mjs) 扫描生成。`tests/shell-contract.test.mjs` 每次都拿当前代码和记录比对，对不上就失败。
 
@@ -41,7 +43,7 @@ bump 的代价：旧号码的外壳不再收到新内核，会提示「先更新
 
 ## 安装内核时发生什么
 
-内核更新包是在某个较新的 Portable 上验证的，它自带的 `COMPONENTS.json` 写着那个版本和指纹。安装时**不能**把这些写进用户的安装目录：外壳文件没有变，产品更新检查、关于页都读这个文件。所以安装前会把外壳身份（Portable 版本、指纹、契约号、WebView2 信息等）合并回已安装的值，运行时部分（内核版本、默认插件、pnpm 等）取自新包。`adoptInstalledShellIdentity` 实现这一步，失败回滚时一并还原。
+内核更新包是在某个较新的 Portable 上验证的，它自带的 `COMPONENTS.json` 写着那个版本和指纹。安装时**不能**把这些写进用户的安装目录：外壳文件没有变，产品更新检查、关于页都读这个文件。所以安装前会把外壳身份（Portable 版本、指纹、契约号、预装插件清单、Node、WebView2 信息等）合并回已安装的值，运行时部分（内核版本、pnpm、市场版本等）取自新包。预装插件清单属于外壳：压缩包放在启动器旁边的 `default-plugins/`，启动器还会逐项对照自己写死的哈希表，所以不能被新包改写。`adoptInstalledShellIdentity` 实现这一步，失败回滚时一并还原。
 
 ## 仍然单独检查的条件
 

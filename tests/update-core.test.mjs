@@ -1391,7 +1391,7 @@ test('the installed state carries the shell contract, and 0 for a shell that pre
 async function contractUpdateFixture({ stagedContract = 3 } = {}) {
   const fixture = await makeCapsuleUpdateFixture()
   const patch = async (file, change) => writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, 'utf8')), ...change }))
-  await patch(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), { shellContract: 3, shellFingerprint: 'a'.repeat(64), releaseChannel: 'stable', pnpmVersion: '10.0.0' })
+  await patch(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), { shellContract: 3, shellFingerprint: 'a'.repeat(64), releaseChannel: 'stable', pnpmVersion: '10.0.0', defaultPlugins: [{ package: 'dsh-image-viewer', version: '0.1.13' }] })
   await patch(path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json'), { shellContract: stagedContract, shellFingerprint: 'b'.repeat(64), releaseChannel: 'stable', pnpmVersion: '10.1.0', defaultPlugins: [{ package: 'dsh-image-viewer', version: '0.1.15' }] })
   await patch(path.join(fixture.stagedRoot, 'component.json'), { releaseChannel: 'stable' })
   const update = {
@@ -1419,7 +1419,8 @@ test('a core qualified on another Portable version replaces the runtime but keep
     assert.equal(components.shellFingerprint, 'a'.repeat(64))
     assert.equal(components.shellContract, 3)
     assert.equal(components.pnpmVersion, '10.1.0', 'runtime facts come from the new capsule')
-    assert.deepEqual(components.defaultPlugins, [{ package: 'dsh-image-viewer', version: '0.1.15' }])
+    assert.deepEqual(components.defaultPlugins, [{ package: 'dsh-image-viewer', version: '0.1.13' }],
+      'the default plugin archives sit beside the installed launcher, so its list stays')
     assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.newCapsule)
     assert.equal((await readInstalledUpdateState(fixture.layout)).portableVersion, '0.5.0-rc.1')
   } finally { await rm(fixture.root, { recursive: true, force: true }) }

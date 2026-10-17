@@ -162,6 +162,19 @@
       "update-signature.mjs",
       "webview-cache.mjs",
       "webview-runtime.mjs"
+    ],
+    "capsule": [
+      "DSHPACK1",
+      "dshpack-zstd-v1"
+    ],
+    "layout": [
+      "app/node_modules/.bin",
+      "app/node_modules/@deepseek-ai/dsh",
+      "app/node_modules/@deepseek-ai/dsh/lib/bin.js",
+      "app/node_modules/@deepseek-ai/dsh/package.json",
+      "app/node_modules/@wsl043/dsh-portable-desktop-bridge/cordis.patch.yml",
+      "app/node_modules/@wsl043/dsh-portable-plugin-market",
+      "app/package.json"
     ]
   },
   "app": {
@@ -239,6 +252,11 @@
       "storage-maintenance.mjs",
       "storage-report.mjs",
       "store-maintenance.mjs"
-    ]
+    ],
+    "capsule": [
+      "DSHPACK1",
+      "dshpack-zstd-v1"
+    ],
+    "layout": []
   }
 }

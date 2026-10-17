@@ -9,6 +9,8 @@
 //   cli     portable-cli commands the app's bridge server runs
 //   flag    portable-cli options those commands pass
 //   file    launcher scripts the app reaches by path
+//   capsule the capsule file format the launcher can read, and the one the packer writes
+//   layout  paths inside the app directory the shell expects to find (the other way round: the shell is the one asking)
 // config/shell-contract.json is the frozen record. A change to either side that breaks it fails the contract test until
 // it is dealt with on purpose:
 //
@@ -22,12 +24,16 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 export const CONTRACT_FILE = 'config/shell-contract.json'
-export const KINDS = ['env', 'bridge', 'cli', 'flag', 'file']
+export const KINDS = ['env', 'bridge', 'cli', 'flag', 'file', 'capsule', 'layout']
+// Kinds where the shell asks and the app answers; every other kind has the shell offering and the app using.
+const SHELL_ASKS = new Set(['layout'])
 const ENV = /\bDSH_PORTABLE_[A-Z0-9]+(?:_[A-Z0-9]+)*\b(?!_)/gu
 const BRIDGE = /\bdsh-portable\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\b/gu
 const FLAG = /'(--[a-z][a-z0-9]*(?:-[a-z0-9]+)*)'/gu
 const SHELL_COMMAND = /options\.command === '([a-z][a-z-]*)'/gu
 const APP_COMMAND = /(?:runCli\(\s*|\bargs\s*=\s*)\[\s*'([a-z][a-z-]*)'/gu
+const APP_LAYOUT = /\bappDir,\s*((?:'[^']+',?\s*)+)\)/gu
+const CAPSULE_FORMAT = /\b(?:DSHPACK\d+|dshpack-[a-z0-9-]+)\b/gu
 const APP_LAUNCHER_FILE = /'launcher',\s*'([A-Za-z0-9._-]+)'/gu
 
 // The shell is everything under launcher/. The app side is what ends up inside the capsule and talks back to it.
@@ -84,6 +90,9 @@ export async function scanShellContract(root) {
     const text = await read(file)
     add(sides.shell, 'flag', captures(text, FLAG))
     if (file.endsWith('portable-cli.mjs')) add(sides.shell, 'cli', captures(text, SHELL_COMMAND))
+    if (file.endsWith('portable-core.mjs')) {
+      for (const [, segments] of text.matchAll(APP_LAYOUT)) sides.shell.layout.add(['app', ...[...segments.matchAll(/'([^']+)'/gu)].map((part) => part[1])].join('/'))
+    }
   }
   for (const { dir, pattern } of APP_ROOTS) {
     for (const file of await filesBelow(root, dir, (name) => pattern.test(name))) {
@@ -93,6 +102,8 @@ export async function scanShellContract(root) {
       add(sides.app, 'file', captures(text, APP_LAUNCHER_FILE))
     }
   }
+  add(sides.shell, 'capsule', collect(await read('launcher/runtime-capsule.mjs'), CAPSULE_FORMAT, () => false))
+  add(sides.app, 'capsule', collect(await read('scripts/create-runtime-capsule.mjs'), CAPSULE_FORMAT, () => false))
   const bridgeServer = await read(APP_CLI_FILE)
   add(sides.app, 'cli', captures(bridgeServer, APP_COMMAND))
   add(sides.app, 'flag', captures(bridgeServer, FLAG))
@@ -113,6 +124,12 @@ export function diffShellContract(frozen, current) {
   const compatible = []
   const has = (list, name) => list.includes(name)
   for (const kind of KINDS) {
+    if (SHELL_ASKS.has(kind)) {
+      // A new shell that needs a path an older capsule never had breaks rolling back to that core.
+      for (const name of current.shell[kind]) if (!has(frozen.shell[kind], name)) breaking.push(`the shell now expects ${kind} ${name}`)
+      for (const name of frozen.shell[kind]) if (!has(current.shell[kind], name)) compatible.push(`the shell no longer expects ${kind} ${name}`)
+      continue
+    }
     for (const name of current.app[kind]) {
       if (!has(frozen.shell[kind], name) && !has(frozen.app[kind], name)) breaking.push(`the app now uses ${kind} ${name}, which the frozen shell never provided`)
     }

@@ -6,10 +6,10 @@ import test from 'node:test'
 import { diffShellContract, readContractRecord, scanShellContract } from '../scripts/shell-contract.mjs'
 
 const root = path.resolve(import.meta.dirname, '..')
-const none = { env: [], bridge: [], cli: [], flag: [], file: [] }
+const none = { env: [], bridge: [], cli: [], flag: [], file: [], capsule: [], layout: [] }
 const frozen = {
-  shell: { ...none, env: ['DSH_PORTABLE_ROOT', 'DSH_PORTABLE_STATE_ROOT', 'DSH_PORTABLE_STARTUP_ID'], bridge: ['dsh-portable/state', 'dsh-portable/surface-ready'], cli: ['doctor'], flag: ['--json'], file: ['runtime-entry.mjs'] },
-  app: { ...none, env: ['DSH_PORTABLE_ROOT', 'DSH_PORTABLE_STATE_ROOT'], bridge: ['dsh-portable/surface-ready'], cli: ['doctor'], flag: ['--json'], file: ['runtime-entry.mjs'] },
+  shell: { ...none, env: ['DSH_PORTABLE_ROOT', 'DSH_PORTABLE_STATE_ROOT', 'DSH_PORTABLE_STARTUP_ID'], bridge: ['dsh-portable/state', 'dsh-portable/surface-ready'], cli: ['doctor'], flag: ['--json'], file: ['runtime-entry.mjs'], capsule: ['DSHPACK1'], layout: ['app/package.json'] },
+  app: { ...none, env: ['DSH_PORTABLE_ROOT', 'DSH_PORTABLE_STATE_ROOT'], bridge: ['dsh-portable/surface-ready'], cli: ['doctor'], flag: ['--json'], file: ['runtime-entry.mjs'], capsule: ['DSHPACK1'] },
 }
 const copy = () => structuredClone(frozen)
 
@@ -35,7 +35,7 @@ test('the shell gaining something is compatible', () => {
 })
 
 test('a new core leaning on something the frozen shell never offered breaks older shells', () => {
-  for (const [kind, name] of [['env', 'DSH_PORTABLE_NEW_THING'], ['bridge', 'dsh-portable/new-message'], ['cli', 'new-command'], ['flag', '--new-flag'], ['file', 'new-script.mjs']]) {
+  for (const [kind, name] of [['env', 'DSH_PORTABLE_NEW_THING'], ['bridge', 'dsh-portable/new-message'], ['cli', 'new-command'], ['flag', '--new-flag'], ['file', 'new-script.mjs'], ['capsule', 'DSHPACK2']]) {
     const next = copy()
     next.app[kind].push(name)
     assert.match(diffShellContract(frozen, next).breaking[0], new RegExp(`app now uses ${kind} `, 'u'), kind)
@@ -67,6 +67,17 @@ test('the shell dropping something both sides shared breaks older cores, but dro
   assert.match(diffShellContract(frozen, command).breaking[0], /shell no longer provides cli doctor/u)
 })
 
+test('a shell that starts expecting another path inside the app breaks rolling back to an older core', () => {
+  const next = copy()
+  next.shell.layout.push('app/node_modules/@wsl043/new-package')
+  assert.match(diffShellContract(frozen, next).breaking[0], /shell now expects layout app\/node_modules\/@wsl043\/new-package/u)
+  const fewer = copy()
+  fewer.shell.layout = []
+  const result = diffShellContract(frozen, fewer)
+  assert.deepEqual(result.breaking, [])
+  assert.match(result.compatible[0], /no longer expects layout/u)
+})
+
 test('the app dropping a message an older shell still sends breaks older shells', () => {
   const unhandled = copy()
   unhandled.app.bridge = []
@@ -76,7 +87,8 @@ test('the app dropping a message an older shell still sends breaks older shells'
 test('test hooks and run-time prefixes are not part of the interface', async () => {
   const scan = await scanShellContract(root)
   for (const side of [scan.shell, scan.app]) {
-    assert.ok(Object.values(side).every((names) => names.length > 0), 'every kind of coupling is actually being scanned')
+    // The app side has no layout list: the shell is the one that asks for paths.
+    assert.ok(Object.entries(side).every(([kind, names]) => names.length > 0 || (side === scan.app && kind === 'layout')), 'every kind of coupling is actually being scanned')
     for (const name of side.env) {
       assert.doesNotMatch(name, /^DSH_PORTABLE_TEST_/u)
       assert.doesNotMatch(name, /_$/u)

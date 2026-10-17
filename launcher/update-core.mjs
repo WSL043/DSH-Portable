@@ -1053,10 +1053,11 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
 
 // Fields of COMPONENTS.json that describe the installed shell rather than the runtime inside the capsule. A core
 // qualified on another Portable version must not rewrite them: the shell on disk did not change, and the product update
-// check, the fingerprint and the about page all read this file.
+// check, the fingerprint and the about page all read this file. The default plugin list is one of them: the archives
+// sit beside the launcher (default-plugins/), and the launcher checks every entry against its own pinned table.
 const SHELL_IDENTITY_KEYS = [
   'portableVersion', 'releaseChannel', 'updaterSchema', 'shellSchema', 'shellFingerprint', 'shellContract',
-  'webView2Package', 'webView2Version', 'webView2Sha256', 'windowsNotificationRuntime',
+  'defaultPlugins', 'nodeVersion', 'nodeSha256', 'webView2Package', 'webView2Version', 'webView2Sha256', 'windowsNotificationRuntime',
 ]
 
 /** Rewrites the staged component metadata so the installed shell keeps its identity while the runtime is replaced. */
