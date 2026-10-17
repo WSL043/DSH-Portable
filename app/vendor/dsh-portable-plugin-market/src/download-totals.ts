@@ -25,6 +25,12 @@ export const DOWNLOAD_TOTALS_MAX_SCOPE_PACKAGES = 100
 export const DOWNLOAD_TOTALS_MAX_CONCURRENCY = 4
 export const DOWNLOAD_TOTALS_REQUEST_TIMEOUT_MS = 10_000
 export const DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS = 120_000
+/**
+ * A table with gaps (a rate-limited or timed-out batch) is retried for just the missing names after this long, instead of
+ * being served for the rest of the day: the npm statistics API rate-limits bursts, and every package in a failed batch
+ * would otherwise sort below packages with real counts until tomorrow.
+ */
+export const DOWNLOAD_TOTALS_INCOMPLETE_RETRY_MS = 10 * 60_000
 const validDate = (value: unknown): value is string => typeof value === 'string'
   && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value))
 
@@ -220,6 +226,8 @@ export function createDownloadTotalsTable(fetcher = marketFetch, options: Downlo
   const refreshTimeoutMs = Math.min(options.refreshTimeoutMs ?? DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS, DOWNLOAD_TOTALS_REFRESH_TIMEOUT_MS)
   const memory = new Map<string, DownloadTotalsCache>()
   const pending = new Map<string, { signature: string; promise: Promise<DownloadTotalsTable> }>()
+  const usable = (cache: DownloadTotalsCache, at: number): boolean =>
+    cache.complete || at - Date.parse(cache.generatedAt) < DOWNLOAD_TOTALS_INCOMPLETE_RETRY_MS
 
   const get = async (plugins: readonly { npm?: string | null; downloads?: number | null; stars?: number | null }[], registryCacheFile?: string): Promise<DownloadTotalsTable> => {
     const names = selectDownloadTotalsPackages(plugins)
@@ -230,7 +238,7 @@ export function createDownloadTotalsTable(fetcher = marketFetch, options: Downlo
     const profileKey = registryCacheFile === undefined ? '<memory>' : resolve(registryCacheFile)
     const cachedMemory = memory.get(profileKey)
     if (cachedMemory?.generatedAt.slice(0, 10) === today && cachedMemory.start === start && cachedMemory.end === end
-      && cachedMemory.namesDigest === signature) {
+      && cachedMemory.namesDigest === signature && usable(cachedMemory, nowAtStart)) {
       return publicTable(cachedMemory, names)
     }
     const existing = pending.get(profileKey)
@@ -244,7 +252,7 @@ export function createDownloadTotalsTable(fetcher = marketFetch, options: Downlo
       const file = registryCacheFile === undefined ? undefined : totalsCacheFile(registryCacheFile)
       const cached = file === undefined ? memory.get(profileKey) ?? null : await readTotalsCache(file)
       if (cached?.generatedAt.slice(0, 10) === today && cached.start === start && cached.end === end
-        && cached.namesDigest === signature) {
+        && cached.namesDigest === signature && usable(cached, nowAtStart)) {
         memory.set(profileKey, cached)
         return publicTable(cached, names)
       }

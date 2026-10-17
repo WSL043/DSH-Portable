@@ -252,3 +252,36 @@ test('table requests coalesce, persist daily, merge additions, and refresh next 
     await rm(directory, { recursive: true, force: true })
   }
 })
+
+test('a rate-limited batch is retried for its missing names after ten minutes, not served as a gap for the whole day', async () => {
+  const plugins = Array.from({ length: 150 }, (_, i) => ({ npm: `plain-${i}` }))
+  let clock = Date.parse('2026-09-29T12:00:00.000Z')
+  let limited = true
+  const requested = []
+  const get = createDownloadTotalsTable(async url => {
+    const [range, encoded] = new URL(url).pathname.split('/downloads/point/')[1].split('/')
+    const [start, end] = range.split(':')
+    const names = encoded.split(',').map(decodeURIComponent)
+    requested.push(names)
+    if (limited && names.includes('plain-120')) return new Response('error code: 1015', { status: 429 })
+    return new Response(JSON.stringify(Object.fromEntries(names.map(name => [name, { package: name, start, end, downloads: 5 }]))))
+  }, { now: () => clock })
+
+  const first = await get(plugins)
+  assert.equal(first.complete, false)
+  assert.equal(first.totals['plain-0'], 5)
+  assert.equal(first.totals['plain-120'], undefined)
+  const calls = requested.length
+
+  clock += 5 * 60_000
+  await get(plugins)
+  assert.equal(requested.length, calls, 'a gap younger than ten minutes is not hammered again')
+
+  limited = false
+  clock += 6 * 60_000
+  const retried = await get(plugins)
+  assert.equal(retried.complete, true)
+  assert.equal(retried.totals['plain-120'], 5)
+  assert.equal(requested.length, calls + 1, 'only the failed batch is requested again')
+  assert.ok(requested.at(-1).includes('plain-120') && !requested.at(-1).includes('plain-0'))
+})

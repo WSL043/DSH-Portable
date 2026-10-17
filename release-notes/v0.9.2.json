@@ -5,7 +5,8 @@
     "highlights": [
       "内核：新增可选内核 0.2.1-rc.1，可选内核保留最新三个。预装的图片查看器升到 0.1.14、会话管理升到 1.5.15，都已适配 rc.1。",
       "安装包自带的内核不变，仍是 0.2.0-rc.2。",
-      "插件市场：卸载插件时会先记下它写入的配置行再删除，不再留下无用的配置行；下载源还没同步到新版本时会明确提示“稍后重试”，更新失败后自动刷新可用更新，不再停在过期的提示上。"
+      "插件市场：卸载插件时会先记下它写入的配置行再删除，不再留下无用的配置行；下载源还没同步到新版本时会明确提示“稍后重试”，更新失败后自动刷新可用更新，不再停在过期的提示上。",
+      "插件市场排序：按累计下载量排序时，如果某批下载数据被限流没取到，这些插件之前整天都会排在最后；现在每十分钟只补取缺的那几批，下载量大的插件会回到正确的位置。"
     ],
     "upgradeNotes": [
       "升级会保留设置、会话、插件和默认工作区。整包更新后会自动恢复你选的内核。"
@@ -16,7 +17,8 @@
     "highlights": [
       "Cores: adds the selectable core 0.2.1-rc.1; the list keeps the newest three. The preinstalled Image Viewer is now 0.1.14 and Chat Manager 1.5.15, both adapted to rc.1.",
       "The core bundled in the installer is unchanged, still 0.2.0-rc.2.",
-      "Plugin market: uninstalling a plugin now records the config rows it inserted before deleting it, so no orphan rows remain; a release your download mirror has not synced yet says to retry later, and a failed update refreshes the offer instead of leaving a stale card."
+      "Plugin market: uninstalling a plugin now records the config rows it inserted before deleting it, so no orphan rows remain; a release your download mirror has not synced yet says to retry later, and a failed update refreshes the offer instead of leaving a stale card.",
+      "Market ordering: when a batch of download counts was rate-limited, those plugins sorted last for the whole day under the cumulative-downloads order; now only the missing batches are retried every ten minutes, so heavily downloaded plugins return to their place."
     ],
     "upgradeNotes": [
       "Upgrading keeps settings, sessions, plugins, and the default workspace. After a full update your chosen core is restored automatically."
