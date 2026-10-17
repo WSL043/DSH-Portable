@@ -5,6 +5,8 @@ param(
 )
 $ErrorActionPreference = "Stop"
 $Root = Join-Path $env:RUNNER_TEMP 'dsh-desktop-host'
+# These checks cover Portable's own market surface and the profile as shipped; the official market has its own acceptance.
+$env:DSH_PORTABLE_OFFICIAL_MARKET = '0'
 New-Item -ItemType Directory -Force -Path $Root | Out-Null
 tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
 if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }

@@ -22,18 +22,18 @@ packages:
     engines: {node: '>=6'}
 
   dsh-chat-manager@file:.dsh-portable-archives/dsh-chat-manager.tgz:
-    resolution: {integrity: sha512-nLDeoAgnUc+wIN8nubPOi2y+MkcfbCejri0i+kSXsTZuYoSAhG3aMEd8HKRI6lTvBx7gDYkM56K3Ci3P4toZ1Q==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
-    version: 1.5.15
+    resolution: {integrity: sha512-tPE79Q/FKA9+MxI/GAcRACyN48tm9vxqM9kb4iMRDgP4EMaS39Ipbe7+4XisZcYIR6QjndBc8mQjlxb/gnFzuQ==, tarball: file:.dsh-portable-archives/dsh-chat-manager.tgz}
+    version: 1.5.16
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
       '@deepseek-ai/cordis': 4.0.3 || 4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2 || 4.0.5
-      '@deepseek-ai/dsh-client-connection': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-locale': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-conversation': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-primitives': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-sidebar': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-slots': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-invariants': 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-connection': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-locale': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-conversation': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-primitives': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-sidebar': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-slots': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-invariants': 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.0-rc.2
       react: ^18.2.0
     peerDependenciesMeta:
       '@deepseek-ai/cordis':

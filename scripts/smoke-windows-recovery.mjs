@@ -9,7 +9,8 @@ assert.equal(process.platform, 'win32')
 assert.ok(root && output && process.argv.includes('--disposable'), 'requires a disposable product and evidence directory')
 await mkdir(output, { recursive: true })
 const env = { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
-  DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
+  // The recovery check compares the profile before and after; the official market is covered by its own tests.
+  DSH_PORTABLE_SKIP_UPDATE_CHECK: '1', DSH_PORTABLE_OFFICIAL_MARKET: '0' }
 for (const name of ['DSH_PORTABLE_STATE_ROOT', 'DSH_PORTABLE_RUNTIME_ROOT', 'DSH_PORTABLE_ENVIRONMENT']) delete env[name]
 if (process.argv.includes('--source-overlay')) env.DSH_PORTABLE_STARTUP_SOURCE_CACHE = '0'
 const evidence = { passed: false, sourceOverlay: process.argv.includes('--source-overlay'), cases: [] }
