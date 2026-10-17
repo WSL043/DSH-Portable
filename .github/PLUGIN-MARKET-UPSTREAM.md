@@ -144,3 +144,22 @@ advance does not trigger a Portable release.
 The applicable changes are integrated by PR #91, with source tests, rebuilt
 client/server bundles and a Windows finished-product diagnostic export check.
 Release qualification remains separate from completing the upstream review.
+
+## Partial intake: v1.45.1 to v1.66.32 (2026-10-17)
+
+The baseline above stays at v1.45.1: the range holds many releases and only the items below are accounted for.
+Each was checked against `app/vendor/dsh-portable-plugin-market/src`, not taken from release notes.
+
+| Upstream change | Portable disposition |
+| --- | --- |
+| Read a plugin's patch rows before deleting the package (#800) | Adopted. Both removal paths in `routes.ts` read the inserted rows before `remove`, because the rows come from the package directory. A source-order test guards both. |
+| `ERR_PNPM_NO_MATCHING_VERSION` gets its own code (#578) | Adopted as `version-not-synced`: the market reads registry.npmjs.org while pnpm installs through the user's mirror, so a release published minutes ago can fail to resolve. The profile is unchanged. |
+| Refused channel moves and failed updates show the current offer | Adopted in Portable's own way: the two 409 branches drop the update cache and the client re-checks after any failed update. The stable return still installs only the version the user saw. |
+| `^`/`~` ceilings follow node-semver (#767) | Already covered (`satisfiesRange('0.2.0-rc.2', '^0.1.7')` is false). |
+| Update-all skips disabled plugins (#642), no git credential prompt (#593), locked-file rollback (#608/#617) | Already covered. |
+| Rollback when an update renames the package (#699), no "restart" verdict for a host-incompatible plugin (#758), classify broken or outdated lockfiles (#811), pin fresh npm installs to the registry latest (#621), catalog fetch progress watchdog (#766) | Pending: adopt with failing tests first. |
+| Toggle semantics with the official plugin page (#685, #691, #696, #707), archive/URL source replacement (#770), installs during running agents (#826) | Pending verification on Portable before any change. |
+| Proxy dispatcher and pnpm 12 release-age spelling (#743, #855, #626, #616) | Not applicable to the pinned pnpm 11. |
+
+Making the market a removable plugin is tracked separately; the official 0.2.1-rc.1 plugin manager has no version picker,
+upgrade, catalog browsing or rollback, so those stay unique to the Portable market.

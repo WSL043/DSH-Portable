@@ -1103,3 +1103,32 @@ test('market discovery does not retain hidden cloud-backup side effects', async 
   assert.doesNotMatch(source, /dshm-webdav|dshm-gist|\/dsh-market\/(?:webdav|gist|backup|restore)\b/)
   assert.doesNotMatch(source, /\{false\s*\?\s*\(/)
 })
+
+test('removal reads the patch rows a package inserted before its directory is deleted (dsh-market #800)', async () => {
+  const routes = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/src/routes.ts', import.meta.url), 'utf8')
+  const removeCall = "runPlugin(config.profile, ['remove', name])"
+  let from = 0
+  let paths = 0
+  while (routes.indexOf(removeCall, from) !== -1) {
+    const at = routes.indexOf(removeCall, from)
+    const before = routes.lastIndexOf('const patchRowIds = rowIdsForPackage(host, activeProfileDir, name)', at)
+    assert.ok(before !== -1 && at - before < 600, 'rows must be read right before the remove at offset ' + at)
+    const after = routes.indexOf('removeRowBlocks(userPatchPath, patchRowIds)', at)
+    assert.ok(after !== -1 && after - at < 3500, 'the saved rows must be removed after the remove at offset ' + at)
+    paths += 1
+    from = at + removeCall.length
+  }
+  assert.equal(paths, 2, 'both the single uninstall and the market-managed removal keep this order')
+  assert.ok(!routes.includes('removeRowBlocks(userPatchPath, rowIdsForPackage(host, activeProfileDir, name))'), 'rows are never derived after the package is gone')
+})
+
+test('a refused Beta or stable move drops the update cache, and a failed update re-checks the offer', async () => {
+  const routes = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/src/routes.ts', import.meta.url), 'utf8')
+  for (const message of ['The selected Beta is no longer a newer available release', 'The selected stable release is no longer a valid return from this Beta']) {
+    const at = routes.indexOf(message)
+    assert.ok(at !== -1)
+    assert.ok(routes.slice(Math.max(0, at - 120), at).includes('invalidateUpdates()'), message + ' must refresh the cache first')
+  }
+  const client = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/src/client/PluginUpdates.tsx', import.meta.url), 'utf8')
+  assert.ok(client.includes('setTimeout(() => { void check(true) }, 0)'))
+})

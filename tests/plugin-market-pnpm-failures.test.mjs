@@ -142,3 +142,13 @@ test('pnpmNeverStarted is true only for launcher failures', () => {
   assert.equal(pnpmNeverStarted(failed({ stderr: 'ERR_PNPM_FETCH_404 GET https://registry.npmjs.org/ghost' })), false)
   assert.equal(pnpmNeverStarted(failed({ stderr: 'ordinary failure' })), false)
 })
+
+test('a release that has not reached the configured mirror is named as mirror lag, not as an unknown failure', async () => {
+  const failure = classifyPnpmFailure(' ERR_PNPM_NO_MATCHING_VERSION  No matching version found for dsh-codex-subscription@2.7.1 while fetching it from https://registry.npmmirror.com/')
+  assert.equal(failure?.code, 'version-not-synced')
+  assert.equal(failure.recoverable, false)
+  assert.match(failure.message, /稍后重试/u)
+  assert.match(failure.message, /retry later/u)
+  const bundle = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/lib/index.js', import.meta.url), 'utf8')
+  assert.ok(bundle.includes('version-not-synced'), 'packaged market is missing the mirror-lag diagnostic; rebuild its server bundle')
+})

@@ -77,7 +77,11 @@ async function update(name: string, selectedVersion?: { betaVersion?: string; st
     publish({ done: { ...snapshot.done, [name]: updateCompletion(body) } })
     void refreshInstalled(true)
     // Do not tear down the page during installation; report the server activation verdict.
-  } catch (error) { publish({ failures: { ...snapshot.failures, [name]: String(error) } }) }
+  } catch (error) {
+    publish({ failures: { ...snapshot.failures, [name]: String(error) } })
+    // The card that failed may be stale (a newer release, a refused channel move); show the current offer.
+    setTimeout(() => { void check(true) }, 0)
+  }
   finally { publish({ busy: '' }) }
 }
 async function activate(name: string) {

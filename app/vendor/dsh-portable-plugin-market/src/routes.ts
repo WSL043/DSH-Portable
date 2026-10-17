@@ -582,6 +582,8 @@ export function mountMarketRoutes(
     // Native addons stay loaded in Node after their package is removed. Keep
     // the result as a restart until the host process actually exits.
     const heldNativeAddon = holdsNativeAddon(config.profile, name, activeProfileDir)
+    // dsh-market #800: the rows a package inserts are read from its own directory, so read them before the remove.
+    const patchRowIds = rowIdsForPackage(host, activeProfileDir, name)
     const result = await runPlugin(config.profile, ['remove', name])
     if (result.exitCode !== 0 || result.timedOut || result.cancelled) {
       return { ok: false, hot: false, detail: (result.stderr || result.stdout).slice(-300) }
@@ -589,7 +591,7 @@ export function mountMarketRoutes(
     const unmounted = await hotUnmount(name)
     const entryDisabled = await themes.setEntryDisabled(name, true)
     const hot = (unmounted || entryDisabled) && !heldNativeAddon
-    removeRowBlocks(userPatchPath, rowIdsForPackage(host, activeProfileDir, name))
+    removeRowBlocks(userPatchPath, patchRowIds)
     disabled.delete(name)
     removeFromGroups({ groups, groupOrder }, name)
     writeMarketState(activeProfileDir, { disabled, groups, groupOrder })
@@ -1480,12 +1482,16 @@ export function mountMarketRoutes(
               const stable = await fetchNpmLatest(name)
               const availableBeta = requestedBeta === null ? null : (await installVersions(name)).beta
               if (requestedBeta !== null && (availableBeta !== requestedBeta || !isUpgrade(installedVersion, requestedBeta))) {
+                invalidateUpdates()
                 sendJson(response, 409, { error: 'The selected Beta is no longer a newer available release. Refresh and choose again.' })
                 return
               }
+              // A stale card (the stable moved since it was drawn) is refused so the user only installs a version they saw;
+              // the cache is dropped so the next check shows the current one.
               if (requestedStable !== null && (stable !== requestedStable
                 || !isPrereleaseVersion(installedVersion) || isPrereleaseVersion(requestedStable)
                 || !isUpgrade(requestedStable, installedVersion))) {
+                invalidateUpdates()
                 sendJson(response, 409, { error: 'The selected stable release is no longer a valid return from this Beta. Refresh and choose again.' })
                 return
               }
@@ -2224,6 +2230,7 @@ export function mountMarketRoutes(
             // process once required. Capture the evidence before removal so a
             // successful package delete still requires a host restart.
             const heldNativeAddon = holdsNativeAddon(config.profile, name, activeProfileDir)
+            const patchRowIds = rowIdsForPackage(host, activeProfileDir, name)
             const result = await runPlugin(config.profile, ['remove', name])
             const cancelled = result.cancelled
             const ok = result.exitCode === 0 && !result.timedOut && !cancelled
@@ -2250,7 +2257,7 @@ export function mountMarketRoutes(
               // Patch-layer rows must not survive the remove either: a
               // `- id: X` + `disabled: true` row for a package that no longer
               // mounts is a boot-time orphan (port of dsh-plugin-hub).
-              removeRowBlocks(userPatchPath, rowIdsForPackage(host, activeProfileDir, name))
+              removeRowBlocks(userPatchPath, patchRowIds)
               // The disable list must not keep a removed plugin: a later
               // reinstall starts enabled. Group memberships follow the same
               // rule so no group toggle ever targets a ghost member.

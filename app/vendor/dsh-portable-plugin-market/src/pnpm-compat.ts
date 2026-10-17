@@ -157,6 +157,16 @@ export function classifyPnpmFailure(output: string, exitCode?: number | null): P
       message: '这个 profile 里有一个刚发布的插件版本，pnpm 的发布时间等待检查暂缓了本次改动。市场已用一次性确认重试；若仍看到本条，请导出日志反馈 / a newly published plugin version in this profile triggered pnpm\'s release-age wait; the market retried with a one-shot confirmation — if this remains, export the log and report it',
     }
   }
+  // dsh-market #578: a version that exists on registry.npmjs.org but has not reached the user's mirror yet.
+  // The market reads the registry directly while pnpm installs through the configured mirror, so a release
+  // published minutes ago can be offered and then fail to resolve; the profile is untouched, retry later.
+  if (output.includes('ERR_PNPM_NO_MATCHING_VERSION')) {
+    return {
+      code: 'version-not-synced',
+      recoverable: false,
+      message: '你的下载源还没有同步到这个新版本（刚发布的版本常有几分钟延迟），插件保持原样。请稍后重试 / your registry mirror has not synced this release yet (new releases can lag by minutes); the plugin is unchanged, retry later',
+    }
+  }
   // #69: pnpm >= 10 blocks dependency build scripts by default. The install
   // route has long surfaced this via the approve-builds banner (#6, #56),
   // but as a hard failure (pnpm 11 exits 1) the raw stack leaked through —
