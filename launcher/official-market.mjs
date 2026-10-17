@@ -13,6 +13,7 @@ export const OFFICIAL_MARKET_BUNDLE = '@deepseek-ai/dsh-experimental-plugin-mark
 // A raw.githubusercontent.com file is served without a redirect, which the official market requires of an index.
 export const AWESOME_INDEX_URL = 'https://raw.githubusercontent.com/WSL043/DSH-Portable-Updates/market-index/awesome-index.json'
 const STATE_FILE = '.dsh-portable-official-market.json'
+const TOOL_ROW = /^-[ \t]+id:[ \t]*['"]?tool-plugin-market['"]?[ \t]*$/mu
 const PLUGIN_MARKET_ROW = /^-[ \t]+id:[ \t]*['"]?plugin-market['"]?[ \t]*$/mu
 
 function emptyPatch(text) {
@@ -25,6 +26,18 @@ export function withAwesomeIndex(text, url = AWESOME_INDEX_URL) {
   const row = `- id: plugin-market\n  config:\n    indexes:\n      - ${url}\n`
   const eol = text.includes('\r\n') ? '\r\n' : '\n'
   const block = row.replaceAll('\n', eol)
+  if (emptyPatch(text)) {
+    const header = text.split(/\r?\n/u).filter(line => /^\s*#/u.test(line)).join(eol)
+    return `${header ? `${header}${eol}` : ''}${block}`
+  }
+  return `${text.endsWith('\n') ? text : `${text}${eol}`}${block}`
+}
+
+/** The patch file with the `plugin_market` agent tool switched on (the core ships it off); null when the user already owns that row. */
+export function withMarketTool(text) {
+  if (TOOL_ROW.test(text)) return null
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const block = `- id: tool-plugin-market${eol}  disabled: false${eol}`
   if (emptyPatch(text)) {
     const header = text.split(/\r?\n/u).filter(line => /^\s*#/u.test(line)).join(eol)
     return `${header ? `${header}${eol}` : ''}${block}`
@@ -90,16 +103,31 @@ export async function ensureOfficialMarket(layout, adapters = {}) {
       delete state.suspended
       stateChanged = true
     }
-    if (state.indexOffered !== true) {
+    if (state.indexOffered !== true || state.toolOffered !== true) {
       const patchPath = paths.join(profileRoot, 'cordis.patch.yml')
-      const current = exists(patchPath) ? await load(patchPath, 'utf8') : ''
-      const next = withAwesomeIndex(current)
-      if (next !== null) {
-        await makeDirectory(profileRoot, { recursive: true })
-        await writeAtomic(patchPath, next, save, move)
-        actions.push('added-index')
+      const original = exists(patchPath) ? await load(patchPath, 'utf8') : ''
+      let text = original
+      if (state.indexOffered !== true) {
+        const next = withAwesomeIndex(text)
+        if (next !== null) {
+          text = next
+          actions.push('added-index')
+        }
+        state.indexOffered = true
       }
-      state.indexOffered = true
+      // The agent can then search and install plugins itself; switching it off on the Plugins page sticks.
+      if (state.toolOffered !== true) {
+        const next = withMarketTool(text)
+        if (next !== null) {
+          text = next
+          actions.push('enabled-tool')
+        }
+        state.toolOffered = true
+      }
+      if (text !== original) {
+        await makeDirectory(profileRoot, { recursive: true })
+        await writeAtomic(patchPath, text, save, move)
+      }
       stateChanged = true
     }
   }

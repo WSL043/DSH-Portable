@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { AWESOME_INDEX_URL, OFFICIAL_MARKET_BUNDLE, ensureOfficialMarket, withAwesomeIndex } from '../launcher/official-market.mjs'
+import { AWESOME_INDEX_URL, OFFICIAL_MARKET_BUNDLE, ensureOfficialMarket, withAwesomeIndex, withMarketTool } from '../launcher/official-market.mjs'
 
 async function bed(t, { shipped = true, bundles = ['dsh-image-viewer'], patch } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'official-market-'))
@@ -29,11 +29,12 @@ async function bed(t, { shipped = true, bundles = ['dsh-image-viewer'], patch } 
 test('a profile on a core that ships the market gets the bundle and the Awesome index once', async t => {
   const { layout, manifest, patchText } = await bed(t, { patch: '# first run\n[]\n' })
   const first = await ensureOfficialMarket(layout)
-  assert.deepEqual(first, { status: 'configured', actions: ['enabled-bundle', 'added-index'] })
+  assert.deepEqual(first, { status: 'configured', actions: ['enabled-bundle', 'added-index', 'enabled-tool'] })
   assert.deepEqual((await manifest()).dsh.profile.bundles, ['dsh-image-viewer', OFFICIAL_MARKET_BUNDLE])
   const patch = await patchText()
   assert.ok(patch.startsWith('# first run\n'), 'the official header comment survives')
   assert.ok(patch.includes(`- id: plugin-market\n  config:\n    indexes:\n      - ${AWESOME_INDEX_URL}\n`))
+  assert.ok(patch.endsWith('- id: tool-plugin-market\n  disabled: false\n'), 'the agent tool is switched on')
   assert.ok(!patch.includes('[]'), 'the empty list is replaced, not kept beside the row')
   assert.deepEqual(await ensureOfficialMarket(layout), { status: 'unchanged', actions: [] })
 })
@@ -53,20 +54,20 @@ test('a user who turned the bundle off or removed the index keeps that choice', 
 test('an index list the user already owns is never touched, and other rows are kept', async t => {
   const owned = '- id: plugin-market\n  config:\n    indexes:\n      - https://example.com/mine.json\n'
   const first = await bed(t, { patch: owned })
-  assert.deepEqual((await ensureOfficialMarket(first.layout)).actions, ['enabled-bundle'])
-  assert.equal(await first.patchText(), owned)
+  assert.deepEqual((await ensureOfficialMarket(first.layout)).actions, ['enabled-bundle', 'enabled-tool'])
+  assert.equal(await first.patchText(), `${owned}- id: tool-plugin-market\n  disabled: false\n`)
 
   const other = '- id: ui-settings-general\n  config:\n    language: zh\n'
   const second = await bed(t, { patch: other })
   await ensureOfficialMarket(second.layout)
   const patch = await second.patchText()
-  assert.ok(patch.startsWith(other) && patch.endsWith(`      - ${AWESOME_INDEX_URL}\n`))
+  assert.ok(patch.startsWith(other) && patch.includes(`      - ${AWESOME_INDEX_URL}\n`))
 })
 
 test('the patch file is created when the profile has none yet', async t => {
   const { layout, patchText } = await bed(t)
   await ensureOfficialMarket(layout)
-  assert.equal(await patchText(), `- id: plugin-market\n  config:\n    indexes:\n      - ${AWESOME_INDEX_URL}\n`)
+  assert.equal(await patchText(), `- id: plugin-market\n  config:\n    indexes:\n      - ${AWESOME_INDEX_URL}\n- id: tool-plugin-market\n  disabled: false\n`)
 })
 
 test('a core without the market suspends the bundle, and the next core that has it brings it back', async t => {
@@ -102,6 +103,21 @@ test('CRLF patch files keep their line endings', () => {
   assert.ok(next.includes('\r\n- id: plugin-market\r\n  config:\r\n'))
   assert.ok(!/(?<!\r)\n/u.test(next))
   assert.equal(withAwesomeIndex('- id: plugin-market\n'), null)
+})
+
+test('a tool row the user owns is kept, and a profile that predates the tool gets it once', async t => {
+  const mine = '- id: tool-plugin-market\n  disabled: true\n'
+  const own = await bed(t, { patch: mine })
+  await ensureOfficialMarket(own.layout)
+  assert.ok((await own.patchText()).startsWith(mine))
+  assert.ok(!(await own.patchText()).includes('disabled: false'))
+
+  const old = await bed(t)
+  await writeFile(path.join(old.profile, '.dsh-portable-official-market.json'), JSON.stringify({ schemaVersion: 1, bundleOffered: true, indexOffered: true }))
+  assert.deepEqual((await ensureOfficialMarket(old.layout)).actions, ['enabled-tool'])
+  assert.equal(await old.patchText(), '- id: tool-plugin-market\n  disabled: false\n')
+  assert.equal((await ensureOfficialMarket(old.layout)).status, 'unchanged')
+  assert.equal(withMarketTool('- id: tool-plugin-market\n'), null)
 })
 
 test('the environment switch leaves the profile untouched', async () => {
