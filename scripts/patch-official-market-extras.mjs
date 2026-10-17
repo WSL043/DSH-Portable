@@ -95,7 +95,7 @@ function PortableEntryShot({ entry }) {
 			onError: () => setHidden(true),
 			onClick: () => setOpen(true),
 			onKeyDown: (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(true); } },
-			style: { flex: "none", width: "112px", height: "72px", objectFit: "cover", borderRadius: "6px", alignSelf: "center", cursor: "zoom-in", border: "1px solid var(--dsw-border, rgba(127,127,127,.25))" }
+			style: { position: "relative", zIndex: 2, flex: "none", width: "112px", height: "72px", objectFit: "cover", borderRadius: "6px", alignSelf: "center", cursor: "zoom-in", border: "1px solid var(--dsw-border, rgba(127,127,127,.25))" }
 		}),
 		open ? (0, react_jsx_runtime.jsx)(PortableShotViewer, { shots, start: 0, onClose: () => setOpen(false) }) : null
 	] });
