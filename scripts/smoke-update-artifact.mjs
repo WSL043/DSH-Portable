@@ -83,9 +83,19 @@ async function main() {
   assert.equal(installed.platform, manifest.platform)
   assert.equal(installed.nodeVersion, manifest.component.requiredNodeVersion)
 
+  // A core that names a shell contract is accepted by any shell with that contract. Present the installation as an
+  // older Portable with a different fingerprint and expect the update to keep that identity.
+  const contractCore = engine && manifest.requiredShellContract != null
+  const skewedPortableVersion = '0.0.1'
   if (engine) {
-    assert.equal(installed.portableVersion, manifest.portableVersion, 'core must target this exact product')
-    assert.equal(installed.shellFingerprint, manifest.requiredShellFingerprint, 'core must target this exact shell')
+    if (contractCore) {
+      assert.equal(installed.shellContract, manifest.requiredShellContract, 'core must target this shell contract')
+      installed.portableVersion = skewedPortableVersion
+      installed.shellFingerprint = 'f'.repeat(64)
+    } else {
+      assert.equal(installed.portableVersion, manifest.portableVersion, 'core must target this exact product')
+      assert.equal(installed.shellFingerprint, manifest.requiredShellFingerprint, 'core must target this exact shell')
+    }
     // A same-version stable build exercises reinstallation; candidate builds keep the real prior core version.
     if (installed.dshVersion === manifest.component.dshVersion) installed.dshVersion = '0.0.0'
   } else installed.portableVersion = '0.0.0'
@@ -166,7 +176,7 @@ async function main() {
     ], { encoding: 'utf8', timeout: 180000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 })
     const result = JSON.parse(updated.stdout.trim())
     assert.equal(result.status, 'updated')
-    assert.equal(result.portableVersion, manifest.portableVersion)
+    assert.equal(result.portableVersion, contractCore ? skewedPortableVersion : manifest.portableVersion)
     assert.equal(result.dshVersion, manifest.component.dshVersion)
     assert.equal(result.running?.status, 'running')
     const status = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
@@ -174,7 +184,11 @@ async function main() {
     })).stdout.trim())
     assert.equal(status.status, 'running')
     const after = JSON.parse(await readFile(installedFile, 'utf8'))
-    assert.equal(after.portableVersion, manifest.portableVersion)
+    assert.equal(after.portableVersion, contractCore ? skewedPortableVersion : manifest.portableVersion)
+    if (contractCore) {
+      assert.equal(after.shellFingerprint, 'f'.repeat(64), 'a core update keeps the installed shell fingerprint')
+      assert.equal(after.shellContract, manifest.requiredShellContract)
+    }
     if (engine) {
       assert.deepEqual(JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies, originalDependencies,
         'core upgrade preserves the installed plugin dependencies')
@@ -229,7 +243,7 @@ async function main() {
     })).stdout.trim())
     assert.equal(rollbackStatus.status, 'running')
     const afterRollback = JSON.parse(await readFile(installedFile, 'utf8'))
-    assert.equal(afterRollback.portableVersion, manifest.portableVersion)
+    assert.equal(afterRollback.portableVersion, contractCore ? skewedPortableVersion : manifest.portableVersion)
     assert.equal(afterRollback.dshVersion, manifest.component.dshVersion)
     if (engine) assert.deepEqual(JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies, originalDependencies)
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)

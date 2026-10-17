@@ -83,6 +83,8 @@ NPM_CLI="$NODE_FOLDER/lib/node_modules/npm/bin/npm-cli.js"
 [[ -x "$NODE_EXE" && -f "$NPM_CLI" ]] || { echo "Pinned Node archive is incomplete" >&2; exit 1; }
 SHELL_FINGERPRINT="$("$NODE_EXE" "$PROJECT_ROOT/scripts/shell-fingerprint.mjs" linux)"
 [[ "$SHELL_FINGERPRINT" =~ ^[a-f0-9]{64}$ ]] || { echo "Linux shell fingerprint generation failed" >&2; exit 1; }
+SHELL_CONTRACT="$("$NODE_EXE" "$PROJECT_ROOT/scripts/shell-contract.mjs" number)"
+[[ "$SHELL_CONTRACT" =~ ^[1-9][0-9]*$ ]] || { echo "Linux shell contract lookup failed" >&2; exit 1; }
 
 cp "$PROJECT_ROOT/app/package.json" "$STAGE/app/package.json"
 cp "$PROJECT_ROOT/app/package-lock.json" "$STAGE/app/package-lock.json"
@@ -191,7 +193,8 @@ cat > "$STAGE/licenses/COMPONENTS.json" <<EOF
   "runtimeLayout": "$(if [[ -n "$PREVIEW_APP_SOURCE" ]]; then printf official-source-pack; else printf npm-lock; fi)",
   "updaterSchema": 1,
   "shellSchema": 12,
-  "shellFingerprint": "$SHELL_FINGERPRINT"
+  "shellFingerprint": "$SHELL_FINGERPRINT",
+  "shellContract": $SHELL_CONTRACT
 }
 EOF
 
@@ -254,6 +257,7 @@ cat > "$ENGINE_UPDATE_MANIFEST" <<EOF
   "minimumUpdaterSchema": 1,
   "requiredShellSchema": 12,
   "requiredShellFingerprint": "$SHELL_FINGERPRINT",
+  "requiredShellContract": $SHELL_CONTRACT,
   "component": {
     "kind": "dsh-app",
     "dshVersion": "$DSH_VERSION",

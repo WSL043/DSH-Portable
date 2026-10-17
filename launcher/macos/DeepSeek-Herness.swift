@@ -349,9 +349,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             return
         }
         if status == "core-incompatible" {
-            alert.messageText = L("内核更新包不兼容", "Incompatible core update package")
-            alert.informativeText = L("此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本或稍后重新检查。",
-                                      "This core update package is not qualified for the current DSH-Portable. Select a verified version or check again later.")
+            alert.messageText = L("需要先更新 DSH-Portable", "Update DSH-Portable first")
+            alert.informativeText = L("这个内核需要更新版本的 DSH-Portable 才能使用。请先更新 DSH-Portable，再选择这个内核；也可以先在更新设置里选用适合当前版本的内核。",
+                                      "This core needs a newer DSH-Portable. Update DSH-Portable first, then choose this core; or pick a core that fits this version in update settings.")
             alert.runModal()
             return
         }

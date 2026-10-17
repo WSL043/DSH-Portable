@@ -488,8 +488,8 @@ fn check_updates(_app: tauri::AppHandle, interactive: bool, scope: &'static str)
                     PRODUCT_NAME,
                     &text(
                         &layout,
-                        "此内核更新包尚未适配当前 DSH-Portable，请选择通过验证的版本或稍后重新检查。",
-                        "This core update package is not qualified for the current DSH-Portable. Select a verified version or check again later.",
+                        "这个内核需要更新版本的 DSH-Portable 才能使用。请先更新 DSH-Portable，再选择这个内核；也可以先在更新设置里选用适合当前版本的内核。",
+                        "This core needs a newer DSH-Portable. Update DSH-Portable first, then choose this core; or pick a core that fits this version in update settings.",
                     ),
                     MessageLevel::Info,
                 );

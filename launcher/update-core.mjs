@@ -132,6 +132,16 @@ function assertManifestShape(manifest) {
   if (manifest.requiredShellFingerprint != null && !/^[a-f0-9]{64}$/i.test(String(manifest.requiredShellFingerprint))) {
     throw new Error('Update manifest shell fingerprint is invalid.')
   }
+  if (manifest.requiredShellContract != null && (!Number.isSafeInteger(manifest.requiredShellContract) || manifest.requiredShellContract < 1)) {
+    throw new Error('Update manifest shell contract is invalid.')
+  }
+}
+
+// A core update names the shell interface it was built for (requiredShellContract). Such a package is accepted by any
+// shell that carries the same contract number, whatever its Portable version or fingerprint, so a user who never
+// follows Portable releases still receives cores. Manifests from before the contract existed bind to one exact shell.
+function usesShellContract(manifest, updateKind) {
+  return updateKind === 'engine' && manifest.requiredShellContract != null
 }
 
 export function evaluateUpdate(manifest, installed, platform, { allowEngineVersionChange = false, allowProductVersionChange = false } = {}) {
@@ -178,10 +188,18 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     const engineComparison = engineCurrent ? comparePortableVersions(engineCurrent, engineLatest) : -1
     engineAlreadyCurrent = engineComparison === 0
     if (!allowEngineVersionChange && engineComparison >= 0) return describe('current', 'none')
-    // A core package is qualified for exactly one Portable shell. A newer installed Portable simply has not
-    // been qualified against this core yet; only an older one needs a Portable update first.
-    if (productComparison > 0) return describe('core-awaiting-qualification', 'none')
-    if (productComparison !== 0) return describe('core-incompatible', 'none')
+    if (usesShellContract(manifest, updateKind)) {
+      const installedContract = Number(installed.shellContract ?? 0)
+      // A newer interface than this shell speaks needs a Portable update first; an older one is a core that was
+      // never qualified for this shell's interface and will not be offered.
+      if (manifest.requiredShellContract > installedContract) return describe('core-incompatible', 'none')
+      if (manifest.requiredShellContract < installedContract) return describe('core-awaiting-qualification', 'none')
+    } else {
+      // A core package without a contract is qualified for exactly one Portable shell. A newer installed Portable
+      // simply has not been qualified against this core yet; only an older one needs a Portable update first.
+      if (productComparison > 0) return describe('core-awaiting-qualification', 'none')
+      if (productComparison !== 0) return describe('core-incompatible', 'none')
+    }
   } else if (productComparison === 0 || (productComparison > 0 && !allowProductVersionChange)) {
     return describe('current', 'none')
   }
@@ -192,7 +210,7 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
   const component = manifest.component
   if (
     Number(manifest.requiredShellSchema ?? 0) > Number(installed.shellSchema ?? 0)
-    || (manifest.requiredShellFingerprint && manifest.requiredShellFingerprint !== installed.shellFingerprint)
+    || (!usesShellContract(manifest, updateKind) && manifest.requiredShellFingerprint && manifest.requiredShellFingerprint !== installed.shellFingerprint)
     || (manifest.targetRuntimeLayout && manifest.targetRuntimeLayout !== (installed.runtimeLayout || 'expanded-v1'))
     || !component.requiredNodeVersion
     || component.requiredNodeVersion !== installed.nodeVersion
@@ -212,6 +230,7 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     minimumUpdaterSchema: Number(manifest.minimumUpdaterSchema),
     requiredShellSchema: Number(manifest.requiredShellSchema),
     requiredShellFingerprint: manifest.requiredShellFingerprint || null,
+    requiredShellContract: usesShellContract(manifest, updateKind) ? manifest.requiredShellContract : null,
     component,
   }
 }
@@ -492,6 +511,7 @@ export async function readInstalledUpdateState(layout) {
     updaterSchema: Number(components.updaterSchema ?? 0),
     shellSchema: Number(components.shellSchema ?? 0),
     shellFingerprint: components.shellFingerprint ?? '',
+    shellContract: Number(components.shellContract ?? 0),
     nodeVersion: components.nodeVersion ?? '',
     runtimeLayout: components.runtimeLayout || 'expanded-v1',
   }
@@ -1031,6 +1051,32 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
   return { status: 'updated', portableVersion: metadata.portableVersion, dshVersion: metadata.dshVersion, cleanupPending, warnings: preflightWarnings }
 }
 
+// Fields of COMPONENTS.json that describe the installed shell rather than the runtime inside the capsule. A core
+// qualified on another Portable version must not rewrite them: the shell on disk did not change, and the product update
+// check, the fingerprint and the about page all read this file.
+const SHELL_IDENTITY_KEYS = [
+  'portableVersion', 'releaseChannel', 'updaterSchema', 'shellSchema', 'shellFingerprint', 'shellContract',
+  'webView2Package', 'webView2Version', 'webView2Sha256', 'windowsNotificationRuntime',
+]
+
+/** Rewrites the staged component metadata so the installed shell keeps its identity while the runtime is replaced. */
+export async function adoptInstalledShellIdentity(layout, stagedRoot) {
+  const installed = await readJson(path.join(layout.root, 'licenses', 'COMPONENTS.json'), null)
+  const componentsFile = path.join(stagedRoot, 'licenses', 'COMPONENTS.json')
+  const staged = await readJson(componentsFile, null)
+  const metadataFile = path.join(stagedRoot, 'component.json')
+  const metadata = await readJson(metadataFile, null)
+  if (!installed || !staged || !metadata) throw new Error('Cannot keep the installed shell identity: component metadata is missing.')
+  const merged = { ...staged }
+  for (const key of SHELL_IDENTITY_KEYS) {
+    if (Object.hasOwn(installed, key)) merged[key] = installed[key]
+    else delete merged[key]
+  }
+  await writeJsonAtomic(componentsFile, merged)
+  await writeJsonAtomic(metadataFile, { ...metadata, portableVersion: merged.portableVersion })
+  return merged
+}
+
 export async function installAvailableAppUpdate({
   layout,
   update,
@@ -1087,10 +1133,16 @@ export async function installAvailableAppUpdate({
       || Number(components.shellSchema) < Number(update.requiredShellSchema)) {
       throw new Error('Downloaded component compatibility metadata does not match its manifest.')
     }
-    if (update.requiredShellFingerprint && components.shellFingerprint !== update.requiredShellFingerprint) {
+    if (update.requiredShellContract != null) {
+      const installed = await readInstalledUpdateState(layout)
+      if (Number(components.shellContract) !== update.requiredShellContract || installed.shellContract !== update.requiredShellContract) {
+        throw new Error('Downloaded component shell contract does not match its manifest or this installation.')
+      }
+    } else if (update.requiredShellFingerprint && components.shellFingerprint !== update.requiredShellFingerprint) {
       throw new Error('Downloaded component shell fingerprint does not match its manifest.')
     }
     if (typeof beforeApply === 'function') await beforeApply({ layout, stagedRoot, metadata })
+    if (update.requiredShellContract != null) metadata.portableVersion = (await adoptInstalledShellIdentity(layout, stagedRoot)).portableVersion
     const applied = metadata.kind === 'dsh-runtime-capsule'
       ? await applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback, onProgress })
       : await applyStagedAppUpdate({ layout, stagedRoot, healthCheck, preflight, beforeRollback, onProgress })

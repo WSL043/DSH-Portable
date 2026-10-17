@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFile, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -1342,4 +1342,105 @@ test('recovery rejects parent operation IDs without touching data or deleting th
     assert.equal(await readFile(fixture.layout.updateJournal,'utf8'), journal)
     assert.equal(await readFile(path.join(fixture.layout.dataDir,'private-session.txt'),'utf8'), 'keep me')
   }
+})
+
+const contractInstalled = { portableVersion: '0.9.2', dshVersion: '0.2.0', releaseChannel: 'stable', updaterSchema: 1, shellSchema: 25,
+  shellFingerprint: 'a'.repeat(64), shellContract: 3, nodeVersion: '24.19.0', runtimeLayout: 'capsule-v1' }
+const contractManifest = (overrides = {}) => engineUpdateManifest({
+  portableVersion: '0.9.7', requiredShellSchema: 25, requiredShellFingerprint: 'b'.repeat(64), requiredShellContract: 3,
+  targetRuntimeLayout: 'capsule-v1',
+  component: { ...engineUpdateManifest().component, kind: 'dsh-runtime-capsule', dshVersion: '0.2.4', runtimeLayout: 'capsule-v1' },
+  ...overrides,
+})
+
+test('a core built for the same shell contract is accepted by an older Portable with another fingerprint', () => {
+  const result = evaluateUpdate(contractManifest(), contractInstalled, 'windows-x64', { allowEngineVersionChange: true })
+  assert.equal(result.status, 'available')
+  assert.equal(result.requiredShellContract, 3)
+  // The same package without a contract is still bound to one exact shell.
+  const legacy = contractManifest()
+  delete legacy.requiredShellContract
+  assert.equal(evaluateUpdate(legacy, contractInstalled, 'windows-x64', { allowEngineVersionChange: true }).status, 'core-incompatible')
+})
+
+test('a core for a newer contract needs a Portable update, an older one is not offered', () => {
+  const options = { allowEngineVersionChange: true }
+  assert.equal(evaluateUpdate(contractManifest({ requiredShellContract: 4 }), contractInstalled, 'windows-x64', options).status, 'core-incompatible')
+  assert.equal(evaluateUpdate(contractManifest({ requiredShellContract: 2 }), contractInstalled, 'windows-x64', options).status, 'core-awaiting-qualification')
+  assert.throws(() => evaluateUpdate(contractManifest({ requiredShellContract: 0 }), contractInstalled, 'windows-x64', options), /shell contract/iu)
+  assert.throws(() => evaluateUpdate(contractManifest({ requiredShellContract: '3' }), contractInstalled, 'windows-x64', options), /shell contract/iu)
+})
+
+test('the contract does not replace the Node, layout and update-machinery requirements', () => {
+  const options = { allowEngineVersionChange: true }
+  assert.equal(evaluateUpdate(contractManifest({ requiredShellSchema: 26 }), contractInstalled, 'windows-x64', options).status, 'full-package-required')
+  assert.equal(evaluateUpdate(contractManifest({ component: { ...contractManifest().component, requiredNodeVersion: '25.0.0' } }), contractInstalled, 'windows-x64', options).status, 'full-package-required')
+  assert.equal(evaluateUpdate(contractManifest(), { ...contractInstalled, runtimeLayout: 'expanded-v1' }, 'windows-x64', options).status, 'full-package-required')
+})
+
+test('the installed state carries the shell contract, and 0 for a shell that predates it', async () => {
+  const fixture = await makeCapsuleUpdateFixture()
+  try {
+    assert.equal((await readInstalledUpdateState(fixture.layout)).shellContract, 0)
+    const file = path.join(fixture.root, 'licenses', 'COMPONENTS.json')
+    await writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, 'utf8')), shellContract: 3 }))
+    assert.equal((await readInstalledUpdateState(fixture.layout)).shellContract, 3)
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})
+
+async function contractUpdateFixture({ stagedContract = 3 } = {}) {
+  const fixture = await makeCapsuleUpdateFixture()
+  const patch = async (file, change) => writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, 'utf8')), ...change }))
+  await patch(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), { shellContract: 3, shellFingerprint: 'a'.repeat(64), releaseChannel: 'stable', pnpmVersion: '10.0.0' })
+  await patch(path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json'), { shellContract: stagedContract, shellFingerprint: 'b'.repeat(64), releaseChannel: 'stable', pnpmVersion: '10.1.0', defaultPlugins: [{ package: 'dsh-image-viewer', version: '0.1.15' }] })
+  await patch(path.join(fixture.stagedRoot, 'component.json'), { releaseChannel: 'stable' })
+  const update = {
+    status: 'available', latest: '0.5.0-rc.2', releaseChannel: 'stable', platform: 'windows-x64', minimumUpdaterSchema: 1,
+    requiredShellSchema: 21, requiredShellContract: 3, requiredShellFingerprint: 'b'.repeat(64),
+    component: { kind: 'dsh-runtime-capsule', dshVersion: '0.1.1-rc.3', dshCommit: 'b'.repeat(40), requiredNodeVersion: '24.19.0', bytes: 4, sha256: 'c'.repeat(64), urls: ['https://example.invalid/x'] },
+  }
+  const install = (extra = {}) => installAvailableAppUpdate({
+    layout: fixture.layout, update, healthCheck: async () => true, cleanOperationDirectories: async () => {},
+    download: async () => {}, extract: async (_archive, destination) => cp(fixture.stagedRoot, destination, { recursive: true }),
+    ...extra,
+  })
+  return { fixture, update, install }
+}
+
+test('a core qualified on another Portable version replaces the runtime but keeps the installed shell identity', async () => {
+  const { fixture, install } = await contractUpdateFixture()
+  try {
+    const result = await install()
+    assert.equal(result.status, 'updated')
+    assert.equal(result.portableVersion, '0.5.0-rc.1', 'the shell version is the installed one, not the one the core was qualified on')
+    const components = JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+    assert.equal(components.dshVersion, '0.1.1-rc.3')
+    assert.equal(components.portableVersion, '0.5.0-rc.1')
+    assert.equal(components.shellFingerprint, 'a'.repeat(64))
+    assert.equal(components.shellContract, 3)
+    assert.equal(components.pnpmVersion, '10.1.0', 'runtime facts come from the new capsule')
+    assert.deepEqual(components.defaultPlugins, [{ package: 'dsh-image-viewer', version: '0.1.15' }])
+    assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.newCapsule)
+    assert.equal((await readInstalledUpdateState(fixture.layout)).portableVersion, '0.5.0-rc.1')
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})
+
+test('a rolled-back core update leaves the shell identity untouched too', async () => {
+  const { fixture, install } = await contractUpdateFixture()
+  try {
+    await assert.rejects(install({ healthCheck: async () => false }), /rolled back/u)
+    const components = JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8'))
+    assert.equal(components.dshVersion, '0.1.1-rc.2')
+    assert.equal(components.portableVersion, '0.5.0-rc.1')
+    assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})
+
+test('a package whose own contract disagrees with its manifest is refused before anything is replaced', async () => {
+  const { fixture, install } = await contractUpdateFixture({ stagedContract: 2 })
+  try {
+    await assert.rejects(install(), /shell contract/iu)
+    assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+    assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).dshVersion, '0.1.1-rc.2')
+  } finally { await rm(fixture.root, { recursive: true, force: true }) }
 })

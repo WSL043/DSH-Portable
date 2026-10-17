@@ -83,9 +83,9 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("此内核更新包尚未适配当前 DSH-Portable。请在更新设置中选择通过验证的内核版本，或稍后重新检查。",
-                          "This core update package is not qualified for the current DSH-Portable. Select a verified core in update settings, or check again later."),
-                        L("内核更新包不兼容", "Incompatible core update package"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        L("这个内核需要更新版本的 DSH-Portable 才能使用。请先更新 DSH-Portable，再选择这个内核；也可以先在更新设置里选用适合当前版本的内核。",
+                          "This core needs a newer DSH-Portable. Update DSH-Portable first, then choose this core; or pick a core that fits this version in update settings."),
+                        L("需要先更新 DSH-Portable", "Update DSH-Portable first"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 if (updateStatus == "core-awaiting-qualification")

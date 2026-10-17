@@ -210,6 +210,8 @@ try {
     }
     $ShellFingerprint = (& $NodeExe (Join-Path $ProjectRoot 'scripts\shell-fingerprint.mjs') windows).Trim()
     if ($LASTEXITCODE -ne 0 -or $ShellFingerprint -notmatch '^[a-f0-9]{64}$') { throw 'Windows shell fingerprint generation failed.' }
+    $ShellContract = [int](& $NodeExe (Join-Path $ProjectRoot 'scriptsshell-contract.mjs') number)
+    if ($LASTEXITCODE -ne 0 -or $ShellContract -lt 1) { throw 'Windows shell contract lookup failed.' }
 
     Copy-PortableSources $Stage
     if ($PreviewAppSource) {
@@ -343,6 +345,7 @@ try {
         updaterSchema = 1
         shellSchema = 25
         shellFingerprint = $ShellFingerprint
+        shellContract = $ShellContract
     }
     [System.IO.File]::WriteAllText(
         (Join-Path $Stage 'licenses\COMPONENTS.json'),
@@ -508,6 +511,7 @@ try {
             minimumUpdaterSchema = 1
             requiredShellSchema = 25
             requiredShellFingerprint = $ShellFingerprint
+            requiredShellContract = $ShellContract
             targetRuntimeLayout = 'capsule-v1'
             component = [ordered]@{
                 kind = 'dsh-runtime-capsule'
