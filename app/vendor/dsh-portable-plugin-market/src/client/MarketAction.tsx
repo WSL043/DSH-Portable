@@ -32,8 +32,8 @@ export function MarketAction(props: MarketActionProps) {
     props.refresh?.()
   }, [props.refresh])
 
-  // With the official plugin market on, its Discover tab browses and installs. The Portable market stays one click away as
-  // "Advanced": groups, themes, diagnostics and the repair tools the official page does not have.
+  // With the official plugin market on, its Discover tab browses and installs, so "Advanced" opens the Portable market on its
+  // installed view only: groups, update and rollback, themes, diagnostics and the repair tools the official page does not have.
   const label = official === 'active' ? props.t('navAdvanced') : props.t('nav')
 
   return (
@@ -55,7 +55,7 @@ export function MarketAction(props: MarketActionProps) {
         contentClassName={css.managerModalContent}
       >
         <MarketErrorBoundary view="discover">
-          <MarketSection t={props.t} locale={props.locale} view="discover"
+          <MarketSection t={props.t} locale={props.locale} view={official === 'active' ? 'installed' : 'discover'}
             onOfficialInstall={props.openInstall && props.editInstallSpec ? spec => {
               setOpen(false)
               props.openInstall!()
