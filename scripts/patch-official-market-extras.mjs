@@ -48,22 +48,57 @@ function PortableEntryExtras({ entry, language }) {
 	if (facts.length === 0) return null;
 	return (0, react_jsx_runtime.jsx)("span", { "data-portable-extras": "1", style: { fontSize: "12px", opacity: 0.7 }, children: facts.join(" · ") });
 }
+let portableCreatePortal = null;
+try { portableCreatePortal = require("react-dom").createPortal; } catch (error) { portableCreatePortal = null; }
+/** Full-size preview: click or Esc closes it, the arrow keys step through the plugin's images. */
+function PortableShotViewer({ shots, start, onClose }) {
+	const [index, setIndex] = react.useState(start);
+	react.useEffect(() => {
+		const onKey = (event) => {
+			if (event.key === "Escape") { event.stopPropagation(); event.preventDefault(); onClose(); }
+			else if (event.key === "ArrowRight") setIndex((value) => (value + 1) % shots.length);
+			else if (event.key === "ArrowLeft") setIndex((value) => (value - 1 + shots.length) % shots.length);
+		};
+		window.addEventListener("keydown", onKey, true);
+		return () => { window.removeEventListener("keydown", onKey, true); };
+	}, []);
+	const viewer = (0, react_jsx_runtime.jsxs)("div", {
+		role: "dialog",
+		"aria-modal": "true",
+		"data-portable-viewer": "1",
+		onClick: onClose,
+		style: { position: "fixed", top: 0, right: 0, bottom: 0, left: 0, zIndex: 2147483000, background: "rgba(0,0,0,.8)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" },
+		children: [
+			(0, react_jsx_runtime.jsx)("img", { src: shots[index], alt: "", referrerPolicy: "no-referrer", style: { maxWidth: "92vw", maxHeight: "90vh", objectFit: "contain", borderRadius: "8px", background: "#fff" } }),
+			shots.length > 1 ? (0, react_jsx_runtime.jsx)("span", { style: { position: "absolute", bottom: "16px", left: 0, right: 0, textAlign: "center", color: "#fff", fontSize: "13px" }, children: \`\${index + 1} / \${shots.length}\` }) : null
+		]
+	});
+	return portableCreatePortal === null ? viewer : portableCreatePortal(viewer, document.body);
+}
 /** The preview sits at the right edge of the card, beside the install button, so it does not make the list taller. */
 function PortableEntryShot({ entry }) {
 	const extra = portableUseExtra(entry);
 	const [hidden, setHidden] = react.useState(false);
-	const shot = extra !== null && Array.isArray(extra.shots) && !hidden ? extra.shots[0] : null;
-	if (shot === null) return null;
-	return (0, react_jsx_runtime.jsx)("img", {
-		"data-portable-shot": "1",
-		src: shot,
-		alt: "",
-		loading: "lazy",
-		decoding: "async",
-		referrerPolicy: "no-referrer",
-		onError: () => setHidden(true),
-		style: { flex: "none", width: "112px", height: "72px", objectFit: "cover", borderRadius: "6px", alignSelf: "center", border: "1px solid var(--dsw-border, rgba(127,127,127,.25))" }
-	});
+	const [open, setOpen] = react.useState(false);
+	const shots = extra !== null && Array.isArray(extra.shots) && !hidden ? extra.shots : [];
+	if (shots.length === 0) return null;
+	return (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+		(0, react_jsx_runtime.jsx)("img", {
+			"data-portable-shot": "1",
+			role: "button",
+			tabIndex: 0,
+			src: shots[0],
+			alt: "",
+			loading: "lazy",
+			decoding: "async",
+			referrerPolicy: "no-referrer",
+			onError: () => setHidden(true),
+			onClick: () => setOpen(true),
+			onKeyDown: (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setOpen(true); } },
+			style: { flex: "none", width: "112px", height: "72px", objectFit: "cover", borderRadius: "6px", alignSelf: "center", cursor: "zoom-in", border: "1px solid var(--dsw-border, rgba(127,127,127,.25))" }
+		}),
+		open ? (0, react_jsx_runtime.jsx)(PortableShotViewer, { shots, start: 0, onClose: () => setOpen(false) }) : null
+	] });
 }
 `
 

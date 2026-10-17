@@ -16,6 +16,7 @@ test('the official card gets the extras row once, and the result is still valid 
   assert.equal(patched.split('PortableEntryExtras, { entry, language }').length - 1, 1)
   assert.equal(patched.split('PortableEntryShot, { entry }').length - 1, 1, 'the preview is its own element beside the install button')
   assert.doesNotThrow(() => new vm.Script(patched))
+  assert.ok(patched.includes('data-portable-viewer'), 'a click on the preview opens it full size')
 })
 
 test('a changed card layout stops the build instead of shipping a half patch', async () => {
