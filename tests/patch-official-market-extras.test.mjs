@@ -14,6 +14,7 @@ test('the official card gets the extras row once, and the result is still valid 
   assert.ok(patched.includes(EXTRAS_MARKER))
   assert.equal(patchMarketExtras(patched), patched, 'applying twice changes nothing')
   assert.equal(patched.split('PortableEntryExtras, { entry, language }').length - 1, 1)
+  assert.equal(patched.split('PortableEntryShot, { entry }').length - 1, 1, 'the preview is its own element beside the install button')
   assert.doesNotThrow(() => new vm.Script(patched))
 })
 

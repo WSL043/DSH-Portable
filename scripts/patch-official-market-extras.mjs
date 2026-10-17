@@ -28,38 +28,41 @@ function portableExtraFor(entry) {
 	const key = match === null ? "" : \`\${match[1]}/\${match[2]}\`.toLowerCase();
 	return data.byRepo && key !== "" && Object.hasOwn(data.byRepo, key) ? data.byRepo[key] : null;
 }
-function PortableEntryExtras({ entry, language }) {
+function portableUseExtra(entry) {
 	const [, refresh] = react.useReducer((count) => count + 1, 0);
-	const [hidden, setHidden] = react.useState(false);
 	react.useEffect(() => {
 		portableExtras.listeners.add(refresh);
 		portableLoadExtras();
 		return () => { portableExtras.listeners.delete(refresh); };
 	}, []);
-	const extra = portableExtraFor(entry);
+	return portableExtraFor(entry);
+}
+function PortableEntryExtras({ entry, language }) {
+	const extra = portableUseExtra(entry);
 	if (extra === null) return null;
 	const zh = String(language).toLowerCase().startsWith("zh");
 	const compact = (value) => new Intl.NumberFormat(language, { notation: "compact", maximumFractionDigits: 1 }).format(value);
 	const facts = [];
 	if (typeof extra.d === "number") facts.push(zh ? \`近 30 天下载 \${compact(extra.d)}\` : \`\${compact(extra.d)} downloads in 30 days\`);
 	if (typeof extra.stars === "number") facts.push(\`★ \${compact(extra.stars)}\`);
-	const shot = Array.isArray(extra.shots) && !hidden ? extra.shots[0] : null;
-	if (facts.length === 0 && shot === null) return null;
-	return (0, react_jsx_runtime.jsxs)("span", {
-		"data-portable-extras": "1",
-		style: { display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" },
-		children: [
-			facts.length === 0 ? null : (0, react_jsx_runtime.jsx)("span", { style: { fontSize: "12px", opacity: 0.7 }, children: facts.join(" · ") }),
-			shot === null ? null : (0, react_jsx_runtime.jsx)("img", {
-				src: shot,
-				alt: "",
-				loading: "lazy",
-				decoding: "async",
-				referrerPolicy: "no-referrer",
-				onError: () => setHidden(true),
-				style: { maxHeight: "120px", maxWidth: "100%", width: "auto", alignSelf: "flex-start", borderRadius: "6px", border: "1px solid var(--dsw-border, rgba(127,127,127,.25))", objectFit: "cover" }
-			})
-		]
+	if (facts.length === 0) return null;
+	return (0, react_jsx_runtime.jsx)("span", { "data-portable-extras": "1", style: { fontSize: "12px", opacity: 0.7 }, children: facts.join(" · ") });
+}
+/** The preview sits at the right edge of the card, beside the install button, so it does not make the list taller. */
+function PortableEntryShot({ entry }) {
+	const extra = portableUseExtra(entry);
+	const [hidden, setHidden] = react.useState(false);
+	const shot = extra !== null && Array.isArray(extra.shots) && !hidden ? extra.shots[0] : null;
+	if (shot === null) return null;
+	return (0, react_jsx_runtime.jsx)("img", {
+		"data-portable-shot": "1",
+		src: shot,
+		alt: "",
+		loading: "lazy",
+		decoding: "async",
+		referrerPolicy: "no-referrer",
+		onError: () => setHidden(true),
+		style: { flex: "none", width: "112px", height: "72px", objectFit: "cover", borderRadius: "6px", alignSelf: "center", border: "1px solid var(--dsw-border, rgba(127,127,127,.25))" }
 	});
 }
 `
@@ -75,5 +78,5 @@ export function patchMarketExtras(source) {
   if (anchors !== 1) throw new Error(`Official market card layout changed: expected 1 card end, found ${anchors}`)
   return source
     .replace(CARD_FUNCTION, () => `${HELPER}\t\t${CARD_FUNCTION}`)
-    .replace(CARD_ANCHOR, (_, rest) => `})\n\t\t\t\t\t\t\t}), (0, react_jsx_runtime.jsx)(PortableEntryExtras, { entry, language })\n\t\t\t\t\t\t]\n\t\t\t\t\t}),${rest}`)
+    .replace(CARD_ANCHOR, (_, rest) => `})\n\t\t\t\t\t\t\t}), (0, react_jsx_runtime.jsx)(PortableEntryExtras, { entry, language })\n\t\t\t\t\t\t]\n\t\t\t\t\t}), (0, react_jsx_runtime.jsx)(PortableEntryShot, { entry }),${rest}`)
 }
