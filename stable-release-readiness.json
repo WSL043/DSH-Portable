@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "1600d8a1e140dcde43a1a0941940a0480712c011",
-  "dshNpmIntegrity": "sha512-ce+4rnRuhkheK8++2EGm0CjHKVfF7IjUk4DO/NydRS8inAM8A0GFGQmX3cWKM4OzzbT+diIMyOiDuA1wYAZioA==",
+  "dshReviewedCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "dshNpmIntegrity": "sha512-tvY+yhfKRifthbqPe/OK0AYxM5ZkvqfYq/jMYgJcEUxiRRL1Vwra3Ti5TB6AXgSWQdiPHYh/Vp6SJa9yHwMNuw==",
   "historicalSessionMigration": {
     "status": "passed",
-    "evidence": "docs/core-rc1-historical-result-2026-10-17.json; scripts/verify-historical-session.mjs; scripts/intake-upstream-core.mjs 0.2.1-rc.1 (five checks PASS)",
+    "evidence": "docs/core-rc2-historical-result-2026-10-18.json; scripts/verify-historical-session.mjs; scripts/intake-upstream-core.mjs 0.2.1-rc.2 (five checks PASS)",
     "compatibilityPatch": {
       "id": "released-v0-descriptor-v2-read-v1",
-      "dshVersion": "0.2.1-rc.1",
+      "dshVersion": "0.2.1-rc.2",
       "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
       "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
     },
-    "reason": "Exact official DSH 0.2.1-rc.1 identity passed the staged historical migration probe (commit 1600d8a1e140dcde43a1a0941940a0480712c011; npm integrity sha512-ce+4rnRuhkheK8++2EGm0CjHKVfF7IjUk4DO/NydRS8inAM8A0GFGQmX3cWKM4OzzbT+diIMyOiDuA1wYAZioA==). The 2026-10-17 result also records continuation, persisted reopen, and interrupted-journal recovery as true. This is migration-probe evidence only, not product or release acceptance: the writer subprobe has qualifiesRelease=false and real AgentLoop continuation, the official persistence save path, and final packaged native acceptance remain open. Physical power loss was not tested; full CI is still required."
+    "reason": "Exact official DSH 0.2.1-rc.2 identity passed the staged historical migration probe (commit 687f282e8625c6b8d11ff58211a90524be2e4317; npm integrity sha512-tvY+yhfKRifthbqPe/OK0AYxM5ZkvqfYq/jMYgJcEUxiRRL1Vwra3Ti5TB6AXgSWQdiPHYh/Vp6SJa9yHwMNuw==). The 2026-10-18 result also records continuation, persisted reopen, and interrupted-journal recovery as true. This is migration-probe evidence only, not product or release acceptance: the writer subprobe has qualifiesRelease=false and real AgentLoop continuation, the official persistence save path, and final packaged native acceptance remain open. Physical power loss was not tested; full CI is still required."
   }
 }
