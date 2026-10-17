@@ -1,27 +1,31 @@
 {
   "version": "0.9.2",
   "zh": {
-    "summary": "安装包自带内核升到官方 0.2.1-rc.2（0.2.1 的候选版），预装插件同步适配。",
+    "summary": "官方插件市场默认开启并接入 Awesome DSH 目录，内核更新不再要求先升级 Portable，安装包自带内核升到官方 0.2.1-rc.2。",
     "highlights": [
-      "内核：安装包自带的官方内核升到 0.2.1-rc.1，可选内核保留最新三个（0.2.1-rc.1、0.2.1-alpha.5、0.2.1-alpha.4）。预装的图片查看器升到 0.1.15、会话管理升到 1.5.16，都已适配 rc.2，也继续支持 0.2.0-rc.2。",
-      "历史会话迁移已在 rc.2 上用真实内核验证通过。",
-      "插件市场：卸载插件时会先记下它写入的配置行再删除，不再留下无用的配置行；下载源还没同步到新版本时会明确提示“稍后重试”，更新失败后自动刷新可用更新，不再停在过期的提示上。",
-      "插件市场排序：按累计下载量排序时，如果某批下载数据被限流没取到，这些插件之前整天都会排在最后；现在每十分钟只补取缺的那几批，下载量大的插件会回到正确的位置。"
+      "插件市场：官方的「发现」页默认开启，并预装了 Awesome DSH 目录（几千个社区插件）。卡片显示近 30 天下载量、年下载量、星标和预览图；点预览图可放大，多张图可以翻页；可按默认顺序、发布时间、近 30 天下载量、年下载量、星标排序。从目录安装的插件也能在这里更新和回滚。",
+      "「高级管理」改为只打开已安装页：分组、更新与回滚、主题、诊断和修复工具；浏览和安装统一在官方「发现」页。",
+      "内核更新：内核包现在按「外壳接口版本」匹配，不再绑定某个具体的 Portable 版本。不跟进 Portable 发布的用户也能收到新内核；装内核时保留外壳自己的版本和预装插件清单，换内核前会先用新内核检查你已安装的插件，加载不了就取消并回滚，版本范围对不上会在更新后列出。需要新接口时会提示先更新 DSH-Portable。0.9.1 及更早的版本不认识这个机制，需要先升到 0.9.2 一次。",
+      "内核：安装包自带的官方内核升到 0.2.1-rc.2。预装的图片查看器 0.1.15、会话管理 1.5.16 已适配。历史会话迁移已在真实内核上验证。",
+      "插件市场修复：卸载插件时会先记下它写入的配置行再删除，不再留下无用配置行；下载源还没同步到新版本时会明确提示“稍后重试”；下载量数据被限流时只补取缺的那几批，不再让下载量大的插件整天排在最后。"
     ],
     "upgradeNotes": [
-      "升级会保留设置、会话、插件和默认工作区。整包更新后会自动恢复你选的内核。"
+      "升级会保留设置、会话、插件和默认工作区。整包更新后会自动恢复你选的内核。",
+      "已有用户升级后，官方「发现」页和 Awesome DSH 目录会自动出现一次；在插件页关掉它或移除目录源，之后不会再被改回去。"
     ]
   },
   "en": {
-    "summary": "The bundled official core moves to 0.2.1-rc.2 (a release candidate of 0.2.1); the preinstalled plugins are adapted to it.",
+    "summary": "The official plugin market is on by default with the Awesome DSH catalog, core updates no longer require upgrading Portable first, and the bundled official core moves to 0.2.1-rc.2.",
     "highlights": [
-      "Cores: the official core bundled in the installer moves to 0.2.1-rc.2, and the selectable list keeps the newest three (0.2.1-rc.2, 0.2.1-rc.1, 0.2.1-alpha.5). The preinstalled Image Viewer is now 0.1.15 and Chat Manager 1.5.16, both adapted to rc.2 and still supporting 0.2.0-rc.2.",
-      "Historical session migration was verified on the real rc.2 core.",
-      "Plugin market: uninstalling a plugin now records the config rows it inserted before deleting it, so no orphan rows remain; a release your download mirror has not synced yet says to retry later, and a failed update refreshes the offer instead of leaving a stale card.",
-      "Market ordering: when a batch of download counts was rate-limited, those plugins sorted last for the whole day under the cumulative-downloads order; now only the missing batches are retried every ten minutes, so heavily downloaded plugins return to their place."
+      "Plugin market: the official Discover page is on by default, with the Awesome DSH catalog (thousands of community plugins) preinstalled. Cards show 30-day downloads, yearly downloads, stars and a preview; click a preview to enlarge it and page through every image; sort by default order, release date, 30-day downloads, yearly downloads or stars. Plugins installed from the catalog can be updated and rolled back there too.",
+      "Advanced now opens only the installed view: groups, update and rollback, themes, diagnostics and repair tools. Browsing and installing live on the official Discover page.",
+      "Core updates: a core package now matches on the shell interface version rather than one exact Portable version, so users who do not follow Portable releases still receive new cores. Installing a core keeps the shell's own version and preinstalled plugin list. Before switching, your installed plugins are checked against the new core: if they cannot load the update is cancelled and rolled back, and plugins whose version ranges no longer fit are listed afterwards. When a new interface is required you are asked to update DSH-Portable first. 0.9.1 and earlier do not know this mechanism and need to move to 0.9.2 once.",
+      "Core: the official core bundled in the installer moves to 0.2.1-rc.2. The preinstalled Image Viewer 0.1.15 and Chat Manager 1.5.16 are adapted to it. Historical session migration was verified on the real core.",
+      "Plugin market fixes: uninstalling a plugin records the config rows it inserted before deleting it, so no orphan rows remain; a release your download mirror has not synced yet says to retry later; when download counts are rate-limited only the missing batches are retried, so heavily downloaded plugins no longer sort last for the whole day."
     ],
     "upgradeNotes": [
-      "Upgrading keeps settings, sessions, plugins, and the default workspace. After a full update your chosen core is restored automatically."
+      "Upgrading keeps settings, sessions, plugins, and the default workspace. After a full update your chosen core is restored automatically.",
+      "Existing users get the official Discover page and the Awesome DSH catalog once after upgrading; if you turn it off on the Plugins page or remove the catalog source, it is not switched back."
     ]
   }
 }
