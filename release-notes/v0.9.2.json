@@ -3,7 +3,7 @@
   "zh": {
     "summary": "安装包自带内核升到官方 0.2.1-rc.1（0.2.1 的第一个候选版），预装插件同步适配。",
     "highlights": [
-      "内核：安装包自带的官方内核升到 0.2.1-rc.1，可选内核保留最新三个（0.2.1-rc.1、0.2.1-alpha.5、0.2.1-alpha.4）。预装的图片查看器升到 0.1.14、会话管理升到 1.5.16，都已适配 rc.1，也继续支持 0.2.0-rc.2。",
+      "内核：安装包自带的官方内核升到 0.2.1-rc.1，可选内核保留最新三个（0.2.1-rc.1、0.2.1-alpha.5、0.2.1-alpha.4）。预装的图片查看器升到 0.1.15、会话管理升到 1.5.16，都已适配 rc.1，也继续支持 0.2.0-rc.2。",
       "历史会话迁移已在 rc.1 上用真实内核验证通过。",
       "插件市场：卸载插件时会先记下它写入的配置行再删除，不再留下无用的配置行；下载源还没同步到新版本时会明确提示“稍后重试”，更新失败后自动刷新可用更新，不再停在过期的提示上。",
       "插件市场排序：按累计下载量排序时，如果某批下载数据被限流没取到，这些插件之前整天都会排在最后；现在每十分钟只补取缺的那几批，下载量大的插件会回到正确的位置。"
@@ -15,7 +15,7 @@
   "en": {
     "summary": "The bundled official core moves to 0.2.1-rc.1 (the first release candidate of 0.2.1); the preinstalled plugins are adapted to it.",
     "highlights": [
-      "Cores: the official core bundled in the installer moves to 0.2.1-rc.1, and the selectable list keeps the newest three (0.2.1-rc.1, 0.2.1-alpha.5, 0.2.1-alpha.4). The preinstalled Image Viewer is now 0.1.14 and Chat Manager 1.5.16, both adapted to rc.1 and still supporting 0.2.0-rc.2.",
+      "Cores: the official core bundled in the installer moves to 0.2.1-rc.1, and the selectable list keeps the newest three (0.2.1-rc.1, 0.2.1-alpha.5, 0.2.1-alpha.4). The preinstalled Image Viewer is now 0.1.15 and Chat Manager 1.5.16, both adapted to rc.1 and still supporting 0.2.0-rc.2.",
       "Historical session migration was verified on the real rc.1 core.",
       "Plugin market: uninstalling a plugin now records the config rows it inserted before deleting it, so no orphan rows remain; a release your download mirror has not synced yet says to retry later, and a failed update refreshes the offer instead of leaving a stale card.",
       "Market ordering: when a batch of download counts was rate-limited, those plugins sorted last for the whole day under the cumulative-downloads order; now only the missing batches are retried every ten minutes, so heavily downloaded plugins return to their place."
