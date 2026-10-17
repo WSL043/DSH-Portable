@@ -37,10 +37,42 @@ async function listFiles(root, relative = '') {
   return result.sort((a, b) => a.localeCompare(b, 'en'))
 }
 
+/**
+ * Identical files sit next to each other in the stream: the first copy of a content, in path order, is followed by every
+ * later copy of it. The compressor then sees a duplicate one file away instead of hundreds of megabytes away, which a
+ * dependency tree full of nested copies (zod 49 times, and so on) otherwise leaves almost entirely uncompressed.
+ */
+export function orderForCompression(records) {
+  const byContent = new Map()
+  for (const record of records) {
+    const group = byContent.get(record.sha256)
+    if (group === undefined) byContent.set(record.sha256, [record])
+    else group.push(record)
+  }
+  const ordered = []
+  const placed = new Set()
+  for (const record of records) {
+    if (placed.has(record.sha256)) continue
+    placed.add(record.sha256)
+    ordered.push(...byContent.get(record.sha256))
+  }
+  return ordered
+}
+
+async function hashSources(appDir, files) {
+  const records = []
+  for (const relative of files) {
+    const bytes = await readFile(path.join(appDir, ...relative.split('/')))
+    records.push({ relative, size: bytes.length, sha256: sha256(bytes) })
+  }
+  return records
+}
+
 export async function createRuntimeCapsule(appDir, capsuleFile, manifestFile, options = {}) {
   const files = await listFiles(appDir)
   const entries = []
   let rawBytes = 0
+  const records = options.groupDuplicates === false ? null : orderForCompression(await hashSources(appDir, files))
   await mkdir(path.dirname(capsuleFile), { recursive: true })
   const rawFile = `${capsuleFile}.${process.pid}.raw`
   try {
@@ -48,10 +80,16 @@ export async function createRuntimeCapsule(appDir, capsuleFile, manifestFile, op
     try {
       // Hash and spool the same bytes once: a second source read could race
       // a build output change and produce a capsule that fails its own hash.
-      for (const relative of files) {
+      for (const relative of records === null ? files : records.map(record => record.relative)) {
         const bytes = await readFile(path.join(appDir, ...relative.split('/')))
+        const digest = sha256(bytes)
+        // The hashing pass and this one read the same tree; a file that changed in between would make a capsule
+        // that fails its own entry hash on extraction.
+        if (records !== null && digest !== records[entries.length].sha256) {
+          throw new Error(`Runtime capsule source changed while it was being packed: ${relative}`)
+        }
         rawBytes += bytes.length
-        entries.push({ path: `app/${relative}`, size: bytes.length, sha256: sha256(bytes) })
+        entries.push({ path: `app/${relative}`, size: bytes.length, sha256: digest })
         await handle.writeFile(bytes)
       }
     } finally {

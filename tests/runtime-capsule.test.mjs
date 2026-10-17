@@ -669,3 +669,38 @@ test('identical files are written once and hard linked, with a plain write where
   for (const file of copies(plain.runtimeRoot)) assert.equal(await readFile(file, 'utf8'), shared, 'fallback content')
   assert.equal((await stat(copies(plain.runtimeRoot)[0])).nlink, 1)
 })
+
+test('duplicate files are stored next to each other and still extract to exactly the same tree', async t => {
+  const { orderForCompression } = await import('../scripts/create-runtime-capsule.mjs')
+  const records = [
+    { relative: 'a/one.js', sha256: 'x' }, { relative: 'b/other.js', sha256: 'y' },
+    { relative: 'c/one.js', sha256: 'x' }, { relative: 'd/third.js', sha256: 'z' }, { relative: 'e/one.js', sha256: 'x' },
+  ]
+  assert.deepEqual(orderForCompression(records).map(record => record.relative), ['a/one.js', 'c/one.js', 'e/one.js', 'b/other.js', 'd/third.js'])
+  assert.deepEqual(orderForCompression([]), [])
+
+  const { parent, root, app } = await fixture()
+  t.after(() => rm(parent, { recursive: true, force: true }))
+  const same = 'the same bytes in many nested copies\n'.repeat(50)
+  const expected = {}
+  for (const relative of ['node_modules/a/zod/index.js', 'node_modules/b/zod/index.js', 'node_modules/c/node_modules/zod/index.js', 'node_modules/unique/index.js', 'node_modules/z-last/zod.js']) {
+    const content = relative.includes('unique') ? 'only once\n' : same
+    await mkdir(path.dirname(path.join(app, ...relative.split('/'))), { recursive: true })
+    await writeFile(path.join(app, ...relative.split('/')), content)
+    expected[relative] = content
+  }
+  const manifest = await createRuntimeCapsule(app, path.join(root, 'runtime/DSH-App.dshpack'), path.join(root, 'runtime-capsule.json'), {
+    platform: process.platform, arch: process.arch, level: 1,
+  })
+  assert.ok(manifest.fileCount >= 10)
+  const cache = path.join(parent, 'cache')
+  const prepared = await ensureRuntimeCapsule(root, { env: { ...process.env, DSH_PORTABLE_RUNTIME_CACHE: cache } })
+  for (const [relative, content] of Object.entries(expected)) {
+    assert.equal(await readFile(path.join(prepared.runtimeRoot, 'app', ...relative.split('/')), 'utf8'), content, relative)
+  }
+  const ungrouped = await createRuntimeCapsule(app, path.join(root, 'runtime/plain.dshpack'), path.join(root, 'plain.json'), {
+    platform: process.platform, arch: process.arch, level: 1, groupDuplicates: false,
+  })
+  assert.equal(ungrouped.fileCount, manifest.fileCount)
+  assert.equal(ungrouped.rawBytes, manifest.rawBytes)
+})

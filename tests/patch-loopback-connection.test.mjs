@@ -5,7 +5,16 @@ import vm from 'node:vm'
 import { fileURLToPath } from 'node:url'
 import { patchLoopbackConnection } from '../scripts/patch-loopback-connection.mjs'
 
-const sourceFile = new URL('../app/node_modules/@deepseek-ai/dsh-client-connection/lib/client.js', import.meta.url)
+// Older cores ship one client.js; newer ones split it into client.browser.js (the web UI) and client.node.js. The seam is in
+// the browser build.
+const libDirectory = new URL('../app/node_modules/@deepseek-ai/dsh-client-connection/lib/', import.meta.url)
+async function readSeamSource() {
+  for (const name of ['client.js', 'client.browser.js', 'client.node.js']) {
+    const source = await readFile(new URL(name, libDirectory), 'utf8').catch(() => null)
+    if (source !== null && source.includes('stopNetworkWatch: watchBrowserNetwork(controller)')) return source
+  }
+  throw new Error('no dsh-client-connection client build carries the loopback seam')
+}
 const original = 'stopNetworkWatch: watchBrowserNetwork(controller)'
 const replacementExpression = 'handle.isLoopback ? () => {} : watchBrowserNetwork(controller)'
 const replacement = `stopNetworkWatch: ${replacementExpression}`
@@ -15,7 +24,7 @@ function count(source, value) {
 }
 
 test('loopback patch applies to the current client seam and is idempotent', async () => {
-  const source = await readFile(sourceFile, 'utf8')
+  const source = await readSeamSource()
   assert.equal(count(source, original), 1)
 
   const patched = patchLoopbackConnection(source)
@@ -26,7 +35,7 @@ test('loopback patch applies to the current client seam and is idempotent', asyn
 })
 
 test('loopback patch rejects a changed or ambiguous seam', async () => {
-  const source = await readFile(sourceFile, 'utf8')
+  const source = await readSeamSource()
   assert.throws(
     () => patchLoopbackConnection(source.replace(original, 'stopNetworkWatch: changed')),
     /expected 1 match, found 0/,
