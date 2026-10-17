@@ -103,3 +103,8 @@ test('CRLF patch files keep their line endings', () => {
   assert.ok(!/(?<!\r)\n/u.test(next))
   assert.equal(withAwesomeIndex('- id: plugin-market\n'), null)
 })
+
+test('the environment switch leaves the profile untouched', async () => {
+  const result = await ensureOfficialMarket({ platform: 'win32', dshHome: 'C:/h', dshBin: 'C:/x/bin/dsh' }, { env: { DSH_PORTABLE_OFFICIAL_MARKET: '0' }, existsSync: () => { throw new Error('must not look at the profile') } })
+  assert.deepEqual(result, { status: 'skipped', reason: 'disabled-by-environment' })
+})

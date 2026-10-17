@@ -102,7 +102,7 @@ function lastJsonLine(source) {
 async function portable(args) {
   const result = await execFileAsync(portableNode, [runtimeEntry, path.basename(portableCli), ...args], {
     cwd: root,
-    env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' },
+    env: { ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1', DSH_PORTABLE_OFFICIAL_MARKET: '0' },
     timeout: 90000,
     windowsHide: true,
   })

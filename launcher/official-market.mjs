@@ -54,6 +54,8 @@ export async function ensureOfficialMarket(layout, adapters = {}) {
   const save = adapters.writeFile ?? writeFile
   const move = adapters.rename ?? rename
   const makeDirectory = adapters.mkdir ?? mkdir
+  // Escape hatch for testing and support: leave the profile exactly as it is.
+  if ((adapters.env ?? process.env).DSH_PORTABLE_OFFICIAL_MARKET === '0') return { status: 'skipped', reason: 'disabled-by-environment' }
   const profileRoot = paths.join(layout.dshHome, 'profiles', 'web')
   const manifestPath = paths.join(profileRoot, 'package.json')
   if (!exists(manifestPath)) return { status: 'skipped', reason: 'no-profile' }

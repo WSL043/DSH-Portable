@@ -19,7 +19,9 @@ const env = { ...process.env, DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: 
   DSH_PORTABLE_BASE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default',
   DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
   DSH_PORTABLE_WEBVIEW_CACHE: path.join(root, 'acceptance-webview-cache'),
-  DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1' }
+  DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
+  // This suite exercises Portable's own market; the official Discover tab replaces it when switched on.
+  DSH_PORTABLE_OFFICIAL_MARKET: '0' }
 // A source-overlay probe must not load immutable server sources from the old
 // release capsule while serving new client files off disk.
 const sourceOverlay = process.argv.includes('--source-overlay')
