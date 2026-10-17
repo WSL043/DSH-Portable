@@ -761,3 +761,25 @@ test('a failed GitHub recovery keeps the floating source and reports an unverifi
   assert.match(String(body.error), /未能验证|could not be verified/)
   assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], 'github:owner/fixture-plugin')
 })
+
+test('an update whose new release renamed the package is rolled back and names the new name (dsh-market #694)', async t => {
+  const bed = await updateTestbed(t, {
+    async onAdd({ target, manifestFile, profile }) {
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      const renamed = target === 'fixture-plugin@1.2.0'
+      manifest.dependencies['fixture-plugin'] = renamed ? '1.2.0' : '1.0.0'
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      // pnpm installs the new release under the OLD dependency key, but its package.json names another package.
+      await writeInstalledPlugin(profile, renamed ? '1.2.0' : '1.0.0', renamed ? { name: 'fixture-plugin-renamed' } : {})
+      return ok()
+    },
+  })
+  const { response, body } = await bed.update()
+  assert.notEqual(response.status, 200, JSON.stringify(body))
+  assert.equal(body.ok, false)
+  assert.equal(body.renamedTo, 'fixture-plugin-renamed')
+  assert.match(body.error, /fixture-plugin-renamed/u)
+  const installed = JSON.parse(await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8'))
+  assert.equal(installed.name, 'fixture-plugin', 'the previous build is back under its own name')
+  assert.equal(installed.version, '1.0.0')
+})

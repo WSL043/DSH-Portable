@@ -157,7 +157,11 @@ Each was checked against `app/vendor/dsh-portable-plugin-market/src`, not taken 
 | Refused channel moves and failed updates show the current offer | Adopted in Portable's own way: the two 409 branches drop the update cache and the client re-checks after any failed update. The stable return still installs only the version the user saw. |
 | `^`/`~` ceilings follow node-semver (#767) | Already covered (`satisfiesRange('0.2.0-rc.2', '^0.1.7')` is false). |
 | Update-all skips disabled plugins (#642), no git credential prompt (#593), locked-file rollback (#608/#617) | Already covered. |
-| Rollback when an update renames the package (#699), no "restart" verdict for a host-incompatible plugin (#758), classify broken or outdated lockfiles (#811), pin fresh npm installs to the registry latest (#621), catalog fetch progress watchdog (#766) | Pending: adopt with failing tests first. |
+| Rollback when an update renames the package (#699) | Adopted: `readInstalledPackageName` before and after the update; a rename this update introduced restores the previous build and reports `renamedTo`. Failing-before/passing-after test. |
+| Classify broken or outdated profile lockfiles (#811) | Adopted: `lockfile-broken` and `lockfile-outdated`, anchored on pnpm's codes, never naming a `pkg`. |
+| Catalog fetch progress watchdog (#766) | Adopted: the 15 s budget covers only the response headers; the body is read under a stall watchdog with a total ceiling and a size cap. |
+| No "restart" verdict for a host-incompatible plugin (#758) | Deferred: it needs the host-version and exemption plumbing (`dshHostInfo`) that Portable's market does not have yet; porting it without that would guess. |
+| Pin fresh npm installs to the registry latest (#621) | Deferred: it depends on a classifier code for a mirror that has not synced (the Portable `version-not-synced` covers the update path) and an install-route fallback; port with its own failing tests. |
 | Toggle semantics with the official plugin page (#685, #691, #696, #707), archive/URL source replacement (#770), installs during running agents (#826) | Pending verification on Portable before any change. |
 | Proxy dispatcher and pnpm 12 release-age spelling (#743, #855, #626, #616) | Not applicable to the pinned pnpm 11. |
 
