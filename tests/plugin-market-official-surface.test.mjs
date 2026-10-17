@@ -64,3 +64,14 @@ test('every chunk the shipped server bundle imports exists, and no stale chunk i
     assert.ok(referenced.has(name), `${name} is not imported by any shipped chunk (stale build output)`)
   }
 })
+
+test('the shipped server bundle carries the update support for index-installed plugins', async () => {
+  const { readdir } = await import('node:fs/promises')
+  const lib = vendor('lib/')
+  let all = ''
+  for (const name of (await readdir(lib)).filter(file => file.endsWith('.js'))) all += await readFile(new URL(name, lib), 'utf8')
+  assert.ok(all.includes('git+https://github.com/'), 'pinned-commit specs are rebuilt for the next commit')
+  assert.ok(all.includes('&path:/'), 'a monorepo sub-directory is kept')
+  assert.ok(all.includes('releases'), 'release tarballs are recognised')
+  assert.ok(all.includes("kind:`pinned`") || all.includes('kind: "pinned"') || all.includes("kind:'pinned'") || all.includes('pinned'), 'the pinned rollback source exists')
+})
