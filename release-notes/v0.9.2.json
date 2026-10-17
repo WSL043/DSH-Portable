@@ -3,7 +3,7 @@
   "zh": {
     "summary": "新增官方 0.2.1-rc.1 内核（0.2.1 的第一个候选版），预装插件同步适配。",
     "highlights": [
-      "内核：新增可选内核 0.2.1-rc.1，可选内核保留最新三个。预装的图片查看器升到 0.1.13、会话管理升到 1.5.14，都已适配 rc.1。",
+      "内核：新增可选内核 0.2.1-rc.1，可选内核保留最新三个。预装的图片查看器升到 0.1.14、会话管理升到 1.5.15，都已适配 rc.1。",
       "安装包自带的内核不变，仍是 0.2.0-rc.2。"
     ],
     "upgradeNotes": [
@@ -13,7 +13,7 @@
   "en": {
     "summary": "Adds the official 0.2.1-rc.1 core (the first release candidate of 0.2.1); the preinstalled plugins are adapted to it.",
     "highlights": [
-      "Cores: adds the selectable core 0.2.1-rc.1; the list keeps the newest three. The preinstalled Image Viewer is now 0.1.13 and Chat Manager 1.5.14, both adapted to rc.1.",
+      "Cores: adds the selectable core 0.2.1-rc.1; the list keeps the newest three. The preinstalled Image Viewer is now 0.1.14 and Chat Manager 1.5.15, both adapted to rc.1.",
       "The core bundled in the installer is unchanged, still 0.2.0-rc.2."
     ],
     "upgradeNotes": [
