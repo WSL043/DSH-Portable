@@ -24,12 +24,11 @@ test('the shipped server bundle serves the official-market route', async () => {
   assert.ok(client.includes('/dsh-market/official-market'), 'rebuild the market client bundle')
 })
 
-test('the toolbar button steps aside for the official market and keeps the update status', async () => {
+test('with the official market on, the Portable market stays one click away as Advanced and the update status stays', async () => {
   const action = await readFile(vendor('src/client/MarketAction.tsx'), 'utf8')
-  const active = action.indexOf("official === 'active'")
-  const button = action.indexOf('<Button')
-  assert.ok(active !== -1 && active < button, 'the official check comes before the button is built')
-  assert.ok(action.slice(active, button).includes('<PluginUpdateStatus'), 'updates stay available')
+  assert.ok(action.includes("official === 'active' ? props.t('navAdvanced') : props.t('nav')"), 'the button is relabelled, not removed')
+  assert.ok(action.includes('<PluginUpdateStatus'), 'updates stay available')
+  assert.ok(action.includes('<Button'), 'the button is always built')
 })
 
 test('the client reads the answer once, falls back to the Portable market on any failure and can re-ask', async () => {

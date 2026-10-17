@@ -2,6 +2,7 @@
 
 export const zh = {
   nav: '插件市场',
+  navAdvanced: '高级管理',
   resultCount: '{0} 个插件',
   resetConditions: '重置条件',
   previewScreenshot: '预览 {0} 的第 {1} 张截图',
@@ -311,6 +312,7 @@ export type MarketKey = keyof typeof zh
 
 export const en: Record<MarketKey, string> = {
   nav: 'Plugin Market',
+  navAdvanced: 'Advanced',
   resultCount: '{0} plugins',
   resetConditions: 'Reset conditions',
   previewScreenshot: 'Preview {0} screenshot {1}',

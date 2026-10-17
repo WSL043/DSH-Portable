@@ -32,10 +32,9 @@ export function MarketAction(props: MarketActionProps) {
     props.refresh?.()
   }, [props.refresh])
 
-  // With the official plugin market on, its Discover tab browses and installs; only the update status stays here.
-  if (official === 'active') {
-    return <MarketErrorBoundary view="installed"><PluginUpdateStatus zh={zh} /></MarketErrorBoundary>
-  }
+  // With the official plugin market on, its Discover tab browses and installs. The Portable market stays one click away as
+  // "Advanced": groups, themes, diagnostics and the repair tools the official page does not have.
+  const label = official === 'active' ? props.t('navAdvanced') : props.t('nav')
 
   return (
     <>
@@ -45,12 +44,12 @@ export function MarketAction(props: MarketActionProps) {
         size="sm"
         icon={<IconCordisPluginOutline14 size={14} />}
         onClick={() => setOpen(true)}
-      >{props.t('nav')}</Button>
+      >{label}</Button>
       <MarketErrorBoundary view="installed"><PluginUpdateStatus zh={zh} /></MarketErrorBoundary>
       <Modal
         open={open}
         onClose={close}
-        title={props.t('nav')}
+        title={label}
         closeLabel={props.t('cancel')}
         className={css.managerModal}
         contentClassName={css.managerModalContent}
