@@ -39,4 +39,6 @@ test('the extras table is keyed by npm name and by whole repository, with only s
   assert.deepEqual(byRepo['some/repo'], byName['pkg-a'])
   assert.deepEqual(byRepo['o/d'], { stars: 3 })
   assert.equal(Object.keys(byRepo).some(key => key.includes('mono')), false, 'a sub-directory does not claim its whole repository')
+  const many = buildOfficialExtras({ plugins: [{ name: 'm', npm: 'm', url: 'https://github.com/o/m', screenshots: Array.from({ length: 25 }, (_, n) => `https://raw.githubusercontent.com/o/m/main/${n}.png`) }] })
+  assert.equal(many.byName.m.shots.length, 20, 'every image up to a sane ceiling, not just the first three')
 })

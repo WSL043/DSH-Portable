@@ -18,7 +18,7 @@ export interface OfficialExtras {
 // A screenshot URL is a request carrying the user's IP, so only GitHub's own image hosting is accepted (same gate as the
 // market's own cards).
 const SHOT_HOSTS = new Set(['raw.githubusercontent.com', 'user-images.githubusercontent.com', 'camo.githubusercontent.com', 'github.com'])
-const MAX_SHOTS = 3
+const MAX_SHOTS = 20
 
 function safeShots(urls: unknown): string[] {
   if (!Array.isArray(urls)) return []
