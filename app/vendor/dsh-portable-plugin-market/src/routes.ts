@@ -28,7 +28,7 @@ import {
   BOOT_ID, cancelActive, pnpmNeverStarted, probePnpm, progress, provisionPnpm, runDshPlugin,
   type PluginCommandRuntime,
 } from './dsh-cli.ts'
-import { addProfileBundle, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
+import { addProfileBundle, dropFromManifest, hasLoadableEntry, holdsNativeAddon, INBOX_BUNDLES, introducedUnresolvedBundles, profileDir, readInstalled, readInstalledManifest, readInstalledPackageName, readInstalledRepoEvidence, readInstalledVersion, readLockCommits, readProfileManifestSnapshot, readProfileBundles, removeProfileBundle, restoreProfileManifest, setAllowBuilds, type ProfileManifestSnapshot } from './profile.ts'
 import { assessProfile, classifyPeer, introducedDuplicateNames, introducedRisks, type CompatibilityRisk } from './compatibility.ts'
 import { preflightNpmUpdate } from './update-preflight.ts'
 import { preflightPluginImports } from './import-preflight.ts'
@@ -1588,6 +1588,7 @@ export function mountMarketRoutes(
             const updateBootBefore = unresolvedProfileBundles()
             const trialBefore = trialValidate(activeProfileDir, readBundleStack(activeProfileDir).community)
             const manifestBefore = readProfileManifestSnapshot(config.profile, activeProfileDir)
+            const beforePackageName = readInstalledPackageName(config.profile, name, activeProfileDir)
             const result = await runPlugin(config.profile, addArgs)
             const cancelled = result.cancelled
             let rollbackOk = true
@@ -1679,6 +1680,24 @@ export function mountMarketRoutes(
               rollbackDetail = rollback.detail
               logEvent('error', 'update',
                 `${name}: updated build has no loadable entry — ${rollback.ok ? 'previous build restored' : `could not restore previous files: ${rollback.detail ?? 'unknown'}`}`)
+            }
+            // The directory a dependency is installed under must hold the package it is named for: DSH composes a
+            // profile by that rule and refuses to start otherwise ("profile package identity is invalid", dsh-market
+            // #694). An upstream rename lands exactly there — the new commit's package.json names another package,
+            // pnpm installs it under the old dependency key and exits 0, and nothing above looks at the name. Only a
+            // mismatch THIS update introduced counts; whatever the directory held before is not this run's to judge.
+            let renamedTo: string | null = null
+            if (ok && beforePackageName === name) {
+              const afterPackageName = readInstalledPackageName(config.profile, name, activeProfileDir)
+              if (afterPackageName !== null && afterPackageName !== name) {
+                renamedTo = afterPackageName
+                ok = false
+                const rollback = await rollbackExactUpdateBuild(name, manifestBefore, updateSource)
+                rollbackOk = rollback.ok
+                rollbackDetail = rollback.detail
+                logEvent('error', 'update',
+                  `${name}: the update installed a package named ${afterPackageName} (renamed upstream) — ${rollback.ok ? 'previous build restored' : `could not restore previous files: ${rollback.detail ?? 'unknown'}`}`)
+              }
             }
             // Composition-level boot check for the remaining brick shapes:
             // duplicate loader entry ids, unparseable bundle patches, or
@@ -1793,6 +1812,13 @@ export function mountMarketRoutes(
             const brokenEntryError = !brokenEntry ? null
               : `${name} 更新后缺少入口文件。${rollbackOk ? '已验证恢复原版本文件。' : '未能确认恢复原版本；请退出后修复，不要假定下次启动正常。'} / ${name} arrived without its entry file. ${rollbackOk ? 'Restoration of the previous build was verified.' : `Restoration could not be verified; exit and repair before restarting. ${rollbackDetail ?? ''}`}`
 
+            // Actionable: the fix is a reinstall under the new name, which the market cannot do on its own without
+            // also rewriting the profile's bundle list.
+            const renamedError = renamedTo === null ? null
+              : rollbackOk
+                ? `${name} 的上游已把包改名为 ${renamedTo}：新版本会装在旧名字下，DSH 下次启动会拒绝这个 profile，所以本次更新已自动回滚、原版本已恢复。要用新名字，请卸载后以新名字重新安装。 / ${name} was renamed upstream to ${renamedTo}: the new version would install under the old name and DSH would refuse to start this profile, so the update was rolled back and the previous version restored. To follow the rename, uninstall it and install it again under the new name.`
+                : `${name} 的上游已把包改名为 ${renamedTo}，且未能验证恢复原版本（${rollbackDetail ?? 'unknown'}）；在卸载 ${name} 之前 DSH 会拒绝启动这个 profile，卸载后以新名字重新安装即可。 / ${name} was renamed upstream to ${renamedTo} and the previous version could not be verified as restored (${rollbackDetail ?? 'unknown'}); DSH will refuse to start this profile until ${name} is uninstalled, then install it again under the new name.`
+
             const cancelDiff = cancelled ? changedSince(beforeInstalled) : null
             // Build-script blocks hit updates too (#69): a leftover invalid
             // allowBuilds entry (pnpm's placeholder bug, #56) or a newly
@@ -1824,7 +1850,8 @@ export function mountMarketRoutes(
               failureCode: versionFailure ?? undefined,
               profileWarnings,
               staleReason: staleReason ?? undefined,
-              error: versionFailureError ?? profileHealthError ?? trialError ?? brokenEntryError ?? hardFailureRollbackError ?? staleError ?? undefined,
+              renamedTo: renamedTo ?? undefined,
+              error: versionFailureError ?? renamedError ?? profileHealthError ?? trialError ?? brokenEntryError ?? hardFailureRollbackError ?? staleError ?? undefined,
               exitCode: result.exitCode,
               timedOut: result.timedOut,
               stdout: result.stdout,

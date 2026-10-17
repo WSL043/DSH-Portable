@@ -152,3 +152,28 @@ test('a release that has not reached the configured mirror is named as mirror la
   const bundle = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/lib/index.js', import.meta.url), 'utf8')
   assert.ok(bundle.includes('version-not-synced'), 'packaged market is missing the mirror-lag diagnostic; rebuild its server bundle')
 })
+
+test('a lockfile that contradicts itself or lags package.json is classified apart, without guessing a package (dsh-market #808)', () => {
+  const broken = classifyPnpmFailure([
+    'Error: ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY',
+    '  × installing dependencies',
+    "  ╰─▶ Broken lockfile: no entry for 'dshmarket@1.47.0' in pnpm-lock.yaml",
+    '  help: This issue is probably caused by a badly resolved merge conflict.',
+    "        To fix the lockfile, run 'pnpm install --fix-lockfile'.",
+  ].join('\n'))
+  assert.equal(broken?.code, 'lockfile-broken')
+  assert.equal(broken.recoverable, false)
+  assert.equal(broken.pkg, undefined, 'the repair is in the lockfile, not in a manifest entry')
+  assert.ok(broken.message.includes('dshmarket@1.47.0'))
+
+  const ndjson = JSON.stringify({ level: 'error', name: 'pnpm', code: 'ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY', err: { code: 'ERR_PNPM_LOCKFILE_MISSING_DEPENDENCY', message: "Broken lockfile: no entry for 'dshmarket@1.47.0' in pnpm-lock.yaml" } })
+  const fromRecord = classifyPnpmFailure(ndjson)
+  assert.equal(fromRecord?.code, 'lockfile-broken')
+  assert.ok(fromRecord.message.includes('dshmarket@1.47.0'))
+
+  // The sentence arrives wrapped across lines in the human reporter, so only the code is an anchor.
+  const outdated = classifyPnpmFailure(['Error: ERR_PNPM_OUTDATED_LOCKFILE', 'Cannot install with "frozen-lockfile" because pnpm-lock.yaml is not up', 'to date with package.json.'].join('\n'))
+  assert.equal(outdated?.code, 'lockfile-outdated')
+  assert.equal(outdated.recoverable, false)
+  assert.equal(outdated.pkg, undefined)
+})

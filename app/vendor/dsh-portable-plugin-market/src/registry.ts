@@ -59,15 +59,48 @@ export function hasPluginCategory(plugin: Pick<RegistryPlugin, 'category'>, cate
 const REGISTRY_URL = process.env.DSHM_REGISTRY_URL ?? 'https://awesome-dsh-plugin.com/plugins.json'
 
 /**
- * How long to wait for the catalog.
+ * How long to wait for the catalog to START answering.
  *
- * Generous on purpose. It used to be 4s with a bundled snapshot behind it,
- * so a slow link quietly became a 39%-smaller catalog. Now that a failure is
- * reported rather than papered over, cutting off a link that WOULD have
- * answered is the expensive mistake — 282KB over TLS from a far-away network
- * is not a 4-second job.
+ * Headers arrive in one burst or not at all, so a fixed budget still fits
+ * them. This used to cover the whole fetch, which was fine at 282KB and is
+ * wrong now that the catalog runs past a megabyte: on a lossy proxied link
+ * the body keeps trickling long after 15s, and a total timer cuts off a
+ * download that was still moving and would have finished (measured: killed
+ * at 15s on both attempts, 89.9s end-to-end when allowed to run). The body
+ * is read under a stall watchdog instead — see readBodyWhileProgressing.
  */
-const FETCH_TIMEOUT_MS = 15_000
+const HEADERS_TIMEOUT_MS = 15_000
+
+/**
+ * How long the body may stay SILENT before we give up on it.
+ *
+ * Deliberately not a total budget. As long as bytes keep arriving, however
+ * slowly, the read continues; the watchdog only fires on a download that has
+ * actually stopped, which is the one failure a slow link cannot fake.
+ */
+const BODY_STALL_TIMEOUT_MS = 15_000
+
+/**
+ * How long the whole body may take, however much progress it keeps making.
+ *
+ * The stall watchdog can only act on a pause, so a mirror that sends one
+ * byte inside every 15s window would hold the read open forever. 10 minutes
+ * is ~7x the slowest measured full download (89.9s); a body still going
+ * after that is broken, not slow, and the byte count in the message says
+ * which of the two it was.
+ */
+const BODY_TOTAL_CEILING_MS = 600_000
+
+/**
+ * The most body bytes to accept before declaring the response not a catalog.
+ *
+ * The catalog passed 5 MB in September 2026; 256 MB is ~48x that — years of
+ * headroom — and still a hard bound on memory, because the whole body is
+ * buffered before parsing and a mirror streaming garbage at line speed
+ * would otherwise grow that buffer until the process dies. backup.ts and
+ * gist.ts cap their downloads for the same reason.
+ */
+const MAX_CATALOG_BODY_BYTES = 256 * 1024 * 1024
 
 /**
  * The catalog we were last served, with the validator identifying it.
@@ -216,7 +249,19 @@ async function revalidateRegistryInner(cacheFile?: string): Promise<RegistryReva
       if (snapshot?.etag != null) headers['if-none-match'] = snapshot.etag
       else if (snapshot?.modified != null) headers['if-modified-since'] = snapshot.modified
 
-      const res = await marketFetch(REGISTRY_URL, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), headers })
+      // Headers and body run on different clocks (dsh-market #766): the fixed budget covers only the wait for the
+      // response to START; the body is read under a stall watchdog, because the catalog (now over 5 MB) takes longer
+      // than any honest fixed budget on a slow link, and "bytes still moving" separates slow from stuck.
+      const controller = new AbortController()
+      const headersDeadline = setTimeout(() => {
+        controller.abort(new DOMException('The operation was aborted due to timeout', 'TimeoutError'))
+      }, HEADERS_TIMEOUT_MS)
+      let res: Response
+      try {
+        res = await marketFetch(REGISTRY_URL, { signal: controller.signal, headers })
+      } finally {
+        clearTimeout(headersDeadline)
+      }
       if (res.status === 304) {
         // Only reachable when we sent a validator, so `served` is present.
         // Guarded anyway: answering a 304 with nothing to reuse would
@@ -225,7 +270,7 @@ async function revalidateRegistryInner(cacheFile?: string): Promise<RegistryReva
         return { registry: snapshot.registry, changed: false, checkedAt: new Date().toISOString() }
       }
       if (!res.ok) throw new Error(`HTTP ${String(res.status)}`)
-      const data = (await res.json()) as Registry
+      const data = JSON.parse(new TextDecoder().decode(await readBodyWhileProgressing(res, BODY_STALL_TIMEOUT_MS))) as Registry
       if (!validRegistry(data)) throw new Error('the catalog came back empty')
       const digest = registryDigest(data)
       const next: RegistrySnapshot = {
@@ -273,4 +318,103 @@ export function describeFetchFailure(error: unknown, elapsedMs: number): string 
     parts.push(`tried through the configured proxy ${proxy.replace(/\/\/[^@]*@/u, '//***@')}`)
   }
   return parts.join(' · ')
+}
+
+/**
+ * Read a catalog body under a stall watchdog instead of a total budget.
+ *
+ * One timer for the whole fetch was the mistake both before and after #188:
+ * at 4s it hid slowness behind a stale snapshot, at 15s it kills downloads
+ * that are still moving. On a lossy proxied link the catalog body trickles
+ * for far longer than 15s while never once going silent — measured 89.9s
+ * end-to-end for a body the 15s cutoff had declared dead twice. This reader
+ * lets a moving body run as long as it keeps moving, in either direction's
+ * sense of "slow", and ends one that goes quiet for `stallMs` with a message
+ * that says what actually happened and how much had arrived.
+ *
+ * The rejection comes from here, not from an abort: undici's abort message
+ * ("This operation was aborted") cannot tell a user anything actionable, and
+ * a bug report containing this string will contain the byte count too.
+ *
+ * Two backstops keep "still moving" from meaning "forever", because the
+ * watchdog can only see pauses: a total ceiling for a body that trickles
+ * without ever pausing, and a size cap for one that outruns any catalog.
+ */
+export function readBodyWhileProgressing(res: Response, stallMs: number): Promise<Uint8Array> {
+  // The stand-in closes at once, so an absent body reads as "no body"
+  // below instead of parking this reader on a stream that never ends.
+  const reader = (res.body ?? new ReadableStream<Uint8Array>({ start(controller) { controller.close() } })).getReader()
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const chunks: Uint8Array[] = []
+    let received = 0
+    let settled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const finish = (error?: Error): void => {
+      if (settled) return
+      settled = true
+      if (timer !== undefined) clearTimeout(timer)
+      clearTimeout(ceiling)
+      // Tell the origin we are done with the socket; its refusal is not ours to report.
+      reader.cancel().catch(() => {})
+      if (error !== undefined) reject(error)
+      // An empty body otherwise surfaces as a JSON parse error, which tells
+      // the user nothing about the network that caused it.
+      else if (received === 0) reject(new Error('the catalog response carried no body'))
+      else resolve(concatBytes(chunks))
+    }
+    const ceiling = setTimeout(
+      () => {
+        finish(new DOMException(
+          `the catalog download did not finish within ${String(Math.round(BODY_TOTAL_CEILING_MS / 1000))}s (received ${String(received)} bytes)`,
+          'TimeoutError',
+        ))
+      },
+      BODY_TOTAL_CEILING_MS,
+    )
+    const arm = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(
+        () => {
+          finish(new DOMException(
+            `no new data for ${String(Math.round(stallMs / 1000))}s while downloading the catalog (received ${String(received)} bytes)`,
+            'TimeoutError',
+          ))
+        },
+        stallMs,
+      )
+    }
+    const step = (): void => {
+      reader.read().then((r) => {
+        if (settled) return
+        if (r.done || r.value === undefined) {
+          finish()
+          return
+        }
+        chunks.push(r.value)
+        received += r.value.byteLength
+        if (received > MAX_CATALOG_BODY_BYTES) {
+          finish(new Error(
+            `the catalog response grew past ${String(MAX_CATALOG_BODY_BYTES / 1024 / 1024)} MB without ending (received ${String(received)} bytes)`,
+          ))
+          return
+        }
+        arm()
+        step()
+      }, (error: unknown) => {
+        finish(error instanceof Error ? error : new Error(String(error)))
+      })
+    }
+    arm()
+    step()
+  })
+}
+
+function concatBytes(chunks: Uint8Array[]): Uint8Array {
+  const all = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0))
+  let at = 0
+  for (const chunk of chunks) {
+    all.set(chunk, at)
+    at += chunk.byteLength
+  }
+  return all
 }
