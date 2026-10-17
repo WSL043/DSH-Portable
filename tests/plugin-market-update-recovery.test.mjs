@@ -323,6 +323,7 @@ async function updateTestbed(t, {
   installedVersion = '1.0.0',
   loaderEntries = [],
   gitHead = null,
+  catalogTarball = null,
   betaVersion = null,
   hotPlugin,
 }) {
@@ -391,6 +392,7 @@ async function updateTestbed(t, {
           category: 'utility',
           description: { zh: 'fixture', en: 'fixture' },
           npm: 'fixture-plugin',
+          ...(catalogTarball === null ? {} : { npm: null, tarball: catalogTarball }),
           install: 'npm',
           added: '2026-09-05',
         }],
@@ -782,4 +784,156 @@ test('an update whose new release renamed the package is rolled back and names t
   const installed = JSON.parse(await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8'))
   assert.equal(installed.name, 'fixture-plugin', 'the previous build is back under its own name')
   assert.equal(installed.version, '1.0.0')
+})
+
+const PINNED_OLD = 'a'.repeat(40)
+const PINNED_NEW = 'b'.repeat(40)
+const pinnedSpec = commit => `git+https://github.com/owner/fixture-plugin.git#${commit}`
+
+test('a plugin installed from the index at a pinned commit is offered the repository\'s next commit', async t => {
+  const bed = await updateTestbed(t, { spec: pinnedSpec(PINNED_OLD), gitHead: PINNED_NEW, async onAdd() { return ok() } })
+  const updates = await checkUpdates('web', true, bed.profile)
+  assert.equal(updates['fixture-plugin'].kind, 'github')
+  assert.equal(updates['fixture-plugin'].current, PINNED_OLD)
+  assert.equal(updates['fixture-plugin'].latest, PINNED_NEW)
+  assert.equal(updates['fixture-plugin'].updateAvailable, true)
+})
+
+test('a pinned-commit plugin whose repository has not moved, or cannot be reached, reports no update', async t => {
+  const same = await updateTestbed(t, { spec: pinnedSpec(PINNED_OLD), gitHead: PINNED_OLD, async onAdd() { return ok() } })
+  assert.equal((await checkUpdates('web', true, same.profile))['fixture-plugin'].updateAvailable, false)
+})
+
+test('an unreachable repository leaves the update status unknown', async t => {
+  const offline = await updateTestbed(t, { spec: pinnedSpec(PINNED_OLD), gitHead: null, async onAdd() { return ok() } })
+  const unknown = (await checkUpdates('web', true, offline.profile))['fixture-plugin']
+  assert.equal(unknown.latest, null)
+  assert.equal(unknown.updateAvailable, false)
+})
+
+test('updating a pinned-commit plugin installs the next commit as an exact spec', async t => {
+  const bed = await updateTestbed(t, {
+    spec: pinnedSpec(PINNED_OLD),
+    gitHead: PINNED_NEW,
+    async onAdd({ target, manifestFile, profile }) {
+      assert.equal(target, pinnedSpec(PINNED_NEW))
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = target
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.1.0')
+      return ok()
+    },
+  })
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 200, JSON.stringify(body))
+  assert.equal(body.ok, true)
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], pinnedSpec(PINNED_NEW))
+})
+
+test('a failed pinned-commit update restores the previous commit exactly', async t => {
+  const added = []
+  const bed = await updateTestbed(t, {
+    spec: pinnedSpec(PINNED_OLD),
+    gitHead: PINNED_NEW,
+    async onAdd({ target, manifestFile, profile }) {
+      added.push(target)
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      if (target === pinnedSpec(PINNED_NEW)) {
+        // pnpm wrote the new declaration, then the install broke.
+        manifest.dependencies['fixture-plugin'] = target
+        await writeFile(manifestFile, JSON.stringify(manifest))
+        return { exitCode: 1, timedOut: false, cancelled: false, stdout: '', stderr: 'ERR_PNPM_FETCH_404 boom' }
+      }
+      manifest.dependencies['fixture-plugin'] = target
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, '1.0.0')
+      return ok()
+    },
+  })
+  const { response, body } = await bed.update()
+  assert.notEqual(response.status, 200)
+  assert.equal(body.ok, false)
+  assert.deepEqual(added, [pinnedSpec(PINNED_NEW), pinnedSpec(PINNED_OLD)], 'the next commit is tried, then the previous one is reinstalled')
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], pinnedSpec(PINNED_OLD))
+  assert.equal(JSON.parse(await readFile(path.join(bed.profile, 'node_modules/fixture-plugin/package.json'), 'utf8')).version, '1.0.0')
+})
+
+test('updating while the repository cannot be reached changes nothing', async t => {
+  const offline = await updateTestbed(t, { spec: pinnedSpec(PINNED_OLD), gitHead: null, async onAdd() { throw new Error('must not be called') } })
+  const refused = await offline.update()
+  assert.equal(refused.response.status, 502)
+  assert.equal(offline.calls.filter(args => args[0] === 'add').length, 0)
+})
+
+test('an unchanged commit is already current', async t => {
+  const current = await updateTestbed(t, { spec: pinnedSpec(PINNED_OLD), gitHead: PINNED_OLD, async onAdd() { throw new Error('must not be called') } })
+  const skipped = await current.update()
+  assert.equal(skipped.response.status, 200)
+  assert.equal(skipped.body.skipped, 'current')
+})
+
+const TARBALL_OLD = 'https://github.com/owner/fixture-plugin/releases/download/v1.0.0/owner-fixture-plugin-1.0.0.tgz'
+const TARBALL_NEW = 'https://github.com/owner/fixture-plugin/releases/download/v1.1.0/owner-fixture-plugin-1.1.0.tgz'
+
+async function seedCatalogSnapshot(bed) {
+  const { revalidateRegistry } = await import('../app/vendor/dsh-portable-plugin-market/src/registry.ts')
+  await revalidateRegistry({ cacheFile: path.join(bed.profile, '.dsh-market', 'registry-cache-v1.json') })
+}
+
+test('a plugin installed from a release tarball is offered the newest catalog tarball and can be updated and rolled back', async t => {
+  const added = []
+  const bed = await updateTestbed(t, {
+    spec: TARBALL_OLD,
+    catalogTarball: TARBALL_NEW,
+    async onAdd({ target, manifestFile, profile }) {
+      added.push(target)
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = target
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      await writeInstalledPlugin(profile, target === TARBALL_NEW ? '1.1.0' : '1.0.0')
+      return ok()
+    },
+  })
+  await seedCatalogSnapshot(bed)
+  const updates = await checkUpdates('web', true, bed.profile, new Map(), async () => [{ tarball: TARBALL_NEW }])
+  assert.equal(updates['fixture-plugin'].kind, 'github')
+  assert.equal(updates['fixture-plugin'].current, 'owner-fixture-plugin-1.0.0.tgz')
+  assert.equal(updates['fixture-plugin'].latest, 'owner-fixture-plugin-1.1.0.tgz')
+  assert.equal(updates['fixture-plugin'].updateAvailable, true)
+
+  const { response, body } = await bed.update()
+  assert.equal(response.status, 200, JSON.stringify(body))
+  assert.deepEqual(added, [TARBALL_NEW])
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], TARBALL_NEW)
+})
+
+test('a failed tarball update reinstalls the previous tarball', async t => {
+  const added = []
+  const bed = await updateTestbed(t, {
+    spec: TARBALL_OLD,
+    catalogTarball: TARBALL_NEW,
+    async onAdd({ target, manifestFile, profile }) {
+      added.push(target)
+      const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
+      manifest.dependencies['fixture-plugin'] = target
+      await writeFile(manifestFile, JSON.stringify(manifest))
+      if (target === TARBALL_NEW) return { exitCode: 1, timedOut: false, cancelled: false, stdout: '', stderr: 'ERR_PNPM_FETCH_404 gone' }
+      await writeInstalledPlugin(profile, '1.0.0')
+      return ok()
+    },
+  })
+  await seedCatalogSnapshot(bed)
+  const { response, body } = await bed.update()
+  assert.notEqual(response.status, 200)
+  assert.equal(body.ok, false)
+  assert.deepEqual(added, [TARBALL_NEW, TARBALL_OLD])
+  assert.equal(JSON.parse(await readFile(bed.manifestFile, 'utf8')).dependencies['fixture-plugin'], TARBALL_OLD)
+})
+
+test('a tarball plugin the catalog no longer lists changes nothing', async t => {
+  const bed = await updateTestbed(t, { spec: TARBALL_OLD, async onAdd() { throw new Error('must not be called') } })
+  await seedCatalogSnapshot(bed)
+  const { response } = await bed.update()
+  assert.equal(response.status, 409)
+  assert.equal(bed.calls.filter(args => args[0] === 'add').length, 0)
 })

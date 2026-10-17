@@ -7,6 +7,7 @@
 import { DIST_TAG, type Channel } from './channels.ts'
 import { marketFetch } from './net.ts'
 import { profileDir, readInstalled, readInstalledVersion, readLockCommits } from './profile.ts'
+import { indexSourceOf, latestCatalogTarball } from './index-sources.ts'
 import { externalUpdateSource, githubRefOfTarget } from './sources.ts'
 import { assessPublishedManifest, preflightNpmUpdate, type Manifest } from './update-preflight.ts'
 
@@ -301,6 +302,8 @@ export async function checkUpdates(
   force = false,
   explicitDir?: string,
   channelFor: ReadonlyMap<string, Channel> = new Map(),
+  /** The catalog entries, for finding the newest release tarball of a plugin installed from one. */
+  catalogEntries: () => Promise<ReadonlyArray<{ tarball?: unknown }>> = async () => [],
 ): Promise<Record<string, UpdateStatus>> {
   const activeProfileDir = profileDir(profile, explicitDir)
   // The channel is part of the key: switching to betas has to change the
@@ -316,6 +319,31 @@ export async function checkUpdates(
   const result: Record<string, UpdateStatus> = {}
   await Promise.all(Object.entries(installed).map(async ([name, spec]) => {
     const version = readInstalledVersion(profile, name, activeProfileDir)
+    // Installed through the official plugin market from the Portable index: a commit-pinned GitHub repository or a
+    // release tarball. The next commit or the catalog's newest tarball is the update; `current`/`latest` are the
+    // identifiers of each (commit, or tarball file name).
+    const indexSource = indexSourceOf(spec)
+    if (indexSource !== null) {
+      try {
+        if (indexSource.kind === 'git') {
+          const latest = await fetchGitHead(indexSource.repo)
+          result[name] = {
+            kind: 'github', version, current: indexSource.commit, latest,
+            updateAvailable: latest !== null && latest !== indexSource.commit,
+          }
+        } else {
+          const latestUrl = latestCatalogTarball(indexSource, await catalogEntries())
+          const file = (url: string): string => url.slice(url.lastIndexOf('/') + 1)
+          result[name] = {
+            kind: 'github', version, current: file(indexSource.url), latest: latestUrl === null ? null : file(latestUrl),
+            updateAvailable: latestUrl !== null && latestUrl !== indexSource.url,
+          }
+        }
+      } catch {
+        result[name] = { kind: 'github', version, current: null, latest: null, updateAvailable: false }
+      }
+      return
+    }
     if (externalUpdateSource(spec)) {
       result[name] = { kind: 'external', version, current: null, latest: null, updateAvailable: false }
       return

@@ -3,11 +3,16 @@
  * installable pnpm target. Pure string logic, no I/O.
  */
 
+import { indexSourceOf } from './index-sources.ts'
+
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
 
 /** Only registry specs may be updated by package name. External sources need
  * source-exact update and rollback support; never substitute a registry package. */
 export function externalUpdateSource(spec: string): boolean {
+  // What the official plugin market installs from the Portable index (a commit-pinned GitHub repository or a GitHub
+  // release tarball) names its origin exactly, so it can be updated and rolled back like a GitHub source.
+  if (indexSourceOf(spec) !== null) return false
   if (/^github:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:#.*)?$/.test(spec)) return false
   if (spec.startsWith('file:') || spec.startsWith('link:')) return false
   return /[:/\\]/.test(spec)

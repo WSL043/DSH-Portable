@@ -42,6 +42,7 @@ import { groupConflictsByOwner, isStaleUpdate, parseIgnoredBuilds, parsePrepareN
 import { asChannel, CHANNELS, DIST_TAG, resolveChannel, type Channel } from './channels.ts'
 import { checkUpdates, fetchGitHead, fetchNpmLatest, installVersions, invalidateUpdates, isPrereleaseVersion, isUpgrade, latestPublishedRecently, resolvedNpmUpdateFailure, versionOnChannel } from './updates.ts'
 import { bundledUpdateTarget } from './bundled-updates.ts'
+import { indexGitTarget, indexSourceOf, latestCatalogTarball } from './index-sources.ts'
 import { createThemeManager, type LoaderEntry } from './themes.ts'
 import { readJsonBody, sameOrigin, sendJson } from './http.ts'
 import { restartAllowed, scheduleRestart, servingPort, trustedRestartRequest, trustedDownloadRequest } from './restart.ts'
@@ -58,6 +59,7 @@ import {
 
 type UpdateRollbackSource =
   | { kind: 'npm'; beforeVersion: string | null }
+  | { kind: 'pinned'; previousSpec: string; beforeVersion: string | null }
   | { kind: 'github'; target: string; beforeCommit: string | null }
 
 export type { LoaderEntry } from './themes.ts'
@@ -576,9 +578,37 @@ export function mountMarketRoutes(
     manifestBefore: ProfileManifestSnapshot,
     source: UpdateRollbackSource,
   ): Promise<{ ok: boolean; detail: string | null }> {
+    if (source.kind === 'pinned') return rollbackPinnedBuild(name, manifestBefore, source.previousSpec, source.beforeVersion)
     return source.kind === 'github'
       ? rollbackGitBuild(name, manifestBefore, source.target, source.beforeCommit)
       : rollbackNpmBuild(name, manifestBefore, source.beforeVersion)
+  }
+
+  /**
+   * Put an index-installed plugin (a commit-pinned repository or a release tarball) back: the previous spec is exact, so
+   * reinstalling it is the whole recovery, and the manifest snapshot keeps the durable declaration whatever pnpm wrote.
+   */
+  async function rollbackPinnedBuild(
+    name: string,
+    manifestBefore: ProfileManifestSnapshot,
+    previousSpec: string,
+    beforeVersion: string | null,
+  ): Promise<{ ok: boolean; detail: string | null }> {
+    restoreProfileManifest(config.profile, manifestBefore, activeProfileDir)
+    const add = await runPlugin(config.profile, ['add', RELEASE_AGE_OVERRIDE, previousSpec])
+      .finally(() => { restoreProfileManifest(config.profile, manifestBefore, activeProfileDir) })
+    if (add.exitCode !== 0 || add.timedOut || add.cancelled) {
+      return { ok: false, detail: (add.stderr || add.stdout).slice(-300) }
+    }
+    const restoredVersion = readInstalledVersion(config.profile, name, activeProfileDir)
+    if (beforeVersion !== null && restoredVersion !== beforeVersion) {
+      return { ok: false, detail: `expected v${beforeVersion} after rollback, found v${restoredVersion ?? 'unknown'}` }
+    }
+    if (!hasLoadableEntry(activeProfileDir, name)) {
+      return { ok: false, detail: 'the previous build was reinstalled without a loadable entry' }
+    }
+    logEvent('info', 'update-rollback', `${name}: restored ${previousSpec}`)
+    return { ok: true, detail: null }
   }
 
   async function removeInstalledPackage(name: string): Promise<{ ok: boolean; hot: boolean; detail: string | null }> {
@@ -1384,7 +1414,8 @@ export function mountMarketRoutes(
               .filter(name => SELF_NAMES.has(name))
               .map(name => [name, channel] as const),
           )
-          const updates = { ...await checkUpdates(config.profile, force, activeProfileDir, channelFor) }
+          const updates = { ...await checkUpdates(config.profile, force, activeProfileDir, channelFor,
+            async () => (await readRegistrySnapshot(registryCacheFile))?.registry.plugins ?? []) }
           for (const [name, status] of Object.entries(updates)) {
             if (status.kind !== 'npm') continue
             const target = bundledUpdateTarget(name, status.version)
@@ -1477,7 +1508,9 @@ export function mountMarketRoutes(
             // Re-running add re-resolves the source: git HEAD for github specs,
             // dist-tag latest for registry installs.
             const isGit = spec.startsWith('github:')
-            if ((requestedBeta !== null || requestedStable !== null) && (isGit || SELF_NAMES.has(name))) {
+            // Installed from the Portable index by the official market: a commit-pinned repository or a release tarball.
+            const indexSource = indexSourceOf(spec)
+            if ((requestedBeta !== null || requestedStable !== null) && (isGit || indexSource !== null || SELF_NAMES.has(name))) {
               sendJson(response, 400, { error: 'version selection is only available for registry plugins' })
               return
             }
@@ -1488,6 +1521,33 @@ export function mountMarketRoutes(
             const selfChannel = SELF_NAMES.has(name) ? activeChannel() : null
             const tag = selfChannel === null ? 'latest' : DIST_TAG[selfChannel]
             let expectedNpmVersion: string | null = null
+            // The next target of an index-installed plugin: the repository's newest commit, or the catalog's newest
+            // release tarball. Resolved before anything is touched, so an unreachable source changes nothing.
+            let indexTarget: string | null = null
+            if (indexSource !== null) {
+              if (indexSource.kind === 'git') {
+                const head = await fetchGitHead(indexSource.repo)
+                if (head === null) {
+                  sendJson(response, 502, { error: '暂时读不到这个插件的仓库，未更改插件，请稍后重试。 / Cannot reach this plugin\'s repository right now; nothing was changed, try again later.' })
+                  return
+                }
+                indexTarget = head === indexSource.commit ? null : indexGitTarget(indexSource, head)
+              } else {
+                const entries = (await readRegistrySnapshot(registryCacheFile))?.registry.plugins ?? []
+                const latestUrl = latestCatalogTarball(indexSource, entries)
+                if (latestUrl === null) {
+                  sendJson(response, 409, { error: '目录里没有找到这个插件更新的发布包，未更改插件。 / The catalog lists no newer release archive for this plugin; nothing was changed.' })
+                  return
+                }
+                indexTarget = latestUrl === spec ? null : latestUrl
+              }
+              if (indexTarget === null) {
+                logEvent('info', 'update', `${name} already current at ${spec}; nothing to do`)
+                invalidateUpdates()
+                sendJson(response, 200, { ok: true, skipped: 'current', name, version: readInstalledVersion(config.profile, name, activeProfileDir) })
+                return
+              }
+            }
             // Never let `@latest` walk a profile BACKWARDS (#64 by @ZeroOrigin64):
             // a package whose latest dist-tag was left on an older release turns
             // this update into a downgrade that also rewrites an exact pin to
@@ -1500,7 +1560,7 @@ export function mountMarketRoutes(
             // so here the guard only refuses when the channel already points
             // at what is installed, and it compares against the target tag
             // rather than `latest`, which is not the tag being installed.
-            if (!isGit) {
+            if (!isGit && indexSource === null) {
               const installedVersion = readInstalledVersion(config.profile, name, activeProfileDir)
               const stable = await fetchNpmLatest(name)
               const availableBeta = requestedBeta === null ? null : (await installVersions(name)).beta
@@ -1555,7 +1615,9 @@ export function mountMarketRoutes(
               }
               if (preflight.status === 'unknown') logEvent('warn', 'update-host-check-unavailable', `${name}@${expectedNpmVersion}: continuing with post-install checks`)
             }
-            const target = isGit
+            const target = indexTarget !== null
+              ? indexTarget
+              : isGit
               ? githubUpdateTarget(spec)
               : expectedNpmVersion !== null ? `${name}@${expectedNpmVersion}` : `${name}@${tag}`
             const repoKey = isGit ? spec.slice('github:'.length).replace(/#.*$/, '').toLowerCase() : null
@@ -1571,7 +1633,9 @@ export function mountMarketRoutes(
             const beforeCommit = repoKey !== null
               ? readLockCommits(config.profile, activeProfileDir).get(repoKey) ?? null
               : null
-            const updateSource: UpdateRollbackSource = isGit
+            const updateSource: UpdateRollbackSource = indexSource !== null
+              ? { kind: 'pinned', previousSpec: spec, beforeVersion }
+              : isGit
               ? { kind: 'github', target, beforeCommit }
               : { kind: 'npm', beforeVersion }
             // Updating is already an explicit user action. Apply the target in
@@ -1639,8 +1703,10 @@ export function mountMarketRoutes(
                 const head = await fetchGitHead(repoKey, githubRefOfTarget(spec) ?? undefined)
                 if (head === beforeCommit) stale = false
               }
+              // An index-installed plugin changes by its spec (new commit or tarball), not necessarily by version.
+              if (indexSource !== null) stale = readInstalled(config.profile, activeProfileDir)[name] !== target
               if (stale) ok = false
-              if (ok && !isGit) {
+              if (ok && !isGit && indexSource === null) {
                 versionFailure = resolvedNpmUpdateFailure({
                   before: beforeVersion,
                   target: expectedNpmVersion,
