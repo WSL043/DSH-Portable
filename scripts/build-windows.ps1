@@ -257,6 +257,8 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Native settings command adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-loopback-connection.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw "Loopback connection adaptation failed with exit code $LASTEXITCODE" }
+    & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-official-market-tarball.mjs') (Join-Path $Stage 'app')
+    if ($LASTEXITCODE -ne 0) { throw "Official plugin market tarball adaptation failed with exit code $LASTEXITCODE" }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-historical-descriptor.mjs') (Join-Path $Stage 'app')
     if ($LASTEXITCODE -ne 0) { throw 'Historical descriptor compatibility adaptation failed.' }
     & $NodeExe (Join-Path $ProjectRoot 'scripts\patch-portable-hero-context.mjs') (Join-Path $Stage 'app')

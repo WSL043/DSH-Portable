@@ -106,7 +106,10 @@ if (changed) {
 
   const installArgs = [
     'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact',
-    `@deepseek-ai/dsh@${version}`, `@deepseek-ai/dsh-settings@${version}`, `pnpm@${currentLock.pnpm.version}`,
+    `@deepseek-ai/dsh@${version}`, `@deepseek-ai/dsh-settings@${version}`,
+    // dsh-settings peers dsh-brand and dsh-session at its own version; naming them keeps an incremental lock refresh
+    // from tripping over the previous release's peer entries (0.2.1-rc.1 did).
+    `@deepseek-ai/dsh-brand@${version}`, `@deepseek-ai/dsh-session@${version}`, `pnpm@${currentLock.pnpm.version}`,
   ]
   const npmCliCandidates = [
     process.env.npm_execpath,

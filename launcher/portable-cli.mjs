@@ -47,6 +47,7 @@ import {
 } from './update-core.mjs'
 import { officialWorkspaceUrl, workspaceDocumentReady } from './http-readiness.mjs'
 import { DEFAULT_PLUGINS, seedDefaultPlugins } from './default-plugins.mjs'
+import { ensureOfficialMarket } from './official-market.mjs'
 import { diagnosePortable, exportPortableSupportReport, repairPortable } from './repair-core.mjs'
 import { formatRecoveryResult } from './recovery-presentation.mjs'
 import { recoverInterruptedImport } from './data-import-journal.mjs'
@@ -566,6 +567,9 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
 
   const defaultPlugins = await seedDefaultPlugins(layout)
   startupLog(startedAt, 'default-plugins-ready', defaultPlugins)
+  // The official plugin market is switched on once per profile; a failure here must never stop the workspace.
+  const officialMarket = await ensureOfficialMarket(layout).catch(error => ({ status: 'warning', message: error?.message ?? String(error) }))
+  startupLog(startedAt, 'official-market-ready', officialMarket)
   try {
     const installed = await readInstalledUpdateState(layout)
     startupLog(startedAt, 'component-versions', {

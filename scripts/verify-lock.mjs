@@ -30,6 +30,8 @@ const desktopBridgePackage = '@wsl043/dsh-portable-desktop-bridge'
 const settingsPackage = '@deepseek-ai/dsh-settings'
 assert.deepEqual(root?.dependencies, {
   [upstream.dsh.package]: upstream.dsh.version,
+  '@deepseek-ai/dsh-brand': upstream.dsh.version,
+  '@deepseek-ai/dsh-session': upstream.dsh.version,
   [settingsPackage]: upstream.dsh.version,
   [desktopBridgePackage]: 'file:../desktop-bridge',
   [upstream.pluginMarket.package]: 'file:vendor/dsh-portable-plugin-market',

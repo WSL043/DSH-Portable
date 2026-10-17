@@ -200,6 +200,9 @@ function blockedBuilds(result: { ignoredBuilds?: unknown; stdout: string; stderr
   return pending !== null ? [pending] : undefined
 }
 
+/** The official experimental plugin market bundle (shipped inside @deepseek-ai/dsh 0.2.1-alpha.4 and later). */
+const OFFICIAL_MARKET_BUNDLE = '@deepseek-ai/dsh-experimental-plugin-market-bundle'
+
 /**
  * Register the market's HTTP routes.
  * @param host - Acquired webServer + shell services.
@@ -1390,6 +1393,26 @@ export function mountMarketRoutes(
           sendJson(response, 200, { updates })
         } catch (error) {
           sendJson(response, 500, { error: error instanceof Error ? error.message : String(error) })
+        }
+      },
+    }),
+
+    // Whether the official plugin market is switched on in this profile. Its Discover tab then does the browsing and
+    // installing, and the Portable toolbar button steps aside; updates and rollback stay with the Portable layer.
+    host.webServer.register({
+      kind: 'exact',
+      path: '/dsh-market/official-market',
+      handler: async (request, response) => {
+        if (request.method !== 'GET') {
+          response.writeHead(405, { allow: 'GET' })
+          response.end()
+          return
+        }
+        try {
+          sendJson(response, 200, { active: readProfileBundles(activeProfileDir).includes(OFFICIAL_MARKET_BUNDLE) })
+        } catch {
+          // An unreadable profile must never hide the only market surface.
+          sendJson(response, 200, { active: false })
         }
       },
     }),

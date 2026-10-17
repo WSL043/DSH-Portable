@@ -3,6 +3,7 @@ import { Button, IconCordisPluginOutline14, Modal } from './primitives.ts'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
 import { PluginUpdateStatus } from './PluginUpdates.tsx'
+import { useOfficialMarket } from './official-market.ts'
 import css from './Market.module.css'
 import type { Translate } from './market-data.ts'
 
@@ -25,10 +26,16 @@ export function MarketAction(props: MarketActionProps) {
     () => props.locale.getSnapshot(),
   )
   const zh = locale.active.toLowerCase().startsWith('zh')
+  const official = useOfficialMarket()
   const close = useCallback(() => {
     setOpen(false)
     props.refresh?.()
   }, [props.refresh])
+
+  // With the official plugin market on, its Discover tab browses and installs; only the update status stays here.
+  if (official === 'active') {
+    return <MarketErrorBoundary view="installed"><PluginUpdateStatus zh={zh} /></MarketErrorBoundary>
+  }
 
   return (
     <>
