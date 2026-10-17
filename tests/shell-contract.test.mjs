@@ -100,6 +100,7 @@ test('every packaging script writes the contract number into the installed ident
   const record = await readContractRecord(root)
   assert.ok(record.contract >= 1)
   const windows = await readFile(path.join(root, 'scripts', 'build-windows.ps1'), 'utf8')
+  assert.match(windows, /'scripts\\shell-contract\.mjs'\) number/u, 'the build must find the script by its real path')
   assert.match(windows, /shellContract\s*=\s*\$ShellContract/u)
   assert.match(windows, /requiredShellContract\s*=\s*\$ShellContract/u)
   for (const script of ['build-macos.sh', 'build-linux.sh']) {
