@@ -39,6 +39,12 @@ export function patchMarketIndex(source) {
   return replaceOnce(withSource, TARGET_ANCHOR, TARGET_TARBALL + TARGET_ANCHOR, 'install target')
 }
 
+/** The index is validated in a worker thread that carries its own copy of the source validator. */
+export function patchMarketWorker(source) {
+  if (source.includes(MARKER)) return source
+  return replaceOnce(source, SOURCE_DEFAULT, SOURCE_TARBALL, 'worker source')
+}
+
 export function patchMarketClient(source) {
   if (source.includes(MARKER)) return source
   const matches = source.match(new RegExp(FACTS_ANCHOR.source, 'gu'))?.length ?? 0
@@ -54,11 +60,14 @@ export async function patchOfficialMarket(appRoot) {
   const scope = path.join(appRoot, 'node_modules', '@deepseek-ai')
   const indexFile = path.join(scope, 'dsh-plugin-market-index', 'lib', 'index.js')
   const clientFile = path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js')
+  const workerFile = path.join(scope, 'dsh-plugin-market', 'lib', 'worker.cjs')
   const present = [await exists(indexFile), await exists(clientFile)]
   if (!present[0] && !present[1]) return { applied: false, reason: 'core-has-no-plugin-market' }
   if (present[0] !== present[1]) throw new Error('Official plugin market packages are only partly present; refusing to patch half of them')
   const patched = []
-  for (const [filename, patch] of [[indexFile, patchMarketIndex], [clientFile, patchMarketClient]]) {
+  const targets = [[indexFile, patchMarketIndex], [clientFile, patchMarketClient]]
+  if (await exists(workerFile)) targets.push([workerFile, patchMarketWorker])
+  for (const [filename, patch] of targets) {
     const source = await readFile(filename, 'utf8')
     const next = patch(source)
     if (next !== source) await writeFile(filename, next, 'utf8')

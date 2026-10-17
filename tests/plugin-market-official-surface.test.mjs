@@ -46,3 +46,21 @@ test('the client reads the answer once, falls back to the Portable market on any
   forgetOfficialMarket()
   assert.equal(await readOfficialMarket(async () => new Response(JSON.stringify({ active: 'yes' }))), 'inactive')
 })
+
+test('every chunk the shipped server bundle imports exists, and no stale chunk is left behind', async () => {
+  const { readdir } = await import('node:fs/promises')
+  const lib = vendor('lib/')
+  const files = (await readdir(lib)).filter(name => name.endsWith('.js'))
+  const referenced = new Set(['index.js'])
+  for (const name of files) {
+    const source = await readFile(new URL(name, lib), 'utf8')
+    for (const match of source.matchAll(/(?:from\s*|import\s*\()\s*["']\.\/([^"']+\.js)["']/gu)) {
+      assert.ok(files.includes(match[1]), `${name} imports ./${match[1]}, which is not in the shipped lib directory; copy the whole build output, not only index.js`)
+      referenced.add(match[1])
+    }
+  }
+  for (const name of files) {
+    if (name === 'import-preflight.js') continue
+    assert.ok(referenced.has(name), `${name} is not imported by any shipped chunk (stale build output)`)
+  }
+})

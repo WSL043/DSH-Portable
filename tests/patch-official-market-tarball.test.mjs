@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 
-import { MARKER, patchMarketClient, patchMarketIndex, patchOfficialMarket } from '../scripts/patch-official-market-tarball.mjs'
+import { MARKER, patchMarketClient, patchMarketIndex, patchMarketWorker, patchOfficialMarket } from '../scripts/patch-official-market-tarball.mjs'
 
 const INDEX_SOURCE = [
   'function source(value, path) {',
@@ -40,6 +40,13 @@ test('the index accepts a tarball source, installs exactly its URL and rejects t
   assert.equal(patchMarketIndex(patched), patched, 'idempotent')
 })
 
+test('the index worker thread, which validates with its own copy of the source rules, accepts tarballs too', () => {
+  const patched = patchMarketWorker(INDEX_SOURCE)
+  assert.ok(patched.includes('case "tarball"') && patched.includes(MARKER))
+  assert.equal(patchMarketWorker(patched), patched)
+  assert.throws(() => patchMarketWorker('function source() {}'), /worker source seam changed/u)
+})
+
 test('the client shows a tarball source as its origin instead of a missing commit', () => {
   const patched = patchMarketClient(CLIENT_SOURCE)
   assert.ok(patched.includes('if (source.type === "tarball") return [{ kind: "repository", value: source.url }];'))
@@ -65,8 +72,12 @@ test('cores without the market are skipped and a half-present market is refused'
 
   await mkdir(path.join(scope, 'dsh-client-ui-plugin-market', 'lib'), { recursive: true })
   await writeFile(path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js'), CLIENT_SOURCE)
+  await mkdir(path.join(scope, 'dsh-plugin-market', 'lib'), { recursive: true })
+  await writeFile(path.join(scope, 'dsh-plugin-market', 'lib', 'worker.cjs'), INDEX_SOURCE)
   const result = await patchOfficialMarket(app)
   assert.equal(result.applied, true)
+  assert.equal(result.files.length, 3, 'the worker copy is patched with the other two')
+  assert.ok((await readFile(path.join(scope, 'dsh-plugin-market', 'lib', 'worker.cjs'), 'utf8')).includes(MARKER))
   assert.ok((await readFile(path.join(scope, 'dsh-plugin-market-index', 'lib', 'index.js'), 'utf8')).includes(MARKER))
   assert.ok((await readFile(path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js'), 'utf8')).includes(MARKER))
 })
