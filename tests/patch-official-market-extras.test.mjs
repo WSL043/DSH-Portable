@@ -14,9 +14,10 @@ test('the official card gets the extras row once, and the result is still valid 
   assert.ok(patched.includes(EXTRAS_MARKER))
   assert.equal(patchMarketExtras(patched), patched, 'applying twice changes nothing')
   assert.equal(patched.split('PortableEntryExtras, { entry, language }').length - 1, 1)
-  assert.equal(patched.split('PortableEntryShot, { entry }').length - 1, 1, 'the preview is its own element beside the install button')
+  assert.equal(patched.split('PortableEntryShot, { entry, language }').length - 1, 1, 'the preview is its own element beside the install button')
   assert.doesNotThrow(() => new vm.Script(patched))
   assert.ok(patched.includes('data-portable-viewer'), 'a click on the preview opens it full size')
+  assert.ok(patched.includes('data-portable-prev') && patched.includes('data-portable-next'), 'several images can be stepped through with visible buttons')
 })
 
 test('a changed card layout stops the build instead of shipping a half patch', async () => {
