@@ -71,7 +71,8 @@ test('cores without the market are skipped and a half-present market is refused'
   await assert.rejects(patchOfficialMarket(app), /only partly present/u)
 
   await mkdir(path.join(scope, 'dsh-client-ui-plugin-market', 'lib'), { recursive: true })
-  await writeFile(path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js'), CLIENT_SOURCE)
+  // The real client: the combined patch (tarball facts plus the card extras) must apply to the shipped file.
+  await writeFile(path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js'), await readFile(new URL('../app/node_modules/@deepseek-ai/dsh-client-ui-plugin-market/lib/client.js', import.meta.url), 'utf8'))
   await mkdir(path.join(scope, 'dsh-plugin-market', 'lib'), { recursive: true })
   await writeFile(path.join(scope, 'dsh-plugin-market', 'lib', 'worker.cjs'), INDEX_SOURCE)
   const result = await patchOfficialMarket(app)
@@ -79,7 +80,9 @@ test('cores without the market are skipped and a half-present market is refused'
   assert.equal(result.files.length, 3, 'the worker copy is patched with the other two')
   assert.ok((await readFile(path.join(scope, 'dsh-plugin-market', 'lib', 'worker.cjs'), 'utf8')).includes(MARKER))
   assert.ok((await readFile(path.join(scope, 'dsh-plugin-market-index', 'lib', 'index.js'), 'utf8')).includes(MARKER))
-  assert.ok((await readFile(path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js'), 'utf8')).includes(MARKER))
+  const patchedClient = await readFile(path.join(scope, 'dsh-client-ui-plugin-market', 'lib', 'client.js'), 'utf8')
+  assert.ok(patchedClient.includes(MARKER))
+  assert.ok(patchedClient.includes('dsh-portable-market-extras-v1'))
 })
 
 test('every platform build applies the market tarball adaptation after the loopback one', async () => {

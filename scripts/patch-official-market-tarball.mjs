@@ -7,6 +7,7 @@
 import { access, readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { patchMarketExtras } from './patch-official-market-extras.mjs'
 
 export const MARKER = 'dsh-portable-market-tarball-v1'
 
@@ -65,7 +66,7 @@ export async function patchOfficialMarket(appRoot) {
   if (!present[0] && !present[1]) return { applied: false, reason: 'core-has-no-plugin-market' }
   if (present[0] !== present[1]) throw new Error('Official plugin market packages are only partly present; refusing to patch half of them')
   const patched = []
-  const targets = [[indexFile, patchMarketIndex], [clientFile, patchMarketClient]]
+  const targets = [[indexFile, patchMarketIndex], [clientFile, source => patchMarketExtras(patchMarketClient(source))]]
   if (await exists(workerFile)) targets.push([workerFile, patchMarketWorker])
   for (const [filename, patch] of targets) {
     const source = await readFile(filename, 'utf8')

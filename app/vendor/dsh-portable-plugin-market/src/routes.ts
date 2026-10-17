@@ -1,5 +1,6 @@
 import { profileRevision } from './profile-revision.ts'
 import { getDownloadTotal, getDownloadTotalsTable } from './download-totals.ts'
+import { buildOfficialExtras } from './extras.ts'
 import { createOfficialTransactionRuntime, type OfficialTransactionRuntime } from './official-transaction.ts'
 import { createLegacyDisableReplay, legacyOwnsPluginState } from './disable-replay.ts'
 /**
@@ -809,6 +810,23 @@ export function mountMarketRoutes(
         }
         try { sendJson(response, 200, await getDownloadTotal(name)) }
         catch { sendJson(response, 503, { error: 'npm total temporarily unavailable' }) }
+      },
+    }),
+
+    host.webServer.register({
+      kind: 'exact',
+      path: '/dsh-market/official-extras',
+      handler: async (request, response) => {
+        if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return }
+        // Downloads, stars and preview images the official index format cannot carry; served from the catalog the market
+        // already keeps, so the official Discover cards can show what the market's own cards showed.
+        try {
+          const cached = await readRegistrySnapshot(registryCacheFile)
+          const registry = cached?.registry ?? await loadRegistry({ cacheFile: registryCacheFile })
+          sendJson(response, 200, buildOfficialExtras(registry))
+        } catch (error) {
+          sendJson(response, 503, { error: error instanceof Error ? error.message : 'catalog temporarily unavailable' })
+        }
       },
     }),
 
