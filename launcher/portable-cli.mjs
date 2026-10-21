@@ -1,4 +1,5 @@
 import { appendLauncherLog } from './launcher-log.mjs'
+import { applyPluginStorage, finalizePluginStorage } from './plugin-storage.mjs'
 import { defaultBrowserSpec } from './browser-fallback.mjs'
 import { execFileSync, spawn } from 'node:child_process'
 import { randomBytes, randomUUID } from 'node:crypto'
@@ -624,6 +625,20 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     : path.join('/tmp', `dshp-${process.pid}-${randomBytes(8).toString('hex')}.sock`)
   if (process.platform !== 'win32') rmSync(controlPipe, { force: true })
   const controlToken = randomBytes(32).toString('hex')
+  // Keep plugin data on the portable drive: create links for absent/empty
+  // sources before the app starts. A live source is left alone until stop().
+  try {
+    const applied = await applyPluginStorage({
+      layout,
+      mode: 'safe',
+      log: message => appendLauncherLog(layout.logsDir, `${new Date().toISOString()} plugin-storage ${message}\n`),
+    })
+    if (applied.failed > 0) {
+      appendLauncherLog(layout.logsDir, `${new Date().toISOString()} plugin-storage apply: ${applied.failed} entries failed\n`)
+    }
+  } catch (error) {
+    appendLauncherLog(layout.logsDir, `${new Date().toISOString()} plugin-storage apply skipped: ${error?.code || 'error'}\n`)
+  }
   const child = spawn(layout.nodeExe, [
     layout.hostBin,
     layout.dshBin,
@@ -707,6 +722,22 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
   }
 }
 
+async function finalizePluginStorageLinks() {
+  try {
+    const result = await finalizePluginStorage({
+      layout,
+      log: message => appendLauncherLog(layout.logsDir, `${new Date().toISOString()} plugin-storage ${message}\n`),
+    })
+    if (result.failed > 0) {
+      appendLauncherLog(layout.logsDir, `${new Date().toISOString()} plugin-storage finalize: ${result.failed} entries failed\n`)
+    }
+    return result
+  } catch (error) {
+    appendLauncherLog(layout.logsDir, `${new Date().toISOString()} plugin-storage finalize skipped: ${error?.code || 'error'}\n`)
+    return null
+  }
+}
+
 async function stop() {
   let browser = null
   let browserError = null
@@ -718,6 +749,9 @@ async function stop() {
   const state = readProcessState()
   if (!ownedState(state)) {
     rmSync(layout.processState, { force: true })
+    // A previous host may have crashed without finalizing its plugin data; only
+    // migrate when no other environment is running against this layout.
+    if ((await runningEnvironments()).length === 0) await finalizePluginStorageLinks()
     if (browserError) throw browserError
     return { status: browser?.stopped ? 'stopped' : 'not-running', browser }
   }
@@ -740,6 +774,9 @@ async function stop() {
   if (ownedState(state)) throw new Error(`DSH process ${state.pid} did not stop.`)
   rmSync(layout.processState, { force: true })
   await clearPortableMoveLinks(layout)
+  // The app is gone, so SQLite/Electron files are no longer held open. Move any
+  // remaining plugin data into the portable home and leave junctions behind.
+  await finalizePluginStorageLinks()
   if (process.platform !== 'win32' && state.controlPipe) rmSync(state.controlPipe, { force: true })
   if (browserError) throw browserError
   return { status: 'stopped', environment: layout.environmentId, pid: state.pid, port: state.port, graceful: gracefulRequested && !forced, forced, browser }
