@@ -8,7 +8,7 @@
 
 | 项目 | 当前状态与下一步 |
 | --- | --- |
-| 主分支 CI | [构建 39391722429](https://github.com/WSL043/DSH-Portable/actions/runs/39391722429) 的五平台合约、Windows/macOS 构建及 Linux arm64 构建已通过；Linux x64 在安装依赖时被 runner 自带的 Microsoft APT 源 403 阻断，尚未开始编译。已只重跑失败部分，结果待回读；不能把定时任务成功当成成品 CI 通过。 |
+| 主分支 CI | [构建 39391722429](https://github.com/WSL043/DSH-Portable/actions/runs/39391722429) 的第 2 次运行已成功，39 项任务全部通过。首次失败发生在 Linux x64 编译前：runner 自带的 Microsoft APT 源返回 403；只重跑失败部分及依赖任务后，编译、原生成品、插件和移动/更新验收均通过。本轮未改安装脚本，不把一次网络故障当成产品缺陷，也不以定时任务成功代替成品 CI。 |
 | 内核目录 | [更新仓库同步](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/39594014772)成功。规则为最新五个、至少两个 RC/正式版；当前目录实际提供 rc.2、rc.1、alpha.5，alpha.4/alpha.3 被图片插件 0.1.15 的 peer 声明阻断。 |
 | 默认插件 | [Image Viewer #9](https://github.com/WSL043/dsh-image-viewer/pull/9)、[Chat Manager #29](https://github.com/WSL043/dsh-chat-manager/pull/29)（五版本兼容窗口）及 [#28](https://github.com/WSL043/dsh-chat-manager/pull/28)（归档页样式）仍开放。已有行为/交付检查通过；两个兼容窗口 PR 的端到端矩阵被跳过，不能称为新增内核验收完成。合并会触发插件自动发布，继续等下次发布安排。 |
 | 社区插件启用状态 | [Portable #175](https://github.com/WSL043/DSH-Portable/pull/175) 修正预发布版 peer 判断；已对照官方 `dsh-app-boot` 的 `includePrerelease: true`，并用真实 semver 复现范围误判，确认精确版本和越界版本仍被拒绝。PR 现有新增测试只模拟返回值，还需补真实 semver 回归及启动后启用状态验证；外部贡献 CI 等待审批。 |
