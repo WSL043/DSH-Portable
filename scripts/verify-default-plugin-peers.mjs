@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { incompatibleProfilePeers } from '../launcher/profile-compatibility.mjs'
+import { incompatibleProfilePeers, satisfiesHostPeer } from '../launcher/profile-compatibility.mjs'
 
 const REQUIRED = ['dsh-chat-manager', 'dsh-image-viewer']
 const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9._~-]*\/)?[a-z0-9-~][a-z0-9._~-]*$/i
@@ -37,7 +37,7 @@ export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage
         throw error
       })
       return host?.version
-    }, semver)
+    }, { satisfies: (version, range) => satisfiesHostPeer(semver, version, range), validRange: semver.validRange })
     assert.deepEqual(incompatible, [], `${name} would be paused by Portable profile compatibility check: ${JSON.stringify(incompatible)}`)
     result.push({ name, version: plugin.version })
   }

@@ -109,7 +109,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 ## 内核版本可选
 
 <!-- core-support:start -->
-**可选内核（最新 3 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
+**可选内核（最多 5 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
 
 <details>
 <summary>查看 Portable 0.9.3 的可选内核</summary>
@@ -122,7 +122,7 @@ macOS、Linux 解压后直接运行，首次打开的注意事项见[用户指�
 | Linux x64 | [0.2.1-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.2.1-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.2.1-alpha.5](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json) |
 | Linux arm64 | [0.2.1-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.2.1-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.2.1-alpha.5](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json) |
 
-每小时同步 stable 目录中最新 3 个已验收内核；— 表示暂无匹配版本。
+候选窗口为最新 5 个版本，至少保留 2 个 RC 或正式版。下表每小时同步 stable 目录中已通过验收的版本，可能少于 5 个；— 表示暂无匹配版本。
 
 </details>
 

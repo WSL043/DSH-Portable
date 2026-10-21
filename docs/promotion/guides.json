@@ -69,7 +69,7 @@
       },
       {
         "type": "p",
-        "text": "Portable 桌面部分与官方 DeepSeek Harness 内核分别管理。在设置 → 更新里，可以从最新的三个已验证内核版本中选择；不同产品版本的设置入口可能不同，以当前页面提示和 Release 说明为准，不是所有上游版本都适用于当前 Portable。"
+        "text": "Portable 桌面部分与官方 DeepSeek Harness 内核分别管理。在设置 → 更新里，可以从最多五个已验证内核版本中选择；不同产品版本的设置入口可能不同，以当前页面提示和 Release 说明为准，不是所有上游版本都适用于当前 Portable。"
       },
       {
         "type": "p",

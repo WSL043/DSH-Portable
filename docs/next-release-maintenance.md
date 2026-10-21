@@ -1,4 +1,8 @@
-# Next release maintenance acceptance
+# Historical maintenance acceptance (0.6.4)
+
+This is the September 2026 acceptance record for 0.6.4. Current maintenance status
+is tracked in [maintenance-roadmap.md](maintenance-roadmap.md); the version and
+pending findings below describe that historical batch.
 
 The pending product version remains 0.6.4. This checklist is implementation and
 qualification work, not authorization to call an unresolved fault fixed or to

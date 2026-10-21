@@ -10,14 +10,18 @@ test('support list excludes other baselines and mismatched core manifests', () =
   assert.throws(() => supportedVersions(index, '0.6.9', 'linux-x64'))
   assert.throws(() => supportedVersions({ ...index, channel: 'candidate' }, '0.6.9', 'windows-x64'), /Invalid published core index/)
 })
-test('README support output is one stable column with the latest three verified cores', () => {
+test('README support output distinguishes the five-core window from qualified availability', () => {
   const rows = ['| Windows x64 | [0.2.0-rc.2](stable-index) |']
   const en = renderSupportSection('0.8.3', rows, false)
   const zh = renderSupportSection('0.8.3', rows, true)
-  assert.match(en, /Optional cores \(latest 3 verified versions\)/)
+  assert.match(en, /Optional cores \(up to 5 verified versions\)/)
+  assert.match(en, /at least two release candidates or finals/)
+  assert.match(en, /may contain fewer than five/)
   assert.match(en, /\| Platform \| Available cores \|/)
   assert.doesNotMatch(en, /Candidate channel|Stable channel/)
-  assert.match(zh, /可选内核（最新 3 个已验证版本）/)
+  assert.match(zh, /可选内核（最多 5 个已验证版本）/)
+  assert.match(zh, /至少保留 2 个 RC 或正式版/)
+  assert.match(zh, /可能少于 5 个/)
   assert.match(zh, /\| 平台 \| 可选内核 \|/)
 })
 

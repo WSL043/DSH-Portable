@@ -6,10 +6,11 @@
 #   scripts/ship-stable.sh <version> --resume    shell already published with the feed held: qualify, then flip
 #   scripts/ship-stable.sh <version> --skip-gate publish and flip the feed immediately (emergency only)
 #
-# Why the feed is held: Portable's updater replaces the whole package, and a core is qualified for exactly one
-# shell. A shell that reaches users before its cores are qualified silently drops the core they selected
+# Why the feed is held: Portable's updater replaces the whole package. A shell that reaches users before
+# compatible cores are available silently drops the core they selected
 # (issue #163). So the order is: publish the release assets with the feed held (publish_feed=false), run
-# "Sync verified DSH core" in the Updates repository until the newest three cores succeed on this exact commit,
+# "Sync verified DSH core" in the Updates repository for the five-core window (at least two RCs/finals),
+# carrying over stable-catalog cores with the same shell contract and excusing never-qualified blocked cores,
 # and only then flip the update feed. If any core fails, the feed stays on the previous shell and the script
 # exits non-zero; fix the cause, then rerun with --resume.
 #
@@ -101,7 +102,7 @@ if [ "$MODE" != --resume ]; then
   gh release list -R "$REPOSITORY" --limit 3 | sed 's/^/release: /'
 fi
 
-# Qualification gate: the newest three official cores must each succeed on this exact commit.
+# Qualification gate: five-core window, same-contract carry-over, never-qualified blocked cores excused.
 gate_state() {
   local state
   # A dropped connection must read as "not known yet", never as a failed gate or a node crash.

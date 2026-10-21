@@ -15,11 +15,11 @@ export function supportedVersions(index, baseline, platform) {
 
 export function renderSupportSection(baseline, rows, zh) {
   const intro = zh
-    ? '**可选内核（最新 3 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。'
-    : '**Optional cores (latest 3 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).'
+    ? '**可选内核（最多 5 个已验证版本）** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。'
+    : '**Optional cores (up to 5 verified versions)** · Settings → Updates · Since 0.6.5 stable (first available in 0.6.5-rc.1).'
   const summary = zh ? `查看 Portable ${baseline} 的可选内核` : `View available cores for Portable ${baseline}`
   const table = zh ? '| 平台 | 可选内核 |' : '| Platform | Available cores |'
-  const note = zh ? '每小时同步 stable 目录中最新 3 个已验收内核；— 表示暂无匹配版本。' : 'Synced hourly from the newest three qualified cores in the stable catalog; — means no matching version.'
+  const note = zh ? '候选窗口为最新 5 个版本，至少保留 2 个 RC 或正式版。下表每小时同步 stable 目录中已通过验收的版本，可能少于 5 个；— 表示暂无匹配版本。' : 'The window covers the newest five versions, retaining at least two release candidates or finals. The table syncs qualified stable-catalog entries hourly and may contain fewer than five; — means no matching version.'
   return `${intro}\n\n<details>\n<summary>${summary}</summary>\n\n${table}\n| --- | --- |\n${rows.join('\n')}\n\n${note}\n\n</details>\n`
 }
 

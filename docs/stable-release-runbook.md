@@ -21,12 +21,12 @@ scripts/ship-stable.sh x.y.z
 
 1. 等 main 上对应提交的构建通过（构建里有一项靠重跑才过，不算数，先查原因）。
 2. 触发“Publish tested release”，但 `publish_feed=false`：Release 和下载包已发布，应用内更新源**不翻**，已安装的用户还停在上一个版本。
-3. 触发更新仓库的“Sync verified DSH core”，反复触发直到**最新三个内核**在这个提交上全部 `success`；任何一个 `failed`/`blocked` 就退出，更新源保持不变。
+3. 检查**最新五个内核、至少两个 RC 或正式版**的窗口。同一 `requiredShellContract` 下 stable 目录已经提供的内核可沿用验收；其余触发更新仓库的“Sync verified DSH core”，在本次发布提交上验收。窗口内曾被 `blocked` 且从未在任何外壳验收成功的内核记为 `excused`，不会发布，也不阻挡外壳发布。其他 `failed`/`blocked` 会退出，更新源保持不变；仍有 `pending` 时继续等待。
 4. 全部通过后再用 `publish_feed=true` 翻更新源。
 
 内核验收失败时：修原因（多半是更新仓库的验收脚本或补丁锚点），再运行 `scripts/ship-stable.sh x.y.z --resume`。只有紧急情况才用 `--skip-gate`（发布并立刻翻更新源）。
 
-背景：Portable 的整包更新会整体替换程序，内核只对一个特定的 Portable 版本验收；用户在新内核验收完之前升级，会丢掉自己选的内核，已有会话可能显示异常（issue #163）。GitHub 的触发接口偶尔连续返回 HTTP 500，脚本每分钟重试一次。
+背景：Portable 的整包更新会整体替换程序；用户在目标外壳还没有兼容内核时升级，可能丢掉自己选的内核（issue #163）。现在内核以 `requiredShellContract` 匹配外壳，接口号相同可沿用已验收内核，不必每发一次外壳就重验；没有接口号的旧版本仍按确切版本与指纹匹配，详见 [shell contract](shell-contract.md)。GitHub 的触发接口偶尔连续返回 HTTP 500，脚本每分钟重试一次。
 
 ## 3. 注意
 
