@@ -143,7 +143,7 @@ const copy = {
     stableLineLabel: "CURRENT DOWNLOAD",
     stableLineTitle: "Stable 0.x (Native)",
     stableLineText:
-      '<ul class="line-points"><li>Recommended for everyday use on Windows, macOS, and Linux.</li><li>Portable and the core update separately; choose among the newest three verified core versions.</li><li>No install and no system changes; copy the folder to take it with you.</li></ul><p><a href="#downloads">See downloads</a></p>',
+      '<ul class="line-points"><li>Recommended for everyday use on Windows, macOS, and Linux.</li><li>Portable and the core update separately; choose among up to five verified core versions.</li><li>No install and no system changes; copy the folder to take it with you.</li></ul><p><a href="#downloads">See downloads</a></p>',
     developmentLineLabel: "ALPHA PREVIEW",
     developmentLineTitle: "1.0 line: runs the official desktop app itself",
     developmentLineText:
