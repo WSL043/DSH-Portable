@@ -23,13 +23,14 @@ test('stable and candidate cores have independently pinned official source locks
   assert.equal(app.overrides['@deepseek-ai/libreoffice-kit@0.1.5']?.fflate, '0.8.3',
     'the alpha Office kit must use the reviewed ZIP parser fix')
   // GHSA-6qxp-vccf-f47h: the official MCP client 2.0.0 (pinned exactly by dsh-mcp-client up to 0.2.1-alpha.1) can send
-  // OAuth credentials to a server-chosen authorization server; 2.2.0 fixes it. dsh-mcp-client's lib is byte-identical
-  // in 0.2.1-alpha.2, which only bumps this dependency, so older cores take the same version. The override is keyed
+  // OAuth credentials to a server-chosen authorization server; 2.2.0 fixes it. GHSA-6prh-2h8m-c8cw also affects
+  // 2.2.0 through cross-origin redirects, so both older cores and the current RC need client 2.3.0. The override is keyed
   // by the requested client version, not by dsh-mcp-client: the preview runtime stages every official package as a
   // direct file: dependency, and npm rejects an override on a direct dependency (EOVERRIDE).
-  assert.equal(app.overrides['@modelcontextprotocol/client@2.0.0'], '2.2.0', 'cores pinning client 2.0.0 must use the patched MCP client')
+  assert.equal(app.overrides['@modelcontextprotocol/client@>=2.0.0 <2.3.0'], '2.3.0',
+    'stable and candidate cores requesting affected MCP clients must use the patched version')
   const lock = JSON.parse(await readFile(path.join(root, 'app/package-lock.json'), 'utf8'))
-  assert.equal(lock.packages['node_modules/@modelcontextprotocol/client'].version, '2.2.0')
+  assert.equal(lock.packages['node_modules/@modelcontextprotocol/client'].version, '2.3.0')
   assert.equal(stable.dsh.version, app.dependencies['@deepseek-ai/dsh'])
   assert.match(stable.dsh.integrity, /^sha512-/)
   assert.match(stable.dsh.reviewedCommit, /^[0-9a-f]{40}$/)

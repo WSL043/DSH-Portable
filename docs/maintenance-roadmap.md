@@ -13,7 +13,8 @@
 | 默认插件 | [Image Viewer #9](https://github.com/WSL043/dsh-image-viewer/pull/9)、[Chat Manager #29](https://github.com/WSL043/dsh-chat-manager/pull/29)（五版本兼容窗口）及 [#28](https://github.com/WSL043/dsh-chat-manager/pull/28)（归档页样式）仍开放。已有行为/交付检查通过；两个兼容窗口 PR 的端到端矩阵被跳过，不能称为新增内核验收完成。合并会触发插件自动发布，继续等下次发布安排。 |
 | 社区插件启用状态 | [Portable #175](https://github.com/WSL043/DSH-Portable/pull/175) 将启动和打包的预发布版 peer 判断统一为官方 `dsh-app-boot` 使用的 `includePrerelease: true`。真实 semver、实际 tgz 打包校验及连续两次启动扫描的 8 项测试通过：兼容插件保持启用，精确版本和越界版本仍被拒绝，依赖文件保留。相关启动、恢复及配置事务测试另有 42 项通过、1 项按平台跳过；这些是源码行为验收，不代表六个社区插件的完整 UI/业务功能均已验收或修复已随版本发布。 |
 | 第三方插件数据 | [Portable #174](https://github.com/WSL043/DSH-Portable/pull/174) 已改为显式 `plugin-storage migrate`，退出不再迁移；拒绝已有目标、其他实例链接和运行中的环境，保留原始备份。Windows 实机已验证真实插件 SQLite 读写、浏览器插件启停、跨环境拒绝、文件占用失败保全及目录移动后重连；完整回归 1172 通过、14 跳过。本机原生 WebView 的 `E_UNEXPECTED` 已定位为验收副本继承低完整性标签：同 SHA-256 的 EXE 换到普通用户临时目录即正常启动；随后以 `1f55558` 源码重编原生宿主，完整启动转场、工作区、设置环境及关闭验收通过。未改产品初始化逻辑。无 manifest 的用户不受影响；本轮不发布。 |
-| 依赖安全更新 | [Dependabot #5](https://github.com/WSL043/DSH-Portable/security/dependabot/5)：`@modelcontextprotocol/client` 中危告警，修复版为 2.3.0；[自动更新任务](https://github.com/WSL043/DSH-Portable/actions/runs/39482839898)以 `security_update_not_possible` 失败，需单独核对锁文件、覆盖项与实际打包依赖，不以自动任务结束当作修复。 |
+| 依赖安全更新 | [Dependabot #5](https://github.com/WSL043/DSH-Portable/security/dependabot/5)：将受影响的 MCP client 2.x 请求统一覆盖至 2.3.0，锁文件仅升级 client/core 两包，DSH 版本不变。实际 DSH 消费者解析与导入通过；本机 307/308 跨域跳转没有转发测试密钥、会话 ID、MCP 请求体或 OAuth 凭据，同域 POST 保持正常。依赖审计为 0，全仓 1178 通过、14 跳过；默认分支告警状态与新提交 CI 另行回读确认，本轮不发布。 |
+| CodeQL 告警审查 | [2026-10-22 审查](security-review-2026-10-22.md)覆盖 main 上全部 143 条开放告警，核对当前提交的 JavaScript/C# SARIF 与具体调用边界；不是旧分支清理，也不以扫描作业成功等同告警清零。保留逐组依据，不关闭查询或排除目录。 |
 
 上述四个仓库没有开放的普通 issue；待办还包含 PR、依赖告警和下方历史台账，不能据此宣称全部完成。发布流程以 [runbook](stable-release-runbook.md) 和 [shell contract](shell-contract.md) 为准；性能基线见 [启动性能](startup-performance-2026-10-15.md)及[内存占用](memory-footprint-2026-10-16.md)，只优化测得的本项目开销，不裁掉官方组件。
 
