@@ -23,6 +23,17 @@ function isCommunityBundle(name) {
     && name !== '@wsl043/dsh-portable-plugin-market'
 }
 
+/**
+ * DSH itself ships prerelease versions (for example 0.2.1-rc.2). Plain
+ * semver.satisfies() excludes prereleases unless the range contains a
+ * comparator with the same major.minor.patch, which would classify every
+ * community plugin with a normal peer range as incompatible. Match the DSH
+ * plugin loader's decision and include prereleases.
+ */
+export function satisfiesHostPeer(semver, version, range) {
+  return semver.satisfies(version, range, { includePrerelease: true })
+}
+
 /** The same peer decision is used before packaging and on every launch. */
 export async function incompatibleProfilePeers(plugin, hostVersion, { satisfies, validRange } = {}) {
   const incompatible = []
@@ -52,7 +63,7 @@ export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}
   // plugin's own peer range is the compatibility contract; no package-name
   // specific workaround is needed when the next DSH alpha changes its API.
   const semver = satisfies ? null : createRequire(layout.dshBin)('semver')
-  const semverSatisfies = satisfies ?? semver.satisfies
+  const semverSatisfies = satisfies ?? ((version, range) => satisfiesHostPeer(semver, version, range))
   const paused = []
   for (const name of active) {
     const filename = packageManifest(profileRoot, name)

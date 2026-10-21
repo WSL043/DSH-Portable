@@ -6,7 +6,7 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { layoutForRoot } from '../launcher/portable-core.mjs'
-import { incompatibleProfilePeers, pauseIncompatibleProfileBundles } from '../launcher/profile-compatibility.mjs'
+import { incompatibleProfilePeers, pauseIncompatibleProfileBundles, satisfiesHostPeer } from '../launcher/profile-compatibility.mjs'
 
 test('packaging and startup agree on the Cordis peer that would pause a default plugin', async () => {
   const hostVersion = async name => name === '@deepseek-ai/cordis' ? '4.0.4' : null
@@ -58,4 +58,16 @@ test('startup pauses only active third-party bundles whose declared host peers e
   assert.equal(updated.dependencies['old-plugin'], '1.0.0')
   assert.equal(existsSync(path.join(pluginRoot, 'package.json')), true)
   assert.deepEqual((await pauseIncompatibleProfileBundles(layout, { satisfies: (version, range) => version === range })).paused, [])
+})
+
+test('host peer checks include prerelease host versions', () => {
+  const calls = []
+  const semver = {
+    satisfies(version, range, options) {
+      calls.push({ version, range, options })
+      return options?.includePrerelease === true
+    },
+  }
+  assert.equal(satisfiesHostPeer(semver, '0.2.1-rc.2', '>=0.2.0-rc.0 <0.3.0'), true)
+  assert.deepEqual(calls, [{ version: '0.2.1-rc.2', range: '>=0.2.0-rc.0 <0.3.0', options: { includePrerelease: true } }])
 })
