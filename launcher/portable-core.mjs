@@ -781,6 +781,12 @@ export function parseCli(argv) {
       conflict = argv[index + 1]
       index += 1
     }
+    else if (arg === 'plugin-storage') {
+      if (commandSeen) throw new Error('Specify no more than one command.')
+      if (argv[++index] !== 'migrate') throw new Error('Usage: plugin-storage migrate [--environment NAME] [--json]')
+      command = 'plugin-storage-migrate'
+      commandSeen = true
+    }
     else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recovery-plugins', 'recovery-pause-plugin', 'recovery-restore-plugin', 'recover-update', 'recover-data', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'plugin-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg

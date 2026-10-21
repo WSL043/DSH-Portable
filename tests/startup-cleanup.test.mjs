@@ -31,6 +31,7 @@ function fixture({ owned = true, details = 'host failed', cleanupError = null, q
     ensureOfficialMarket: async () => ({ status: 'unchanged', actions: [] }),
     pauseIncompatibleProfileBundles: async () => ({ status: 'passed', paused: [] }),
     repairIncompleteProfileDependencies: async () => ({ profiles: [] }),
+    applyPluginStorage: async () => ({ failed: 0, entries: [] }),
     reservePort: async () => ({ port: 3080, release() {} }), logSize: () => 0,
     openSync: () => 1, writeSync() {}, closeSync() {}, startupTrace: null,
     process: { platform: 'win32', env: {} }, randomUUID: () => 'fixture',

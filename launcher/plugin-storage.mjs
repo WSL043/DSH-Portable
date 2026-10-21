@@ -1,32 +1,10 @@
-// Portable plugin storage: keep third-party plugin data inside the portable drive.
-//
-// Many DSH plugins hardcode user-profile directories (for example
-// `~/.dsh/memory`, `%APPDATA%\dsh-pet-electron-helper` or
-// `%LOCALAPPDATA%\ego-lite-linux`). Those paths survive `data/` backups and a
-// drive move, so plugin state silently stays on the host machine.
-//
-// A profile can list such directories in `data/plugin-storage.json`:
-//
-//   {
-//     "version": 1,
-//     "links": [
-//       { "id": "mneme-memory", "link": "%USERPROFILE%\\.dsh\\memory",
-//         "target": "%DSH_DATA%\\plugin-data\\mneme-memory" }
-//     ]
-//   }
-//
-// `applyPluginStorage` runs before the DSH app starts and only creates links for
-// absent/empty sources; it never moves a live directory. `finalizePluginStorage`
-// runs after the app exits and migrates a real source directory (copy -> backup
-// -> link -> delete backup, with rollback), so SQLite/Electron files are moved
-// only when nobody holds them. Both are idempotent.
-import { existsSync } from 'node:fs'
-import { cp, lstat, mkdir, readFile, readdir, readlink, rename, rm, rmdir, symlink } from 'node:fs/promises'
+// Opt-in host-path redirects. Only an explicit command migrates real directories.
+import { randomUUID } from 'node:crypto'
+import { cp, lstat, mkdir, open, readFile, readdir, readlink, rename, symlink, unlink } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 
 export const PLUGIN_STORAGE_MANIFEST = 'plugin-storage.json'
-export const PLUGIN_STORAGE_DIR = 'plugin-data'
 const ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/i
 const ENV_TOKEN = /%([^%]+)%|\$\{([^}]+)\}|\$([A-Za-z_][A-Za-z0-9_]*)/g
 
@@ -35,17 +13,13 @@ export function pluginStorageManifestPath(dataDir) {
 }
 
 export function pluginStorageRoot(dataDir) {
-  // Under dsh-home so the existing `sessions` data backup (which includes
-  // dsh-home/storages) and profile exports carry plugin data with the drive.
-  return path.join(path.resolve(dataDir), 'dsh-home', 'storages', PLUGIN_STORAGE_DIR)
+  return path.join(path.resolve(dataDir), 'dsh-home', 'storages', 'plugin-data')
 }
 
-function expandValue(value, { dataDir, dshHome, env = process.env }) {
-  if (typeof value !== 'string' || value.trim() === '') throw new Error('Plugin storage path must be a non-empty string.')
+function expandValue(value, { dataDir, dshHome, env }) {
+  if (typeof value !== 'string' || !value.trim()) throw new Error('Plugin storage path must be a non-empty string.')
   let text = value.trim()
-  if (text === '~' || text.startsWith('~/') || text.startsWith('~\\')) {
-    text = path.join(os.homedir(), text.slice(1))
-  }
+  if (text === '~' || /^~[/\\]/.test(text)) text = path.join(os.homedir(), text.slice(1))
   text = text.replace(ENV_TOKEN, (match, winName, bracedName, plainName) => {
     const name = String(winName ?? bracedName ?? plainName).trim()
     if (name === 'DSH_DATA') return path.resolve(dataDir)
@@ -56,34 +30,28 @@ function expandValue(value, { dataDir, dshHome, env = process.env }) {
     if (found === undefined) throw new Error(`Unknown plugin storage token: ${match}`)
     return String(found)
   })
-  if (/%[^%]+%/.test(text)) throw new Error(`Unresolved plugin storage token in: ${value}`)
-  return text
+  if (!path.isAbsolute(text)) throw new Error(`Plugin storage path must be absolute: ${value}`)
+  return path.resolve(text)
 }
 
 function isContained(root, candidate) {
-  const relative = path.relative(path.resolve(root), path.resolve(candidate))
-  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+  const relative = path.relative(root, candidate)
+  return relative === '' || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative))
 }
 
 function samePath(a, b) {
-  const left = path.resolve(a)
-  const right = path.resolve(b)
-  return process.platform === 'win32' ? left.toLowerCase() === right.toLowerCase() : left === right
+  return path.relative(path.resolve(a), path.resolve(b)) === ''
 }
 
 export function resolvePluginStorageEntry(entry, layout, { env = process.env } = {}) {
-  if (!entry || typeof entry !== 'object') throw new Error('Plugin storage entry must be an object.')
-  if (typeof entry.id !== 'string' || !ID_PATTERN.test(entry.id)) throw new Error(`Invalid plugin storage id: ${entry.id}`)
-  const dataDir = path.resolve(layout.dataDir)
-  const targetRoot = pluginStorageRoot(dataDir)
-  const link = path.resolve(expandValue(entry.link, { dataDir, dshHome: layout.dshHome, env }))
-  const target = path.resolve(expandValue(entry.target, { dataDir, dshHome: layout.dshHome, env }))
-  if (!isContained(targetRoot, target) || samePath(targetRoot, target)) {
-    throw new Error(`Plugin storage target must stay under ${targetRoot}: ${entry.target}`)
-  }
-  if (samePath(link, target)) throw new Error(`Plugin storage link and target are identical: ${entry.link}`)
-  if (isContained(dataDir, link) || (layout.root && isContained(layout.root, link))) {
-    throw new Error(`Plugin storage link must live outside the portable root: ${entry.link}`)
+  if (!entry || typeof entry.id !== 'string' || !ID_PATTERN.test(entry.id)) throw new Error('Invalid plugin storage id.')
+  const context = { dataDir: layout.dataDir, dshHome: layout.dshHome, env }
+  const link = expandValue(entry.link, context)
+  const target = expandValue(entry.target, context)
+  const targetRoot = pluginStorageRoot(layout.dataDir)
+  if (!isContained(targetRoot, target) || samePath(targetRoot, target)) throw new Error(`Plugin storage target must stay under ${targetRoot}`)
+  for (const root of [layout.root, layout.stateRoot, layout.baseStateRoot, layout.dataDir].filter(Boolean).map(value => path.resolve(value))) {
+    if (isContained(root, link) || isContained(link, root)) throw new Error('Plugin storage link must be outside and not contain the portable root or data directory.')
   }
   return { id: entry.id, link, target }
 }
@@ -92,131 +60,128 @@ export async function readPluginStorageManifest(dataDir, { layout, env = process
   const filename = pluginStorageManifestPath(dataDir)
   let raw
   try { raw = await readFile(filename, 'utf8') } catch (error) {
-    if (error?.code === 'ENOENT') return { filename, entries: [] }
+    if (error.code === 'ENOENT') return { filename, entries: [] }
     throw error
   }
-  let parsed
-  try { parsed = JSON.parse(raw) } catch { throw new Error(`Invalid plugin storage manifest JSON: ${filename}`) }
-  if (!parsed || typeof parsed !== 'object' || parsed.version !== 1 || !Array.isArray(parsed.links))
-    throw new Error(`Unsupported plugin storage manifest: ${filename}`)
+  const parsed = JSON.parse(raw)
+  if (parsed?.version !== 1 || !Array.isArray(parsed.links)) throw new Error(`Unsupported plugin storage manifest: ${filename}`)
+  const entries = parsed.links.map(entry => resolvePluginStorageEntry(entry, layout, { env }))
   const seen = new Set()
-  const entries = parsed.links.map(entry => {
-    const resolved = resolvePluginStorageEntry(entry, layout, { env })
-    const key = process.platform === 'win32' ? resolved.id.toLowerCase() : resolved.id
-    if (seen.has(key)) throw new Error(`Duplicate plugin storage id: ${resolved.id}`)
+  for (const [index, entry] of entries.entries()) {
+    const key = process.platform === 'win32' ? entry.id.toLowerCase() : entry.id
+    if (seen.has(key)) throw new Error(`Duplicate plugin storage id: ${entry.id}`)
     seen.add(key)
-    return resolved
-  })
+    for (const previous of entries.slice(0, index)) {
+      for (const a of [entry.link, entry.target]) for (const b of [previous.link, previous.target]) {
+        if (isContained(a, b) || isContained(b, a)) throw new Error(`Overlapping plugin storage paths: ${entry.id}, ${previous.id}`)
+      }
+    }
+  }
   return { filename, entries }
 }
 
-async function lstatIfPresent(filename) {
+async function statIfPresent(filename) {
   try { return await lstat(filename) } catch (error) {
-    if (error?.code === 'ENOENT') return null
+    if (error.code === 'ENOENT') return null
     throw error
   }
 }
 
-async function removeLink(link) {
-  try { await rm(link, { force: true }) } catch {}
-  if (await lstatIfPresent(link)) {
-    try { await rmdir(link) } catch {}
+// Reject existing junction/symlink ancestors, including dangling ones.
+async function checkParents(filename, create = false) {
+  const directory = path.dirname(filename)
+  let current = path.parse(directory).root
+  for (const part of directory.slice(current.length).split(path.sep).filter(Boolean)) {
+    current = path.join(current, part)
+    let stat = await statIfPresent(current)
+    if (!stat) {
+      if (!create) return
+      try { await mkdir(current) } catch (error) { if (error.code !== 'EEXIST') throw error }
+      stat = await lstat(current)
+    }
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`Unsafe plugin storage parent: ${current}`)
   }
+}
+
+async function checkTarget(target) {
+  await checkParents(target)
+  const stat = await statIfPresent(target)
+  if (stat && (stat.isSymbolicLink() || !stat.isDirectory())) throw new Error(`Unsafe plugin storage target: ${target}`)
+  return stat
 }
 
 async function createLink(link, target, platform) {
-  await mkdir(target, { recursive: true })
-  await mkdir(path.dirname(link), { recursive: true })
-  try {
-    await symlink(target, link, platform === 'win32' ? 'junction' : 'dir')
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw error
-    await removeLink(link)
-    await symlink(target, link, platform === 'win32' ? 'junction' : 'dir')
-  }
-}
-
-async function isEmptyDirectory(filename) {
-  try {
-    return (await readdir(filename)).length === 0
-  } catch {
-    return false
-  }
+  await checkParents(target, true)
+  if (!await checkTarget(target)) await mkdir(target)
+  // EEXIST is a conflict; never remove an entry that appeared after inspection.
+  await symlink(target, link, platform === 'win32' ? 'junction' : 'dir')
 }
 
 async function migrate(source, target, platform) {
-  await mkdir(target, { recursive: true })
-  await cp(source, target, { recursive: true, force: true, errorOnExist: false, preserveTimestamps: true })
-  const backup = `${source}.pre-portable-${Date.now()}`
-  await rename(source, backup)
+  await checkParents(target, true)
+  await mkdir(target) // Exclusive reservation: even an existing empty target conflicts.
+  const backup = `${source}.pre-portable-${randomUUID()}`
   try {
-    await createLink(source, target, platform)
-    await rm(backup, { recursive: true, force: true })
-  } catch (error) {
-    if (existsSync(backup) && !existsSync(source)) {
-      try { await rename(backup, source) } catch {}
+    for (const name of await readdir(source)) await cp(path.join(source, name), path.join(target, name), {
+      recursive: true, force: false, errorOnExist: true, preserveTimestamps: true,
+      filter: async filename => {
+        const stat = await lstat(filename)
+        if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new Error(`Unsupported plugin storage entry: ${filename}`)
+        return true
+      },
+    })
+    await rename(source, backup)
+    try { await createLink(source, target, platform) } catch (error) {
+      if (!await statIfPresent(source)) await rename(backup, source)
+      throw error
     }
-    throw error
+    return backup // Keep the original until the user has verified plugin behavior.
+  } catch (error) {
+    throw new Error(`Migration stopped; inspect source ${source}, backup ${backup}, and target ${target} before retrying. ${error.message}`, { cause: error })
   }
 }
 
-/**
- * Create or repair links for the manifest.
- * mode 'safe'     — links absent/empty sources only; never moves a live directory.
- * mode 'finalize' — also migrates non-empty real directories (host must be stopped).
- */
-export async function applyPluginStorage({ layout, mode = 'safe', dryRun = false, platform = process.platform, env = process.env, log = () => {} }) {
-  if (mode !== 'safe' && mode !== 'finalize') throw new Error(`Unknown plugin storage mode: ${mode}`)
+export async function applyPluginStorage({ layout, mode = 'safe', platform = process.platform, env = process.env, log = () => {} }) {
+  if (!['safe', 'migrate'].includes(mode)) throw new Error(`Unknown plugin storage mode: ${mode}`)
   const { filename, entries } = await readPluginStorageManifest(layout.dataDir, { layout, env })
-  const result = { schemaVersion: 1, mode, dryRun, manifest: filename, entries: [], ok: 0, skipped: 0, failed: 0 }
+  const result = { schemaVersion: 1, mode, manifest: filename, entries: [], ok: 0, skipped: 0, failed: 0 }
   for (const entry of entries) {
-    const item = { id: entry.id, link: entry.link, target: entry.target, action: 'none' }
+    const item = { ...entry, action: 'none' }
+    let lock
+    const lockPath = `${entry.link}.dsh-portable-lock`
     try {
-      const stat = await lstatIfPresent(entry.link)
+      await checkParents(entry.link, true)
+      // Shared by separate Portable copies. A crash leaves the lock for manual
+      // inspection; an active or stale lock is never automatically stolen.
+      lock = await open(lockPath, 'wx')
+      await checkTarget(entry.target)
+      const stat = await statIfPresent(entry.link)
       if (!stat) {
+        await createLink(entry.link, entry.target, platform)
         item.action = 'link'
-        if (!dryRun) await createLink(entry.link, entry.target, platform)
       } else if (stat.isSymbolicLink()) {
-        let current = ''
-        try { current = String(await readlink(entry.link)).replace(/^\\\\\?\\/, '') } catch {}
-        if (current && samePath(current, entry.target)) item.action = 'ok'
-        else {
-          item.action = 'relink'
-          if (!dryRun) {
-            await removeLink(entry.link)
-            await createLink(entry.link, entry.target, platform)
-          }
-        }
+        const current = path.resolve(path.dirname(entry.link), String(await readlink(entry.link)).replace(/^\\\\\?\\/, ''))
+        if (!samePath(current, entry.target)) throw new Error(`Existing link belongs to a different target; left unchanged: ${entry.link}`)
+        if (!await statIfPresent(entry.target)) throw new Error(`Plugin storage target is missing; restore it before starting: ${entry.target}`)
+        item.action = 'ok'
       } else if (stat.isDirectory()) {
-        const empty = await isEmptyDirectory(entry.link)
-        if (mode === 'safe' && !empty) {
-          item.action = 'skip-live'
-        } else if (empty) {
-          item.action = 'link'
-          if (!dryRun) {
-            await rm(entry.link, { recursive: true, force: true })
-            await createLink(entry.link, entry.target, platform)
-          }
-        } else {
+        if (mode === 'safe') item.action = 'skip-live'
+        else {
+          item.backup = await migrate(entry.link, entry.target, platform)
           item.action = 'migrate'
-          if (!dryRun) await migrate(entry.link, entry.target, platform)
         }
-      } else {
-        item.action = 'skip-file'
-      }
+      } else throw new Error(`Plugin storage source is not a directory: ${entry.link}`)
     } catch (error) {
       item.action = 'failed'
-      item.error = error?.message || String(error)
+      item.error = error.message
       log(`plugin-storage ${entry.id}: ${item.error}`)
+    } finally {
+      if (lock) { await lock.close(); await unlink(lockPath) }
     }
     result.entries.push(item)
     if (item.action === 'failed') result.failed += 1
-    else if (String(item.action).startsWith('skip')) result.skipped += 1
+    else if (item.action.startsWith('skip')) result.skipped += 1
     else result.ok += 1
   }
   return result
-}
-
-export async function finalizePluginStorage(options) {
-  return applyPluginStorage({ ...options, mode: 'finalize' })
 }

@@ -43,39 +43,58 @@ Create `data/plugin-storage.json`:
   `%NAME%`, `$NAME` and `${NAME}` tokens expand from the process environment, and a leading `~`
   expands to the user home.
 
-## Lifecycle
+## Lifecycle and migration
 
-- **Start** (`dsh-portable start`): before the host process is spawned, absent or empty sources get
-  a directory link (NTFS junction on Windows, symlink elsewhere). A non-empty real directory is left
-  alone; the plugin keeps using it for this run.
-- **Stop** (`dsh-portable stop`, including the tray's quit path): after the host process is gone and
-  no other environment is running, a real source directory is migrated:
-  copy to target → rename source to `<source>.pre-portable-<stamp>` → create the link → delete the
-  backup. On failure the original is restored and the plugin stays on its old path; the next stop
-  retries. Running the command twice is safe.
-- Both steps are best-effort and never block startup or stop on a malformed manifest; problems are
-  written to `data/logs/launcher.log`.
+- **Start** creates a link only when the source is absent, or verifies that an existing link points
+  to the declared target. Real directories, even empty ones, stay untouched. A malformed manifest,
+  unsafe path or conflicting link blocks startup so plugins cannot write through another instance's link.
+- **Stop** never migrates storage. Stopping one Portable environment does not prove that another
+  application has closed the same files.
+- **Migrate explicitly** after closing every Portable environment and any other application using
+  these directories. From the portable folder on Windows:
 
-A hard kill (Task Manager, power loss) skips the stop step. The next `dsh-portable stop` retries the
-migration; until then the plugin keeps using the old path (no data loss).
+  ```powershell
+  .\runtime\node\node.exe .\launcher\runtime-entry.mjs portable-cli.mjs plugin-storage migrate --json
+  ```
+
+  On macOS/Linux, use `./runtime/node/bin/node launcher/runtime-entry.mjs portable-cli.mjs plugin-storage migrate --json`.
+  Add `--environment NAME` for a named environment. Its manifest lives in that environment's `data/`.
+  The command takes the existing environment and product locks and refuses to migrate while any
+  environment in this Portable installation is running. A per-source lock also prevents two Portable
+  copies from changing the same path concurrently; it cannot detect unrelated applications.
+
+Migration exclusively creates a **previously absent** target, copies without overwriting, renames
+the source to `<source>.pre-portable-<uuid>`, then creates the link. The original backup is retained
+and reported in the result. After checking the plugin's actual data, move that backup to the Recycle
+Bin yourself. A second migration verifies the link without copying again. Any failed entry makes the
+command exit nonzero; successful earlier entries are reported and remain in effect.
+
+If copying fails, the source remains intact; a partial target is retained for inspection. If link
+creation fails after the rename, the source is restored when its name is still free. Otherwise the
+backup is preserved. Never delete a conflicting source to force recovery. Inspect the reported paths
+before retrying; restore the backup when needed and move an unneeded partial target to the Recycle Bin.
+A hard kill can leave `<source>.dsh-portable-lock`; after confirming that no migration or application
+is running, inspect the source, target and backup before removing this lock. Startup does not silently
+take over a stale lock or repair an interrupted migration.
 
 ## Safety rules
 
 - The link path must be absolute and outside the portable root; the target must stay inside
   `data/dsh-home/storages/plugin-data/`.
-- Entries are processed only when `link` is absent, already a link, or a directory; files are
-  rejected.
-- Links are never followed when copying or deleting. A source that is already a link is only
-  verified/repaired to point at the declared target.
-- Migration requires the app to be stopped; the launcher calls it only from `stop` after the host
-  process exited.
+- The source cannot contain the Portable root or state directories. Relative, duplicate and
+  overlapping paths are rejected. Existing symlink/junction ancestors, linked targets, and links
+  inside a source tree are refused; use canonical paths without linked ancestors.
+- A real source directory can migrate only to an absent target, even if an existing target is empty.
+  Existing targets are never merged or overwritten. Ordinary files are rejected.
+- Only a link already pointing at the declared target is accepted. A mismatching or dangling target
+  is an error, not permission to replace another instance's link or create an empty replacement.
 
 ## Notes
 
-- On Windows the link is a directory junction (`fs.symlink` type `junction`), which needs no admin
-  rights and survives moving the portable folder as long as the data folder moves with it.
-- A drive-letter change invalidates the old link target. `dsh-portable start` repairs links whose
-  target no longer matches, as long as the new target exists at the declared path.
+- Windows uses a directory junction, which needs no admin rights. Links contain absolute paths;
+  moving the portable folder or changing drive letters can invalidate them. Close all applications,
+  verify the old link's destination and the data at the new target, then remove **only the old link**
+  and run the migration command to reconnect. No automatic retargeting is performed.
 - `%LOCALAPPDATA%\electron\Cache` is intentionally not redirected: it is a shared cache used by all
   Electron applications, not plugin data. External CLI homes (`~/.codex`, `~/.claude`) and browser
   profiles are also out of scope.
