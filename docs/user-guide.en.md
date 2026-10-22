@@ -151,7 +151,7 @@ Synced hourly from qualified catalogs. Older and RC builds depend on in-app comp
 2. Put the launcher where you want to keep the product and run it. It prepares a complete `DSH-Portable` folder beside itself.
 3. Connect a model in the interface. Next time, run `DeepSeek-Herness.exe` inside that folder.
 
-The close button sends the app to the system tray by default, so an active task can keep running. To stop everything, use the native **File → Exit** command first; on Windows, press `Ctrl+Q`. The tray's **Exit** command is an alternate path.
+The close button sends the app to the system tray by default, so an active task can keep running. To quit on Windows, use **File → Exit** or `Ctrl+Q`; the tray's **Exit** command is an alternate path. On macOS, use **Quit DSH-Portable** in the application menu or `Cmd+Q`; on Linux, use **Quit**.
 
 ## Downloads
 
@@ -206,7 +206,7 @@ See the [offline deployment guide](docs/offline-deployment-acceptance.md) for pr
 
 See the [computer-to-computer migration guide](docs/move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
 
-1. Use **File → Exit** first; on Windows, press `Ctrl+Q`, or choose the tray's alternate **Exit** command, and wait for the window and tray icon to disappear.
+1. Quit the app completely and wait for the window and tray icon to disappear. On Windows, use **File → Exit**, `Ctrl+Q`, or the tray's **Exit** command.
 2. Copy the entire `DSH-Portable` folder to a new location with the same OS and architecture.
 3. Run `DeepSeek-Herness.exe` from that location.
 

@@ -6,15 +6,15 @@
 
 1.x 数据迁移、跨机及异常恢复的上批验收见[恢复记录](one-x-data-recovery-2026-10-23.md)；官方 Electron 内核的 MCP 重定向漏洞仍由[安全跟进记录](one-x-mcp-followup-2026-10-23.md)阻断发布，不能沿用 0.x 重打包内核已修复的结论。
 
-本批只补[通用窗口接口](window-plugin-boundary.md)与[离线更新](offline-updates.md)。PR #181 的灵动岛、新旧 UI 偏好和交通灯外观不集成，窗口外观交由用户插件。离线入口复用 0.x 现有组件/整包更新事务；1.x 官方引导器不因此自动具备本地导入能力。实机证据与 CI 必须通过后才合入，暂不发布版本或更新源。
+本批只补[通用窗口接口](window-plugin-boundary.md)与[离线更新](offline-updates.md)，证据见[本批验收记录](native-offline-window-acceptance-2026-10-23.md)。PR #181 的灵动岛、新旧 UI 偏好和交通灯外观不集成，窗口外观交由用户插件。离线入口复用 0.x 现有组件/整包更新事务；1.x 官方引导器不因此自动具备本地导入能力。实机证据与 CI 必须通过后才合入，暂不发布版本或更新源。
 
-## 当前维护状态（2026-10-22 更新）
+## 已发布基线（2026-10-22 快照）
 
 稳定版 [0.9.4](https://github.com/WSL043/DSH-Portable/releases/tag/v0.9.4) 已发布并进入应用内更新源；MCP 安全修复、社区插件兼容性、显式插件存储迁移、重启入口和设置页改进已交付。最终成品、内核目录、发布回读和清理证据见[0.9.4 最终成品验收](release-0.9.4-acceptance.md)。0.x Native 与 1.0 纯便携 alpha 两条线继续保留；旧通道兼容代码仍服务旧客户端，不按无用代码删除。
 
 | 项目 | 当前状态与下一步 |
 | --- | --- |
-| 主分支 CI | 产品提交 `79602ae` 的[构建 39652186374](https://github.com/WSL043/DSH-Portable/actions/runs/39652186374) 39/39 成功；GitHub 终态延迟的一次定向复验及不变的 Windows artifact 身份保留在验收记录。工具提交 `5a574df` 的[构建 39658415409](https://github.com/WSL043/DSH-Portable/actions/runs/39658415409) 39/39 成功，首次 npm 新包 404 在真实下载及摘要恢复后仅作一次 failed-only 复验；四语言 CodeQL 成功。发布成品仍固定 `79602ae`。 |
+| 发布基线 CI | 产品提交 `79602ae` 的[构建 39652186374](https://github.com/WSL043/DSH-Portable/actions/runs/39652186374) 39/39 成功；GitHub 终态延迟的一次定向复验及不变的 Windows artifact 身份保留在验收记录。工具提交 `5a574df` 的[构建 39658415409](https://github.com/WSL043/DSH-Portable/actions/runs/39658415409) 39/39 成功，首次 npm 新包 404 在真实下载及摘要恢复后仅作一次 failed-only 复验；四语言 CodeQL 成功。发布成品仍固定 `79602ae`；本批未发布源码的 CI 见顶部验收记录。 |
 | 内核目录 | 最新五个、至少两个 RC/正式版的规则不变；rc.2、rc.1、alpha.5 已用 0.9.4 源码重建并进入五平台 contract 2 目录，三个 Windows 公开包的 MCP client/core 2.3.0 已回读。alpha.4/alpha.3 仍由图片插件 0.1.15 的 peer 声明阻断，不发布；运行和目录证据见[0.9.4 最终成品验收](release-0.9.4-acceptance.md)。 |
 | 默认插件 | [Image Viewer #9](https://github.com/WSL043/dsh-image-viewer/pull/9)、[Chat Manager #29](https://github.com/WSL043/dsh-chat-manager/pull/29)（五版本兼容窗口）及 [#28](https://github.com/WSL043/dsh-chat-manager/pull/28)（归档页样式）仍开放。已有行为/交付检查通过；两个兼容窗口 PR 的端到端矩阵被跳过，不能称为新增内核验收完成。合并会触发插件自动发布，继续等下次发布安排。 |
 | 社区插件启用状态 | [Portable #175](https://github.com/WSL043/DSH-Portable/pull/175) 将启动和打包的预发布版 peer 判断统一为官方 `dsh-app-boot` 使用的 `includePrerelease: true`。真实 semver、实际 tgz 打包校验及连续两次启动扫描的 8 项测试通过：兼容插件保持启用，精确版本和越界版本仍被拒绝，依赖文件保留。相关启动、恢复及配置事务测试另有 42 项通过、1 项按平台跳过；修复已随 0.9.4 发布；上述证据不代表六个社区插件的完整 UI/业务功能均已验收。 |
@@ -22,7 +22,7 @@
 | 依赖安全更新 | [Dependabot #5](https://github.com/WSL043/DSH-Portable/security/dependabot/5)：将受影响的 MCP client 2.x 请求统一覆盖至 2.3.0，锁文件仅升级 client/core 两包，DSH 版本不变。实际 DSH 消费者解析与导入通过；本机 307/308 跨域跳转没有转发测试密钥、会话 ID、MCP 请求体或 OAuth 凭据，同域 POST 保持正常。依赖审计为 0，全仓 1178 通过、14 跳过；修复经 #177 合入 main，GitHub 已自动将 #5 标为 Fixed（未手工忽略）；合入前完整 CI 39/39 通过，合入后[构建 39637847106](https://github.com/WSL043/DSH-Portable/actions/runs/39637847106)也已 39/39 通过，无重跑；修复已随 0.9.4 发布，最终成品及可选内核的依赖回读见[0.9.4 最终成品验收](release-0.9.4-acceptance.md)。 |
 | CodeQL 告警审查 | [2026-10-22 审查](security-review-2026-10-22.md)覆盖初始 main 上全部 143 条开放告警及扫描改善后新增/重开的 20 条，核对当前提交的 JavaScript/C# SARIF 与具体调用边界，逐条附对应理由标为误报；分页回读开放项为 0，密钥扫描也为 0。保留逐组依据，不关闭查询或排除目录，不以当前 0 代表完整安全审计。补充单个分析依赖项目后，完整扫描已消除 C# 低质量警告；27 个源码仍纳入，仍有 4 个 Windows 通知类型无法解析，详见审查记录。 |
 
-上述四个仓库没有开放的普通 issue；待办还包含 PR、依赖告警和下方历史台账，不能据此宣称全部完成。发布流程以 [runbook](stable-release-runbook.md) 和 [shell contract](shell-contract.md) 为准；性能基线见 [启动性能](startup-performance-2026-10-15.md)及[内存占用](memory-footprint-2026-10-16.md)，只优化测得的本项目开销，不裁掉官方组件。
+该次快照中，四个仓库没有开放的普通 issue；待办还包含 PR、依赖告警和下方历史台账，不能据此宣称全部完成。发布流程以 [runbook](stable-release-runbook.md) 和 [shell contract](shell-contract.md) 为准；性能基线见 [启动性能](startup-performance-2026-10-15.md)及[内存占用](memory-footprint-2026-10-16.md)，只优化测得的本项目开销，不裁掉官方组件。
 
 本机原生验收应使用普通用户权限的隔离临时目录。若遇到缓存写入 `EPERM` 或 WebView 控制器初始化失败，先核对 EXE 的 `icacls` 完整性标签和实际进程 token；本次失败进程为 Low（`S-1-16-4096`），调用者为 Medium（`S-1-16-8192`）。[Windows MIC 规则](https://learn.microsoft.com/en-us/windows/win32/secauthz/mandatory-integrity-control)会让低完整性 EXE 降低子进程权限。保留原失败证据，在正常用户目录复用已校验的运行时做对照；不要为验收改系统 ACL、关闭安全保护或给产品增加盲重试。
 
