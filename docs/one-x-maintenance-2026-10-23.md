@@ -52,7 +52,7 @@
 
 本机首次工具继承 Low integrity，无法创建 D 盘锁，属于验收控制器环境：逐字节相同的工具复制到正常继承的 D 盘后实际 token RID 从 4096 到 8192，未修改用户或原程序 ACL。另一次观察器空窗口枚举失败已保留日志，实际程序正常；不隐藏失败记录。全局目录/应用树首份元数据采样在首次启动后，只证明之后稳定；本机未做完整 Procmon 审计。
 
-本机 UI 的 Payload.psm1 早于最终 HTTP 限界修正；不将其冒充精确最终引擎验收。最终源码由以下线上运行覆盖：
+最初三轮本机 UI 的 Payload.psm1 早于最终 HTTP 限界修正，不冒充精确最终引擎验收。第一批实现的线上运行分别绑定以下源码：
 
 - [真实跨版本 E2E 39802825055](https://github.com/WSL043/DSH-Portable/actions/runs/39802825055)，源码 `d83fb329c9c86b4ee82854d9510331ec5c814c52`，0.1.7-rc.2 → 0.2.1-rc.2，`overallPassed=true`，12/12 通过。实际点击更新/安装重启、应用切换、健康清除、协议恢复与崩溃回退均有证据。
 - [完整包/Bootstrap 39802832641](https://github.com/WSL043/DSH-Portable/actions/runs/39802832641)，同一源码，`alpha=99`、`smoke=all`、`publish_draft=false`，preflight/package 成功，完整包和轻量包首启/二启/搬迁及配置检查全部通过，draft-release 跳过。两根实际 MCP 2.0.0 的安全报告与 provenance 均 blocked，运行成功没有授予发布资格。
@@ -61,10 +61,14 @@ E2E 实际捕获进程写入，意外写入列表为空；另记录官方自身�
 
 PR 安全扫描随后发现共享 CLI 的环境路径和测试 executable 选择缺少显式边界。本轮继续收紧：CLI 输入/输出限定当前工作区、拒绝路径逃逸和现存链接、版本/报告 kind 只接受规定形状；summary 留在证据目录，由 workflow 写 GitHub 文件命令。测试环境只从固定系统路径允许项选择 PowerShell；原生 cache pointer 写入前增加规范化、单叶名称和分隔符包含校验。修正后 56 个定向检查通过，新增实际越界/链接拒绝覆盖；静态扫描以最终 PR 运行结果为准，不用单测替代。
 
+最终原生补验绑定产品源码 `44c0c25affe1ae27480972a3733af4d8dc372557`，复用同一搬迁后根，已同步最终 Payload/apply-update。冷启动仍保留原草稿/深色、设置显示 0.2.1-rc.2、正常关闭后 Launcher exit 0，协议全树恢复，进程归零。Launcher SHA-256 `0c1ea49b0241b664bdc583ced9ed3c0dcb874b47243276df7be3815d7a5fccc9`，官方 EXE/ASAR 摘要保持原值。最终共享 CLI 也对该实际 ASAR 完成 collect=0 / authorize=1：保留 blocked 证据，拒绝发布。该本地证据使用 `local-final` 身份，不冒充 Actions 运行。
+
+安全扫描收敛到 `b50e0a5fc6bf7b7dd82149cbefccf95734197a32`：Actions、C#、JavaScript/TypeScript、Python 四项分析结果均为 0，PR head open alerts 回读为空。没有添加 suppression 或改安全门槛；JavaScript 路径守卫使用单独的正向前缀分支支配每次文件访问，避免复合条件无法被分析器识别。本地实物采证的共享 CLI SHA-256 `48fb15af67cead45efbffa6aec52709b9ac4425da98281b53a03b02185c3579a` 与该提交一致。
+
 ## 安全阻断与后续工作
 
 [GHSA-6prh-2h8m-c8cw / CVE-2026-111769](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) 影响 MCP client `>=2.0.0 <2.3.0`。旧 0.2.0-rc.2 实物为 2.0.0，新 0.2.1-rc.2 实物为 2.2.0，均命中，ASAR 清单完整性已验证。DSH 存在 StreamableHTTP 与自定义 headers 路径，stdio 不受此公告影响；未声称本机遭利用。官方签名不消除该依赖债，当前发布资格为 **blocked**。
 
 接下来优先等待官方修复的签名成品并重跑；随后补真实旧 Native 数据迁移、跨机账号、断网/磁盘不足/中断恢复、官方插件入口和第三方兼容。崩溃遗留 partial/目标冲突仍保守拒绝覆盖；自动恢复和多实例未作承诺。物理断电、付费模型请求和 macOS 均无本轮证据。
 
-临时构建/验收根验收结束后按精确路径回收并核对可恢复记录，保留小型日志/JSON/截图。回收结果在本节补充；原便携版及其数据不作清理目标。
+临时 D 盘构建/验收根已整体移入回收站：1,403,652,692 B、7,947 文件。原路径消失，精确 `$I/$R` 记录、完整目录元数据指纹匹配；从回收站再次读取安装包 SHA-512、ASAR 与最终 Launcher SHA-256 均保持原值。采用删除前可否决的原生回收操作，不存在永久删除 fallback；先以小夹具验证否决保全与回收恢复边界。自有工具已另行回收，测试 feed 已停止，保留小型日志/JSON/截图；原便携版及其数据未列为清理目标。同盘回收保留物理占用，不宣称立即释放这 1.307 GiB 空间，也未清空回收站。
