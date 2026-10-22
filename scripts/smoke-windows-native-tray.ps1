@@ -302,10 +302,11 @@ try {
     $ZhTerminal = 'DSH ' + (-join ([char[]]@(0x7EC8, 0x7AEF)))
     $ZhFeedback = -join ([char[]]@(0x53CD, 0x9988, 0x95EE, 0x9898))
     $ZhExit = (-join ([char[]]@(0x9000, 0x51FA))) + ' DeepSeek Harness'
+    $ZhRestore = -join ([char[]]@(0x6062, 0x590D, 0x539F, 0x751F, 0x7A97, 0x53E3, 0x680F))
 
     foreach ($Case in @(
-        @{ Locale = 'en'; Theme = 'light'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Terminal = 'DSH Terminal'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
-        @{ Locale = 'zh'; Theme = 'dark'; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = $ZhTerminal; Feedback = $ZhFeedback; Exit = $ZhExit }
+        @{ Locale = 'en'; Theme = 'light'; Restore = 'Restore native window bar'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Terminal = 'DSH Terminal'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
+        @{ Locale = 'zh'; Theme = 'dark'; Restore = $ZhRestore; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = $ZhTerminal; Feedback = $ZhFeedback; Exit = $ZhExit }
     )) {
         Set-Property $StateType $State 'locale' $Case.Locale
         Set-Property $StateType $State 'theme' $Case.Theme
@@ -326,22 +327,23 @@ try {
         ) | Out-Null
         $Menu = [Windows.Forms.ContextMenuStrip]$WindowType.GetField('trayMenu', $AllFields).GetValue($Window)
 
-        if ($Menu.Items.Count -ne 10) { throw "The tray menu must expose exactly ten bounded rows for $($Case.Locale)" }
+        if ($Menu.Items.Count -ne 11) { throw "The tray menu must expose exactly eleven bounded rows for $($Case.Locale)" }
         if ($Menu.Items[0].Text -notmatch 'DeepSeek Harness') { throw "Open command must be the first root item for $($Case.Locale)" }
-        if ($Menu.Items[1] -isnot [Windows.Forms.ToolStripSeparator]) { throw "Open command separator is missing for $($Case.Locale)" }
-        if ($Menu.Items[2].ShortcutKeyDisplayString.Trim() -ne $Case.Running) { throw "Running state is missing for $($Case.Locale)" }
-        if ($Menu.Items[3].ShortcutKeyDisplayString -ne $Case.Waiting) { throw "Waiting state is missing for $($Case.Locale)" }
-        if ($Menu.Items[4].ShortcutKeyDisplayString -ne $Case.Completed) { throw "Completed state is missing for $($Case.Locale)" }
-        if ($Menu.Items[6] -isnot [Windows.Forms.ToolStripSeparator] -or $Menu.Items[8] -isnot [Windows.Forms.ToolStripSeparator]) {
+        if ($Menu.Items[1].Text -ne $Case.Restore) { throw "Native window recovery must be the second root item for $($Case.Locale)" }
+        if ($Menu.Items[2] -isnot [Windows.Forms.ToolStripSeparator]) { throw "Open command separator is missing for $($Case.Locale)" }
+        if ($Menu.Items[3].ShortcutKeyDisplayString.Trim() -ne $Case.Running) { throw "Running state is missing for $($Case.Locale)" }
+        if ($Menu.Items[4].ShortcutKeyDisplayString -ne $Case.Waiting) { throw "Waiting state is missing for $($Case.Locale)" }
+        if ($Menu.Items[5].ShortcutKeyDisplayString -ne $Case.Completed) { throw "Completed state is missing for $($Case.Locale)" }
+        if ($Menu.Items[7] -isnot [Windows.Forms.ToolStripSeparator] -or $Menu.Items[9] -isnot [Windows.Forms.ToolStripSeparator]) {
             throw "Tray grouping is incorrect for $($Case.Locale)"
         }
-        if ($Menu.Items[5].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
-        if ($Menu.Items[7].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
-        if ($Menu.Items[9].Text -ne $Case.Exit) { throw "Exit command is missing for $($Case.Locale)" }
-        if ($Menu.Items[5].DropDownItems.Count -ne 10) { throw "More submenu must contain bounded overflow and direct settings commands" }
-        if ($Menu.Items[5].DropDownItems[8].Text -ne $Case.Terminal) { throw "DSH Terminal command must be in More for $($Case.Locale)" }
-        if ($Menu.Items[5].DropDownItems[9].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
-        foreach ($MoreItem in $Menu.Items[5].DropDownItems) {
+        if ($Menu.Items[6].Text -ne $Case.More) { throw "More command is missing for $($Case.Locale)" }
+        if ($Menu.Items[8].Text -ne $Case.New) { throw "New-session command is missing for $($Case.Locale)" }
+        if ($Menu.Items[10].Text -ne $Case.Exit) { throw "Exit command is missing for $($Case.Locale)" }
+        if ($Menu.Items[6].DropDownItems.Count -ne 10) { throw "More submenu must contain bounded overflow and direct settings commands" }
+        if ($Menu.Items[6].DropDownItems[8].Text -ne $Case.Terminal) { throw "DSH Terminal command must be in More for $($Case.Locale)" }
+        if ($Menu.Items[6].DropDownItems[9].Text -ne $Case.Feedback) { throw "Feedback command must be in More for $($Case.Locale)" }
+        foreach ($MoreItem in $Menu.Items[6].DropDownItems) {
             if ($MoreItem -is [Windows.Forms.ToolStripMenuItem] -and $MoreItem.DropDownItems.Count -ne 0) {
                 throw "More submenu must stop at the second level"
             }
@@ -423,7 +425,7 @@ try {
         if ($Menu.Height -lt 230 -or $Menu.Height -gt 330) { throw "Tray menu height is outside the compact target: $($Menu.Height)" }
         Assert-MenuRowsFillWidth $Menu "Tray menu"
         if ($CaptureSelected -and $Case.Locale -eq 'zh' -and $Case.Theme -eq 'dark') {
-            $Menu.Items[4].Select()
+            $Menu.Items[5].Select()
             [Windows.Forms.Application]::DoEvents()
         }
         $Bitmap = New-Object Drawing.Bitmap($Menu.Width, $Menu.Height)
@@ -449,7 +451,7 @@ try {
         }
 
         if ($CaptureDirectory -and $Case.Locale -eq 'zh' -and $Case.Theme -eq 'dark') {
-            $More = [Windows.Forms.ToolStripMenuItem]$Menu.Items[5]
+            $More = [Windows.Forms.ToolStripMenuItem]$Menu.Items[6]
             $Menu.Show([Drawing.Point]::new(-32000, -32000))
             $More.ShowDropDown()
             [Windows.Forms.Application]::DoEvents()
