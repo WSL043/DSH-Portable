@@ -3,10 +3,28 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const repository = 'deepseek-ai/deepseek-harness';
+// Shared seams reviewed with the desktop baseline. Package-wide monitoring
+// catches new entry points as well as changes to the currently reviewed files.
+const sharedDesktopPackages = [
+  'packages/util/home-paths/',
+  'packages/boot/app-boot/',
+  'packages/boot/plugin-manager/',
+  'packages/boot/plugin-market/',
+  'packages/client/connection/',
+  'packages/client/ui-plugin-manager/',
+  'packages/client/ui-plugin-market/',
+  'packages/api/gateway/',
+  'packages/host/webserver/',
+  'packages/mcp/mcp-client/',
+  'packages/experimental/plugin-market-bundle/',
+];
 export function desktopFiles(tree) {
   if (tree.truncated || !Array.isArray(tree.tree)) throw new Error('Incomplete upstream tree; desktop review cannot be trusted');
   return Object.fromEntries(tree.tree.filter(x => x.type === 'blob' &&
-    /^(apps\/desktop(?:-host)?\/|packages\/desktop[^/]*\/)/.test(x.path)).map(x => [x.path, x.sha]));
+    (/^(apps\/desktop(?:-host)?\/|packages\/desktop[^/]*\/)/.test(x.path)
+      || sharedDesktopPackages.some(prefix => x.path.startsWith(prefix))
+      // External SDK versions and transitive security fixes live in the lockfile.
+      || x.path === 'pnpm-lock.yaml')).map(x => [x.path, x.sha]));
 }
 export function changesBetween(before, after) {
   return [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()
@@ -33,13 +51,15 @@ async function main() {
   const changes = changesBetween(desktopFiles(before), desktopFiles(after));
   const report = {
     checkedAt: new Date().toISOString(), repository, baseline: baseline.commit, head: head.sha, changes,
+    sourceScope: { desktop: ['apps/desktop/', 'apps/desktop-host/', 'packages/desktop*/'],
+      sharedPackages: sharedDesktopPackages, dependencyLock: 'pnpm-lock.yaml' },
     releaseScope: 'Latest ten GitHub releases only; other distribution channels are not checked. Assets are not downloaded or signature-verified.',
     releases: releases.map(r => ({ tag: r.tag_name, url: r.html_url, prerelease: r.prerelease,
       assets: r.assets.map(a => ({ name: a.name, size: a.size, url: a.browser_download_url })) })),
     qualified: false,
   };
   const summary = ['## Official desktop review', '', `Baseline: ${baseline.commit}`, `Observed: ${head.sha}`,
-    '', `${changes.length} changed files in desktop source scope.`,
+    '', `${changes.length} changed files in desktop and reviewed shared-package source scope.`,
     'Source discovery only: no compatibility, signature or release qualification is implied.',
     'GitHub release inventory covers the latest ten releases; it does not cover external distribution.', '',
     ...changes.map(c => `- ${c.status}: ${c.path}`), ''].join('\n');

@@ -83,7 +83,7 @@ test('a static preflight gates the package job, and a draft is only created afte
   const file = new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url);
   const workflow = yaml.load(await readFile(file, 'utf8'));
   assert.equal(workflow.jobs.package.needs, 'preflight');
-  assert.equal(workflow.jobs['draft-release'].if, "inputs.smoke == 'all'");
+  assert.equal(workflow.jobs['draft-release'].if, "inputs.publish_draft == true && inputs.smoke == 'all'");
   const steps = workflow.jobs.package.steps;
   const full = steps.find(step => /Smoke first and second startup/.test(step.name ?? ''));
   const lite = steps.find(step => /Smoke lite bootstrap/.test(step.name ?? ''));
@@ -95,8 +95,49 @@ test('a static preflight gates the package job, and a draft is only created afte
   assert.match(preflightSource, /node --test/);
 });
 
+test('manual alpha qualification creates no draft unless publication is explicitly enabled after both smokes', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
+  const input = workflow.on.workflow_dispatch.inputs.publish_draft;
+  assert.equal(input.type, 'boolean');
+  assert.equal(input.default, false);
+  const mayPublish = new Function('inputs', `return ${workflow.jobs['draft-release'].if}`);
+  for (const publish_draft of [undefined, false]) {
+    for (const smoke of workflow.on.workflow_dispatch.inputs.smoke.options) {
+      assert.equal(mayPublish({ publish_draft, smoke }), false);
+    }
+  }
+  assert.equal(mayPublish({ publish_draft: true, smoke: 'all' }), true);
+  for (const smoke of ['full', 'lite', 'none']) assert.equal(mayPublish({ publish_draft: true, smoke }), false);
+  assert.equal(workflow.jobs.package.permissions.contents, 'read');
+  assert.ok(workflow.jobs.package.steps.some(step => step.uses?.startsWith('actions/upload-artifact@') && step.with?.name?.includes('draft-assets')));
+});
+
 test('the alpha number comes from one workflow-level variable', async () => {
   const workflow = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
   assert.equal(workflow.env.ALPHA, "${{ inputs.alpha || '5' }}");
   assert.equal(workflow.on.workflow_dispatch.inputs.alpha.default, '5');
+});
+
+test('security collection preserves runtime artifacts and every external writer first requires bound reports', async () => {
+  const alpha = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
+  const channel = yaml.load(await readFile(new URL('../.github/workflows/official-desktop-channel.yml', import.meta.url), 'utf8'));
+  const collectorName = 'Collect actual accepted ASAR security evidence without blocking runtime artifacts';
+  const gateName = 'Require bound actual-ASAR security authorization before any external write';
+  for (const [job, roots] of [[alpha.jobs.package, ['smoke-root-moved', 'smoke-lite-root-moved']], [channel.jobs.gates, ['T27/work/portable']]]) {
+    const step = job.steps.find(step => step.name === collectorName);
+    assert.equal(step.if, 'always()');
+    for (const root of roots) assert.ok(step.env.SECURITY_ROOTS.includes(root));
+    assert.match(step.run, /node scripts\/official-payload-security-evidence\.mjs collect/);
+    assert.match(step.run, /exit 0/);
+    assert.doesNotMatch(step.run, /Expand-Archive|extract|7z\.exe|import /);
+    assert.ok(job.steps.some(step => step.if === 'always()' && step.with?.path?.includes('/security/')));
+  }
+  for (const job of [alpha.jobs['draft-release'], channel.jobs.publish, channel.jobs['report-failure']]) {
+    const gateIndex = job.steps.findIndex(step => step.name === gateName);
+    const writeIndex = job.steps.findIndex(step => /gh release create|gh api -X PATCH|gh issue comment|gh issue create/.test(step.run ?? ''));
+    assert.ok(gateIndex >= 0 && gateIndex < writeIndex, 'security authorization must precede the first external write');
+    assert.match(job.steps[gateIndex].run, /node scripts\/official-payload-security-evidence\.mjs authorize/);
+    assert.doesNotMatch(job.steps[gateIndex].run, /import /);
+    assert.ok(job.steps.slice(0, gateIndex).some(step => step.uses?.startsWith('actions/download-artifact@') && /security|gates/.test(step.with.name)));
+  }
 });

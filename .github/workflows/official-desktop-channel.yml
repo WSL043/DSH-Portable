@@ -9,6 +9,11 @@ on:
         required: false
         default: ''
         type: string
+      publish_channel:
+        description: Explicitly publish the qualified channel or report a failed qualification to an issue
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 concurrency:
@@ -135,6 +140,20 @@ jobs:
             -WorkRoot 'build/orch-080/T27/work' `
             -Locale en
           if ($LASTEXITCODE -ne 0) { throw 'Pure portable end-to-end acceptance exited non-zero' }
+      - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
+        if: always()
+        shell: pwsh
+        env:
+          SECURITY_DIRECTORY: build/orch-080/T28/security
+          SECURITY_CANDIDATE: build/orch-080/T28/input/candidate.json
+          SECURITY_ROOTS: '[["candidate","build/orch-080/T27/work/portable"]]'
+        run: |
+          node scripts/official-payload-security-evidence.mjs collect
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Security evidence collection failed; publication remains blocked. Runtime artifacts are retained.'
+            'Security blocked: evidence collection failed. Runtime passing does not establish publication qualification.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          exit 0
       - name: Copy phase-2 evidence into this task evidence directory
         if: always()
         shell: pwsh
@@ -157,13 +176,14 @@ jobs:
           path: |
             build/orch-080/T28/contract/
             build/orch-080/T28/e2e-evidence/
+            build/orch-080/T28/security/
             build/orch-080/T28/input/
           if-no-files-found: warn
           retention-days: 14
 
   publish:
     needs: [resolve, gates]
-    if: needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'success'
+    if: (github.event_name == 'schedule' || inputs.publish_channel == true) && needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'success'
     runs-on: windows-latest
     timeout-minutes: 20
     permissions:
@@ -177,6 +197,20 @@ jobs:
         with:
           name: official-desktop-channel-input
           path: build/orch-080/T28/input
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-desktop-channel-gates
+          path: build/orch-080/T28/qualified-evidence
+      - name: Require bound actual-ASAR security authorization before any external write
+        shell: pwsh
+        env:
+          SECURITY_DIRECTORY: build/orch-080/T28/qualified-evidence/security
+          SECURITY_CANDIDATE: build/orch-080/T28/input/candidate.json
+          SECURITY_EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+          SECURITY_KINDS: '["candidate"]'
+        run: |
+          node scripts/official-payload-security-evidence.mjs authorize
+          if ($LASTEXITCODE -ne 0) { throw 'Official payload security did not authorize external writes' }
       - name: Build the channel with the established csc launcher command
         shell: pwsh
         run: |
@@ -205,7 +239,8 @@ jobs:
           }
           $output = 'build/orch-080/T28/channel-output'
           $exeFiles = @(Get-ChildItem -LiteralPath $output -Filter 'deepseek-harness-*-win-x64.exe' -File | ForEach-Object { $_.FullName })
-          if ($exeFiles.Count -lt 1 -or $exeFiles.Count -gt 2) { throw 'Channel builder did not emit exactly the latest one or two launcher copies' }
+          $expectedLauncher = 'deepseek-harness-${{ needs.resolve.outputs.version }}-win-x64.exe'
+          if ($exeFiles.Count -ne 1 -or [IO.Path]::GetFileName($exeFiles[0]) -cne $expectedLauncher) { throw 'Channel builder must emit only the qualified candidate launcher' }
           $assetLines = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets[].name'
           if ($LASTEXITCODE -ne 0) { throw 'Could not inspect existing channel assets' }
           foreach ($file in $exeFiles) {
@@ -238,16 +273,30 @@ jobs:
 
   report-failure:
     needs: [resolve, gates]
-    if: always() && needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'failure'
+    if: always() && (github.event_name == 'schedule' || inputs.publish_channel == true) && needs.resolve.outputs.no_op == 'false' && needs.gates.result == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
     steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
       - uses: actions/download-artifact@v8
         with:
           name: official-desktop-channel-gates
           path: build/orch-080/T28/failure-evidence
+      - name: Require bound actual-ASAR security authorization before any external write
+        shell: bash
+        env:
+          SECURITY_DIRECTORY: build/orch-080/T28/failure-evidence/security
+          SECURITY_CANDIDATE: build/orch-080/T28/failure-evidence/input/candidate.json
+          SECURITY_EXPECTED_VERSION: ${{ needs.resolve.outputs.version }}
+          SECURITY_KINDS: '["candidate"]'
+        run: |
+          node scripts/official-payload-security-evidence.mjs authorize
       - name: Create one version-scoped issue or append its latest failure report
         env:
           GH_TOKEN: ${{ github.token }}

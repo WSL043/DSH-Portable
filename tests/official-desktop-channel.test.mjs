@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ const digest = Buffer.alloc(64, 9).toString('base64');
 const installer = version => `https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-${version}-win-x64.exe`;
 const entry = (version, overrides = {}) => ({ version, installerUrl: installer(version), sha512: digest, size: 1_000_000, qualifiedAt: '2026-09-29T12:00:00.000Z', ...overrides });
 
-test('channel versions use semver order, deduplicate, and retain the newest 20 including latest two', () => {
+test('channel versions use semver order, deduplicate, and retain the newest 20 while generating only the candidate launcher', () => {
   const result = generateChannel({
     existingIndex: { schemaVersion: 1, versions: [entry('0.2.0'), entry('0.2.0-rc.10'), entry('0.2.0-rc.2'), entry('0.2.0-rc.2')] },
     candidate: entry('0.2.1-rc.1'), launcherBytes: Buffer.from('launcher'), qualifiedAt: '2026-09-30T00:00:00.000Z',
@@ -25,7 +25,12 @@ test('channel versions use semver order, deduplicate, and retain the newest 20 i
   const capped = generateChannel({ existingIndex: { schemaVersion: 1, versions: many }, candidate: entry('1.0.21'), launcherBytes: Buffer.from('launcher') });
   assert.equal(capped.index.versions.length, 20);
   assert.equal(capped.index.versions[0].version, '1.0.2');
-  assert.deepEqual(capped.launcherFiles, ['deepseek-harness-1.0.20-win-x64.exe', 'deepseek-harness-1.0.21-win-x64.exe']);
+  assert.deepEqual(capped.launcherFiles, ['deepseek-harness-1.0.21-win-x64.exe']);
+});
+
+test('an older candidate cannot put new launcher bytes in the latest version feed', () => {
+  assert.throws(() => generateChannel({ existingIndex: { schemaVersion: 1, versions: [entry('0.2.1-rc.2')] },
+    candidate: entry('0.2.0-rc.2'), launcherBytes: Buffer.from('new launcher') }), /Candidate is older/);
 });
 
 test('same-version identity changes are rejected, while an empty missing index is supported', () => {
@@ -89,6 +94,35 @@ test('generator CLI writes an index, generic feed, and launcher copies from a mi
     assert.equal(index.versions[0].version, '0.2.0-rc.2');
     assert.equal(yaml.load(await readFile(join(output, 'nightly.yml'), 'utf8')).version, '0.2.0-rc.2');
     assert.deepEqual(result.stdout && JSON.parse(result.stdout).launcherFiles, ['deepseek-harness-0.2.0-rc.2-win-x64.exe']);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('a new candidate preserves historical installer identities without regenerating old immutable launcher names', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'official-channel-history-'));
+  try {
+    const launcher = join(directory, 'launcher.exe');
+    const candidate = join(directory, 'candidate.json');
+    const previous = join(directory, 'index.json');
+    const output = join(directory, 'out');
+    const historical = entry('0.2.0-rc.2');
+    const oldAssetName = 'deepseek-harness-0.2.0-rc.2-win-x64.exe';
+    const oldAsset = Buffer.from('historical immutable launcher');
+    await writeFile(join(directory, oldAssetName), oldAsset);
+    await writeFile(launcher, Buffer.from('new candidate launcher'));
+    await writeFile(candidate, JSON.stringify(entry('0.2.1-rc.2')));
+    await writeFile(previous, JSON.stringify({ schemaVersion: 1, versions: [historical] }));
+    const { spawnSync } = await import('node:child_process');
+    const result = spawnSync(process.execPath, [fileURLToPath(new URL('../experiments/official-payload/channel/build-channel.mjs', import.meta.url)),
+      '--candidate', candidate, '--launcher', launcher, '--index', previous, '--output', output], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const index = JSON.parse(await readFile(join(output, 'index.json'), 'utf8'));
+    assert.deepEqual(index.versions.map(item => item.version), ['0.2.0-rc.2', '0.2.1-rc.2']);
+    assert.deepEqual(index.versions[0], historical);
+    assert.deepEqual((await readdir(output)).sort(), ['deepseek-harness-0.2.1-rc.2-win-x64.exe', 'index.json', 'nightly.yml']);
+    assert.deepEqual(await readFile(join(directory, oldAssetName)), oldAsset);
+    const feed = yaml.load(await readFile(join(output, 'nightly.yml'), 'utf8'));
+    assert.equal(feed.version, '0.2.1-rc.2');
+    assert.equal(feed.path, 'deepseek-harness-0.2.1-rc.2-win-x64.exe');
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 

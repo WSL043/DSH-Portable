@@ -77,7 +77,12 @@ function Test-ForbiddenOfficialExternalWrite([string]$Path) {
     if ($streamSeparator -ge 0) { $candidate = $candidate.Substring(0, $streamSeparator) }
     try { $normalizedPath = [IO.Path]::GetFullPath($candidate).TrimEnd('\') }
     catch { return $false }
-    $forbiddenRoots = @((Join-Path $env:LOCALAPPDATA 'node-addon-native-custom-loader\native-cache'))
+    $forbiddenRoots = @(
+        (Join-Path $env:LOCALAPPDATA 'node-addon-native-custom-loader\native-cache'),
+        (Join-Path $env:USERPROFILE '.dsh'),
+        (Join-Path $env:USERPROFILE '.agents'),
+        (Join-Path $env:APPDATA 'DeepSeek Harness')
+    )
     foreach ($root in $forbiddenRoots) {
         try { $normalizedRoot = [IO.Path]::GetFullPath($root).TrimEnd('\') }
         catch { continue }

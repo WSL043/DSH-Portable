@@ -1,5 +1,5 @@
 {
-  "commit": "c291e7961a515f6d7af9304e7fd1d257929aef26",
-  "reviewedAt": "2026-09-14",
-  "qualification": "Source review only; see official-desktop-readiness.md. Advance only after reviewing source changes."
+  "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "reviewedAt": "2026-10-23",
+  "qualification": "Limited source review of Portable-facing desktop and shared home/profile/plugin/MCP/trust seams only; not desktop artifact delivery qualification. GHSA-6prh-2h8m-c8cw remains outstanding in the official MCP client 2.2.0 dependency. Advance only after reviewing source changes."
 }

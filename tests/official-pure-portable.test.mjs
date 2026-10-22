@@ -19,7 +19,8 @@ const psModule = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyCo
 
 test('health state machine rolls back once only for pending non-zero exit and clears after 20 seconds', async () => {
   const base = { version: '2.0.0', previous: '1.0.0', pendingHealth: true };
-  assert.deepEqual(assessHealth(base, { exitCode: 1 }), { action: 'rollback', state: { ...base, version: '1.0.0', previous: '2.0.0', pendingHealth: false } });
+  const at = '2026-10-22T00:00:00.000Z';
+  assert.deepEqual(assessHealth(base, { exitCode: 1, at }), { action: 'rollback', state: { ...base, version: '1.0.0', previous: '', pendingHealth: false, switchedAt: at, rejected: { version: '2.0.0', at } } });
   assert.equal(assessHealth(base, { aliveForMs: 20_000 }).state.pendingHealth, false);
   assert.equal(assessHealth(base, { aliveForMs: 19_999 }).state.pendingHealth, true);
   assert.equal(assessHealth(base, { exitCode: 0 }).action, 'supervise');

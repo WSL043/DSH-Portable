@@ -10,9 +10,11 @@ export function assessHealth(state, observation) {
   }
   if (Number.isInteger(observation?.exitCode) && observation.exitCode !== 0 &&
       typeof state.previous === 'string' && state.previous && state.previous !== state.version) {
+    const at = new Date(observation.at ?? Date.now()).toISOString();
     return {
       action: 'rollback',
-      state: { ...state, version: state.previous, previous: state.version, pendingHealth: false },
+      state: { ...state, version: state.previous, previous: '', pendingHealth: false, switchedAt: at,
+        rejected: { version: state.version, at } },
     };
   }
   return { action: 'supervise', state: { ...state } };

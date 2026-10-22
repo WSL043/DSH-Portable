@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { resolve } from 'node:path';
 import { buildAcceptedIndex, buildPureE2EReport, expectedProtocolCommand, isPathOwnedByRoot, normalizeOfficialCandidate, packageFeedContract, REQUIRED_IDS, serializeCandidateFile } from '../experiments/official-payload/e2e/report.mjs';
 
 const digest = Buffer.alloc(64, 7).toString('base64');
@@ -99,4 +101,18 @@ test('outside-write audit rejects a leaked native-addon cache and tolerates unus
   assert.doesNotMatch(source.match(/function Test-ForbiddenOfficialExternalWrite[\s\S]*?\n\}/)[0], /Documents/);
   assert.match(source, /catch \{ return \$false \}/);
   assert.match(source, /-and -not \$forbiddenOfficialExternalWrite/);
+});
+
+test('the actual write-audit predicate rejects global data/agents leaks without blocking sibling paths or opaque traces', { skip: process.platform !== 'win32' }, () => {
+  const file = resolve(import.meta.dirname, '../experiments/official-payload/e2e/run-pure-e2e.ps1');
+  const quote = value => `'${value.replaceAll("'", "''")}'`;
+  const script = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue';
+    $ast=[Management.Automation.Language.Parser]::ParseFile(${quote(file)},[ref]$null,[ref]$null);
+    $function=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Test-ForbiddenOfficialExternalWrite'},$true);
+    . ([scriptblock]::Create($function.Extent.Text));
+    $agents=Join-Path $env:USERPROFILE '.agents';
+    @{ agents=(Test-ForbiddenOfficialExternalWrite ($agents+'/AGENTS.md')); agentsRoot=(Test-ForbiddenOfficialExternalWrite $agents); dsh=(Test-ForbiddenOfficialExternalWrite (Join-Path $env:USERPROFILE '.dsh/profile.json')); electron=(Test-ForbiddenOfficialExternalWrite (Join-Path $env:APPDATA 'DeepSeek Harness/Preferences')); sibling=(Test-ForbiddenOfficialExternalWrite ($agents+'-other/file')); opaque=(Test-ForbiddenOfficialExternalWrite 'HKCU\\Software\\Example') }|ConvertTo-Json -Compress`;
+  const env = { ...process.env }; delete env.PSModulePath;
+  const result = JSON.parse(execFileSync(resolve(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true }).trim());
+  assert.deepEqual(result, { agents: true, agentsRoot: true, dsh: true, electron: true, sibling: false, opaque: false });
 });

@@ -106,7 +106,7 @@ internal static class PortableLauncher {
             else throw new IOException("Unsupported portable launch argument. / 不支持此启动参数。");
         }
 
-        CheckPath(LauncherData); Directory.CreateDirectory(LauncherData);
+        CheckDataDirectories(); Directory.CreateDirectory(LauncherData);
         bool created;
         using (var mutex = new Mutex(true, MutexName(Root), out created)) {
             if (!created) {
@@ -115,10 +115,20 @@ internal static class PortableLauncher {
             }
             try {
                 if (NeedsBootstrap() && !RunBootstrapInstall()) return 1;
-                return Supervise(link, probe, restartPid);
+                // Bootstrap itself needs the update engine's exclusive activation lock. Only
+                // hold this shared lease after it completes, through the full supervised run.
+                using (FileStream activation = OpenActivationLock()) {
+                    return Supervise(link, probe, restartPid);
+                }
             }
             finally { mutex.ReleaseMutex(); }
         }
+    }
+
+    private static FileStream OpenActivationLock() {
+        string path = Path.Combine(LauncherData, "activation.lock");
+        CheckPath(path);
+        return new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
     }
 
     private static bool NeedsBootstrap() {
@@ -428,8 +438,11 @@ internal static class PortableLauncher {
 
     private static void WritePortableRootPointer(string cacheName) {
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        string directory = Path.Combine(local, cacheName); Directory.CreateDirectory(directory); CheckPath(directory);
-        WriteTextAtomic(Path.Combine(directory, "portable-root.txt"), Root + Environment.NewLine);
+        string directory = Path.Combine(local, cacheName);
+        string pointer = Path.Combine(directory, "portable-root.txt");
+        CheckPath(Root); CheckDirectoryPaths(directory); CheckPath(pointer);
+        Directory.CreateDirectory(directory);
+        WriteTextAtomic(pointer, Root + Environment.NewLine);
     }
 
     private static string AppExecutable(string version) { return Path.Combine(AppRoot, version, "DeepSeek Harness.exe"); }
@@ -439,15 +452,20 @@ internal static class PortableLauncher {
     }
 
     private static Process StartOfficialProcess(string exe, string link, string probe) {
+        // Check every destination before creating the first one. Protocol handoff and
+        // second-instance launches use this entry too, so they cannot bypass the boundary.
+        CheckPath(exe); CheckDataDirectories();
         var start = new ProcessStartInfo(exe) { UseShellExecute = false, WorkingDirectory = Root };
         start.Arguments = "--user-data-dir=" + Quote(Path.Combine(DataRoot, "electron"));
         if (!String.IsNullOrEmpty(probe)) start.Arguments += " --remote-debugging-port=" + probe;
         if (link != null) start.Arguments += " " + Quote(link);
         start.EnvironmentVariables.Remove("ELECTRON_RUN_AS_NODE");
         start.EnvironmentVariables["DSH_HOME"] = Path.Combine(DataRoot, "dsh-home");
+        string agentsHome = Path.Combine(DataRoot, "agents");
+        start.EnvironmentVariables["DSH_AGENTS_HOME"] = agentsHome;
         string nativeAddonCache = Path.Combine(DataRoot, "cache", "native-addons");
         start.EnvironmentVariables["NARB_NATIVE_CACHE_DIR"] = nativeAddonCache;
-        Directory.CreateDirectory(Path.Combine(DataRoot, "electron")); Directory.CreateDirectory(Path.Combine(DataRoot, "dsh-home")); Directory.CreateDirectory(nativeAddonCache);
+        Directory.CreateDirectory(Path.Combine(DataRoot, "electron")); Directory.CreateDirectory(Path.Combine(DataRoot, "dsh-home")); Directory.CreateDirectory(agentsHome); Directory.CreateDirectory(nativeAddonCache);
         return Process.Start(start);
     }
     private static void StartOfficial(string link, string probe, bool unused) {
@@ -505,8 +523,22 @@ internal static class PortableLauncher {
         } finally { if (File.Exists(temp)) File.Delete(temp); }
     }
     private static void CheckPath(string path) {
-        for (string current = Path.GetFullPath(path); !String.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
-            if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new IOException("Redirected portable path is not supported: " + current);
+        for (string current = Path.GetFullPath(path); !String.IsNullOrEmpty(current); current = Path.GetDirectoryName(current)) {
+            try {
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new IOException("Redirected portable path is not supported: " + current);
+            } catch (FileNotFoundException) { } catch (DirectoryNotFoundException) { }
+        }
+    }
+    private static void CheckDirectoryPaths(params string[] paths) {
+        foreach (string path in paths) {
+            CheckPath(path);
+            for (string current = Path.GetFullPath(path); !String.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+                if (File.Exists(current)) throw new IOException("Portable directory path is occupied by a file: " + current);
+        }
+    }
+    private static void CheckDataDirectories() {
+        CheckDirectoryPaths(DataRoot, LauncherData, Path.Combine(DataRoot, "electron"),
+            Path.Combine(DataRoot, "dsh-home"), Path.Combine(DataRoot, "agents"), Path.Combine(DataRoot, "cache", "native-addons"));
     }
     private static bool HasOwnedProcesses(string appRoot, bool onError = true) {
         string prefix = Path.GetFullPath(appRoot).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;

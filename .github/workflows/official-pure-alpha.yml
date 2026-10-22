@@ -18,6 +18,11 @@ on:
         default: all
         type: choice
         options: [all, full, lite, none]
+      publish_draft:
+        description: Explicitly create or update the alpha draft after both package smokes pass
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 env:
@@ -61,7 +66,7 @@ jobs:
           Move-Item -LiteralPath (Join-Path $env:RUNNER_TEMP 'package') -Destination app/node_modules/js-yaml
       - name: Run the official payload static and contract tests
         shell: pwsh
-        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-pure-alpha-seed-smoke.test.mjs tests/official-desktop-channel.test.mjs tests/official-seed-plugins.test.mjs tests/official-seed-launcher.test.mjs
+        run: node --test tests/official-pure-portable.test.mjs tests/official-pure-alpha-workflow.test.mjs tests/official-desktop-channel-workflow.test.mjs tests/official-payload-security.test.mjs tests/official-payload-security-evidence.test.mjs tests/official-pure-alpha-seed-smoke.test.mjs tests/official-desktop-channel.test.mjs tests/official-seed-plugins.test.mjs tests/official-seed-launcher.test.mjs
   package:
     needs: preflight
     runs-on: windows-latest
@@ -154,6 +159,28 @@ jobs:
             -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
             -Bootstrap `
             -NoSeed
+      - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
+        if: always()
+        shell: pwsh
+        env:
+          SECURITY_DIRECTORY: build/orch-080/T32/security
+          SECURITY_CANDIDATE: build/orch-080/T32/candidate.json
+          SECURITY_ROOTS: '[["full","build/orch-080/T32/smoke-root-moved"],["lite","build/orch-080/T32/smoke-lite-root-moved"]]'
+          SECURITY_ASSETS: '["build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip","build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip"]'
+        run: |
+          node scripts/official-payload-security-evidence.mjs collect
+          if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'Security evidence collection failed; publication remains blocked. Runtime artifacts are retained.'
+            'Security blocked: evidence collection failed. Runtime passing does not establish publication qualification.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+          exit 0
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: official-pure-alpha-${{ env.ALPHA }}-security
+          path: build/orch-080/T32/security/
+          if-no-files-found: warn
+          retention-days: 14
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -199,8 +226,9 @@ jobs:
 
   draft-release:
     needs: package
-    # Never publish a draft from a run that skipped a smoke.
-    if: inputs.smoke == 'all'
+    # Ordinary manual runs retain Actions artifacts without creating or updating a draft.
+    # Explicit publication still requires both real package smokes.
+    if: inputs.publish_draft == true && inputs.smoke == 'all'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -214,6 +242,20 @@ jobs:
         with:
           name: official-pure-alpha-${{ env.ALPHA }}-draft-assets
           path: release-input
+      - uses: actions/download-artifact@v8
+        with:
+          name: official-pure-alpha-${{ env.ALPHA }}-security
+          path: release-security
+      - name: Require bound actual-ASAR security authorization before any external write
+        shell: bash
+        env:
+          SECURITY_DIRECTORY: release-security
+          SECURITY_CANDIDATE: release-security/selection.json
+          SECURITY_EXPECTED_VERSION: ${{ needs.package.outputs.version }}
+          SECURITY_KINDS: '["full","lite"]'
+          SECURITY_ASSETS: '["release-input/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip","release-input/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip"]'
+        run: |
+          node scripts/official-payload-security-evidence.mjs authorize
       - name: Create or update only the alpha.${{ env.ALPHA }} draft release
         env:
           GH_TOKEN: ${{ github.token }}

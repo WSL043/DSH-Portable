@@ -69,6 +69,9 @@ export function generateChannel({ existingIndex = null, candidate, launcherBytes
   const versions = [...byVersion.values()].sort((a, b) => compareVersions(a.version, b.version)).slice(-MAX_VERSIONS);
   if (versions.length === 0) throw new Error('No qualified official versions');
   const latest = versions.at(-1);
+  // The feed digest describes this candidate's launcher bytes. Never attach
+  // them to a different, already qualified version when a feed moves backward.
+  if (latest.version !== incoming.version) throw new Error('Candidate is older than the latest qualified version');
   const filename = `deepseek-harness-${latest.version}-win-x64.exe`;
   const launcherSha512 = createHash('sha512').update(launcherBytes).digest('base64');
   const releaseDate = new Date(qualifiedAt).toISOString();
@@ -88,7 +91,9 @@ export function generateChannel({ existingIndex = null, candidate, launcherBytes
     feed,
     launcherSha512,
     launcherSize: launcherBytes.length,
-    launcherFiles: versions.slice(-2).map(entry => `deepseek-harness-${entry.version}-win-x64.exe`),
+    // Historical launcher assets keep their original bytes in the Release.
+    // Copying this new launcher under their old names would break immutability.
+    launcherFiles: [filename],
   };
 }
 

@@ -44,9 +44,15 @@ function Read-BoundedHttpText([string]$Url) {
             }
             if ($status -ne 200 -or $response.ContentLength -gt 1048576) { throw 'Index response is invalid or too large' }
             $reader = New-Object IO.StreamReader($response.GetResponseStream(), [Text.Encoding]::UTF8)
-            try { $text = $reader.ReadToEnd() } finally { $reader.Dispose() }
-            if ($text.Length -gt 1048576) { throw 'Index response is too large' }
-            return $text
+            try {
+                $text = New-Object Text.StringBuilder
+                $buffer = New-Object char[] 4096
+                while (($count = $reader.Read($buffer, 0, $buffer.Length)) -gt 0) {
+                    if ($text.Length + $count -gt 1048576) { throw 'Index response is too large' }
+                    $null = $text.Append($buffer, 0, $count)
+                }
+                return $text.ToString()
+            } finally { $reader.Dispose() }
         } finally { $response.Dispose() }
     }
     throw 'Index redirected too many times'
@@ -212,6 +218,52 @@ function Get-VersionRetentionPlan([string[]]$VersionNames, [string]$Current, [st
     return @($VersionNames | Where-Object { $_ -match '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$' -and $_ -notin $keep })
 }
 
+# Bind ownership to the complete installed tree, including empty directories. A version-like
+# directory name or an old receipt alone does not authorize deleting user-added/changed files.
+function Get-PortablePayloadTreeHash([string]$Path) {
+    Assert-PlainPath $Path
+    $root = [IO.Path]::GetFullPath($Path).TrimEnd('\')
+    if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw 'Payload directory is missing' }
+    $pending = New-Object 'System.Collections.Generic.Stack[string]'
+    $records = New-Object 'System.Collections.Generic.List[string]'
+    $pending.Push($root)
+    while ($pending.Count) {
+        foreach ($entry in Get-ChildItem -LiteralPath $pending.Pop() -Force -ErrorAction Stop) {
+            if ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Payload inventory encountered a reparse point' }
+            if (-not $entry.FullName.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Payload inventory escaped its directory' }
+            $relative = $entry.FullName.Substring($root.Length + 1).Replace('\', '/')
+            if ($entry.PSIsContainer) { $records.Add('d|' + $relative); $pending.Push($entry.FullName) }
+            else { $records.Add('f|' + $relative + '|' + (Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256 -ErrorAction Stop).Hash) }
+        }
+    }
+    $lines = $records.ToArray()
+    [Array]::Sort($lines, [StringComparer]::Ordinal)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { return [BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes([String]::Join("`n", $lines)))).Replace('-', '').ToLowerInvariant() }
+    finally { $sha.Dispose() }
+}
+
+function Remove-OwnedOlderPayloads([string]$AppRoot, [string]$ReceiptRoot, [string]$Current, [string]$Previous) {
+    Assert-PlainPath $AppRoot; Assert-PlainPath $ReceiptRoot
+    $result = @{ removed=@(); preserved=@(); deferred=@() }
+    $names = @((Get-ChildItem -LiteralPath $AppRoot -Directory -Force -ErrorAction Stop).Name)
+    foreach ($name in Get-VersionRetentionPlan $names $Current $Previous) {
+        $directory = Join-Path $AppRoot $name
+        $receiptPath = Join-Path $ReceiptRoot ($name + '.json')
+        try {
+            Assert-PlainPath $receiptPath
+            if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) { $result.preserved += $name; continue }
+            $receipt = Get-Content -LiteralPath $receiptPath -Raw -ErrorAction Stop | ConvertFrom-Json
+            if ($receipt.version -cne $name -or $null -eq $receipt.PSObject.Properties['payloadTreeSha256'] -or [string]$receipt.payloadTreeSha256 -cnotmatch '^[0-9a-f]{64}$') { $result.preserved += $name; continue }
+            if ((Get-PortablePayloadTreeHash $directory) -cne [string]$receipt.payloadTreeSha256) { $result.preserved += $name; continue }
+            Remove-PortableScratch $directory $AppRoot
+            Remove-Item -LiteralPath $receiptPath -Force -ErrorAction Stop
+            $result.removed += $name
+        } catch { $result.deferred += $name }
+    }
+    return $result
+}
+
 function Assert-PlainTree([string]$Path) {
     Assert-PlainPath $Path
     foreach ($entry in Get-ChildItem -LiteralPath $Path -Recurse -Force) {
@@ -287,7 +339,7 @@ function Expand-OfficialPayload([string]$Installer, $Candidate, [string]$Output,
         $rewritten = Rewrite-AppUpdateYml $originalConfig $FeedUrl $CacheDirName
         [IO.File]::WriteAllText($yml, $rewritten, (New-Object Text.UTF8Encoding($false)))
         $rewrittenHash = (Get-FileHash -LiteralPath $yml -Algorithm SHA256).Hash.ToLowerInvariant()
-        return [pscustomobject]@{ version=[string]$Candidate.version; installerSha512=[string]$Candidate.sha512; installerSize=[long]$Candidate.size; appAsarSha256=$asarHash; officialExeSha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant(); appUpdateYmlOriginalSha256=$originalConfigHash; appUpdateYmlPortableSha256=$rewrittenHash; allowedModifiedFiles=@('resources/app-update.yml') }
+        return [pscustomobject]@{ version=[string]$Candidate.version; installerSha512=[string]$Candidate.sha512; installerSize=[long]$Candidate.size; appAsarSha256=$asarHash; officialExeSha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant(); appUpdateYmlOriginalSha256=$originalConfigHash; appUpdateYmlPortableSha256=$rewrittenHash; allowedModifiedFiles=@('resources/app-update.yml'); payloadTreeSha256=(Get-PortablePayloadTreeHash $Output) }
     } finally {
         $scratchBoundary = Split-Path -Parent $Output
         foreach ($scratch in @($outer, $verify)) { if (Test-Path -LiteralPath $scratch) { Remove-PortableScratch $scratch $scratchBoundary } }
@@ -303,4 +355,4 @@ function Remove-PortableScratch([string]$Path, [string]$Boundary) {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
-Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch
+Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-PortablePayloadTreeHash,Remove-OwnedOlderPayloads,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch

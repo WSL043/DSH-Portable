@@ -15,7 +15,7 @@ if ($Root.Length -le 3 -or (-not $Install -and $Version -notmatch $versionPatter
 $appRoot = Join-Path $Root 'app'; $launcherRoot = Join-Path $Root 'launcher'; $storage = Join-Path $Root 'data/launcher'
 foreach ($path in @($appRoot, $launcherRoot, $storage)) { Assert-PlainPath $path }
 $statusPath = Join-Path $storage 'update-status.json'; $currentPath = Join-Path $appRoot 'current.json'
-$lock = $null; $stage = $null; $partial = $null; $candidatePath = $null
+$lock = $null; $activation = $null; $stage = $null; $partial = $null; $candidatePath = $null
 $originalVersion = $null; $committed = $false; $status = [ordered]@{ status='starting'; phase='initializing'; version=$Version; downloadedBytes=0; totalBytes=0; progress=0 }
 
 # A flaky connection (weak Wi-Fi, a proxy that drops idle sockets) should not make the user press Retry: resume the
@@ -95,23 +95,16 @@ function Update-RootLauncher([string]$Source) {
 }
 
 function Clear-OlderVersions([string]$KeepCurrent, [string]$KeepPrevious) {
-    $names = @((Get-ChildItem -LiteralPath $appRoot -Directory).Name)
-    foreach ($name in Get-VersionRetentionPlan $names $KeepCurrent $KeepPrevious) {
-        Remove-PortableScratch (Join-Path $appRoot $name) $appRoot
-    }
-    $receipts = Join-Path $launcherRoot 'receipts'
-    if (Test-Path $receipts) {
-        foreach ($file in Get-ChildItem -LiteralPath $receipts -Filter '*.json' -File) {
-            if ($file.BaseName -notin @($KeepCurrent, $KeepPrevious)) { Assert-PlainPath $file.FullName; Remove-Item -LiteralPath $file.FullName -Force }
-        }
-    }
+    return Remove-OwnedOlderPayloads $appRoot (Join-Path $launcherRoot 'receipts') $KeepCurrent $KeepPrevious
 }
 
 try {
     foreach ($path in @($appRoot, $launcherRoot, $storage, (Join-Path $storage 'downloads'))) { New-Item -ItemType Directory -Path $path -Force | Out-Null }
     $lock = [IO.File]::Open((Join-Path $storage 'update.lock'), [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
-    $current = $null
+    $current = $null; $currentHash = $null
     if (Test-Path -LiteralPath $currentPath) {
+        Assert-PlainPath $currentPath
+        $currentHash = (Get-FileHash -LiteralPath $currentPath -Algorithm SHA256).Hash
         $current = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json
         $currentVersion = [string]$current.version
         if ($currentVersion -match '^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$' -and (Test-Path -LiteralPath (Join-Path $appRoot ($currentVersion + '/DeepSeek Harness.exe')))) { $originalVersion = $currentVersion }
@@ -146,6 +139,13 @@ try {
     if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
     $status.status = 'switching'; $status.phase = 'switching'; Write-Atomic $statusPath $status
     if (-not $Install) { $status.status = 'waiting-for-exit'; $status.phase = 'waiting-for-exit'; Write-Atomic $statusPath $status; Wait-NoOwnedProcesses }
+    $activationPath = Join-Path $storage 'activation.lock'
+    Assert-PlainPath $activationPath
+    $activation = [IO.File]::Open($activationPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+    if ($currentHash) {
+        Assert-PlainPath $currentPath
+        if (-not (Test-Path -LiteralPath $currentPath -PathType Leaf) -or (Get-FileHash -LiteralPath $currentPath -Algorithm SHA256).Hash -cne $currentHash) { throw 'Current application state changed during preparation; preserving it' }
+    } elseif (Test-Path -LiteralPath $currentPath) { throw 'Current application state appeared during preparation; preserving it' }
     $receiptPath = Join-Path $launcherRoot ('receipts/' + $Version + '.json')
     if (-not (Test-Path (Split-Path -Parent $receiptPath))) { New-Item -ItemType Directory -Path (Split-Path -Parent $receiptPath) -Force | Out-Null }
     Write-Atomic $receiptPath $receipt
@@ -158,11 +158,6 @@ try {
         if ($Install -and $CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
         Write-Atomic $currentPath $next
         $committed = $true
-        Clear-OlderVersions $Version $previous
-        Remove-PortableScratch $stage $storage; $stage = $null
-        if (Test-Path -LiteralPath $installer) { Remove-Item -LiteralPath $installer -Force }
-        if (Test-Path -LiteralPath ($installer + '.part')) { Remove-Item -LiteralPath ($installer + '.part') -Force }
-        $status.status = 'applied'; $status.phase = 'applied'; Write-Atomic $statusPath $status
     } catch {
         if ($committed) {
             try { if ($current) { Write-Atomic $currentPath $current } else { Remove-Item -LiteralPath $currentPath -Force -ErrorAction SilentlyContinue }; $committed = $false } catch { }
@@ -171,18 +166,30 @@ try {
         if (-not $committed -and (Test-Path $receiptPath)) { Remove-Item $receiptPath -Force }
         throw
     }
+    # Cleanup is not part of activation: a locked old file must never undo a committed update.
+    $status.status = 'applied'; $status.phase = 'applied'
+    try { $status.cleanup = Clear-OlderVersions $Version $previous }
+    catch { $status.cleanup = @{ removed=@(); preserved=@(); deferred=@('older-versions') } }
+    foreach ($file in @($installer, ($installer + '.part'))) {
+        try { if (Test-Path -LiteralPath $file) { Assert-PlainPath $file; Remove-Item -LiteralPath $file -Force -ErrorAction Stop } }
+        catch { $status.downloadCleanup = 'deferred' }
+    }
 } catch {
     $message = $_.Exception.Message
     if (-not [string]::IsNullOrEmpty($Root)) { $message = $message.Replace($Root, '<portable-root>') }
     $message = $message -replace '(?i)(token|password|secret|authorization)\s*[:=]\s*\S+', '$1=<redacted>'
     $status.status = if ($message -match '(?i)cancelled') { 'cancelled' } else { 'failed' }; $status.phase = $status.status; $status.error = $message
+    if (-not $lock) { Write-Error $message -ErrorAction Continue }
 } finally {
-    if (-not $committed -and $partial -and (Test-Path -LiteralPath $partial)) {
+    if ($lock -and -not $committed -and $partial -and (Test-Path -LiteralPath $partial)) {
         try { Remove-PortableScratch $partial $appRoot } catch { }
     }
-    if ($stage -and (Test-Path -LiteralPath $stage)) { try { Remove-PortableScratch $stage $storage } catch { } }
-    if ($lock) { $lock.Dispose() }
-    try { Write-Atomic $statusPath $status } catch { }
+    if ($lock -and $stage -and (Test-Path -LiteralPath $stage)) { try { Remove-PortableScratch $stage $storage } catch { } }
+    if ($activation) { $activation.Dispose() }
+    if ($lock) {
+        try { Write-Atomic $statusPath $status } catch { }
+        finally { $lock.Dispose() }
+    }
 }
 if ($status.status -eq 'failed') { exit 1 }
 exit 0
