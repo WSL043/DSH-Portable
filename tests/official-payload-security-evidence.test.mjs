@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, mkdir, rm, symlink, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, rm, symlink, unlink, realpath } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 const evidenceCLI = fileURLToPath(new URL('../scripts/official-payload-security-evidence.mjs', import.meta.url));
 
 test('shared authorization CLI rejects missing, blocked, stale, or mismatched security evidence', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'dsh-security-gate-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'dsh-security-gate-')));
   const sha256 = value => createHash('sha256').update(value).digest('hex');
   const env = { ...process.env, SECURITY_DIRECTORY: directory, SECURITY_CANDIDATE: join(directory, 'selection.json'),
     SECURITY_EXPECTED_VERSION: '0.2.1-rc.2', SECURITY_KINDS: '["candidate"]', SECURITY_ASSETS: JSON.stringify([join(directory, 'portable.zip')]),
@@ -79,7 +79,7 @@ test('shared authorization CLI rejects missing, blocked, stale, or mismatched se
 });
 
 test('shared collection CLI retains blocked reports without changing the accepted ASAR or failing runtime artifacts', async () => {
-  const directory = await mkdtemp(join(tmpdir(), 'dsh-security-collection-'));
+  const directory = await realpath(await mkdtemp(join(tmpdir(), 'dsh-security-collection-')));
   const officialVersion = '0.2.1-rc.2', root = join(directory, 'accepted-root');
   const asarPath = join(root, 'app', officialVersion, 'resources', 'app.asar');
   const output = join(directory, 'security');

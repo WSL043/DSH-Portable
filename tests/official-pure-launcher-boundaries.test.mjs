@@ -37,7 +37,7 @@ test('compiled pure launcher rejects redirected data before any creation and pre
       $ErrorActionPreference='Stop'
       $assembly=[Reflection.Assembly]::LoadFile(${quote(launcher)})
       $type=$assembly.GetType('PortableLauncher'); $flags=[Reflection.BindingFlags]'NonPublic,Static'
-      $fixtures=Get-Content -LiteralPath ${quote(input)} -Raw | ConvertFrom-Json
+      $fixtures=Get-Content -LiteralPath ${quote(input)} -Raw -Encoding UTF8 | ConvertFrom-Json
       function Set-Root([string]$root) {
         $type.GetField('Root',$flags).SetValue($null,$root)
         $type.GetField('DataRoot',$flags).SetValue($null,(Join-Path $root 'data'))

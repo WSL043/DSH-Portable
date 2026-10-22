@@ -65,6 +65,8 @@ PR 安全扫描随后发现共享 CLI 的环境路径和测试 executable 选择
 
 安全扫描收敛到 `b50e0a5fc6bf7b7dd82149cbefccf95734197a32`：Actions、C#、JavaScript/TypeScript、Python 四项分析结果均为 0，PR head open alerts 回读为空。没有添加 suppression 或改安全门槛；JavaScript 路径守卫使用单独的正向前缀分支支配每次文件访问，避免复合条件无法被分析器识别。本地实物采证的共享 CLI SHA-256 `48fb15af67cead45efbffa6aec52709b9ac4425da98281b53a03b02185c3579a` 与该提交一致。
 
+main 完整矩阵另发现两项测试夹具差异：macOS 临时根 `/var` 与 `/private/var` 别名未统一，Windows PowerShell 5.1 按 ANSI 误读无 BOM 的 UTF-8 中文路径。分别仅将测试临时根 realpath、显式 UTF-8 读取夹具修正，未放宽生产路径守卫。把已有 ASAR/报告测试加入三平台安全 job，并将实际 C# 路径/更新锁测试接入既有 Windows job；无需新增框架或工作流，PR 即可提前覆盖这些差异。
+
 ## 安全阻断与后续工作
 
 [GHSA-6prh-2h8m-c8cw / CVE-2026-111769](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) 影响 MCP client `>=2.0.0 <2.3.0`。旧 0.2.0-rc.2 实物为 2.0.0，新 0.2.1-rc.2 实物为 2.2.0，均命中，ASAR 清单完整性已验证。DSH 存在 StreamableHTTP 与自定义 headers 路径，stdio 不受此公告影响；未声称本机遭利用。官方签名不消除该依赖债，当前发布资格为 **blocked**。
