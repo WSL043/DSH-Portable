@@ -108,7 +108,7 @@ test('compiled pure launcher rejects redirected data before any creation and pre
         $created=$false;
         try {
           $null=New-Item -ItemType Junction -Path $link -Target ${quote(external)} -ErrorAction Stop; $created=$true;
-          try { $type.GetMethod('WritePortableRootPointer',$flags).Invoke($null,@(${quote(cacheName + '/new-child')})) | Out-Null; 'accepted' } catch { $_.Exception.GetBaseException().GetType().FullName }
+          try { $type.GetMethod('WritePortableRootPointer',$flags).Invoke($null,@(${quote(cacheName)})) | Out-Null; 'accepted' } catch { $_.Exception.GetBaseException().GetType().FullName }
         } finally { if($created) { [IO.Directory]::Delete($link) } }`);
       assert.equal(result.trim(), 'System.IO.IOException');
       assert.deepEqual(await readdir(external), ['marker.txt']);

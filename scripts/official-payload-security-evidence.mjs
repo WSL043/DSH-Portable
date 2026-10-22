@@ -10,8 +10,10 @@ const workspace = realpathSync(process.cwd());
 function localPath(value) {
   if (typeof value !== 'string' || !value || value.includes('\0')) throw new Error('Missing workspace path');
   const path = resolve(workspace, value);
-  if (path !== workspace && !path.startsWith(workspace + sep)) throw new Error('Security path escapes the workspace');
+  if (path === workspace) return workspace;
+  if (!path.startsWith(workspace + sep)) throw new Error('Security path escapes the workspace');
   for (let ancestor = path; ancestor !== workspace; ancestor = dirname(ancestor)) {
+    if (!ancestor.startsWith(workspace + sep)) throw new Error('Security ancestor escapes the workspace');
     try { if (lstatSync(ancestor).isSymbolicLink()) throw new Error('Security path contains a link'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
