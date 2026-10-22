@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { createWriteStream, existsSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync } from 'node:fs'
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import { Readable, Transform } from 'node:stream'
@@ -524,6 +524,97 @@ export async function readInstalledUpdateState(layout) {
     nodeVersion: components.nodeVersion ?? '',
     runtimeLayout: components.runtimeLayout || 'expanded-v1',
   }
+}
+
+// Offline input is the original release manifest, its detached .sig and the ZIP named by its URLs,
+// kept in one directory. Unlike a direct GitHub request, a local file is always untrusted.
+export async function readLocalUpdate({ layout, input, scope = 'product' }, { verifySignature = verifyUpdateSignature } = {}) {
+  try { return await readLocalUpdateFiles({ layout, input, scope }, verifySignature) }
+  catch (cause) {
+    throw Object.assign(new Error('The local update package is invalid or incomplete.', { cause }), { code: 'UPDATE_LOCAL_PACKAGE_INVALID' })
+  }
+}
+
+async function readLocalUpdateFiles({ layout, input, scope }, verifySignature) {
+  if (!['product', 'engine'].includes(scope)) throw new Error('Unsupported update scope.')
+  const manifestFile = path.resolve(input)
+  if (path.extname(manifestFile).toLowerCase() !== '.json') throw new Error('Choose the original update manifest (.json).')
+  const directory = await realpath(path.dirname(manifestFile))
+  const localFile = async (filename, limit) => {
+    const candidate = path.join(directory, filename)
+    const info = await lstat(candidate)
+    if (!info.isFile() || info.isSymbolicLink() || (limit && info.size > limit)) throw new Error(`Invalid local update file: ${filename}`)
+    return { filename: candidate, info }
+  }
+  const metadata = await localFile(path.basename(manifestFile), 256 * 1024)
+  const sidecar = await localFile(`${path.basename(manifestFile)}.sig`, 1024)
+  const bytes = await readFile(metadata.filename)
+  if (!verifySignature(bytes, await readFile(sidecar.filename, 'utf8'))) throw new Error('The local update manifest signature is invalid.')
+  const manifest = JSON.parse(bytes.toString('utf8'))
+  const installed = await readInstalledUpdateState(layout)
+  let result, component, archiveName
+  const assertArchiveName = name => {
+    if (typeof name !== 'string' || !/^[^\\/:*?"<>|\x00-\x1f]+\.zip$/i.test(name)) throw new Error('Invalid local update archive name.')
+    return name
+  }
+  if (!manifest.portableVersion && manifest.version && manifest.payloads) {
+    if (scope !== 'product') throw new Error('Update kind mismatch: a complete Portable package requires product scope.')
+    if (manifest.schemaVersion !== UPDATE_SCHEMA_VERSION) throw new Error('Unsupported update manifest schema.')
+    parseSemanticVersion(manifest.version)
+    const releaseChannel = normalizeReleaseChannel(manifest.releaseChannel, manifest.version)
+    result = { status: 'full-package-required', updateKind: 'product', delivery: 'full-package', existingFullUpdater: true,
+      current: installed.portableVersion, latest: manifest.version, productCurrent: installed.portableVersion, productLatest: manifest.version,
+      engineCurrent: installed.dshVersion, releaseChannel, fullPackageManifestFile: metadata.filename }
+    if (platformUpdateKey(layout.platform, process.arch) !== 'windows-x64') return { ...result, status: 'wrong-platform', existingFullUpdater: false }
+    component = manifest.payloads.windowsX64
+    if (!component || !Number.isSafeInteger(component.bytes) || component.bytes <= 0 || !/^[a-f0-9]{64}$/i.test(String(component.sha256 ?? ''))) {
+      throw new Error('Complete Portable package metadata is invalid.')
+    }
+    validateRemoteUrl(component.url, false)
+    archiveName = assertArchiveName(component.filename)
+  } else {
+    if ((manifest.updateKind || 'product') !== scope) throw new Error(`Update kind mismatch: expected ${scope}.`)
+    result = evaluateUpdate(manifest, installed, platformUpdateKey(layout.platform, process.arch), {
+      allowEngineVersionChange: scope === 'engine', allowProductVersionChange: scope === 'product',
+    })
+    if (result.status !== 'available') return result
+    component = result.component
+    const names = new Set(component.urls.map(value => {
+      const url = validateRemoteUrl(value, false)
+      return assertArchiveName(decodeURIComponent(url.pathname.split('/').at(-1)))
+    }))
+    if (names.size !== 1) throw new Error('The local update manifest names ambiguous archives.')
+    archiveName = [...names][0]
+  }
+  const archive = await localFile(archiveName)
+  if (archive.info.size !== Number(component.bytes)) throw new Error('Local update component size mismatch.')
+  // The read-only check verifies the actual attachment; installation verifies again while copying its bytes.
+  const digest = createHash('sha256')
+  let received = 0
+  for await (const chunk of createReadStream(archive.filename)) {
+    received += chunk.length
+    if (received > Number(component.bytes)) throw new Error('Local update component size mismatch.')
+    digest.update(chunk)
+  }
+  if (received !== Number(component.bytes) || digest.digest('hex') !== component.sha256.toLowerCase()) throw new Error('Local update component digest mismatch.')
+  return { ...result, localArchive: archive.filename }
+}
+
+export async function copyVerifiedLocalComponent({ source, destination, bytes, sha256, onProgress = () => {} }) {
+  const digest = createHash('sha256')
+  let received = 0
+  const meter = new Transform({ transform(chunk, _encoding, callback) {
+    received += chunk.length
+    if (received > Number(bytes)) return callback(Object.assign(new Error('Local update component size mismatch.'), { code: 'UPDATE_LOCAL_PACKAGE_INVALID' }))
+    digest.update(chunk)
+    onProgress({ phase: 'downloading', receivedBytes: received, totalBytes: Number(bytes), percent: Math.floor(received * 100 / Number(bytes)) })
+    callback(null, chunk)
+  } })
+  await pipeline(createReadStream(source), meter, createWriteStream(destination, { flags: 'wx' }))
+  if (received !== Number(bytes) || digest.digest('hex') !== String(sha256).toLowerCase()) {
+    throw Object.assign(new Error('Local update component digest or size mismatch.'), { code: 'UPDATE_LOCAL_PACKAGE_INVALID' })
+  }
+  return { bytes: received, sha256 }
 }
 
 // Shared read-only entry point for the desktop bridge and command line.

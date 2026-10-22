@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 export const launcherSourceFiles = Object.freeze([
   'DSH-Portable.cs',
   'LauncherWindow.Chrome.cs',
+  'LauncherWindow.WindowControls.cs',
   'LauncherWindow.Tray.cs',
   'LauncherWindow.Data.cs',
   'LauncherWindow.WebViewShutdown.cs',

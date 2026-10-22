@@ -33,6 +33,7 @@ export function redactDiagnosticText(source) {
 }
 
 export function classifyPortableError(error) {
+  if (error?.code === 'UPDATE_LOCAL_PACKAGE_INVALID') return error.code
   if (['DSH_DATA_IMPORT_RECOVERY_REQUIRED', 'DSH_DATA_IMPORT_WORKER_ACTIVE', 'DSH_DATA_IMPORT_PROFILE_BUSY',
     'DSH_DATA_IMPORT_BACKUP_MISSING', 'DSH_DATA_IMPORT_ROLLBACK_FAILED'].includes(error?.code)) return error.code
   if (error?.code === 'RECOVERY_BUNDLE_PROTECTED' || error?.code === 'RECOVERY_BUNDLE_UNAVAILABLE') return error.code
@@ -58,6 +59,7 @@ export function classifyPortableError(error) {
 export function portablePublicError(error) {
   const code = classifyPortableError(error)
   const messages = {
+    UPDATE_LOCAL_PACKAGE_INVALID: '离线更新文件不可用：校验失败或附件不完整。请重新下载适用于当前系统的完整更新文件，并保留随附文件。The offline update is invalid or incomplete. Download the complete update for this system and keep its companion files together.',
     DSH_DATA_IMPORT_RECOVERY_REQUIRED: '存在未完成的数据导入，未执行本次操作。请完全退出 Portable 后运行修复；保留原目录与恢复备份。An unfinished data import requires recovery. Quit Portable and run repair; keep the original folder and recovery backups.',
     DSH_DATA_IMPORT_WORKER_ACTIVE: '导入的后台依赖操作尚未退出，暂未回滚。请稍后重试修复。The import dependency operation is still running; rollback was deferred. Retry repair after it exits.',
     DSH_DATA_IMPORT_PROFILE_BUSY: '插件配置仍有写入锁，未执行导入或恢复。请关闭插件安装操作后重试；不要直接删除未知锁文件。A plugin profile write lock is present. Close its installer and retry; do not delete unknown lock files.',

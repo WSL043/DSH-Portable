@@ -65,6 +65,7 @@ namespace DshPortable
             if (eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.RenderProcessExited
                 || eventArgs.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
             {
+                ResetPageWindowChrome();
                 MarkTrayBridgeUnavailable();
             }
             string failure = eventArgs.ProcessFailedKind + "/" + eventArgs.Reason

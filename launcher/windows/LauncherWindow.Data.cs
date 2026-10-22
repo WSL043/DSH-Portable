@@ -67,6 +67,7 @@ namespace DshPortable
             try
             {
                 Dictionary<string, object> message = json.Deserialize<Dictionary<string, object>>(eventArgs.WebMessageAsJson);
+                if (HandleWindowMessage(message)) return;
                 object messageType;
                 if (message != null && message.TryGetValue("type", out messageType)
                     && Convert.ToString(messageType) == "dsh-portable/dismiss-menu")
@@ -185,7 +186,13 @@ namespace DshPortable
                         && !String.Equals(requestedScope, "engine", StringComparison.Ordinal)) return;
                     if (!String.IsNullOrEmpty(requestedManifest)
                         && (String.Equals(requestedScope, "engine", StringComparison.Ordinal) ? !IsTrustedEngineManifestUrl(requestedManifest) : !IsTrustedProductManifestUrl(requestedManifest))) return;
-                    BeginInvoke((MethodInvoker)(async delegate { await CheckForDesktopUpdateAsync(true, requestedScope, requestedManifest); }));
+                    object offlineValue;
+                    bool offline = message.TryGetValue("offline", out offlineValue) && offlineValue is bool && (bool)offlineValue;
+                    if (offline && !String.IsNullOrEmpty(requestedManifest)) return;
+                    BeginInvoke((MethodInvoker)(async delegate {
+                        if (offline) await SelectOfflineUpdateAsync(requestedScope);
+                        else await CheckForDesktopUpdateAsync(true, requestedScope, requestedManifest);
+                    }));
                     return;
                 }
                 if (message != null && message.TryGetValue("type", out messageType)

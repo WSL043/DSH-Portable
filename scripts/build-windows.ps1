@@ -378,6 +378,7 @@ try {
         "/out:$LauncherExe",
         (Join-Path $ProjectRoot 'launcher\windows\DSH-Portable.cs'),
         (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Chrome.cs'),
+        (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.WindowControls.cs'),
         (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Tray.cs'),
         (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.Data.cs'),
         (Join-Path $ProjectRoot 'launcher\windows\LauncherWindow.WebViewShutdown.cs'),

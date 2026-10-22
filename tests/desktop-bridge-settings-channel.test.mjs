@@ -141,7 +141,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeFileUpdates = true, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -164,7 +164,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, page = 
     createElement() { return {} },
   }
   const native = nativeMessages && {
-    capabilities: { preferences: true, openUpdate: true },
+    capabilities: { preferences: true, openUpdate: true, openUpdateFromFile: nativeFileUpdates },
     postMessage(message) { nativeMessages.push(message) },
     addEventListener() {},
     removeEventListener() {},
@@ -237,6 +237,38 @@ test('alpha7 regular artwork still registers and renders Portable settings', asy
     await settle()
     assert.match(textContent(mounted.tree), /0\.1\.7-alpha\.1/)
   } finally { mounted.unmount() }
+})
+
+test('update from file opens the native review for the selected scope without checking a feed', async () => {
+  for (const [nativeMessages, nativeFileUpdates] of [[[], true], [[], false], [null, false]]) {
+    let requests = 0
+    const client = await loadSettingsComponent(async url => {
+      requests++
+      return jsonResponse(url === '/dsh-portable/settings'
+        ? { settings: settings(), versions: { portable: '0.9.4', engine: '0.1.7-alpha.7' } }
+        : { schemaVersion: 1, releaseChannel: 'stable', versions: [], unavailable: [] })
+    }, { nativeMessages, nativeFileUpdates })
+    const mounted = client.mount()
+    try {
+      await settle()
+      const before = requests
+      for (const [scope, title] of [['product', 'DSH-Portable'], ['engine', 'DeepSeek Harness']]) {
+        const row = findNode(mounted.tree, node => node.type === 'section' && node.props['aria-label'] === title)
+        const button = findNode(row, node => typeof node.props?.onClick === 'function' && textContent(node) === 'Update from file')
+        if (!nativeFileUpdates) {
+          assert.equal(button, null, 'old shells and browser hosts cannot silently fall back to an online update')
+          continue
+        }
+        assert.ok(button)
+        button.props.onClick()
+        await settle()
+        if (nativeMessages) assert.deepEqual(JSON.parse(JSON.stringify(nativeMessages.at(-1))), {
+          type: 'dsh-portable/open-update', schemaVersion: 1, scope, offline: true,
+        })
+      }
+      assert.equal(requests, before)
+    } finally { mounted.unmount() }
+  }
 })
 
 test('delayed product catalogs never insert empty-state text into the selector row', async () => {

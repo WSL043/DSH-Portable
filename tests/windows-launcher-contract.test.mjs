@@ -121,6 +121,17 @@ test('Windows launcher preserves UTF-8 diagnostics from the DSH subprocess', { s
 
     const text = (await readFile(diagnostic, 'utf8')).replace(/^\uFEFF/, '')
     assert.equal(text, '启动失败：找不到运行模块 “测试”')
+
+    const controls = path.join(root, 'window-controls-fixture.exe')
+    await execFileAsync(cscPath(), [
+      '/nologo', '/target:exe', '/platform:x64',
+      '/reference:System.dll', '/reference:System.Core.dll',
+      '/reference:System.Drawing.dll', '/reference:System.Windows.Forms.dll',
+      `/out:${controls}`,
+      path.join(projectRoot, 'tests', 'fixtures', 'launcher-window-controls.cs'),
+    ])
+    const acceptance = await execFileAsync(controls, [executable, root], { windowsHide: true })
+    assert.match(acceptance.stdout, /window-controls-composite-ok/)
   } finally {
     // Windows can retain the just-exited node image briefly (job teardown or
     // scanner). Retry fixture cleanup only; never rerun the tested operation.

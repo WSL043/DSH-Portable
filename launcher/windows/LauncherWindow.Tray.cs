@@ -269,6 +269,8 @@ namespace DshPortable
                 : new List<TrayBridgeSession>();
 
             trayMenu.Items.Add(CreateOpenItem());
+            if (desktopStart) trayMenu.Items.Add(new ToolStripMenuItem(
+                L("恢复原生窗口栏", "Restore native window bar"), null, delegate { RestoreNativeWindowBar(); }));
             if (trayBridgeReady)
             {
                 trayMenu.Items.Add(new ToolStripSeparator());

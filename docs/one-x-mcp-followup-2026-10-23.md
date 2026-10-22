@@ -6,6 +6,8 @@
 
 2026-10-23 04:50 JST 回读：公开 master 仍为 [`687f282e8625c6b8d11ff58211a90524be2e4317`](https://github.com/deepseek-ai/deepseek-harness/commit/687f282e8625c6b8d11ff58211a90524be2e4317)；[Windows feed](https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml) 和 [macOS ARM feed](https://download.deepseek.com/dsh-desk/feeds/mac-arm64/nightly-mac.yml) 仍是 0.2.1-rc.2，[macOS Intel feed](https://download.deepseek.com/dsh-desk/feeds/mac-x64/nightly-mac.yml) 是 0.2.1-rc.1。没有把 feed 版本等同各平台已完成本机验证。
 
+06:07 JST 再次读取公开源码与三个 feed，版本和三个 SHA-512 均与本轮已验收输入一致；Windows 仍对应上述实际包，没有新的修复成品可替代。Native 通用窗口桥与离线更新不修改这个官方 ASAR，也不改变下方发布阻断。
+
 复用上一轮已经验证签名、摘要并移入回收站的 Windows 成品，只读其原始 ASAR；没有重新下载、解包、覆盖 SDK 或重打包。`app.asar` SHA-256 仍为 `47874618bf5b3011fcaac10cd4c85f69da333e70d4f99b921207c78d0999512a`，其中 client/core 实际版本均为 2.2.0。
 
 除版本以外，这次还核对了真正的调用代码及 ASAR entry integrity：

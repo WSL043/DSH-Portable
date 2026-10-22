@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
@@ -17,7 +17,7 @@ function cscPath() {
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
 }
 
-async function compileBootstrap(output) {
+async function compileBootstrap(output, source = bootstrapSource) {
   await execFileAsync(cscPath(), [
     '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
     '/reference:System.dll', '/reference:System.Core.dll',
@@ -25,7 +25,7 @@ async function compileBootstrap(output) {
     '/reference:System.Net.Http.dll', '/reference:System.Runtime.Serialization.dll',
     '/reference:System.IO.Compression.dll',
     `/out:${output}`,
-    bootstrapSource,
+    source,
   ])
 }
 
@@ -77,6 +77,65 @@ async function exists(filename) {
     throw error
   }
 }
+
+test('signed local full updates preserve data, reject damaged inputs and never contact their remote URLs', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'offline-full-'))
+  const destination = path.join(root, 'installed')
+  const executable = path.join(root, 'updater.exe')
+  const resultFile = path.join(root, 'result.json')
+  const manifestFile = path.join(root, 'manifest.json')
+  let connections = 0
+  const server = createServer((request, response) => response.writeHead(503).end())
+  server.on('connection', () => { connections++ })
+  try {
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+    const payload = await makePayload(root, '0.2.5')
+    await createOldInstall(destination)
+    const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+    const jwk = keys.publicKey.export({ format: 'jwk' })
+    // Only this disposable test binary trusts the ephemeral key; production has no key override.
+    const source = (await readFile(bootstrapSource, 'utf8'))
+      .replace(/PublicKeyX = "[a-f0-9]+"/, `PublicKeyX = "${Buffer.from(jwk.x, 'base64url').toString('hex')}"`)
+      .replace(/PublicKeyY = "[a-f0-9]+"/, `PublicKeyY = "${Buffer.from(jwk.y, 'base64url').toString('hex')}"`)
+      .replace(/DefaultManifestUrl = "[^"]+"/, `DefaultManifestUrl = "https://127.0.0.1:${server.address().port}/unused"`)
+    const testSource = path.join(root, 'test-updater.cs')
+    await writeFile(testSource, source)
+    await compileBootstrap(executable, testSource)
+    const manifest = Buffer.from(JSON.stringify({ schemaVersion: 1, version: '0.2.5', payloads: { windowsX64: {
+      filename: 'payload.zip', url: `https://127.0.0.1:${server.address().port}/unused.zip`,
+      bytes: payload.bytes.length, sha256: payload.sha256,
+    } } }))
+    const signature = sign('sha256', manifest, { key: keys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64')
+    const run = async (success) => {
+      const result = await execFileAsync(executable, ['--manifest-file', manifestFile, '--destination', destination,
+        '--upgrade-existing', '--no-launch', '--result', resultFile], { timeout: 30000, windowsHide: true }).catch(error => error)
+      if (success) assert.equal(result.code, undefined, result.stderr)
+      else assert.equal(result.code, 1)
+      assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, success ? 'updated' : 'failed')
+    }
+    await writeFile(manifestFile, manifest)
+    await writeFile(`${manifestFile}.sig`, signature)
+    await run(true)
+    assert.equal(await readFile(path.join(destination, 'data/dsh-home/profiles/web/settings.json'), 'utf8'), '{"keep":true}\n')
+    assert.equal(await readFile(path.join(destination, 'workspace/project.txt'), 'utf8'), 'keep workspace\n')
+    const installed = await readFile(path.join(destination, 'licenses/COMPONENTS.json'), 'utf8')
+    await writeFile(manifestFile, Buffer.concat([manifest, Buffer.from(' ')]))
+    await run(false)
+    await writeFile(manifestFile, manifest)
+    const corrupted = Buffer.from(payload.bytes)
+    corrupted[0] ^= 1
+    await writeFile(payload.archive, corrupted)
+    await run(false)
+    await rm(payload.archive)
+    await run(false)
+    assert.equal(await readFile(path.join(destination, 'licenses/COMPONENTS.json'), 'utf8'), installed)
+    assert.equal(connections, 0, 'offline mode must not contact either metadata or payload URLs')
+  } finally {
+    server.closeAllConnections()
+    await new Promise(resolve => server.close(resolve))
+    await rm(root, { recursive: true, force: true })
+  }
+})
 
 test('bootstrap automatically upgrades an older complete install and stays usable offline', { skip: process.platform !== 'win32' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-auto-upgrade-'))

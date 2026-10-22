@@ -167,7 +167,7 @@ namespace DshPortable
                         : bottom ? (left ? 16 : right ? 17 : 15) : left ? 10 : right ? 11 : 0;
                     if (edge != 0) { message.Result = new IntPtr(edge); return; }
                 }
-                if (desktopMenu.ClientRectangle.Contains(point) && desktopMenu.GetItemAt(point) == null)
+                if (desktopMenu.Visible && desktopMenu.ClientRectangle.Contains(point) && desktopMenu.GetItemAt(point) == null)
                 {
                     message.Result = new IntPtr(2); // Native caption drag/double-click/system menu.
                     return;
@@ -199,7 +199,7 @@ namespace DshPortable
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 36, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen };
+                AutoSize = false, Height = 36, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen && !pageWindowChrome };
             desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
@@ -311,6 +311,7 @@ namespace DshPortable
             if (desktopContent != null) FitWebViewToClient();
             if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
                 desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
+            PostWindowState();
         }
 
         private void CloseDesktopMenus()
@@ -437,7 +438,7 @@ namespace DshPortable
             {
                 WindowState = FormWindowState.Normal;
                 FormBorderStyle = FormBorderStyle.Sizable;
-                desktopMenu.Visible = true;
+                desktopMenu.Visible = !pageWindowChrome;
                 Bounds = boundsBeforeFullscreen;
                 // Restore work-area sizing before re-entering the maximized state.
                 fullscreen = false;
@@ -448,6 +449,7 @@ namespace DshPortable
             FitWebViewToClient();
             RefreshDesktopCommands();
             WriteLauncherLog("desktop-window", "fullscreen=" + fullscreen);
+            PostWindowState();
         }
 
         private void LoadStartupTheme()

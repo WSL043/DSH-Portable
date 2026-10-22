@@ -62,7 +62,13 @@
       "dsh-portable/state",
       "dsh-portable/surface-ready",
       "dsh-portable/test-desktop",
-      "dsh-portable/test-desktop-result"
+      "dsh-portable/test-desktop-result",
+      "dsh-portable/window-chrome",
+      "dsh-portable/window-command",
+      "dsh-portable/window-control",
+      "dsh-portable/window-drag",
+      "dsh-portable/window-menu",
+      "dsh-portable/window-state"
     ],
     "cli": [
       "backup-data",

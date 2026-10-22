@@ -119,7 +119,8 @@ namespace DshPortable
                 + "if(!bridge||typeof bridge.postMessage!=='function'||typeof bridge.addEventListener!=='function'||typeof bridge.removeEventListener!=='function')return;"
                 + "const native={protocolVersion:1,capabilities:Object.freeze({"
                 + "pickDirectory:true,saveDataPackage:true,openDataPackage:true,importData:true,restartHost:true,"
-                + "openEnvironment:true,openUpdate:true,preferences:true,sessionProjection:true,clearWebCache:true"
+                + "openEnvironment:true,openUpdate:true,openUpdateFromFile:true,preferences:true,sessionProjection:true,clearWebCache:true,"
+                + "windowChrome:true,windowDrag:true,windowControls:true,windowState:true,windowCommand:true,windowMenu:true"
                 + "}),"
                 + "postMessage:function(message){return bridge.postMessage(message);},"
                 + "addEventListener:function(name,listener){return bridge.addEventListener(name,listener);},"
@@ -132,6 +133,7 @@ namespace DshPortable
             webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
             webView.CoreWebView2.ContentLoading += delegate(object sender, CoreWebView2ContentLoadingEventArgs eventArgs)
             {
+                ResetPageWindowChrome();
                 RecordWebViewPhase("content-loading:" + eventArgs.NavigationId);
             };
             webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
@@ -285,6 +287,7 @@ namespace DshPortable
 
         private void ResetWebViewAfterInitializationFailure()
         {
+            ResetPageWindowChrome();
             CoreWebView2Environment failedEnvironment = webViewEnvironment;
             if (failedEnvironment != null)
             {
@@ -394,6 +397,7 @@ namespace DshPortable
             if (!Uri.TryCreate(eventArgs.Uri, UriKind.Absolute, out target)) { eventArgs.Cancel = true; return; }
             if (applicationUri != null && target.IsLoopback && target.Port == applicationUri.Port)
             {
+                ResetPageWindowChrome();
                 trayBridgeReady = false;
                 NativeTaskNotification.SetOwnerReady(false);
                 return;

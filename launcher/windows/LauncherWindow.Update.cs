@@ -32,7 +32,7 @@ namespace DshPortable
             await CheckForDesktopUpdateAsync(manual, scope, String.Empty);
         }
 
-        private async Task CheckForDesktopUpdateAsync(bool manual, string scope, string manifestUrl)
+        private async Task CheckForDesktopUpdateAsync(bool manual, string scope, string manifestUrl, string input = "")
         {
             bool engineScope = String.Equals(scope, "engine", StringComparison.Ordinal);
             string targetName = engineScope ? "DeepSeek Harness" : "DSH-Portable";
@@ -46,7 +46,9 @@ namespace DshPortable
             RebuildTrayMenu();
             try
             {
-                string[] checkArguments = !String.IsNullOrEmpty(manifestUrl)
+                string[] checkArguments = !String.IsNullOrEmpty(input)
+                    ? new[] { "check-update", "--scope", scope, "--json", "--input", input }
+                    : !String.IsNullOrEmpty(manifestUrl)
                     ? new[] { "check-update", "--scope", scope, "--json", "--force", "--update-manifest", manifestUrl }
                     : manual
                         ? new[] { "check-update", "--scope", scope, "--json", "--force" }
@@ -56,7 +58,9 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("现在无法检查更新，请稍后再试。", "Updates could not be checked right now. Try again later."),
+                        String.IsNullOrEmpty(input)
+                            ? L("现在无法检查更新，请稍后再试。", "Updates could not be checked right now. Try again later.")
+                            : L("离线更新包未通过验证。请确认清单、签名和对应 ZIP 完整并放在同一目录。", "The offline update failed verification. Keep the manifest, signature and matching ZIP together in one folder."),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -123,6 +127,19 @@ namespace DshPortable
                 }
                 if (updateStatus == "full-package-required")
                 {
+                    if (!String.IsNullOrEmpty(input))
+                    {
+                        Dictionary<string, object> result = json.Deserialize<Dictionary<string, object>>(check.Item2);
+                        object supported;
+                        if (result == null || !result.TryGetValue("existingFullUpdater", out supported)
+                            || !(supported is bool) || !(bool)supported)
+                        {
+                            MessageBox.Show(this, L("此组件包需要匹配的完整便携包，请选择该完整包的签名清单。",
+                                "This component needs a matching full portable package. Select that full package's signed manifest."),
+                                L("需要完整便携包", "Full portable package required"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            return;
+                        }
+                    }
                     if (!trayBridgeReady)
                     {
                         if (!manual) return;
@@ -143,12 +160,18 @@ namespace DshPortable
                     }
                     if (!EnsureNoOtherRunningEnvironmentHosts(manual)) return;
                     int choice = await ShowUpdateChoiceOverlayAsync(current, latest, engineCurrent, engineLatest, true);
-                    if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl);
-                    else if (choice < 0) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--scope", scope, "--json" }));
-                    else await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
+                    if (choice == 1) StartFullPackageUpdate(fullPackageManifestUrl, input);
+                    else if (choice < 0 && String.IsNullOrEmpty(input)) await Task.Run(() => InvokePortableCli(new[] { "ignore-update", "--scope", scope, "--json" }));
+                    else if (String.IsNullOrEmpty(input)) await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
                     return;
                 }
-                if (updateStatus != "available") return;
+                if (updateStatus != "available")
+                {
+                    if (manual && !String.IsNullOrEmpty(input)) MessageBox.Show(this,
+                        L("离线包不适用于当前环境：", "The offline package is not applicable: ") + updateStatus,
+                        L("离线更新", "Offline update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
 
                 if (!trayBridgeReady)
                 {
@@ -174,10 +197,10 @@ namespace DshPortable
                 bool accepted = await ShowUpdateChoiceOverlayAsync(current, latest, engineCurrent, engineLatest, false, scope) == 1;
                 if (!accepted)
                 {
-                    await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
+                    if (String.IsNullOrEmpty(input)) await Task.Run(() => InvokePortableCli(new[] { "defer-update", "--scope", scope, "--json" }));
                     return;
                 }
-                await ApplyDesktopUpdateAsync(scope, manifestUrl);
+                await ApplyDesktopUpdateAsync(scope, manifestUrl, input);
             }
             catch (Exception error)
             {
@@ -192,6 +215,20 @@ namespace DshPortable
                 updateCheckRunning = false;
                 updateInteractionRunning = false;
                 RebuildTrayMenu();
+            }
+        }
+
+        private async Task SelectOfflineUpdateAsync(string scope)
+        {
+            if (updateCheckRunning || updateInteractionRunning) return;
+            using (OpenFileDialog dialog = new OpenFileDialog {
+                Filter = L("签名更新清单 (*.json)|*.json", "Signed update manifest (*.json)|*.json"),
+                Title = L("选择离线更新清单", "Select offline update manifest"),
+                CheckFileExists = true, Multiselect = false, RestoreDirectory = true
+            })
+            {
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    await CheckForDesktopUpdateAsync(true, scope, String.Empty, Path.GetFullPath(dialog.FileName));
             }
         }
 
@@ -214,7 +251,7 @@ namespace DshPortable
             CenterLaunchContent();
         }
 
-        private async Task ApplyDesktopUpdateAsync(string scope, string manifestUrl = "")
+        private async Task ApplyDesktopUpdateAsync(string scope, string manifestUrl = "", string input = "")
         {
             bool restoredAfterFailure = false;
             ExceptionDispatchInfo updateFailure = null;
@@ -226,7 +263,9 @@ namespace DshPortable
                     ? L("正在准备 DeepSeek Harness 更新…", "Preparing the DeepSeek Harness update…")
                     : L("正在准备 DSH-Portable 更新…", "Preparing the DSH-Portable update…"));
                 MarkTrayBridgeUnavailable();
-                string[] updateArguments = String.IsNullOrEmpty(manifestUrl)
+                string[] updateArguments = !String.IsNullOrEmpty(input)
+                    ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--input", input }
+                    : String.IsNullOrEmpty(manifestUrl)
                     ? new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json" }
                     : new[] { "update", "--scope", scope, "--no-browser", "--json", "--progress-json", "--update-manifest", manifestUrl };
                 Tuple<int, string> updated = await Task.Run(() => InvokePortableCli(updateArguments, HandleUpdateProgress));
@@ -304,20 +343,25 @@ namespace DshPortable
             }
         }
 
-        private void StartFullPackageUpdate(string manifestUrl)
+        private void StartFullPackageUpdate(string manifestUrl, string offlineManifestPath = "")
         {
             string helper = null;
             try
             {
-                Uri manifest;
-                if (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
+                Uri manifest = null;
+                if (String.IsNullOrEmpty(offlineManifestPath) && (!Uri.TryCreate(manifestUrl, UriKind.Absolute, out manifest)
                     || manifest.Scheme != Uri.UriSchemeHttps
                     || !String.Equals(manifest.Host, "github.com", StringComparison.OrdinalIgnoreCase)
                     || !manifest.AbsolutePath.StartsWith("/WSL043/DSH-Portable/releases/download/v", StringComparison.Ordinal)
-                    || !manifest.AbsolutePath.EndsWith("/portable-manifest.json", StringComparison.Ordinal))
+                    || !manifest.AbsolutePath.EndsWith("/portable-manifest.json", StringComparison.Ordinal)))
                     throw new InvalidOperationException(L(
                         "更新清单地址无效，请重新检查更新。",
                         "The update manifest target is invalid. Check for updates again."));
+                if (!String.IsNullOrEmpty(offlineManifestPath))
+                {
+                    offlineManifestPath = Path.GetFullPath(offlineManifestPath);
+                    if (!File.Exists(offlineManifestPath)) throw new FileNotFoundException("Offline update manifest is missing.", offlineManifestPath);
+                }
                 string source = Path.Combine(root, "launcher", "DSH-FullUpdater.exe");
                 if (!File.Exists(source)) throw new FileNotFoundException(L(
                     "完整更新组件缺失，请重新安装当前版本后再试。",
@@ -328,7 +372,8 @@ namespace DshPortable
                 {
                     "--upgrade-existing",
                     "--destination", root,
-                    "--manifest", manifest.AbsoluteUri,
+                    String.IsNullOrEmpty(offlineManifestPath) ? "--manifest" : "--manifest-file",
+                    String.IsNullOrEmpty(offlineManifestPath) ? manifest.AbsoluteUri : offlineManifestPath,
                     "--window-bounds", String.Join(",", new[] { Bounds.X, Bounds.Y, Bounds.Width, Bounds.Height }.Select(value => value.ToString(System.Globalization.CultureInfo.InvariantCulture))),
                     "--theme", String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase) ? "dark" : "light",
                 });

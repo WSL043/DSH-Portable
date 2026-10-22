@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
+import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -13,6 +13,7 @@ import {
   applyStagedAppUpdate,
   applyStagedCapsuleUpdate,
   checkForUpdate,
+  copyVerifiedLocalComponent,
   comparePortableVersions,
   cleanStaleUpdateOperationDirectories,
   defaultEngineUpdateIndexUrl,
@@ -30,12 +31,182 @@ import {
   listProductVersions,
   platformUpdateKey,
   readInstalledUpdateState,
+  readLocalUpdate,
   rollbackPendingAppUpdate,
   validateArchiveEntries,
 } from '../launcher/update-core.mjs'
+import { verifyUpdateSignature } from '../launcher/update-signature.mjs'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
+
+// Independent fixture keys never reach the CLI or the production key list.
+const offlineKeys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+const offlineVerification = { verifySignature: (bytes, signature) => verifyUpdateSignature(bytes, signature,
+  [offlineKeys.publicKey.export({ type: 'spki', format: 'pem' })]) }
+const localFailure = expected => error => error.code === 'UPDATE_LOCAL_PACKAGE_INVALID'
+  && (expected instanceof RegExp ? expected.test(error.cause?.message) : error.cause?.code === expected)
+async function writeOfflineManifest(filename, manifest) {
+  const bytes = Buffer.from(`${JSON.stringify(manifest)}\n`)
+  await writeFile(filename, bytes)
+  await writeFile(`${filename}.sig`, sign('sha256', bytes, { key: offlineKeys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64'))
+}
+
+test('offline updates require the original signature and local attachment without contacting a feed', async t => {
+  const fixture = await makeUpdateFixture()
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  const input = path.join(fixture.root, 'offline.json')
+  const archive = path.join(fixture.root, 'component.zip')
+  const payload = Buffer.from('fixture ZIP bytes')
+  const manifest = updateManifest({ platform: platformUpdateKey() })
+  manifest.component = { ...manifest.component, bytes: payload.length,
+    sha256: createHash('sha256').update(payload).digest('hex'), urls: ['https://example.invalid/component.zip'] }
+  const read = () => readLocalUpdate({ layout: fixture.layout, input, scope: 'product' }, offlineVerification)
+  const originalFetch = globalThis.fetch
+  let requests = 0
+  globalThis.fetch = () => { requests++; throw new Error('Offline update attempted a network request.') }
+  t.after(() => { globalThis.fetch = originalFetch })
+  await writeOfflineManifest(input, manifest)
+  await writeFile(archive, payload)
+  assert.equal((await read()).status, 'available')
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input }), localFailure(/signature/i), 'a package signed by an unknown key is rejected by production defaults')
+  await mkdir(path.join(fixture.root, 'launcher'), { recursive: true })
+  for (const name of (await readdir(path.join(projectRoot, 'launcher'))).filter(name => name.endsWith('.mjs'))) {
+    await copyFile(path.join(projectRoot, 'launcher', name), path.join(fixture.root, 'launcher', name))
+  }
+  await assert.rejects(execFileAsync(process.execPath, [path.join(fixture.root, 'launcher', 'portable-cli.mjs'),
+    'check-update', '--input', input, '--json', '--allow-http'], { windowsHide: true, timeout: 10000 }),
+  error => {
+    const response = JSON.parse(error.stderr.trim())
+    return response.code === 'UPDATE_LOCAL_PACKAGE_INVALID' && !response.message.includes(fixture.root)
+      && /offline update is invalid or incomplete/i.test(response.message)
+  })
+  assert.match(await readFile(path.join(fixture.layout.logsDir, 'portable-errors.jsonl'), 'utf8'), /manifest signature is invalid/)
+  await writeFile(input, `${JSON.stringify(manifest)}  \n`)
+  await assert.rejects(read(), localFailure(/signature/i), 'equivalent JSON with different bytes fails authentication')
+  await writeOfflineManifest(input, manifest)
+  await rename(`${input}.sig`, `${input}.saved`)
+  await assert.rejects(read(), localFailure('ENOENT'))
+  await rename(`${input}.saved`, `${input}.sig`)
+  await rename(archive, `${archive}.saved`)
+  await assert.rejects(read(), localFailure('ENOENT'), 'missing attachments do not fall back to component.urls')
+  await rename(`${archive}.saved`, archive)
+  await writeFile(archive, Buffer.alloc(payload.length, 1))
+  await assert.rejects(read(), localFailure(/digest/i))
+  await writeFile(archive, payload)
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification), localFailure(/kind mismatch/i))
+  for (const [patch, status] of [
+    [{ platform: 'wrong-platform' }, 'wrong-platform'],
+    [{ requiredShellFingerprint: 'f'.repeat(64) }, 'full-package-required'],
+    [{ targetRuntimeLayout: 'capsule-v1' }, 'full-package-required'],
+    [{ component: { ...manifest.component, requiredNodeVersion: '99.0.0' } }, 'full-package-required'],
+    [{ updateKind: 'engine', requiredShellContract: 999 }, 'core-incompatible'],
+  ]) {
+    await writeOfflineManifest(input, { ...manifest, ...patch })
+    assert.equal((await readLocalUpdate({ layout: fixture.layout, input, scope: patch.updateKind || 'product' }, offlineVerification)).status, status)
+  }
+  await writeOfflineManifest(input, { ...manifest, component: { ...manifest.component, urls: ['https://example.invalid/%2e%2e%2foutside.zip'] } })
+  await assert.rejects(read(), localFailure(/archive name/i))
+  assert.equal(requests, 0)
+  assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+  assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+  await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
+})
+
+test('offline complete manifests preflight the signed Windows ZIP and delegate only to the existing full updater', async t => {
+  const fixture = await makeUpdateFixture()
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  const input = path.join(fixture.root, 'portable-manifest.json')
+  const payload = Buffer.from('complete ZIP fixture')
+  const full = { schemaVersion: 1, version: '0.9.4', releaseChannel: 'stable', payloads: { windowsX64: {
+    filename: 'complete.zip', url: 'https://example.invalid/complete.zip', bytes: payload.length,
+    sha256: createHash('sha256').update(payload).digest('hex'),
+  } } }
+  await writeOfflineManifest(input, full)
+  await writeFile(path.join(fixture.root, 'complete.zip'), payload)
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification), localFailure(/product scope/i))
+  assert.equal((await readLocalUpdate({ layout: { ...fixture.layout, platform: 'linux' }, input }, offlineVerification)).status, 'wrong-platform')
+  if (process.arch !== 'x64') return
+  const read = () => readLocalUpdate({ layout: { ...fixture.layout, platform: 'win32' }, input }, offlineVerification)
+  const result = await read()
+  assert.equal(result.status, 'full-package-required')
+  assert.equal(result.existingFullUpdater, true)
+  assert.equal(result.latest, '0.9.4')
+  assert.equal(result.fullPackageManifestFile, input)
+  for (const [patch, message] of [[{ filename: '../complete.zip' }, /archive name/i], [{ bytes: payload.length - 1 }, /size/i],
+    [{ sha256: 'a'.repeat(64) }, /digest/i]]) {
+    await writeOfflineManifest(input, { ...full, payloads: { windowsX64: { ...full.payloads.windowsX64, ...patch } } })
+    await assert.rejects(read(), localFailure(message))
+  }
+  assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+  await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
+})
+
+test('offline ZIPs use the existing product/core transactions, preflight and health rollback', { skip: process.platform !== 'win32' }, async t => {
+  const toolsRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-offline-update-tools-'))
+  t.after(() => rm(toolsRoot, { recursive: true, force: true }))
+  const extractor = path.join(toolsRoot, 'DSH-UpdateExtractor.exe')
+  await compileUpdateExtractor(extractor)
+  for (const [scope, capsule, healthy] of [['product', false, true], ['engine', true, true], ['engine', true, false], ['product', false, null]]) {
+    const fixture = await (capsule ? makeCapsuleUpdateFixture() : makeUpdateFixture())
+    try {
+      const archive = path.join(fixture.root, 'component.zip')
+      const input = path.join(fixture.root, 'offline.json')
+      await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', fixture.stagedRoot, '.'])
+      const bytes = await readFile(archive)
+      const components = JSON.parse(await readFile(path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json')))
+      components.releaseChannel = 'stable'
+      await writeFile(path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json'), JSON.stringify(components))
+      const metadataFile = path.join(fixture.stagedRoot, 'component.json')
+      await writeFile(metadataFile, JSON.stringify({ ...JSON.parse(await readFile(metadataFile)), releaseChannel: 'stable' }))
+      await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', fixture.stagedRoot, '.'])
+      const originalBytes = await readFile(archive)
+      const installedBefore = await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')
+      const manifest = updateManifest({ portableVersion: components.portableVersion, updateKind: scope, releaseChannel: 'stable',
+        platform: platformUpdateKey(), requiredShellSchema: components.shellSchema,
+        ...(capsule ? { requiredShellContract: 1, targetRuntimeLayout: 'capsule-v1' } : {}),
+        component: { kind: capsule ? 'dsh-runtime-capsule' : 'dsh-app', dshVersion: components.dshVersion, dshCommit: components.dshCommit,
+          requiredNodeVersion: components.nodeVersion, bytes: originalBytes.length, sha256: createHash('sha256').update(originalBytes).digest('hex'),
+          urls: ['https://example.invalid/component.zip'] } })
+      if (capsule) {
+        const installed = JSON.parse(installedBefore)
+        await writeFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ ...installed, shellContract: 1 }))
+        await writeFile(path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json'), JSON.stringify({ ...components, shellContract: 1 }))
+        await execFileAsync('tar.exe', ['-a', '-c', '-f', archive, '-C', fixture.stagedRoot, '.'])
+        const updatedBytes = await readFile(archive)
+        manifest.component.bytes = updatedBytes.length
+        manifest.component.sha256 = createHash('sha256').update(updatedBytes).digest('hex')
+      }
+      await writeOfflineManifest(input, manifest)
+      const update = await readLocalUpdate({ layout: fixture.layout, input, scope }, offlineVerification)
+      assert.equal(update.status, 'available')
+      if (healthy === null) await writeFile(archive, Buffer.alloc(manifest.component.bytes, 1))
+      const phases = []
+      const apply = () => installAvailableAppUpdate({ layout: fixture.layout, update,
+        download: parameters => copyVerifiedLocalComponent({ ...parameters, source: update.localArchive }),
+        extract: (file, destination) => extractUpdateArchive(file, destination, { windowsExtractor: extractor }),
+        preflight: async () => { phases.push('preflight'); return { warnings: [] } },
+        healthCheck: async () => { phases.push('health'); return healthy }, onProgress: event => phases.push(event.phase) })
+      if (healthy === null) {
+        await assert.rejects(apply(), /digest/i, 'changing a ZIP after preview still fails before extraction or replacement')
+        assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+        assert.equal(phases.includes('preflight'), false)
+        await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
+        continue
+      }
+      if (healthy) assert.equal((await apply()).status, 'updated')
+      else await assert.rejects(apply(), /rolled back/i)
+      assert.ok(phases.indexOf('preflight') < phases.indexOf('installing'))
+      assert.ok(phases.indexOf('health') > phases.indexOf('installing'))
+      if (capsule) {
+        assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), healthy ? fixture.newCapsule : fixture.oldCapsule)
+        assert.equal((await readInstalledUpdateState(fixture.layout)).portableVersion, '0.5.0-rc.1', 'core updates retain installed shell identity')
+      }
+      assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+      await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
+    } finally { await rm(fixture.root, { recursive: true, force: true }) }
+  }
+})
 
 test('mutable GitHub update metadata bypasses stale CDN entries without altering other downloads', () => {
   const url = defaultEngineUpdateIndexUrl('candidate', 'win32', 'x64', '0.6.9')

@@ -36,12 +36,14 @@ import {
 } from './portable-core.mjs'
 import {
   checkForUpdate,
+  copyVerifiedLocalComponent,
   deferUpdate,
   ignoreUpdate,
   installAvailableAppUpdate,
   listInstalledVersions,
   listProductVersions,
   readInstalledUpdateState,
+  readLocalUpdate,
   reconcilePreferredCore,
   recordPreferredCore,
   rollbackPendingAppUpdate,
@@ -477,7 +479,8 @@ let coreReconciled = false
 // A Portable upgrade starts on its bundled core. Put the core the user had chosen back before the host first runs
 // on their data, once per process (the restore itself starts the host again).
 async function reconcileCoreAtStart() {
-  if (coreReconciled || process.env.DSH_PORTABLE_SKIP_CORE_RECONCILE === '1') return
+  if (coreReconciled || process.env.DSH_PORTABLE_SKIP_CORE_RECONCILE === '1'
+    || (activeOptions?.command === 'update' && activeOptions.input)) return
   coreReconciled = true
   try {
     const outcome = await reconcilePreferredCore({
@@ -827,6 +830,10 @@ async function restoreData(options) {
 }
 
 async function checkUpdate(options) {
+  if (options.input) {
+    if (options.updateManifest) throw new Error('--input and --update-manifest cannot be combined.')
+    return readLocalUpdate({ layout, input: options.input, scope: options.updateScope })
+  }
   const selectedProduct = options.updateScope === 'product' && Boolean(options.updateManifest)
   let selectedVersion
   const testManifest = options.allowHttp && options.updateManifest
@@ -877,6 +884,7 @@ async function update(options) {
     const applied = await installAvailableAppUpdate({
       layout,
       update: available,
+      download: options.input ? parameters => copyVerifiedLocalComponent({ ...parameters, source: available.localArchive }) : undefined,
       allowHttp: options.allowHttp,
       beforeApply: async () => {
         reportProgress({ phase: 'stopping-current' })
@@ -925,7 +933,7 @@ async function update(options) {
     if (options.updateScope === 'engine' && applied.dshVersion) await recordPreferredCore(layout, applied.dshVersion).catch(() => {})
     return { ...applied, warnings: applied.warnings ?? [], running, browser }
   } catch (error) {
-    await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
+    if (!options.input) await deferUpdate(layout, { scope: options.updateScope }).catch(() => {})
     if (!stoppedForApply) throw error
     let recovery = null
     try {

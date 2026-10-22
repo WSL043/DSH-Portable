@@ -270,6 +270,7 @@ namespace DshPortableBootstrap
         internal const string OfflineDownloadUrl = "https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64-offline.zip";
 
         internal string ManifestUrl = DefaultManifestUrl;
+        internal string OfflineManifest;
         internal string Destination;
         internal string ResultFile;
         internal bool AllowHttp;
@@ -289,6 +290,7 @@ namespace DshPortableBootstrap
                 + "选项：\r\n"
                 + "  --destination <路径>  选择 DSH-Portable 保存位置\r\n"
                 + "  --no-launch           准备完成后不启动 DSH-Portable\r\n"
+                + "  --manifest-file <路径> 从本地签名清单和同目录 ZIP 离线安装\r\n"
                 + "  --help, -h, /?        显示此帮助\r\n\r\n"
                 + "不带选项启动时，可以在窗口中选择保存位置。",
                 "DSH-Portable downloader and updater\r\n\r\n"
@@ -296,6 +298,7 @@ namespace DshPortableBootstrap
                 + "Options:\r\n"
                 + "  --destination <path>  Choose where to keep DSH-Portable\r\n"
                 + "  --no-launch           Do not start DSH-Portable when ready\r\n"
+                + "  --manifest-file <path> Install using a local signed manifest and adjacent ZIP\r\n"
                 + "  --help, -h, /?        Show this help\r\n\r\n"
                 + "With no options, choose the destination in the window.");
         }
@@ -303,6 +306,7 @@ namespace DshPortableBootstrap
         internal static BootstrapOptions Parse(string[] args)
         {
             BootstrapOptions options = new BootstrapOptions();
+            bool remoteManifestExplicit = false;
             string executableDirectory = Path.GetDirectoryName(Application.ExecutablePath);
             options.Destination = Path.Combine(executableDirectory, "DSH-Portable");
 
@@ -329,7 +333,8 @@ namespace DshPortableBootstrap
                     if (theme != "dark" && theme != "light") throw new ArgumentException("--theme requires dark or light.");
                     options.DarkTheme = theme == "dark";
                 }
-                else if (argument == "--manifest") options.ManifestUrl = RequireValue(args, ref index, argument);
+                else if (argument == "--manifest") { options.ManifestUrl = RequireValue(args, ref index, argument); remoteManifestExplicit = true; }
+                else if (argument == "--manifest-file") options.OfflineManifest = Path.GetFullPath(RequireValue(args, ref index, argument));
                 else if (argument == "--destination")
                 {
                     options.Destination = RequireValue(args, ref index, argument);
@@ -342,6 +347,8 @@ namespace DshPortableBootstrap
             }
 
             options.Destination = Path.GetFullPath(options.Destination);
+            if (options.OfflineManifest != null && remoteManifestExplicit)
+                throw new ArgumentException("Choose either --manifest or --manifest-file.");
             return options;
         }
 
@@ -392,7 +399,8 @@ namespace DshPortableBootstrap
         internal async Task<BootstrapResult> ExecuteAsync(CancellationToken cancellationToken)
         {
             bool existingComplete = IsCompletePortable(options.Destination);
-            bool upgradeExisting = options.UpgradeExisting;
+            bool offline = !String.IsNullOrEmpty(options.OfflineManifest);
+            bool upgradeExisting = options.UpgradeExisting || (offline && existingComplete);
             string installedVersion = existingComplete ? ReadInstalledPortableVersion(options.Destination) : null;
             PortableManifest manifest = null;
             PortablePayload payload = null;
@@ -439,7 +447,7 @@ namespace DshPortableBootstrap
             if (Directory.Exists(options.Destination) && !upgradeExisting)
                 throw new InvalidOperationException(BootstrapText.L("目标目录已经存在但内容不完整。为避免覆盖数据，请删除该空目录或把下载器移到其他位置后重试。", "The destination folder exists but is incomplete. To protect your data, remove the empty folder or move the downloader elsewhere and try again."));
 
-            ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
+            if (!offline) ValidateRemoteUri(options.ManifestUrl, options.AllowHttp, "manifest");
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             string destinationParent = Path.GetDirectoryName(options.Destination);
@@ -455,13 +463,22 @@ namespace DshPortableBootstrap
                 if (manifest == null || payload == null)
                 {
                     reportStatus(BootstrapText.L("正在获取 DSH-Portable 版本信息…", "Getting DSH-Portable version information…"));
-                    manifest = await DownloadManifestAsync(options.ManifestUrl, cancellationToken).ConfigureAwait(false);
+                    manifest = offline ? ReadOfflineManifest(options.OfflineManifest)
+                        : await DownloadManifestAsync(options.ManifestUrl, cancellationToken).ConfigureAwait(false);
                     payload = ValidateManifest(manifest);
-                    ValidateRemoteUri(payload.Url, options.AllowHttp, "payload");
+                    ValidateRemoteUri(payload.Url, !offline && options.AllowHttp, "payload");
                 }
 
-                reportStatus(BootstrapText.L("正在下载运行环境，完成后可离线使用…", "Downloading the runtime for offline use…"));
-                await DownloadFileAsync(payload.Url, temporaryArchive, payload.Bytes, cancellationToken).ConfigureAwait(false);
+                if (offline)
+                {
+                    reportStatus(BootstrapText.L("正在读取本地更新包…", "Reading the local update package…"));
+                    await CopyOfflineArchiveAsync(payload, temporaryArchive, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    reportStatus(BootstrapText.L("正在下载运行环境，完成后可离线使用…", "Downloading the runtime for offline use…"));
+                    await DownloadFileAsync(payload.Url, temporaryArchive, payload.Bytes, cancellationToken).ConfigureAwait(false);
+                }
 
                 reportStatus(BootstrapText.L("正在验证下载内容…", "Verifying the download…"));
                 string actualHash = ComputeSha256(temporaryArchive);
@@ -1107,6 +1124,74 @@ namespace DshPortableBootstrap
             {
                 DataContractJsonSerializer serializer = new DataContractJsonSerializer(typeof(PortableManifest));
                 return (PortableManifest)serializer.ReadObject(stream);
+            }
+        }
+
+        private static void AssertOfflinePlainFile(string filename)
+        {
+            string current = Path.GetFullPath(filename);
+            bool leaf = true;
+            while (!String.IsNullOrEmpty(current))
+            {
+                FileAttributes attributes = File.GetAttributes(current);
+                if ((attributes & FileAttributes.ReparsePoint) != 0 || (leaf && (attributes & FileAttributes.Directory) != 0))
+                    throw new InvalidDataException("Offline update files cannot use redirected paths.");
+                leaf = false;
+                current = Path.GetDirectoryName(current);
+            }
+        }
+
+        private static byte[] ReadOfflineBytes(string filename, int limit)
+        {
+            AssertOfflinePlainFile(filename);
+            using (FileStream stream = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                if (stream.Length < 1 || stream.Length > limit) throw new InvalidDataException("Offline update metadata has an invalid size.");
+                byte[] bytes = new byte[(int)stream.Length];
+                int offset = 0;
+                while (offset < bytes.Length)
+                {
+                    int count = stream.Read(bytes, offset, bytes.Length - offset);
+                    if (count == 0) throw new EndOfStreamException("Offline metadata is incomplete.");
+                    offset += count;
+                }
+                return bytes;
+            }
+        }
+
+        private static PortableManifest ReadOfflineManifest(string filename)
+        {
+            byte[] bytes = ReadOfflineBytes(filename, 1024 * 1024);
+            string signature = Encoding.ASCII.GetString(ReadOfflineBytes(filename + ".sig", 256));
+            if (!UpdateMirrors.VerifySignature(bytes, signature))
+                throw new InvalidDataException(BootstrapText.L("离线清单签名无效；没有修改目标目录。", "The offline manifest signature is invalid. The destination was not changed."));
+            return ParseManifest(bytes);
+        }
+
+        private async Task CopyOfflineArchiveAsync(PortablePayload payload, string destination, CancellationToken cancellationToken)
+        {
+            string name = payload.Filename;
+            if (!String.Equals(name, Path.GetFileName(name), StringComparison.Ordinal)
+                || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name != name.Trim()
+                || !name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The offline archive filename is invalid.");
+            string source = Path.Combine(Path.GetDirectoryName(options.OfflineManifest), name);
+            AssertOfflinePlainFile(source);
+            using (FileStream input = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (FileStream output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                if (input.Length != payload.Bytes) throw new InvalidDataException("The offline archive size does not match its signed manifest.");
+                byte[] buffer = new byte[128 * 1024];
+                long total = 0;
+                int count;
+                while ((count = await input.ReadAsync(buffer, 0, buffer.Length, cancellationToken).ConfigureAwait(false)) != 0)
+                {
+                    total += count;
+                    if (total > payload.Bytes) throw new InvalidDataException("The offline archive exceeded its signed size.");
+                    await output.WriteAsync(buffer, 0, count, cancellationToken).ConfigureAwait(false);
+                    reportProgress(total, payload.Bytes);
+                }
+                if (total != payload.Bytes) throw new InvalidDataException("The offline archive is incomplete.");
             }
         }
 
