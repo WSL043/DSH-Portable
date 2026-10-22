@@ -217,7 +217,7 @@ namespace DshPortable
                 menu.Margin = new Padding(0, 4, 2, 4);
                 menu.Padding = new Padding(8, 0, 8, 0);
             }
-            AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("折叠/展开侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
+            AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("切换侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
             AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
             AddNavigationCommand(2, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
             desktopMenu.ShowItemToolTips = true;
@@ -237,7 +237,7 @@ namespace DshPortable
                 delegate { RequestDesktopRestart(); });
             AddDesktopCommand(file, "exit", L("退出", "Exit"), Keys.Control | Keys.Q,
                 delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
-            AddDesktopCommand(view, "reload", L("重新加载界面", "Reload interface"), Keys.Control | Keys.R,
+            AddDesktopCommand(view, "reload", L("重新加载", "Reload"), Keys.Control | Keys.R,
                 delegate { ScheduleWebViewRecovery(false, "desktop-menu"); });
             view.DropDownItems.Add(new ToolStripSeparator());
             AddDesktopCommand(view, "zoom-in", L("放大", "Zoom in"), Keys.Control | Keys.Oemplus,
@@ -247,26 +247,26 @@ namespace DshPortable
             AddDesktopCommand(view, "zoom-reset", L("实际大小", "Actual size"), Keys.Control | Keys.D0,
                 delegate { SetDesktopZoom(1); });
             view.DropDownItems.Add(new ToolStripSeparator());
-            AddDesktopCommand(view, "maximize", L("最大化或还原（保留任务栏）", "Maximize or restore (keep taskbar visible)"), Keys.None,
+            AddDesktopCommand(view, "maximize", L("最大化/还原", "Maximize / Restore"), Keys.None,
                 delegate { WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; });
-            AddDesktopCommand(view, "fullscreen", L("全屏（遮盖任务栏，Esc 退出）", "Full screen (cover taskbar, Esc to exit)"), Keys.F11,
+            AddDesktopCommand(view, "fullscreen", L("全屏", "Full screen"), Keys.F11,
                 delegate { SetDesktopFullscreen(!fullscreen); });
-            AddDesktopCommand(help, "product-update", L("检查 Portable 更新", "Check Portable updates"), Keys.None,
+            AddDesktopCommand(help, "product-update", L("Portable 更新", "Portable updates"), Keys.None,
                 async delegate { await CheckForDesktopUpdateAsync(true, "product"); });
-            AddDesktopCommand(help, "engine-update", L("检查内核更新", "Check core updates"), Keys.None,
+            AddDesktopCommand(help, "engine-update", L("内核更新", "Core updates"), Keys.None,
                 async delegate { await CheckForDesktopUpdateAsync(true, "engine"); });
             AddDesktopCommand(help, "product-file-update", L("从文件更新 Portable", "Update Portable from file"), Keys.None,
                 async delegate { await SelectOfflineUpdateAsync("product"); });
             AddDesktopCommand(help, "engine-file-update", L("从文件更新内核", "Update core from file"), Keys.None,
                 async delegate { await SelectOfflineUpdateAsync("engine"); });
-            AddDesktopCommand(help, "logs", L("打开日志文件夹", "Open logs folder"), Keys.None,
+            AddDesktopCommand(help, "logs", L("日志文件夹", "Logs folder"), Keys.None,
                 delegate { string directory = ResolveLauncherLogDirectory(); Directory.CreateDirectory(directory);
                     Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
             help.DropDownItems.Add(new ToolStripSeparator());
-            help.DropDownItems.Add(CreateExternalLinkItem(L("喜欢的话，点个 Star", "If you like it, leave a Star"),
+            help.DropDownItems.Add(CreateExternalLinkItem(L("项目主页", "Project page"),
                 "https://github.com/WSL043/DSH-Portable"));
             help.DropDownItems.Add(CreateReportProblemItem());
-            help.DropDownItems.Add(CreateExternalLinkItem(L("提出建议", "Suggest an idea"),
+            help.DropDownItems.Add(CreateExternalLinkItem(L("提出建议", "Suggest idea"),
                 "https://github.com/WSL043/DSH-Portable/discussions/new"));
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
             foreach (ToolStripMenuItem menu in desktopMenu.Items) AttachDesktopDropDownHandlers(menu);

@@ -290,7 +290,7 @@ namespace DshPortable
             engineUpdateCheckEnabled = LoadUpdateCheckEnabled("engineUpdateCheckEnabled");
             updateChannel = LoadUpdateChannel();
             taskNotificationsEnabled = LoadTaskNotificationsEnabled();
-            closeBehaviorItem = new ToolStripMenuItem(L("关闭窗口时", "When closing"));
+            closeBehaviorItem = new ToolStripMenuItem(L("关闭窗口时", "On close"));
             closeBehaviorItem.Click += delegate
             {
                 SaveCloseBehavior(closeBehavior == WindowCloseBehavior.Tray
@@ -298,11 +298,11 @@ namespace DshPortable
                     : WindowCloseBehavior.Tray);
                 RebuildTrayMenu();
             };
-            checkUpdateItem = new ToolStripMenuItem(L("检查 DSH-Portable 更新", "Check DSH-Portable updates"));
+            checkUpdateItem = new ToolStripMenuItem(L("Portable 更新", "Portable updates"));
             checkUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(true, "product"); };
-            checkEngineUpdateItem = new ToolStripMenuItem(L("检查 DSH 内核更新", "Check DSH core updates"));
+            checkEngineUpdateItem = new ToolStripMenuItem(L("内核更新", "Core updates"));
             checkEngineUpdateItem.Click += async delegate { await CheckForDesktopUpdateAsync(true, "engine"); };
-            automaticUpdateCheckItem = new ToolStripMenuItem(L("启动时检查更新", "Check for updates at startup"))
+            automaticUpdateCheckItem = new ToolStripMenuItem(L("启动检查更新", "Check at startup"))
             {
                 Checked = updateCheckEnabled,
                 CheckOnClick = false,

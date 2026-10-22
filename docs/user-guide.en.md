@@ -151,7 +151,7 @@ Synced hourly from qualified catalogs. Older and RC builds depend on in-app comp
 2. Put the launcher where you want to keep the product and run it. It prepares a complete `DSH-Portable` folder beside itself.
 3. Connect a model in the interface. Next time, run `DeepSeek-Herness.exe` inside that folder.
 
-The close button sends the app to the system tray by default, so an active task can keep running. To stop everything, use the native **File → Exit DeepSeek Harness** command first; on Windows, press `Ctrl+Q`. The tray's **Exit DeepSeek Harness** command is an alternate path.
+The close button sends the app to the system tray by default, so an active task can keep running. To stop everything, use the native **File → Exit** command first; on Windows, press `Ctrl+Q`. The tray's **Exit** command is an alternate path.
 
 ## Downloads
 
@@ -206,7 +206,7 @@ See the [offline deployment guide](docs/offline-deployment-acceptance.md) for pr
 
 See the [computer-to-computer migration guide](docs/move-between-computers.en.md) for the complete procedure, data-only packages, and a portability check that does not require a second computer.
 
-1. Use **File → Exit DeepSeek Harness** first; on Windows, press `Ctrl+Q`, or choose the tray's alternate **Exit DeepSeek Harness** command, and wait for the window and tray icon to disappear.
+1. Use **File → Exit** first; on Windows, press `Ctrl+Q`, or choose the tray's alternate **Exit** command, and wait for the window and tray icon to disappear.
 2. Copy the entire `DSH-Portable` folder to a new location with the same OS and architecture.
 3. Run `DeepSeek-Herness.exe` from that location.
 
@@ -261,7 +261,7 @@ Startup uses one native logo, loading indicator, and phase description until the
 | Close window / quit | `Ctrl+W` / `Ctrl+Q` |
 | Open File / View / Help | `Alt+F` / `Alt+V` / `Alt+H` |
 
-Leaving full screen restores the previous window bounds and maximized state. Outside full screen, `Esc` remains available to page dialogs. To quit completely, use the File menu's **Exit DeepSeek Harness** command first; the tray exit command is an alternate path. Help provides product and core update checks, the logs folder, and issue reporting.
+Leaving full screen restores the previous window bounds and maximized state. Outside full screen, `Esc` remains available to page dialogs. To quit completely, use the File menu's **Exit** command first; the tray exit command is an alternate path. Help provides product and core update checks, the logs folder, and issue reporting.
 
 ## Updates and repair
 
@@ -280,7 +280,7 @@ Leaving full screen restores the previous window bounds and maximized state. Out
 
 The core list contains qualified versions compatible with the installed shell. Packages declaring `requiredShellContract` match by interface version, while Node, runtime layout and updater requirements are still checked. Older packages without that field require the exact Portable version and shell fingerprint. See the [shell contract](docs/shell-contract.md).
 
-The maintenance build adds **Update from file** under Settings → Updates in Windows Native hosts advertising that capability. Choose the original signed Portable or core manifest and keep its matching `.sig` and ZIP in the same directory. Failed verification never downloads a replacement. Older hosts need a shell upgrade before this entry becomes available. See [offline updates](docs/offline-updates.md) for package types and commands. This capability has not shipped in a release yet.
+The maintenance build adds **Update Portable/core from file** to the Windows Native Help menu. Newer Settings → Updates pages also offer this action; the native menu remains available after switching to a core with an older settings page. Choose the original signed manifest and keep its matching `.sig` and ZIP in the same directory. Failed verification never downloads a replacement. Older hosts need a shell upgrade before this entry becomes available. See [offline updates](docs/offline-updates.md) for package types and commands. This capability has not shipped in a release yet.
 
 - **Settings → Portable** provides checks, repair, and a redacted support report. Startup traces and desktop/backend health samples are grouped by launch in `data/logs/history/`. Retention defaults to the latest 30 runs within 14 days, capped at 32 MiB; each log rotates at 128 KiB. Support reports include redacted launch history and explicitly mark truncation when the export budget is reached; retained local history remains available for further investigation. Attach that report for slow or failed launches instead of sending raw logs that may contain login tokens. Repair keeps user data and rebuilds only reproducible components.
 

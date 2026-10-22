@@ -301,12 +301,13 @@ try {
     $ZhNew = -join ([char[]]@(0x65B0, 0x4F1A, 0x8BDD))
     $ZhTerminal = 'DSH ' + (-join ([char[]]@(0x7EC8, 0x7AEF)))
     $ZhFeedback = -join ([char[]]@(0x53CD, 0x9988, 0x95EE, 0x9898))
-    $ZhExit = (-join ([char[]]@(0x9000, 0x51FA))) + ' DeepSeek Harness'
-    $ZhRestore = -join ([char[]]@(0x6062, 0x590D, 0x539F, 0x751F, 0x7A97, 0x53E3, 0x680F))
+    $ZhOpen = -join ([char[]]@(0x6253, 0x5F00))
+    $ZhExit = -join ([char[]]@(0x9000, 0x51FA))
+    $ZhRestore = -join ([char[]]@(0x6062, 0x590D, 0x7A97, 0x53E3, 0x680F))
 
     foreach ($Case in @(
-        @{ Locale = 'en'; Theme = 'light'; Restore = 'Restore native window bar'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Terminal = 'DSH Terminal'; Feedback = 'Report a problem'; Exit = 'Exit DeepSeek Harness' },
-        @{ Locale = 'zh'; Theme = 'dark'; Restore = $ZhRestore; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = $ZhTerminal; Feedback = $ZhFeedback; Exit = $ZhExit }
+        @{ Locale = 'en'; Theme = 'light'; Open = 'Open'; Restore = 'Restore window bar'; Running = 'Running'; Waiting = 'Needs input'; Completed = 'Completed'; More = 'More'; New = 'New session'; Terminal = 'DSH Terminal'; Feedback = 'Report issue'; Exit = 'Exit' },
+        @{ Locale = 'zh'; Theme = 'dark'; Open = $ZhOpen; Restore = $ZhRestore; Running = $ZhRunning; Waiting = $ZhWaiting; Completed = $ZhCompleted; More = $ZhMore; New = $ZhNew; Terminal = $ZhTerminal; Feedback = $ZhFeedback; Exit = $ZhExit }
     )) {
         Set-Property $StateType $State 'locale' $Case.Locale
         Set-Property $StateType $State 'theme' $Case.Theme
@@ -328,7 +329,7 @@ try {
         $Menu = [Windows.Forms.ContextMenuStrip]$WindowType.GetField('trayMenu', $AllFields).GetValue($Window)
 
         if ($Menu.Items.Count -ne 11) { throw "The tray menu must expose exactly eleven bounded rows for $($Case.Locale)" }
-        if ($Menu.Items[0].Text -notmatch 'DeepSeek Harness') { throw "Open command must be the first root item for $($Case.Locale)" }
+        if ($Menu.Items[0].Text -ne $Case.Open) { throw "Open command must be the first root item for $($Case.Locale)" }
         if ($Menu.Items[1].Text -ne $Case.Restore) { throw "Native window recovery must be the second root item for $($Case.Locale)" }
         if ($Menu.Items[2] -isnot [Windows.Forms.ToolStripSeparator]) { throw "Open command separator is missing for $($Case.Locale)" }
         if ($Menu.Items[3].ShortcutKeyDisplayString.Trim() -ne $Case.Running) { throw "Running state is missing for $($Case.Locale)" }

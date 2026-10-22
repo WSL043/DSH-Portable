@@ -123,7 +123,7 @@ namespace DshPortable
 
         private ToolStripMenuItem CreateOpenItem()
         {
-            return new ToolStripMenuItem(L("打开 DeepSeek Harness", "Open DeepSeek Harness"), null, delegate { RestoreFromTray(); });
+            return new ToolStripMenuItem(L("打开", "Open"), null, delegate { RestoreFromTray(); });
         }
 
         private void ConfigureDesktopLoadingSurface(string message, bool showDetail)
@@ -210,7 +210,7 @@ namespace DshPortable
 
         private ToolStripMenuItem CreateExitItem()
         {
-            return new ToolStripMenuItem(L("退出 DeepSeek Harness", "Exit DeepSeek Harness"), null, delegate
+            return new ToolStripMenuItem(L("退出", "Exit"), null, delegate
             {
                 if (!shutdownRunning) BeginDesktopShutdown();
             });
@@ -218,7 +218,7 @@ namespace DshPortable
 
         private ToolStripMenuItem CreateReportProblemItem()
         {
-            return CreateExternalLinkItem(L("反馈问题", "Report a problem"),
+            return CreateExternalLinkItem(L("反馈问题", "Report issue"),
                 "https://github.com/WSL043/DSH-Portable/issues/new/choose");
         }
 
@@ -236,22 +236,22 @@ namespace DshPortable
                 return;
             }
 
-            closeBehaviorItem.Text = L("关闭窗口时", "When closing");
+            closeBehaviorItem.Text = L("关闭窗口时", "On close");
             checkUpdateItem.Text = updateCheckRunning
                 ? L("正在检查…", "Checking…")
-                : L("检查 DSH-Portable 更新", "Check DSH-Portable updates");
+                : L("Portable 更新", "Portable updates");
             checkUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
             checkEngineUpdateItem.Text = updateCheckRunning
                 ? L("正在检查…", "Checking…")
-                : L("检查 DSH 内核更新", "Check DSH core updates");
+                : L("内核更新", "Core updates");
             checkEngineUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
             RefreshAutomaticUpdateCheckItem();
             RefreshTaskNotificationsItem();
             closeBehaviorItem.Checked = false;
             closeBehaviorItem.ShowShortcutKeys = true;
             closeBehaviorItem.ShortcutKeyDisplayString = closeBehavior == WindowCloseBehavior.Tray
-                ? L("最小化到托盘", "Minimize to tray")
-                : L("退出程序", "Exit application");
+                ? L("移至托盘", "To tray")
+                : L("退出", "Exit");
             // Detach persistent commands before disposing generated menus.
             // Items.Clear() alone leaves dropdowns and their native resources alive.
             foreach (ToolStripItem persistent in new ToolStripItem[] {
@@ -270,7 +270,7 @@ namespace DshPortable
 
             trayMenu.Items.Add(CreateOpenItem());
             if (desktopStart) trayMenu.Items.Add(new ToolStripMenuItem(
-                L("恢复原生窗口栏", "Restore native window bar"), null, delegate { RestoreNativeWindowBar(); }));
+                L("恢复窗口栏", "Restore window bar"), null, delegate { RestoreNativeWindowBar(); }));
             if (trayBridgeReady)
             {
                 trayMenu.Items.Add(new ToolStripSeparator());
@@ -320,7 +320,7 @@ namespace DshPortable
 
         private void RefreshAutomaticUpdateCheckItem()
         {
-            automaticUpdateCheckItem.Text = L("启动时检查更新", "Check for updates at startup");
+            automaticUpdateCheckItem.Text = L("启动检查更新", "Check at startup");
             automaticUpdateCheckItem.Checked = false;
             automaticUpdateCheckItem.ShowShortcutKeys = true;
             automaticUpdateCheckItem.ShortcutKeyDisplayString = updateCheckEnabled && engineUpdateCheckEnabled
