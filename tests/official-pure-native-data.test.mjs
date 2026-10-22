@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { gunzipSync, gzipSync, zstdCompressSync, zstdDecompressSync } from 'node:zlib'
@@ -12,7 +12,7 @@ import { importNativeData } from '../experiments/official-payload/import-native-
 const hash = value => createHash('sha256').update(value).digest('hex')
 
 test('Native archive restores history, nested workspace records and settings into fresh desktop data without profiles or credentials', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'pure-native-data-'))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'pure-native-data-')))
   t.after(() => rm(root, { recursive: true, force: true }))
   const source = layoutForRoot(path.join(root, 'old-native'))
   const desktop = path.join(root, 'desktop')
@@ -57,7 +57,7 @@ test('Native archive restores history, nested workspace records and settings int
 })
 
 test('migration refuses used targets, redirected roots and damaged packages without replacing user files', async t => {
-  const root = await mkdtemp(path.join(tmpdir(), 'pure-native-boundary-'))
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'pure-native-boundary-')))
   t.after(() => rm(root, { recursive: true, force: true }))
   const source = layoutForRoot(path.join(root, 'source'))
   await mkdir(source.dshHome, { recursive: true })
