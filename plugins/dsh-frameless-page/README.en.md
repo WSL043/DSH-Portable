@@ -7,7 +7,7 @@ The plugin picks one of two modes automatically:
 1. **Native frameless (recommended, needs the patched shell)** — the shell hides its native title strip, the web surface fills the whole window, the plugin draws a 44px title bar (identity at left, 50% grab region in the middle, minimize/maximize/close at right) and dragging the grab region moves the **real OS window** (`ReleaseCapture + WM_NCLBUTTONDOWN/HTCAPTION`). Window state (maximized/fullscreen) is synced through `window-state` messages.
 2. **Overlay fallback (stock 0.9.4 shell)** — without the `windowChrome` capability the native path is disabled and the old in-window draggable overlay page is used instead, so a window without a title bar can never appear.
 
-![Native frameless window (isolated test environment)](shots/native/native-16-after-real-drag.png)
+![Native frameless window (isolated test environment)](shots/island/island-32-expanded.png)
 
 - Entry: orbit icon at the bottom of the left sidebar, or `Ctrl+Alt+G`. Auto-opens once on first install (overlay mode).
 - The grab region is exactly 50% of the title bar's content width (side zones are 25% each); native mode measured 413.12 / 826.24 = 0.5000.
