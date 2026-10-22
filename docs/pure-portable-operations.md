@@ -1,63 +1,52 @@
 # 纯便携版通道运维
 
-## 自动化边界
+2026-10-23 更新。适用于 `experiments/official-payload/` 当前开发代码；旧 alpha 的安装说明和历史批次保留各自日期。当前状态与证据见 [维护记录](one-x-maintenance-2026-10-23.md)。
 
-- `official-desktop-channel.yml` 每小时读取官方 feed；版本和摘要已在索引中时不运行 Windows 验收。
-- 新身份先验证官方安装包大小、SHA-512、Authenticode 发布者及 NSIS 展开，再依次通过阶段 1 更新契约哨兵和阶段 2 的真实旧版到新版升级验收。
-- 仅两个门槛都报告 `overallPassed: true` 才生成并发布索引、`nightly.yml` 与启动器副本。用户仍从官方更新界面升级，程序下载官方安装包。
-- `official-pure-alpha.yml` 只在手动 dispatch 后打包、解压冒烟并更新 `v1.0.0-alpha.5` 草稿；不会替代稳定 Native 线。
-- alpha.5 随包预装 `dsh-image-viewer@0.1.8` 与 `dsh-chat-manager@1.5.8`，两个插件默认关闭。源码仓库与固定提交、期望版本集中在 `.github/workflows/official-pure-alpha.yml` 顶部 `env`；升级时同步更新对应的 `*_COMMIT` 与 `*_VERSION`，工作流会断言各自 `package.json` 版本，并按插件 CI 的构建/打包步骤生成 tgz。
-- alpha.5 的 CI 冒烟要求首次启动成功、第二次启动完成两个插件播种并保持健康，之后用官方 `--dump-config` 检查关闭状态及整根搬动后的相对路径。配置和本地证据不等于 GitHub Windows runner 验收；CI 运行前不宣称通过。
-- 这些工作流目前等待 GitHub Windows runner 首次验证；配置存在不代表阶段 3 已验收。
+## 先验收，发布另行授权
 
-## 完整包与轻量包
+当前 `official-desktop-channel.yml` 在线状态为 **disabled_manually**。本轮不启用、不发布、不修改公开索引。手动运行的两个发布开关默认均为 false；计划任务的原发布路径仍存在，不能把手动默认安全等同允许重新启用定时任务。
 
-- 完整包保留已展开的 `app/<版本>/`，适合离线复制；新增的 `-Bootstrap` 轻量包省略官方桌面与 `current.json`，携带启动器、更新引擎、`follow.json`、`bootstrap.json`、7-Zip 和同一组可选插件种子。CI 必须断言无应用版本目录、无 `current.json`，并检查解压后体积小于 40 MiB。
-- 首次启动使用生产 `follow.json` 的索引选出最新已验收版本，再从官方 `download.deepseek.com` 下载。下载状态位于 `data/launcher/update-status.json`；`.part` 文件仅按 HTTP Range 续传，Range 不受支持时从头开始，SHA-512 或大小错误时丢弃部分文件。离线机器应使用完整包。
-- Windows CI 的轻量冒烟必须实际完成首次安装、官方页面渲染与正常退出，再运行第二次启动插件播种、disabled `--dump-config` 和搬根检查。静态检查、下载接受或绿色的非真实 runner 任务都不构成官方成品验收。
-- Bootstrap 标记在成功安装后保留；后续启动只检查 `current.json` 与应用文件是否完整，已安装根按原路径启动，不弹安装窗口。
-
-## 需要人工介入的情况
-
-- 更新契约哨兵或完整 E2E 失败；检查对应 workflow artifact 和运行日志。
-- 收到 `Official desktop <version> did not qualify` issue；同版本后续失败会评论到原 issue。
-- 官方改变 feed、NSIS 文件布局、`app-update.yml`、签名发布者、数据目录语义或更新器调用形状。通道不会因验收失败而前进。
-- 发现同版本官方安装包摘要/大小改变时，停止发布并由维护者核查，不得覆盖旧身份。
-
-## 冻结、回退与撤回
-
-紧急冻结：删除更新 feed 资产，现有客户端不会看到新的通道版本：
+仅验收的示例（先提交并推送待验分支，`<branch>` 替换为实际分支）：
 
 ```powershell
-gh release delete-asset update-channel-desktop nightly.yml --yes
+gh workflow run official-pure-alpha.yml --ref <branch> -f alpha=99 -f smoke=all -f publish_draft=false
+gh workflow run official-pure-e2e.yml --ref <branch> -f candidate_version=0.2.1-rc.2
 ```
 
-恢复或回退最新一个版本：先下载索引，再移除最高版本并选出剩余最新版本（要求至少两条）：
+第一条使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签。第二条由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
+
+`candidate.json` 的旧版本是跨版本 E2E 输入，不是过时的生产版本锁，不能随源码基线刷新一起覆盖。
+
+## 门槛和证据
+
+1. 下载前核对官方候选来源；下载后验证完整大小、SHA-512、有效 Authenticode 与 DeepSeek 发布者，安全展开 NSIS。
+2. 更新契约哨兵用真实官方界面验证 updater 交接；完整 E2E 验证旧到新、搬迁、插件操作、退出及写入边界。完整包与轻量包还须各自启动和搬迁。
+3. 从实际冒烟根的 ASAR 收集安全报告。旧 `0.2.0-rc.2` 中 MCP 为 2.0.0，新 `0.2.1-rc.2` 为 2.2.0，均受当前 MCP 公告影响；运行成功仍标为 security blocked。
+4. 发布入口先验证共享 CLI 的报告绑定：同一 repository/run/attempt/source/candidate、实际 ASAR 大小/摘要、原报告与复核报告摘要、包摘要以及严格布尔资格。`--report-only` 返回 0 不授予发布资格。
+5. 历史版本的启动器资产不可重建覆盖。只生成本次候选的副本；已有同名不同摘要资产必须拒绝，禁止用 mutable 模式绕过。
+
+检查安全债的只读命令：
 
 ```powershell
-New-Item -ItemType Directory -Force build/orch-080/channel-rollback | Out-Null
-gh release download update-channel-desktop --pattern index.json --dir build/orch-080/channel-rollback
-node --input-type=module -e "import fs from 'node:fs';const d='build/orch-080/channel-rollback/';const i=JSON.parse(fs.readFileSync(d+'index.json','utf8'));if(i.versions.length<2)throw Error('no rollback version');i.versions.pop();fs.writeFileSync(d+'index.json',JSON.stringify(i,null,2)+'\n');fs.writeFileSync(d+'candidate.json',JSON.stringify(i.versions.at(-1),null,2)+'\n')"
-$v = node -p "JSON.parse(require('fs').readFileSync('build/orch-080/channel-rollback/candidate.json','utf8')).version"
-gh release download update-channel-desktop --pattern "deepseek-harness-$v-win-x64.exe" --dir build/orch-080/channel-rollback
-node experiments/official-payload/channel/build-channel.mjs --index build/orch-080/channel-rollback/index.json --candidate build/orch-080/channel-rollback/candidate.json --launcher "build/orch-080/channel-rollback/deepseek-harness-$v-win-x64.exe" --output build/orch-080/channel-rollback/generated
-node scripts/upload-release-assets.mjs update-channel-desktop build/orch-080/channel-rollback/generated/index.json build/orch-080/channel-rollback/generated/nightly.yml --mutable
+node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/resources/app.asar' --output security.json
 ```
 
-撤回任意一个已发布版本（示例 `0.2.0-rc.3`）：
+已知受影响、未知版本、缺清单、完整性错误均非零退出。诊断时可加 `--report-only` 保留 JSON，报告仍为 blocked。此工具只覆盖报告所列公告，不替代其他发布验收。
 
-```powershell
-$env:RETRACT_VERSION = '0.2.0-rc.3'
-node --input-type=module -e "import fs from 'node:fs';const d='build/orch-080/channel-rollback/';const i=JSON.parse(fs.readFileSync(d+'index.json','utf8'));const n=i.versions.length;i.versions=i.versions.filter(x=>x.version!==process.env.RETRACT_VERSION);if(i.versions.length===n||!i.versions.length)throw Error('version absent or no rollback target');fs.writeFileSync(d+'index.json',JSON.stringify(i,null,2)+'\n');fs.writeFileSync(d+'candidate.json',JSON.stringify(i.versions.at(-1),null,2)+'\n')"
-$v = node -p "JSON.parse(require('fs').readFileSync('build/orch-080/channel-rollback/candidate.json','utf8')).version"
-gh release download update-channel-desktop --pattern "deepseek-harness-$v-win-x64.exe" --dir build/orch-080/channel-rollback
-node experiments/official-payload/channel/build-channel.mjs --index build/orch-080/channel-rollback/index.json --candidate build/orch-080/channel-rollback/candidate.json --launcher "build/orch-080/channel-rollback/deepseek-harness-$v-win-x64.exe" --output build/orch-080/channel-rollback/generated
-node scripts/upload-release-assets.mjs update-channel-desktop build/orch-080/channel-rollback/generated/index.json build/orch-080/channel-rollback/generated/nightly.yml --mutable
-```
+## 程序、数据与清理
 
-## 启动器与用户机器边界
+完整包包含官方 `app/<version>/`；轻量包无应用版本目录和 `current.json`，解压后上限 40 MiB，首次联网安装。默认不播种 Portable 插件；可选种子实现保留供显式配置使用。
 
-- 只在修复启动、更新、回退、协议转交缺陷或官方契约变化时发布新启动器；普通官方桌面版本由通道自动复用当前启动器跟进。
-- 便携根目录外的已知写入只有 `%LOCALAPPDATA%\<updaterCacheDirName>\pending`（官方更新器保存的启动器副本/缓存）以及当前用户 `HKCU\Software\Classes\dsh\shell\open\command`（运行期间临时接管，退出还原）。应用数据、下载暂存、日志与版本目录在便携根目录。
-- 官方固定端口 `19387` 不允许已安装版、另一 Portable 实例同时运行；启动器只提示，不结束其他进程。`dsh://` 由运行中的启动器接管并在退出时恢复。
-- 当前实现仍待 GitHub CI 的安装包下载/验签/展开、完整双阶段验收、Release 回读及 alpha.4 解压冒烟；不得据此声称架构或通道已验收。
+应用状态位于 `data/dsh-home`、`data/agents`、`data/electron` 和 `data/cache/native-addons`。用户主动选择的外部工作区仍是外部文件。官方 updater 的专用缓存和运行期间临时 `HKCU\Software\Classes\dsh` 注册是已知根外边界；退出须核对注册表恢复。当前 E2E 对全局 `.dsh`、`.agents` 和默认 Electron profile 的写入作失败判定；不能把有限探针描述为全盘零写入证明。
+
+旧官方包有固定端口 19387；本轮新成品实测使用动态端口。启动器仍保留跨旧版本的冲突保护，不结束外来进程。动态端口也不等于任意多实例已经验收。
+
+更新成功后，仅完整树摘要与收据匹配的更旧程序允许自动清理；当前/上一版本、旧格式收据、未知或改动目录保留。锁定、路径异常或清理失败记录 deferred，不能回滚已提交更新。崩溃遗留的 `.partial` 和目标冲突仍拒绝覆盖，保留日志并人工核实。
+
+本地构建和验收临时副本完成后移回收站并验证可恢复记录；失败运行只保留日志。不要复用没有回收记录的旧清理 helper，不对原便携目录运行清理。CI 使用一次性 runner。
+
+## 故障处理
+
+先保留失败运行的 JSON、日志和精确成品摘要，区分安装包身份、契约、运行、写入和安全门槛。不得通过关闭验签、修改官方 ASAR、放宽安全布尔值、覆盖旧资产或伪造 runner 环境来取得绿色状态。
+
+需要冻结或撤回公开通道时，先回读并备份当前索引/资产，明确目标身份和用户影响，另行授权后操作。本文不再提供脱离当前索引和不可变规则的直接发布命令。

@@ -26,9 +26,10 @@ test('retention requires complete-tree ownership and preserves modified, unknown
       Import-Module ${quote(payload)} -Force -DisableNameChecking;
       $app=Join-Path ${quote(fixture)} 'app'; $receipts=Join-Path ${quote(fixture)} 'receipts';
       $null=New-Item -ItemType Directory -Path $receipts -Force;
-      foreach($v in @('0.1.0','0.2.0','0.3.0','0.4.0','0.5.0','1.0.0','2.0.0')) {
+      foreach($v in @('0.1.0','0.2.0','0.3.0','0.4.0','0.5.0','0.6.0','1.0.0','2.0.0')) {
         $d=Join-Path $app $v; $null=New-Item -ItemType Directory -Path $d -Force;
         [IO.File]::WriteAllText((Join-Path $d 'marker.txt'),$v);
+        if($v -eq '0.6.0') { [IO.File]::WriteAllText((Join-Path $d 'a-first.txt'),'must survive a later sharing failure') }
         if($v -ne '0.3.0') {
           @{version=$v;payloadTreeSha256=(Get-PortablePayloadTreeHash $d)}|ConvertTo-Json|Set-Content (Join-Path $receipts ($v+'.json'));
         }
@@ -39,14 +40,20 @@ test('retention requires complete-tree ownership and preserves modified, unknown
       [IO.File]::WriteAllText((Join-Path $outside 'marker.txt'),'outside');
       $null=New-Item -ItemType Junction -Path (Join-Path $app '0.2.0/link') -Target $outside;
       $held=[IO.File]::Open((Join-Path $app '0.5.0/marker.txt'),'Open','Read','None');
-      try { $plan=Remove-OwnedOlderPayloads $app $receipts '2.0.0' '1.0.0' } finally { $held.Dispose() }
-      @{plan=$plan; remaining=@((Get-ChildItem $app -Directory).Name); outside=[IO.File]::ReadAllText((Join-Path $outside 'marker.txt')); legacyReceipt=(Test-Path (Join-Path $receipts '0.4.0.json'))}|ConvertTo-Json -Depth 5 -Compress;
+      $readHeld=[IO.File]::Open((Join-Path $app '0.6.0/marker.txt'),'Open','Read','Read');
+      try { $plan=Remove-OwnedOlderPayloads $app $receipts '2.0.0' '1.0.0' } finally { $held.Dispose(); $readHeld.Dispose() }
+      $remaining=@((Get-ChildItem $app -Directory).Name); $sharingFiles=@((Get-ChildItem (Join-Path $app '0.6.0') -File).Name);
+      $retry=Remove-OwnedOlderPayloads $app $receipts '2.0.0' '1.0.0';
+      @{plan=$plan; remaining=$remaining; sharingFiles=$sharingFiles; retry=$retry; outside=[IO.File]::ReadAllText((Join-Path $outside 'marker.txt')); legacyReceipt=(Test-Path (Join-Path $receipts '0.4.0.json'))}|ConvertTo-Json -Depth 5 -Compress;
     `));
     assert.deepEqual(result.plan.removed, ['0.1.0']);
-    assert.deepEqual(result.remaining.sort(), ['0.2.0', '0.3.0', '0.4.0', '0.5.0', '1.0.0', '2.0.0']);
+    assert.deepEqual(result.remaining.sort(), ['0.2.0', '0.3.0', '0.4.0', '0.5.0', '0.6.0', '1.0.0', '2.0.0']);
     assert.equal(result.outside, 'outside');
     assert.equal(result.legacyReceipt, true);
     assert.ok(result.plan.deferred.includes('0.5.0'));
+    assert.ok(result.plan.deferred.includes('0.6.0'));
+    assert.deepEqual(result.sharingFiles.sort(), ['a-first.txt', 'marker.txt'], 'a read-shared lock must not leave a partially deleted tree');
+    assert.ok(result.retry.removed.includes('0.6.0'), 'after the reader closes, the unchanged tree must remain eligible for cleanup');
   } finally { await rm(fixture, { recursive: true, force: true }); }
 });
 

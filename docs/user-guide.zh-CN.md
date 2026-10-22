@@ -157,7 +157,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 ## 下载
 
-[1.0 开发路线 · 官方 Electron 成品便携化](experiments/official-payload/README.md)：仍在探索阶段，Alpha 保留为开发构建和草稿，不列入公开 Releases。日常使用请选择下面的稳定版。
+[1.0 开发路线 · 官方 Electron 成品便携化](experiments/official-payload/README.md)：已有仅 Windows 的 [alpha.5 公开预览](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，不是 0.x 的升级路径。后续开发代码与该旧包不同，本轮仅维护验收、不发布；当前安全债和限制见[维护记录](docs/one-x-maintenance-2026-10-23.md)。日常使用请选择下面的稳定版。
 
 ### Windows
 

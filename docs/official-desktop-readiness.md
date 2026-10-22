@@ -1,5 +1,13 @@
 # 官方桌面适配准备 / Official desktop readiness
 
+## 2026-10-23 有限源码复审与成品核实
+
+已将源码观察基线从 `c291e7961a515f6d7af9304e7fd1d257929aef26` 更新到 `687f282e8625c6b8d11ff58211a90524be2e4317`：复审 37 个与 Portable 边界直接相关的文件，并扩展 shared packages 与锁文件监控。重点包括独立 agents home、动态端口、官方插件 slots/Discover、插件兼容和更新协调器。相隔 5,884 提交，这不是全仓库安全审计或成品交付资格。
+
+Windows/macOS ARM nightly 为 0.2.1-rc.2，macOS Intel 为 0.2.1-rc.1，stable/latest feed 尚不存在。Windows 完整包摘要和有效官方签名已核对；实际 ASAR 的 MCP client/core 是 2.2.0，命中已知公告并阻断发布。成品内嵌 build SHA 不能映射到此次公开源码提交，不把源码推断当成实物事实。当前有限证据、本轮改动与未完成验收见 [维护记录](one-x-maintenance-2026-10-23.md)。
+
+下文保留历史决策；旧 alpha 的补丁、默认插件、固定端口与“无扩展点”等判断不能直接套用当前开发线。
+
 2026-09-14。工程决策与源码证据，不是成品兼容声明。
 
 当前完整设计以 [2026-09-26 长期架构](portable-long-term-architecture.md)为准：官方 Desktop 负责通用桌面能力，Portable 收敛到环境交付、搬迁、更新恢复与空间生命周期；下列早期决定按日期保留，不作为并列的当前指令。

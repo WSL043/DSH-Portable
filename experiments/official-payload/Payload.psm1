@@ -256,6 +256,16 @@ function Remove-OwnedOlderPayloads([string]$AppRoot, [string]$ReceiptRoot, [stri
             $receipt = Get-Content -LiteralPath $receiptPath -Raw -ErrorAction Stop | ConvertFrom-Json
             if ($receipt.version -cne $name -or $null -eq $receipt.PSObject.Properties['payloadTreeSha256'] -or [string]$receipt.payloadTreeSha256 -cnotmatch '^[0-9a-f]{64}$') { $result.preserved += $name; continue }
             if ((Get-PortablePayloadTreeHash $directory) -cne [string]$receipt.payloadTreeSha256) { $result.preserved += $name; continue }
+            # A reader may allow hashing but forbid deletion. Detect existing sharing locks
+            # before removing any file, otherwise a partial tree can no longer match its receipt.
+            # This is a quiescence preflight, not protection against concurrent local mutation.
+            $probes = New-Object 'System.Collections.Generic.List[System.IDisposable]'
+            try {
+                foreach ($file in Get-ChildItem -LiteralPath $directory -Recurse -File -Force -ErrorAction Stop) {
+                    Assert-PlainPath $file.FullName
+                    $probes.Add([IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::None))
+                }
+            } finally { foreach ($probe in $probes) { $probe.Dispose() } }
             Remove-PortableScratch $directory $AppRoot
             Remove-Item -LiteralPath $receiptPath -Force -ErrorAction Stop
             $result.removed += $name
