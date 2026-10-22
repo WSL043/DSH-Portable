@@ -255,6 +255,10 @@ namespace DshPortable
                 async delegate { await CheckForDesktopUpdateAsync(true, "product"); });
             AddDesktopCommand(help, "engine-update", L("检查内核更新", "Check core updates"), Keys.None,
                 async delegate { await CheckForDesktopUpdateAsync(true, "engine"); });
+            AddDesktopCommand(help, "product-file-update", L("从文件更新 Portable", "Update Portable from file"), Keys.None,
+                async delegate { await SelectOfflineUpdateAsync("product"); });
+            AddDesktopCommand(help, "engine-file-update", L("从文件更新内核", "Update core from file"), Keys.None,
+                async delegate { await SelectOfflineUpdateAsync("engine"); });
             AddDesktopCommand(help, "logs", L("打开日志文件夹", "Open logs folder"), Keys.None,
                 delegate { string directory = ResolveLauncherLogDirectory(); Directory.CreateDirectory(directory);
                     Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });

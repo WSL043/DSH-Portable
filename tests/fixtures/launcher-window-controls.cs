@@ -50,6 +50,9 @@ internal static class WindowControlsFixture
             Application.DoEvents();
             ToolStrip bar = (ToolStrip)type.GetField("desktopMenu", Private).GetValue(form);
             Control content = (Control)type.GetField("desktopContent", Private).GetValue(form);
+            ToolStripMenuItem help = (ToolStripMenuItem)bar.Items["menu-help"];
+            Check(help.DropDownItems["product-file-update"] != null && help.DropDownItems["engine-file-update"] != null,
+                "offline entry remains in the native shell when switching to a core with an older page bridge");
             Check(bar.Parent == form && bar.Visible && content.Top >= bar.Bottom, "default native layout");
             message("chrome", true);
             Check(bar.Parent == form && !bar.Visible && content.Top == 0, "page handshake releases title height");

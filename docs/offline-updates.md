@@ -23,11 +23,11 @@
 命令行沿用现有命令（以下在 Portable 根目录执行）：
 
 ```powershell
-.\runtime\node\node.exe .\launcher\portable-cli.mjs check-update --scope engine --input D:\Updates\dsh-core-update-windows-x64.json --json
-.\runtime\node\node.exe .\launcher\portable-cli.mjs update --scope engine --input D:\Updates\dsh-core-update-windows-x64.json --no-browser --json
+.\runtime\node\node.exe .\launcher\runtime-entry.mjs portable-cli.mjs check-update --scope engine --input D:\Updates\dsh-core-update-windows-x64.json --json
+.\runtime\node\node.exe .\launcher\runtime-entry.mjs portable-cli.mjs update --scope engine --input D:\Updates\dsh-core-update-windows-x64.json --no-browser --json
 ```
 
-组件形式的 Portable 更新把 `--scope engine` 换成 `--scope product`，并选择对应清单。`--input` 不能与 `--update-manifest` 混用。适用性仍由原有平台、Node、布局与外壳契约规则判断，不能用离线导入绕过资格验证。
+组件形式的 Portable 更新把 `--scope engine` 换成 `--scope product`，并选择对应清单。通过既有 `runtime-entry.mjs` 进入，紧凑运行时会先准备并定位 app；不要跳过它直接执行 `portable-cli.mjs update`。`--input` 不能与 `--update-manifest` 混用。适用性仍由原有平台、Node、布局与外壳契约规则判断，不能用离线导入绕过资格验证。
 
 完整 Portable 包由现有 Windows FullUpdater 执行，不由 Node 另做一套整包事务；CLI 检查只返回委托信息，不代表已经安装。新版引导器也支持：
 
