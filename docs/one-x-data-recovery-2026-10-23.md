@@ -55,4 +55,8 @@ Windows 故障注入覆盖关闭的 loopback 端口、断流后 Range 续传、�
 
 [修正后运行 39846169430](https://github.com/WSL043/DSH-Portable/actions/runs/39846169430) 中 Windows 2025 全部通过；Windows 2022 第二轮历史/文件/settings 断言通过，但最后 `Page.captureScreenshot` 超过统一 8 秒时限，完整运行仍记失败。只对截图命令使用 30 秒上限并先激活目标页，其他命令保持 8 秒；仍必须取得真实 PNG，不跳过采证。该修正不改变产品。
 
-验收完成后在此补入精确提交、运行编号和清理记录。MCP 2.2.0 仍使发布资格 blocked，迁移和恢复成功不豁免安全门槛。
+[最终跨机运行 39846959271](https://github.com/WSL043/DSH-Portable/actions/runs/39846959271) **success**，绑定 `899b3665f1c194220139cee10bdfc4e83ccc0b8b`。独立 Linux 源与 Windows 2022/2025 接收端均成功，两端各有两轮 `passed` UI JSON 和真实 PNG；differentHost/differentHome 均为 true，每轮 Launcher exit 0、完整协议树恢复，最终自有进程为零。同一提交的 PR #182 常规检查 15 项成功，无 pending/failure，CodeQL 新增告警为零。
+
+本机最终 Launcher 源 SHA-256 `70a4f726c131b085e5b079c8c5eb7f78bd6da5a04a7cdcdf9bf1e3b5b82d8721`，EXE `dbaa7c1bcc23a60633f62845416099abc61b011a9be364fda9a222c994aeed47`；官方 ASAR 仍为 `47874618bf5b3011fcaac10cd4c85f69da333e70d4f99b921207c78d0999512a`，未改官方字节。后续文档增补不改变已验收的产品代码。
+
+构建、合成验收和复现副本在核对无占用后移入回收站，并验证源路径消失、精确 `$I/$R` 与目录指纹；保留小型日志/JSON/截图。原便携版、用户真实数据和原 C 盘 Node 不在清理范围；同卷回收不宣称立即释放同等物理空间。MCP 2.2.0 仍使发布资格 blocked，迁移和恢复成功不豁免安全门槛。
