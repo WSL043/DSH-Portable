@@ -89,7 +89,26 @@ test('signed local full updates preserve data, reject damaged inputs and never c
   server.on('connection', () => { connections++ })
   try {
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
-    const payload = await makePayload(root, '0.2.5')
+    let payload = await makePayload(root, '0.2.5')
+    const healthLog = path.join(root, 'offline-health.log')
+    const healthSource = path.join(root, 'health-launcher.cs')
+    await writeFile(healthSource, `
+using System;
+using System.IO;
+internal static class HealthLauncher {
+  [STAThread] private static void Main() {
+    if (Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_UPDATE_CHECK") != "1"
+      || Environment.GetEnvironmentVariable("DSH_PORTABLE_SKIP_CORE_RECONCILE") != "1") Environment.Exit(17);
+    File.AppendAllText(Environment.GetEnvironmentVariable("OFFLINE_TEST_HEALTH_LOG"),
+      Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT") == "1" ? "preflight\\n" : "updated\\n");
+    File.WriteAllText(Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_FILE"),
+      Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_TOKEN"));
+  }
+}`)
+    await compileBootstrap(path.join(root, 'payload', 'DSH-Portable', 'DeepSeek-Herness.exe'), healthSource)
+    await execFileAsync('tar.exe', ['-a', '-c', '-f', payload.archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
+    const payloadBytes = await readFile(payload.archive)
+    payload = { ...payload, bytes: payloadBytes, sha256: createHash('sha256').update(payloadBytes).digest('hex') }
     await createOldInstall(destination)
     const keys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
     const jwk = keys.publicKey.export({ format: 'jwk' })
@@ -108,7 +127,10 @@ test('signed local full updates preserve data, reject damaged inputs and never c
     const signature = sign('sha256', manifest, { key: keys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64')
     const run = async (success) => {
       const result = await execFileAsync(executable, ['--manifest-file', manifestFile, '--destination', destination,
-        '--upgrade-existing', '--no-launch', '--result', resultFile], { timeout: 30000, windowsHide: true }).catch(error => error)
+        '--upgrade-existing', '--result', resultFile], { timeout: 30000, windowsHide: true,
+        env: { ...process.env, OFFLINE_TEST_HEALTH_LOG: healthLog,
+          DSH_PORTABLE_SKIP_UPDATE_CHECK: '0', DSH_PORTABLE_SKIP_CORE_RECONCILE: '0' },
+      }).catch(error => error)
       if (success) assert.equal(result.code, undefined, result.stderr)
       else assert.equal(result.code, 1)
       assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, success ? 'updated' : 'failed')
@@ -116,6 +138,7 @@ test('signed local full updates preserve data, reject damaged inputs and never c
     await writeFile(manifestFile, manifest)
     await writeFile(`${manifestFile}.sig`, signature)
     await run(true)
+    assert.equal(await readFile(healthLog, 'utf8'), 'preflight\nupdated\n', 'both real child launches inherit offline-only startup flags')
     assert.equal(await readFile(path.join(destination, 'data/dsh-home/profiles/web/settings.json'), 'utf8'), '{"keep":true}\n')
     assert.equal(await readFile(path.join(destination, 'workspace/project.txt'), 'utf8'), 'keep workspace\n')
     const installed = await readFile(path.join(destination, 'licenses/COMPONENTS.json'), 'utf8')

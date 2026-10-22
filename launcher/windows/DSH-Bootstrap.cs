@@ -683,12 +683,22 @@ namespace DshPortableBootstrap
         private void LaunchIfRequested()
         {
             if (options.NoLaunch) return;
-            Process.Start(new ProcessStartInfo
+            ProcessStartInfo start = new ProcessStartInfo
             {
                 FileName = Path.Combine(options.Destination, "DeepSeek-Herness.exe"),
                 WorkingDirectory = options.Destination,
                 UseShellExecute = false,
-            });
+            };
+            ApplyOfflineStartupOptions(start);
+            Process.Start(start);
+        }
+
+        private void ApplyOfflineStartupOptions(ProcessStartInfo start)
+        {
+            if (String.IsNullOrEmpty(options.OfflineManifest)) return;
+            // Keep this update's health/recovery launches offline, without changing saved preferences.
+            start.EnvironmentVariables["DSH_PORTABLE_SKIP_UPDATE_CHECK"] = "1";
+            start.EnvironmentVariables["DSH_PORTABLE_SKIP_CORE_RECONCILE"] = "1";
         }
 
         private void StopRunningPortable()
@@ -766,6 +776,7 @@ namespace DshPortableBootstrap
                 start.EnvironmentVariables["DSH_PORTABLE_UPDATE_HEALTH_FILE"] = marker;
                 start.EnvironmentVariables["DSH_PORTABLE_UPDATE_HEALTH_TOKEN"] = token;
                 start.EnvironmentVariables["DSH_PORTABLE_UPDATE_TARGET_VERSION"] = targetVersion ?? String.Empty;
+                ApplyOfflineStartupOptions(start);
                 process = Process.Start(start);
                 if (process == null) throw new InvalidOperationException(BootstrapText.L("无法启动更新后的程序。", "The updated application could not be started."));
 
@@ -821,6 +832,7 @@ namespace DshPortableBootstrap
                     start.EnvironmentVariables["DSH_PORTABLE_UPDATE_TARGET_VERSION"] = targetVersion ?? String.Empty;
                     start.EnvironmentVariables["DSH_PORTABLE_UPDATE_PREFLIGHT"] = "1";
                     start.EnvironmentVariables["DSH_PORTABLE_TEST_HIDDEN"] = "1";
+                    ApplyOfflineStartupOptions(start);
                     process = Process.Start(start);
                     if (process == null) throw new InvalidOperationException(BootstrapText.L("无法启动新版本兼容性检查。", "The new-version compatibility check could not be started."));
 
