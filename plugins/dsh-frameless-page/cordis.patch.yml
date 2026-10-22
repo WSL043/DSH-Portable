@@ -1,0 +1,5 @@
+# dsh-frameless-page 的 bundle patch：把插件的宿主半侧挂进当前 profile。
+# 网页半侧由 package.json 的 dsh.client 声明，DSH 按声明自动组装，不用写在这里。
+- insert:
+    - id: dsh-frameless-page
+      name: 'dsh-frameless-page'

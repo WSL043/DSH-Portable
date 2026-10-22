@@ -134,6 +134,61 @@ namespace DshPortable
                     return;
                 }
                 if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/window-chrome", StringComparison.Ordinal))
+                {
+                    object framelessValue;
+                    bool requestedFrameless = message.TryGetValue("frameless", out framelessValue)
+                        && framelessValue is bool && (bool)framelessValue;
+                    BeginInvoke((MethodInvoker)delegate { ApplyFramelessPage(requestedFrameless); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/window-drag", StringComparison.Ordinal))
+                {
+                    BeginDesktopWindowDrag();
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/window-control", StringComparison.Ordinal))
+                {
+                    object windowActionValue;
+                    string windowAction = message.TryGetValue("action", out windowActionValue)
+                        ? Convert.ToString(windowActionValue)
+                        : String.Empty;
+                    BeginInvoke((MethodInvoker)delegate { HandleDesktopWindowControl(windowAction); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/window-state", StringComparison.Ordinal))
+                {
+                    BeginInvoke((MethodInvoker)delegate { PostDesktopWindowState(); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/ui-mode", StringComparison.Ordinal))
+                {
+                    object uiModeValue;
+                    string uiMode = message.TryGetValue("mode", out uiModeValue) ? Convert.ToString(uiModeValue) : "pill";
+                    BeginInvoke((MethodInvoker)delegate { SetChromeUiMode(uiMode); });
+                    return;
+                }                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/window-command", StringComparison.Ordinal))
+                {
+                    object commandValue;
+                    string commandId = message.TryGetValue("id", out commandValue) ? Convert.ToString(commandValue) : null;
+                    BeginInvoke((MethodInvoker)delegate { ExecuteDesktopMenuCommand(commandId); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
+                    && String.Equals(Convert.ToString(messageType), "dsh-portable/window-menu", StringComparison.Ordinal))
+                {
+                    Point menuPoint = Cursor.Position;
+                    object menuValue;
+                    string menuName = message.TryGetValue("menu", out menuValue) ? Convert.ToString(menuValue) : null;
+                    BeginInvoke((MethodInvoker)delegate { ShowNativeMenuAt(menuPoint, menuName); });
+                    return;
+                }
+                if (message != null && message.TryGetValue("type", out messageType)
                     && String.Equals(Convert.ToString(messageType), "dsh-portable/preferences", StringComparison.Ordinal))
                 {
                     BeginInvoke((MethodInvoker)delegate
@@ -861,3 +916,4 @@ namespace DshPortable
 
     }
 }
+

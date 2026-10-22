@@ -153,7 +153,24 @@ namespace DshPortable
                 }
                 return;
             }
-            if (desktopStart && !fullscreen && desktopMenu != null && message.Msg == 0x0084)
+            if (desktopStart && !fullscreen && message.Msg == 0x0084 && WindowState == FormWindowState.Normal)
+            {
+                // Captionless window: provide the standard eight sizing edges so the
+                // user can still drag any of the four sides / corners to resize.
+                long hitPosition = message.LParam.ToInt64();
+                Point hitPoint = PointToClient(new Point((short)hitPosition, (short)(hitPosition >> 16)));
+                int grip = Math.Max(6, (int)Math.Ceiling(6 * DeviceDpi / 96.0));
+                bool hLeft = hitPoint.X < grip, hRight = hitPoint.X >= ClientSize.Width - grip;
+                bool hTop = hitPoint.Y < grip, hBottom = hitPoint.Y >= ClientSize.Height - grip;
+                if (hLeft || hRight || hTop || hBottom)
+                {
+                    int code = hTop ? (hLeft ? 13 : hRight ? 14 : 12)
+                        : hBottom ? (hLeft ? 16 : hRight ? 17 : 15)
+                        : hLeft ? 10 : 11;
+                    message.Result = new IntPtr(code);
+                    return;
+                }
+            }            if (desktopStart && !fullscreen && desktopMenu != null && immersiveOverlay == null && desktopMenu.Parent == this && message.Msg == 0x0084)
             {
                 long position = message.LParam.ToInt64();
                 Point point = desktopMenu.PointToClient(new Point((short)position, (short)(position >> 16)));
@@ -195,15 +212,13 @@ namespace DshPortable
 
         private void InitializeDesktopMenu()
         {
-            if (desktopMenu != null) { Controls.Remove(desktopMenu); desktopMenu.Dispose(); }
+            if (desktopMenu != null) { DetachImmersiveChrome(); Controls.Remove(desktopMenu); desktopMenu.Dispose(); }
             desktopShortcuts.Clear();
+            LoadChromeUiMode();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 36, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen };
+                AutoSize = false, Height = 34, Padding = new Padding(8, 0, 12, 0), Visible = true };
             desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
-            MainMenuStrip = desktopMenu;
-            Controls.Add(desktopMenu);
-            desktopContent.BringToFront();
             ToolStripMenuItem file = new DesktopMenuItem(L("文件", "&File"));
             ToolStripMenuItem view = new DesktopMenuItem(L("视图", "&View"));
             ToolStripMenuItem help = new DesktopMenuItem(L("帮助", "&Help"));
@@ -217,15 +232,16 @@ namespace DshPortable
                 menu.Margin = new Padding(0, 4, 2, 4);
                 menu.Padding = new Padding(8, 0, 8, 0);
             }
-            AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("折叠/展开侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
-            AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
-            AddNavigationCommand(2, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
+            AddNavigationCommand(3, "nav-sidebar", "toggle-sidebar", L("折叠/展开侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
+            AddNavigationCommand(4, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
+            AddNavigationCommand(5, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
             desktopMenu.ShowItemToolTips = true;
-            AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { Close(); });
-            AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate {
+            // iOS-style traffic lights on the right; visual order (left to right): minimize, maximize, close.
+            AddTrafficCommand(0, "traffic-close", Color.FromArgb(255, 69, 58), L("关闭窗口", "Close window"), delegate { Close(); });
+            AddTrafficCommand(1, "traffic-maximize", Color.FromArgb(48, 209, 88), L("最大化或还原", "Maximize or restore"), delegate {
                 WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
             });
-            AddCaptionCommand("caption-minimize", "\uE921", L("最小化", "Minimize"), delegate { WindowState = FormWindowState.Minimized; });
+            AddTrafficCommand(2, "traffic-minimize", Color.FromArgb(255, 214, 10), L("最小化", "Minimize"), delegate { WindowState = FormWindowState.Minimized; });
             AddDesktopCommand(file, "new-session", L("新会话", "New session"), Keys.Control | Keys.N,
                 delegate { PostBridgeAction("new-session", null); });
             AddDesktopCommand(file, "settings", L("设置", "Settings"), Keys.Control | Keys.Oemcomma,
@@ -237,6 +253,9 @@ namespace DshPortable
                 delegate { RequestDesktopRestart(); });
             AddDesktopCommand(file, "exit", L("退出", "Exit"), Keys.Control | Keys.Q,
                 delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
+            AddDesktopCommand(view, "toggle-chrome-ui", L("切换至新UI", "Switch to new UI"), Keys.None,
+                delegate { SetChromeUiMode("pill"); });
+            view.DropDownItems.Add(new ToolStripSeparator());
             AddDesktopCommand(view, "reload", L("重新加载界面", "Reload interface"), Keys.Control | Keys.R,
                 delegate { ScheduleWebViewRecovery(false, "desktop-menu"); });
             view.DropDownItems.Add(new ToolStripSeparator());
@@ -267,6 +286,7 @@ namespace DshPortable
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
             foreach (ToolStripMenuItem menu in desktopMenu.Items) AttachDesktopDropDownHandlers(menu);
             RefreshDesktopCommands();
+            InstallPillMode();
         }
 
         private void AttachDesktopDropDownHandlers(ToolStripMenuItem menu)
@@ -282,6 +302,17 @@ namespace DshPortable
             dropDown.Opened += delegate { ApplyRoundedCorners(dropDown); };
             foreach (ToolStripMenuItem child in dropDown.Items.OfType<ToolStripMenuItem>())
                 AttachDesktopDropDownHandlers(child);
+        }
+
+        private void AddTrafficCommand(int index, string name, Color color, string label, EventHandler action)
+        {
+            ToolStripMenuItem item = new ToolStripMenuItem("●", null, action) {
+                Name = name, Alignment = ToolStripItemAlignment.Right, AutoSize = false, Size = new Size(25, 26), Margin = new Padding(2, 4, 2, 4),
+                Padding = Padding.Empty, ForeColor = color, Tag = color,
+                Font = ((DesktopTitleStrip)desktopMenu).ComposeFont,
+                AccessibleName = label, ToolTipText = label,
+            };
+            desktopMenu.Items.Insert(index, item);
         }
 
         private void AddCaptionCommand(string name, string glyph, string label, EventHandler action)
@@ -311,6 +342,8 @@ namespace DshPortable
             if (desktopContent != null) FitWebViewToClient();
             if (desktopMenu != null && desktopMenu.Items.ContainsKey("caption-maximize"))
                 desktopMenu.Items["caption-maximize"].Text = WindowState == FormWindowState.Maximized ? "\uE923" : "\uE922";
+            SyncImmersiveChrome();
+            PostDesktopWindowStateThrottled();
         }
 
         private void CloseDesktopMenus()
@@ -325,6 +358,8 @@ namespace DshPortable
             CloseDesktopMenus();
             base.OnDeactivate(eventArgs);
             ApplyDesktopBorder();
+            if (immersiveOverlay != null && immersiveOverlay.Visible && Form.ActiveForm != immersiveOverlay)
+                HideImmersiveChrome();
         }
 
         protected override void OnMouseDown(MouseEventArgs eventArgs)
@@ -374,7 +409,7 @@ namespace DshPortable
         private bool QueueDesktopShortcut(Keys key)
         {
             if (!desktopStart) return false;
-            if (!fullscreen && (key == Keys.F10 || key == (Keys.Alt | Keys.F) || key == (Keys.Alt | Keys.V) || key == (Keys.Alt | Keys.H)))
+            if (!fullscreen && !framelessPage && (key == Keys.F10 || key == (Keys.Alt | Keys.F) || key == (Keys.Alt | Keys.V) || key == (Keys.Alt | Keys.H)))
             {
                 string name = key == (Keys.Alt | Keys.V) ? "menu-view" : key == (Keys.Alt | Keys.H) ? "menu-help" : "menu-file";
                 BeginInvoke(new Action(delegate {
@@ -430,7 +465,7 @@ namespace DshPortable
                 fullscreen = true;
                 WindowState = FormWindowState.Normal;
                 FormBorderStyle = FormBorderStyle.None;
-                desktopMenu.Visible = false;
+                if (immersiveOverlay != null) HideImmersiveChrome(); else desktopMenu.Visible = false;
                 Bounds = hiddenForAutomation ? new Rectangle(Location, screen.Size) : screen;
             }
             else
@@ -649,11 +684,11 @@ namespace DshPortable
 
         private uint DesktopBorderColor()
         {
-            if (fullscreen || WindowState != FormWindowState.Normal) return 0xFFFFFFFE;
-            bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
-            bool active = Form.ActiveForm == this;
-            int shade = dark ? (active ? 76 : 54) : (active ? 184 : 211);
-            return ToColorRef(Color.FromArgb(shade, shade, shade));
+            // The window paints its own background edge to edge; let DWM keep only
+            // the rounded-corner clip and drop the 1px system border line, which
+            // shows up as a white hairline when the shell/tray theme is light while
+            // the page itself uses the dark theme.
+            return 0xFFFFFFFE; // DWMWA_COLOR_NONE
         }
 
         private void ApplyDesktopBorder()
@@ -677,5 +712,109 @@ namespace DshPortable
                 Math.Max(0, (launchPanel.ClientSize.Height - launchContent.Height) / 2));
         }
 
+        private const int WmNcLeftButtonDown = 0x00A1;
+        private const int HtCaption = 2;
+
+        [DllImport("user32.dll")]
+        private static extern bool ReleaseCapture();
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern IntPtr SendMessage(IntPtr window, int message, IntPtr wParam, IntPtr lParam);
+
+        /// <summary>
+        /// Page-driven frameless mode: the page owns a floating "dynamic island"
+        /// pill and asks the shell to take the native title strip out of the
+        /// layout so the workspace fills the whole window. Until the page asks
+        /// for it (or if the plugin is not mounted) the stock title strip stays
+        /// visible, so a missing/failed plugin can never leave a chrome-less,
+        /// undraggable window behind.
+        /// </summary>
+        private void ApplyFramelessPage(bool enabled)
+        {
+            if (!IsHandleCreated || !desktopStart) return;
+            LoadChromeUiMode();
+            if (enabled && String.Equals(chromeUiMode, "native", StringComparison.Ordinal)) enabled = false;
+            framelessPage = enabled;
+            if (desktopMenu != null)
+            {
+                CloseDesktopMenus();
+                if (framelessPage)
+                {
+                    if (desktopMenu.Parent == this) Controls.Remove(desktopMenu);
+                    desktopMenu.Visible = false;
+                }
+                else
+                {
+                    if (desktopMenu.Parent == null)
+                    {
+                        Controls.Add(desktopMenu);
+                        desktopMenu.Dock = DockStyle.Top;
+                    }
+                    desktopMenu.Visible = !fullscreen;
+                }
+            }
+            PerformLayout();
+            FitWebViewToClient();
+            ApplyDesktopBorder();
+            PostDesktopWindowState();
+            WriteLauncherLog("desktop-window", "frameless=" + framelessPage);
+        }
+
+        /// <summary>Starts a native window move from page mouse input.</summary>
+        private void BeginDesktopWindowDrag()
+        {
+            if (!IsHandleCreated || !framelessPage) return;
+            ReleaseCapture();
+            SendMessage(Handle, WmNcLeftButtonDown, new IntPtr(HtCaption), IntPtr.Zero);
+        }
+
+        /// <summary>Page title-bar buttons: minimize / maximize / close / fullscreen.</summary>
+        private void HandleDesktopWindowControl(string action)
+        {
+            if (!desktopStart) return;
+            if (String.Equals(action, "minimize", StringComparison.Ordinal))
+                WindowState = FormWindowState.Minimized;
+            else if (String.Equals(action, "maximize", StringComparison.Ordinal))
+                WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+            else if (String.Equals(action, "close", StringComparison.Ordinal))
+                Close();
+            else if (String.Equals(action, "fullscreen", StringComparison.Ordinal))
+                SetDesktopFullscreen(!fullscreen);
+            else
+                return;
+            RefreshDesktopCommands();
+            PostDesktopWindowState();
+        }
+
+        /// <summary>Publishes the window chrome state the page title bar renders.</summary>
+        private void PostDesktopWindowState()
+        {
+            if (!desktopStart || webView == null || webView.CoreWebView2 == null) return;
+            try
+            {
+                webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(new
+                {
+                    type = "dsh-portable/window-state",
+                    frameless = framelessPage,
+                    maximized = WindowState == FormWindowState.Maximized,
+                    fullscreen = fullscreen,
+                    chrome = FormBorderStyle.ToString(),
+                    uiMode = chromeUiMode ?? "pill",
+                    menuVisible = desktopMenu != null && desktopMenu.Visible
+                }));
+            }
+            catch (Exception) { }
+        }
+
+        /// <summary>Throttles resize-driven state posts while a native drag/resize runs.</summary>
+        private void PostDesktopWindowStateThrottled()
+        {
+            if (!framelessPage || !desktopStart) return;
+            int now = Environment.TickCount;
+            if (unchecked(now - framelessStatePostTick) < 120) return;
+            framelessStatePostTick = now;
+            PostDesktopWindowState();
+        }
     }
 }
+

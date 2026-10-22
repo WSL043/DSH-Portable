@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -105,6 +105,8 @@ namespace DshPortable
         private string desktopMenuLanguage;
         private MenuStrip desktopMenu;
         private bool fullscreen;
+        private bool framelessPage;
+        private int framelessStatePostTick;
         private Rectangle boundsBeforeFullscreen;
         private FormWindowState stateBeforeFullscreen;
         private readonly Dictionary<Keys, ToolStripMenuItem> desktopShortcuts = new Dictionary<Keys, ToolStripMenuItem>();
@@ -399,3 +401,4 @@ namespace DshPortable
 
     }
 }
+

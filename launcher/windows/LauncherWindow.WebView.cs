@@ -119,7 +119,8 @@ namespace DshPortable
                 + "if(!bridge||typeof bridge.postMessage!=='function'||typeof bridge.addEventListener!=='function'||typeof bridge.removeEventListener!=='function')return;"
                 + "const native={protocolVersion:1,capabilities:Object.freeze({"
                 + "pickDirectory:true,saveDataPackage:true,openDataPackage:true,importData:true,restartHost:true,"
-                + "openEnvironment:true,openUpdate:true,preferences:true,sessionProjection:true,clearWebCache:true"
+                + "openEnvironment:true,openUpdate:true,preferences:true,sessionProjection:true,clearWebCache:true,"
+                + "windowChrome:true,windowDrag:true,windowControls:true,windowState:true"
                 + "}),"
                 + "postMessage:function(message){return bridge.postMessage(message);},"
                 + "addEventListener:function(name,listener){return bridge.addEventListener(name,listener);},"
@@ -133,6 +134,16 @@ namespace DshPortable
             webView.CoreWebView2.ContentLoading += delegate(object sender, CoreWebView2ContentLoadingEventArgs eventArgs)
             {
                 RecordWebViewPhase("content-loading:" + eventArgs.NavigationId);
+                // A fresh document starts with the native strip visible; the page
+                // re-requests frameless mode once its title bar mounts. This keeps
+                // a reload with the extension unavailable from leaving a
+                // chrome-less, undraggable window behind.
+                if (desktopStart && framelessPage && !eventArgs.IsErrorPage)
+                {
+                    framelessPage = false;
+                    if (desktopMenu != null) desktopMenu.Visible = !fullscreen;
+                    FitWebViewToClient();
+                }
             };
             webView.CoreWebView2.ProcessFailed += OnWebViewProcessFailed;
             ApplyDesktopChrome();
@@ -350,12 +361,16 @@ namespace DshPortable
             desktopReady = true;
             RefreshDesktopCommands();
             trayIcon.Visible = true;
+            // Show the floating immersive title strip once on first paint so the
+            // native menus / window buttons stay discoverable; it hides itself
+            // after a few seconds and comes back from the top edge on hover.
+            BeginInvoke(new Action(delegate { ShowImmersiveChromeTemporarily(2800); }));
         }
 
         private void FitWebViewToClient()
         {
             int border = desktopStart && !fullscreen && WindowState == FormWindowState.Normal
-                ? Math.Max(4, (int)Math.Ceiling(4 * DeviceDpi / 96.0)) : 0;
+                ? Math.Max(6, (int)Math.Ceiling(6 * DeviceDpi / 96.0)) : 0;
             desktopContent.Padding = new Padding(border, 0, border, border);
             desktopContent.BackColor = BackColor;
             if (webView == null || webView.IsDisposed) return;
@@ -641,3 +656,4 @@ namespace DshPortable
 
     }
 }
+

@@ -123,6 +123,15 @@ namespace DshPortable
                 base.OnRenderItemText(eventArgs);
                 return;
             }
+            if (menuItem.Name != null && menuItem.Name.StartsWith("traffic-", StringComparison.Ordinal))
+            {
+                int diameter = Math.Min(14, Math.Min(eventArgs.Item.Width - 6, eventArgs.Item.Height - 8));
+                Rectangle circle = new Rectangle(
+                    (eventArgs.Item.Width - diameter) / 2, (eventArgs.Item.Height - diameter) / 2, diameter, diameter);
+                Color dotColor = menuItem.Tag is Color ? (Color)menuItem.Tag : menuItem.ForeColor;
+                using (Brush brush = new SolidBrush(dotColor)) eventArgs.Graphics.FillEllipse(brush, circle);
+                return;
+            }
             if (session == null)
             {
                 string caption = menuItem.ShortcutKeyDisplayString ?? "";
@@ -427,6 +436,39 @@ namespace DshPortable
 
         protected override void OnRenderItemText(ToolStripItemTextRenderEventArgs e)
         {
+            if (e.ToolStrip is DesktopTitleStrip && e.Item.Name != null && e.Item.Name.StartsWith("traffic-", StringComparison.Ordinal))
+            {
+                int diameter = Math.Min(18, Math.Min(e.Item.Width - 7, e.Item.Height - 8));
+                Rectangle circle = new Rectangle((e.Item.Width - diameter) / 2, (e.Item.Height - diameter) / 2, diameter, diameter);
+                Color dotColor = e.Item.Tag is Color ? (Color)e.Item.Tag : e.Item.ForeColor;
+                e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                using (Brush brush = new SolidBrush(dotColor)) e.Graphics.FillEllipse(brush, circle);
+                if (e.Item.Selected || e.Item.Pressed)
+                {
+                    float hint = Math.Max(5F, diameter * 0.46F);
+                    float centreX = circle.Left + circle.Width / 2F;
+                    float centreY = circle.Top + circle.Height / 2F;
+                    using (Pen ink = new Pen(Color.FromArgb(92, 60, 48, 36), Math.Max(1.4F, diameter / 9.5F)))
+                    {
+                        if (e.Item.Name == "traffic-close")
+                        {
+                            float d2 = hint / 2F;
+                            e.Graphics.DrawLine(ink, centreX - d2, centreY - d2, centreX + d2, centreY + d2);
+                            e.Graphics.DrawLine(ink, centreX + d2, centreY - d2, centreX - d2, centreY + d2);
+                        }
+                        else if (e.Item.Name == "traffic-minimize")
+                        {
+                            e.Graphics.DrawLine(ink, centreX - hint / 2F, centreY, centreX + hint / 2F, centreY);
+                        }
+                        else
+                        {
+                            float d2 = hint / 2F;
+                            e.Graphics.DrawRectangle(ink, centreX - d2, centreY - d2, hint, hint);
+                        }
+                    }
+                }
+                return;
+            }
             if (IsDesktopDropDown(e.ToolStrip))
             {
                 ToolStripMenuItem dropDownItem = e.Item as ToolStripMenuItem;
@@ -530,22 +572,28 @@ namespace DshPortable
     {
         internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
         internal readonly Font MenuFont = new Font("Microsoft YaHei UI", 9F);
+        internal readonly Font ComposeFont = new Font("Segoe UI Symbol", 10F);
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
             if (disposing) CaptionFont.Dispose();
             if (disposing) MenuFont.Dispose();
+            if (disposing) ComposeFont.Dispose();
         }
         protected override void WndProc(ref Message message)
         {
             if (message.Msg == 0x0084)
             {
+                // Empty strip background is transparent for hit-testing so the
+                // top-level window can treat it as a native caption (drag,
+                // double-click maximize, system menu); real items stay clickable.
                 long position = message.LParam.ToInt64();
                 Point point = PointToClient(new Point((short)position, (short)(position >> 16)));
-                int border = Math.Max(4, (int)Math.Ceiling(4 * DeviceDpi / 96.0));
-                if (GetItemAt(point) == null || (FindForm().WindowState == FormWindowState.Normal
-                    && (point.Y < border || point.X < border || point.X >= Width - border)))
-                { message.Result = new IntPtr(-1); return; }
+                if (GetItemAt(point) == null)
+                {
+                    message.Result = new IntPtr(-1); // HTTRANSPARENT
+                    return;
+                }
             }
             base.WndProc(ref message);
         }
