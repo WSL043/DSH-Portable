@@ -4,7 +4,7 @@
 
 ## 能力探测
 
-本次仅 Windows Native 实现这些接口。插件先检查宿主 `window.__DSH_PORTABLE_NATIVE__` 的 `capabilities`，只有对应能力为 `true` 才向 WebView 宿主发送消息。浏览器、macOS、Linux 或旧版宿主没有声明时，应保留普通页面及系统窗口，不隐藏控件、不模拟调用成功。不要按操作系统名称猜测能力。
+本次仅 Windows Native 实现这些接口。插件先检查宿主 `window.__DSH_PORTABLE_NATIVE__` 的 `protocolVersion === 1` 与 `capabilities`，只有对应能力为 `true` 才通过该宿主的 `postMessage` 发送消息。浏览器、macOS、Linux 或旧版宿主没有声明时，应保留普通页面及系统窗口，不隐藏控件、不模拟调用成功。不要按操作系统名称猜测能力。
 
 | capability | 消息与字段 | 用途 |
 | --- | --- | --- |
