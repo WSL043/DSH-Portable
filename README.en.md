@@ -52,6 +52,8 @@
 
 For everyday use, choose the stable 0.x (Native) line. The 1.0 line has a Windows-only [alpha preview](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5) for early adopters; it is not an upgrade path from 0.x.
 
+1.x maintenance and qualification are underway. Known MCP security debt in the official desktop payload blocks new publication; the older alpha is not a security-qualified upgrade. See [current progress, evidence and limitations](docs/one-x-maintenance-2026-10-23.md).
+
 ### Windows
 
 | Choose this when… | Download |

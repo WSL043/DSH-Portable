@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, writeFile, mkdtemp, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdtemp, mkdir, rm, symlink, unlink } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
@@ -19,7 +19,7 @@ test('shared authorization CLI rejects missing, blocked, stale, or mismatched se
   const baseReport = { schemaVersion: 1, officialVersion: env.SECURITY_EXPECTED_VERSION,
     appASARPath: 'C:/accepted/app/' + env.SECURITY_EXPECTED_VERSION + '/resources/app.asar', appASARBytes: 1234, appASARsha256: asarHash,
     advisory: { id: 'GHSA-6prh-2h8m-c8cw', affected: false }, status: 'allowed-for-this-advisory', qualificationAllowed: true };
-  const run = () => spawnSync(process.execPath, [evidenceCLI, 'authorize'], { env, encoding: 'utf8' });
+  const run = (overrides = {}) => spawnSync(process.execPath, [evidenceCLI, 'authorize'], { env: { ...env, ...overrides }, cwd: directory, encoding: 'utf8' });
   const fixture = async (mutate = () => {}) => {
     const report = structuredClone(baseReport), verified = { ...structuredClone(baseReport), verifiedReport: { passed: true } };
     const entry = { kind: 'candidate', appASARPath: report.appASARPath, appASARBytes: report.appASARBytes, appASARsha256: asarHash, qualificationAllowed: true };
@@ -64,6 +64,17 @@ test('shared authorization CLI rejects missing, blocked, stale, or mismatched se
     for (const name of ['candidate.json', 'candidate-verified.json', 'provenance.json']) {
       await fixture(); await rm(join(directory, name)); assert.notEqual(run().status, 0, 'missing ' + name);
     }
+    await fixture();
+    for (const overrides of [{ SECURITY_DIRECTORY: join(directory, '..') },
+      { SECURITY_CANDIDATE: join(directory, '..', 'selection.json') },
+      { SECURITY_ASSETS: JSON.stringify([join(directory, '..', 'portable.zip')]) }]) {
+      const denied = run(overrides);
+      assert.notEqual(denied.status, 0, JSON.stringify(overrides));
+      assert.match(denied.stderr, /escapes the workspace/);
+    }
+    assert.notEqual(run({ SECURITY_KINDS: '["../candidate"]' }).status, 0, 'report names cannot traverse');
+    await writeFile(env.SECURITY_CANDIDATE, JSON.stringify({ version: '../outside' }));
+    assert.match(run().stderr, /Invalid official version/);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
@@ -99,7 +110,7 @@ test('shared collection CLI retains blocked reports without changing the accepte
     for (const version of ['2.3.0', '2.0.0']) {
       const bytes = archive(version); await writeFile(asarPath, bytes);
       const result = spawnSync(process.execPath, [evidenceCLI, 'collect'], { env,
-        cwd: fileURLToPath(new URL('../', import.meta.url)), encoding: 'utf8' });
+        cwd: directory, encoding: 'utf8' });
       assert.equal(result.status, 0, result.stderr);
       const provenance = JSON.parse(await readFile(join(output, 'provenance.json'), 'utf8'));
       const verified = JSON.parse(await readFile(join(output, 'candidate-verified.json'), 'utf8'));
@@ -109,9 +120,19 @@ test('shared collection CLI retains blocked reports without changing the accepte
       assert.deepEqual(await readFile(asarPath), bytes);
       assert.equal(JSON.parse(await readFile(join(output, 'selection.json'), 'utf8')).version, officialVersion);
       const authorization = spawnSync(process.execPath, [evidenceCLI, 'authorize'], { encoding: 'utf8',
+        cwd: directory,
         env: { ...env, SECURITY_EXPECTED_VERSION: officialVersion, SECURITY_KINDS: '["candidate"]' } });
       assert.equal(authorization.status === 0, version === '2.3.0', authorization.stderr);
     }
-    assert.match(await readFile(env.GITHUB_STEP_SUMMARY, 'utf8'), /security blocked/);
+    assert.match(await readFile(join(output, 'summary.md'), 'utf8'), /security blocked/);
+    const linked = join(directory, 'linked-root');
+    await symlink(root, linked, process.platform === 'win32' ? 'junction' : 'dir');
+    try {
+      const denied = spawnSync(process.execPath, [evidenceCLI, 'collect'], { cwd: directory, encoding: 'utf8',
+        env: { ...env, SECURITY_ROOTS: JSON.stringify([['candidate', linked]]) } });
+      assert.notEqual(denied.status, 0);
+      assert.match(denied.stderr, /contains a link/);
+      assert.deepEqual(await readFile(asarPath), archive('2.0.0'));
+    } finally { await unlink(linked); }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

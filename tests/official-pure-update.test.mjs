@@ -6,11 +6,12 @@ import { promisify } from 'node:util';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
+import { windowsPowerShell } from './helpers/windows-powershell.mjs';
 
 const root = resolve(import.meta.dirname, '..');
 const payload = resolve(root, 'experiments/official-payload/Payload.psm1');
 const engine = resolve(root, 'experiments/official-payload/apply-update.ps1');
-const powershell = resolve(process.env.SystemRoot ?? 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+const powershell = process.platform === 'win32' ? windowsPowerShell() : null;
 const windows = { skip: process.platform !== 'win32' && 'requires Windows file-sharing and junction semantics' };
 const quote = value => `'${value.replaceAll("'", "''")}'`;
 function ps(source) {

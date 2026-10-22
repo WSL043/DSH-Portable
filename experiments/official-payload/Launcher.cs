@@ -438,8 +438,14 @@ internal static class PortableLauncher {
 
     private static void WritePortableRootPointer(string cacheName) {
         string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        string directory = Path.Combine(local, cacheName);
-        string pointer = Path.Combine(directory, "portable-root.txt");
+        if (String.IsNullOrWhiteSpace(local)) throw new IOException("LocalAppData is unavailable.");
+        local = Path.GetFullPath(local).TrimEnd(Path.DirectorySeparatorChar);
+        if (local.Length <= 3 || String.IsNullOrEmpty(cacheName) || cacheName != Path.GetFileName(cacheName) ||
+            !Regex.IsMatch(cacheName, @"\A[A-Za-z0-9._@-]{1,100}\z") || cacheName == "." || cacheName == "..") throw new IOException("Invalid updater cache path.");
+        string directory = Path.GetFullPath(Path.Combine(local, cacheName));
+        if (!directory.StartsWith(local + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new IOException("Updater cache escaped LocalAppData.");
+        string pointer = Path.GetFullPath(Path.Combine(directory, "portable-root.txt"));
+        if (!pointer.StartsWith(directory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)) throw new IOException("Updater pointer escaped its cache.");
         CheckPath(Root); CheckDirectoryPaths(directory); CheckPath(pointer);
         Directory.CreateDirectory(directory);
         WriteTextAtomic(pointer, Root + Environment.NewLine);

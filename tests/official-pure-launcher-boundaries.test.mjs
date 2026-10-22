@@ -5,9 +5,10 @@ import { mkdir, mkdtemp, readFile, readdir, symlink, unlink, writeFile } from 'n
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { assessHealth } from '../experiments/official-payload/launcher/state.mjs';
+import { windowsPowerShell } from './helpers/windows-powershell.mjs';
 
 const repository = resolve(import.meta.dirname, '..');
-const powershell = join(process.env.SystemRoot ?? 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe');
+const powershell = process.platform === 'win32' ? windowsPowerShell() : null;
 const quote = value => `'${value.replaceAll("'", "''")}'`;
 const ps = source => execFileSync(powershell, ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from("$ProgressPreference='SilentlyContinue';" + source, 'utf16le').toString('base64')], {
   encoding: 'utf8', windowsHide: true, env: Object.fromEntries(Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath')),
@@ -99,12 +100,16 @@ test('compiled pure launcher rejects redirected data before any creation and pre
 
     await t.test('update pointer rejects an ancestor junction before creating a child', async () => {
       const cacheName = `dsh-boundary-${crypto.randomUUID()}`;
-      const local = process.env.LOCALAPPDATA;
-      assert.ok(local);
       const external = join(scratch, 'outside-pointer'); await mkdir(external);
       await writeFile(join(external, 'marker.txt'), 'pointer marker');
-      const link = join(local, cacheName); await symlink(external, link, 'junction'); junctions.push(link);
-      const result = ps(`$ErrorActionPreference='Stop'; $type=[Reflection.Assembly]::LoadFile(${quote(launcher)}).GetType('PortableLauncher'); $flags=[Reflection.BindingFlags]'NonPublic,Static'; $type.GetField('Root',$flags).SetValue($null,${quote(normalRoot)}); try { $type.GetMethod('WritePortableRootPointer',$flags).Invoke($null,@(${quote(cacheName + '/new-child')})) | Out-Null; 'accepted' } catch { $_.Exception.GetBaseException().GetType().FullName }`);
+      const result = ps(`$ErrorActionPreference='Stop'; $type=[Reflection.Assembly]::LoadFile(${quote(launcher)}).GetType('PortableLauncher'); $flags=[Reflection.BindingFlags]'NonPublic,Static'; $type.GetField('Root',$flags).SetValue($null,${quote(normalRoot)});
+        # Use the launcher's OS folder lookup, so an overridden LOCALAPPDATA cannot redirect this fixture.
+        $link=Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) ${quote(cacheName)};
+        $created=$false;
+        try {
+          $null=New-Item -ItemType Junction -Path $link -Target ${quote(external)} -ErrorAction Stop; $created=$true;
+          try { $type.GetMethod('WritePortableRootPointer',$flags).Invoke($null,@(${quote(cacheName + '/new-child')})) | Out-Null; 'accepted' } catch { $_.Exception.GetBaseException().GetType().FullName }
+        } finally { if($created) { [IO.Directory]::Delete($link) } }`);
       assert.equal(result.trim(), 'System.IO.IOException');
       assert.deepEqual(await readdir(external), ['marker.txt']);
     });

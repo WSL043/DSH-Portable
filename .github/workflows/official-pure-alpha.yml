@@ -169,6 +169,7 @@ jobs:
           SECURITY_ASSETS: '["build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64.zip","build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip"]'
         run: |
           node scripts/official-payload-security-evidence.mjs collect
+          if (Test-Path 'build/orch-080/T32/security/summary.md') { Get-Content 'build/orch-080/T32/security/summary.md' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
           if ($LASTEXITCODE -ne 0) {
             Write-Warning 'Security evidence collection failed; publication remains blocked. Runtime artifacts are retained.'
             'Security blocked: evidence collection failed. Runtime passing does not establish publication qualification.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

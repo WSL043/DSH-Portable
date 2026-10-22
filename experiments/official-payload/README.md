@@ -23,4 +23,6 @@ Windows x64 的 1.x 开发线，当前启动器标识仍为 `1.0.0-alpha.5`，�
 
 跨机登录、旧 Native 数据迁移、真实模型请求、任意第三方插件、物理断电和磁盘耗尽仍需专项验收。保留旧程序不保证新版数据能降级。
 
+官方默认 `Documents/deepseek-harness/default-workspace` 及用户另选工作区仍可在便携根外；当前写入审计不等于全应用零外写保证。
+
 The current development line preserves official payload bytes except `app-update.yml`, ships no default Portable plugins, and keeps all managed homes under the portable root. Manual workflows qualify artifacts by default; publication is opt-in and independently security-gated. The signed Windows 0.2.1-rc.2 payload contains affected MCP 2.2.0, so it remains blocked from publication. Source tests and runtime acceptance do not establish full 1.0 or comprehensive security qualification.

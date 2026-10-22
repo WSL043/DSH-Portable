@@ -149,6 +149,7 @@ jobs:
           SECURITY_ROOTS: '[["candidate","build/orch-080/T27/work/portable"]]'
         run: |
           node scripts/official-payload-security-evidence.mjs collect
+          if (Test-Path 'build/orch-080/T28/security/summary.md') { Get-Content 'build/orch-080/T28/security/summary.md' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8 }
           if ($LASTEXITCODE -ne 0) {
             Write-Warning 'Security evidence collection failed; publication remains blocked. Runtime artifacts are retained.'
             'Security blocked: evidence collection failed. Runtime passing does not establish publication qualification.' | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8

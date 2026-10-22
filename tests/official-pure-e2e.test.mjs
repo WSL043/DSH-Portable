@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { resolve } from 'node:path';
+import { windowsPowerShell } from './helpers/windows-powershell.mjs';
 import { buildAcceptedIndex, buildPureE2EReport, expectedProtocolCommand, isPathOwnedByRoot, normalizeOfficialCandidate, packageFeedContract, REQUIRED_IDS, serializeCandidateFile } from '../experiments/official-payload/e2e/report.mjs';
 
 const digest = Buffer.alloc(64, 7).toString('base64');
@@ -113,6 +114,6 @@ test('the actual write-audit predicate rejects global data/agents leaks without 
     $agents=Join-Path $env:USERPROFILE '.agents';
     @{ agents=(Test-ForbiddenOfficialExternalWrite ($agents+'/AGENTS.md')); agentsRoot=(Test-ForbiddenOfficialExternalWrite $agents); dsh=(Test-ForbiddenOfficialExternalWrite (Join-Path $env:USERPROFILE '.dsh/profile.json')); electron=(Test-ForbiddenOfficialExternalWrite (Join-Path $env:APPDATA 'DeepSeek Harness/Preferences')); sibling=(Test-ForbiddenOfficialExternalWrite ($agents+'-other/file')); opaque=(Test-ForbiddenOfficialExternalWrite 'HKCU\\Software\\Example') }|ConvertTo-Json -Compress`;
   const env = { ...process.env }; delete env.PSModulePath;
-  const result = JSON.parse(execFileSync(resolve(process.env.SystemRoot, 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true }).trim());
+  const result = JSON.parse(execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true }).trim());
   assert.deepEqual(result, { agents: true, agentsRoot: true, dsh: true, electron: true, sibling: false, opaque: false });
 });

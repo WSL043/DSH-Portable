@@ -52,6 +52,8 @@
 
 日常使用请选择稳定版 0.x（Native）。1.0 线有一个仅 Windows 的 [alpha 预览版](https://github.com/WSL043/DSH-Portable/releases/tag/v1.0.0-alpha.5)，供想尝鲜的用户试用，不是 0.x 的升级路径。
 
+1.x 正在维护验收，当前官方桌面底包的已知 MCP 安全债阻断新发布；旧 alpha 也不作安全晋级承诺。[当前进度、验收与限制](docs/one-x-maintenance-2026-10-23.md)。
+
 ### Windows
 
 | 需要 | 下载 |
