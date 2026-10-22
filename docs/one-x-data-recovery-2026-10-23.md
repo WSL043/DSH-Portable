@@ -33,7 +33,7 @@ node '<checkout>/experiments/official-payload/import-native-data.mjs' 'Native.ds
 - 跨机由独立 Linux runner 导出小归档，Windows 2022/2025 runner 下载后实际运行官方桌面。证据绑定归档摘要、源/目标 OS、home、hostname、成品与 source commit；改 USERPROFILE 或本机换目录不算跨机。
 - 两项集成测试覆盖普通/Zstd 历史、后续帧原样、嵌套 storage、中文工作区、默认排除、源保全、已用目标/junction/损坏包/缺元数据/无用户数据拒绝，接入已有三平台 Data transfer safety。
 
-首次独立 Windows 2022/2025 运行均在首轮完整 UI 通过后发现协议恢复缺陷：干净机器退出后残留官方首次写入的根默认 `URL:dsh` 与空 `URL Protocol`。本机预存协议根掩盖了此差异。修正仅保存/恢复这两项已知值的存在性、原值和类型，沿用 command 恢复并只剪除本轮新建空键；保留未知值/子键与原有空祖先，不做整树递归删除。须以修正后的独立运行重验，不能放宽全树对比。
+首次独立 [Windows 2022/2025 运行 39845105186](https://github.com/WSL043/DSH-Portable/actions/runs/39845105186) 均在首轮完整 UI 通过后发现协议恢复缺陷：干净机器退出后残留官方首次写入的根默认 `URL:dsh` 与空 `URL Protocol`。本机预存协议根掩盖了此差异。修正仅保存/恢复这两项已知值的存在性、原值和类型，沿用 command 恢复并只剪除本轮新建空键；保留未知值/子键与原有空祖先，不做整树递归删除。须以修正后的独立运行重验，不能放宽全树对比。
 
 ## 异常恢复
 
@@ -48,5 +48,11 @@ Windows 故障注入覆盖关闭的 loopback 端口、断流后 Range 续传、�
 网络小夹具仍受真实签名门拒绝，强制终止用小型编译替身，不冒充官方包更新。写失败注入只代表同类 API 故障；未填满系统盘、未物理断电。
 
 ## 最终结果
+
+本机最终源码全套：1,226 项，1,212 通过、14 条件跳过、0 失败。注册表复合场景在 GUID 隔离测试键上验证不存在根、混合大小写值名/ExpandString 元数据与未知 Binary/QWord 子键、原有空祖先，实际真实 `dsh` 键未被测试改动。最终 Launcher 另复用同一合成 data 冷启动，历史、工作区文件与 settings 仍可用，完整协议树恢复，exit 0、官方进程归零。
+
+全套最初将 TEMP 放在长 D 路径而 Node 仍在 C，暴露测试夹具的跨盘硬链接假设和旧 bootstrap 初始路径解析超长弹窗。只关闭了精确核对的自有测试进程；改用 D 短目录及独立 Node 字节副本后，bootstrap 17/17 和完整全套通过，没有借机改 0.x 产品逻辑或原 Node 文件/权限。失败日志保留，不把该次运行报告为成功。
+
+[修正后运行 39846169430](https://github.com/WSL043/DSH-Portable/actions/runs/39846169430) 中 Windows 2025 全部通过；Windows 2022 第二轮历史/文件/settings 断言通过，但最后 `Page.captureScreenshot` 超过统一 8 秒时限，完整运行仍记失败。只对截图命令使用 30 秒上限并先激活目标页，其他命令保持 8 秒；仍必须取得真实 PNG，不跳过采证。该修正不改变产品。
 
 验收完成后在此补入精确提交、运行编号和清理记录。MCP 2.2.0 仍使发布资格 blocked，迁移和恢复成功不豁免安全门槛。

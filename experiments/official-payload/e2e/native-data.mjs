@@ -94,8 +94,8 @@ async function connect(url) {
     else request.resolve(response.result);
   };
   socket.onclose = () => { for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('CDP target closed')); } pending.clear(); };
-  const send = (method, params = {}) => new Promise((resolve, reject) => {
-    const id = ++sequence, timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, 8000);
+  const send = (method, params = {}, timeoutMs = 8000) => new Promise((resolve, reject) => {
+    const id = ++sequence, timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout: ${method}`)); }, timeoutMs);
     pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params }));
   });
   return { send, close: () => socket.close(), evaluate: async expression => (await send('Runtime.evaluate', { expression, returnByValue: true })).result.value };
@@ -173,7 +173,9 @@ async function verifyDesktop(root, originPath, port, output) {
     assert.equal((await readFile(path.join(workspace, origin.workspaceFile), 'utf8')).trim(), origin.workspaceText);
     evidence.steps.push('official legacy-settings import applied; old credentials, web profile, browser and Native preferences excluded');
     evidence.screenshot = prefix + '.png';
-    await writeFile(evidence.screenshot, Buffer.from((await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'));
+    // Cold Windows runners can delay composition after all DOM checks finish.
+    await client.send('Page.bringToFront');
+    await writeFile(evidence.screenshot, Buffer.from((await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true }, 30000)).data, 'base64'));
     evidence.passed = true;
     return evidence;
   } catch (error) { evidence.error = error.message; throw error; }
