@@ -8,19 +8,6 @@ import { layoutForRoot } from '../../launcher/portable-core.mjs'
 
 // Maintenance entry, run from a checkout with Node 24. The pure package needs no
 // Node installation or new runtime adapter. Use the Native data-export format.
-async function plainPath(filename) {
-  let current = path.resolve(filename)
-  for (;;) {
-    try {
-      const entry = await lstat(current)
-      if (entry.isSymbolicLink()) throw new Error('Redirected migration paths are not supported.')
-    } catch (error) { if (error.code !== 'ENOENT') throw error }
-    const parent = path.dirname(current)
-    if (parent === current) break
-    current = parent
-  }
-}
-
 async function emptyDirectories(directory, found = []) {
   let entries
   try { entries = await readdir(directory, { withFileTypes: true }) }
@@ -33,17 +20,33 @@ async function emptyDirectories(directory, found = []) {
   return found
 }
 
-export async function importNativeData(archive, desktopRoot) {
-  archive = path.resolve(archive)
-  desktopRoot = path.resolve(desktopRoot)
+export async function importNativeData(archive, desktopRoot, { workspaceRoot = process.cwd() } = {}) {
+  const workspace = await realpath(workspaceRoot)
+  function localPath(value) {
+    const target = path.resolve(workspace, value)
+    if (target.startsWith(workspace + path.sep)) return target
+    throw new Error('Migration path escapes the selected working directory.')
+  }
+  async function plainPath(filename) {
+    for (let current = localPath(filename); current !== workspace; current = path.dirname(current)) {
+      if (current.startsWith(workspace + path.sep)) {
+        try {
+          const entry = await lstat(current)
+          if (entry.isSymbolicLink()) throw new Error('Redirected migration paths are not supported.')
+        } catch (error) { if (error.code !== 'ENOENT') throw error }
+      } else throw new Error('Migration ancestor escapes the selected working directory.')
+    }
+  }
+  archive = localPath(archive)
+  desktopRoot = localPath(desktopRoot)
   await plainPath(desktopRoot)
   await plainPath(archive)
-  if (!(await lstat(desktopRoot)).isDirectory()) throw new Error('Desktop root must already exist.')
-  desktopRoot = await realpath(desktopRoot)
+  if (!(await lstat(localPath(desktopRoot))).isDirectory()) throw new Error('Desktop root must already exist.')
+  desktopRoot = localPath(await realpath(localPath(desktopRoot)))
   const data = path.join(desktopRoot, 'data')
   await plainPath(data)
   await emptyDirectories(data)
-  const archiveStat = await lstat(archive)
+  const archiveStat = await lstat(localPath(archive))
   if (!archiveStat.isFile() || archiveStat.size > 512 * 1024 * 1024) throw new Error('Native data package is not a supported regular file.')
   const stage = await mkdtemp(path.join(desktopRoot, '.native-import-'))
   const layout = { ...layoutForRoot(stage), workspace: path.join(data, 'workspace') }
@@ -51,7 +54,7 @@ export async function importNativeData(archive, desktopRoot) {
     // Inspect, restore and identify the same private snapshot even if an export
     // replaces its original filename while migration is running.
     const snapshot = path.join(stage, 'source.dshdata')
-    await copyFile(archive, snapshot, constants.COPYFILE_EXCL)
+    await copyFile(localPath(archive), localPath(snapshot), constants.COPYFILE_EXCL)
     const input = await inspectDataArchive(snapshot)
     const categories = ['settings', 'sessions', 'workspace'].filter(value => input.categories.includes(value))
     const userFiles = input.files.filter(value => value === 'data/dsh-home/settings.yaml'

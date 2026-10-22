@@ -66,8 +66,16 @@ try {
     $cacheName = 'dsh-native-transfer-' + [guid]::NewGuid().ToString('N')
     $report.cachePath = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) $cacheName
     & (Join-Path $PSScriptRoot '../package-pure.ps1') -Installer $Installer -Output $portable -SevenZip $SevenZip -FeedUrl $ready.baseUrl -IndexUrl $ready.indexUrl -CacheDirName $cacheName
-    & $node (Join-Path $PSScriptRoot '../import-native-data.mjs') $NativeArchive $portable
-    if ($LASTEXITCODE -ne 0) { throw 'Native archive import failed' }
+    $inputArchive = Join-Path $WorkRoot 'input.dshdata'
+    [IO.File]::Copy([IO.Path]::GetFullPath($NativeArchive), $inputArchive, $false)
+    $report.inputArchiveSha256 = (Get-FileHash -LiteralPath $inputArchive -Algorithm SHA256).Hash.ToLowerInvariant()
+    # The maintenance CLI confines both inputs and outputs to the operator's cwd.
+    # Only this new work root is used; the downloaded source archive stays intact.
+    Push-Location -LiteralPath $WorkRoot
+    try {
+        & $node (Join-Path $PSScriptRoot '../import-native-data.mjs') $inputArchive $portable
+        if ($LASTEXITCODE -ne 0) { throw 'Native archive import failed' }
+    } finally { Pop-Location }
     $version = [string](Get-Content -LiteralPath $current -Raw | ConvertFrom-Json).version
     & $node (Join-Path $PSScriptRoot '../../../scripts/check-official-payload-security.mjs') (Join-Path $portable ('app/' + $version + '/resources/app.asar')) --report-only --output (Join-Path $evidence 'official-security.json')
     if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the actual official ASAR' }

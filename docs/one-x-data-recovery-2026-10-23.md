@@ -10,10 +10,11 @@
 
 ```powershell
 & '<Native>/runtime/node/node.exe' '<Native>/launcher/portable-cli.mjs' backup-data --output 'D:/transfer/Native.dshdata' --categories settings,sessions,workspace
-node experiments/official-payload/import-native-data.mjs 'D:/transfer/Native.dshdata' '<fresh-desktop-root>'
+Set-Location 'D:/transfer'
+node '<checkout>/experiments/official-payload/import-native-data.mjs' 'Native.dshdata' 'DSH-Portable'
 ```
 
-目标为全新解压、尚无使用数据的 1.x 根。`data` 可不存在或只有空目录；已有文件、junction/符号链接均拒绝。来源包只读，先复制自有暂存快照，再用同一快照校验、恢复和记录摘要。只含 Native 窗口/启动器偏好的包拒绝，收据数量只计算真正提交的文件。
+先切到专用迁移工作目录，归档与目标根均须在该目录下；路径逃逸拒绝。目标为全新解压、尚无使用数据的 1.x 根。`data` 可不存在或只有空目录；已有文件、junction/符号链接均拒绝。来源包只读，先复制自有暂存快照，再用同一快照校验、恢复和记录摘要。只含 Native 窗口/启动器偏好的包拒绝，收据数量只计算真正提交的文件。
 
 提交内容为 `data/dsh-home`、`data/workspace` 和 `data/launcher/native-import.json`。会话目录 key、已知各代普通/Zstd 日志的 cwd、嵌套 storage JSON 中精确相等的工作区路径由现有逻辑重定位；历史事件与后续压缩帧不作全局替换。涉及历史/工作区却缺少 `portableWorkspace` 元数据的旧包要求重新导出。
 
@@ -31,6 +32,8 @@ node experiments/official-payload/import-native-data.mjs 'D:/transfer/Native.dsh
 - 实际桌面必须显示旧工作区、标题和两条消息，完成官方 V0→V4 读取；冷启动后重验。settings 只断言实际接收 section，不以进程启动替代数据可用。
 - 跨机由独立 Linux runner 导出小归档，Windows 2022/2025 runner 下载后实际运行官方桌面。证据绑定归档摘要、源/目标 OS、home、hostname、成品与 source commit；改 USERPROFILE 或本机换目录不算跨机。
 - 两项集成测试覆盖普通/Zstd 历史、后续帧原样、嵌套 storage、中文工作区、默认排除、源保全、已用目标/junction/损坏包/缺元数据/无用户数据拒绝，接入已有三平台 Data transfer safety。
+
+首次独立 Windows 2022/2025 运行均在首轮完整 UI 通过后发现协议恢复缺陷：干净机器退出后残留官方首次写入的根默认 `URL:dsh` 与空 `URL Protocol`。本机预存协议根掩盖了此差异。修正仅保存/恢复这两项已知值的存在性、原值和类型，沿用 command 恢复并只剪除本轮新建空键；保留未知值/子键与原有空祖先，不做整树递归删除。须以修正后的独立运行重验，不能放宽全树对比。
 
 ## 异常恢复
 

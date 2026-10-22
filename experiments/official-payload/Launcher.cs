@@ -25,7 +25,8 @@ internal static class PortableLauncher {
     private static readonly JavaScriptSerializer Json = new JavaScriptSerializer();
     private static readonly Regex VersionPattern = new Regex(@"^\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?$", RegexOptions.CultureInvariant);
     private static readonly Regex UpdatedName = new Regex(@"^deepseek-harness-(\d+\.\d+\.\d+(?:-[A-Za-z0-9]+(?:\.[A-Za-z0-9]+)*)?)-win-x64\.exe$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-    private const string ProtocolKey = @"Software\Classes\dsh\shell\open\command";
+    private const string ProtocolRoot = @"Software\Classes\dsh";
+    private const string ProtocolKey = ProtocolRoot + @"\shell\open\command";
     private static RegistrySnapshot ProtocolBefore;
     private static string Root, AppRoot, DataRoot, LauncherData;
 
@@ -480,13 +481,32 @@ internal static class PortableLauncher {
         EnsureApplication(AppExecutable(version)); StartOfficialProcess(AppExecutable(version), link, probe);
     }
 
-    private sealed class RegistrySnapshot { public bool KeyExisted; public bool ValueExisted; public object Value; public RegistryValueKind ValueKind; }
+    private sealed class RegistryValueSnapshot { public bool Existed; public object Value; public RegistryValueKind Kind; }
+    private sealed class RegistrySnapshot {
+        public bool KeyExisted, RootKeyExisted, ShellKeyExisted, OpenKeyExisted;
+        public bool ValueExisted; public object Value; public RegistryValueKind ValueKind;
+        public RegistryValueSnapshot RootDefault, UrlProtocol;
+    }
+    private static RegistryValueSnapshot CaptureRegistryValue(RegistryKey key, string name) {
+        var result = new RegistryValueSnapshot(); result.Existed = key != null && key.GetValueNames().Contains(name, StringComparer.OrdinalIgnoreCase);
+        if (result.Existed) { result.Value = key.GetValue(name, null, RegistryValueOptions.DoNotExpandEnvironmentNames); result.Kind = key.GetValueKind(name); }
+        return result;
+    }
+    private static bool RegistryKeyExists(string path) { using (RegistryKey key = Registry.CurrentUser.OpenSubKey(path, false)) return key != null; }
+    private static void RestoreRegistryValue(RegistryKey key, string name, RegistryValueSnapshot value) {
+        if (value.Existed) key.SetValue(name, value.Value, value.Kind); else key.DeleteValue(name, false);
+    }
     private static RegistrySnapshot CaptureProtocol() {
-        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(ProtocolKey, false)) {
-            var result = new RegistrySnapshot(); result.KeyExisted = key != null;
-            if (key != null) { result.ValueExisted = key.GetValueNames().Contains(""); if (result.ValueExisted) { result.Value = key.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames); result.ValueKind = key.GetValueKind(""); } }
-            return result;
+        var result = new RegistrySnapshot();
+        using (RegistryKey root = Registry.CurrentUser.OpenSubKey(ProtocolRoot, false)) {
+            result.RootKeyExisted = root != null; result.RootDefault = CaptureRegistryValue(root, ""); result.UrlProtocol = CaptureRegistryValue(root, "URL Protocol");
         }
+        result.ShellKeyExisted = RegistryKeyExists(ProtocolRoot + @"\shell"); result.OpenKeyExisted = RegistryKeyExists(ProtocolRoot + @"\shell\open");
+        using (RegistryKey key = Registry.CurrentUser.OpenSubKey(ProtocolKey, false)) {
+            result.KeyExisted = key != null;
+            if (key != null) { result.ValueExisted = key.GetValueNames().Contains(""); if (result.ValueExisted) { result.Value = key.GetValue("", null, RegistryValueOptions.DoNotExpandEnvironmentNames); result.ValueKind = key.GetValueKind(""); } }
+        }
+        return result;
     }
     // The official app re-registers dsh:// to its own exe on every start, so ownership is re-checked every second
     // (one registry read) instead of on a slow timer; a link clicked in between would bypass the launcher.
@@ -509,9 +529,17 @@ internal static class PortableLauncher {
                 if (snapshot.ValueExisted) key.SetValue("", snapshot.Value, snapshot.ValueKind); else key.DeleteValue("", false);
             }
         } else {
-            Registry.CurrentUser.DeleteSubKeyTree(ProtocolKey, false);
-            PruneEmptyKey(@"Software\Classes\dsh\shell\open"); PruneEmptyKey(@"Software\Classes\dsh\shell"); PruneEmptyKey(@"Software\Classes\dsh");
+            using (RegistryKey key = Registry.CurrentUser.OpenSubKey(ProtocolKey, true)) if (key != null) key.DeleteValue("", false);
+            PruneEmptyKey(ProtocolKey);
         }
+        // Electron also writes these two root values. Preserve unknown values
+        // and subkeys, and only prune ancestors that did not exist before launch.
+        using (RegistryKey root = Registry.CurrentUser.CreateSubKey(ProtocolRoot)) {
+            RestoreRegistryValue(root, "", snapshot.RootDefault); RestoreRegistryValue(root, "URL Protocol", snapshot.UrlProtocol);
+        }
+        if (!snapshot.OpenKeyExisted) PruneEmptyKey(ProtocolRoot + @"\shell\open");
+        if (!snapshot.ShellKeyExisted) PruneEmptyKey(ProtocolRoot + @"\shell");
+        if (!snapshot.RootKeyExisted) PruneEmptyKey(ProtocolRoot);
     }
     private static void PruneEmptyKey(string path) { using (RegistryKey key = Registry.CurrentUser.OpenSubKey(path, true)) if (key != null && key.SubKeyCount == 0 && key.ValueCount == 0) Registry.CurrentUser.DeleteSubKey(path, false); }
 

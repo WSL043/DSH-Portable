@@ -114,6 +114,65 @@ test('compiled pure launcher rejects redirected data before any creation and pre
       assert.deepEqual(await readdir(external), ['marker.txt']);
     });
 
+    await t.test('protocol metadata and value types restore on fresh and existing Windows profiles', async () => {
+      const registryRoot = String.raw`Software\DSHPortableAcceptance\protocol-${crypto.randomUUID()}`;
+      const source = await readFile(join(repository, 'experiments/official-payload/Launcher.cs'), 'utf8');
+      const realRoot = String.raw`Software\Classes\dsh`;
+      assert.equal(source.split(realRoot).length, 2, 'the fixture must replace the only real protocol root literal');
+      const fixtureSource = join(scratch, 'ProtocolLauncher.cs'), fixtureExe = join(scratch, 'ProtocolLauncher.exe');
+      await writeFile(fixtureSource, source.replaceAll(realRoot, registryRoot + String.raw`\dsh`));
+      const output = ps(`
+        $ErrorActionPreference='Stop'; $fixture=${quote(registryRoot)}; $root=$fixture+'\\dsh'
+        if([Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($fixture)){throw 'Registry fixture already exists'}
+        & (Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe') /nologo /target:winexe /platform:x64 /optimize+ /r:System.Web.Extensions.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll ${quote('/out:' + fixtureExe)} ${quote(fixtureSource)}
+        if($LASTEXITCODE -ne 0){throw 'Protocol fixture compilation failed'}
+        $type=[Reflection.Assembly]::Load([IO.File]::ReadAllBytes(${quote(fixtureExe)})).GetType('PortableLauncher'); $flags=[Reflection.BindingFlags]'NonPublic,Static'
+        function Write-Value([string]$path,[string]$name,$value,[Microsoft.Win32.RegistryValueKind]$kind) {
+          $key=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($path); try{$key.SetValue($name,$value,$kind)}finally{$key.Dispose()}
+        }
+        function Read-Tree([string]$path,[string]$relative='') {
+          $key=[Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($path,$false); if($null -eq $key){return}
+          try {
+            $values=@(); foreach($name in @($key.GetValueNames()|Sort-Object)) {
+              $values+=@{name=$name;kind=[string]$key.GetValueKind($name);value=$key.GetValue($name,$null,[Microsoft.Win32.RegistryValueOptions]::DoNotExpandEnvironmentNames)}
+            }
+            $rows=@(@{path=$relative;values=$values})
+            foreach($name in @($key.GetSubKeyNames()|Sort-Object)){$rows+=@(Read-Tree ($path+'\\'+$name) ($relative+'\\'+$name))}
+            return $rows
+          } finally {$key.Dispose()}
+        }
+        $cases=@()
+        try {
+          foreach($kind in @('absent','existing','empty-ancestors')) {
+            [Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($root,$false)
+            if($kind -eq 'existing') {
+              Write-Value $root '' '%TEMP%\\prior-title' ExpandString
+              Write-Value $root 'uRl PrOtOcOl' '%TEMP%\\prior-marker' ExpandString
+              Write-Value $root 'unknown-binary' ([byte[]](1,2,3,4)) Binary
+              Write-Value ($root+'\\unknown\\child') 'qword' ([long]1234567890123) QWord
+              Write-Value ($root+'\\DefaultIcon') '' '%TEMP%\\prior.ico' ExpandString
+              Write-Value ($root+'\\shell\\open\\command') '' '"%TEMP%\\prior.exe" "%1"' ExpandString
+            } elseif($kind -eq 'empty-ancestors') {
+              $empty=[Microsoft.Win32.Registry]::CurrentUser.CreateSubKey($root+'\\shell\\open'); $empty.Dispose()
+            }
+            $before=@(Read-Tree $root)
+            $snapshot=$type.GetMethod('CaptureProtocol',$flags).Invoke($null,@())
+            $type.GetMethod('RegisterProtocol',$flags).Invoke($null,@())|Out-Null
+            # These are exactly the three values written by Electron's Windows protocol registration.
+            Write-Value $root '' 'URL:dsh' String; Write-Value $root 'URL Protocol' '' String
+            Write-Value ($root+'\\shell\\open\\command') '' '"C:\\synthetic-official.exe" "%1"' String
+            $type.GetMethod('RestoreProtocol',$flags).Invoke($null,@($snapshot))|Out-Null
+            $cases+=@{kind=$kind;before=$before;after=@(Read-Tree $root)}
+          }
+        } finally {[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($fixture,$false)}
+        @{cases=$cases;registryClean=($null -eq [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($fixture))}|ConvertTo-Json -Depth 10 -Compress
+      `);
+      const results = JSON.parse(output.trim().split(/\r?\n/).at(-1));
+      assert.equal(results.registryClean, true);
+      for (const item of results.cases) assert.deepEqual(item.after, item.before, `${item.kind} protocol tree was not restored`);
+      console.log('isolated protocol restoration:', JSON.stringify(results.cases.map(item => ({ kind: item.kind, keys: item.after.length }))));
+    });
+
     await t.test('activation lease and update exclusive lock are incompatible in both directions', async () => {
       const root = join(scratch, 'lease-root'); await mkdir(join(root, 'data/launcher'), { recursive: true });
       const output = ps(`

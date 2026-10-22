@@ -40,7 +40,8 @@ test('updated-copy filename, protocol link whitelist and launcher protocol comma
   assert.equal(isValidDshLink('dsh://x" --evil'), false);
   assert.equal(isValidDshLink('dsh://x\n'), false);
   const source = await readFile(launcherPath, 'utf8');
-  assert.match(source, /Software\\Classes\\dsh\\shell\\open\\command/);
+  assert.match(source, /ProtocolRoot = @"Software\\Classes\\dsh"/);
+  assert.match(source, /ProtocolKey = ProtocolRoot \+ @"\\shell\\open\\command"/);
   assert.match(source, /--open \\\"%1\\\"/);
   assert.match(source, /WritePortableRootPointer\(ReadCacheName\(\)\)/);
   assert.match(source, /1\.0\.0\.5/);
