@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash, generateKeyPairSync, sign } from 'node:crypto'
-import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
@@ -132,7 +132,7 @@ test('offline complete manifests preflight the signed Windows ZIP and delegate o
   assert.equal(result.status, 'full-package-required')
   assert.equal(result.existingFullUpdater, true)
   assert.equal(result.latest, '0.9.4')
-  assert.equal(result.fullPackageManifestFile, input)
+  assert.equal(result.fullPackageManifestFile, await realpath(input))
   for (const [patch, message] of [[{ filename: '../complete.zip' }, /archive name/i], [{ bytes: payload.length - 1 }, /size/i],
     [{ sha256: 'a'.repeat(64) }, /digest/i]]) {
     await writeOfflineManifest(input, { ...full, payloads: { windowsX64: { ...full.payloads.windowsX64, ...patch } } })
