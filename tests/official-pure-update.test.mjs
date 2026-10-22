@@ -96,48 +96,78 @@ test('chunked update metadata is rejected before an oversized stream is fully bu
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
-test('real update transaction keeps a committed version on cleanup failure and refuses concurrent activation/state changes', windows, async () => {
+test('real update transaction preserves existing trees and current state across locks, cancellation and write failures', windows, async () => {
   const fixture = await mkdtemp(join(tmpdir(), 'pure-update-transaction-'));
   try {
     // The engine is unchanged. Only download/extraction are replaced at its module boundary;
     // activation, locks, atomic file replacement, rollback and cleanup execute on the real filesystem.
     const mockModule = `${await readFile(payload, 'utf8')}
 function Read-BoundedHttpText { return (@{versions=@(@{version='2.0.0';installerUrl='https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-2.0.0-win-x64.exe';sha512=[Convert]::ToBase64String((New-Object byte[] 64));size=1000000})}|ConvertTo-Json -Depth 5) }
-function Get-OfficialInstaller([string]$Destination) { [IO.File]::WriteAllText($Destination,'fixture'); return $Destination }
+$script:fixtureAttempts=0
+function Get-OfficialInstaller([string]$Destination) {
+  $script:fixtureAttempts++
+  [IO.File]::WriteAllText((Join-Path $env:PURE_TEST_ROOT 'attempt-count.txt'),[string]$script:fixtureAttempts)
+  if($env:PURE_FAILURE -eq 'download-write') { throw [IO.IOException]::new('Injected destination write refusal') }
+  if($env:PURE_FAILURE -eq 'permanent-network') { throw [Net.WebException]::new('Installer digest mismatch',[Net.WebExceptionStatus]::ConnectFailure) }
+  if($env:PURE_FAILURE -eq 'download-partial') {
+    $partial=Join-Path $env:PURE_TEST_ROOT 'app/2.0.0.partial'; $null=New-Item -ItemType Directory -Path $partial;
+    [IO.File]::WriteAllText((Join-Path $partial 'preserve.txt'),'unknown/interrupted content')
+  }
+  if($env:PURE_FAILURE -eq 'network-retry') {
+    if($script:fixtureAttempts -eq 1) { throw [Net.WebException]::new('接続に失敗しました',[Net.WebExceptionStatus]::ConnectFailure) }
+  }
+  [IO.File]::WriteAllText($Destination,'fixture'); return $Destination
+}
 function Expand-OfficialPayload([string]$Installer,$Candidate,[string]$Output) {
   $null=New-Item -ItemType Directory -Path $Output -Force; [IO.File]::WriteAllText((Join-Path $Output 'DeepSeek Harness.exe'),'fixture');
+  if($env:PURE_FAILURE -eq 'extract-write') { throw [IO.IOException]::new('Injected extraction write failure (disk full/denied)') }
+  if($env:PURE_FAILURE -eq 'cancel') { [IO.File]::WriteAllText((Join-Path $env:PURE_TEST_ROOT 'cancel.request'),'cancel') }
   if($env:PURE_STATE_CHANGE -eq '1') { [IO.File]::WriteAllText((Join-Path $env:PURE_TEST_ROOT 'app/current.json'),'{"version":"1.1.0","pendingHealth":false}') }
   return @{version=$Candidate.version;payloadTreeSha256=(Get-PortablePayloadTreeHash $Output)}
 }
 function Remove-OwnedOlderPayloads { throw 'Injected old payload sharing failure' }
 `;
-    await writeFile(join(fixture, 'Payload.psm1'), mockModule);
+    await writeFile(join(fixture, 'Payload.psm1'), '\ufeff' + mockModule);
     await writeFile(join(fixture, 'apply-update.ps1'), await readFile(engine));
-    for (const scenario of ['cleanup', 'activation', 'state']) {
+    for (const scenario of ['cleanup', 'activation', 'state', 'stale-partial', 'stale-target', 'extract-write', 'cancel', 'commit-write', 'network-retry', 'download-write', 'permanent-network', 'download-partial']) {
       const target = join(fixture, scenario);
       const result = JSON.parse(ps(`
-        $env:PURE_TEST_ROOT=${quote(target)}; $env:PURE_STATE_CHANGE=${quote(scenario === 'state' ? '1' : '0')};
+        $env:PURE_TEST_ROOT=${quote(target)}; $env:PURE_STATE_CHANGE=${quote(scenario === 'state' ? '1' : '0')}; $env:PURE_FAILURE=${quote(scenario)};
         $null=New-Item -ItemType Directory -Path ${quote(join(target, 'app/1.0.0'))},${quote(join(target, 'data/launcher'))},${quote(join(target, 'launcher'))} -Force;
         [IO.File]::WriteAllText(${quote(join(target, 'app/1.0.0/DeepSeek Harness.exe'))},'old');
         [IO.File]::WriteAllText(${quote(join(target, 'DeepSeek Harness Portable.exe'))},'launcher fixture');
         [IO.File]::WriteAllText(${quote(join(target, 'app/current.json'))},'{"version":"1.0.0","pendingHealth":false}');
         [IO.File]::WriteAllText(${quote(join(target, 'launcher/follow.json'))},'{"indexUrl":"https://example.invalid/index.json","feedUrl":"https://example.invalid/","cacheDirName":"test"}');
+        $marker=$null;
+        if(${['stale-partial', 'stale-target'].includes(scenario) ? '$true' : '$false'}) {
+          $existing=${quote(join(target, scenario === 'stale-partial' ? 'app/2.0.0.partial' : 'app/2.0.0'))};
+          $null=New-Item -ItemType Directory -Path $existing; $marker=Join-Path $existing 'preserve.txt';
+          [IO.File]::WriteAllText($marker,'unknown/interrupted content');
+        }
+        if(${scenario === 'download-partial' ? '$true' : '$false'}) { $marker=${quote(join(target, 'app/2.0.0.partial/preserve.txt'))} }
         $held=$null;
         if(${scenario === 'activation' ? '$true' : '$false'}) { $held=[IO.File]::Open(${quote(join(target, 'data/launcher/activation.lock'))},'OpenOrCreate','ReadWrite','None') }
+        if(${scenario === 'commit-write' ? '$true' : '$false'}) { $held=[IO.File]::Open(${quote(join(target, 'app/current.json'))},'Open','Read','Read') }
         $ErrorActionPreference='Continue';
-        try { & ${quote(powershell)} -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File ${quote(join(fixture, 'apply-update.ps1'))} -Root ${quote(target)} -Version '2.0.0' -SelfPath ${quote(join(target, 'DeepSeek Harness Portable.exe'))} -Install *> ${quote(join(target, 'engine.log'))}; $code=$LASTEXITCODE } finally { if($held){$held.Dispose()}; $ErrorActionPreference='Stop' }
-        @{exitCode=$code;current=(Get-Content ${quote(join(target, 'app/current.json'))} -Raw|ConvertFrom-Json);status=(Get-Content ${quote(join(target, 'data/launcher/update-status.json'))} -Raw|ConvertFrom-Json);newExists=(Test-Path ${quote(join(target, 'app/2.0.0'))});old=[IO.File]::ReadAllText(${quote(join(target, 'app/1.0.0/DeepSeek Harness.exe'))})}|ConvertTo-Json -Depth 6 -Compress;
+        try { & ${quote(powershell)} -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File ${quote(join(fixture, 'apply-update.ps1'))} -Root ${quote(target)} -Version '2.0.0' -SelfPath ${quote(join(target, 'DeepSeek Harness Portable.exe'))} -Install -CancelFile ${quote(join(target, 'cancel.request'))} *> ${quote(join(target, 'engine.log'))}; $code=$LASTEXITCODE } finally { if($held){$held.Dispose()}; $ErrorActionPreference='Stop' }
+        $attempts=if(Test-Path ${quote(join(target, 'attempt-count.txt'))}){[int][IO.File]::ReadAllText(${quote(join(target, 'attempt-count.txt'))})}else{1};
+        @{exitCode=$code;attempts=$attempts;current=(Get-Content ${quote(join(target, 'app/current.json'))} -Raw|ConvertFrom-Json);status=(Get-Content ${quote(join(target, 'data/launcher/update-status.json'))} -Raw|ConvertFrom-Json);newExists=(Test-Path ${quote(join(target, 'app/2.0.0'))});partialExists=(Test-Path ${quote(join(target, 'app/2.0.0.partial'))});receiptExists=(Test-Path ${quote(join(target, 'launcher/receipts/2.0.0.json'))});markerPreserved=($marker -and (Test-Path -LiteralPath $marker) -and [IO.File]::ReadAllText($marker) -ceq 'unknown/interrupted content');old=[IO.File]::ReadAllText(${quote(join(target, 'app/1.0.0/DeepSeek Harness.exe'))})}|ConvertTo-Json -Depth 6 -Compress;
       `));
       assert.equal(result.old, 'old');
-      if (scenario === 'cleanup') {
+      assert.equal(result.attempts, scenario === 'network-retry' ? 2 : 1, 'only a transient network failure is retried');
+      if (scenario === 'cleanup' || scenario === 'network-retry') {
         assert.equal(result.exitCode, 0, JSON.stringify(result));
         assert.equal(result.current.version, '2.0.0');
         assert.equal(result.status.status, 'applied');
         assert.deepEqual(result.status.cleanup.deferred, ['older-versions']);
       } else {
-        assert.equal(result.exitCode, 1);
+        assert.equal(result.exitCode, scenario === 'cancel' ? 0 : 1, JSON.stringify(result));
         assert.equal(result.current.version, scenario === 'state' ? '1.1.0' : '1.0.0');
-        assert.equal(result.newExists, false);
+        assert.equal(result.newExists, scenario === 'stale-target');
+        assert.equal(result.partialExists, ['stale-partial', 'download-partial'].includes(scenario));
+        assert.equal(result.receiptExists, false);
+        if (scenario.startsWith('stale-') || scenario === 'download-partial') assert.equal(result.markerPreserved, true, 'an existing tree is not this attempt\'s scratch');
+        if (scenario === 'cancel') assert.equal(result.status.status, 'cancelled');
       }
     }
   } finally { await rm(fixture, { recursive: true, force: true }); }

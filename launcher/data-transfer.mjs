@@ -219,6 +219,7 @@ export async function inspectDataArchive(filename, options = {}) {
     format: document.format,
     version: document.version,
     createdAt: document.createdAt,
+    portableWorkspace: document.portableWorkspace,
     encrypted,
     categories: document.categories,
     files: document.files.map(file => file.path),

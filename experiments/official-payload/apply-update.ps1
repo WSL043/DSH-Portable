@@ -15,7 +15,7 @@ if ($Root.Length -le 3 -or (-not $Install -and $Version -notmatch $versionPatter
 $appRoot = Join-Path $Root 'app'; $launcherRoot = Join-Path $Root 'launcher'; $storage = Join-Path $Root 'data/launcher'
 foreach ($path in @($appRoot, $launcherRoot, $storage)) { Assert-PlainPath $path }
 $statusPath = Join-Path $storage 'update-status.json'; $currentPath = Join-Path $appRoot 'current.json'
-$lock = $null; $activation = $null; $stage = $null; $partial = $null; $candidatePath = $null
+$lock = $null; $activation = $null; $stage = $null; $partial = $null; $candidatePath = $null; $ownsPartial = $false
 $originalVersion = $null; $committed = $false; $status = [ordered]@{ status='starting'; phase='initializing'; version=$Version; downloadedBytes=0; totalBytes=0; progress=0 }
 
 # A flaky connection (weak Wi-Fi, a proxy that drops idle sockets) should not make the user press Retry: resume the
@@ -26,6 +26,13 @@ function Invoke-WithNetworkRetry([scriptblock]$Action, [int]$Attempts = 4) {
             $message = [string]$_.Exception.Message
             $permanent = $message -match '(?i)cancelled|digest mismatch|publisher|size mismatch|redirects require|invalid byte range|unexpected installer response|server did not honor'
             $transient = $message -match '(?i)timed out|timeout|unable to read|transport|connection|download is incomplete|exceeded bounds|could not be resolved|remote server|forcibly closed|reset'
+            # .NET messages are localized, and PowerShell wraps GetResponse/Read failures.
+            # Recognize known network statuses without retrying every IO exception.
+            for ($failure = $_.Exception; $failure; $failure = $failure.InnerException) {
+                if ($failure -is [Net.WebException] -and [string]$failure.Status -in @('Timeout', 'ConnectFailure', 'NameResolutionFailure', 'ProxyNameResolutionFailure', 'ConnectionClosed', 'KeepAliveFailure', 'ReceiveFailure', 'SendFailure')) {
+                    $transient = $true; break
+                }
+            }
             if ($permanent -or -not $transient -or $attempt -ge $Attempts) { throw }
             $script:status.retry = $attempt; Write-Atomic $statusPath $script:status
             $until = [DateTime]::UtcNow.AddSeconds(2 * [Math]::Pow(2, $attempt - 1))
@@ -135,6 +142,11 @@ try {
     Invoke-WithNetworkRetry { Get-OfficialInstaller $installer $candidate { param($downloaded,$total) $status.downloadedBytes = [long]$downloaded; $status.totalBytes = [long]$total; $status.progress = [Math]::Floor(100 * $downloaded / $total); if ($downloaded -ge $total) { $status.phase = 'verifying' }; Write-Atomic $statusPath $status } $CancelFile | Out-Null }
     if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
     $status.status = 'extracting'; $status.phase = 'extracting'; Write-Atomic $statusPath $status
+    Assert-PlainPath $partial
+    if (Test-Path -LiteralPath $partial) { throw 'Partial directory appeared during download; preserving it' }
+    # Only this attempt's extraction is scratch. A pre-existing interrupted/unknown
+    # directory was rejected above and must survive the failure cleanup unchanged.
+    $ownsPartial = $true
     $receipt = Expand-OfficialPayload $installer $candidate $partial (Join-Path $launcherRoot '7z.exe') ([string]$follow.feedUrl) ([string]$follow.cacheDirName)
     if ($CancelFile -and (Test-Path -LiteralPath $CancelFile)) { throw 'Installation cancelled' }
     $status.status = 'switching'; $status.phase = 'switching'; Write-Atomic $statusPath $status
@@ -181,7 +193,7 @@ try {
     $status.status = if ($message -match '(?i)cancelled') { 'cancelled' } else { 'failed' }; $status.phase = $status.status; $status.error = $message
     if (-not $lock) { Write-Error $message -ErrorAction Continue }
 } finally {
-    if ($lock -and -not $committed -and $partial -and (Test-Path -LiteralPath $partial)) {
+    if ($lock -and $ownsPartial -and -not $committed -and $partial -and (Test-Path -LiteralPath $partial)) {
         try { Remove-PortableScratch $partial $appRoot } catch { }
     }
     if ($lock -and $stage -and (Test-Path -LiteralPath $stage)) { try { Remove-PortableScratch $stage $storage } catch { } }

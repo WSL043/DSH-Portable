@@ -6,6 +6,9 @@ on:
       - 'launcher/data-*.mjs'
       - 'launcher/portable-core.mjs'
       - 'tests/data-transfer*.test.mjs'
+      - 'experiments/official-payload/import-native-data.mjs'
+      - 'experiments/official-payload/e2e/native-data.mjs'
+      - 'tests/official-pure-native-data.test.mjs'
       - '.github/workflows/data-transfer-safety.yml'
   workflow_dispatch:
 
@@ -33,4 +36,4 @@ jobs:
         with:
           node-version: 24.19.0
       - name: Test archive round trips and filesystem boundaries
-        run: node --test tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs tests/data-transfer-io-failure.test.mjs
+        run: node --test tests/data-transfer.test.mjs tests/data-transfer-security.test.mjs tests/data-transfer-io-failure.test.mjs tests/official-pure-native-data.test.mjs

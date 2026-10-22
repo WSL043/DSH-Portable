@@ -2,6 +2,12 @@ name: Official pure portable end-to-end acceptance
 on:
   workflow_dispatch:
     inputs:
+      scenario:
+        description: 'Acceptance scenario; both routes retain evidence without publishing'
+        type: choice
+        required: true
+        default: update
+        options: [update, data-transfer]
       candidate_version:
         description: 'Optional assertion for the version currently served by the official desktop feed'
         required: false
@@ -11,6 +17,7 @@ permissions:
   contents: read
 jobs:
   pure-portable-e2e:
+    if: inputs.scenario == 'update'
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -98,5 +105,85 @@ jobs:
             build/orch-080/T27/write-trace-summary.json
             build/orch-080/T27/protocol-before.json
             build/orch-080/T27/protocol-after.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  native-data-origin:
+    if: inputs.scenario == 'data-transfer'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - name: Export synthetic Native history and settings on an independent Linux host
+        run: node experiments/official-payload/e2e/native-data.mjs export "$RUNNER_TEMP/native-data-source" "$RUNNER_TEMP/native-transfer-origin"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-transfer-origin
+          path: ${{ runner.temp }}/native-transfer-origin/
+          if-no-files-found: error
+          retention-days: 14
+
+  native-data-desktop:
+    needs: native-data-origin
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.19.0
+      - uses: actions/download-artifact@v8
+        with:
+          name: native-transfer-origin
+          path: artifacts/native-transfer-origin
+      - name: Resolve the current signed desktop candidate
+        shell: powershell
+        env:
+          REQUESTED_CANDIDATE_VERSION: ${{ inputs.candidate_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $baseline = Join-Path $env:RUNNER_TEMP 'native-data-baseline-candidate.json'
+          Copy-Item -LiteralPath 'experiments/official-payload/candidate.json' -Destination $baseline
+          node experiments/official-payload/resolve-candidate.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Could not resolve the official desktop feed' }
+          $candidate = Get-Content -LiteralPath 'experiments/official-payload/candidate.json' -Raw | ConvertFrom-Json
+          if ($env:REQUESTED_CANDIDATE_VERSION -and $candidate.version -cne $env:REQUESTED_CANDIDATE_VERSION) { throw 'Requested version does not match the actual official feed' }
+          ('NATIVE_INDEX_BASELINE=' + $baseline) | Add-Content -LiteralPath $env:GITHUB_ENV -Encoding UTF8
+      - id: stage-native
+        name: Download and verify the actual official installer
+        uses: ./.github/actions/official-payload-stage
+        with:
+          candidate: experiments/official-payload/candidate.json
+          installer: ${{ runner.temp }}/native-data-official.exe
+      - name: Import another host's archive and verify real desktop UI twice
+        shell: powershell
+        env:
+          NATIVE_INSTALLER: ${{ steps.stage-native.outputs.installer }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          ./experiments/official-payload/e2e/run-native-data-e2e.ps1 `
+            -Installer $env:NATIVE_INSTALLER `
+            -Candidate 'experiments/official-payload/candidate.json' `
+            -IndexBaselineCandidate $env:NATIVE_INDEX_BASELINE `
+            -SevenZip (Join-Path $env:ProgramFiles '7-Zip/7z.exe') `
+            -NativeArchive 'artifacts/native-transfer-origin/legacy.dshdata' `
+            -Origin 'artifacts/native-transfer-origin/origin.json' `
+            -WorkRoot (Join-Path $env:RUNNER_TEMP 'pure-native-data')
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: native-data-evidence-${{ matrix.os }}
+          path: ${{ runner.temp }}/pure-native-data/evidence/
           if-no-files-found: warn
           retention-days: 14

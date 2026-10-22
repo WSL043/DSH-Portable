@@ -11,11 +11,14 @@
 ```powershell
 gh workflow run official-pure-alpha.yml --ref <branch> -f alpha=99 -f smoke=all -f publish_draft=false
 gh workflow run official-pure-e2e.yml --ref <branch> -f candidate_version=0.2.1-rc.2
+gh workflow run official-pure-e2e.yml --ref <branch> -f scenario=data-transfer -f candidate_version=0.2.1-rc.2
 ```
 
 第一条使用生产目录中已接纳的版本，生成完整包与 Bootstrap 包并实际冒烟，不创建 alpha.99 草稿或标签。第二条由受控旧候选 `candidate.json` 的 `0.1.7-rc.2` 升级至官方 feed 当前版本；参数只断言新版身份，不改写生产目录。feed 版本改变后应先核实身份再调整断言。
 
 `candidate.json` 的旧版本是跨版本 E2E 输入，不是过时的生产版本锁，不能随源码基线刷新一起覆盖。
+
+第三条验证独立 Linux 源归档到 Windows 桌面的迁移和冷启动，不创建发布。离线入口、默认排除与故障注入边界见 [数据和恢复验收](one-x-data-recovery-2026-10-23.md)。
 
 ## 门槛和证据
 
