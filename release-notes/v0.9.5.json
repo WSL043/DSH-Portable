@@ -6,7 +6,8 @@
       "离线更新：帮助菜单与新版设置页可选择本地清单，复用现有签名校验、更新事务、健康检查和回滚；旧内核设置页也可通过宿主菜单更新。",
       "窗口自定义：提供可探测的窗口栏、拖动、控制、状态与既有菜单接口，由用户插件决定外观；默认保留原生窗口，并提供托盘恢复入口。",
       "窗口一致性：标题按钮、菜单与插件共用窗口操作，修正全屏中切换最大化的状态冲突，以及恢复窗口栏意外还原窗口的问题。",
-      "界面：缩短应用与托盘菜单描述，并参考官方桌面端统一顶栏高度、字号、浅深配色与悬停留白；保留必要的更新与恢复提示。"
+      "界面：缩短应用与托盘菜单描述，并参考官方桌面端统一顶栏高度、字号、浅深配色与悬停留白；保留必要的更新与恢复提示。",
+      "稳定性：本机健康检查使用独立连接，避免空闲连接失效时误报启动中；关闭窗口优先等待 WebView 释放资源，再决定是否需要安全回收。"
     ],
     "upgradeNotes": [
       "内置 DSH 仍为 0.2.1-rc.2，沿用既有默认插件与外壳契约 2；可选内核只提供已通过对应平台资格的版本。",
@@ -27,7 +28,8 @@
       "Offline updates: the Help menu and newer settings pages accept local manifests through the existing signature checks, update transactions, health checks and rollback. The host menu remains available with older core settings pages.",
       "Window customization: discoverable capabilities expose window chrome, dragging, controls, state and existing menus. User plugins choose the appearance; native controls remain the default, with manual recovery from the tray.",
       "Consistent controls: caption buttons, menus and plugins share window actions, fixing maximize state conflicts during fullscreen and unintended window restoration when recovering native chrome.",
-      "Interface: shorter application and tray labels reduce crowding after translation. Title-bar height, text size, light/dark colors and hover spacing follow the official desktop's visual language, retaining essential update and recovery guidance."
+      "Interface: shorter application and tray labels reduce crowding after translation. Title-bar height, text size, light/dark colors and hover spacing follow the official desktop's visual language, retaining essential update and recovery guidance.",
+      "Stability: local health probes use fresh connections to avoid reporting startup after an idle socket expires. Shutdown first waits for WebView to release its resources before considering the safe owned-process fallback."
     ],
     "upgradeNotes": [
       "Keeps DSH 0.2.1-rc.2, the existing default plugins and shell contract 2. Selectable cores remain limited to versions qualified for each platform.",
