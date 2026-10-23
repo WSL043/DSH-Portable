@@ -475,6 +475,17 @@ namespace DshPortable
                             e.Graphics.DrawPath(pen, outline);
                         e.Graphics.DrawLine(pen, x - 2, y - 5, x - 2, y + 5);
                     }
+                    else if (e.Item.Name == "nav-new-session")
+                    {
+                        e.Graphics.DrawLines(pen, new PointF[] {
+                            new PointF(x + 5, y + 1), new PointF(x + 5, y + 5),
+                            new PointF(x - 5, y + 5), new PointF(x - 5, y - 5), new PointF(x - 1, y - 5),
+                        });
+                        e.Graphics.DrawPolygon(pen, new PointF[] {
+                            new PointF(x - 1, y + 2), new PointF(x, y - 1), new PointF(x + 4, y - 5),
+                            new PointF(x + 6, y - 3), new PointF(x + 2, y + 1),
+                        });
+                    }
                     else
                     {
                         float direction = e.Item.Name == "nav-back" ? -1 : 1;

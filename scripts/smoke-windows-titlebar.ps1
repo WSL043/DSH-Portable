@@ -95,7 +95,7 @@ try {
    $type.GetField('trayBridgeReady',$flags).SetValue($window,$true)
    $type.GetField('operationRunning',$flags).SetValue($window,$false)
    $type.GetMethod('RefreshDesktopCommands',$flags).Invoke($window,@()) | Out-Null
-   if($NavigationPreview -and (-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-back'].Enabled -or $menu.Items['nav-forward'].Enabled)){throw 'Navigation availability does not follow host state'}
+   if($NavigationPreview -and (-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-new-session'].Enabled -or -not $menu.Items['nav-back'].Enabled -or $menu.Items['nav-forward'].Enabled)){throw 'Navigation availability does not follow host state'}
  }
  foreach($theme in @('dark','light')){
    $type.GetField('trayTheme',$flags).SetValue($window,$theme)
@@ -127,13 +127,20 @@ try {
        $selectable=@($dropDown.Items | Where-Object { $_ -is [Windows.Forms.ToolStripMenuItem] -and $_.Enabled })
        if($selectable.Count -gt 0){$selectable[0].Select()}
        [Windows.Forms.Application]::DoEvents()
-       if($dropDown.Width -lt 260){throw "$name dropdown is narrower than 260px: $($dropDown.Width)"}
+       if($dropDown.Width -lt 180){throw "$name dropdown is narrower than 180px: $($dropDown.Width)"}
+       if($name -eq 'menu-file' -and $dropDown.Width -ge 260){throw 'File menu retained the oversized minimum width'}
        if($dropDown.Padding.Top -ne 6 -or $dropDown.Padding.Bottom -ne 6){throw "$name dropdown padding is not 6px"}
        foreach($item in $dropDown.Items){
          if($item -is [Windows.Forms.ToolStripSeparator]){
            if($item.Height -ne 13){throw "$name separator height is not 13px: $($item.Height)"}
-         } elseif($item -is [Windows.Forms.ToolStripMenuItem] -and $item.Height -ne 30){
-           throw "$name menu row height is not 30px: $($item.Height)"
+         } elseif($item -is [Windows.Forms.ToolStripMenuItem]){
+           if($item.Height -ne 30){throw "$name menu row height is not 30px: $($item.Height)"}
+           $textFlags=[Windows.Forms.TextFormatFlags]::NoPadding -bor [Windows.Forms.TextFormatFlags]::SingleLine
+           $title=[Windows.Forms.TextRenderer]::MeasureText($item.Text,$item.Font,[Drawing.Size]::Empty,$textFlags)
+           $shortcut=if($item.ShowShortcutKeys){$item.ShortcutKeyDisplayString}else{''}
+           $reserved=if($item.HasDropDownItems){30}else{12}
+           if($shortcut){$reserved+=12+[Windows.Forms.TextRenderer]::MeasureText($shortcut,$item.Font,[Drawing.Size]::Empty,$textFlags).Width}
+           if($title.Width -gt $item.Width-12-$reserved){throw "$name text clips or overlaps its shortcut: $($item.Text)"}
          }
        }
        # Draw the real native dropdown off-screen; this does not exercise DWM's popup shadow.

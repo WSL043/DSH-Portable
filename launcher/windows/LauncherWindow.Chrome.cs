@@ -218,8 +218,9 @@ namespace DshPortable
                 menu.Padding = new Padding(10, 0, 10, 0);
             }
             AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("切换侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
-            AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
-            AddNavigationCommand(2, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
+            AddNavigationCommand(1, "nav-new-session", "new-session", L("新会话", "New session"), Keys.None);
+            AddNavigationCommand(2, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
+            AddNavigationCommand(3, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
             desktopMenu.ShowItemToolTips = true;
             AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { PerformWindowControl("close"); });
             AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate { PerformWindowControl("maximize"); });
@@ -298,11 +299,12 @@ namespace DshPortable
         private void AddNavigationCommand(int index, string name, string action, string label, Keys shortcut)
         {
             ToolStripMenuItem item = new ToolStripMenuItem(" ", null, delegate { PostBridgeAction(action, null); }) {
-                Name = name, AutoSize = false, Size = new Size(32, 28), Margin = new Padding(0, 6, 0, 6),
-                AccessibleName = label, ToolTipText = label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
+                Name = name, AutoSize = false, Size = new Size(28, 28), Margin = new Padding(0, 6, 0, 6),
+                AccessibleName = label, ToolTipText = shortcut == Keys.None ? label
+                    : label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
             };
             desktopMenu.Items.Insert(index, item);
-            desktopShortcuts.Add(shortcut, item);
+            if (shortcut != Keys.None) desktopShortcuts.Add(shortcut, item);
         }
 
         protected override void OnSizeChanged(EventArgs eventArgs)
@@ -356,6 +358,7 @@ namespace DshPortable
             if (desktopMenu == null) return;
             bool navigationReady = desktopReady && trayBridgeReady && !shutdownRunning && !operationRunning;
             desktopMenu.Items["nav-sidebar"].Enabled = navigationReady;
+            desktopMenu.Items["nav-new-session"].Enabled = navigationReady;
             desktopMenu.Items["nav-back"].Enabled = navigationReady && trayState != null && trayState.canGoBack;
             desktopMenu.Items["nav-forward"].Enabled = navigationReady && trayState != null && trayState.canGoForward;
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
@@ -510,7 +513,7 @@ namespace DshPortable
 
         private static int MeasureDesktopDropDownWidth(ToolStripDropDown dropDown)
         {
-            int desired = 260;
+            int desired = 180;
             foreach (ToolStripItem item in dropDown.Items)
             {
                 ToolStripMenuItem menuItem = item as ToolStripMenuItem;

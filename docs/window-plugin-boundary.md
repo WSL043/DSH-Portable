@@ -4,6 +4,8 @@
 
 ## 能力探测
 
+顶栏的新会话快捷入口参考官方 [HeaderLeadingControls](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/client/ui-sidebar/src/client/HeaderLeadingControls.tsx)，复用既有 `uiWorkspace.startSession()`，不创建另一套会话状态。Native 保留固定入口，下拉菜单按当前语言的文字和快捷键测量宽度；不强制套用官方 Electron 的菜单分组或新增快捷键。
+
 Windows 默认顶栏参考 [官方桌面实现](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/apps/desktop/src/preload-menu.ts) 的 40 DIP 栏高、14px 系统字体、28px 菜单按钮与中性浅深配色。继续复用 Native 的文件、视图、帮助及现有命令，不增加另一套网页菜单或皮肤设置。macOS 和 Linux 沿用各自宿主的窗口机制。
 
 本次仅 Windows Native 实现这些接口。插件先检查宿主 `window.__DSH_PORTABLE_NATIVE__` 的 `protocolVersion === 1` 与 `capabilities`，只有对应能力为 `true` 才通过该宿主的 `postMessage` 发送消息。浏览器、macOS、Linux 或旧版宿主没有声明时，应保留普通页面及系统窗口，不隐藏控件、不模拟调用成功。不要按操作系统名称猜测能力。
