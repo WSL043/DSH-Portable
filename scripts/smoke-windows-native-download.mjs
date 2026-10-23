@@ -5,9 +5,11 @@ import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
+const evidenceFile = fileURLToPath(new URL('../build/native-download-evidence.json', import.meta.url))
 const root = path.resolve(process.argv[2] || '')
 if (!process.argv[2]) throw new Error('usage: node smoke-windows-native-download.mjs <DSH-Portable root>')
 if (process.platform !== 'win32') throw new Error('the native WebView2 download smoke is Windows-only')
@@ -238,8 +240,8 @@ try {
     }
   } catch (error) { evidence.observationError = error.code || error.name }
   try {
-    await mkdir(path.join(root, 'data'), { recursive: true })
-    await writeFile(path.join(root, 'data', 'native-download-evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+    await mkdir(path.dirname(evidenceFile), { recursive: true })
+    await writeFile(evidenceFile, `${JSON.stringify(evidence, null, 2)}\n`)
   } catch (error) { process.stderr.write(`Cannot retain native download evidence: ${error.code || error.name}\n`) }
   client?.close()
   await portable(['stop', '--no-browser', '--json']).catch(() => {})

@@ -134,7 +134,7 @@ jobs:
         with:
           name: focused-download-${{ matrix.runner }}
           path: |
-            ${{ runner.temp }}/dsh-native-download-host/DSH-Portable/data/native-download-evidence.json
+            build/native-download-evidence.json
             ${{ runner.temp }}/dsh-native-download-host/DSH-Portable/data/logs/
           retention-days: 14
       - name: Retain component update product logs
