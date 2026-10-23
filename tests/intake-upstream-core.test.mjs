@@ -120,7 +120,7 @@ test('--record-shape appends a same-shape version once and is byte-idempotent', 
   const root = await makeTestTemp('record-')
   const filePath = path.join(root, 'historical-descriptor-versions.json')
   try {
-    const before = readHistoricalDescriptorVersions()
+    const before = readHistoricalDescriptorVersions().filter(version => version !== NEW_VERSION)
     await writeFile(filePath, `${JSON.stringify(before, null, 2)}\n`)
     const report = createIntakeReport(goodFixture({ version: NEW_VERSION }))
     assert.deepEqual(await recordHistoricalDescriptorVersion(NEW_VERSION, report, { filePath }), { changed: true, skipped: false })
