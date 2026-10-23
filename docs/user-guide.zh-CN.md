@@ -127,25 +127,7 @@ DSH-Portable 的桌面壳、便携目录、更新、修复和迁移流程由本�
 
 
 
-<!-- core-support:start -->
-**内核版本可选** · 设置 → 更新 · 正式版 0.6.5 起支持（首发 0.6.5-rc.1）。
-
-<details>
-<summary>查看 Portable 0.8.1 的可选内核</summary>
-
-| 平台 | 稳定通道 | 候选通道 |
-| --- | --- | --- |
-| Windows x64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-windows-x64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-windows-x64.json) |
-| macOS arm64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-arm64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-arm64.json) |
-| macOS x64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-macos-x64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-macos-x64.json) |
-| Linux x64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-x64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-x64.json) |
-| Linux arm64 | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-stable/dsh-core-index-linux-arm64.json) | [0.2.0-rc.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.7-rc.2](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json), [0.1.7-alpha.1](https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-candidate/dsh-core-index-linux-arm64.json) |
-
-每小时同步已验收的发布目录。旧版及 RC 以应用内兼容检查为准；— 表示暂无匹配版本。
-
-</details>
-
-<!-- core-support:end -->
+**可选内核** · 当前目录见 [README 的可选内核说明](../README.md)。设置 → 更新只列出已通过对应平台资格验证、且满足当前外壳能力与兼容性要求的版本；请以实际设置列表为准。
 
 ## 三步启动
 
@@ -272,8 +254,8 @@ dsh --profile web --dump-config
 
 ![独立更新设置页](assets/portable-updates.png)
 
-- DSH-Portable 会先打开本地工作台；只有对应的“启动时检查更新”已开启时，才会在后台检查更新。产品更新与官方 DeepSeek Harness 内核更新各自独立，两个启动检查默认关闭；**设置 → 更新** 是主要更新入口：可分别检查 DSH-Portable 和官方 DeepSeek Harness 内核，检查后在页面内经桌面宿主确认即可安装更新；两者的检查和安装操作独立，但共享稳定版/候选版偏好。
-- 更新通道可选**稳定版**或**候选版**。稳定版适合日常使用；候选通道按实际成熟度提供 Alpha、Beta 或 RC，并且都必须先通过对应的 Portable 成品验证。切换通道不会自动降级当前版本。各阶段含义见[发布阶段规则](docs/release-policy.md)。
+- DSH-Portable 会先打开本地工作台；只有对应的“启动时检查更新”已开启时，才会在后台检查更新。产品更新与官方 DeepSeek Harness 内核更新各自独立，两个启动检查默认关闭；**设置 → 更新** 是主要更新入口：可分别检查 DSH-Portable 和官方 DeepSeek Harness 内核，检查后在页面内经桌面宿主确认即可安装更新；两者的检查和安装操作独立，统一使用稳定资格通道。
+- 更新统一使用 **stable 稳定资格通道**；**candidate** 仅保留为旧客户端的兼容镜像，旧候选偏好也归一到稳定通道。目录中的 Alpha、Beta 或 RC 必须通过相应的成品资格验证，不能仅凭阶段名称判断可用性。各阶段含义见[发布阶段规则](release-policy.md)。
 - 托盘菜单提供备用的两种手动检查；检查完成、等待选择和实际更新是不同状态，不会一直停在“正在检查”。
 - 更新提示会明确写出正在更新 DSH-Portable 还是 DeepSeek Harness，并显示对应的当前版本和目标版本。
 - 一般更新只下载变化的 DSH 应用组件，并显示真实下载百分比；会话、设置、凭据和工作区全部保留。
@@ -281,15 +263,15 @@ dsh --profile web --dump-config
 - 可以选择稍后或**跳过此版本**；安装前会确认没有任务运行。替换内核前会先用新内核检查现有 Profile 和插件能否组合启动；不兼容时保持当前版本不变。更新后只有工作台真正就绪才会提交新版本，启动失败或超时会自动恢复更新前的程序，同时保留会话、设置、插件和工作区。
 - 「设置 → 更新」可分别选择 Portable 与官方内核版本。Portable 历史目录从 0.6.5-rc.1 开始保留经过成品验收的版本；更早版本不自动加入，已知问题版本会从可选目录排除。
 
-内核列表只提供通过成品验证且与当前外壳兼容的版本。带有 `requiredShellContract` 的内核按接口号匹配，仍会检查 Node 版本、运行时布局与更新器要求；没有接口号的旧包仍须匹配确切 Portable 版本和外壳指纹。详见[外壳接口版本](docs/shell-contract.md)。
+内核列表只提供通过成品验证且与当前外壳兼容的版本。带有 `requiredShellContract` 的内核按接口号匹配，仍会检查 Node 版本、运行时布局与更新器要求；没有接口号的旧包仍须匹配确切 Portable 版本和外壳指纹。详见[外壳接口版本](shell-contract.md)。
 
-维护版增加了**从文件更新**：Windows Native 的帮助菜单可分别选择 Portable 或内核的原始签名清单，新版设置 → 更新也提供相同入口。切换到随带旧设置页的内核后，仍可用帮助菜单。同一目录必须放齐清单、同名 `.sig` 和清单对应的 ZIP；验证不通过不会联网补取。旧版窗口未提供此入口时，需要先升级外壳。完整包、组件包与内核包的区别和命令见[离线更新](docs/offline-updates.md)。此能力尚未随正式版发布。
+从 **0.9.5** 起支持**从文件更新**：Windows Native 的帮助菜单可分别选择 Portable 或内核的原始签名清单，新版设置 → 更新也提供相同入口。切换到随带旧设置页的内核后，仍可用帮助菜单。同一目录必须放齐清单、同名 `.sig` 和清单对应的 ZIP；验证不通过不会联网补取。旧版窗口未提供此入口时，需要先升级外壳。完整包、组件包与内核包的区别和命令见[离线更新](offline-updates.md)。
 
 - **设置 → Portable** 提供检查、修复和脱敏支持报告。启动轨迹和桌面／后台健康采样按启动批次保存在 `data/logs/history/`，默认保留 14 天内最近 30 次，总量上限 32 MiB；单类日志按 128 KiB 轮转。支持报告包含多次启动的脱敏历史，导出达到大小限制时会明确标记截断，本地历史仍可供进一步排查。反馈启动慢或启动失败时请优先附上该报告，不要直接发送可能含登录令牌的原始日志。修复保留用户数据，只重建可再生组件。
 
-官方 DSH 版本每小时从官方 npm 发现。每个发现的版本都记录不可变的包完整性和官方源码来源，并在五个目标平台（Windows x64、macOS arm64、macOS x64、Linux x64、Linux arm64）完成成品资格验证。目录优先处理最新缺失版本；历史回填仅支持不超过 20 个版本的窗口。失败版本不会替换已接受的目录。兼容的官方版本可独立进入内核通道，无需发布新的 DSH-Portable 版本；官方发布不会直接替换正在使用的工作环境，两条发布线的版本号和时间可以不同。
+官方 DSH 版本每小时从官方 npm 发现。候选版本须记录不可变的包完整性与可核验的官方源码来源，并在对应目标平台完成成品资格验证后才会提供；目标包括 Windows x64、macOS arm64、macOS x64、Linux x64 和 Linux arm64。资格窗口按最新 5 个候选版本、至少 2 个非 Alpha 版本维护，目录优先处理最新缺失版本。失败版本不会替换已接受的目录。兼容的官方版本可独立进入内核通道，无需发布新的 DSH-Portable 版本；官方发布不会直接替换正在使用的工作环境，两条发布线的版本号和时间可以不同。
 
-发布说明的写法和证据要求见 [Release 写作规范](docs/release-writing.md)。
+发布说明的写法和证据要求见 [Release 写作规范](release-writing.md)。
 
 ## 文件夹里有什么
 
