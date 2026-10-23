@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { comparePortableVersions } from '../launcher/update-core.mjs'
 
 const runFile = promisify(execFile)
 const [rootArgument] = process.argv.slice(2)
@@ -112,7 +113,10 @@ try {
     const defaultUpdate = updates.updates?.[plugin.name]
     assert.equal(defaultUpdate?.kind, 'npm', `${plugin.name} is outside the market update lifecycle`)
     assert.equal(defaultUpdate?.version, plugin.version, `the market did not resolve ${plugin.name}`)
-    assert.equal(defaultUpdate?.updateAvailable, false, `the market must not offer the bundled ${plugin.name} version as an update`)
+    assert.equal(defaultUpdate?.current, plugin.version, `the market did not retain the installed ${plugin.name} version`)
+    assert.equal(typeof defaultUpdate?.latest, 'string', `the market did not resolve the latest compatible ${plugin.name} version`)
+    assert.equal(defaultUpdate?.updateAvailable, comparePortableVersions(defaultUpdate.latest, plugin.version) > 0,
+      `the market must offer ${plugin.name} only when its latest compatible version is newer`)
   }
 
   const node = process.platform === 'win32'
