@@ -1,10 +1,12 @@
 {
   "version": "0.9.6",
   "zh": {
-    "summary": "内置 DSH 更新至 0.2.1-rc.3，并沿用官方新会话的草稿恢复行为。",
+    "summary": "内置 DSH 更新至 0.2.1-rc.3，恢复新会话草稿，并统一归档会话页面的视觉样式。",
     "highlights": [
       "内核：采用官方 DSH 0.2.1-rc.3，并更新兼容该内核的默认插件。",
-      "新会话：通过新会话入口或 Ctrl+N 返回尚未发送的草稿时，保留已输入内容。"
+      "新会话：通过新会话入口或 Ctrl+N 返回尚未发送的草稿时，保留已输入内容。",
+      "插件入口：左侧栏、会话视图和右侧栏的“更多”菜单支持浏览和创建插件。",
+      "聊天管理：归档会话页面沿用官方设置页的排版、分组与明暗主题样式。"
     ],
     "upgradeNotes": [
       "升级前正常退出应用并备份重要数据；升级保留现有会话、设置、凭据、插件和工作区。"
@@ -14,10 +16,12 @@
     ]
   },
   "en": {
-    "summary": "Updates bundled DSH to 0.2.1-rc.3 and follows its draft recovery behavior when starting a new session.",
+    "summary": "Updates bundled DSH to 0.2.1-rc.3, restores new-session drafts and aligns the archived-session page with the settings style.",
     "highlights": [
       "Core: adopts official DSH 0.2.1-rc.3 and updates the default plugins to compatible releases.",
-      "New session: returning to an unsent draft through New Session or Ctrl+N preserves the text already entered."
+      "New session: returning to an unsent draft through New Session or Ctrl+N preserves the text already entered.",
+      "Plugin entry points: the More menus in the left sidebar, conversation view and right sidebar let you browse and create plugins.",
+      "Chat Manager: the archived-session page follows the layout, grouping and light/dark styling of the official settings page."
     ],
     "upgradeNotes": [
       "Exit normally and back up important data before upgrading. Sessions, settings, credentials, plugins and the workspace are preserved."
