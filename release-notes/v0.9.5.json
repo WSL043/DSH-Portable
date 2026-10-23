@@ -1,0 +1,45 @@
+{
+  "version": "0.9.5",
+  "zh": {
+    "summary": "为 Windows Native 补齐 Portable 与内核的离线更新入口，开放通用窗口接口，并精简菜单文案。",
+    "highlights": [
+      "离线更新：帮助菜单与新版设置页可选择本地清单，复用现有签名校验、更新事务、健康检查和回滚；旧内核设置页也可通过宿主菜单更新。",
+      "窗口自定义：提供可探测的窗口栏、拖动、控制、状态与既有菜单接口，由用户插件决定外观；默认保留原生窗口，并提供托盘恢复入口。",
+      "窗口一致性：标题按钮、菜单与插件共用窗口操作，修正全屏中切换最大化的状态冲突，以及恢复窗口栏意外还原窗口的问题。",
+      "界面：缩短应用与托盘菜单描述，减少翻译后的拥挤，保留必要的更新与恢复提示。"
+    ],
+    "upgradeNotes": [
+      "内置 DSH 仍为 0.2.1-rc.2，沿用既有默认插件与外壳契约 2；可选内核只提供已通过对应平台资格的版本。",
+      "离线更新须同时准备原始清单、原始签名与对应 ZIP；完整包和组件包不能互换，不能绕过平台或运行时兼容性检查。",
+      "升级前正常退出应用并备份重要数据；升级保留现有会话、设置、凭据、插件和工作区。"
+    ],
+    "knownIssues": [
+      "通用窗口接口仅由 Windows Native 声明；浏览器、macOS、Linux 和旧宿主须按能力探测保留系统窗口。此版本不内置皮肤或灵动岛插件。",
+      "1.x 官方 Electron 内核仍内置受影响的 MCP client/core 2.2.0，等待官方修复后重新验收；本次 0.x 发布不修改官方 ASAR，也不解除 1.x 发布阻断。0.x 已在 0.9.4 更新至修复版本 2.3.0。"
+    ],
+    "acknowledgements": [
+      "感谢 [ArtificialAngels 在 PR #181](https://github.com/WSL043/DSH-Portable/pull/181) 提出的窗口桥接与菜单复用思路。本次采纳通用接口方向，视觉插件与皮肤偏好由用户自行选择。"
+    ]
+  },
+  "en": {
+    "summary": "Adds offline Portable and core update entry points to Windows Native, exposes generic window capabilities, and shortens menu labels.",
+    "highlights": [
+      "Offline updates: the Help menu and newer settings pages accept local manifests through the existing signature checks, update transactions, health checks and rollback. The host menu remains available with older core settings pages.",
+      "Window customization: discoverable capabilities expose window chrome, dragging, controls, state and existing menus. User plugins choose the appearance; native controls remain the default, with manual recovery from the tray.",
+      "Consistent controls: caption buttons, menus and plugins share window actions, fixing maximize state conflicts during fullscreen and unintended window restoration when recovering native chrome.",
+      "Interface: shorter application and tray labels reduce crowding after translation while retaining essential update and recovery guidance."
+    ],
+    "upgradeNotes": [
+      "Keeps DSH 0.2.1-rc.2, the existing default plugins and shell contract 2. Selectable cores remain limited to versions qualified for each platform.",
+      "Offline updates require the original manifest, signature and matching ZIP. Full packages and component packages are not interchangeable; platform and runtime compatibility checks still apply.",
+      "Exit normally and back up important data before upgrading. Sessions, settings, credentials, plugins and the workspace are preserved."
+    ],
+    "knownIssues": [
+      "Only Windows Native declares the new window capabilities. Browsers, macOS, Linux and older hosts must retain system controls when capabilities are absent. No skin or Dynamic Island plugin is bundled.",
+      "The official 1.x Electron payload still bundles affected MCP client/core 2.2.0. Its release remains blocked pending an upstream fix and renewed qualification. This 0.x release does not modify the official ASAR; 0.x already adopted fixed SDK 2.3.0 in 0.9.4."
+    ],
+    "acknowledgements": [
+      "Thanks to [ArtificialAngels and PR #181](https://github.com/WSL043/DSH-Portable/pull/181) for the window bridge and menu reuse proposal. This release adopts the generic capability direction; visual plugins and skin preferences remain user choices."
+    ]
+  }
+}

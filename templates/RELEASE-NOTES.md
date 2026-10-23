@@ -20,6 +20,8 @@
 
 {{RELEASE_KNOWN_ISSUES_ZH}}
 
+{{RELEASE_ACKNOWLEDGEMENTS_ZH}}
+
 ## 下载
 
 [**Windows x64 便携版（推荐）**](https://github.com/WSL043/DSH-Portable/releases/latest/download/{{WINDOWS_PRIMARY_FILENAME}})
@@ -65,6 +67,8 @@
 {{CHANNEL_UPGRADE_NOTICE_EN}}
 
 {{RELEASE_KNOWN_ISSUES_EN}}
+
+{{RELEASE_ACKNOWLEDGEMENTS_EN}}
 
 ### Downloads
 

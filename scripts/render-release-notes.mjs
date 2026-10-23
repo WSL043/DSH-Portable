@@ -11,7 +11,7 @@ function releaseLocale(value, label) {
     throw new Error(`${label} release highlights must contain 1-6 useful items.`)
   }
   const optional = {}
-  for (const key of ['knownIssues', 'upgradeNotes']) {
+  for (const key of ['knownIssues', 'upgradeNotes', 'acknowledgements']) {
     if (value[key] === undefined) continue
     if (!Array.isArray(value[key]) || value[key].some(item => typeof item !== 'string' || item.trim().length < 12)) {
       throw new Error(`${label} ${key} must contain useful text items.`)
@@ -83,6 +83,8 @@ export function renderReleaseNotes(source, tag, dshVersion, descriptor = null) {
     '{{RELEASE_KNOWN_ISSUES_EN}}': optionalSection('Known limitations', release.en.knownIssues),
     '{{RELEASE_UPGRADE_NOTES_ZH}}': optionalSection('升级说明', release.zh.upgradeNotes),
     '{{RELEASE_UPGRADE_NOTES_EN}}': optionalSection('Upgrade notes', release.en.upgradeNotes),
+    '{{RELEASE_ACKNOWLEDGEMENTS_ZH}}': optionalSection('致谢', release.zh.acknowledgements),
+    '{{RELEASE_ACKNOWLEDGEMENTS_EN}}': optionalSection('Acknowledgements', release.en.acknowledgements),
     '{{VERIFICATION_SCOPE_ZH}}': candidate
       ? '候选成品会经过 Windows、macOS、Linux x64 与 ARM64 验收。'
       : '正式成品已通过 Windows、macOS、Linux x64 与 ARM64 验收。',

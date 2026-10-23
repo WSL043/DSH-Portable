@@ -6,11 +6,12 @@ const locale = { summary: 'A focused maintenance release.', highlights: ['Restor
 const descriptor = { version: '0.7.0', zh: locale, en: locale }
 
 test('optional release sections render evidence supplied for that release only', () => {
-  const value = { ...descriptor, en: { ...locale, knownIssues: ['A documented proxy mode can prevent web requests.'], upgradeNotes: ['Exit the application before moving its data folder.'] } }
-  const template = '{{RELEASE_KNOWN_ISSUES_ZH}}\n{{RELEASE_KNOWN_ISSUES_EN}}\n{{RELEASE_UPGRADE_NOTES_EN}}'
+  const value = { ...descriptor, en: { ...locale, knownIssues: ['A documented proxy mode can prevent web requests.'], upgradeNotes: ['Exit the application before moving its data folder.'], acknowledgements: ['Thanks to a community contributor for the window bridge proposal.'] } }
+  const template = '{{RELEASE_KNOWN_ISSUES_ZH}}\n{{RELEASE_KNOWN_ISSUES_EN}}\n{{RELEASE_UPGRADE_NOTES_EN}}\n{{RELEASE_ACKNOWLEDGEMENTS_EN}}'
   const rendered = renderReleaseNotes(template, 'v0.7.0', '0.1.2-rc.1', value)
   assert.match(rendered, /### Known limitations\n\n- A documented proxy/)
   assert.match(rendered, /### Upgrade notes\n\n- Exit the application/)
+  assert.match(rendered, /### Acknowledgements\n\n- Thanks to a community contributor/)
   assert.doesNotMatch(rendered, /已知限制|\{\{/)
   assert.equal(renderReleaseNotes(template, 'v0.7.0', '0.1.2-rc.1', descriptor).trim(), '')
 })

@@ -37,7 +37,8 @@ namespace DshPortable
             nativeChromeForced = true;
             if (fullscreen) SetDesktopFullscreen(false);
             SetPageWindowChrome(false);
-            RestoreFromTray();
+            if (!Visible || WindowState == FormWindowState.Minimized) RestoreFromTray();
+            else Activate();
         }
 
         private void PostWindowState()

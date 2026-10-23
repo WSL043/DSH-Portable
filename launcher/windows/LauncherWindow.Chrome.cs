@@ -221,18 +221,16 @@ namespace DshPortable
             AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
             AddNavigationCommand(2, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
             desktopMenu.ShowItemToolTips = true;
-            AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { Close(); });
-            AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate {
-                WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
-            });
-            AddCaptionCommand("caption-minimize", "\uE921", L("最小化", "Minimize"), delegate { WindowState = FormWindowState.Minimized; });
+            AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { PerformWindowControl("close"); });
+            AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate { PerformWindowControl("maximize"); });
+            AddCaptionCommand("caption-minimize", "\uE921", L("最小化", "Minimize"), delegate { PerformWindowControl("minimize"); });
             AddDesktopCommand(file, "new-session", L("新会话", "New session"), Keys.Control | Keys.N,
                 delegate { PostBridgeAction("new-session", null); });
             AddDesktopCommand(file, "settings", L("设置", "Settings"), Keys.Control | Keys.Oemcomma,
                 delegate { PostBridgeAction("open-settings", null); });
             file.DropDownItems.Add(CreateTerminalItem());
             file.DropDownItems.Add(new ToolStripSeparator());
-            AddDesktopCommand(file, "close", L("关闭窗口", "Close window"), Keys.Control | Keys.W, delegate { Close(); });
+            AddDesktopCommand(file, "close", L("关闭窗口", "Close window"), Keys.Control | Keys.W, delegate { PerformWindowControl("close"); });
             AddDesktopCommand(file, "restart", L("重启", "Restart"), Keys.None,
                 delegate { RequestDesktopRestart(); });
             AddDesktopCommand(file, "exit", L("退出", "Exit"), Keys.Control | Keys.Q,
@@ -248,9 +246,9 @@ namespace DshPortable
                 delegate { SetDesktopZoom(1); });
             view.DropDownItems.Add(new ToolStripSeparator());
             AddDesktopCommand(view, "maximize", L("最大化/还原", "Maximize / Restore"), Keys.None,
-                delegate { WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized; });
+                delegate { PerformWindowControl("maximize"); });
             AddDesktopCommand(view, "fullscreen", L("全屏", "Full screen"), Keys.F11,
-                delegate { SetDesktopFullscreen(!fullscreen); });
+                delegate { PerformWindowControl("fullscreen"); });
             AddDesktopCommand(help, "product-update", L("Portable 更新", "Portable updates"), Keys.None,
                 async delegate { await CheckForDesktopUpdateAsync(true, "product"); });
             AddDesktopCommand(help, "engine-update", L("内核更新", "Core updates"), Keys.None,

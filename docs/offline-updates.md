@@ -1,6 +1,6 @@
 # 离线更新
 
-此文描述尚未发布的 Native 维护版。0.x Portable 和内核使用既有更新流程；1.x 官方 Electron 纯便携线不使用这套 Native 桥，不能据此认为其引导器已支持本地导入。
+从 0.9.5 起，Windows Native 在既有更新流程上提供本地文件入口，适用于 0.x Portable 和内核。1.x 官方 Electron 纯便携线不使用这套 Native 桥，其发布仍等待官方成品修复内置 MCP 依赖；本次更新不修改官方 ASAR，也不解除该阻断。详见 [1.x MCP 复核与处理边界](one-x-mcp-followup-2026-10-23.md)。
 
 ## 准备
 
