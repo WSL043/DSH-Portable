@@ -199,7 +199,7 @@ namespace DshPortable
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 36, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen && !pageWindowChrome };
+                AutoSize = false, Height = 40, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen && !pageWindowChrome };
             desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
@@ -214,8 +214,8 @@ namespace DshPortable
                 menu.AutoSize = false;
                 menu.Size = new Size(TextRenderer.MeasureText(menu.Text, desktopMenu.Font,
                     Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width + 20, 28);
-                menu.Margin = new Padding(0, 4, 2, 4);
-                menu.Padding = new Padding(8, 0, 8, 0);
+                menu.Margin = new Padding(0, 6, 2, 6);
+                menu.Padding = new Padding(10, 0, 10, 0);
             }
             AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("切换侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
             AddNavigationCommand(1, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
@@ -290,7 +290,7 @@ namespace DshPortable
         {
             desktopMenu.Items.Add(new ToolStripMenuItem(glyph, null, action) {
                 Name = name, Alignment = ToolStripItemAlignment.Right, AutoSize = false,
-                Size = new Size(46, 36), Margin = Padding.Empty, Padding = Padding.Empty,
+                Size = new Size(46, 40), Margin = Padding.Empty, Padding = Padding.Empty,
                 Font = ((DesktopTitleStrip)desktopMenu).CaptionFont, AccessibleName = label, ToolTipText = label,
             });
         }
@@ -298,7 +298,7 @@ namespace DshPortable
         private void AddNavigationCommand(int index, string name, string action, string label, Keys shortcut)
         {
             ToolStripMenuItem item = new ToolStripMenuItem(" ", null, delegate { PostBridgeAction(action, null); }) {
-                Name = name, AutoSize = false, Size = new Size(32, 28), Margin = new Padding(0, 4, 0, 4),
+                Name = name, AutoSize = false, Size = new Size(32, 28), Margin = new Padding(0, 6, 0, 6),
                 AccessibleName = label, ToolTipText = label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
             };
             desktopMenu.Items.Insert(index, item);
@@ -611,7 +611,7 @@ namespace DshPortable
             if (desktopMenu != null && desktopMenuLanguage != uiLanguage) InitializeDesktopMenu();
             if (desktopMenu != null)
             {
-                desktopMenu.BackColor = dark ? Color.FromArgb(30, 30, 30) : Color.FromArgb(250, 250, 250);
+                desktopMenu.BackColor = dark ? Color.FromArgb(27, 27, 28) : Color.FromArgb(249, 250, 251);
                 desktopMenu.ForeColor = foreground;
                 DesktopTitleRenderer renderer = new DesktopTitleRenderer(dark);
                 DshMenuColorTable colors = renderer.Colors;

@@ -399,7 +399,7 @@ namespace DshPortable
                 bounds.Inflate(-1, -2);
                 using (GraphicsPath shape = new GraphicsPath())
                 {
-                    int diameter = e.Item.Name.StartsWith("nav-") ? 14 : 8;
+                    int diameter = e.Item.Name.StartsWith("nav-") ? 14 : 12;
                     shape.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
                     shape.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
                     shape.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
@@ -459,8 +459,8 @@ namespace DshPortable
             if (e.ToolStrip is DesktopTitleStrip && e.Item.Name.StartsWith("nav-"))
             {
                 Color color = !e.Item.Enabled ? (dark ? Color.FromArgb(77, 77, 77) : Color.FromArgb(184, 184, 184))
-                    : e.Item.Selected || e.Item.Pressed ? (dark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(40, 40, 40))
-                    : dark ? Color.FromArgb(151, 151, 151) : Color.FromArgb(103, 103, 103);
+                    : e.Item.Selected || e.Item.Pressed ? (dark ? Color.FromArgb(249, 250, 251) : Color.FromArgb(15, 17, 21))
+                    : dark ? Color.FromArgb(207, 211, 214) : Color.FromArgb(97, 102, 107);
                 float x = e.Item.Width / 2F, y = e.Item.Height / 2F;
                 using (Pen pen = new Pen(color, 1.1F))
                 {
@@ -488,8 +488,8 @@ namespace DshPortable
             }
             if (e.ToolStrip is DesktopTitleStrip)
                 e.TextColor = e.Item.Name == "caption-close" && e.Item.Selected ? Color.White
-                    : e.Item.Selected ? (dark ? Color.White : Color.FromArgb(30, 30, 32))
-                    : dark ? Color.FromArgb(155, 155, 155) : Color.FromArgb(96, 96, 96);
+                    : e.Item.Selected ? (dark ? Color.FromArgb(249, 250, 251) : Color.FromArgb(15, 17, 21))
+                    : dark ? Color.FromArgb(207, 211, 214) : Color.FromArgb(97, 102, 107);
             base.OnRenderItemText(e);
         }
 
@@ -529,7 +529,8 @@ namespace DshPortable
     internal sealed class DesktopTitleStrip : MenuStrip
     {
         internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
-        internal readonly Font MenuFont = new Font("Microsoft YaHei UI", 9F);
+        // Follow the official desktop's 14px system UI type while retaining native menu behavior.
+        internal readonly Font MenuFont = new Font("Segoe UI", 10.5F);
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);
