@@ -362,6 +362,8 @@ test('prepare-only signs acceptance metadata without enabling publication', asyn
   assert.ok(workflow.indexOf('sign-update-metadata.mjs') < workflow.indexOf('Verify signed metadata with the product trust key'))
   assert.ok(workflow.indexOf('verifyUpdateSignature(await readFile') < workflow.indexOf('Publish curated user downloads'))
   assert.match(workflow, /prepare_only:\s*\n\s*description:[^\n]+\n\s*required: false\n\s*default: false\n\s*type: boolean/)
+  assert.ok(workflow.includes('update-channel-candidate --mutable product-catalog/latest/* release-staging/update-assets/portable-manifest.json release-staging/update-assets/portable-manifest.json.sig'),
+    'the legacy full-package mirror publishes its original detached signature too')
 })
 
 test('publishing separates beginner downloads from machine update assets', async () => {
