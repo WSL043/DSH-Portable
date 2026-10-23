@@ -149,6 +149,26 @@ try {
        $popupName=$name.Substring(5)
        $popupPath=Join-Path $Evidence "$theme-$popupName.png"
        $popupBitmap.Save($popupPath)
+       $shortcutItems=@($dropDown.Items | Where-Object { $_ -is [Windows.Forms.ToolStripMenuItem] -and $_.ShowShortcutKeys -and $_.ShortcutKeyDisplayString })
+       if($shortcutItems.Count -gt 0){
+         $withoutShortcuts=[Drawing.Bitmap]::new($dropDown.Width,$dropDown.Height)
+         try {
+           foreach($item in $shortcutItems){$item.ShowShortcutKeys=$false}
+           $dropDown.DrawToBitmap($withoutShortcuts,[Drawing.Rectangle]::new(0,0,$withoutShortcuts.Width,$withoutShortcuts.Height))
+           foreach($item in $shortcutItems){
+             $painted=$false
+             for($y=$item.Bounds.Top+5;$y -lt $item.Bounds.Bottom-5 -and -not $painted;$y++){
+               for($x=[int]($dropDown.Width/2);$x -lt $dropDown.Width-12;$x++){
+                 if($popupBitmap.GetPixel($x,$y) -ne $withoutShortcuts.GetPixel($x,$y)){$painted=$true;break}
+               }
+             }
+             if(-not $painted){throw "$name shortcut is not painted: $($item.ShortcutKeyDisplayString)"}
+           }
+         } finally {
+           foreach($item in $shortcutItems){$item.ShowShortcutKeys=$true}
+           $withoutShortcuts.Dispose()
+         }
+       }
        $popupBitmap.Dispose()
        $popupCaptures[$theme][$popupName]=$popupPath
      }
