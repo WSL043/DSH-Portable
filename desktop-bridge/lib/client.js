@@ -1336,6 +1336,7 @@ window.__ModuleLoader__.load({
         let lastProjection = ''
         let sidebarFrame = null
         let sidebarCollapsed = null
+        const page = window.document
         const navigation = []
         let navigationIndex = -1
         let observedSession
@@ -1442,7 +1443,7 @@ window.__ModuleLoader__.load({
         // Its public layout action service does not expose this resolved state.
         const readSidebar = () => {
           if (!sidebarFrame?.isConnected) {
-            const frames = [...document.querySelectorAll('[data-shell-bottom]')]
+            const frames = [...page.querySelectorAll('[data-shell-bottom]')]
               .map(element => element.parentElement)
               .filter(element => element?.querySelector(':scope > [data-shell-overlay]'))
             sidebarFrame = frames.length === 1 ? frames[0] : null
@@ -1453,9 +1454,9 @@ window.__ModuleLoader__.load({
           schedulePublish()
         }
         let sidebarObserver = null
-        if (typeof MutationObserver === 'function' && typeof document?.querySelectorAll === 'function' && document.body) {
-          sidebarObserver = new MutationObserver(readSidebar)
-          sidebarObserver.observe(document.body, { childList: true, subtree: true,
+        if (typeof window.MutationObserver === 'function' && typeof page?.querySelectorAll === 'function' && page.body) {
+          sidebarObserver = new window.MutationObserver(readSidebar)
+          sidebarObserver.observe(page.body, { childList: true, subtree: true,
             attributes: true, attributeFilter: ['data-sidebar-collapsed'] })
           readSidebar()
         }

@@ -59,8 +59,7 @@ async function loadBridgeClient(options = {}) {
     window.__DSH_PORTABLE_NATIVE__ = native
     delete window.chrome
   }
-  vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window,
-    ...options.pageGlobals })
+  vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window })
   assert.equal(definition?.id, '@wsl043/dsh-portable-desktop-bridge')
   const exports = definition.factory((id) => {
     if (id === 'react') return {}
@@ -267,7 +266,8 @@ test('sidebar projection follows resolved frame geometry, remounts, and disposal
         this.callback([{ type, attributeName }])
     }
   }
-  const client = await loadBridgeClient({ pageGlobals: { document, MutationObserver } })
+  const client = await loadBridgeClient()
+  Object.assign(client.window, { document, MutationObserver })
   const runtime = fakeContext(sessionList(1))
   const replaceFrame = collapsed => {
     if (frame) frame.isConnected = false
