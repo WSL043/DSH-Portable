@@ -5,6 +5,7 @@ import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 
 import { runImportCommand } from './data-import-worker.mjs'
+import { assertImportedSessionCompatibility } from './session-import-preflight.mjs'
 import { assertImportProfilesIdle, clearImportJournal, importEntryIdentity, recoverInterruptedImport, saveImportJournal } from './data-import-journal.mjs'
 import { projectKey, relocateSessionHeaderBytes, SESSION_LOG_FILENAMES } from './portable-core.mjs'
 import { dataPathKey, lstatIfPresent, normalizeDataPath, safeDataTarget as safeTarget, writeDataFileAtomic } from './data-paths.mjs'
@@ -264,6 +265,24 @@ export async function restoreDataArchive(layout, filename, options = {}) {
     throw new Error('The data package has no entries in the selected categories.')
   }
   const trace = typeof options.trace === 'function' ? options.trace : () => {}
+  // Project the real keep/replace result before creating a journal or backups.
+  // Only configuration bytes are retained; session payloads are already in the archive.
+  const compatibilityPlan = []
+  const compatibilityPaths = new Set()
+  for (const file of document.files) {
+    if (!included.has(file.category) || (options.excludeProfileCredentials === true && profileCredential(file))) continue
+    const { archivePath, bytes } = relocatePortableWorkspaceEntry(file, Buffer.from(file.data, 'base64'), document.portableWorkspace, layout.workspace)
+    const key = dataPathKey(archivePath)
+    if (compatibilityPaths.has(key)) throw new Error('Duplicate relocated data package path: ' + archivePath)
+    compatibilityPaths.add(key)
+    const existing = await safeTarget(layout.stateRoot, archivePath, { createParents: false })
+    if (existing && (conflict === 'keep' || sha256(await readFile(existing)) === sha256(bytes))) continue
+    compatibilityPlan.push({ path: archivePath, category: file.category,
+      bytes: /(?:^|\/)(?:package\.json|cordis(?:\.patch)?\.ya?ml)$/.test(archivePath) ? bytes : Buffer.alloc(0) })
+  }
+  if (compatibilityPlan.some(file => file.category === 'sessions' || file.category === 'plugins')) {
+    await assertImportedSessionCompatibility(layout, compatibilityPlan)
+  }
   await assertImportProfilesIdle(layout, document.files.filter(file => included.has(file.category)).map(file => file.path))
   trace('archive-validated', { files: document.files.length, categories: includedCategories.length, encrypted })
   const stamp = new Date().toISOString().replaceAll(':', '-').replace(/\.\d{3}Z$/, 'Z')

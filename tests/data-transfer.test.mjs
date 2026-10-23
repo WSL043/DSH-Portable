@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { existsSync } from 'node:fs'
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rename, writeFile, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -149,6 +149,10 @@ test(`restore relocates ${sessionFilename} without rewriting historical event te
   const header = `${JSON.stringify({ type: 'session', id: sessionId, cwd: source.layout.workspace })}\n`
   const events = `${JSON.stringify({ type: 'user/message', data: { content: `historical ${source.layout.workspace}` } })}\n`
   const compressed = sessionFilename.endsWith('.zstd')
+  if (!compressed) {
+    const other = path.join(source.layout.dshHome, 'sessions/workspace-a/session-one/session.jsonl.zstd')
+    await rename(other, other.replace(/\.zstd$/, ''))
+  }
   const eventFrame = compressed ? zstdCompressSync(Buffer.from(events)) : Buffer.from(events)
   await writeFile(sourceSession, Buffer.concat([compressed ? zstdCompressSync(Buffer.from(header)) : Buffer.from(header), eventFrame]))
 
@@ -298,4 +302,34 @@ test('restore rejects archive entries outside their durable data category', asyn
   const tampered = Buffer.concat([bytes.subarray(0, 8), gzipSync(Buffer.from(JSON.stringify(document)))])
   await writeFile(output, tampered)
   await assert.rejects(inspectDataArchive(output), /does not belong/i)
+})
+
+test('incompatible physical session modes fail before writes and cannot use plugin fallback', async t => {
+  const snapshot = async (root, prefix = '') => {
+    const entries = []
+    for (const item of await readdir(path.join(root, prefix), { withFileTypes: true })) {
+      const relative = path.join(prefix, item.name)
+      if (item.isDirectory()) entries.push(...await snapshot(root, relative))
+      else entries.push([relative, (await readFile(path.join(root, relative))).toString('hex')])
+    }
+    return entries.sort(([a], [b]) => a.localeCompare(b))
+  }
+  for (const targetMode of ['none', 'zstd']) for (const differentId of [false, true]) {
+    const source = await fixture(), target = await fixture()
+    t.after(() => Promise.all([source, target].map(item => rm(item.root, { recursive: true, force: true }))))
+    const filename = item => path.join(item.layout.dshHome, 'sessions/workspace-a/session-one/session.jsonl.zstd')
+    if (targetMode === 'none') await rename(filename(target), filename(target).replace(/\.zstd$/, ''))
+    else await rename(filename(source), filename(source).replace(/\.zstd$/, ''))
+    if (differentId) await rename(path.dirname(filename(source)), path.join(path.dirname(path.dirname(filename(source))), 'other-session'))
+    const archive = path.join(source.root, 'sessions.dshdata')
+    await createDataArchive(source.layout, archive, { categories: ['sessions'] })
+    const before = await snapshot(target.layout.dataDir)
+    let validations = 0
+    await assert.rejects(restoreDataArchiveAllowingPluginFailure(target.layout, archive, {
+      conflict: 'replace',
+      validate: () => { validations++; throw Object.assign(new Error('defer plugins'), { code: 'DSH_DATA_IMPORT_PROFILE_FAILED' }) },
+    }), { code: 'DSH_DATA_IMPORT_SESSION_INCOMPATIBLE' })
+    assert.equal(validations, 0)
+    assert.deepEqual(await snapshot(target.layout.dataDir), before)
+  }
 })
