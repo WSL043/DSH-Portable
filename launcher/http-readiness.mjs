@@ -67,7 +67,9 @@ export function workspaceDocumentReady(target, timeout = 1200, options = {}) {
       resolve(Boolean(ready))
     }
     const inspect = (current, redirects = 0, cookie = '') => {
-      const request = http.get({ ...current, timeout, headers: cookie ? { cookie } : undefined }, (response) => {
+      // Ownership checks can block this event loop while the server closes an idle socket.
+      // A fresh connection keeps a healthy host from looking unavailable on the next probe.
+      const request = http.get({ ...current, timeout, agent: false, headers: cookie ? { cookie } : undefined }, (response) => {
       const status = Number(response.statusCode)
       if ([301, 302, 303, 307, 308].includes(status) && redirects < 2) {
         const next = redirectedTarget(current, response.headers.location)
