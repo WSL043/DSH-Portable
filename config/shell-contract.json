@@ -155,6 +155,7 @@
       "runtime-capsule.mjs",
       "runtime-entry.mjs",
       "runtime-health.mjs",
+      "session-import-preflight.mjs",
       "startup-profile-recovery.mjs",
       "startup-source-cache.mjs",
       "startup-summary.mjs",
