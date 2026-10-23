@@ -1334,6 +1334,8 @@ window.__ModuleLoader__.load({
         const sessionEventStops = new Map()
         let publishTimer = null
         let lastProjection = ''
+        let sidebarFrame = null
+        let sidebarCollapsed = null
         const navigation = []
         let navigationIndex = -1
         let observedSession
@@ -1421,6 +1423,7 @@ window.__ModuleLoader__.load({
           recordNavigation()
           state.canGoBack = navigationTarget(-1) >= 0
           state.canGoForward = navigationTarget(1) >= 0
+          state.sidebarCollapsed = sidebarCollapsed
           const projection = JSON.stringify(state)
           if (projection === lastProjection) return
           lastProjection = projection
@@ -1434,6 +1437,27 @@ window.__ModuleLoader__.load({
             publishTimer = null
             publish()
           }, 100)
+        }
+        // AppFrame owns resolved geometry, including narrow-window auto-collapse.
+        // Its public layout action service does not expose this resolved state.
+        const readSidebar = () => {
+          if (!sidebarFrame?.isConnected) {
+            const frames = [...document.querySelectorAll('[data-shell-bottom]')]
+              .map(element => element.parentElement)
+              .filter(element => element?.querySelector(':scope > [data-shell-overlay]'))
+            sidebarFrame = frames.length === 1 ? frames[0] : null
+          }
+          const next = sidebarFrame ? sidebarFrame.getAttribute('data-sidebar-collapsed') === 'true' : null
+          if (next === sidebarCollapsed) return
+          sidebarCollapsed = next
+          schedulePublish()
+        }
+        let sidebarObserver = null
+        if (typeof MutationObserver === 'function' && typeof document?.querySelectorAll === 'function' && document.body) {
+          sidebarObserver = new MutationObserver(readSidebar)
+          sidebarObserver.observe(document.body, { childList: true, subtree: true,
+            attributes: true, attributeFilter: ['data-sidebar-collapsed'] })
+          readSidebar()
         }
         const receive = event => {
           const message = event?.data
@@ -1604,6 +1628,7 @@ window.__ModuleLoader__.load({
 
         return () => {
           active = false
+          sidebarObserver?.disconnect()
           if (publishTimer !== null) clearTimeout(publishTimer)
           publishTimer = null
           if (ctx.workspaces?.pickDirectory === nativePickDirectory && typeof originalPickDirectory === 'function') {

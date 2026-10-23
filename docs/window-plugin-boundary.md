@@ -4,9 +4,9 @@
 
 ## 能力探测
 
-顶栏的新会话快捷入口参考官方 [HeaderLeadingControls](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/client/ui-sidebar/src/client/HeaderLeadingControls.tsx)，复用既有 `uiWorkspace.startSession()`，不创建另一套会话状态。Native 保留固定入口，下拉菜单按当前语言的文字和快捷键测量宽度；不强制套用官方 Electron 的菜单分组或新增快捷键。
+Windows 新会话入口参考官方 [SidebarRoot](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/packages/client/ui-sidebar/src/client/SidebarRoot.tsx)：采用原版气泡加号图标，侧栏收起后才显示顶栏入口，复用 `uiWorkspace.startSession()`。桥读取官方 AppFrame 已解析的折叠属性，包含窄屏自动折叠，不另存布局偏好。展开时使用既有侧栏入口，后退和前进保留在视图菜单。
 
-Windows 默认顶栏参考 [官方桌面实现](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/apps/desktop/src/preload-menu.ts) 的 40 DIP 栏高、14px 系统字体、28px 菜单按钮与中性浅深配色。继续复用 Native 的文件、视图、帮助及现有命令，不增加另一套网页菜单或皮肤设置。macOS 和 Linux 沿用各自宿主的窗口机制。
+Windows 默认顶栏参考 [官方桌面实现](https://github.com/deepseek-ai/deepseek-harness/blob/687f282e8625c6b8d11ff58211a90524be2e4317/apps/desktop/src/preload-menu.ts) 的 40 DIP 栏高、14px 系统字体、28px 按钮与中性浅深配色。官方当前分组为应用、编辑；Portable 保留文件、视图、帮助及离线更新、恢复等既有命令，下拉宽度按当前语言和快捷键测量。macOS 和 Linux 沿用各自宿主的窗口机制。
 
 本次仅 Windows Native 实现这些接口。插件先检查宿主 `window.__DSH_PORTABLE_NATIVE__` 的 `protocolVersion === 1` 与 `capabilities`，只有对应能力为 `true` 才通过该宿主的 `postMessage` 发送消息。浏览器、macOS、Linux 或旧版宿主没有声明时，应保留普通页面及系统窗口，不隐藏控件、不模拟调用成功。不要按操作系统名称猜测能力。
 
@@ -18,6 +18,21 @@ Windows 默认顶栏参考 [官方桌面实现](https://github.com/deepseek-ai/d
 | `windowState` | `dsh-portable/window-state` | 查询状态；宿主以同名消息返回状态变化 |
 | `windowCommand` | `dsh-portable/window-command`，`id` | 只执行现有且当前可用的原生命令 ID |
 | `windowMenu` | `dsh-portable/window-menu`，`menu` 为 `file` / `view` / `help` | 复用当前原生菜单 |
+
+页面插件可将下列函数绑定到自己的按钮回调；这是调用片段，不是完整插件包。`window.__DSH_PORTABLE_HOST__` 尚未封装这六项窗口能力，应直接探测 Native 对象。
+
+```js
+const native = window.__DSH_PORTABLE_NATIVE__
+const send = (capability, message) => {
+  if (native?.protocolVersion !== 1 || native.capabilities?.[capability] !== true ||
+      typeof native.postMessage !== 'function') return
+  native.postMessage(message)
+}
+const openFileMenu = () => send('windowMenu', { type: 'dsh-portable/window-menu', menu: 'file' })
+const newSession = () => send('windowCommand', { type: 'dsh-portable/window-command', id: 'new-session' })
+```
+
+`window-menu` 只复用现有菜单组，`window-command` 只执行已有且启用的 ID。新 UI 的 DOM 菜单、文案、顺序和页面回调由插件负责；接口不支持增删原生菜单项、注册任意原生回调或指定弹出锚点，原生菜单弹在当前鼠标位置。
 
 返回状态包含 `frameless`、`maximized`、`minimized`、`fullscreen`、`menuVisible`、`nativeChromeForced`。接口是新增的可选能力，旧内核无需使用，外壳契约仍为 2。
 

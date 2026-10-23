@@ -59,7 +59,8 @@ async function loadBridgeClient(options = {}) {
     window.__DSH_PORTABLE_NATIVE__ = native
     delete window.chrome
   }
-  vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window })
+  vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window,
+    ...options.pageGlobals })
   assert.equal(definition?.id, '@wsl043/dsh-portable-desktop-bridge')
   const exports = definition.factory((id) => {
     if (id === 'react') return {}
@@ -250,6 +251,59 @@ test('title navigation follows session visits, skips deleted sessions, and clear
     navigate('forward')
     assert.equal(runtime.ctx.sessions.list.getSnapshot().current, null)
   } finally { runtime.dispose() }
+})
+
+test('sidebar projection follows resolved frame geometry, remounts, and disposal', async () => {
+  let frame = null
+  let observer
+  const document = { body: {}, querySelectorAll: () => frame ? [{ parentElement: frame }] : [] }
+  class MutationObserver {
+    constructor(callback) { this.callback = callback; observer = this }
+    observe(target, options) { this.connected = target === document.body; this.options = options }
+    disconnect() { this.connected = false }
+    mutate(type, attributeName) {
+      if (this.connected && this.options.subtree && this.options[type] &&
+          (!attributeName || !this.options.attributeFilter || this.options.attributeFilter.includes(attributeName)))
+        this.callback([{ type, attributeName }])
+    }
+  }
+  const client = await loadBridgeClient({ pageGlobals: { document, MutationObserver } })
+  const runtime = fakeContext(sessionList(1))
+  const replaceFrame = collapsed => {
+    if (frame) frame.isConnected = false
+    frame = collapsed === null ? null : {
+      isConnected: true, collapsed,
+      querySelector: () => ({}),
+      getAttribute() { return String(this.collapsed) },
+    }
+    observer.mutate('childList')
+  }
+  const projected = () => client.posted.at(-1).sidebarCollapsed
+  const settle = () => new Promise(resolve => setTimeout(resolve, 150))
+  client.exports.apply(runtime.ctx)
+  try {
+    assert.equal(projected(), null, 'an unknown frame must not be guessed from user preferences')
+    replaceFrame(false)
+    await settle()
+    assert.equal(projected(), false)
+    // Resolved geometry can collapse at narrow widths without a preference change.
+    frame.collapsed = true
+    observer.mutate('attributes', 'data-sidebar-collapsed')
+    await settle()
+    assert.equal(projected(), true)
+    replaceFrame(false)
+    await settle()
+    assert.equal(projected(), false, 'a replacement frame supplies the new state')
+    replaceFrame(null)
+    await settle()
+    assert.equal(projected(), null, 'a removed frame returns to unknown')
+    const before = client.posted.length
+    replaceFrame(true)
+    runtime.dispose()
+    assert.equal(observer.connected, false)
+    await settle()
+    assert.equal(client.posted.length, before, 'disposal cancels a queued sidebar projection')
+  } finally { if (observer.connected) runtime.dispose() }
 })
 
 test('alpha2 navigation uses uiWorkspace APIs and retained main-view selection', async () => {

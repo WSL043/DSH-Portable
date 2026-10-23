@@ -199,7 +199,7 @@ namespace DshPortable
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 40, Padding = new Padding(4, 0, 0, 0), Visible = !fullscreen && !pageWindowChrome };
+                AutoSize = false, Height = 40, Padding = new Padding(12, 0, 0, 0), Visible = !fullscreen && !pageWindowChrome };
             desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
@@ -219,8 +219,6 @@ namespace DshPortable
             }
             AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("切换侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
             AddNavigationCommand(1, "nav-new-session", "new-session", L("新会话", "New session"), Keys.None);
-            AddNavigationCommand(2, "nav-back", "navigate-back", L("后退", "Back"), Keys.Alt | Keys.Left);
-            AddNavigationCommand(3, "nav-forward", "navigate-forward", L("前进", "Forward"), Keys.Alt | Keys.Right);
             desktopMenu.ShowItemToolTips = true;
             AddCaptionCommand("caption-close", "\uE8BB", L("关闭窗口", "Close window"), delegate { PerformWindowControl("close"); });
             AddCaptionCommand("caption-maximize", "\uE922", L("最大化或还原", "Maximize or restore"), delegate { PerformWindowControl("maximize"); });
@@ -236,6 +234,11 @@ namespace DshPortable
                 delegate { RequestDesktopRestart(); });
             AddDesktopCommand(file, "exit", L("退出", "Exit"), Keys.Control | Keys.Q,
                 delegate { if (!shutdownRunning) BeginDesktopShutdown(); });
+            AddDesktopCommand(view, "nav-back", L("后退", "Back"), Keys.Alt | Keys.Left,
+                delegate { PostBridgeAction("navigate-back", null); });
+            AddDesktopCommand(view, "nav-forward", L("前进", "Forward"), Keys.Alt | Keys.Right,
+                delegate { PostBridgeAction("navigate-forward", null); });
+            view.DropDownItems.Add(new ToolStripSeparator());
             AddDesktopCommand(view, "reload", L("重新加载", "Reload"), Keys.Control | Keys.R,
                 delegate { ScheduleWebViewRecovery(false, "desktop-menu"); });
             view.DropDownItems.Add(new ToolStripSeparator());
@@ -299,7 +302,7 @@ namespace DshPortable
         private void AddNavigationCommand(int index, string name, string action, string label, Keys shortcut)
         {
             ToolStripMenuItem item = new ToolStripMenuItem(" ", null, delegate { PostBridgeAction(action, null); }) {
-                Name = name, AutoSize = false, Size = new Size(28, 28), Margin = new Padding(0, 6, 0, 6),
+                Name = name, AutoSize = false, Size = new Size(28, 28), Margin = new Padding(0, 6, 8, 6),
                 AccessibleName = label, ToolTipText = shortcut == Keys.None ? label
                     : label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
             };
@@ -359,8 +362,7 @@ namespace DshPortable
             bool navigationReady = desktopReady && trayBridgeReady && !shutdownRunning && !operationRunning;
             desktopMenu.Items["nav-sidebar"].Enabled = navigationReady;
             desktopMenu.Items["nav-new-session"].Enabled = navigationReady;
-            desktopMenu.Items["nav-back"].Enabled = navigationReady && trayState != null && trayState.canGoBack;
-            desktopMenu.Items["nav-forward"].Enabled = navigationReady && trayState != null && trayState.canGoForward;
+            desktopMenu.Items["nav-new-session"].Visible = navigationReady && trayState != null && trayState.sidebarCollapsed == true;
             foreach (ToolStripMenuItem menu in desktopMenu.Items)
                 foreach (ToolStripItem item in menu.DropDownItems)
                 {
@@ -368,6 +370,8 @@ namespace DshPortable
                     if (id == null) continue;
                     item.Enabled = !shutdownRunning;
                     if (id == "new-session" || id == "settings") item.Enabled &= desktopReady && trayBridgeReady && !operationRunning;
+                    if (id == "nav-back") item.Enabled = navigationReady && trayState != null && trayState.canGoBack;
+                    if (id == "nav-forward") item.Enabled = navigationReady && trayState != null && trayState.canGoForward;
                     if (id == "reload" || id.StartsWith("zoom-")) item.Enabled &= desktopReady && !operationRunning && !webViewRecoveryRunning;
                     if (id == "close") item.Enabled &= desktopReady;
                     if (id == "exit" || id == "restart") item.Enabled &= desktopReady && !operationRunning;

@@ -95,7 +95,17 @@ try {
    $type.GetField('trayBridgeReady',$flags).SetValue($window,$true)
    $type.GetField('operationRunning',$flags).SetValue($window,$false)
    $type.GetMethod('RefreshDesktopCommands',$flags).Invoke($window,@()) | Out-Null
-   if($NavigationPreview -and (-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-new-session'].Enabled -or -not $menu.Items['nav-back'].Enabled -or $menu.Items['nav-forward'].Enabled)){throw 'Navigation availability does not follow host state'}
+   if($menu.Items['nav-new-session'].Available){throw 'New-session caption must stay hidden while sidebar state is unknown'}
+   $state.sidebarCollapsed=$false
+   $type.GetMethod('RefreshDesktopCommands',$flags).Invoke($window,@()) | Out-Null
+   $menu.PerformLayout()
+   if($menu.Items['nav-new-session'].Available -or $menu.Items['menu-file'].Bounds.Left -ne 48){throw 'Expanded sidebar must leave only the toggle before menus'}
+   $state.sidebarCollapsed=$true
+   $type.GetMethod('RefreshDesktopCommands',$flags).Invoke($window,@()) | Out-Null
+   $menu.PerformLayout()
+   if(-not $menu.Items['nav-new-session'].Available -or $menu.Items['nav-new-session'].Bounds.Left -ne 48 -or $menu.Items['menu-file'].Bounds.Left -ne 84){throw 'Collapsed sidebar caption does not match official placement'}
+   $history=$menu.Items['menu-view'].DropDownItems
+   if($NavigationPreview -and (-not $menu.Items['nav-sidebar'].Enabled -or -not $menu.Items['nav-new-session'].Enabled -or -not $history['nav-back'].Enabled -or $history['nav-forward'].Enabled)){throw 'Navigation availability does not follow host state'}
  }
  foreach($theme in @('dark','light')){
    $type.GetField('trayTheme',$flags).SetValue($window,$theme)

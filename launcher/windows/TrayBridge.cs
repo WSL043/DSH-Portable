@@ -50,6 +50,7 @@ namespace DshPortable
         public bool hasRunningSession { get; set; }
         public bool canGoBack { get; set; }
         public bool canGoForward { get; set; }
+        public bool? sidebarCollapsed { get; set; }
         public List<TrayBridgeSession> sessions { get; set; }
     }
 

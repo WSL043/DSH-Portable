@@ -470,30 +470,52 @@ namespace DshPortable
                     pen.LineJoin = LineJoin.Round;
                     SmoothingMode previous = e.Graphics.SmoothingMode;
                     e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+                    // Original DeepSeek MIT icon paths (see NOTICE.md), viewBox 0 0 16 16.
+                    pen.Width = 1F;
+                    pen.StartCap = pen.EndCap = LineCap.Flat;
+                    pen.LineJoin = LineJoin.Miter;
+                    GraphicsState iconState = e.Graphics.Save();
+                    e.Graphics.TranslateTransform(x - 8, y - 8);
                     if (e.Item.Name == "nav-sidebar")
                     {
-                        using (GraphicsPath outline = RoundedRectangle(new Rectangle((int)x - 6, (int)y - 5, 12, 10), 2))
+                        using (GraphicsPath outline = new GraphicsPath())
+                        {
+                            outline.AddLine(13.5F, 1.5F, 2.5F, 1.5F);
+                            outline.AddBezier(2.5F, 1.5F, 1.94772F, 1.5F, 1.5F, 1.94772F, 1.5F, 2.5F);
+                            outline.AddLine(1.5F, 2.5F, 1.5F, 13.5F);
+                            outline.AddBezier(1.5F, 13.5F, 1.5F, 14.0523F, 1.94772F, 14.5F, 2.5F, 14.5F);
+                            outline.AddLine(2.5F, 14.5F, 13.5F, 14.5F);
+                            outline.AddBezier(13.5F, 14.5F, 14.0523F, 14.5F, 14.5F, 14.0523F, 14.5F, 13.5F);
+                            outline.AddLine(14.5F, 13.5F, 14.5F, 2.5F);
+                            outline.AddBezier(14.5F, 2.5F, 14.5F, 1.94772F, 14.0523F, 1.5F, 13.5F, 1.5F);
+                            outline.CloseFigure();
                             e.Graphics.DrawPath(pen, outline);
-                        e.Graphics.DrawLine(pen, x - 2, y - 5, x - 2, y + 5);
+                        }
+                        e.Graphics.DrawLine(pen, 5.5F, 1.5F, 5.5F, 14.5F);
                     }
                     else if (e.Item.Name == "nav-new-session")
                     {
-                        e.Graphics.DrawLines(pen, new PointF[] {
-                            new PointF(x + 5, y + 1), new PointF(x + 5, y + 5),
-                            new PointF(x - 5, y + 5), new PointF(x - 5, y - 5), new PointF(x - 1, y - 5),
-                        });
-                        e.Graphics.DrawPolygon(pen, new PointF[] {
-                            new PointF(x - 1, y + 2), new PointF(x, y - 1), new PointF(x + 4, y - 5),
-                            new PointF(x + 6, y - 3), new PointF(x + 2, y + 1),
-                        });
+                        using (GraphicsPath outline = new GraphicsPath())
+                        {
+                            outline.AddBeziers(new PointF[] {
+                                new PointF(2.37091F, 11.2501F),
+                                new PointF(1.58745F, 9.89288F), new PointF(1.32067F, 8.29835F), new PointF(1.61969F, 6.76006F),
+                                new PointF(1.91872F, 5.22177F), new PointF(2.76342F, 3.8433F), new PointF(3.99826F, 2.87846F),
+                                new PointF(5.2331F, 1.91362F), new PointF(6.77494F, 1.42737F), new PointF(8.33988F, 1.50925F),
+                                new PointF(9.90482F, 1.59113F), new PointF(11.3875F, 2.23562F), new PointF(12.5149F, 3.32406F),
+                                new PointF(13.6425F, 4.41269F), new PointF(14.3387F, 5.87206F), new PointF(14.4754F, 7.4334F),
+                                new PointF(14.612F, 8.99474F), new PointF(14.18F, 10.5529F), new PointF(13.2587F, 11.8209F),
+                                new PointF(12.3375F, 13.0888F), new PointF(10.9891F, 13.9813F), new PointF(9.46194F, 14.3337F),
+                                new PointF(8.18691F, 14.628F), new PointF(6.85895F, 14.5294F), new PointF(5.64989F, 14.0605F),
+                                new PointF(5.1712F, 13.8748F), new PointF(4.76962F, 13.4932F), new PointF(4.26534F, 13.3967F),
+                                new PointF(3.67413F, 13.2835F), new PointF(2.95257F, 13.5598F), new PointF(2.03794F, 14.3337F),
+                            });
+                            e.Graphics.DrawPath(pen, outline);
+                        }
+                        e.Graphics.DrawLine(pen, 8, 5, 8, 11);
+                        e.Graphics.DrawLine(pen, 5, 8, 11, 8);
                     }
-                    else
-                    {
-                        float direction = e.Item.Name == "nav-back" ? -1 : 1;
-                        e.Graphics.DrawLine(pen, x - 5, y, x + 5, y);
-                        e.Graphics.DrawLine(pen, x + direction * 5, y, x, y - 4);
-                        e.Graphics.DrawLine(pen, x + direction * 5, y, x, y + 4);
-                    }
+                    e.Graphics.Restore(iconState);
                     e.Graphics.SmoothingMode = previous;
                 }
                 return;
