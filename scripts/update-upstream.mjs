@@ -103,6 +103,15 @@ if (changed) {
     marketManifest.peerDependencies['@deepseek-ai/dsh-settings'] = [...verifiedRanges, verifiedTrain].join(' || ')
     await writeFile(marketManifestPath, `${JSON.stringify(marketManifest, null, 2)}\n`, 'utf8')
   }
+  // Keep the standalone frozen build in sync without refreshing its dependency graph.
+  const marketLockPath = path.join(path.dirname(marketManifestPath), 'pnpm-lock.yaml')
+  const marketLock = await readFile(marketLockPath, 'utf8')
+  const settingsEntry = /^(      '@deepseek-ai\/dsh-settings':\r?\n        specifier: )[^\r\n]+$/gm
+  if ([...marketLock.matchAll(settingsEntry)].length !== 1) {
+    throw new Error('Expected one vendored market settings peer in the lockfile root importer')
+  }
+  await writeFile(marketLockPath, marketLock.replace(settingsEntry,
+    (_, prefix) => prefix + marketManifest.peerDependencies['@deepseek-ai/dsh-settings']), 'utf8')
 
   const installArgs = [
     'install', '--package-lock-only', '--ignore-scripts', '--no-audit', '--no-fund', '--save-exact',
