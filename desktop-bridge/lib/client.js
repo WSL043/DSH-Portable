@@ -536,7 +536,7 @@ window.__ModuleLoader__.load({
           if (!active || sequence !== productRequestSequenceRef.current) return
           setProductVersions(body.versions)
           setProductCatalogLoaded(true)
-          setProductVersion(body.versions.some(item => item.version === body.current) ? body.current : body.versions[0]?.version || '')
+          setProductVersion(body.current || '')
         }).catch(error => {
           if (active && sequence === productRequestSequenceRef.current) setStatus('update-product', updateErrorText(t, error))
         })
@@ -840,7 +840,7 @@ window.__ModuleLoader__.load({
           h('div', { style: styles.label }, t('productVersionChoice')),
           h(PortableSelector, {
             primitives, value: productVersion || version, label: t('productVersionChoice'),
-            items: [...(version && !productVersions.some(item => item.version === version) ? [{ id: version, label: version }] : []), ...productVersions.map(item => ({ id: item.version, label: item.version }))],
+            items: [...(version && !productVersions.some(item => item.version === version) ? [{ id: version, label: format(t('currentTag'), version) }] : []), ...productVersions.map(item => ({ id: item.version, label: item.version === version ? format(t('currentTag'), version) : item.version }))],
             onSelect: setProductVersion,
           })),
         scope === 'product' && version && productVersion && compareCoreVersions(productVersion, version) < 0

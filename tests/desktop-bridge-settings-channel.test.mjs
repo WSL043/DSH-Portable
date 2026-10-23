@@ -586,10 +586,64 @@ test('Portable version selection sends the exact approved stable manifest to the
   await settle()
   const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
   assert.deepEqual(Array.from(selector.props.items, item => item.id), ['0.6.4', '0.6.5'])
+  assert.equal(selector.props.value, '0.6.4')
+  assert.equal(selector.props.items[0].label, '0.6.4 (current)')
+  selector.props.onSelect('0.6.5')
+  await settle()
   findNode(mounted.tree, node => textContent(node) === 'Install 0.6.5' && typeof node.props?.onClick === 'function').props.onClick()
   assert.equal(messages.at(-1).scope, 'product')
   assert.equal(messages.at(-1).manifestUrl, manifestUrl)
   mounted.unmount()
+})
+
+test('an installed Portable absent from the feed is not implicitly downgraded', async () => {
+  const messages = [], checks = []
+  const manifestUrl = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-windows-x64-0.9.4.json'
+  const client = await loadSettingsComponent(async (url, options) => {
+    if (url === '/dsh-portable/settings') return jsonResponse({ settings: settings(), versions: { portable: '0.9.5', engine: '0.2.1-rc.2' } })
+    if (url === '/dsh-portable/check-update') {
+      checks.push(JSON.parse(options.body))
+      return jsonResponse({ status: 'current' })
+    }
+    return jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: '0.2.1-rc.2', versions: [], unavailable: [] })
+  }, {
+    lang: 'zh', nativeMessages: messages,
+    productFetch: async () => jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: '0.9.5', versions: [{ version: '0.9.4', manifestUrl }] }),
+  })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const selector = findNode(mounted.tree, node => node.props?.label === 'Portable 版本')
+    assert.equal(selector.props.value, '0.9.5')
+    assert.deepEqual(Array.from(selector.props.items, item => [item.id, item.label]), [['0.9.5', '0.9.5（当前）'], ['0.9.4', '0.9.4']])
+    const product = () => findNode(mounted.tree, node => node.type === 'section' && node.props?.['aria-label'] === 'DSH-Portable')
+    assert.doesNotMatch(textContent(product()), /所选 Portable 比当前的旧/)
+    findNode(product(), node => textContent(node) === '检查更新' && typeof node.props?.onClick === 'function').props.onClick()
+    await settle()
+    assert.deepEqual(checks, [{ scope: 'product' }])
+    assert.equal(messages.length, 0, 'the default action checks normally instead of opening an older manifest')
+    selector.props.onSelect('0.9.4')
+    await settle()
+    assert.match(textContent(product()), /所选 Portable 比当前的旧/)
+    findNode(product(), node => textContent(node) === '安装 0.9.4' && typeof node.props?.onClick === 'function').props.onClick()
+    assert.equal(messages.at(-1).scope, 'product')
+    assert.equal(messages.at(-1).manifestUrl, manifestUrl, 'explicit historical selection keeps the existing approved-manifest path')
+  } finally { mounted.unmount() }
+})
+
+test('a listed current Portable is marked without adding a duplicate option', async () => {
+  const client = await loadSettingsComponent(async url => jsonResponse(url === '/dsh-portable/settings'
+    ? { settings: settings(), versions: { portable: '0.9.4', engine: '0.2.1-rc.2' } }
+    : { schemaVersion: 1, releaseChannel: 'stable', current: '0.2.1-rc.2', versions: [], unavailable: [] }), {
+    productFetch: async () => jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: '0.9.4', versions: [{ version: '0.9.5' }, { version: '0.9.4' }] }),
+  })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const selector = findNode(mounted.tree, node => node.props?.label === 'Portable version')
+    assert.equal(selector.props.value, '0.9.4')
+    assert.deepEqual(Array.from(selector.props.items, item => [item.id, item.label]), [['0.9.5', '0.9.5'], ['0.9.4', '0.9.4 (current)']])
+  } finally { mounted.unmount() }
 })
 
 test('Portable current version remains visible with an empty approved catalog', async () => {
