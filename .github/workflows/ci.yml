@@ -252,6 +252,13 @@ jobs:
           tar.exe -x -f artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
           if ($LASTEXITCODE -ne 0) { throw "Windows package extraction failed with exit code $LASTEXITCODE" }
           node scripts/smoke-update-artifact.mjs (Join-Path $Root 'DSH-Portable') artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip
+      - name: Retain sanitized component update evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-component-update-evidence
+          path: ${{ runner.temp }}/dsh-update-smoke/DSH-Portable/data/logs/update-smoke-evidence.json
+          if-no-files-found: warn
 
   windows-portable-smoke:
     name: Windows movable ZIP

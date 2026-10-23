@@ -7,8 +7,61 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
+import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
+import { layoutForRoot } from '../launcher/portable-core.mjs'
 
 const execFileAsync = promisify(execFile)
+
+function diagnosticText(value) {
+  const withoutCredentials = String(value).split('\n').map(line =>
+    /control.?token|cookie|authorization/i.test(line) ? '[credential-bearing log line omitted]' : line).join('\n')
+  return redactDiagnosticText(withoutCredentials).replace(/https?:\/\/[^\s"'<>]+/gi, source => {
+    try { const url = new URL(source); return `${url.origin}${url.pathname}` } catch { return '[URL]' }
+  })
+}
+
+function diagnosticScalar(value) {
+  return typeof value === 'string' ? diagnosticText(value).slice(0, 512)
+    : typeof value === 'number' || typeof value === 'boolean' ? value : undefined
+}
+
+function statusEvidence(value) {
+  return {
+    status: diagnosticScalar(value?.status),
+    pid: Number.isSafeInteger(value?.pid) ? value.pid : undefined,
+    port: Number.isSafeInteger(value?.port) ? value.port : undefined,
+    urlPresent: typeof value?.url === 'string',
+  }
+}
+
+// One later, first-response observation, not a retry of the failed product check or an acceptance gate.
+function observeHttp(target) {
+  const started = Date.now()
+  let url
+  try { url = new URL(target) } catch { return Promise.resolve({ skipped: 'no-url' }) }
+  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1') return Promise.resolve({ skipped: 'non-loopback-url' })
+  return new Promise(resolve => {
+    let settled = false
+    let timer
+    const finish = fields => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve({ at: new Date().toISOString(), elapsedMs: Date.now() - started, timeoutMs: 1200, firstResponseOnly: true, ...fields })
+    }
+    // Match status()'s initial request path: preserve the one-use access token by omitting URL search/hash.
+    const request = http.get({ hostname: url.hostname, port: url.port || 80, path: url.pathname || '/', timeout: 1200 }, response => {
+      const statusCode = response.statusCode
+      response.resume()
+      response.once('end', () => finish({ statusCode }))
+      response.once('aborted', () => finish({ statusCode, errorCode: 'RESPONSE_ABORTED' }))
+      response.once('error', error => finish({ statusCode, errorCode: error.code || 'RESPONSE_ERROR' }))
+    })
+    request.once('timeout', () => { finish({ timedOut: true }); request.destroy() })
+    request.once('error', error => finish({ errorCode: error.code || 'REQUEST_ERROR' }))
+    timer = setTimeout(() => { finish({ timedOut: true }); request.destroy() }, 1200)
+  })
+}
 
 function runtimeNode(root) {
   return process.platform === 'win32'
@@ -146,7 +199,20 @@ async function main() {
   localManifest.component.urls = [`${origin}/component.zip`]
   rollbackProbe.manifest.component.urls = [`${origin}/rollback-component.zip`]
 
+  const diagnosticLayout = layoutForRoot(root)
+  const evidenceFile = path.join(diagnosticLayout.logsDir, 'update-smoke-evidence.json')
+  const started = Date.now()
+  const evidence = { schemaVersion: 1, status: 'running', phases: [] }
+  let phase = 'setup'
+  const checkpoint = async (next, fields = {}) => {
+    phase = next
+    evidence.phases.push({ phase, at: new Date().toISOString(), elapsedMs: Date.now() - started, ...fields })
+    // Diagnostic I/O must not turn a product failure into a different exception or prevent normal cleanup.
+    await mkdir(path.dirname(evidenceFile), { recursive: true }).then(() =>
+      writeFile(evidenceFile, `${JSON.stringify(evidence, null, 2)}\n`)).catch(() => {})
+  }
   try {
+    await checkpoint('baseline')
     let originalDependencies
     const profileManifestFile = path.join(root, 'data', 'dsh-home', 'profiles', 'web', 'package.json')
     if (engine) {
@@ -163,6 +229,7 @@ async function main() {
         assert.equal(originalDependencies?.[plugin.package], plugin.version, 'baseline includes the reviewed default plugins')
       }
     }
+    await checkpoint('apply-update')
     const updated = await execFileAsync(node, [
       ...cliPrefix,
       'update',
@@ -175,10 +242,16 @@ async function main() {
       `${origin}/manifest.json`,
     ], { encoding: 'utf8', timeout: 180000, windowsHide: true, maxBuffer: 4 * 1024 * 1024 })
     const result = JSON.parse(updated.stdout.trim())
+    await checkpoint('update-returned', { result: {
+      status: diagnosticScalar(result.status), portableVersion: diagnosticScalar(result.portableVersion),
+      dshVersion: diagnosticScalar(result.dshVersion), cleanupPending: diagnosticScalar(result.cleanupPending),
+      running: statusEvidence(result.running),
+    } })
     assert.equal(result.status, 'updated')
     assert.equal(result.portableVersion, contractCore ? skewedPortableVersion : manifest.portableVersion)
     assert.equal(result.dshVersion, manifest.component.dshVersion)
     assert.equal(result.running?.status, 'running')
+    await checkpoint('post-update-status')
     const status = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
       encoding: 'utf8', timeout: 30000, windowsHide: true,
     })).stdout.trim())
@@ -217,6 +290,7 @@ async function main() {
     }
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
 
+    await checkpoint('rollback-update')
     let rollbackDiagnostic = ''
     try {
       await execFileAsync(node, [
@@ -238,6 +312,7 @@ async function main() {
       assert.equal(rollbackError.code, 'UPDATE_ROLLED_BACK', JSON.stringify(rollbackError))
       assert.doesNotMatch(rollbackDiagnostic, /(?:token|authorization|cookie)=/i)
     }
+    await checkpoint('rollback-status')
     const rollbackStatus = JSON.parse((await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
       encoding: 'utf8', timeout: 30000, windowsHide: true,
     })).stdout.trim())
@@ -247,6 +322,7 @@ async function main() {
     assert.equal(afterRollback.dshVersion, manifest.component.dshVersion)
     if (engine) assert.deepEqual(JSON.parse(await readFile(profileManifestFile, 'utf8')).dependencies, originalDependencies)
     for (const [filename, content] of sentinels) assert.equal(await readFile(filename, 'utf8'), content)
+    await checkpoint('check-deferred')
     const deferred = JSON.parse((await execFileAsync(node, [
       ...cliPrefix,
       'check-update',
@@ -258,6 +334,8 @@ async function main() {
     ], { encoding: 'utf8', timeout: 30000, windowsHide: true })).stdout.trim())
     assert.equal(deferred.status, 'deferred')
     const rollbackVerified = true
+    evidence.status = 'verified'
+    await checkpoint('verified')
     process.stdout.write(`${JSON.stringify({
       status: 'verified',
       portableVersion: result.portableVersion,
@@ -265,6 +343,46 @@ async function main() {
       preserved: sentinels.length,
       rollbackVerified,
     })}\n`)
+  } catch (error) {
+    evidence.status = 'failed'
+    evidence.failure = {
+      phase, name: diagnosticScalar(error?.name), code: diagnosticScalar(error?.code),
+      actual: diagnosticScalar(error?.actual), expected: diagnosticScalar(error?.expected),
+    }
+    // Observe before finally stops the fixture. These later observations never replace the original assertion.
+    await checkpoint('failure')
+    try {
+      const readJson = async filename => readFile(filename, 'utf8').then(text => ({ value: JSON.parse(text) }))
+        .catch(readError => ({ errorCode: readError.code || readError.name }))
+      const processRead = await readJson(diagnosticLayout.processState)
+      const journalRead = await readJson(diagnosticLayout.updateJournal)
+      const componentsRead = await readJson(installedFile)
+      const state = processRead.value
+      evidence.beforeStop = {
+        at: new Date().toISOString(),
+        process: { ...statusEvidence(state), startedAt: diagnosticScalar(state?.startedAt), errorCode: processRead.errorCode },
+        journal: { present: Boolean(journalRead.value), phase: diagnosticScalar(journalRead.value?.phase), errorCode: journalRead.errorCode },
+        installed: { portableVersion: diagnosticScalar(componentsRead.value?.portableVersion),
+          dshVersion: diagnosticScalar(componentsRead.value?.dshVersion), errorCode: componentsRead.errorCode },
+      }
+      try {
+        const observed = await execFileAsync(node, [...cliPrefix, 'status', '--json'], {
+          encoding: 'utf8', timeout: 30000, windowsHide: true,
+        })
+        evidence.beforeStop.status = statusEvidence(JSON.parse(observed.stdout.trim()))
+      } catch (statusError) { evidence.beforeStop.status = { errorCode: diagnosticScalar(statusError?.code || statusError?.name) } }
+      evidence.beforeStop.http = await observeHttp(state?.url)
+      evidence.beforeStop.logTails = {}
+      for (const name of ['launcher.log', 'startup-latest.jsonl', 'dsh.stdout.log', 'dsh.stderr.log', 'portable-errors.jsonl']) {
+        try { evidence.beforeStop.logTails[name] = diagnosticText(readLogTail(path.join(diagnosticLayout.logsDir, name), 8192)) }
+        catch (logError) { evidence.beforeStop.logTails[name] = { errorCode: logError.code || 'LOG_READ_FAILED' } }
+      }
+      await checkpoint('failure-observed-before-stop')
+    } catch (diagnosticError) {
+      evidence.diagnosticError = diagnosticScalar(diagnosticError?.code || diagnosticError?.name)
+      await checkpoint('failure-evidence-incomplete')
+    }
+    throw error
   } finally {
     await execFileAsync(node, [...cliPrefix, 'stop', '--json'], { encoding: 'utf8', timeout: 30000, windowsHide: true }).catch(() => {})
     await new Promise((resolve) => server.close(resolve))
