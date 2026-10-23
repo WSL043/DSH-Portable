@@ -15,11 +15,11 @@
       "升级前正常退出应用并备份重要数据；升级保留现有会话、设置、凭据、插件和工作区。"
     ],
     "knownIssues": [
-      "通用窗口接口仅由 Windows Native 声明；浏览器、macOS、Linux 和旧宿主须按能力探测保留系统窗口。此版本不内置皮肤或灵动岛插件。",
+      "通用窗口接口仅由 Windows Native 声明；浏览器、macOS、Linux 和旧宿主须按能力探测保留系统窗口。",
       "1.x 官方 Electron 内核仍内置受影响的 MCP client/core 2.2.0，等待官方修复后重新验收；本次 0.x 发布不修改官方 ASAR，也不解除 1.x 发布阻断。0.x 已在 0.9.4 更新至修复版本 2.3.0。"
     ],
     "acknowledgements": [
-      "感谢 [ArtificialAngels 在 PR #181](https://github.com/WSL043/DSH-Portable/pull/181) 提出的窗口桥接与菜单复用思路。本次采纳通用接口方向，视觉插件与皮肤偏好由用户自行选择。"
+      "感谢 [ArtificialAngels 在 PR #181](https://github.com/WSL043/DSH-Portable/pull/181) 提出的窗口桥接与菜单复用思路。本次采纳通用接口方向。"
     ]
   },
   "en": {
@@ -37,11 +37,11 @@
       "Exit normally and back up important data before upgrading. Sessions, settings, credentials, plugins and the workspace are preserved."
     ],
     "knownIssues": [
-      "Only Windows Native declares the new window capabilities. Browsers, macOS, Linux and older hosts must retain system controls when capabilities are absent. No skin or Dynamic Island plugin is bundled.",
+      "Only Windows Native declares the new window capabilities. Browsers, macOS, Linux and older hosts must retain system controls when capabilities are absent.",
       "The official 1.x Electron payload still bundles affected MCP client/core 2.2.0. Its release remains blocked pending an upstream fix and renewed qualification. This 0.x release does not modify the official ASAR; 0.x already adopted fixed SDK 2.3.0 in 0.9.4."
     ],
     "acknowledgements": [
-      "Thanks to [ArtificialAngels and PR #181](https://github.com/WSL043/DSH-Portable/pull/181) for the window bridge and menu reuse proposal. This release adopts the generic capability direction; visual plugins and skin preferences remain user choices."
+      "Thanks to [ArtificialAngels and PR #181](https://github.com/WSL043/DSH-Portable/pull/181) for the window bridge and menu reuse proposal. This release adopts the generic capability direction."
     ]
   }
 }

@@ -1,9 +1,9 @@
-# 0.9.5 发布准备 / Release preparation
+# 0.9.6 发布准备 / Release preparation
 
-本轮范围以 [0.9.5 双语更新说明](v0.9.5.json) 为准：Windows Native 离线更新入口、通用窗口接口、窗口行为一致性和简短菜单。窗口外观由用户插件自定义，不内置皮肤或新旧 UI 偏好；见 [接口边界](../docs/window-plugin-boundary.md) 与 [离线更新](../docs/offline-updates.md)。发布状态、最终提交和成品摘要以 GitHub Release 证据为准。
+本轮范围以 [0.9.6 双语更新说明](v0.9.6.json) 为准：内置 DSH 更新至 0.2.1-rc.3，默认插件更新到兼容版本；新会话入口沿用官方的未发送草稿恢复行为。聊天管理的归档会话页面统一设置样式。
 
-1.x 官方 Electron 线等待官方修复内置 MCP 依赖，再重新验收；不修改官方 ASAR、不用 0.x 的 SDK 修复替它通过资格。见 [1.x MCP 复核](../docs/one-x-mcp-followup-2026-10-23.md)。0.x 已在 0.9.4 使用 SDK 2.3.0。
+升级继续保留现有会话、设置、凭据、插件和工作区。
 
-The [0.9.5 bilingual descriptor](v0.9.5.json) covers Windows Native offline update entry points, generic window capabilities, consistent window actions and shorter menus. Appearance remains a user plugin choice. Final publication, source revision and artifact checksums belong to the GitHub Release evidence.
+The [0.9.6 bilingual descriptor](v0.9.6.json) covers bundled DSH 0.2.1-rc.3, compatible default plugin updates and the official recovery of unsent drafts through New Session. Chat Manager aligns the archived-session page with the settings style.
 
-The official 1.x Electron line remains blocked pending an upstream MCP fix and renewed qualification. Its ASAR is preserved; the 0.x SDK fix does not qualify the official 1.x payload.
+Upgrades continue to preserve sessions, settings, credentials, plugins and the workspace.
