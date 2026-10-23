@@ -341,6 +341,29 @@ test('0.4.2 notes describe targeted compatibility guidance and website discovery
   assert.match(notes, /站点地图/)
 })
 
+test('prepare-only signs acceptance metadata without enabling publication', async () => {
+  const workflow = await read('.github/workflows/publish.yml')
+  const steps = workflow.split(/(?=^      - name:)/m)
+  const publication = steps.filter(step => /gh release (?:create|edit)|scripts\/upload-release-assets\.mjs/.test(step))
+  assert.equal(publication.length, 2, 'both existing Release and feed publication blocks are covered')
+  for (const step of publication) {
+    assert.match(step, /^        if: \$\{\{ !inputs\.prepare_only(?: && inputs\.publish_feed)? \}\}$/m,
+      'prepare-only must block external writes even when publish_feed retains its true default')
+  }
+  for (const step of steps.filter(step => /uses: actions\/attest@/.test(step))) {
+    assert.match(step, /^        if: \$\{\{ !inputs\.prepare_only \}\}$/m)
+  }
+  const metadata = steps.find(step => step.includes('name: Retain signed metadata for final acceptance without publication'))
+  assert.ok(metadata)
+  assert.match(metadata, /^        if: \$\{\{ inputs\.prepare_only \}\}$/m)
+  assert.match(metadata, /\.json\.sig/)
+  assert.doesNotMatch(metadata, /\.zip|^\s+(?:product-catalog|release-staging\/(?:user-assets|update-assets))\/\s*$/m,
+    'the acceptance artifact contains selected small metadata, never whole package directories')
+  assert.ok(workflow.indexOf('sign-update-metadata.mjs') < workflow.indexOf('Verify signed metadata with the product trust key'))
+  assert.ok(workflow.indexOf('verifyUpdateSignature(await readFile') < workflow.indexOf('Publish curated user downloads'))
+  assert.match(workflow, /prepare_only:\s*\n\s*description:[^\n]+\n\s*required: false\n\s*default: false\n\s*type: boolean/)
+})
+
 test('publishing separates beginner downloads from machine update assets', async () => {
   const [workflow, staging, windowsBuild, macBuild, updateCore, bootstrap] = await Promise.all([
     read('.github/workflows/publish.yml'),

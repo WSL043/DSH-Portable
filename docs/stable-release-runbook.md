@@ -10,10 +10,25 @@
 
 ## 2. 采纳插件并发版
 
+先冻结本次交付的插件、版本和双语说明：
+
 ```bash
-node scripts/adopt-default-plugins.mjs --write      # 采纳已发布且声明兼容的默认插件
+node scripts/adopt-default-plugins.mjs --write      # 仅在决定采纳已发布且兼容的默认插件时运行
 node scripts/set-product-version.mjs x.y.z           # 同步所有版本号
-# 编写 release-notes/vx.y.z.json（中英文），本地 npm test 通过后推送 main
+# 编写 release-notes/vx.y.z.json（中英文及致谢），本地 npm test 通过后推送 main
+```
+
+最终 main CI 成功后、公开 Release 前，先用同一个发布工作流准备生产签名清单，供最终成品实机验收：
+
+```bash
+gh workflow run publish.yml --ref main -f run_id=<最终mainCI运行ID> -f tag=v0.9.5 -f prepare_only=true -f publish_feed=false
+```
+
+`prepare_only` 默认 false；设为 true 时仍校验确切 main CI、提交、版本、历史会话门禁及成品摘要，并使用原生产签名器与产品公钥验证。它只上传 Actions artifact `prepared-release-metadata-v0.9.5`（小型 JSON、签名、checksums、资格记录和说明），不创建 tag、Release 或更新源，也不生成正式发布 attestation。将其中原始清单与 `.sig` 同匹配的 CI ZIP 配套，在隔离目录完成真实旧版 → 最终新版更新、健康及回滚验收；不得改清单、重签或覆盖产品源码。保存最终 CI/成品/清单摘要；后续正式发布仍使用同一源码和 CI，回读原始清单与成品摘要一致。目录历史可能随之后的新记录变化，ECDSA 签名也可随机不同，不将索引或签名文件的逐字相同当作成品身份。
+
+上述最终验收通过后再执行下面的正式流程；`prepare_only` 不代替成品验收，也不改变先公开下载、验内核、最后翻更新源的顺序。正式发布的两份 attestation 保持必需。
+
+```bash
 scripts/ship-stable.sh x.y.z
 ```
 

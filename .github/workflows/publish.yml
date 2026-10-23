@@ -16,6 +16,11 @@ on:
         required: false
         default: true
         type: boolean
+      prepare_only:
+        description: Sign metadata for final acceptance and upload it only to Actions; never create a tag, Release, or update feed.
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   actions: read
@@ -81,10 +86,12 @@ jobs:
             "$GITHUB_SHA" \
             "$RELEASE_TAG"
       - name: Sign the user download provenance with GitHub attestations
+        if: ${{ !inputs.prepare_only }}
         uses: actions/attest@v4
         with:
           subject-checksums: release-staging/user-assets/checksums.txt
       - name: Sign the cross-platform qualification result
+        if: ${{ !inputs.prepare_only }}
         uses: actions/attest@v4
         with:
           subject-checksums: release-staging/user-assets/checksums.txt
@@ -94,7 +101,43 @@ jobs:
         env:
           RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/render-release-notes.mjs templates/RELEASE-NOTES.md release-staging/RELEASE-NOTES.md "$RELEASE_TAG"
+      - name: Sign the update metadata so mirrors can serve it safely
+        if: ${{ inputs.prepare_only || inputs.publish_feed }}
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+        run: node scripts/sign-update-metadata.mjs product-catalog release-staging/update-assets
+      - name: Verify signed metadata with the product trust key
+        if: ${{ inputs.prepare_only || inputs.publish_feed }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises'
+          import { metadataFiles } from './scripts/sign-update-metadata.mjs'
+          import { verifyUpdateSignature } from './launcher/update-signature.mjs'
+          const files = await metadataFiles(['product-catalog', 'release-staging/update-assets'])
+          if (files.length === 0) throw new Error('No signed metadata was prepared')
+          for (const file of files) {
+            if (!verifyUpdateSignature(await readFile(file), await readFile(`${file}.sig`, 'utf8'))) {
+              throw new Error(`Prepared metadata is not signed by the product trust key: ${file}`)
+            }
+          }
+          NODE
+      - name: Retain signed metadata for final acceptance without publication
+        if: ${{ inputs.prepare_only }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: prepared-release-metadata-${{ inputs.tag }}
+          path: |
+            release-staging/update-assets/*.json
+            release-staging/update-assets/*.json.sig
+            product-catalog/**/*.json
+            product-catalog/**/*.json.sig
+            release-staging/user-assets/checksums.txt
+            release-qualification.json
+            release-staging/RELEASE-NOTES.md
+          if-no-files-found: error
+          retention-days: 14
       - name: Publish curated user downloads
+        if: ${{ !inputs.prepare_only }}
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
@@ -111,13 +154,8 @@ jobs:
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" "${VERIFY_FLAGS[@]}" release-staging/user-assets/*
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
-      - name: Sign the update metadata so mirrors can serve it safely
-        if: ${{ inputs.publish_feed }}
-        env:
-          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
-        run: node scripts/sign-update-metadata.mjs product-catalog release-staging/update-assets
       - name: Publish the stable update feed and legacy candidate mirror
-        if: ${{ inputs.publish_feed }}
+        if: ${{ !inputs.prepare_only && inputs.publish_feed }}
         env:
           GH_TOKEN: ${{ github.token }}
           UPDATE_CHANNEL_TAG: update-channel-stable
