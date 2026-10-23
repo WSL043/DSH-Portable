@@ -107,7 +107,7 @@ async function verifyStorageCleanup({ root, evaluate, until, click, output, nati
       await writeFile(webviewManifest, JSON.stringify({ ...manifest, sha256: randomBytes(32).toString('hex') }))
       for (const lease of nativeLeases) await rm(lease.file)
     }
-    await until(click(['More', '更多']), Boolean, 'cleanup menu')
+    await until(click(['More', '更多'], 'section[aria-label="Maintenance"],section[aria-label="维护"]'), Boolean, 'cleanup menu')
     await until(click(['Clean old runtimes and logs', '清理旧运行时和日志']), Boolean, 'explicit cleanup action')
     await until(`document.body.innerText.includes('recovery backups are retained') || document.body.innerText.includes('登录信息和恢复备份均保留')`, Boolean, 'cleanup result')
     await assert.rejects(access(oldRuntime), { code: 'ENOENT' })
@@ -146,7 +146,7 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
     await until(`document.body.innerText.includes('Check and repair') || document.body.innerText.includes('检查与修复')`, Boolean, 'maintenance loaded')
   }
   const scan = async () => {
-    await until(click(['More', '更多']), Boolean, 'maintenance menu')
+    await until(click(['More', '更多'], 'section[aria-label="Maintenance"],section[aria-label="维护"]'), Boolean, 'maintenance menu')
     await until(click(['View storage usage', '查看存储占用']), Boolean, 'storage action')
     await until(`document.body.innerText.includes('Backups are not caches') || document.body.innerText.includes('备份不是缓存')`, Boolean, 'storage result and retention explanation')
   }
@@ -167,7 +167,7 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
         return response;
       };
     })()`)
-    await until(click(['More', '更多']), Boolean, 'dependency menu')
+    await until(click(['More', '更多'], 'section[aria-label="Maintenance"],section[aria-label="维护"]'), Boolean, 'dependency menu')
     await until(click(['Clean plugin dependency cache', '整理插件依赖缓存']), Boolean, 'dependency cleanup action')
     const response = await until('window.__portableStoreResult', Boolean, 'dependency cleanup response')
     assert.equal(response.status, 200, JSON.stringify(response))
@@ -191,7 +191,7 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
     await scan()
     await evaluate(`document.querySelector('section[aria-label="Maintenance"],section[aria-label="维护"]')?.scrollIntoView({block:'center'})`)
     await writeFile(path.join(output, `storage-${theme}.png`), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-    await until(click(['More', '更多']), Boolean, `${theme} cleanup menu`)
+    await until(click(['More', '更多'], 'section[aria-label="Maintenance"],section[aria-label="维护"]'), Boolean, `${theme} cleanup menu`)
     await writeFile(path.join(output, `storage-menu-${theme}.png`), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
     await until(click(['Clean old runtimes and logs', '清理旧运行时和日志']), Boolean, `${theme} cleanup action`)
     await until(`document.body.innerText.includes('recovery backups are retained') || document.body.innerText.includes('登录信息和恢复备份均保留')`, Boolean, `${theme} cleanup feedback`)
