@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile, spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
@@ -17,6 +17,36 @@ const portableNode = path.join(root, 'runtime', 'node', 'node.exe')
 const portableCli = path.join(root, 'launcher', 'portable-cli.mjs')
 for (const filename of [executable, portableNode, portableCli]) {
   if (!existsSync(filename)) throw new Error(`portable file is missing: ${filename}`)
+}
+
+const evidence = { node: process.version, startedAt: new Date().toISOString(), phase: 'start', events: [] }
+const documentIdentity = `({ url: location.href, readyState: document.readyState, timeOrigin: performance.timeOrigin,
+  body: Boolean(document.body), appFrame: Boolean(document.querySelector('[data-shell-bottom]')),
+  portableHost: Boolean(window.__DSH_PORTABLE_HOST__), nativeProtocol: window.__DSH_PORTABLE_NATIVE__?.protocolVersion,
+  visibility: document.visibilityState, focused: document.hasFocus(),
+  activationActive: navigator.userActivation?.isActive, activationEver: navigator.userActivation?.hasBeenActive })`
+function safeUrl(value) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'blob:' ? `blob:${url.origin}`
+      : ['http:', 'https:'].includes(url.protocol) ? `${url.origin}${url.pathname}`
+      : url.protocol === 'about:' ? `about:${url.pathname}` : url.protocol
+  } catch { return undefined }
+}
+function safeDocument(value) { return value && { ...value, url: safeUrl(value.url) } }
+const observedEvents = new Set(['Page.frameNavigated', 'Page.frameStartedLoading', 'Page.frameStoppedLoading',
+  'Page.domContentEventFired', 'Page.loadEventFired', 'Runtime.executionContextCreated',
+  'Runtime.executionContextDestroyed', 'Runtime.executionContextsCleared', 'Runtime.exceptionThrown',
+  'Page.downloadWillBegin', 'Page.downloadProgress', 'Browser.downloadWillBegin', 'Browser.downloadProgress'])
+function recordEvent(message) {
+  if (!observedEvents.has(message.method)) return
+  const params = message.params || {}, context = params.context || {}, frame = params.frame || {}
+  evidence.events.push({ at: new Date().toISOString(), method: message.method,
+    frameId: frame.id || params.frameId || context.auxData?.frameId, loaderId: frame.loaderId,
+    contextId: context.id || params.executionContextId, defaultContext: context.auxData?.isDefault,
+    url: safeUrl(frame.url || params.url || context.origin || params.exceptionDetails?.url),
+    state: params.state, guid: params.guid, receivedBytes: params.receivedBytes, totalBytes: params.totalBytes })
+  if (evidence.events.length > 100) evidence.events.shift()
 }
 
 async function reserveLoopbackPort() {
@@ -65,7 +95,7 @@ class CdpClient {
     })
     this.socket.addEventListener('message', event => {
       const message = JSON.parse(event.data)
-      if (!message.id) return
+      if (!message.id) { recordEvent(message); return }
       const pending = this.pending.get(message.id)
       if (!pending) return
       this.pending.delete(message.id)
@@ -115,6 +145,7 @@ async function triggerDownload(client, launcher, filename, body, timeoutMs = 600
       const triggered = await evaluate(client, `(() => {
         const target = document.body
         if (!target || document.readyState === 'loading') return false
+        const identity = ${documentIdentity}
         const blob = new Blob([${JSON.stringify(body)}], { type: 'text/plain;charset=utf-8' })
         const anchor = document.createElement('a')
         anchor.href = URL.createObjectURL(blob)
@@ -122,9 +153,9 @@ async function triggerDownload(client, launcher, filename, body, timeoutMs = 600
         target.appendChild(anchor)
         anchor.click()
         anchor.remove()
-        return true
+        return identity
       })()`)
-      if (triggered) return
+      if (triggered) { evidence.trigger = { at: new Date().toISOString(), document: safeDocument(triggered) }; return }
     } catch (error) {
       latest = error instanceof Error ? error.message : String(error)
     }
@@ -162,21 +193,53 @@ try {
     windowsHide: true,
   })
 
+  evidence.phase = 'wait-page'
   const page = await waitForPage(debugPort, launcher)
+  evidence.target = { id: page.id, url: safeUrl(page.url) }
   client = new CdpClient(page.webSocketDebuggerUrl)
   await client.open()
+  await client.send('Page.enable')
   await client.send('Runtime.enable')
+  evidence.phase = 'wait-document'
   await waitForDocumentBody(client, launcher)
   const filename = 'dsh-native-download-smoke.txt'
   const body = 'DSH native WebView2 download passed.'
+  evidence.phase = 'trigger-download'
   await triggerDownload(client, launcher, filename, body)
 
   const downloaded = path.join(downloadRoot, filename)
+  evidence.phase = 'wait-file'
   const deadline = Date.now() + 30000
   while (!existsSync(downloaded) && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 100))
+  if (!existsSync(downloaded)) throw Object.assign(new Error('Native download did not create the expected file within 30000ms'), { code: 'NATIVE_DOWNLOAD_TIMEOUT' })
+  evidence.phase = 'verify-content'
   assert.equal(await readFile(downloaded, 'utf8'), body)
+  evidence.status = 'passed'
   process.stdout.write(`${JSON.stringify({ status: 'passed', host: 'WebView2', filename, bytes: Buffer.byteLength(body) })}\n`)
+} catch (error) {
+  evidence.status = 'failed'
+  evidence.error = { name: error.name, code: error.code, syscall: error.syscall }
+  throw error
 } finally {
+  // Observe before stopping the product or removing the disposable download directory.
+  try {
+    evidence.finishedAt = new Date().toISOString()
+    evidence.launcher = { pid: launcher?.pid, exitCode: launcher?.exitCode }
+    if (downloadRoot) {
+      evidence.directory = { path: downloadRoot, realpath: await realpath(downloadRoot), entries: [] }
+      for (const entry of (await readdir(downloadRoot, { withFileTypes: true })).slice(0, 32))
+        evidence.directory.entries.push({ name: entry.name, file: entry.isFile(), bytes: (await stat(path.join(downloadRoot, entry.name))).size })
+    }
+    if (client) {
+      const observation = client.send('Runtime.evaluate', { expression: documentIdentity, returnByValue: true, timeout: 1000 })
+      const snapshot = await Promise.race([observation, new Promise((_, reject) => setTimeout(() => reject(new Error('diagnostic-timeout')), 1500))])
+      evidence.finalDocument = safeDocument(snapshot.result?.value)
+    }
+  } catch (error) { evidence.observationError = error.code || error.name }
+  try {
+    await mkdir(path.join(root, 'data'), { recursive: true })
+    await writeFile(path.join(root, 'data', 'native-download-evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`)
+  } catch (error) { process.stderr.write(`Cannot retain native download evidence: ${error.code || error.name}\n`) }
   client?.close()
   await portable(['stop', '--no-browser', '--json']).catch(() => {})
   if (launcher?.pid) {

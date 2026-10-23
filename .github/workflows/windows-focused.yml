@@ -15,12 +15,12 @@ on:
       scope:
         description: Isolated native checks or cold runtime preparation measurement
         type: choice
-        options: [tray, native, migration, update, preparation]
+        options: [tray, native, migration, update, preparation, download]
         default: tray
       node_version:
         description: Harness Node version for controlled environment comparison
         type: choice
-        options: [24.19.0, 22.23.2]
+        options: [24.19.0, 22.23.2, 22.23.4]
         default: 24.19.0
 
 permissions:
@@ -47,11 +47,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_RUN: ${{ inputs.run_id }}
+          SCOPE: ${{ inputs.scope }}
+          HARNESS_NODE: ${{ inputs.node_version }}
+          TRACE_RUNTIME: ${{ inputs.trace_runtime }}
         run: |
           New-Item -ItemType Directory evidence | Out-Null
           gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:SOURCE_RUN" --jq '{id,head_sha,path,conclusion,head_branch}' | Out-File evidence/source-run.json -Encoding utf8
           if ($LASTEXITCODE -ne 0) { throw 'Cannot resolve source run' }
           git rev-parse HEAD | Out-File evidence/harness-commit.txt
+          node --version | Out-File evidence/harness-node-version.txt
+          if ($env:SCOPE -eq 'download') {
+            $Source = Get-Content evidence/source-run.json -Raw | ConvertFrom-Json
+            if ($env:SOURCE_RUN -ne '39945528473' -or $Source.head_sha -ne '2266966acae2be2901041b663128bf16b89cb837' -or $env:HARNESS_NODE -ne '22.23.4' -or $env:TRACE_RUNTIME -eq 'true') {
+              throw 'Download diagnosis requires the original main artifact, Node 22.23.4 and no runtime overlay'
+            }
+          }
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -109,6 +119,29 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Extraction failed' }
           node scripts/smoke-update-artifact.mjs (Join-Path $Root 'DSH-Portable') artifacts/portable-update-windows-x64.json artifacts/DSH-Portable-update-windows-x64.zip 2>&1 | Tee-Object evidence/component-update.log
           if ($LASTEXITCODE -ne 0) { throw 'Component update check failed' }
+      - name: Diagnose one native download using the original product
+        if: inputs.scope == 'download'
+        shell: powershell
+        run: |
+          $Root = Join-Path $env:RUNNER_TEMP 'dsh-native-download-host'
+          New-Item -ItemType Directory -Force $Root | Out-Null
+          Get-FileHash artifacts/DSH-Portable-windows-x64-offline.zip | Format-List | Out-File evidence/artifact-sha256.txt
+          tar.exe -xf artifacts/DSH-Portable-windows-x64-offline.zip -C $Root
+          if ($LASTEXITCODE -ne 0) { throw 'Download fixture extraction failed' }
+          Start-Transcript -Path evidence/native-download.log
+          try {
+            node scripts/smoke-windows-native-download.mjs (Join-Path $Root 'DSH-Portable')
+            if ($LASTEXITCODE -ne 0) { throw 'Native download diagnostic failed; original assertions retained' }
+          } finally { Stop-Transcript }
+      - name: Retain independent download product diagnostics
+        if: always() && inputs.scope == 'download'
+        uses: actions/upload-artifact@v7
+        with:
+          name: focused-download-${{ matrix.runner }}
+          path: |
+            ${{ runner.temp }}/dsh-native-download-host/DSH-Portable/data/native-download-evidence.json
+            ${{ runner.temp }}/dsh-native-download-host/DSH-Portable/data/logs/
+          retention-days: 14
       - name: Retain component update product logs
         if: always() && inputs.scope == 'update'
         uses: actions/upload-artifact@v7
