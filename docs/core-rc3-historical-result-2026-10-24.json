@@ -1,0 +1,124 @@
+{
+  "status": "passed",
+  "checkedAt": "2026-10-23T19:39:11.963Z",
+  "scope": "Exactrc3 core migration and controlled recovery probes only; not a signed finished product",
+  "sourceHeadAtProbe": "5843722a78d77ad21f49e37b4adaa327fe4192ae",
+  "coreProvenance": {
+    "version": "0.2.1-rc.3",
+    "reviewedCommit": "1f81c047fc48fa190a683e469daa699857e9afe8",
+    "npmIntegrity": "sha512-H+E9HLnHf7fJqzen84Z9Bq8ggb5xbrcbyhZjXTJLE9NabHr3zteGvTRvdvGkxPl4ov80is4WLglFmSo+/olJjg==",
+    "lockSha256": "e7a0291be76529773cf9623daffe23d660cfb901bbcfa0e3666d209dd8c01fcd",
+    "appLockSha256": "4008d2ba61cdaea14560e3af941b16c9e971535c542062a9e24600cc86d03d47"
+  },
+  "compatibilityPatch": {
+    "id": "released-v0-descriptor-v2-read-v1",
+    "dshVersion": "0.2.1-rc.3",
+    "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
+    "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
+  },
+  "writer": {
+    "experimental": true,
+    "qualifiesRelease": false,
+    "writer": "0.1.1-rc.2",
+    "originalRuntimeRefusalVerified": false,
+    "physicalHeader": "published header mapping; official event packer",
+    "checks": [
+      "exact-writer-versions",
+      "parent-child-catalog",
+      "inherited-message-identity-and-content",
+      "descriptor-composition",
+      "both-tool-results",
+      "source-file-hashes"
+    ],
+    "files": {
+      "D:\\Temp\\DSH-recycle-probe-726005c99afd4fdaa169cafcf2935de00\\fixtures-patched\\writer-parent.jsonl": "1f2f94dca9913d2aa2c503ad943fac8d53dbc91728f1bf2f391e1ddca690ef53",
+      "D:\\Temp\\DSH-recycle-probe-726005c99afd4fdaa169cafcf2935de00\\fixtures-patched\\writer-child.jsonl": "ca9836723823f38797f33447072c196a1207f7aaaf32a9414bd0a939ce41d562"
+    },
+    "remaining": [
+      "real agent continuation",
+      "official persistence save path",
+      "final packaged native acceptance"
+    ]
+  },
+  "continuation": {
+    "experimental": true,
+    "qualifiesRelease": false,
+    "continuation": true,
+    "persistedReopen": true,
+    "interruptedJournalRecovery": true,
+    "physicalPowerLossTested": false,
+    "originalHistoricalFilesUnchanged": true
+  },
+  "unpatchedOfficialNegativeCheck": {
+    "expectedRefusalVerified": true,
+    "exitCode": 1,
+    "originalCompiledSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
+    "reason": "Official rc3 unpatched strict reader rejects released descriptor2; expected negative probe"
+  },
+  "portableArchiveRoundTrip": {
+    "passed": true,
+    "actualRc3PersistenceReopen": true,
+    "actualRc3AgentLoopAfterRestore": true,
+    "inheritedParentChildToolResults": true,
+    "interruptedJournalHistoryRetained": true,
+    "sourceBytesUnchanged": true,
+    "sourceFileCount": 4,
+    "archiveSha256": "950a163bcccb6539e094d7155d0b7f2e83e6fa3f7aae86963e55f9dcfb9240ce",
+    "realModelCalls": 0,
+    "sameWindowsHostDifferentRoot": true,
+    "physicalSecondMachineTested": false
+  },
+  "controlledRecoveryTests": {
+    "uniqueTests": 89,
+    "passed": 82,
+    "skipped": 7,
+    "unresolvedFailures": 0,
+    "firstRun": {
+      "passed": 81,
+      "failed": 1,
+      "skipped": 7,
+      "reason": "EXDEV: C generic Node cannot hardlink into D fixture"
+    },
+    "correction": "Copied identical verified Node24.19 bytes to owned D tools; unchanged failure file reran7pass/1skip. No product or test source change.",
+    "coverage": [
+      "hard-killed import at seven durable journal boundaries then folder move and idempotent recovery",
+      "active dependency worker refusal",
+      "missing backup and user edit fail-closed behavior",
+      "actual repair/recovery entry with incomplete runtime",
+      "injected ENOSPC/EIO rollback and blocked rollback failures",
+      "normal/encrypted archive restore and path safety",
+      "community bundle pause/restore and running backend refusal"
+    ],
+    "skipLimits": [
+      "Five Windows file-symlink cases unavailable without Developer Mode/privilege",
+      "Two POSIX-only cases on Windows"
+    ]
+  },
+  "installedRuntimeAudit": {
+    "exitCode": 0,
+    "knownAdvisories": 0,
+    "scope": "npm registry audit of the installed production lock; not a security guarantee"
+  },
+  "sourceScriptSha256": {
+    "app/package-lock.json": "4008d2ba61cdaea14560e3af941b16c9e971535c542062a9e24600cc86d03d47",
+    "app/package.json": "cdc06ea0d78d65611d715304e8be673a1cb882c5ec1645f6f348b16380a9d22e",
+    "scripts/patch-historical-descriptor.mjs": "84d7f8a1eab2947d755a76cdb17e123e5e35aa4b7e05847dd14d64d593cddec2",
+    "experiments/descriptor-v2/writer-probe.mjs": "5599e047c9d7783a44cf01ecc93c865d8cac3fc20623c3cc6c43e5825292f4d9",
+    "experiments/descriptor-v2/continuation-probe.mjs": "39963dc2cb98b3c5f71bca693d99de8018b2e1542c444e12babd51884054762d",
+    "launcher/data-transfer.mjs": "d8dc3e13c4edd7168f3528f3f712e40c4422c60d18b1bba2a47744800c01c6fc",
+    "launcher/data-import-journal.mjs": "d97a51d101829ddf604146c59197327961f76bf6722241e5c1207ce084960d7f"
+  },
+  "experimental": true,
+  "qualifiesRelease": false,
+  "physicalPowerLossTested": false,
+  "physicalSecondMachineTested": false,
+  "finalPackagedNativeAcceptance": false,
+  "finalPluginVisualReleaseAdopted": false,
+  "evidenceDirectory": "D:/CodexEvidence/DSH-Portable/rc3-and-chat-visual-20261024/core-adoption",
+  "limitations": [
+    "Old writer.remaining describes only that writer subprobe; the separate real continuation and persistence subprobe above completed those core checks.",
+    "Exact core tested with temporary chat1.5.17 metadata; final chat1.5.18 adoption, its UI and the final signed product remain separate.",
+    "Same-Windows-host archive transfer and folder-move failure recovery are not a physical second-machine or cross-OS acceptance.",
+    "The runtime was installed with ignore-scripts and only the existing digest-bound historical patch; native addon build/setup and other product staging patches are not asserted here."
+  ]
+}

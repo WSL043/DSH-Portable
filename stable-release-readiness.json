@@ -1,16 +1,16 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "687f282e8625c6b8d11ff58211a90524be2e4317",
-  "dshNpmIntegrity": "sha512-tvY+yhfKRifthbqPe/OK0AYxM5ZkvqfYq/jMYgJcEUxiRRL1Vwra3Ti5TB6AXgSWQdiPHYh/Vp6SJa9yHwMNuw==",
+  "dshReviewedCommit": "1f81c047fc48fa190a683e469daa699857e9afe8",
+  "dshNpmIntegrity": "sha512-H+E9HLnHf7fJqzen84Z9Bq8ggb5xbrcbyhZjXTJLE9NabHr3zteGvTRvdvGkxPl4ov80is4WLglFmSo+/olJjg==",
   "historicalSessionMigration": {
     "status": "passed",
-    "evidence": "docs/core-rc2-historical-result-2026-10-18.json; scripts/verify-historical-session.mjs; scripts/intake-upstream-core.mjs 0.2.1-rc.2 (five checks PASS)",
+    "evidence": "docs/core-rc3-historical-result-2026-10-24.json; exact old0.1.1-rc.2 writer; experiments/descriptor-v2/continuation-probe.mjs; D isolated archive roundtrip and controlled process-kill recovery probes",
     "compatibilityPatch": {
       "id": "released-v0-descriptor-v2-read-v1",
-      "dshVersion": "0.2.1-rc.2",
+      "dshVersion": "0.2.1-rc.3",
       "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
       "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
     },
-    "reason": "Exact official DSH 0.2.1-rc.2 identity passed the staged historical migration probe (commit 687f282e8625c6b8d11ff58211a90524be2e4317; npm integrity sha512-tvY+yhfKRifthbqPe/OK0AYxM5ZkvqfYq/jMYgJcEUxiRRL1Vwra3Ti5TB6AXgSWQdiPHYh/Vp6SJa9yHwMNuw==). The 2026-10-18 result also records continuation, persisted reopen, and interrupted-journal recovery as true. This is migration-probe evidence only, not product or release acceptance: the writer subprobe has qualifiesRelease=false and real AgentLoop continuation, the official persistence save path, and final packaged native acceptance remain open. Physical power loss was not tested; full CI is still required."
+    "reason": "Exact official DSH0.2.1-rc.3/1f81 passed original-official rejection, released-writer migration, actual official AgentLoop continuation with a deterministic local adapter, official persistence save/reopen, interrupted-journal recovery, inherited tool history and original historical-byte preservation. Portable archive transfer to a different isolated D root reopened and continued those real rc3 sessions with source bytes unchanged. Controlled import recovery89 cases resolved82pass/7documented platform skips after correcting only an EXDEV test-tool placement. This is migration/core-probe evidence only: experimental=true, qualifiesRelease=false, real model calls=0. Physical power loss, a physical second machine/cross-OS restore, final chat1.5.18 adoption/UI and final signed packaged Native acceptance were not tested here. Full final-product CI and actual acceptance remain required."
   }
 }
