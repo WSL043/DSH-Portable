@@ -44,7 +44,7 @@ try {
  $origin=$window.PointToScreen([Drawing.Point]::Empty)
  $inset=$origin.Y-$window.Top
  if($inset -ne 0){throw "Extra top frame remains above the title row: $inset px"}
- if($menu.Height -ne 36 -or $content.Top -ne $menu.Bottom){throw 'Expected a single 36px title row above content'}
+ if($menu.Height -ne 40 -or $content.Top -ne $menu.Bottom){throw 'Expected a single 40px title row above content'}
  foreach($name in @('caption-minimize','caption-maximize','caption-close')){
    $item=$menu.Items[$name]
    if($null -eq $item -or $item.Bounds.Bottom -gt $menu.Height){throw "Caption control outside title row: $name"}
