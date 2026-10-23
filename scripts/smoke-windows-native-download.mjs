@@ -136,7 +136,7 @@ async function waitForDocumentBody(client, launcher, timeoutMs = 60000) {
   throw new Error(`timed out waiting for the embedded DSH document body; latest=${latest}`)
 }
 
-async function triggerDownload(client, launcher, filename, body, timeoutMs = 60000) {
+async function triggerDownload(client, launcher, filename, body, expectedOrigin, timeoutMs = 60000) {
   const deadline = Date.now() + timeoutMs
   let latest = 'document changed before the download could be attached'
   while (Date.now() < deadline) {
@@ -145,6 +145,7 @@ async function triggerDownload(client, launcher, filename, body, timeoutMs = 600
       const triggered = await evaluate(client, `(() => {
         const target = document.body
         if (!target || document.readyState === 'loading') return false
+        if (location.origin !== ${JSON.stringify(expectedOrigin)}) return false
         const identity = ${documentIdentity}
         const blob = new Blob([${JSON.stringify(body)}], { type: 'text/plain;charset=utf-8' })
         const anchor = document.createElement('a')
@@ -205,7 +206,7 @@ try {
   const filename = 'dsh-native-download-smoke.txt'
   const body = 'DSH native WebView2 download passed.'
   evidence.phase = 'trigger-download'
-  await triggerDownload(client, launcher, filename, body)
+  await triggerDownload(client, launcher, filename, body, new URL(page.url).origin)
 
   const downloaded = path.join(downloadRoot, filename)
   evidence.phase = 'wait-file'

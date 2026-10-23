@@ -575,6 +575,8 @@ jobs:
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/native-lifecycle-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable-moved/data/native-lifecycle-support.json
             ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/history/
+            ${{ runner.temp }}/dsh-native-download-host/DSH-Portable/data/native-download-evidence.json
+            ${{ runner.temp }}/dsh-native-download-host/DSH-Portable/data/logs/
           if-no-files-found: warn
       - name: Upload startup transition evidence
         if: always()
