@@ -115,15 +115,16 @@ namespace DshPortable
             catch { }
         }
 
-        private async Task<List<string>> InspectWebViewForShutdownAsync()
+        private async Task<List<string>> InspectWebViewForShutdownAsync(int timeoutMs, Task exited)
         {
             try
             {
-                List<string> remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics());
-                return remaining;
+                List<string> remaining = await Task.Run(() => OwnedWebViewProcessDiagnostics(Math.Min(5000, timeoutMs)));
+                return exited != null && exited.IsCompleted ? new List<string>() : remaining;
             }
             catch (TimeoutException error)
             {
+                if (exited != null && exited.IsCompleted) return new List<string>();
                 // A slow CIM query is not evidence of a broken workspace. The
                 // active kernel job already owns this process tree; close that
                 // verified boundary rather than guessing PIDs or ignoring locks.
@@ -132,9 +133,14 @@ namespace DshPortable
                 ExitOwnedTreeForShutdown();
                 throw; // Environment.Exit above does not return; fail closed if it does.
             }
+            catch (Exception)
+            {
+                if (exited != null && exited.IsCompleted) return new List<string>();
+                throw;
+            }
         }
 
-        private List<string> OwnedWebViewProcessDiagnostics()
+        private List<string> OwnedWebViewProcessDiagnostics(int timeoutMs = 5000)
         {
             if (Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION") == "1"
                 && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW_QUERY_TIMEOUT") == "1")
@@ -161,10 +167,11 @@ namespace DshPortable
             {
                 Task<string> output = process.StandardOutput.ReadToEndAsync();
                 Task<string> error = process.StandardError.ReadToEndAsync();
-                if (!process.WaitForExit(5000))
+                if (!process.WaitForExit(timeoutMs))
                 {
                     try { process.Kill(); } catch { }
-                    throw new TimeoutException("Could not inspect owned WebView2 processes within 5 seconds.");
+                    throw new TimeoutException("Could not inspect owned WebView2 processes within "
+                        + timeoutMs.ToString(CultureInfo.InvariantCulture) + " milliseconds.");
                 }
                 Task.WaitAll(output, error);
                 if (process.ExitCode != 0)

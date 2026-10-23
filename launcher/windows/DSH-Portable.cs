@@ -36,7 +36,6 @@ namespace DshPortable
         private const int DwmwaTextColor = 36;
         private const int WorkspaceNavigationTimeoutMs = 60000;
         private const int WebViewShutdownTimeoutMs = 10000;
-        private const int WebViewGracefulShutdownMs = 1500;
         private const int WebViewResourceInUseHResult = unchecked((int)0x800700AA);
         private const int WebViewInitializationMaxAttempts = 4;
         private const int WebViewUnresponsivePromptThreshold = 2;

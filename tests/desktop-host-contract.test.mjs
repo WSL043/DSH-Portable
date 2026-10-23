@@ -141,12 +141,12 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
     webViewExit.indexOf('Controls.Remove(closingWebView)') < webViewExit.indexOf('closingWebView.Dispose()'),
     'the WinForms control must leave the visual tree before its controller is disposed',
   )
-  assert.match(webViewExit, /DateTime deadline\s*=\s*DateTime\.UtcNow\.AddMilliseconds\(timeoutMs\)/)
-  assert.match(webViewExit, /while \(DateTime\.UtcNow < deadline\)/)
+  assert.match(webViewExit, /Stopwatch shutdownClock\s*=\s*Stopwatch\.StartNew\(\)/)
+  assert.match(webViewExit, /shutdownClock\.ElapsedMilliseconds < timeoutMs/)
   assert.match(webViewExit, /Task\.WhenAny\(exited, Task\.Delay\(pollDelayMs\)\)/)
   assert.match(webViewExit, /exitEventObserved/)
-  assert.match(webViewExit, /remaining\s*=\s*await Task\.Run\(\(\) => OwnedWebViewProcessDiagnostics\(\)\)/)
-  assert.match(webViewExit, /if \(remaining\.Count == 0\)/)
+  assert.match(webViewExit, /remaining\s*=\s*await Task\.Run\(\(\) => OwnedWebViewProcessDiagnostics\(Math\.Min\(5000, timeoutMs\)\)\)/)
+  assert.match(webViewExit, /if \(exitEventObserved \|\| remaining\.Count == 0\)/)
   assert.match(webViewExit, /restart Windows/i)
   assert.match(webViewExit, /TryForceReleaseOwnedWebViewProcesses\(remaining\)/)
   assert.match(webViewExit, /catch \(TimeoutException error\)[\s\S]*if \(!PortableProcessJob\.IsActive\) throw;[\s\S]*query-timeout-job-close[\s\S]*ExitOwnedTreeForShutdown\(\)/)

@@ -370,19 +370,37 @@ try {
 
     # The persisted setting can opt into close-to-exit without changing system settings.
     [System.IO.File]::WriteAllText($LauncherSettings, '{"schemaVersion":1,"closeBehavior":"exit"}', [System.Text.UTF8Encoding]::new($false))
+    $ExitStartedAt = [DateTime]::UtcNow
+    $ExitDeadline = $ExitStartedAt.AddSeconds(90)
     $Process = [System.Diagnostics.Process]::Start($StartInfo)
-    $ExitDeadline = [DateTime]::UtcNow.AddSeconds(90)
+    $ExitTraceFile = Join-Path $Root 'data\logs\startup-latest.jsonl'
+    $ExitNativeReady = $false
     do {
         Start-Sleep -Milliseconds 250
         $Process.Refresh()
         if ($Process.HasExited) { throw "Close-to-exit host ended before becoming ready: $($Process.ExitCode)" }
-        $ExitReady = (Get-ProductStatus).Status
+        $RemainingSeconds = [Math]::Max(1, [Math]::Min(15, [Math]::Floor(($ExitDeadline - [DateTime]::UtcNow).TotalSeconds)))
+        $ExitReady = (Get-ProductStatus -TimeoutSeconds $RemainingSeconds).Status
+        # A backend and loading HWND do not prove this generation revealed its WebView.
+        $ExitTrace = @()
+        if (Test-Path -LiteralPath $ExitTraceFile) {
+            $ExitTrace = @(Get-Content -LiteralPath $ExitTraceFile | ForEach-Object {
+                try { $_ | ConvertFrom-Json -ErrorAction Stop } catch { } # An appended last line may still be incomplete.
+            } | Where-Object { $_.pid -eq $Process.Id -and [DateTime]$_.timestamp -ge $ExitStartedAt })
+        }
+        $ExitNativeReveal = $ExitTrace | Where-Object { $_.component -eq 'native-host' -and $_.phase -eq 'interactive-ready' } | Select-Object -Last 1
+        $ExitNativeReady = $null -ne $ExitNativeReveal -and @($ExitTrace | Where-Object {
+            $_.phase -eq 'surface-ready-message' -and $_.startupId -eq $ExitNativeReveal.startupId
+        }).Count -gt 0
         $ExitRect = [WindowAppIdentity+Rect]::new()
         $ExitWidth = 0
         if ($Process.MainWindowHandle -ne [IntPtr]::Zero -and [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$ExitRect)) {
             $ExitWidth = $ExitRect.Right - $ExitRect.Left
         }
-    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $ExitWidth -lt 900 -or $ExitReady -ne 'running') -and [DateTime]::UtcNow -lt $ExitDeadline)
+    } while (($Process.MainWindowHandle -eq [IntPtr]::Zero -or $ExitWidth -lt 900 -or $ExitReady -ne 'running' -or -not $ExitNativeReady) -and [DateTime]::UtcNow -lt $ExitDeadline)
+    if ([DateTime]::UtcNow -ge $ExitDeadline -or $Process.MainWindowHandle -eq [IntPtr]::Zero -or $ExitWidth -lt 900 -or $ExitReady -ne 'running' -or -not $ExitNativeReady) {
+        throw "Close-to-exit host PID $($Process.Id) did not reach its native first paint and surface-ready within 90 seconds (status=$ExitReady; nativeReady=$ExitNativeReady)."
+    }
     $RestoredStateRect = [WindowAppIdentity+Rect]::new()
     if (-not [WindowAppIdentity]::GetWindowRect($Process.MainWindowHandle, [ref]$RestoredStateRect)) {
         throw 'Could not read the restored native window bounds.'
@@ -405,7 +423,7 @@ try {
             $Reader = [System.IO.StreamReader]::new($Stream, [System.Text.Encoding]::UTF8, $true, 4096, $true)
             try { $LifecycleLog = $Reader.ReadToEnd() } finally { $Reader.Dispose() }
         } finally { $Stream.Dispose() }
-        if ($LifecycleLog -match 'watchdog-fired|taskkill exit=') {
+        if ($LifecycleLog -match 'watchdog-fired|taskkill exit=|verified-owned-browser-force-requested|job-close-requested|kill-requested pid=') {
             throw "Native desktop shutdown used forced WebView2 termination:`n$LifecycleLog"
         }
         if ($LifecycleLog -notmatch 'controller-close-requested' -or $LifecycleLog -notmatch 'browser-process-exited|process-tree-empty-without-event') {

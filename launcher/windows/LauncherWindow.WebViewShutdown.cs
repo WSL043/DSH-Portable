@@ -126,10 +126,9 @@ namespace DshPortable
         private async Task WaitForWebViewExitAsync(int timeoutMs)
         {
             if (webViewEnvironment == null) return;
+            Stopwatch shutdownClock = Stopwatch.StartNew();
             CoreWebView2Environment closingEnvironment = webViewEnvironment;
-            Task exited = webViewBrowserExited == null
-                ? (Task)Task.FromResult<object>(null)
-                : webViewBrowserExited.Task;
+            Task exited = webViewBrowserExited == null ? null : webViewBrowserExited.Task;
 
             WebView2 closingWebView = webView;
             webView = null;
@@ -173,15 +172,25 @@ namespace DshPortable
                 return;
             }
 
-            DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
-            DateTime gracefulDeadline = DateTime.UtcNow.AddMilliseconds(Math.Min(WebViewGracefulShutdownMs, timeoutMs));
-            bool exitEventObserved = exited.IsCompleted;
+            // Let the SDK release the entire browser group before inspecting
+            // processes. Reserve the last 1.5 seconds for the owned-tree fallback.
+            if (Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_AUTOMATION") == "1"
+                && Environment.GetEnvironmentVariable("DSH_PORTABLE_TEST_WEBVIEW_QUERY_TIMEOUT") == "1")
+                await InspectWebViewForShutdownAsync(timeoutMs, null);
+            if (exited != null)
+                await Task.WhenAny(exited, Task.Delay(Math.Max(0, timeoutMs - 1500 - (int)shutdownClock.ElapsedMilliseconds)));
+            bool exitEventObserved = exited != null && exited.IsCompleted;
             bool forceAttempted = false;
             List<string> remaining = new List<string>();
-            while (DateTime.UtcNow < deadline)
+            while ((exited != null && exited.IsCompleted) || shutdownClock.ElapsedMilliseconds < timeoutMs)
             {
-                remaining = await InspectWebViewForShutdownAsync();
-                if (remaining.Count == 0)
+                exitEventObserved = exited != null && exited.IsCompleted;
+                int remainingMs = timeoutMs - (int)shutdownClock.ElapsedMilliseconds;
+                if (!exitEventObserved && remainingMs <= 0) break;
+                remaining = exitEventObserved ? new List<string>()
+                    : await InspectWebViewForShutdownAsync(remainingMs, exited);
+                exitEventObserved = exited != null && exited.IsCompleted;
+                if (exitEventObserved || remaining.Count == 0)
                 {
                     closingEnvironment.BrowserProcessExited -= OnWebViewBrowserProcessExited;
                     webViewEnvironment = null;
@@ -193,16 +202,21 @@ namespace DshPortable
                     return;
                 }
 
-                if (!forceAttempted && DateTime.UtcNow >= gracefulDeadline)
+                if (!forceAttempted)
                 {
+                    if (shutdownClock.ElapsedMilliseconds >= timeoutMs) break;
                     forceAttempted = true;
                     bool forced = await Task.Run(() => TryForceReleaseOwnedWebViewProcesses(remaining));
                     WriteLauncherLog("shutdown-webview", forced
                         ? "verified-owned-browser-force-requested"
                         : "verified-owned-browser-force-refused");
 
-                    await Task.Delay(250);
-                    remaining = await InspectWebViewForShutdownAsync();
+                    await Task.Delay(Math.Max(0, Math.Min(250, timeoutMs - (int)shutdownClock.ElapsedMilliseconds)));
+                    if (exited != null && exited.IsCompleted) { exitEventObserved = true; continue; }
+                    remainingMs = timeoutMs - (int)shutdownClock.ElapsedMilliseconds;
+                    if (remainingMs <= 0) break;
+                    remaining = await InspectWebViewForShutdownAsync(remainingMs, exited);
+                    if (exited != null && exited.IsCompleted) { exitEventObserved = true; continue; }
                     if (remaining.Count > 0 && PortableProcessJob.IsActive)
                     {
                         WriteLauncherLog("shutdown-webview", "job-close-requested remaining="
@@ -212,8 +226,8 @@ namespace DshPortable
                     }
                 }
 
-                int pollDelayMs = Math.Max(1, Math.Min(100, (int)(deadline - DateTime.UtcNow).TotalMilliseconds));
-                if (exitEventObserved) await Task.Delay(pollDelayMs);
+                int pollDelayMs = Math.Max(1, Math.Min(100, timeoutMs - (int)shutdownClock.ElapsedMilliseconds));
+                if (exitEventObserved || exited == null) await Task.Delay(pollDelayMs);
                 else
                 {
                     Task winner = await Task.WhenAny(exited, Task.Delay(pollDelayMs));
