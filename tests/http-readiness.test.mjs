@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict'
 import http from 'node:http'
 import test from 'node:test'
+import { once } from 'node:events'
+import { setImmediate } from 'node:timers/promises'
+import { Worker } from 'node:worker_threads'
 
 import { officialWorkspaceUrl, workspaceDocumentReady } from '../launcher/http-readiness.mjs'
 
@@ -100,4 +103,30 @@ test('host readiness leaves a one-time workspace token for the WebView', async (
     assert.equal(tokenRequests, 0)
     assert.equal(bareRequests, 1)
   })
+})
+
+test('status probes survive an idle connection closing during synchronous process inspection', async t => {
+  const closed = new Int32Array(new SharedArrayBuffer(4))
+  const server = new Worker(`
+    const http = require('node:http')
+    const { parentPort, workerData } = require('node:worker_threads')
+    const closed = new Int32Array(workerData)
+    const server = http.createServer((request, response) => {
+      response.once('finish', () => setTimeout(() => {
+        const notify = () => { Atomics.store(closed, 0, 1); Atomics.notify(closed, 0) }
+        if (request.socket.destroyed) notify()
+        else { request.socket.once('close', notify); request.socket.destroy() }
+      }, 30))
+      response.writeHead(401).end('authentication required')
+    })
+    server.listen(0, '127.0.0.1', () => parentPort.postMessage(server.address().port))
+  `, { eval: true, workerData: closed.buffer })
+  t.after(() => server.terminate())
+  const [port] = await once(server, 'message')
+  assert.equal(await workspaceDocumentReady(port, 1200, { preserveAccessToken: true }), true)
+  await setImmediate()
+  // The independent server closes its idle socket while this event loop is busy,
+  // just as a synchronous ownership query can defer delivery of the socket FIN.
+  assert.notEqual(Atomics.wait(closed, 0, 0, 5000), 'timed-out')
+  assert.equal(await workspaceDocumentReady(port, 1200, { preserveAccessToken: true }), true)
 })
