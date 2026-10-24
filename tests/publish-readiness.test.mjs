@@ -13,6 +13,7 @@ const stableLock = { dsh: { version: '0.1.7-alpha.1', reviewedCommit: commit, in
 } }
 const passed = {
   schemaVersion: 1,
+  dependencySecurity: { status: 'passed', evidence: 'verified unpacked frontend and package-manager fixture' },
   dshReviewedCommit: commit,
   dshNpmIntegrity: integrity,
   historicalSessionMigration: { status: 'passed', evidence: 'documented historical-data acceptance', compatibilityPatch: descriptorV2PatchIdentity },
@@ -85,4 +86,12 @@ test('publish workflow checks candidate readiness before creating a release', as
   const workflow = await readFile(new URL('../.github/workflows/publish.yml', import.meta.url), 'utf8')
   assert.ok(workflow.indexOf('scripts/assert-publish-readiness.mjs') > workflow.indexOf('scripts/version-policy.mjs'))
   assert.ok(workflow.indexOf('scripts/assert-publish-readiness.mjs') < workflow.indexOf('gh release create'))
+})
+
+test('publication refuses missing or blocked bundled-dependency security for stable and candidate', () => {
+  for (const productVersion of ['0.7.5', '0.7.5-alpha.1']) {
+    for (const dependencySecurity of [undefined, { status: 'blocked', evidence: 'known internal bundle risk' }, { status: 'passed', evidence: '' }]) {
+      assert.throws(() => assertPublishReadiness({ productVersion, stableLock, previewLock, readiness: { ...passed, dependencySecurity } }), /bundled-dependency security/)
+    }
+  }
 })

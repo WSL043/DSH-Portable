@@ -6,5 +6,10 @@
     "status": "blocked",
     "evidence": null,
     "reason": "Official 0.1.7-rc.1 rejects released subagent descriptor v2 sessions; see https://github.com/deepseek-ai/deepseek-harness/discussions/7576"
+  },
+  "dependencySecurity": {
+    "status": "blocked",
+    "evidence": "docs/bundled-dependency-security.md",
+    "reason": "Application dependency overrides and Node24.22.1 do not rewrite upstream prebuilt frontend or pnpm internal bundles. Current rc3 frontend includes Zod4.4.3; pnpm11.11.0 includes Undici7.28.0/6.27.0, and reviewed pnpm11 releases through11.28.8 still inline affected7.29.1. Require repaired upstream packages or a separately reviewed rebuild and final packaged verification before publication."
   }
 }

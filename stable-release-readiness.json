@@ -12,5 +12,10 @@
       "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
     },
     "reason": "Exact official DSH0.2.1-rc.3/1f81 passed original-official rejection, released-writer migration, actual official AgentLoop continuation with a deterministic local adapter, official persistence save/reopen, interrupted-journal recovery, inherited tool history and original historical-byte preservation. Portable archive transfer to a different isolated D root reopened and continued those real rc3 sessions with source bytes unchanged. Controlled import recovery89 cases resolved82pass/7documented platform skips after correcting only an EXDEV test-tool placement. This is migration/core-probe evidence only: experimental=true, qualifiesRelease=false, real model calls=0. Physical power loss, a physical second machine/cross-OS restore, final chat1.5.18 adoption/UI and final signed packaged Native acceptance were not tested here. Full final-product CI and actual acceptance remain required."
+  },
+  "dependencySecurity": {
+    "status": "blocked",
+    "evidence": "docs/bundled-dependency-security.md",
+    "reason": "Application dependency overrides and Node24.22.1 do not rewrite upstream prebuilt frontend or pnpm internal bundles. Current rc3 frontend includes Zod4.4.3; pnpm11.11.0 includes Undici7.28.0/6.27.0, and reviewed pnpm11 releases through11.28.8 still inline affected7.29.1. Require repaired upstream packages or a separately reviewed rebuild and final packaged verification before publication."
   }
 }

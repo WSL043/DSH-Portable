@@ -33,6 +33,12 @@ export function assertPublishReadiness({ productVersion, stableLock, previewLock
     || typeof migration.evidence !== 'string' || !migration.evidence.trim()) {
     throw new Error(`${prerelease ? 'Candidate' : 'Stable'} DSH ${selectedLock?.dsh?.version ?? '<unknown>'} is not ready for publication: historical-session migration needs passing evidence tied to the exact reviewed core commit and package. ${migration?.reason ?? ''}`.trim())
   }
+  const dependencySecurity = readiness?.dependencySecurity
+  if (dependencySecurity?.status !== 'passed'
+    || typeof dependencySecurity.evidence !== 'string' || !dependencySecurity.evidence.trim()) {
+    throw new Error(`Publication is blocked: bundled-dependency security needs passing evidence for the selected product, including prebuilt frontend and package-manager copies. ${dependencySecurity?.reason ?? ''}`.trim())
+  }
+
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
