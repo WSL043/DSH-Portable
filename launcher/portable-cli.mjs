@@ -666,6 +666,7 @@ async function startAttempt(noBrowser, portRetry, startedAt) {
     controlPipe,
     controlToken,
     root: layout.root,
+    runtimeRoot: layout.immutableRoot,
     environment: layout.environmentId,
     startedAt: new Date().toISOString(),
   }

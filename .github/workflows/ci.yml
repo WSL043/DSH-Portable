@@ -89,6 +89,15 @@ jobs:
           npm install --prefix "$RUNNER_TEMP/pnpm-build" --ignore-scripts --no-audit --no-fund "pnpm@$(node -p "require('./upstream.lock.json').pnpm.version")"
           node scripts/build-reviewed-pnpm.mjs --source pnpm-source --pnpm "$RUNNER_TEMP/pnpm-build/node_modules/pnpm/bin/pnpm.cjs" --output upstream/dist/pnpm
       - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: reviewed-runtime-build-evidence
+          path: |
+            source-dependency-receipt.json
+            upstream/dist/pnpm/report.json
+            upstream/dist/pnpm/*.log
+          if-no-files-found: warn
+      - uses: actions/upload-artifact@v7
         with:
           name: preview-packed-runtime
           path: |

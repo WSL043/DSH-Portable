@@ -55,3 +55,24 @@ test('repair entry restores a broken capsule before loading it', async t => {
   assert.equal(await readFile(path.join(layout.dataDir, 'sentinel'), 'utf8'), 'preserve user data')
   await assert.rejects(readFile(layout.updateJournal), { code: 'ENOENT' })
 })
+
+test('stop and status do not prepare a damaged capsule or require a writable cache', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-control-entry-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'launcher'), { recursive: true })
+  for (const entry of await readdir(new URL('../launcher/', import.meta.url))) {
+    if (entry.endsWith('.mjs')) await cp(new URL(`../launcher/${entry}`, import.meta.url), path.join(root, 'launcher', entry))
+  }
+  await writeFile(path.join(root, 'runtime-capsule.json'), '{damaged')
+  const cache = path.join(root, 'blocked-cache')
+  await writeFile(cache, 'not a directory')
+  const env = { ...process.env, DSH_PORTABLE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default', DSH_PORTABLE_RUNTIME_CACHE: cache }
+  for (const [command, expected] of [['status', 'stopped'], ['stop', 'not-running']]) {
+    const { stdout } = await promisify(execFile)(process.execPath, [
+      path.join(root, 'launcher/runtime-entry.mjs'), 'portable-cli.mjs', command, '--json',
+    ], { env, windowsHide: true, timeout: 20000 })
+    assert.equal(JSON.parse(stdout).status, expected)
+  }
+  assert.equal(await readFile(cache, 'utf8'), 'not a directory')
+  assert.equal(await readFile(path.join(root, 'runtime-capsule.json'), 'utf8'), '{damaged')
+})

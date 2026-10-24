@@ -27,7 +27,7 @@ await (async function buildReviewedPnpm() {
         env: { ...process.env, npm_config_manage_package_manager_versions: 'false', npm_config_package_manager_strict_version: 'false' },
         stdio: ['ignore', fd, fd] });
       report.commands.push({ name, passed: true });
-    } catch (error) { report.commands.push({ name, passed: false, status: error.status }); throw error; }
+    } catch (error) { report.commands.push({ name, passed: false, status: error.status }); console.error(fss.readFileSync(log, 'utf8').slice(-8000)); throw error; }
     finally { fss.closeSync(fd); }
   }
   try {
@@ -111,6 +111,6 @@ await (async function buildReviewedPnpm() {
     report.packageSha256 = await sha(path.join(output, report.packageFile));
     assert.equal(await sha(path.join(source, 'pnpm-lock.yaml')), report.resolvedLockSha256, 'Packaging preserves the reviewed dependency graph');
     report.passed = true;
-  } catch (error) { report.error = error.stack; process.exitCode = 1; }
+  } catch (error) { report.error = error.stack; console.error(error.stack); process.exitCode = 1; }
   finally { await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2)); }
 })();

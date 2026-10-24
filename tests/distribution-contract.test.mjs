@@ -1,6 +1,7 @@
 import { readLauncherSource } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
 import test from 'node:test'
@@ -53,11 +54,18 @@ test('upstream lock pins independently verifiable DSH and Node artifacts', async
   assert.match(lock.dsh.integrity, /^sha512-/)
   assert.match(lock.dsh.reviewedCommit, /^[0-9a-f]{40}$/)
   assert.match(lock.dsh.noticesSha256, /^[0-9a-f]{64}$/)
-  assert.deepEqual(lock.pnpm, {
+  const { sourceBuild, ...registryPin } = lock.pnpm
+  assert.deepEqual(registryPin, {
     package: 'pnpm',
     version: '11.11.0',
     integrity: 'sha512-RGP2X9gO2A1pvB1L8WPulPYFxzgPwxi7Wy6+FfjNEtScUaTVnpUbQB52TTtsp1HL9RvFDtcAGmvLSTXmhMNIgg==',
   })
+  assert.equal(sourceBuild.sourceRepository, 'https://github.com/pnpm/pnpm')
+  assert.match(sourceBuild.reviewedCommit, /^[0-9a-f]{40}$/)
+  assert.match(sourceBuild.resolvedLockSha256, /^[0-9a-f]{64}$/)
+  assert.equal(createHash('sha256').update(await read(sourceBuild.patch)).digest('hex'), sourceBuild.patchSha256)
+  assert.equal(sourceBuild.inlineUndici, '7.30.1')
+  assert.equal(sourceBuild.distributedUndici, '6.29.1')
   assert.deepEqual(lock.pluginMarket, {
     package: '@wsl043/dsh-portable-plugin-market',
     version: '0.1.0-beta.10',

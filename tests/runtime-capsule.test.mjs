@@ -20,6 +20,7 @@ import {
   ensureRuntimeCapsule,
   runtimeCacheStatus,
   runtimePreparationDiagnostic,
+  resolveControlRuntimeRoot,
 } from '../launcher/runtime-capsule.mjs'
 import { layoutForRoot } from '../launcher/portable-core.mjs'
 
@@ -703,4 +704,40 @@ test('duplicate files are stored next to each other and still extract to exactly
   })
   assert.equal(ungrouped.fileCount, manifest.fileCount)
   assert.equal(ungrouped.rawBytes, manifest.rawBytes)
+})
+
+test('control reuses the recorded runtime even when its cache and capsule are unavailable', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-control-root-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const cache = path.join(root, 'cache')
+  await writeFile(cache, 'unavailable cache')
+  await writeFile(path.join(root, 'runtime-capsule.json'), '{damaged')
+  const runtimeRoot = path.join(root, 'previous-runtime')
+  assert.equal(await resolveControlRuntimeRoot(root, { pid: 12345, runtimeRoot }, { DSH_PORTABLE_RUNTIME_CACHE: cache }), runtimeRoot)
+})
+
+test('control resolves legacy process records through their existing lease without preparing anything', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-control-legacy-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const cache = path.join(root, 'cache'), hash = 'a'.repeat(64), token = '11111111-1111-1111-1111-111111111111'
+  await mkdir(cache)
+  await writeFile(path.join(root, 'runtime-capsule.json'), '{damaged')
+  const lease = path.join(cache, `${hash}.lease.12345.${token}.json`)
+  const record = JSON.stringify({ schemaVersion: 1, pid: 12345, token })
+  await writeFile(lease, record)
+  assert.equal(await resolveControlRuntimeRoot(root, { pid: 12345 }, { DSH_PORTABLE_RUNTIME_CACHE: cache }), path.join(cache, hash))
+  assert.deepEqual(await readdir(cache), [path.basename(lease)])
+  assert.equal(await readFile(lease, 'utf8'), record)
+})
+
+test('ambiguous legacy runtime ownership fails closed instead of guessing a process', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-control-ambiguous-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const cache = path.join(root, 'cache'), token = '11111111-1111-1111-1111-111111111111'
+  await mkdir(cache)
+  for (const hash of ['a'.repeat(64), 'b'.repeat(64)]) {
+    await writeFile(path.join(cache, `${hash}.lease.12345.${token}.json`), JSON.stringify({ schemaVersion: 1, pid: 12345, token }))
+  }
+  await assert.rejects(resolveControlRuntimeRoot(root, { pid: 12345 }, { DSH_PORTABLE_RUNTIME_CACHE: cache }), /unambiguously/)
+  assert.equal((await readdir(cache)).length, 2)
 })

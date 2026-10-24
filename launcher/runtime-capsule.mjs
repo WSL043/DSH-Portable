@@ -623,3 +623,36 @@ export async function ensureRuntimeCapsule(root, options = {}) {
     await release()
   }
 }
+
+
+export async function resolveControlRuntimeRoot(root, state, env = process.env) {
+  if (typeof state?.runtimeRoot === 'string' && path.isAbsolute(state.runtimeRoot)) return path.resolve(state.runtimeRoot)
+  // Older process records did not retain the runtime path. Their existing lease
+  // identifies it without opening a new lease or touching the capsule contents.
+  const parent = runtimeCacheParent(env)
+  let names = []
+  try { names = await readdir(parent) } catch (error) {
+    if (!['ENOENT', 'EACCES', 'EPERM'].includes(error.code)) throw error
+  }
+  const pattern = new RegExp(`^([a-f0-9]{64})\\.lease\\.${Number(state.pid)}\\.([a-f0-9-]{36})\\.json$`)
+  const roots = new Set()
+  for (const name of names) {
+    const match = pattern.exec(name)
+    if (!match) continue
+    try {
+      const record = JSON.parse(await readFile(path.join(parent, name), 'utf8'))
+      if (record.pid === state.pid && record.token === match[2]) roots.add(path.join(parent, match[1]))
+    } catch { /* an unreadable or half-written record is not proof of ownership */ }
+  }
+  if (roots.size === 1) return [...roots][0]
+  if (roots.size > 1) throw new Error('Cannot identify the running runtime unambiguously; process state was preserved.')
+  const location = capsulePaths(root, env)
+  if (location.mode === 'capsule') {
+    const manifest = await readManifest(location.manifestFile)
+    return path.join(location.cacheParent, manifest.sha256)
+  }
+  if (!existsSync(path.join(root, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'))) {
+    throw new Error('Cannot identify the running runtime; process state was preserved.')
+  }
+  return path.resolve(root)
+}

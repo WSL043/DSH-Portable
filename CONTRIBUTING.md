@@ -73,3 +73,9 @@ Explain the user-visible problem, the implementation boundary, and the verificat
 - Remove only confirmed unused build outputs and caches, preserving current acceptance artifacts, failure evidence and user data. Refactor concrete defects or duplication without mixing unrelated rewrites into release fixes.
 
 By contributing, you agree that your contribution is licensed under the repository's Apache-2.0 License.
+
+### 本机 Windows 验收与交付
+
+后台控制台程序必须明确使用 `CREATE_NO_WINDOW`，包括文件重定向场景；仅设置 `windowsHide` 或 `SW_HIDE` 不算保证。GUI 验收使用不切换输入桌面的私有桌面，记录实际控制台创建标志与前台状态，不向用户交互桌面发送输入。
+
+交付前核对实际新启动子进程的完整性级别。低完整性验收副本不能直接作为日常便携包；需要修复时只处理已确认无外部硬链接的受管执行文件，核对内容摘要及 DACL 不变，不递归修改用户数据或缓存目录权限。停止和状态查询不应依赖运行时准备或新租约；保持原有进程归属检查。

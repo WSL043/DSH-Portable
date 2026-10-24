@@ -1,5 +1,5 @@
 import { appendLauncherLog } from './launcher-log.mjs'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
@@ -7,7 +7,7 @@ import { promisify } from 'node:util'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
-import { acquireRuntimeLease, ensureRuntimeCapsule, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
+import { acquireRuntimeLease, ensureRuntimeCapsule, resolveControlRuntimeRoot, runtimePreparationDiagnostic } from './runtime-capsule.mjs'
 import { pruneLogHistory } from './log-history.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { environmentStateRoot, layoutForRoot, parseCli } from './portable-core.mjs'
@@ -20,6 +20,26 @@ if (!entryName || path.basename(entryName) !== entryName || !entryName.endsWith(
 
 const stateRoot = process.env.DSH_PORTABLE_STATE_ROOT
 const cliOptions = entryName === 'portable-cli.mjs' ? parseCli(forwarded) : null
+// Existing-process control must work even when the runtime cache is unwritable or damaged.
+// It needs shipped launcher modules only, not a prepared app or a new runtime lease.
+if (cliOptions?.command === 'stop' || cliOptions?.command === 'status') {
+  const controlEnvironment = cliOptions.environment || process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
+  const controlStateRoot = environmentStateRoot(stateRoot || root, controlEnvironment, process.platform)
+  const controlLayout = layoutForRoot(root, process.platform, controlStateRoot, root, controlEnvironment)
+  let state
+  try { state = JSON.parse(await readFile(controlLayout.processState, 'utf8')) } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+  }
+  let alive = false
+  if (Number.isSafeInteger(state?.pid) && state.pid > 0) {
+    try { process.kill(state.pid, 0); alive = true } catch (error) {
+      if (error.code !== 'ESRCH') alive = true
+    }
+  }
+  process.env.DSH_PORTABLE_RUNTIME_ROOT = alive ? await resolveControlRuntimeRoot(root, state) : root
+  process.argv = [process.execPath, path.join(root, 'launcher', entryName), ...forwarded]
+  await import(pathToFileURL(process.argv[1]).href)
+} else {
 const requestedEnvironment = cliOptions?.environment || process.env.DSH_PORTABLE_ENVIRONMENT || 'default'
 const effectiveStateRoot = environmentStateRoot(stateRoot || root, requestedEnvironment, process.platform)
 const logDirectory = path.join(effectiveStateRoot, 'data', 'logs')
@@ -115,4 +135,5 @@ try {
   await import(pathToFileURL(process.argv[1]).href)
 } finally {
   await release()
+}
 }
