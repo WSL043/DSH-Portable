@@ -64,6 +64,12 @@ const copy = {
     linuxAppText:
       "Grant execute permission and run. Data stays in the adjacent directory.",
     completeFolder: "Complete portable directory",
+    offlineUpdateGuide: "Offline update guide ↗",
+    portableUpdateAssets: "Portable update files",
+    portableUpdateAssetsText: "Get the original manifest, signature, and ZIP named by the manifest",
+    coreUpdateAssets: "Core update files",
+    coreUpdateAssetsText: "Choose JSON, .sig, and ZIP for the same platform and version",
+    offlineUpdateNote: "Update files are for an existing installation. The complete offline ZIP above includes WebView2 for first-time deployment. See the offline update guide for download steps.",
     downloadTrust:
       'Windows files are not digitally signed and may trigger SmartScreen or a Windows Security false positive; download only from GitHub Releases, compare the checksums, and see the <a href=\"https://github.com/WSL043/DSH-Portable/blob/main/docs/user-guide.en.md#windows-security-removed-the-program-or-blocked-it\">user guide</a> if a file is removed. User data stays in <code>data/</code> and the default workspace in <code>workspace/</code>. <a href="https://github.com/WSL043/DSH-Portable/blob/main/CODE_SIGNING.md">Read the code-signing policy</a>.',
     allDownloads: "View Release",

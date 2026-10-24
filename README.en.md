@@ -77,6 +77,8 @@ Not sure? Use the online launcher with internet, or the standard ZIP for manual 
 
 See the [Linux guide](docs/user-guide.en.md#linux) for AppImage launch details, data location, and the complete folder.
 
+For an existing installation, see the [offline update guide](docs/offline-updates.md#download-files-english) for the source releases and matching JSON, signature, and ZIP.
+
 ## Start in 3 steps
 
 1. Download the [Windows portable launcher](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe).

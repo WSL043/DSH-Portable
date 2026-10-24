@@ -1,5 +1,7 @@
 # 离线更新
 
+[English download steps](#download-files-english)
+
 从 0.9.5 起，Windows Native 在既有更新流程上提供本地文件入口，适用于 0.x Portable 和内核。1.x 官方 Electron 纯便携线不使用这套 Native 桥，其发布仍等待官方成品修复内置 MCP 依赖；本次更新不修改官方 ASAR，也不解除该阻断。详见 [1.x MCP 复核与处理边界](one-x-mcp-followup-2026-10-23.md)。
 
 ## 准备
@@ -11,6 +13,25 @@
 | 完整 Windows Portable（可跨运行时边界） | `portable-manifest.json`、`portable-manifest.json.sig`、清单 `payloads.windowsX64.filename` 指定的 ZIP |
 | Portable 组件 | 对应平台的 `portable-update-*.json`、同名 `.sig`、清单 URL 中的 ZIP 文件名 |
 | 内核 | 对应平台的 `dsh-core-update-*.json`、同名 `.sig`、清单 URL 中的 ZIP 文件名 |
+
+## 文件从哪里下载
+
+先在联网电脑上打开对应的 Release，展开 **Assets**：
+
+- [Portable 更新附件（update-channel-stable）](https://github.com/WSL043/DSH-Portable/releases/tag/update-channel-stable)：完整 Windows Portable 清单、签名，以及各平台的 Portable 组件更新附件。
+- [内核更新附件（update-channel-core-stable）](https://github.com/WSL043/DSH-Portable-Updates/releases/tag/update-channel-core-stable)：已经打包为 Portable 组件的内核更新附件。
+
+按下面的步骤取文件：
+
+1. **完整 Windows Portable**：从 Portable 更新通道下载原始 `portable-manifest.json` 和 `portable-manifest.json.sig`。再打开清单，按 `payloads.windowsX64` 中的下载地址获取 ZIP，并保持 `payloads.windowsX64.filename` 指定的文件名。**JSON 与签名在更新通道，ZIP 可以在清单指向的产品版本 Release；不要只在同一个 Release 内找 ZIP。**
+2. **Portable 组件**：下载当前平台的 `portable-update-<平台>.json` 及同名 `.json.sig`，再按清单 `component.urls` 中的地址获取指定 ZIP。
+3. **内核组件**：选择同一平台、同一版本的 `dsh-core-update-<平台>-<版本>.json`、同名 `.json.sig` 和清单 `component.urls` 指定的 ZIP。也可使用当前版本的 `dsh-core-update-<平台>.json` 与其签名；ZIP 仍以该 JSON 为准。不要混用其他版本的签名或 ZIP。
+
+平台名包括 `windows-x64`、`macos-arm64`、`macos-x64`、`linux-x64`、`linux-arm64`。以上三件文件放在同一目录，再复制到目标电脑；选择 JSON 开始更新。下载附件本身，不要把 GitHub 网页另存为 JSON。
+
+这里的“内核更新附件”来自 **DSH-Portable-Updates**。DeepSeek 官方 Harness Release 的原始源码或安装包不是 Portable 内核组件，不能替代。
+
+下载区的 **Windows 完整离线 ZIP** 额外包含 WebView2，用于初次部署。更新已有安装时，应按所选清单获取 ZIP；不要把初装整包与更新组件混为一谈。
 
 签名附件以已发布更新通道为准，不能假设每个历史 Release 都有签名。不要编辑 JSON、重命名 ZIP 或自己生成签名；不要把组件包当作完整包。完整离线 ZIP 额外附带 WebView2；它与更新组件 ZIP 用途不同。离线模型仍须另行准备。
 
@@ -38,3 +59,18 @@
 目标是完整的现有安装时，会原地更新并保留 `data`、`workspace`；安装前仍需退出任务与其他环境。失败时沿用原来的回滚机制。备份重要数据仍可使用既有迁移导出。
 
 离线更新指更新器不下载清单或 ZIP；模型服务、用户插件以及下次正常启动的自动检查仍遵循各自设置。它不构成整机断网保证。
+
+## Download files (English)
+
+Use a connected computer first. Open the release and expand **Assets**:
+
+- [Portable update files](https://github.com/WSL043/DSH-Portable/releases/tag/update-channel-stable).
+- [Portable core update files](https://github.com/WSL043/DSH-Portable-Updates/releases/tag/update-channel-core-stable).
+
+For a full Windows Portable update, download `portable-manifest.json` and `portable-manifest.json.sig` from the Portable update channel. Get the ZIP from the download address in `payloads.windowsX64` and keep its `filename`. The JSON and signature are on the update channel; the ZIP may be on the product version release named by the manifest.
+
+For a Portable component, get the platform's `portable-update-<platform>.json`, its `.json.sig`, and the ZIP at `component.urls`. For a core component, get `dsh-core-update-<platform>-<version>.json`, its `.json.sig`, and the ZIP named by that JSON. Keep the platform and version the same. The current-version JSON alias is also usable with its own signature and named ZIP.
+
+Keep all three original files together. Copy them to the target computer and select the JSON. Do not edit the JSON, rename the ZIP, or mix signatures from different versions. Raw official Harness releases are not Portable core components.
+
+The Windows complete offline ZIP includes WebView2 for first-time deployment. Update components serve an existing installation. Offline models must be prepared separately.

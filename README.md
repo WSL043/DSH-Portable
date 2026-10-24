@@ -77,6 +77,8 @@
 
 AppImage 与完整目录的启动和数据位置见[Linux 使用说明](docs/user-guide.zh-CN.md#linux)。
 
+已有安装的文件更新见[离线更新指南](docs/offline-updates.md)，其中列出 Portable 与内核附件的来源及配套文件的获取步骤。
+
 ## 三步启动
 
 1. 下载 [Windows 便携启动器](https://github.com/WSL043/DSH-Portable/releases/latest/download/DSH-Portable-windows-x64.exe)。

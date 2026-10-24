@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'docs/**'
+      - 'site/**'
       - 'README.md'
       - 'README.en.md'
       # The 1.0 pure-portable line has its own preflight, e2e and alpha workflows.
