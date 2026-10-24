@@ -7,6 +7,7 @@ await (async function buildReviewedPnpm() {
   const path = await import('node:path');
   const crypto = await import('node:crypto');
   const http = await import('node:http');
+  const os = await import('node:os');
   const assert = (await import('node:assert/strict')).default;
   const { parseArgs } = await import('node:util');
   const { values } = parseArgs({ options: { source: { type: 'string' }, pnpm: { type: 'string' }, output: { type: 'string' }, lock: { type: 'string', default: 'upstream.lock.json' } } });
@@ -52,6 +53,7 @@ await (async function buildReviewedPnpm() {
     run(process.execPath, [path.join(source, 'node_modules/@typescript/native-preview', compilerBin), '--build', 'pnpm11/pnpm'], source, 'compile');
     const pkg = path.join(source, 'pnpm11/pnpm');
     const packageIdentity = JSON.parse(await fs.readFile(path.join(pkg, 'package.json'), 'utf8'));
+    assert.equal(packageIdentity.version, pins.pnpm.version, 'Reviewed source package identity');
     process.env.npm_package_name = packageIdentity.name;
     process.env.npm_package_version = packageIdentity.version;
     run(process.execPath, [path.join(pkg, 'bundle.ts')], pkg, 'bundle');
@@ -59,8 +61,12 @@ await (async function buildReviewedPnpm() {
       await fs.cp(path.join(pkg, from), path.join(pkg, to), { recursive: true });
     }
     await fs.copyFile(path.join(pkg, 'pnpmrc'), path.join(pkg, 'dist/pnpmrc'));
-    run(process.execPath, [path.join(pkg, 'bin/pnpm.cjs'), '--version'], output, 'version');
-    assert.match(await fs.readFile(path.join(output, 'version.log'), 'utf8'), /11\.11\.0/);
+    // Keep consumers outside the packed DSH workspace: its packageManager field
+    // would redirect this CLI to an unrelated installed version.
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'portable-pnpm-consumer-'));
+    run(process.execPath, [path.join(pkg, 'bin/pnpm.cjs'), '--version'], cwd, 'version');
+    report.cliVersion = (await fs.readFile(path.join(output, 'version.log'), 'utf8')).trim();
+    assert.equal(report.cliVersion, pins.pnpm.version, 'Exercise the rebuilt CLI itself');
     const actualBundle = await fs.readFile(path.join(pkg, 'dist/pnpm.mjs'), 'utf8');
     report.inlineUndiciVersions = [...new Set([...actualBundle.matchAll(/undici(?:@|\/)([678]\.\d+\.\d+)(?:\/|_)/g)].map(m => m[1]))];
     assert.deepEqual(report.inlineUndiciVersions, [build.inlineUndici], 'Actual source resolved into the bundle');
@@ -71,7 +77,6 @@ await (async function buildReviewedPnpm() {
     }
     const preload = path.join(output, 'observe-fetch.cjs');
     await fs.writeFile(preload, `const fs=require('node:fs');let calls=0,uncaught=0;const original=globalThis.fetch;globalThis.fetch=function(...args){calls++;return original.apply(this,args)};process.on('uncaughtExceptionMonitor',()=>{uncaught++});process.on('exit',code=>fs.writeFileSync(process.env.PROBE_OBSERVATION,JSON.stringify({calls,uncaught,code})));`);
-    const cwd = path.join(output, 'consumer'); await fs.mkdir(cwd, { recursive: true });
     report.consumers = [];
     for (const mode of ['normal', 'malformed']) {
       const server = http.createServer((_request, response) => {
