@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { installedDependencyManifest, npmCliCandidates, productionPackageClosure } from '../scripts/stage-preview-runtime.mjs'
+import { installedDependencyManifest, npmCliCandidates, productionPackageClosure, verifyInstalledRuntimeDependencies } from '../scripts/stage-preview-runtime.mjs'
 import { DEFAULT_PLUGINS, PREVIEW_DEFAULT_PLUGINS, defaultsForProduct } from '../launcher/default-plugins.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -209,5 +209,51 @@ test('promoted stable source packs retain realistic headroom from candidate qual
         `${platform} stable ${metric} budget must retain at least 95% of its qualified candidate headroom`,
       )
     }
+  }
+})
+
+test('source-pack staging rejects affected nested and vendor dependencies before discarding its lock', async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-security-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const versions = {
+    'node_modules/zod': ['zod', '4.6.7'],
+    'node_modules/official/node_modules/zod': ['zod', '4.6.7'],
+    'node_modules/undici': ['undici', '8.12.2'],
+    'vendor/market/node_modules/undici': ['undici', '7.30.1'],
+    'node_modules/fast-uri': ['fast-uri', '3.1.9'],
+    'node_modules/legacy/node_modules/zod': ['zod', '3.25.76'],
+  }
+  async function writeGraph() {
+    const packages = {}
+    for (const [location, [name, version]] of Object.entries(versions)) {
+      await mkdir(path.join(fixture, location), { recursive: true })
+      await writeFile(path.join(fixture, location, 'package.json'), JSON.stringify({ name, version }))
+      packages[location] = { version }
+    }
+    await writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }))
+  }
+  await writeGraph()
+  assert.equal((await verifyInstalledRuntimeDependencies(fixture)).length, 6)
+  for (const [location, affected] of [
+    ['node_modules/official/node_modules/zod', '4.4.3'],
+    ['node_modules/undici', '8.11.2'],
+    ['vendor/market/node_modules/undici', '7.30.0'],
+    ['node_modules/fast-uri', '3.1.8'],
+  ]) {
+    const original = versions[location][1]
+    versions[location][1] = affected
+    await writeGraph()
+    await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /requires >=/)
+    versions[location][1] = original
+  }
+  await writeGraph()
+  await writeFile(path.join(fixture, 'node_modules/official/node_modules/zod/package.json'),
+    JSON.stringify({ name: 'zod', version: '4.4.3' }))
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /must match the generated lock/)
+  for (const location of ['../escape/node_modules/zod', '/outside/node_modules/zod', 'C:/outside/node_modules/zod']) {
+    await writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({
+      packages: { [location]: { version: '4.6.7' } },
+    }))
+    await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency location escapes runtime/)
   }
 })

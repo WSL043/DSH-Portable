@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
@@ -12,15 +12,13 @@ import { classifyProductVersion } from './version-policy.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  return execFileSync(command, args, {
     encoding: 'utf8',
     maxBuffer: 32 * 1024 * 1024,
     ...options,
-  })
-  if (result.error || result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} failed:\n${result.error?.message || result.stderr || result.stdout}`)
-  }
-  return result.stdout.trim()
+    windowsHide: true,
+    shell: false,
+  }).trim()
 }
 
 function readPackedManifest(tarball) {
@@ -124,6 +122,38 @@ export function productionPackageClosure(packages, entryName) {
   return [...selected.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
+export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
+  // Source-pack staging resolves a fresh graph, then discards its generated lock.
+  // Check every matching lock location against installed manifests first, including
+  // nested packages and local vendor packages; root-only resolution misses exact pins.
+  const minimums = { zod: { 4: [4, 6, 7] }, undici: { 7: [7, 30, 1], 8: [8, 12, 2] }, 'fast-uri': { 3: [3, 1, 9] } }
+  const lock = JSON.parse(await readFile(path.join(runtimeRoot, 'package-lock.json'), 'utf8'))
+  assert.ok(lock.packages && typeof lock.packages === 'object', 'staged npm lock must inventory installed packages')
+  const checked = []
+  for (const [location, entry] of Object.entries(lock.packages)) {
+    const name = /(?:^|\/)node_modules\/(zod|undici|fast-uri)$/.exec(location)?.[1]
+    if (!name) continue
+    const manifestPath = path.resolve(runtimeRoot, location, 'package.json')
+    const relative = path.relative(path.resolve(runtimeRoot), manifestPath)
+    assert.ok(!path.isAbsolute(location) && !path.win32.isAbsolute(location) && !location.split(/[\\/]/).includes('..')
+      && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `dependency location escapes runtime: ${location}`)
+    const installed = JSON.parse(await readFile(manifestPath, 'utf8'))
+    assert.equal(installed.name, name, `installed package at ${location}`)
+    assert.equal(installed.version, entry.version, `installed version at ${location} must match the generated lock`)
+    const version = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/.exec(installed.version)
+    const major = Number(installed.version.split('.')[0])
+    const minimum = minimums[name][major]
+    if (minimum) {
+      assert.ok(version, `${location} must use a patched stable version`)
+      const actual = version.slice(1, 4).map(Number)
+      const comparison = actual.map((part, index) => part - minimum[index]).find((difference) => difference !== 0) ?? 0
+      assert.ok(comparison >= 0, `${location}@${installed.version} requires >=${minimum.join('.')}`)
+    }
+    checked.push({ path: location, name, version: installed.version })
+  }
+  return checked
+}
+
 export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile }) {
   const product = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
   lockFile ||= classifyProductVersion(product.version).channel === 'candidate' ? 'upstream.preview.lock.json' : 'upstream.lock.json'
@@ -172,6 +202,9 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     },
     timeout: 30 * 60 * 1000,
   })
+
+  const dependencySecurity = await verifyInstalledRuntimeDependencies(output)
+  console.log(`Staged dependency security checks: ${JSON.stringify(dependencySecurity)}`)
 
   const installed = JSON.parse(await readFile(path.join(output, 'node_modules', '@deepseek-ai', 'dsh', 'package.json'), 'utf8'))
   assert.equal(installed.version, lock.dsh.version, 'installed preview entry version')

@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -96,7 +96,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: npm ci --prefix app --ignore-scripts
@@ -138,7 +138,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: npm
           cache-dependency-path: app/package-lock.json
       - name: Select an isolated candidate version for official preview qualification
@@ -235,7 +235,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -269,7 +269,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -326,7 +326,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Restore the exact reviewed WebView2 download
         uses: actions/cache@v4
         with:
@@ -378,7 +378,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -492,7 +492,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - uses: actions/download-artifact@v8
         with:
           name: windows-x64-build
@@ -677,7 +677,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -697,7 +697,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -810,7 +810,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: npm
           cache-dependency-path: app/package-lock.json
       - name: Select an isolated candidate version for official preview qualification
@@ -865,7 +865,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -973,7 +973,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           cache: npm
           cache-dependency-path: |
             app/package-lock.json
@@ -1041,7 +1041,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash

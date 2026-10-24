@@ -45,7 +45,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Parse every packaged PowerShell source with Windows PowerShell 5.1
         shell: powershell
         run: |
@@ -79,7 +79,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - id: select
         name: Read the production channel and select an accepted official version
         shell: pwsh
@@ -238,7 +238,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - uses: actions/download-artifact@v8
         with:
           name: official-pure-alpha-${{ env.ALPHA }}-draft-assets

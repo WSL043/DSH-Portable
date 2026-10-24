@@ -20,8 +20,8 @@ on:
       node_version:
         description: Harness Node version for controlled environment comparison
         type: choice
-        options: [24.19.0, 22.23.2, 22.23.4]
-        default: 24.19.0
+        options: [24.22.1, 22.23.2, 22.23.4]
+        default: 24.22.1
 
 permissions:
   contents: read

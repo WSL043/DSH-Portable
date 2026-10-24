@@ -46,7 +46,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
           package-manager-cache: false
       - run: npm ci --prefix app --ignore-scripts
       - name: Exercise package consumers, filesystem boundaries and the complete review map

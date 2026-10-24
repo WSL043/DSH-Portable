@@ -12,12 +12,12 @@ const read = (name) => readFile(path.join(root, name), 'utf8')
 test('Linux runtimes are pinned for both supported CPU families', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
   assert.deepEqual(lock.node.runtimes['linux-x64'], {
-    archive: 'node-v24.19.0-linux-x64.tar.xz',
-    sha256: '14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647',
+    archive: 'node-v24.22.1-linux-x64.tar.xz',
+    sha256: '6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6',
   })
   assert.deepEqual(lock.node.runtimes['linux-arm64'], {
-    archive: 'node-v24.19.0-linux-arm64.tar.xz',
-    sha256: '01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc',
+    archive: 'node-v24.22.1-linux-arm64.tar.xz',
+    sha256: 'dbabf7a1cbf947e6059ffad2c27b80041db97dea1e553b62afdee7f13fca336e',
   })
 })
 

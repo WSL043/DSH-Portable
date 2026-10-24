@@ -1072,7 +1072,7 @@ test('CI upgrades the immediate prior Windows release through the declared compo
 
 test('Node runtime lock covers Windows, macOS, and both Linux CPU families', async () => {
   const lock = JSON.parse(await read('upstream.lock.json'))
-  assert.equal(lock.node.version, '24.19.0')
+  assert.equal(lock.node.version, '24.22.1')
   assert.match(lock.node.runtimes['win-x64'].archive, /win-x64\.zip$/)
   assert.match(lock.node.runtimes['darwin-arm64'].archive, /darwin-arm64\.tar\.gz$/)
   assert.match(lock.node.runtimes['darwin-x64'].archive, /darwin-x64\.tar\.gz$/)

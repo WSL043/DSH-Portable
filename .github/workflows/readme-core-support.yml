@@ -20,7 +20,7 @@ jobs:
           ref: main
       - uses: actions/setup-node@v7
         with:
-          node-version: 24.19.0
+          node-version: 24.22.1
       - name: Read the stable core catalog and update both languages
         env:
           GITHUB_TOKEN: ${{ github.token }}

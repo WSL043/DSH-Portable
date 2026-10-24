@@ -27,7 +27,11 @@
     "@deepseek-ai/libreoffice-kit@0.1.5": {
       "fflate": "0.8.3"
     },
-    "@modelcontextprotocol/client@>=2.0.0 <2.3.0": "2.3.0"
+    "@modelcontextprotocol/client@>=2.0.0 <2.3.0": "2.3.0",
+    "zod@>=4 <4.6.7": "4.6.7",
+    "undici@>=7 <7.30.1": "7.30.1",
+    "undici@>=8 <8.12.2": "8.12.2",
+    "fast-uri@>=3 <3.1.9": "3.1.9"
   },
   "allowScripts": {
     "@deepseek-ai/dsh-subprocess-local@0.2.1-rc.3": true,
