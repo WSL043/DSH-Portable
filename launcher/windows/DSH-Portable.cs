@@ -75,6 +75,7 @@ namespace DshPortable
         private readonly bool nonInteractive;
         private readonly bool desktopStart;
         private readonly bool hiddenForAutomation;
+        private bool initialShowWithoutActivation;
         private bool operationRunning = true;
         private bool desktopReady;
         private bool startupTraceActive;
@@ -152,6 +153,8 @@ namespace DshPortable
                 "1",
                 StringComparison.Ordinal);
             hiddenForAutomation = testHidden;
+            initialShowWithoutActivation = String.Equals(
+                Environment.GetEnvironmentVariable("DSH_PORTABLE_SHOW_INACTIVE"), "1", StringComparison.Ordinal);
             desktopStart = !nonInteractive && IsStartCommand(launcherArgs);
             if (desktopStart)
             {
@@ -385,6 +388,7 @@ namespace DshPortable
             ResizeEnd += delegate { SaveDesktopWindowState(); };
             Shown += async delegate
             {
+                initialShowWithoutActivation = false;
                 if (desktopStart)
                 {
                     FitWebViewToClient();

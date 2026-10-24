@@ -31,6 +31,7 @@ Pull Request 请说明用户可见的问题、实现边界和实际完成的验�
 
 ## 持续维护与故障处理
 
+- 用户本地预览必须使用正常运行模式，不得把 `DSH_PORTABLE_TEST_HIDDEN` 的隐藏验收实例展示给用户。需要首次显示不激活时，只对子进程设置 `DSH_PORTABLE_SHOW_INACTIVE=1`；它不隐藏窗口，也不禁用后续恢复。托盘打开、会话条目、更多和新会话须在正常模式下逐项验证窗口恢复与页面动作；隔离桌面用于防止验收抢占用户焦点。
 - 每项修复记录复现条件、受影响模块、证据路径和验收结果；区分产品缺陷、测试工具故障和运行环境问题。未定位的失败不能写成已修复。
 - 先运行受影响模块的定向检查。排查测试工具时复用已有成品，记录成品来源提交与测试脚本提交；这种结果不能替代最终发布提交的成品验收。
 - 同一失败没有新证据不重复运行。先补齐失败阶段、进程退出信息和已脱敏的日志，再验证假设。通过的检查仅在相关代码、依赖或环境发生变化时重跑。
@@ -62,6 +63,7 @@ Explain the user-visible problem, the implementation boundary, and the verificat
 
 ## Ongoing maintenance and failure handling
 
+- User previews must use normal runtime mode; never expose a `DSH_PORTABLE_TEST_HIDDEN` instance as a user preview. For an inactive initial show, set `DSH_PORTABLE_SHOW_INACTIVE=1` only on the child process; this neither hides the window nor disables later restoration. Verify tray Open, session entries, More and New session in normal mode for both window restoration and page actions; use an isolated desktop to avoid stealing user focus.
 - Record reproduction conditions, affected modules, evidence paths and acceptance results. Separate product defects, test harness failures and environment failures; an unexplained failure is not a fix.
 - Run affected checks first. Reuse existing artifacts when diagnosing the harness, recording both artifact and test-script commits. Such results do not replace acceptance of the final release commit.
 - Do not repeat an unchanged failure without new evidence. Capture the failing phase, process exit information and redacted logs before testing a hypothesis. Repeat passed checks when relevant code, dependencies or environment change.

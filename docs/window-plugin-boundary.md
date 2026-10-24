@@ -37,7 +37,7 @@ const newSession = () => send('windowCommand', { type: 'dsh-portable/window-comm
 
 返回状态包含 `frameless`、`resizeEdges`、`maximized`、`minimized`、`fullscreen`、`menuVisible`、`nativeChromeForced`。接口是新增的可选能力，旧内核无需使用，外壳契约仍为 2。
 
-`frameless` 只隐藏宿主绘制的标题和菜单栏。旧调用保留原有缩放边缘；同时明确接管 `resizeEdges` 时才取消左、右、底部的可见内缩。原有窗口尺寸限制不变，不承诺移除 Windows 自身的每一条系统细边线。`maximize` 在最大化与还原之间切换，并先退出全屏；`fullscreen` 独立切换全屏。标题按钮、原生菜单与页面接口共用同一组窗口操作。查询和返回状态走相反方向，不需要插件回传宿主的状态消息。
+`frameless` 只隐藏宿主绘制的标题和菜单栏。旧调用保留原有缩放边缘；同时明确接管 `resizeEdges` 时才取消左、右、底部的可见内缩。明确接管透明缩放区时，同时关闭宿主设置的 DWM 窗口描边；释放接管后恢复默认描边。原有窗口尺寸限制不变。`maximize` 在最大化与还原之间切换，并先退出全屏；`fullscreen` 独立切换全屏。标题按钮、原生菜单与页面接口共用同一组窗口操作。查询和返回状态走相反方向，不需要插件回传宿主的状态消息。
 
 ## 透明缩放区（可选）
 
@@ -61,7 +61,7 @@ const beginResize = (event, edge) => {
 
 This Windows-only addition is optional and keeps shell contract 2. Detect `protocolVersion === 1` and `capabilities.windowResize === true` before preparing transparent page-owned resize handles and requesting `window-chrome` with `frameless: true, resizeEdges: true`. The accepted state returns `resizeEdges: true`; only then does the WebView fill the former inset. Omitted/false flags retain the existing inset, and malformed flags are ignored. Unsupported hosts keep their original window behavior.
 
-On a left-button `pointerdown`, send one `window-resize` message with one of the eight fixed `edge` values above. Handles overlay the page without adding a visible border; plugins own their size, cursor and control/scrollbar clearance. The host uses the current screen cursor and native system sizing, preserves minimum dimensions, and ignores requests without takeover or while maximized/fullscreen. No arbitrary native codes or coordinates are accepted.
+On a left-button `pointerdown`, send one `window-resize` message with one of the eight fixed `edge` values above. Handles overlay the page without adding a visible border; plugins own their size, cursor and control/scrollbar clearance. The host uses the current screen cursor and native system sizing, preserves minimum dimensions, and ignores requests without takeover or while maximized/fullscreen. The host also suppresses its DWM border while takeover is active and restores the default border when released. No arbitrary native codes or coordinates are accepted.
 
 Release takeover before removing handles or disabling the plugin. Navigation, reload, renderer failure, releasing frameless mode, and tray recovery restore native chrome and insets. Tray-forced recovery prevents the same document from hiding chrome again. Hide page handles while maximized/fullscreen. Portable supplies the capability, not a skin or injected DOM handles; arbitrary same-document plugin errors still require plugin cleanup or tray recovery.
 

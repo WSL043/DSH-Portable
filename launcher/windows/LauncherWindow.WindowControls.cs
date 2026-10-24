@@ -26,6 +26,7 @@ namespace DshPortable
             CloseDesktopMenus();
             desktopMenu.Visible = !pageWindowChrome && !fullscreen;
             FitWebViewToClient();
+            ApplyDesktopBorder();
             PostWindowState();
         }
 

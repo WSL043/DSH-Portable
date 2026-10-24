@@ -84,7 +84,7 @@ namespace DshPortable
 
         protected override bool ShowWithoutActivation
         {
-            get { return hiddenForAutomation || base.ShowWithoutActivation; }
+            get { return hiddenForAutomation || initialShowWithoutActivation || base.ShowWithoutActivation; }
         }
 
         protected override CreateParams CreateParams
@@ -660,7 +660,7 @@ namespace DshPortable
 
         private uint DesktopBorderColor()
         {
-            if (fullscreen || WindowState != FormWindowState.Normal) return 0xFFFFFFFE;
+            if (fullscreen || WindowState != FormWindowState.Normal || (pageWindowChrome && pageResizeEdges)) return 0xFFFFFFFE;
             bool dark = String.Equals(trayTheme, "dark", StringComparison.OrdinalIgnoreCase);
             bool active = Form.ActiveForm == this;
             int shade = dark ? (active ? 76 : 54) : (active ? 184 : 211);
