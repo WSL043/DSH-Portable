@@ -40,7 +40,9 @@ await (async function dependencyProbe() {
     const overrides = "  'undici@>=6 <6.29.1': '6.29.1'\n  'undici@>=7 <7.30.1': '7.30.1'\n  'undici@>=8 <8.12.2': '8.12.2'\n";
     const anchors = originalYaml.match(/^overrides:\r?$/gm) ?? [];
     assert.ok(anchors.length <= 1, 'Ambiguous overrides');
-    const yaml = anchors.length ? originalYaml.replace(/^overrides:\r?\n/m, `overrides:\n${overrides}`) : originalYaml + `\noverrides:\n${overrides}`;
+    let yaml = anchors.length ? originalYaml.replace(/^overrides:\r?\n/m, `overrides:\n${overrides}`) : originalYaml + `\noverrides:\n${overrides}`;
+    assert.match(yaml, /^  undici: \^7\.27\.2$/m, 'Reviewed catalog identity');
+    yaml = yaml.replace(/^  undici: \^7\.27\.2$/m, '  undici: 7.30.1');
     await fs.writeFile(workspace, yaml);
     report.changes = ['build package manager pinned to stock 11.11.0; automatic dev runtime selection disabled', 'Undici dependency ranges override to fixed original same-major packages'];
     run(process.execPath, [cli, 'install', '--filter=pnpm...', '--ignore-scripts', '--no-frozen-lockfile', '--config.enable-global-virtual-store=false'], source, 'install');
@@ -61,6 +63,9 @@ await (async function dependencyProbe() {
     await fs.copyFile(path.join(pkg, 'pnpmrc'), path.join(pkg, 'dist/pnpmrc'));
     run(process.execPath, [path.join(pkg, 'bin/pnpm.cjs'), '--version'], output, 'version');
     assert.match(await fs.readFile(path.join(output, 'version.log'), 'utf8'), /11\.11\.0/);
+    const actualBundle = await fs.readFile(path.join(pkg, 'dist/pnpm.mjs'), 'utf8');
+    report.inlineUndiciVersions = [...new Set([...actualBundle.matchAll(/undici(?:@|\/)([678]\.\d+\.\d+)(?:\/|_)/g)].map(m => m[1]))];
+    assert.deepEqual(report.inlineUndiciVersions, ['7.30.1'], 'Actual source resolved into the bundle');
     report.outputHashes = {};
     for (const name of ['pnpm.mjs', 'worker.js']) {
       report.outputHashes[name] = await sha(path.join(pkg, 'dist', name));
@@ -96,6 +101,16 @@ await (async function dependencyProbe() {
         report.consumers.push({ mode, ...observed, handled: true });
       } finally { server.closeAllConnections(); await new Promise(r => server.close(r)); }
     }
+    run(process.execPath, [path.join(pkg, 'bundle-deps.ts')], pkg, 'bundle-external-dependencies');
+    const distributedUndici = JSON.parse(await fs.readFile(path.join(pkg, 'dist/node_modules/undici/package.json'), 'utf8'));
+    assert.equal(distributedUndici.version, '6.29.1');
+    report.distributedUndici = distributedUndici.version;
+    const provenance = { format: 1, upstreamVersion: report.originalVersion, sourceCommit: report.sourceCommit, inputHashes: report.inputHashes, resolvedLockSha256: report.resolvedLockSha256, outputHashes: report.outputHashes, inlineUndiciVersions: report.inlineUndiciVersions, distributedUndici: report.distributedUndici };
+    await fs.writeFile(path.join(pkg, 'dist/portable-source-build.json'), JSON.stringify(provenance, null, 2) + '\n');
+    run(process.execPath, [cli, '--config.ignore-scripts=true', 'pack', '--pack-destination', output], pkg, 'pack');
+    report.packageFile = (await fs.readdir(output)).find(name => name.endsWith('.tgz'));
+    assert.ok(report.packageFile);
+    report.packageSha256 = await sha(path.join(output, report.packageFile));
     report.passed = true;
   } catch (error) { report.error = error.stack; process.exitCode = 1; }
   finally { await fs.writeFile(path.join(output, 'report.json'), JSON.stringify(report, null, 2)); }

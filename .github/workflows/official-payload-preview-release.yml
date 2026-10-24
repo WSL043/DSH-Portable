@@ -43,6 +43,7 @@ jobs:
           retention-days: 7
 
   frontend:
+    if: inputs.qualification_run != 'pnpm-only'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
