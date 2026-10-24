@@ -12,6 +12,8 @@ await (async function dependencyProbe() {
   const { values } = parseArgs({ options: { source: { type: 'string' }, pnpm: { type: 'string' }, output: { type: 'string' } } });
   const source = path.resolve(values.source), cli = path.resolve(values.pnpm), output = path.resolve(values.output);
   assert.equal(process.env.GITHUB_ACTIONS, 'true', 'This source-build probe runs only in ephemeral CI');
+  process.env.PATH = path.resolve(path.dirname(cli), '../../.bin') + path.delimiter + process.env.PATH;
+  process.env.npm_config_enable_global_virtual_store = 'false';
   await fs.mkdir(output, { recursive: true });
   const report = { passed: false, sourceCommit: '8e1e4c0aaece387dfda16377b2ba31f7a1a2602c', originalVersion: '11.11.0', changes: [], commands: [] };
   const sha = async p => crypto.createHash('sha256').update(await fs.readFile(p)).digest('hex');
@@ -45,7 +47,9 @@ await (async function dependencyProbe() {
     report.resolvedLockSha256 = await sha(path.join(source, 'pnpm-lock.yaml'));
     const diff = cp.execFileSync('git', ['diff', '--', 'package.json', 'pnpm-workspace.yaml', 'pnpm-lock.yaml'], { cwd: source, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, windowsHide: true, shell: false });
     await fs.writeFile(path.join(output, 'dependency-input.diff'), diff);
-    run(process.execPath, [cli, 'exec', 'tsgo', '--build', 'pnpm11/pnpm'], source, 'compile');
+    const compiler = JSON.parse(await fs.readFile(path.join(source, 'node_modules/@typescript/native-preview/package.json'), 'utf8'));
+    const compilerBin = typeof compiler.bin === 'string' ? compiler.bin : compiler.bin.tsgo;
+    run(process.execPath, [path.join(source, 'node_modules/@typescript/native-preview', compilerBin), '--build', 'pnpm11/pnpm'], source, 'compile');
     const pkg = path.join(source, 'pnpm11/pnpm');
     run(process.execPath, [path.join(pkg, 'bundle.ts')], pkg, 'bundle');
     for (const [from, to] of [['node-gyp-bin', 'dist/node-gyp-bin'], ['node_modules/@pnpm/tabtab/lib/templates', 'dist/templates'], ['node_modules/ps-list/vendor', 'dist/vendor']]) {
