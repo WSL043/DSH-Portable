@@ -72,3 +72,12 @@ execFile and literal arguments. Each was reviewed and dismissed with its own
 API record. GitHub then reported zero open main-branch CodeQL alerts and zero
 open Dependabot alerts; glib #1 was automatically marked fixed after merge.
 This is a scanner-state result, not a complete security audit or release claim.
+
+
+## 2026-10-25: PR #207 control-path review
+
+The stop/status path now resolves state and lease files with `safeDataTarget(..., { createParents: false })`: relative paths stay within the caller-selected root, existing descendants cannot be links, and read-only resolution does not create the root. Lease discovery also validates the file name, schema, PID and token; ambiguous roots fail closed. Final `queryProcess` / `isOwnedDshProcess` checks (Node executable, host binary, DSH binary and port) remain unchanged.
+
+CodeQL alerts 1561 (`data-paths.mjs`, root `lstat`) and 1562 (`runtime-capsule.mjs`, root `readdir`) were independently reviewed at `cf50a02e179eb7ea95fe65dd2d0a41f1255676e0` as false positives. These operations inspect or enumerate the explicitly configured state/cache root itself, rather than admitting an imported relative member. Cache enumeration first canonicalizes the selected root and confirms it is a directory; individual lease reads still pass the descendant checks. Data imports cannot replace either root. The prior descendant-file reads and default-branch cache-poisoning finding were addressed in code, not dismissed.
+
+This API deliberately trusts the selected root and its ancestors, including a caller-selected root alias; it is not a filesystem sandbox. The checks do not lock directories against another same-user writer changing links concurrently, and roots must not be delegated to an untrusted shared writable directory. Windows uses `asInvoker` / `uiAccess=false`, but an administrator-started process still inherits that authority. Exposing root selection to a remote or less-trusted caller would require a new review. The disposition only covers the two root-metadata findings above.
