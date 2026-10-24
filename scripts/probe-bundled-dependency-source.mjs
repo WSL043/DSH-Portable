@@ -83,7 +83,7 @@ await (async function dependencyProbe() {
       await new Promise(r => server.listen(0, '127.0.0.1', r));
       const observation = path.join(output, `${mode}-observation.json`);
       try {
-        const args = ['--require', preload, path.join(pkg, 'bin/pnpm.cjs'), 'view', 'portable-security-probe', 'version', '--registry', `http://127.0.0.1:${server.address().port}`, '--fetch-retries=0'];
+        const args = ['--require', preload, path.join(pkg, 'bin/pnpm.cjs'), 'view', 'portable-security-probe', 'version', '--registry', `http://127.0.0.1:${server.address().port}`, '--config.fetch-retries=0'];
         let code = 0, stdout = '', stderr = '';
         try { ({ stdout, stderr } = await util.promisify(cp.execFile)(process.execPath, args, { cwd, env: { ...process.env, PROBE_OBSERVATION: observation, npm_config_manage_package_manager_versions: 'false' }, timeout: 20000, maxBuffer: 1024 * 1024, windowsHide: true, shell: false })); }
         catch (error) { code = error.code; stdout = error.stdout ?? ''; stderr = error.stderr ?? ''; }

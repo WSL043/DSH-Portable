@@ -20,7 +20,7 @@ export function patchDshDependencyLock({ workspace, lock, version, integrity }) 
   assert(resolution.test(lock), 'Unrecognized upstream Zod resolution');
   lock = lock.replace(resolution, `$1${integrity}$2`);
   lock = lock.replaceAll(`zod@${old}`, `zod@${version}`)
-    .replace(new RegExp(`(\\n\\s+zod:\\n\\s+specifier:[^\\n]+\\n\\s+version:) ${escaped}(?=\\n)`, 'g'), `$1 ${version}`)
+    .replace(new RegExp(`(\\n\\s+zod:\\n\\s+specifier:) [^\\n]+(\\n\\s+version:) ${escaped}(?=\\n)`, 'g'), `$1 ${version}$2 ${version}`)
     .replace(new RegExp(`(\\n\\s+zod:) ${escaped}(?=\\n)`, 'g'), `$1 ${version}`);
   assert(!lock.includes(`zod@${old}`), 'Old source Zod identity remains');
   return { workspace: addOverride(workspace), lock: addOverride(lock), status: 'patched', from: old, to: version };
