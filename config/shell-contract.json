@@ -68,6 +68,7 @@
       "dsh-portable/window-control",
       "dsh-portable/window-drag",
       "dsh-portable/window-menu",
+      "dsh-portable/window-resize",
       "dsh-portable/window-state"
     ],
     "cli": [

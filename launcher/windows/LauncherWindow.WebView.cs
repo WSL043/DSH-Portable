@@ -120,7 +120,7 @@ namespace DshPortable
                 + "const native={protocolVersion:1,capabilities:Object.freeze({"
                 + "pickDirectory:true,saveDataPackage:true,openDataPackage:true,importData:true,restartHost:true,"
                 + "openEnvironment:true,openUpdate:true,openUpdateFromFile:true,preferences:true,sessionProjection:true,clearWebCache:true,"
-                + "windowChrome:true,windowDrag:true,windowControls:true,windowState:true,windowCommand:true,windowMenu:true"
+                + "windowChrome:true,windowDrag:true,windowResize:true,windowControls:true,windowState:true,windowCommand:true,windowMenu:true"
                 + "}),"
                 + "postMessage:function(message){return bridge.postMessage(message);},"
                 + "addEventListener:function(name,listener){return bridge.addEventListener(name,listener);},"
@@ -357,7 +357,7 @@ namespace DshPortable
 
         private void FitWebViewToClient()
         {
-            int border = desktopStart && !fullscreen && WindowState == FormWindowState.Normal
+            int border = desktopStart && !pageResizeEdges && !fullscreen && WindowState == FormWindowState.Normal
                 ? Math.Max(4, (int)Math.Ceiling(4 * DeviceDpi / 96.0)) : 0;
             desktopContent.Padding = new Padding(border, 0, border, border);
             desktopContent.BackColor = BackColor;

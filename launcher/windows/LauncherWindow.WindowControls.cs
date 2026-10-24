@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
@@ -8,6 +9,7 @@ namespace DshPortable
     internal sealed partial class LauncherWindow : Form
     {
         private bool pageWindowChrome;
+        private bool pageResizeEdges;
         private bool nativeChromeForced;
 
         [DllImport("user32.dll")]
@@ -16,10 +18,11 @@ namespace DshPortable
         private static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 
         // The native bar stays attached: a new document or failed renderer can always restore it.
-        private void SetPageWindowChrome(bool frameless)
+        private void SetPageWindowChrome(bool frameless, bool resizeEdges = false)
         {
             if (!desktopStart || desktopMenu == null) return;
             pageWindowChrome = frameless && !nativeChromeForced;
+            pageResizeEdges = pageWindowChrome && resizeEdges;
             CloseDesktopMenus();
             desktopMenu.Visible = !pageWindowChrome && !fullscreen;
             FitWebViewToClient();
@@ -45,7 +48,7 @@ namespace DshPortable
         {
             if (!desktopStart || webView == null || webView.IsDisposed || webView.CoreWebView2 == null) return;
             try { webView.CoreWebView2.PostWebMessageAsJson(json.Serialize(new {
-                type = "dsh-portable/window-state", frameless = pageWindowChrome,
+                type = "dsh-portable/window-state", frameless = pageWindowChrome, resizeEdges = pageResizeEdges,
                 maximized = WindowState == FormWindowState.Maximized,
                 minimized = WindowState == FormWindowState.Minimized, fullscreen = fullscreen,
                 menuVisible = desktopMenu != null && desktopMenu.Visible, nativeChromeForced = nativeChromeForced
@@ -69,6 +72,29 @@ namespace DshPortable
             PostWindowState();
         }
 
+        private void ResizePageWindow(string edge)
+        {
+            if (!desktopStart || !pageWindowChrome || !pageResizeEdges || nativeChromeForced
+                || fullscreen || WindowState != FormWindowState.Normal || !Visible || !IsHandleCreated || shutdownRunning) return;
+            int hit;
+            switch (edge)
+            {
+                case "left": hit = 10; break;
+                case "right": hit = 11; break;
+                case "top": hit = 12; break;
+                case "top-left": hit = 13; break;
+                case "top-right": hit = 14; break;
+                case "bottom": hit = 15; break;
+                case "bottom-left": hit = 16; break;
+                case "bottom-right": hit = 17; break;
+                default: return;
+            }
+            Point point = Cursor.Position;
+            int position = unchecked((point.X & 0xffff) | ((point.Y & 0xffff) << 16));
+            ReleaseCapture();
+            SendMessage(Handle, 0x00A1, new IntPtr(hit), new IntPtr(position));
+        }
+
         private bool HandleWindowMessage(Dictionary<string, object> message)
         {
             object value;
@@ -78,7 +104,10 @@ namespace DshPortable
             switch (type)
             {
                 case "dsh-portable/window-chrome":
-                    if (message.TryGetValue("frameless", out value) && value is bool) SetPageWindowChrome((bool)value);
+                    object resizeEdges;
+                    if (message.TryGetValue("resizeEdges", out resizeEdges) && !(resizeEdges is bool)) break;
+                    if (message.TryGetValue("frameless", out value) && value is bool)
+                        SetPageWindowChrome((bool)value, resizeEdges is bool && (bool)resizeEdges);
                     break;
                 case "dsh-portable/window-state": PostWindowState(); break;
                 case "dsh-portable/window-control":
@@ -90,6 +119,9 @@ namespace DshPortable
                         ReleaseCapture();
                         SendMessage(Handle, 0x00A1, new IntPtr(2), IntPtr.Zero);
                     }
+                    break;
+                case "dsh-portable/window-resize":
+                    if (message.TryGetValue("edge", out value) && value is string) ResizePageWindow((string)value);
                     break;
                 case "dsh-portable/window-menu":
                     if (!message.TryGetValue("menu", out value) || desktopMenu == null) break;
