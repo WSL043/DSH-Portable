@@ -1,44 +1,43 @@
-name: Prepare qualified official desktop preview draft
+name: Probe bundled dependency source build
 on:
   workflow_dispatch:
     inputs:
       qualification_run:
-        description: Successful Official payload portable alpha run ID
+        description: Unused compatibility input; this branch only probes dependencies
         required: true
+        default: "0"
         type: string
 permissions:
-  contents: write
+  contents: read
   actions: read
 concurrency:
-  group: official-desktop-preview-publication
+  group: dependency-source-probe
   cancel-in-progress: false
 jobs:
-  publish:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
-      - name: Require a successful native qualification
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.qualification_run }}
-        run: |
-          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
-          gh run view "$RUN_ID" --json conclusion,workflowName,headSha > qualification-run.json
-          node -e 'const r=require("./qualification-run.json");if(r.conclusion!=="success"||r.workflowName!=="Official payload portable alpha")throw Error("Not a successful native qualification")'
-      - uses: actions/download-artifact@v8
         with:
-          name: official-payload-preview-package
-          path: release-input
-          run-id: ${{ inputs.qualification_run }}
-          github-token: ${{ github.token }}
-      - name: Verify exact archive and retain as a private draft
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.qualification_run }}
-        run: |
-          python3 experiments/official-payload/verify-preview-archive.py
-          VERSION=$(node -p 'require("./release-input/qualification.json").version')
-          SOURCE=$(node -p 'require("./release-input/qualification.json").sourceCommit')
-          test -f "docs/release-$VERSION-notes.md"
-          gh release create "v$VERSION" release-input/* --target "$SOURCE" --draft --prerelease --latest=false --title "DSH-Portable $VERSION — Official desktop payload preview" --notes-file "docs/release-$VERSION-notes.md"
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+      - uses: actions/checkout@v7
+        with:
+          repository: pnpm/pnpm
+          ref: 8e1e4c0aaece387dfda16377b2ba31f7a1a2602c
+          path: pnpm-source
+          persist-credentials: false
+      - name: Bootstrap original pinned package manager without install scripts
+        run: npm install --prefix "$RUNNER_TEMP/bootstrap" --ignore-scripts --no-audit --no-fund pnpm@11.11.0
+      - name: Rebuild and exercise actual bundled network consumer
+        run: node scripts/probe-bundled-dependency-source.mjs --source pnpm-source --pnpm "$RUNNER_TEMP/bootstrap/node_modules/pnpm/bin/pnpm.cjs" --output "$RUNNER_TEMP/dependency-source-probe"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: dependency-source-probe
+          path: ${{ runner.temp }}/dependency-source-probe
+          if-no-files-found: error
+          retention-days: 7

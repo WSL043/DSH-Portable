@@ -12,6 +12,7 @@
 
 - 便携版特有行为应位于启动器、桌面桥接、打包或更新边界；没有兼容性理由时，不要复刻官方 DSH 行为。
 - 更新和修复必须保留会话、凭据、插件与工作区。
+- 本地升级使用完整且验收通过的 Portable 包或更新事务；单独替换原生 EXE 只能称为热修预览。升级后核对版本页、`licenses/COMPONENTS.json`、运行时胶囊和 Node 实物版本，不用改元数据伪装整包升级。
 - 用户可见行为的公开文档保持中英双语。
 - 不要提交凭据、私人会话、生成的发布成品或本地构建缓存。
 
@@ -51,7 +52,7 @@ Thanks for helping improve DSH-Portable. Small, focused changes are easier to re
 2. Confirm that official DeepSeek Harness does not already provide the capability.
 3. Discuss larger changes before implementation, describing the user problem and expected result.
 
-Keep Portable-specific behavior in the launcher, desktop bridge, packaging, or update boundary. Preserve sessions, credentials, plugins, and workspaces across updates and repairs. Never commit credentials, private conversations, generated release artifacts, or local build caches.
+Keep Portable-specific behavior in the launcher, desktop bridge, packaging, or update boundary. Preserve sessions, credentials, plugins, and workspaces across updates and repairs. Local upgrades use a complete qualified Portable package or update transaction; an EXE-only replacement is a hotfix preview. Verify the version page, `licenses/COMPONENTS.json`, runtime capsule and actual Node version afterward; never relabel a mixed package as an upgraded release. Never commit credentials, private conversations, generated release artifacts, or local build caches.
 
 The official core declares the Node engine range `^22.19.0 || >=24.0.0`; existing compatibility tests retain Node 24.19.0 scenarios. Bundled runtimes and Node 24 CI jobs use the Node 24.22.1 security release pinned in `upstream.lock.json`. Compatibility does not imply a recommended distribution version; npm dependency overrides do not update the Undici built into Node.
 
