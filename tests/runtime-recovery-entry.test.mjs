@@ -76,3 +76,22 @@ test('stop and status do not prepare a damaged capsule or require a writable cac
   assert.equal(await readFile(cache, 'utf8'), 'not a directory')
   assert.equal(await readFile(path.join(root, 'runtime-capsule.json'), 'utf8'), '{damaged')
 })
+
+test('control rejects linked state descendants under custom and named state roots', async t => {
+  const root=await mkdtemp(path.join(os.tmpdir(),'dsh-control-state-link-'))
+  t.after(()=>rm(root,{recursive:true,force:true}))
+  await mkdir(path.join(root,'launcher'))
+  for (const entry of await readdir(new URL('../launcher/',import.meta.url))) if(entry.endsWith('.mjs')) await cp(new URL('../launcher/'+entry,import.meta.url),path.join(root,'launcher',entry))
+  const { environmentStateRoot }=await import('../launcher/portable-core.mjs')
+  const { symlink }=await import('node:fs/promises')
+  const base=path.join(root,'external-state'), outside=path.join(root,'outside')
+  await mkdir(outside); const bytes=JSON.stringify({pid:process.pid})
+  await writeFile(path.join(outside,'process.json'),bytes)
+  for(const name of ['default','work']) {
+    const stateRoot=environmentStateRoot(base,name,process.platform)
+    await mkdir(path.join(stateRoot,'data'),{recursive:true})
+    await symlink(outside,path.join(stateRoot,'data/runtime'),process.platform==='win32'?'junction':'dir')
+    for(const command of ['stop','status']) await assert.rejects(promisify(execFile)(process.execPath,[path.join(root,'launcher/runtime-entry.mjs'),'portable-cli.mjs',command,'--json','--environment',name],{env:{...process.env,DSH_PORTABLE_STATE_ROOT:base},windowsHide:true,timeout:20000}), error=>error.stderr.includes('Unsafe restore path'))
+  }
+  assert.equal(await readFile(path.join(outside,'process.json'),'utf8'),bytes)
+})

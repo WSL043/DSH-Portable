@@ -41,7 +41,7 @@ export async function safeDataTarget(root, relativePath, { leaf = 'file', create
     throw new Error(`Unsafe restore path: ${relativePath}`)
   }
   if (!createParents && !await lstatIfPresent(base)) return null
-  await mkdir(base, { recursive: true })
+  if (createParents) await mkdir(base, { recursive: true })
   let current = base
   for (const part of normalized.split('/').slice(0, -1)) {
     current = path.join(current, part)

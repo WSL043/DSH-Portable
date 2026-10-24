@@ -11,6 +11,7 @@ import { acquireRuntimeLease, ensureRuntimeCapsule, resolveControlRuntimeRoot, r
 import { pruneLogHistory } from './log-history.mjs'
 import { appendStartupTrace, beginStartupTrace, traceFromEnvironment } from './startup-trace.mjs'
 import { environmentStateRoot, layoutForRoot, parseCli } from './portable-core.mjs'
+import { safeDataTarget } from './data-paths.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const [entryName, ...forwarded] = process.argv.slice(2)
@@ -27,7 +28,10 @@ if (cliOptions?.command === 'stop' || cliOptions?.command === 'status') {
   const controlStateRoot = environmentStateRoot(stateRoot || root, controlEnvironment, process.platform)
   const controlLayout = layoutForRoot(root, process.platform, controlStateRoot, root, controlEnvironment)
   let state
-  try { state = JSON.parse(await readFile(controlLayout.processState, 'utf8')) } catch (error) {
+  try {
+    const stateFile = await safeDataTarget(controlStateRoot, path.relative(controlStateRoot, controlLayout.processState), { createParents: false })
+    if (stateFile) state = JSON.parse(await readFile(stateFile, 'utf8'))
+  } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
   let alive = false

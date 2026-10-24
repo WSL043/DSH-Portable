@@ -55,11 +55,15 @@ jobs:
         run: |
           node scripts/version-policy.mjs "$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
           node -e "const lock=require(require('./package.json').version.includes('-') ? './upstream.preview.lock.json' : './upstream.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager); console.log('lockFile='+(require('./package.json').version.includes('-') ? 'upstream.preview.lock.json' : 'upstream.lock.json')); console.log('pnpmCommit='+require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit); for (const [family,count] of Object.entries(lock.dsh.packedFamilies)) console.log(family+'Count='+count)" >> "$GITHUB_OUTPUT"
+      - name: Bind default-branch execution to reviewed immutable source
+        run: |
+          node -e "if(process.env.GITHUB_REF==='refs/heads/main'){const fs=require('fs');const preview=require('./package.json').version.includes('-');const lock=require(preview?'./upstream.preview.lock.json':'./upstream.lock.json');const expected=preview?'2fbf4359b82fb94c03dcce0b831660d87f12ea5c':'1f81c047fc48fa190a683e469daa699857e9afe8';if(lock.dsh.reviewedCommit!==expected||require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit!=='8e1e4c0aaece387dfda16377b2ba31f7a1a2602c')throw Error('Default-branch source changed and requires explicit review')}"
       - uses: actions/checkout@v7
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: ${{ steps.preview.outputs.commit }}
+          ref: ${{ github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '2fbf4359b82fb94c03dcce0b831660d87f12ea5c' || '1f81c047fc48fa190a683e469daa699857e9afe8') || steps.preview.outputs.commit }}
           path: upstream
+          persist-credentials: false
       - name: Apply reviewed source dependency locks
         run: node scripts/prepare-reviewed-source-dependencies.mjs --source upstream --lock "${{ steps.preview.outputs.lockFile }}" --dependency-lock upstream.lock.json --output source-dependency-receipt.json
       - name: Build and pack the locked official DSH source
@@ -81,7 +85,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: pnpm/pnpm
-          ref: ${{ steps.preview.outputs.pnpmCommit }}
+          ref: ${{ github.ref == 'refs/heads/main' && '8e1e4c0aaece387dfda16377b2ba31f7a1a2602c' || steps.preview.outputs.pnpmCommit }}
           path: pnpm-source
           persist-credentials: false
       - name: Rebuild the reviewed package manager

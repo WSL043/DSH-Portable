@@ -741,3 +741,31 @@ test('ambiguous legacy runtime ownership fails closed instead of guessing a proc
   await assert.rejects(resolveControlRuntimeRoot(root, { pid: 12345 }, { DSH_PORTABLE_RUNTIME_CACHE: cache }), /unambiguously/)
   assert.equal((await readdir(cache)).length, 2)
 })
+
+test('legacy control ignores linked lease records and rejects invalid process identities', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-control-linked-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const cache = path.join(root, 'cache'), token = '11111111-1111-1111-1111-111111111111', hash = 'a'.repeat(64)
+  await mkdir(cache)
+  const bin = path.join(root, 'app/node_modules/@deepseek-ai/dsh/lib/bin.js')
+  await mkdir(path.dirname(bin), { recursive: true }); await writeFile(bin, '')
+  const outside = path.join(root, 'outside.json'), bytes = JSON.stringify({schemaVersion:1,pid:12345,token})
+  await writeFile(outside, bytes)
+  const { symlink } = await import('node:fs/promises')
+  try { await symlink(outside, path.join(cache, hash + '.lease.12345.' + token + '.json')) }
+  catch (error) { if (error.code === 'EPERM') { t.skip('File symlinks unavailable'); return } throw error }
+  assert.equal(await resolveControlRuntimeRoot(root, {pid:12345}, {DSH_PORTABLE_RUNTIME_CACHE:cache}), root)
+  assert.equal(await readFile(outside, 'utf8'), bytes)
+  for (const pid of [0, -1, 1.5, undefined]) await assert.rejects(resolveControlRuntimeRoot(root, {pid}, {DSH_PORTABLE_RUNTIME_CACHE:cache}), /valid process ID/)
+})
+
+test('legacy control preserves the configured cache alias used in process command lines', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-control-alias-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const cache = path.join(root, 'cache'), alias = path.join(root, 'alias'), token = '11111111-1111-1111-1111-111111111111', hash = 'a'.repeat(64)
+  await mkdir(cache)
+  const { symlink } = await import('node:fs/promises')
+  await symlink(cache, alias, process.platform === 'win32' ? 'junction' : 'dir')
+  await writeFile(path.join(cache, hash+'.lease.12345.'+token+'.json'), JSON.stringify({schemaVersion:1,pid:12345,token}))
+  assert.equal(await resolveControlRuntimeRoot(root,{pid:12345},{DSH_PORTABLE_RUNTIME_CACHE:alias}),path.join(alias,hash))
+})
