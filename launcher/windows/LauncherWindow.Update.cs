@@ -76,7 +76,7 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("你使用的已经是最新版。", "You're already using the latest version.")
+                        L("当前通道无可用更新。", "No update is available in this channel.")
                             + (engineScope
                                 ? (String.IsNullOrEmpty(engineCurrent) ? "" : "\r\n\r\nDeepSeek Harness " + engineCurrent)
                                 : (String.IsNullOrEmpty(current) ? "" : "\r\n\r\nDSH-Portable " + current)),

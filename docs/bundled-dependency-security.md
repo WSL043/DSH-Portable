@@ -1,8 +1,18 @@
 # Bundled dependency security / 内置依赖安全
 
+## 2026-10-25 packaged Native dependency gate
+
+The production candidate [40131741031](https://github.com/WSL043/DSH-Portable/actions/runs/40131741031) passed all 39 product jobs. Its Windows artifact SHA256 is `5ee28b8cb339d7d593a1984360dab20df475cb49192e29574ef66233db8bfacb`. The complete 0.9.7 / rc.3 / Node24.22.1 package was then exercised in a normal native WebView on an isolated desktop, with no product source overlay.
+
+- The page's actual module-loader seed and `modules.import('zod')` returned the same Zod4.6.7 object. An eight-element proxy array rejected `max(1)` with zero element reads; a valid one-element array passed. No page runtime exception was recorded. Its shared chunk SHA256 remains `731802fc2ffafa6c8964f6b84ab07e37067cf9ceb238e7c5dc67e9fe5ef5459e`.
+- The shipped pnpm11.11.0 rebuild contains inline Undici7.30.1 and distributed6.29.1. Its source patch, resolved lock, actual pnpm/worker hashes and retained offline recovery archive match the CI receipt. The real rebuilt CLI passed the normal registry consumer and handled the malformed response with exit1, zero uncaught errors and zero Node-global-fetch calls. Production archive SHA256: `120106e2f1ba9354736bc2d78dac204a0ce33a21af9d0faaf4cac541206b775d`.
+- Cold startup, native File > New session, the top new-session icon, Settings, both offline file pickers and native Exit were exercised. Stop completed in 2313ms, backend and WebView exited, and no runtime lease remained. A fresh isolated official CLI profile installed and enabled Chat Manager1.5.18 without peer exemptions.
+
+This passes the selected Native product's bundled-dependency gate. The supported core window must still be prepared/requalified before its catalogs and automatic intake are restored; publication and signed-feed readback are separate final gates.
+
 ## 2026-10-25 reproducible source-build qualification
 
-Publication is still blocked pending final product acceptance. A frozen official rc.3 source build with Zod4.6.7 succeeded in [40123555423](https://github.com/WSL043/DSH-Portable/actions/runs/40123555423). The actual rebuilt frontend shared chunk has SHA256 `731802fc2ffafa6c8964f6b84ab07e37067cf9ceb238e7c5dc67e9fe5ef5459e`; browser consumer verification remains a final-product gate.
+Earlier feasibility evidence: a frozen official rc.3 source build with Zod4.6.7 succeeded in [40123555423](https://github.com/WSL043/DSH-Portable/actions/runs/40123555423). The actual rebuilt frontend shared chunk has SHA256 `731802fc2ffafa6c8964f6b84ab07e37067cf9ceb238e7c5dc67e9fe5ef5459e`; the production consumer result is recorded above.
 
 A complete pnpm11.11.0 source rebuild succeeded in [40124398269](https://github.com/WSL043/DSH-Portable/actions/runs/40124398269): actual inline Undici7.30.1, distributed6.29.1, normal registry query exit0, malformed-response exit1 with zero uncaught errors and zero global-fetch calls. The first rebuild still contained7.28.0 because range overrides did not replace `catalog:` references; the reviewed patch now pins the catalog as well. Failed runs retain their original outcomes.
 
@@ -10,9 +20,11 @@ A complete pnpm11.11.0 source rebuild succeeded in [40124398269](https://github.
 
 当前仅说明源码重建可行及其真实消费者结果；不能把这两次探针的产物当作最终0.9.7成品。完整成品、离线恢复、内核窗口和发布回读仍须完成；发布准备状态不提前改成通过。
 
-2026-10-24: release remains blocked. Main contains Node24.22.1 and same-major application dependency fixes; these are not a new release or a claim that every embedded copy is repaired.
+## Historical affected distributions (2026-10-24)
 
-发布仍受阻断。main 已修复分发 Node 与应用安装图中的依赖，前端和包管理器的预打包副本需要独立核验。
+At this audit snapshot, release remained blocked. Main contains Node24.22.1 and same-major application dependency fixes; these are not a new release or a claim that every embedded copy is repaired.
+
+该审计快照仍受阻断。main 已修复分发 Node 与应用安装图中的依赖，前端和包管理器的预打包副本需要独立核验。
 
 | Copy / 副本 | Verified state / 已核状态 | Boundary / 边界 |
 | --- | --- | --- |

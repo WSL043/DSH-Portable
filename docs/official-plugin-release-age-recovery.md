@@ -56,3 +56,9 @@ manager's logs.
 The 0.7.2 default Chat Manager pin is the published 1.5.1 package. GitHub and npm
 tarballs were compared byte for byte; SHA-256:
 `ba0d411e21b09e8f4426c02d57ce4d619530e8235ea42ad4f1a5ccc4adc6899d`.
+
+## rc.3 package selection (2026-10-25)
+
+[Chat Manager issue #32](https://github.com/WSL043/dsh-chat-manager/issues/32) reported pnpm11.21.0 selecting1.5.16 after an unversioned Hub install. Both pnpm11.11 and11.21 default to a24-hour minimum release age. At the issue timestamp,1.5.17/1.5.18 had not passed that window; a bare add may also reuse an existing dependency specifier. These mechanisms explain plausible old-version selection, but the original profile and complete logs are required to identify its unique cause. DSH checks peers after package selection; it does not search for a host-compatible alternative.
+
+A fresh isolated profile using the complete0.9.7 rc.3 package now installs and activates1.5.18 through the bare official add command, with exit0 and no peer exemptions. Its declared rc.3 peers match. This is CLI/profile evidence; it does not reproduce the reporter's prior desktop carrier. The recovery adapter above does not disable release-age filtering for new additions or relax peer declarations.
