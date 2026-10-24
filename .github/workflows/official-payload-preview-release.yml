@@ -41,3 +41,38 @@ jobs:
           path: ${{ runner.temp }}/dependency-source-probe
           if-no-files-found: error
           retention-days: 7
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.22.1
+      - uses: actions/checkout@v7
+        with:
+          repository: deepseek-ai/deepseek-harness
+          ref: 1f81c047fc48fa190a683e469daa699857e9afe8
+          path: upstream
+          persist-credentials: false
+      - name: Pin only the reviewed Zod dependency in the original source lock
+        run: node scripts/prepare-reviewed-source-dependencies.mjs --source upstream --lock upstream.lock.json --output "$RUNNER_TEMP/frontend-probe/source-receipt.json"
+      - name: Install the original selected upstream build tool
+        run: npm install --global --ignore-scripts --no-audit --no-fund pnpm@11.28.5
+      - name: Frozen source build
+        run: |
+          pnpm --dir upstream install --frozen-lockfile
+          pnpm --dir upstream run build:official
+          pnpm --dir upstream run release:pack --family dsh --out dist/npm --concurrency 8
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frontend-source-probe
+          path: |
+            ${{ runner.temp }}/frontend-probe
+            upstream/dist/npm
+          if-no-files-found: error
+          retention-days: 7

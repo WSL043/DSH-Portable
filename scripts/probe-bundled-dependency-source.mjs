@@ -51,6 +51,9 @@ await (async function dependencyProbe() {
     const compilerBin = typeof compiler.bin === 'string' ? compiler.bin : compiler.bin.tsgo;
     run(process.execPath, [path.join(source, 'node_modules/@typescript/native-preview', compilerBin), '--build', 'pnpm11/pnpm'], source, 'compile');
     const pkg = path.join(source, 'pnpm11/pnpm');
+    const packageIdentity = JSON.parse(await fs.readFile(path.join(pkg, 'package.json'), 'utf8'));
+    process.env.npm_package_name = packageIdentity.name;
+    process.env.npm_package_version = packageIdentity.version;
     run(process.execPath, [path.join(pkg, 'bundle.ts')], pkg, 'bundle');
     for (const [from, to] of [['node-gyp-bin', 'dist/node-gyp-bin'], ['node_modules/@pnpm/tabtab/lib/templates', 'dist/templates'], ['node_modules/ps-list/vendor', 'dist/vendor']]) {
       await fs.cp(path.join(pkg, from), path.join(pkg, to), { recursive: true });
