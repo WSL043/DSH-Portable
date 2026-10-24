@@ -25,7 +25,16 @@
   "pnpm": {
     "package": "pnpm",
     "version": "11.11.0",
-    "integrity": "sha512-RGP2X9gO2A1pvB1L8WPulPYFxzgPwxi7Wy6+FfjNEtScUaTVnpUbQB52TTtsp1HL9RvFDtcAGmvLSTXmhMNIgg=="
+    "integrity": "sha512-RGP2X9gO2A1pvB1L8WPulPYFxzgPwxi7Wy6+FfjNEtScUaTVnpUbQB52TTtsp1HL9RvFDtcAGmvLSTXmhMNIgg==",
+    "sourceBuild": {
+      "sourceRepository": "https://github.com/pnpm/pnpm",
+      "reviewedCommit": "8e1e4c0aaece387dfda16377b2ba31f7a1a2602c",
+      "patch": "patches/pnpm-11.11.0-security.patch",
+      "patchSha256": "b4fc0cef06712e0445775244822fd34eb7bb14f1c600ce463e36620254427405",
+      "resolvedLockSha256": "8e16d360375de55f7388864d4db3068e5c6736c76e78015ef98b809679cf0ab7",
+      "inlineUndici": "7.30.1",
+      "distributedUndici": "6.29.1"
+    }
   },
   "pluginMarket": {
     "package": "@wsl043/dsh-portable-plugin-market",

@@ -1,5 +1,15 @@
 # Bundled dependency security / 内置依赖安全
 
+## 2026-10-25 reproducible source-build qualification
+
+Publication is still blocked pending final product acceptance. A frozen official rc.3 source build with Zod4.6.7 succeeded in [40123555423](https://github.com/WSL043/DSH-Portable/actions/runs/40123555423). The actual rebuilt frontend shared chunk has SHA256 `731802fc2ffafa6c8964f6b84ab07e37067cf9ceb238e7c5dc67e9fe5ef5459e`; browser consumer verification remains a final-product gate.
+
+A complete pnpm11.11.0 source rebuild succeeded in [40124398269](https://github.com/WSL043/DSH-Portable/actions/runs/40124398269): actual inline Undici7.30.1, distributed6.29.1, normal registry query exit0, malformed-response exit1 with zero uncaught errors and zero global-fetch calls. The first rebuild still contained7.28.0 because range overrides did not replace `catalog:` references; the reviewed patch now pins the catalog as well. Failed runs retain their original outcomes.
+
+`patches/pnpm-11.11.0-security.patch` is bound to official source `8e1e4c0aaece387dfda16377b2ba31f7a1a2602c`, SHA256 `b4fc0cef06712e0445775244822fd34eb7bb14f1c600ce463e36620254427405`, resolved lock `8e16d360375de55f7388864d4db3068e5c6736c76e78015ef98b809679cf0ab7`. Production builds apply that immutable patch and use frozen installation; they do not re-resolve dependencies or edit minified output. The original registry integrity identifies the build bootstrap, while the rebuilt distribution carries its own source receipt and actual archive digest.
+
+当前仅说明源码重建可行及其真实消费者结果；不能把这两次探针的产物当作最终0.9.7成品。完整成品、离线恢复、内核窗口和发布回读仍须完成；发布准备状态不提前改成通过。
+
 2026-10-24: release remains blocked. Main contains Node24.22.1 and same-major application dependency fixes; these are not a new release or a claim that every embedded copy is repaired.
 
 发布仍受阻断。main 已修复分发 Node 与应用安装图中的依赖，前端和包管理器的预打包副本需要独立核验。

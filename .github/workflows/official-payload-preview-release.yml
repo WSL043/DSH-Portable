@@ -1,79 +1,44 @@
-name: Probe bundled dependency source build
+name: Prepare qualified official desktop preview draft
 on:
   workflow_dispatch:
     inputs:
       qualification_run:
-        description: Unused compatibility input; this branch only probes dependencies
+        description: Successful Official payload portable alpha run ID
         required: true
-        default: "0"
         type: string
 permissions:
-  contents: read
+  contents: write
   actions: read
 concurrency:
-  group: dependency-source-probe
+  group: official-desktop-preview-publication
   cancel-in-progress: false
 jobs:
-  probe:
+  publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24.22.1
-      - uses: actions/checkout@v7
-        with:
-          repository: pnpm/pnpm
-          ref: 8e1e4c0aaece387dfda16377b2ba31f7a1a2602c
-          path: pnpm-source
-          persist-credentials: false
-      - name: Bootstrap original pinned package manager without install scripts
-        run: npm install --prefix "$RUNNER_TEMP/bootstrap" --ignore-scripts --no-audit --no-fund pnpm@11.11.0
-      - name: Rebuild and exercise actual bundled network consumer
-        run: node scripts/probe-bundled-dependency-source.mjs --source pnpm-source --pnpm "$RUNNER_TEMP/bootstrap/node_modules/pnpm/bin/pnpm.cjs" --output "$RUNNER_TEMP/dependency-source-probe"
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: dependency-source-probe
-          path: ${{ runner.temp }}/dependency-source-probe
-          if-no-files-found: error
-          retention-days: 7
-
-  frontend:
-    if: inputs.qualification_run != 'pnpm-only'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24.22.1
-      - uses: actions/checkout@v7
-        with:
-          repository: deepseek-ai/deepseek-harness
-          ref: 1f81c047fc48fa190a683e469daa699857e9afe8
-          path: upstream
-          persist-credentials: false
-      - name: Pin only the reviewed Zod dependency in the original source lock
-        run: node scripts/prepare-reviewed-source-dependencies.mjs --source upstream --lock upstream.lock.json --output "$RUNNER_TEMP/frontend-probe/source-receipt.json"
-      - name: Install the original selected upstream build tool
-        run: npm install --global --ignore-scripts --no-audit --no-fund pnpm@11.28.5
-      - name: Frozen source build
+      - name: Require a successful native qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.qualification_run }}
         run: |
-          pnpm --dir upstream install --frozen-lockfile
-          pnpm --dir upstream run build:official
-          pnpm --dir upstream run release:pack --family dsh --out dist/npm --concurrency 8
-      - uses: actions/upload-artifact@v7
-        if: always()
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+          gh run view "$RUN_ID" --json conclusion,workflowName,headSha > qualification-run.json
+          node -e 'const r=require("./qualification-run.json");if(r.conclusion!=="success"||r.workflowName!=="Official payload portable alpha")throw Error("Not a successful native qualification")'
+      - uses: actions/download-artifact@v8
         with:
-          name: frontend-source-probe
-          path: |
-            ${{ runner.temp }}/frontend-probe
-            upstream/dist/npm
-          if-no-files-found: error
-          retention-days: 7
+          name: official-payload-preview-package
+          path: release-input
+          run-id: ${{ inputs.qualification_run }}
+          github-token: ${{ github.token }}
+      - name: Verify exact archive and retain as a private draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.qualification_run }}
+        run: |
+          python3 experiments/official-payload/verify-preview-archive.py
+          VERSION=$(node -p 'require("./release-input/qualification.json").version')
+          SOURCE=$(node -p 'require("./release-input/qualification.json").sourceCommit')
+          test -f "docs/release-$VERSION-notes.md"
+          gh release create "v$VERSION" release-input/* --target "$SOURCE" --draft --prerelease --latest=false --title "DSH-Portable $VERSION — Official desktop payload preview" --notes-file "docs/release-$VERSION-notes.md"

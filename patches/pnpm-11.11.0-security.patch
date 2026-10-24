@@ -1,0 +1,300 @@
+diff --git a/package.json b/package.json
+index 4b3b28f..706e0a2 100644
+--- a/package.json
++++ b/package.json
+@@ -62,17 +62,5 @@
+     "shx": "catalog:",
+     "typescript": "catalog:"
+   },
+-  "packageManager": "pnpm@11.9.0",
+-  "devEngines": {
+-    "packageManager": {
+-      "name": "pnpm",
+-      "version": "11.9.0",
+-      "onFail": "download"
+-    },
+-    "runtime": {
+-      "name": "node",
+-      "version": "26.4.0",
+-      "onFail": "download"
+-    }
+-  }
++  "packageManager": "pnpm@11.11.0"
+ }
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index f08b715..97b581c 100644
+--- a/pnpm-lock.yaml
++++ b/pnpm-lock.yaml
+@@ -981,8 +981,8 @@ catalogs:
+       specifier: ^8.61.0
+       version: 8.62.1
+     undici:
+-      specifier: ^7.27.2
+-      version: 7.28.0
++      specifier: 7.30.1
++      version: 7.30.1
+     unified:
+       specifier: ^11.0.5
+       version: 11.0.5
+@@ -1024,6 +1024,9 @@ catalogs:
+       version: 1.1.0
+ 
+ overrides:
++  undici@>=6 <6.29.1: 6.29.1
++  undici@>=7 <7.30.1: 7.30.1
++  undici@>=8 <8.12.2: 8.12.2
+   '@cypress/request@3.0.9>qs': ^6.14.1
+   '@yarnpkg/fslib@2': '3'
+   ajv@>=7.0.0-alpha.0 <8.18.0: '>=8.18.0'
+@@ -1152,9 +1155,6 @@ importers:
+       lcov-result-merger:
+         specifier: 'catalog:'
+         version: 6.0.0
+-      node:
+-        specifier: runtime:26.4.0
+-        version: runtime:26.4.0
+       rimraf:
+         specifier: 'catalog:'
+         version: 6.1.3
+@@ -4727,7 +4727,7 @@ importers:
+         version: 3.0.0
+       undici:
+         specifier: 'catalog:'
+-        version: 7.28.0
++        version: 7.30.1
+ 
+   pnpm11/fetching/tarball-fetcher:
+     dependencies:
+@@ -4818,7 +4818,7 @@ importers:
+         version: 3.0.0
+       undici:
+         specifier: 'catalog:'
+-        version: 7.28.0
++        version: 7.30.1
+ 
+   pnpm11/fetching/types:
+     dependencies:
+@@ -7358,7 +7358,7 @@ importers:
+         version: 2.8.9
+       undici:
+         specifier: 'catalog:'
+-        version: 7.28.0
++        version: 7.30.1
+     devDependencies:
+       '@jest/globals':
+         specifier: 'catalog:'
+@@ -8516,7 +8516,7 @@ importers:
+         version: 7.5.19
+       undici:
+         specifier: 'catalog:'
+-        version: 7.28.0
++        version: 7.30.1
+ 
+   pnpm11/releasing/exportable-manifest:
+     dependencies:
+@@ -9483,7 +9483,7 @@ importers:
+         version: link:../../network/fetch
+       undici:
+         specifier: 'catalog:'
+-        version: 7.28.0
++        version: 7.30.1
+     devDependencies:
+       '@pnpm/testing.mock-agent':
+         specifier: workspace:*
+@@ -15367,127 +15367,6 @@ packages:
+     resolution: {integrity: sha512-J6l92tKHX6w8Jy5nO1Vuc01NoIiRGi/d6qBKVxh+IQ8Cr3b6HbVNfKiF8ZpFKufTwpwxMmce2W3iQZ861ZRyTg==}
+     engines: {node: '>=18'}
+ 
+-  node@runtime:26.4.0:
+-    resolution:
+-      type: variations
+-      variants:
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-YCabfi8hTrVGvdyXbUDbpij2PuRASI68JZSr/AaHMlg=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-aix-ppc64.tar.gz
+-          targets:
+-            - cpu: ppc64
+-              os: aix
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-T0+8rPax/xqV3u26e9ey157+yqU6jssFMFRtyQY/77w=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-darwin-arm64.tar.gz
+-          targets:
+-            - cpu: arm64
+-              os: darwin
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-6zvdjew/8lWO4Q4oTafSo4Za8MvaIfBtOXsCZYN8ZB4=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-darwin-x64.tar.gz
+-          targets:
+-            - cpu: x64
+-              os: darwin
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-dz2exnJmg4Jw3cEFwlSK6Kr/KLyP5vNMVdEJQEPEFl4=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-linux-arm64.tar.gz
+-          targets:
+-            - cpu: arm64
+-              os: linux
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-1VA2YFj7KareEY/gVS8vrcaU2p6mOq30pz1qUjOY4Tk=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-linux-ppc64le.tar.gz
+-          targets:
+-            - cpu: ppc64le
+-              os: linux
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-cOvQM8UPkIO+U9igWDwhUEnGMhIIeDXacZw8BszkEXs=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-linux-s390x.tar.gz
+-          targets:
+-            - cpu: s390x
+-              os: linux
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-8iHasw0OnVRDMvBvvuLGIYbJfYZNXKyEgtujTx44uNw=
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-linux-x64.tar.gz
+-          targets:
+-            - cpu: x64
+-              os: linux
+-        - resolution:
+-            archive: zip
+-            bin:
+-              node: node.exe
+-            integrity: sha256-OUy3LmZPqqUYyhh3vMILsDo+L1HtH2z85T4aMG6Ml/Y=
+-            prefix: node-v26.4.0-win-arm64
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-win-arm64.zip
+-          targets:
+-            - cpu: arm64
+-              os: win32
+-        - resolution:
+-            archive: zip
+-            bin:
+-              node: node.exe
+-            integrity: sha256-X4fQOMbsRCqka5Em+MoXCsvS87m5FSynmM9UWWox4hQ=
+-            prefix: node-v26.4.0-win-x64
+-            type: binary
+-            url: https://nodejs.org/download/release/v26.4.0/node-v26.4.0-win-x64.zip
+-          targets:
+-            - cpu: x64
+-              os: win32
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-0q2Mbp+pVe3wM3B4wdGs2jRdNqhJhrIYzOPP0dLSaSA=
+-            type: binary
+-            url: https://unofficial-builds.nodejs.org/download/release/v26.4.0/node-v26.4.0-linux-arm64-musl.tar.gz
+-          targets:
+-            - cpu: arm64
+-              os: linux
+-              libc: musl
+-        - resolution:
+-            archive: tarball
+-            bin:
+-              node: bin/node
+-            integrity: sha256-VU6WD2VwvT0Zh/UXDY8qNzohgYWBqNMHtpfng5mIMUo=
+-            type: binary
+-            url: https://unofficial-builds.nodejs.org/download/release/v26.4.0/node-v26.4.0-linux-x64-musl.tar.gz
+-          targets:
+-            - cpu: x64
+-              os: linux
+-              libc: musl
+-    version: 26.4.0
+-    hasBin: true
+-
+   nopt@1.0.10:
+     resolution: {integrity: sha512-NWmpvLSqUrgrAC9HCuxEvb+PSloHpqVu+FqcO4eeF2h5qYRhA7ev6KvelyQAKtegUbC6RypJnlEOhd8vloNKYg==}
+     hasBin: true
+@@ -16943,12 +16822,12 @@ packages:
+   undici-types@8.3.0:
+     resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+ 
+-  undici@6.27.0:
+-    resolution: {integrity: sha512-YmfV3YnEDzXRC5lZ2jWtWWHKGUm1zIt8AhesR1tens+HTNv+YZlN/dp6G727LOvMJ8xjP9Be7Y2Sdr96LDm+pg==}
++  undici@6.29.1:
++    resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
+     engines: {node: '>=18.17'}
+ 
+-  undici@7.28.0:
+-    resolution: {integrity: sha512-cRZYrTDwWznlnRiPjggAGxZXanty6M8RV1ff8Wm4LWXBp7/IG8v5DnOm74DtUBp9OONpK75YlPnIjQqX0dBDtA==}
++  undici@7.30.1:
++    resolution: {integrity: sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg==}
+     engines: {node: '>=20.18.1'}
+ 
+   unicorn-magic@0.1.0:
+@@ -23723,15 +23602,13 @@ snapshots:
+       semver: 7.8.5
+       tar: 7.5.19
+       tinyglobby: 0.2.17
+-      undici: 6.27.0
++      undici: 6.29.1
+       which: 6.0.1
+ 
+   node-int64@0.4.0: {}
+ 
+   node-releases@2.0.50: {}
+ 
+-  node@runtime:26.4.0: {}
+-
+   nopt@1.0.10:
+     dependencies:
+       abbrev: 1.1.1
+@@ -25246,9 +25123,9 @@ snapshots:
+ 
+   undici-types@8.3.0: {}
+ 
+-  undici@6.27.0: {}
++  undici@6.29.1: {}
+ 
+-  undici@7.28.0: {}
++  undici@7.30.1: {}
+ 
+   unicorn-magic@0.1.0: {}
+ 
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+index 365fb9f..3cef324 100644
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -327,7 +327,7 @@ catalog:
+   typescript-eslint: ^8.61.0
+   # undici 8.x requires Node.js >=22.19.0, above pnpm's supported floor of
+   # Node.js >=22.13.
+-  undici: ^7.27.2
++  undici: 7.30.1
+   unified: ^11.0.5
+   # validate-npm-package-name 8.x requires Node.js ^22.22.2 || ^24.15.0 ||
+   # >=26.0.0, above pnpm's supported floor of Node.js >=22.13.
+@@ -424,6 +424,9 @@ nodeVersion: 22.13.0
+ optimisticRepeatInstall: true
+ 
+ overrides:
++  'undici@>=6 <6.29.1': '6.29.1'
++  'undici@>=7 <7.30.1': '7.30.1'
++  'undici@>=8 <8.12.2': '8.12.2'
+   '@cypress/request@3.0.9>qs': ^6.14.1
+   '@yarnpkg/fslib@2': '3'
+   ajv@>=7.0.0-alpha.0 <8.18.0: '>=8.18.0'

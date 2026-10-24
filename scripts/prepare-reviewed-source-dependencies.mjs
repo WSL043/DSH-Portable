@@ -32,11 +32,12 @@ async function prepareReviewedSourceDependencies() {
   const crypto = await import('node:crypto');
   const { execFileSync } = await import('node:child_process');
   const { parseArgs } = await import('node:util');
-  const { values } = parseArgs({ options: { source: { type: 'string' }, lock: { type: 'string' }, output: { type: 'string' } } });
+  const { values } = parseArgs({ options: { source: { type: 'string' }, lock: { type: 'string' }, 'dependency-lock': { type: 'string' }, output: { type: 'string' } } });
   const source = path.resolve(values.source), pins = JSON.parse(await fs.readFile(path.resolve(values.lock), 'utf8'));
   const actualCommit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: source, encoding: 'utf8', windowsHide: true, shell: false }).trim();
   if (actualCommit !== pins.dsh.reviewedCommit) throw new Error('Source commit differs from selected reviewed core');
-  const zod = pins.dsh.buildDependencies?.zod;
+  const dependencyPins = values['dependency-lock'] ? JSON.parse(await fs.readFile(path.resolve(values['dependency-lock']), 'utf8')) : pins;
+  const zod = dependencyPins.dsh.buildDependencies?.zod;
   if (!zod) throw new Error('Missing reviewed source dependency identity');
   const lockPath = path.join(source, 'pnpm-lock.yaml'), workspacePath = path.join(source, 'pnpm-workspace.yaml');
   const beforeLock = await fs.readFile(lockPath, 'utf8'), beforeWorkspace = await fs.readFile(workspacePath, 'utf8');

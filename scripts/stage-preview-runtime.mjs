@@ -154,6 +154,33 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
   return checked
 }
 
+async function reviewedBuildInputs(packedRoot, lock, stableLock) {
+  const frontend = JSON.parse(await readFile(path.join(packedRoot, 'source-dependency-receipt.json'), 'utf8'));
+  assert.equal(frontend.sourceCommit, lock.dsh.reviewedCommit, 'reviewed frontend source');
+  assert.equal(frontend.dependency?.version, stableLock.dsh.buildDependencies.zod.version, 'reviewed frontend Zod');
+  assert.ok(['patched', 'upstream-already-fixed-or-no-v4'].includes(frontend.status), 'source dependency preparation succeeded');
+  const build = stableLock.pnpm.sourceBuild;
+  const report = JSON.parse(await readFile(path.join(packedRoot, 'pnpm', 'report.json'), 'utf8'));
+  assert.equal(report.passed, true, 'package-manager build and actual consumer probes passed');
+  assert.equal(report.sourceCommit, build.reviewedCommit, 'reviewed package-manager source');
+  assert.equal(report.sourcePatchSha256, build.patchSha256, 'reviewed package-manager patch');
+  assert.equal(report.resolvedLockSha256, build.resolvedLockSha256, 'reviewed package-manager dependency graph');
+  assert.equal(report.packageFile, `pnpm-${stableLock.pnpm.version}.tgz`, 'expected package-manager filename');
+  const tarball = path.join(packedRoot, 'pnpm', report.packageFile);
+  assert.equal(await sha256(tarball), report.packageSha256, 'built package-manager archive');
+  const manifest = readPackedManifest(tarball);
+  assert.equal(manifest.name, stableLock.pnpm.package);
+  assert.equal(manifest.version, stableLock.pnpm.version);
+  const embedded = JSON.parse(run('tar', ['-xOf', tarball, 'package/dist/portable-source-build.json']));
+  assert.equal(embedded.sourceCommit, build.reviewedCommit);
+  assert.equal(embedded.sourcePatchSha256, build.patchSha256);
+  assert.deepEqual(embedded.inlineUndiciVersions, [build.inlineUndici]);
+  assert.equal(embedded.distributedUndici, build.distributedUndici);
+  assert.ok(report.consumers.some(c => c.mode === 'normal' && c.code === 0 && c.uncaught === 0 && c.calls === 0));
+  assert.ok(report.consumers.some(c => c.mode === 'malformed' && c.code === 1 && c.uncaught === 0 && c.calls === 0));
+  return { tarball, embedded, frontend, report };
+}
+
 export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile }) {
   const product = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
   lockFile ||= classifyProductVersion(product.version).channel === 'candidate' ? 'upstream.preview.lock.json' : 'upstream.lock.json'
@@ -164,6 +191,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
   const stableRuntimeManifest = JSON.parse(await readFile(path.join(root, 'app', 'package.json'), 'utf8'))
   const packages = await inventoryPackedRuntime({ packedRoot, lock })
   const runtimePackages = productionPackageClosure(packages, lock.dsh.package)
+  const reviewedBuild = stableLock.pnpm.sourceBuild ? await reviewedBuildInputs(packedRoot, lock, stableLock) : undefined
   await rm(output, { recursive: true, force: true })
   await mkdir(path.join(output, 'vendor'), { recursive: true })
   const sourceFilter = (source) => !source.split(path.sep).includes('node_modules')
@@ -181,7 +209,9 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
   const dependencies = Object.fromEntries(runtimePackages.map((entry) => [entry.name, pathToFileURL(entry.tarball).href]))
   dependencies['@wsl043/dsh-portable-desktop-bridge'] = 'file:desktop-bridge'
   dependencies[stableLock.pluginMarket.package] = 'file:vendor/dsh-portable-plugin-market'
-  dependencies[stableLock.pnpm.package] = stableLock.pnpm.version
+  const pnpmSpec = reviewedBuild ? `file:vendor/pnpm-${stableLock.pnpm.version}-portable.tgz` : stableLock.pnpm.version
+  if (reviewedBuild) await cp(reviewedBuild.tarball, path.join(output, 'vendor', `pnpm-${stableLock.pnpm.version}-portable.tgz`))
+  dependencies[stableLock.pnpm.package] = pnpmSpec
   const manifest = {
     name: 'deepseek-harness-portable-preview-runtime',
     version: lock.dsh.version,
@@ -203,6 +233,13 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     timeout: 30 * 60 * 1000,
   })
 
+  if (reviewedBuild) {
+    const managerRoot = path.join(output, 'node_modules', stableLock.pnpm.package)
+    for (const [name, digest] of Object.entries(reviewedBuild.embedded.outputHashes)) assert.equal(await sha256(path.join(managerRoot, 'dist', name)), digest, `installed package-manager ${name}`)
+    const distributed = JSON.parse(await readFile(path.join(managerRoot, 'dist/node_modules/undici/package.json'), 'utf8'))
+    assert.equal(distributed.version, stableLock.pnpm.sourceBuild.distributedUndici, 'installed distributed Undici')
+    await writeFile(path.join(output, 'source-build-dependencies.json'), `${JSON.stringify({ frontend: reviewedBuild.frontend, pnpm: reviewedBuild.embedded }, null, 2)}\n`)
+  }
   const dependencySecurity = await verifyInstalledRuntimeDependencies(output)
   console.log(`Staged dependency security checks: ${JSON.stringify(dependencySecurity)}`)
 
@@ -227,7 +264,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
       [lock.dsh.package]: lock.dsh.version,
       '@wsl043/dsh-portable-desktop-bridge': 'file:desktop-bridge',
       [stableLock.pluginMarket.package]: 'file:vendor/dsh-portable-plugin-market',
-      [stableLock.pnpm.package]: stableLock.pnpm.version,
+      [stableLock.pnpm.package]: pnpmSpec,
     },
   }
   await writeFile(path.join(output, 'package.json'), `${JSON.stringify(runtimeManifest, null, 2)}\n`, 'utf8')
