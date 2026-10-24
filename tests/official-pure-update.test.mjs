@@ -88,11 +88,34 @@ test('chunked update metadata is rejected before an oversized stream is fully bu
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
-    const source = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; Import-Module ${quote(payload)} -Force -DisableNameChecking; $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_FEED='1'; try { Read-BoundedHttpText 'http://127.0.0.1:${server.address().port}/' | Out-Null; throw 'Unexpected success' } catch { @{message=$_.Exception.Message}|ConvertTo-Json -Compress }`;
+    // Server writes include socket/read-ahead queues; measure the real reader instead.
+    const source = `$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; Import-Module ${quote(payload)} -Force -DisableNameChecking;
+      Add-Type -TypeDefinition @'
+using System.IO; using System.Text;
+public sealed class MetadataCountingReader : StreamReader {
+  public static long Consumed;
+  public MetadataCountingReader(Stream stream, Encoding encoding) : base(stream, encoding) {}
+  public override int Read(char[] buffer, int index, int count) {
+    int read = base.Read(buffer, index, count); Consumed += read; return read;
+  }
+}
+'@;
+      $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_FEED='1';
+      & (Get-Module Payload) {
+        param($url)
+        $body = (Get-Command Read-BoundedHttpText).ScriptBlock.ToString();
+        $needle = 'New-Object IO.StreamReader(';
+        if (($body.Split(@($needle), [StringSplitOptions]::None)).Length -ne 2) { throw 'Bounded-reader instrumentation seam changed' }
+        Set-Item Function:Read-BoundedHttpText ([scriptblock]::Create($body.Replace($needle, 'New-Object MetadataCountingReader(')));
+        try { Read-BoundedHttpText $url | Out-Null; throw 'Unexpected success' }
+        catch { @{message=$_.Exception.Message;consumed=[MetadataCountingReader]::Consumed}|ConvertTo-Json -Compress }
+      } 'http://127.0.0.1:${server.address().port}/'`;
     const env = { ...process.env }; delete env.PSModulePath;
     const { stdout } = await promisify(execFile)(powershell, ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(source, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true, timeout: 15000 });
-    assert.match(JSON.parse(stdout.trim()).message, /Index response is too large/);
-    assert.ok(sent < 4 * 1024 * 1024, `reader consumed ${sent} bytes instead of stopping near the 1 MiB limit`);
+    const result = JSON.parse(stdout.trim());
+    assert.match(result.message, /Index response is too large/);
+    assert.ok(result.consumed > 1048576 && result.consumed <= 1048576 + 4096,
+      `reader consumed ${result.consumed} ASCII characters; server queued ${sent} bytes`);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 
