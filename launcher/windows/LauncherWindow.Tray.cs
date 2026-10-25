@@ -75,6 +75,7 @@ namespace DshPortable
             Show();
             WindowState = windowStateBeforeHide;
             Activate();
+            PostWindowState();
         }
 
         internal static string MenuTitle(string value)
