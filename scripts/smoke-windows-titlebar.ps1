@@ -23,6 +23,12 @@ $type=$assembly.GetType('DshPortable.LauncherWindow',$true)
 $flags=[Reflection.BindingFlags]'Instance,Public,NonPublic'
 $ctor=$type.GetConstructor($flags,$null,[Type[]]@([string[]],[string],[string],[int],[int],[int]),$null)
 $window=$ctor.Invoke([object[]]@([string[]]@('--desktop'),'default',$Root,0,0,0))
+$stateFile=$type.GetMethod('DesktopWindowStatePath',$flags).Invoke($window,@())
+$stateBefore=if([IO.File]::Exists($stateFile)){[Convert]::ToBase64String([IO.File]::ReadAllBytes($stateFile))}else{$null}
+function Assert-HiddenProbeWindowState {
+ $stateAfter=if([IO.File]::Exists($stateFile)){[Convert]::ToBase64String([IO.File]::ReadAllBytes($stateFile))}else{$null}
+ if($stateAfter -cne $stateBefore){throw 'Hidden window probe overwrote saved window placement'}
+}
 try {
  # The fixture renders native chrome only; never start a backend or activate a window.
  $events=[ComponentModel.Component].GetProperty('Events',$flags).GetValue($window)
@@ -230,5 +236,10 @@ function Assert-NormalWindowSize([string]$Phase) {
      }
    }
  }
- @{passed=$true;captionInset=$inset;restoreCyclesPerChromeMode=3;restoreSizesPreserved=$true;nativeResizePreserved=$true;titleHeight=$menu.Height;contentTop=$content.Top;dragHitTest=$hit;captionCommands=@('minimize','maximize','restore');themes=@('dark','light');popupMenus=$popupCaptures;popupMenuCapture='DrawToBitmap';popupMenuShadowVerified=$false} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Evidence 'result.json') -Encoding UTF8
-} finally { $window.Dispose() }
+ $readyField=$type.GetField('desktopReady',$flags)
+ $readyBefore=$readyField.GetValue($window)
+ try { $readyField.SetValue($window,$true); $type.GetMethod('SaveDesktopWindowState',$flags).Invoke($window,@()) | Out-Null }
+ finally { $readyField.SetValue($window,$readyBefore) }
+ Assert-HiddenProbeWindowState
+ @{passed=$true;hiddenProbePreservesWindowState=$true;captionInset=$inset;restoreCyclesPerChromeMode=3;restoreSizesPreserved=$true;nativeResizePreserved=$true;titleHeight=$menu.Height;contentTop=$content.Top;dragHitTest=$hit;captionCommands=@('minimize','maximize','restore');themes=@('dark','light');popupMenus=$popupCaptures;popupMenuCapture='DrawToBitmap';popupMenuShadowVerified=$false} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Evidence 'result.json') -Encoding UTF8
+} finally { $window.Dispose(); Assert-HiddenProbeWindowState }

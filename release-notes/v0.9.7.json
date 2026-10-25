@@ -4,7 +4,7 @@
     "summary": "完善无边框窗口缩放与更新提示，更新运行环境和内置依赖。",
     "highlights": [
       "退出：停止和状态查询复用现有运行时位置，不再因新建缓存租约失败而卡住，并兼容旧版进程记录。",
-      "窗口：为插件提供透明边缘缩放接口，启用后移除原来的 4 像素边缘和残余系统描边；修复窗口还原后逐次变大及托盘恢复后的状态通知。",
+      "窗口：提供透明缩放区接口，接管后移除 4 像素内缩和系统描边；修复还原时尺寸增长、托盘状态不同步，以及隐藏健康检查覆盖位置。",
       "更新：明确显示当前通道可用版本，提供离线文件指南；适配 rc.3 的原生目录选择入口，并在会话头与工作区元数据不一致时先拒绝导入。",
       "整包升级：保留独立环境的设置、插件和工作区；新完整清单使旧更新器在改动文件前安全拒绝。",
       "运行环境：更新至 Node.js 24.22.1，修复应用依赖，并独立核验前端和包管理器的内联副本。"
@@ -21,7 +21,7 @@
     "summary": "Improves frameless resizing and update messages, and refreshes the runtime and bundled dependencies.",
     "highlights": [
       "Exit: stopping and status checks reuse the existing runtime location, avoiding failures while creating an unnecessary cache lease and preserving compatibility with older process records.",
-      "Windows: exposes transparent edge resizing to plugins, removing the previous four-pixel margin and remaining system outline when enabled; fixes restore-size growth and state notifications after tray recovery.",
+      "Windows: adds transparent resize edges without the four-pixel inset or system outline; fixes restore-size growth, tray-state notifications and hidden health checks overwriting window position.",
       "Updates: reports versions available in the selected channel, links offline download steps, adapts native directory picking to rc.3 and rejects imports whose session headers do not match workspace metadata.",
       "Full upgrades: preserve named-environment settings, plugins and workspaces; the new full-manifest format makes legacy updaters refuse before changing files.",
       "Runtime: updates to Node.js 24.22.1, repairs application dependencies and separately verifies copies embedded in the frontend and package manager."

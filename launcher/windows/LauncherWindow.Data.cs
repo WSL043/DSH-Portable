@@ -755,7 +755,7 @@ namespace DshPortable
 
         private void SaveDesktopWindowState()
         {
-            if (!desktopReady || fullscreen) return;
+            if (!desktopReady || fullscreen || hiddenForAutomation) return;
             try { SaveDesktopWindowStateCore(); }
             catch
             {
