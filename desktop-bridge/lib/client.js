@@ -1364,7 +1364,9 @@ window.__ModuleLoader__.load({
         }
         let workspaceRequestSequence = 0
         const pendingWorkspaceRequests = new Map()
-        const originalPickDirectory = ctx.workspaces?.pickDirectory
+        const directoryPickers = [...new Set([ctx.uiWorkspace, ctx.workspaces])]
+          .filter(owner => typeof owner?.pickDirectory === 'function')
+          .map(owner => ({ owner, original: owner.pickDirectory }))
         let nativePickDirectory = null
         let workspacePickerPromise = null
         const cancelWorkspacePicker = () => {
@@ -1375,7 +1377,7 @@ window.__ModuleLoader__.load({
         // A page can enter the back/forward cache without disposing its plugins.
         // Do not leave its picker promise waiting for a reply to the old page.
         window.addEventListener?.('pagehide', cancelWorkspacePicker)
-        if (host.capabilities.pickDirectory === true && ctx.workspaces && typeof originalPickDirectory === 'function') {
+        if (host.capabilities.pickDirectory === true && directoryPickers.length > 0) {
           nativePickDirectory = () => {
             if (!active) return Promise.resolve(null)
             if (workspacePickerPromise) return workspacePickerPromise
@@ -1396,7 +1398,7 @@ window.__ModuleLoader__.load({
             request.then(clear, clear)
             return request
           }
-          ctx.workspaces.pickDirectory = nativePickDirectory
+          for (const { owner } of directoryPickers) owner.pickDirectory = nativePickDirectory
         }
         const syncSessionEventSubscriptions = () => {
           const snapshot = ctx.sessions.list.getSnapshot()
@@ -1634,8 +1636,8 @@ window.__ModuleLoader__.load({
           sidebarObserver?.disconnect()
           if (publishTimer !== null) clearTimeout(publishTimer)
           publishTimer = null
-          if (ctx.workspaces?.pickDirectory === nativePickDirectory && typeof originalPickDirectory === 'function') {
-            ctx.workspaces.pickDirectory = originalPickDirectory
+          for (const { owner, original } of directoryPickers) {
+            if (nativePickDirectory && owner.pickDirectory === nativePickDirectory) owner.pickDirectory = original
           }
           window.removeEventListener?.('pagehide', cancelWorkspacePicker)
           cancelWorkspacePicker()

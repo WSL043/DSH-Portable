@@ -10,6 +10,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import { readLogTail, redactDiagnosticText } from '../launcher/diagnostic-policy.mjs'
 import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs'
+import { comparePortableVersions } from '../launcher/update-core.mjs'
 
 const execFileAsync = promisify(execFile)
 const projectRoot = path.resolve(import.meta.dirname, '..')
@@ -149,6 +150,8 @@ try {
     // A comment-only YAML document stands in for the real credential store.
     [path.join(destination, 'data', 'dsh-home', '.credentials.yaml'), '# keep-credentials\n'],
     [path.join(destination, 'workspace', 'portable-upgrade-project.txt'), 'keep-workspace\n'],
+    [path.join(destination, 'environments', 'research', 'data', 'dsh-home', 'settings.yaml'), 'locale: zh-CN\n'],
+    [path.join(destination, 'environments', 'research', 'workspace', 'project.txt'), 'keep environment workspace\n'],
   ])
   for (const [filename, value] of markers) {
     await mkdir(path.dirname(filename), { recursive: true })
@@ -189,6 +192,8 @@ try {
   assert.ok(['available', 'full-package-required'].includes(decision.status), `unexpected update decision: ${decision.status}`)
   assert.equal(decision.delivery, decision.status === 'available' ? 'component' : 'full-package')
 
+  const needsNewBootstrap = fullManifestSource.schemaVersion === 2
+    && comparePortableVersions(oldComponents.portableVersion, '0.9.7') < 0
   let launcherLogOffset = 0
   if (decision.delivery === 'full-package') {
     if (runningHostUpgrade) {
@@ -209,6 +214,20 @@ try {
       )
       launcherLogOffset = (await launcherLog()).length
     }
+    if (needsNewBootstrap) {
+      const refusalPath = path.join(root, 'legacy-updater-refusal.json')
+      await assert.rejects(execFileAsync(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+        '--upgrade-existing', '--manifest', `${origin}/portable-manifest.json`,
+        '--destination', destination, '--allow-http', '--no-launch', '--result', refusalPath,
+      ], { timeout: 60_000, windowsHide: true }))
+      const refusal = JSON.parse(await readFile(refusalPath, 'utf8'))
+      assert.equal(refusal.status, 'failed')
+      assert.match(refusal.message, /latest (?:launcher|bootstrap)|最新版启动器/i)
+      for (const [filename, value] of markers) assert.equal(await readFile(filename, 'utf8'), value)
+      assert.equal(JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8')).portableVersion, oldComponents.portableVersion)
+      if (runningHostUpgrade) assert.equal(oldHost.exitCode, null, 'schema refusal must not stop the installed desktop')
+      console.log('[upgrade-smoke] legacy updater refused full schema 2 before modifying the installation')
+    }
     if (runningHostUpgrade && sourceOverlay) {
       await stopFinishedProduct()
       await waitFor(() => oldHost?.exitCode !== null, 'the old product host did not stop before the source-overlay upgrade', 30_000)
@@ -225,7 +244,10 @@ try {
       if (!runningHostUpgrade || sourceOverlay) updaterArguments.push('--no-launch')
       // A relaunched desktop can inherit redirected pipes from the old updater.
       // Await the updater's exit, not pipe EOF from the long-lived new desktop.
-      const updater = spawn(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), updaterArguments, {
+      const updaterExecutable = needsNewBootstrap
+        ? path.join(artifacts, 'DSH-Portable-windows-x64.exe')
+        : path.join(destination, 'launcher', 'DSH-FullUpdater.exe')
+      const updater = spawn(updaterExecutable, updaterArguments, {
         windowsHide: true,
         stdio: 'ignore',
         env: runningHostUpgrade ? {

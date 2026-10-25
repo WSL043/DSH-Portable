@@ -50,13 +50,13 @@
 
 组件形式的 Portable 更新把 `--scope engine` 换成 `--scope product`，并选择对应清单。通过既有 `runtime-entry.mjs` 进入，紧凑运行时会先准备并定位 app；不要跳过它直接执行 `portable-cli.mjs update`。`--input` 不能与 `--update-manifest` 混用。适用性仍由原有平台、Node、布局与外壳契约规则判断，不能用离线导入绕过资格验证。
 
-完整 Portable 包由现有 Windows FullUpdater 执行，不由 Node 另做一套整包事务；CLI 检查只返回委托信息，不代表已经安装。新版引导器也支持：
+完整 Portable 包由 Windows FullUpdater 执行，不由 Node 另做一套整包事务；CLI 检查只返回委托信息，不代表已经安装。**0.9.6 及更早版本请下载本次 Release 的新版 Windows 引导器来升级。** 完整清单从 0.9.7 起使用 schema 2，旧更新器会在停进程和改动文件前拒绝，并提示下载最新版引导器，避免其旧保留名单误处理独立环境。Portable 组件和内核清单仍为 schema 1。新版引导器支持：
 
 ```powershell
 .\DSH-Portable-windows-x64.exe --manifest-file D:\Updates\portable-manifest.json --destination D:\Apps\DSH-Portable
 ```
 
-目标是完整的现有安装时，会原地更新并保留 `data`、`workspace`；安装前仍需退出任务与其他环境。失败时沿用原来的回滚机制。备份重要数据仍可使用既有迁移导出。
+目标是完整的现有安装时，会原地更新并保留 `data`、`workspace`、`environments` 和 `installed-mode.json`；安装前仍需退出任务与其他环境。自定义数据根目录应放在程序目录之外。失败时沿用原来的回滚机制。备份重要数据仍可使用既有迁移导出。
 
 离线更新指更新器不下载清单或 ZIP；模型服务、用户插件以及下次正常启动的自动检查仍遵循各自设置。它不构成整机断网保证。
 
@@ -70,6 +70,8 @@ Use a connected computer first. Open the release and expand **Assets**:
 For a full Windows Portable update, download `portable-manifest.json` and `portable-manifest.json.sig` from the Portable update channel. Get the ZIP from the download address in `payloads.windowsX64` and keep its `filename`. The JSON and signature are on the update channel; the ZIP may be on the product version release named by the manifest.
 
 For a Portable component, get the platform's `portable-update-<platform>.json`, its `.json.sig`, and the ZIP at `component.urls`. For a core component, get `dsh-core-update-<platform>-<version>.json`, its `.json.sig`, and the ZIP named by that JSON. Keep the platform and version the same. The current-version JSON alias is also usable with its own signature and named ZIP.
+
+For a full upgrade from 0.9.6 or earlier, run the new Windows bootstrap from the target release, using `--manifest-file` for offline files. Full manifests now use schema 2 so legacy updaters refuse before changing files; Portable component and core manifests remain schema 1. Named environments are preserved by the new updater.
 
 Keep all three original files together. Copy them to the target computer and select the JSON. Do not edit the JSON, rename the ZIP, or mix signatures from different versions. Raw official Harness releases are not Portable core components.
 

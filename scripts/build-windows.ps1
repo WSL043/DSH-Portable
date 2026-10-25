@@ -584,7 +584,8 @@ try {
     $Manifest = Join-Path $OutputDir 'portable-manifest.json'
     $ManifestCandidate = Join-Path $OutputDir (".portable-manifest-$BuildId.json")
     $ManifestBody = [ordered]@{
-        schemaVersion = 1
+        # Full schema 2 prevents older updaters from discarding named environments.
+        schemaVersion = 2
         version = $PortableVersion
         releaseChannel = $ReleaseChannel
         payloads = [ordered]@{

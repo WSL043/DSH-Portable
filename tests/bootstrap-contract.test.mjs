@@ -243,7 +243,7 @@ async function withFixtureServer(fixture, callback) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve))
   const origin = `http://127.0.0.1:${server.address().port}`
   manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     version: 'test-portable',
     payloads: {
       windowsX64: {
@@ -399,6 +399,17 @@ test('a full-package update restores the prior program when the updated desktop 
     await writeFile(path.join(destination, 'licenses', 'COMPONENTS.json'), '{"portableVersion":"0.4.0"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
 
+    const environmentFiles = [
+      ['data/dsh-home/settings.yaml', 'locale: zh-CN\n'],
+      ['data/dsh-home/profiles/web/package.json', '{"private":true,"dependencies":{"example-plugin":"1.0.0"}}\n'],
+      ['workspace/project.txt', 'keep named environment workspace\n'],
+    ]
+    for (const [name, contents] of environmentFiles) {
+      const filename = path.join(destination, 'environments', 'research', name)
+      await mkdir(path.dirname(filename), { recursive: true })
+      await writeFile(filename, contents)
+    }
+
     await withFixtureServer(fixture, async ({ manifestUrl }) => {
       await assert.rejects(execBootstrap(executable, [
         '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
@@ -416,6 +427,9 @@ test('a full-package update restores the prior program when the updated desktop 
     assert.match(updateOutcome.message, /previous version was restored/i)
     assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"old"}\n')
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
+    for (const [name, contents] of environmentFiles) {
+      assert.equal(await readFile(path.join(destination, 'environments', 'research', name), 'utf8'), contents)
+    }
     assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
   } finally {
     await removeTestRoot(root)
@@ -447,6 +461,19 @@ test('a failed staged compatibility preflight leaves the installed program untou
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
 
     await withFixtureServer(fixture, async ({ manifestUrl }) => {
+      const customStateRoot = path.join(destination, 'custom-state')
+      const customMarker = path.join(customStateRoot, 'data', 'session.json')
+      await mkdir(path.dirname(customMarker), { recursive: true })
+      await writeFile(customMarker, '{"custom":true}\n')
+      await assert.rejects(execFileAsync(executable, [
+        '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
+        '--allow-http', '--result', resultFile,
+      ], { windowsHide: true, env: { ...process.env, DSH_PORTABLE_STATE_ROOT: customStateRoot } }))
+      const customRefusal = JSON.parse(await readFile(resultFile, 'utf8'))
+      assert.equal(customRefusal.status, 'failed')
+      assert.match(customRefusal.message, /custom state root|自定义数据根目录/i)
+      assert.equal(await readFile(customMarker, 'utf8'), '{"custom":true}\n')
+      assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"old"}\n')
       await assert.rejects(execBootstrap(executable, [
         '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
         '--allow-http', '--result', resultFile,
@@ -489,6 +516,17 @@ test('a full-package update commits only after the updated desktop reports ready
     await writeFile(path.join(destination, 'app', 'package.json'), '{"name":"old"}\n')
     await writeFile(path.join(destination, 'data', 'session.json'), '{"keep":true}\n')
 
+    const environmentFiles = [
+      ['data/dsh-home/settings.yaml', 'locale: zh-CN\n'],
+      ['data/dsh-home/profiles/web/package.json', '{"private":true,"dependencies":{"example-plugin":"1.0.0"}}\n'],
+      ['workspace/project.txt', 'keep named environment workspace\n'],
+    ]
+    for (const [name, contents] of environmentFiles) {
+      const filename = path.join(destination, 'environments', 'research', name)
+      await mkdir(path.dirname(filename), { recursive: true })
+      await writeFile(filename, contents)
+    }
+
     await withFixtureServer(fixture, async ({ manifestUrl }) => {
       await execBootstrap(executable, [
         '--upgrade-existing', '--manifest', manifestUrl, '--destination', destination,
@@ -503,6 +541,9 @@ test('a full-package update commits only after the updated desktop reports ready
     assert.equal(updateOutcome.targetVersion, 'test-portable')
     assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"fixture"}\n')
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
+    for (const [name, contents] of environmentFiles) {
+      assert.equal(await readFile(path.join(destination, 'environments', 'research', name), 'utf8'), contents)
+    }
     assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-backup-')), [])
   } finally {
     await removeTestRoot(root)

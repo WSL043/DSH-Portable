@@ -5,12 +5,13 @@
     "highlights": [
       "退出：停止和状态查询复用现有运行时位置，不再因新建缓存租约失败而卡住，并兼容旧版进程记录。",
       "窗口：为插件提供透明边缘缩放接口，启用后移除原来的 4 像素边缘和残余系统描边。",
-      "更新：明确显示当前通道是否有可用更新，在两张更新卡片提供“获取文件”入口，指向 Portable 与内核离线更新指南。",
+      "更新：明确显示当前通道可用版本，提供离线文件指南；适配 rc.3 的原生目录选择入口，并在会话头与工作区元数据不一致时先拒绝导入。",
+      "整包升级：保留独立环境的设置、插件和工作区；新完整清单使旧更新器在改动文件前安全拒绝。",
       "运行环境：更新至 Node.js 24.22.1，修复应用依赖，并独立核验前端和包管理器的内联副本。"
     ],
     "upgradeNotes": [
       "正常退出应用后更新，并备份重要数据；升级保留会话、设置、凭据、插件和工作区。",
-      "通过完整 Portable 更新包或“从文件更新”升级；仅替换 EXE 不会升级内核、Node.js 和组件清单。"
+      "0.9.6 及更早版本请运行本次 Release 的新版 Windows 引导器升级；旧更新器会拒绝新的完整清单，以保护独立环境。离线时将原始 JSON、签名和 ZIP 放在同一目录，并通过新版引导器的 --manifest-file 入口更新。"
     ],
     "acknowledgements": [
       "感谢 [@ArtificialAngels](https://github.com/ArtificialAngels) 在 [#201](https://github.com/WSL043/DSH-Portable/issues/201) 提供无边框窗口反馈与缩放接口建议。"
@@ -21,12 +22,13 @@
     "highlights": [
       "Exit: stopping and status checks reuse the existing runtime location, avoiding failures while creating an unnecessary cache lease and preserving compatibility with older process records.",
       "Windows: exposes transparent edge resizing to plugins, removing the previous four-pixel margin and remaining system outline when enabled.",
-      "Updates: reports availability within the selected channel and adds a Get files link to each update card for the Portable and core offline download steps.",
+      "Updates: reports versions available in the selected channel, links offline download steps, adapts native directory picking to rc.3 and rejects imports whose session headers do not match workspace metadata.",
+      "Full upgrades: preserve named-environment settings, plugins and workspaces; the new full-manifest format makes legacy updaters refuse before changing files.",
       "Runtime: updates to Node.js 24.22.1, repairs application dependencies and separately verifies copies embedded in the frontend and package manager."
     ],
     "upgradeNotes": [
       "Exit normally and back up important data before upgrading. Sessions, settings, credentials, plugins and the workspace are preserved.",
-      "Use a complete Portable update package or Update from file. Replacing only the EXE does not upgrade the core, Node.js or component manifest."
+      "From 0.9.6 or earlier, run this release’s new Windows bootstrap. Legacy updaters reject the new full manifest to protect named environments. For offline upgrades, keep the original JSON, signature and ZIP together and use the new bootstrap’s --manifest-file option."
     ],
     "acknowledgements": [
       "Thanks to [@ArtificialAngels](https://github.com/ArtificialAngels) for the frameless-window feedback and resizing-interface proposal in [#201](https://github.com/WSL043/DSH-Portable/issues/201)."

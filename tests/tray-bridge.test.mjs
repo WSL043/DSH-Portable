@@ -390,17 +390,22 @@ test('Portable registers its owned workspace only for a truly empty first run', 
   assert.deepEqual(existing.startedWorkspaces, [])
 })
 
-test('Portable desktop bridge owns workspace picking through the WebView host and restores the runtime on dispose', async () => {
+for (const pickerService of ['workspaces', 'uiWorkspace']) test(`Portable desktop bridge owns ${pickerService} directory picking and restores it on dispose`, async () => {
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList(1))
-  const original = runtime.ctx.workspaces.pickDirectory
+  if (pickerService === 'uiWorkspace') {
+    runtime.ctx.uiWorkspace.pickDirectory = runtime.ctx.workspaces.pickDirectory
+    delete runtime.ctx.workspaces.pickDirectory
+  }
+  const pickerOwner = runtime.ctx[pickerService]
+  const original = pickerOwner.pickDirectory
 
   client.exports.apply(runtime.ctx)
-  assert.notEqual(runtime.ctx.workspaces.pickDirectory, original)
+  assert.notEqual(pickerOwner.pickDirectory, original)
 
-  const picked = runtime.ctx.workspaces.pickDirectory()
+  const picked = pickerOwner.pickDirectory()
   const request = client.posted.at(-1)
-  assert.equal(runtime.ctx.workspaces.pickDirectory(), picked, 'repeated clicks reuse the active native dialog')
+  assert.equal(pickerOwner.pickDirectory(), picked, 'repeated clicks reuse the active native dialog')
   assert.equal(client.posted.at(-1), request, 'a second native dialog must not be queued')
   assert.equal(request.type, 'dsh-portable/pick-directory')
   assert.equal(request.schemaVersion, 1)
@@ -413,7 +418,7 @@ test('Portable desktop bridge owns workspace picking through the WebView host an
   })
   assert.equal(await picked, 'C:\\Projects\\Harness')
 
-  const cancelled = runtime.ctx.workspaces.pickDirectory()
+  const cancelled = pickerOwner.pickDirectory()
   const cancelRequest = client.posted.at(-1)
   client.send({
     type: 'dsh-portable/pick-directory-result',
@@ -423,10 +428,10 @@ test('Portable desktop bridge owns workspace picking through the WebView host an
   })
   assert.equal(await cancelled, null)
 
-  const pendingAtDispose = runtime.ctx.workspaces.pickDirectory()
+  const pendingAtDispose = pickerOwner.pickDirectory()
   runtime.dispose()
   assert.equal(await pendingAtDispose, null)
-  assert.equal(runtime.ctx.workspaces.pickDirectory, original)
+  assert.equal(pickerOwner.pickDirectory, original)
 })
 
 for (const native of [false, true]) test(`workspace picker cancels on page exit and ignores stale replies (native=${native})`, async () => {

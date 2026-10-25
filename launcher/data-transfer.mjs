@@ -247,7 +247,9 @@ function relocatePortableWorkspaceEntry(file, bytes, before, after) {
     return { archivePath, bytes: Buffer.from(`${JSON.stringify(replaceExactStrings(parsed, before, after), null, 2)}\n`, 'utf8') }
   }
   if (file.path.startsWith(sourcePrefix) && SESSION_LOG_FILENAMES.includes(file.path.split('/').at(-1))) {
-    return { archivePath, bytes: relocateSessionHeaderBytes(bytes, before, after, file.path.endsWith('.zstd')) }
+    const relocated = relocateSessionHeaderBytes(bytes, before, after, file.path.endsWith('.zstd'))
+    if (archivePath !== file.path && relocated === bytes) throw new Error('Session header does not match the source workspace metadata.')
+    return { archivePath, bytes: relocated }
   }
   return { archivePath, bytes }
 }

@@ -495,6 +495,7 @@ namespace DshPortableBootstrap
                 {
                     if (!IsCompletePortable(options.Destination))
                         throw new InvalidOperationException(BootstrapText.L("现有 DSH-Portable 目录不完整；没有修改任何文件。", "The existing DSH-Portable folder is incomplete. No files were changed."));
+                    ValidatePreservedStateRoot();
                     PreserveBundledWebViewRuntime(extracted);
                     reportStatus(BootstrapText.L("正在停止当前版本…", "Stopping the current version…"));
                     StopRunningPortable();
@@ -894,8 +895,24 @@ namespace DshPortableBootstrap
             return result;
         }
 
+        private void ValidatePreservedStateRoot()
+        {
+            string destination = Path.GetFullPath(options.Destination).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string stateRoot = ResolveProductStateRoot().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string prefix = destination + Path.DirectorySeparatorChar;
+            if (!stateRoot.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return;
+            string first = stateRoot.Substring(prefix.Length).Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)[0];
+            string[] preservedDirectories = new[] { "data", "workspace", "environments" };
+            if (!Array.Exists(preservedDirectories, value => String.Equals(value, first, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException(BootstrapText.L(
+                    "自定义数据根目录位于程序文件中；请先将其移到程序目录之外，再进行整包升级。没有修改现有安装。",
+                    "The custom state root is inside program files. Move it outside the application folder before a full upgrade. The existing installation was not changed."));
+        }
+
         private string ResolveProductStateRoot()
         {
+            string configuredRoot = Environment.GetEnvironmentVariable("DSH_PORTABLE_STATE_ROOT");
+            if (!String.IsNullOrWhiteSpace(configuredRoot)) return Path.GetFullPath(configuredRoot);
             string definition = Path.Combine(options.Destination, "installed-mode.json");
             if (!File.Exists(definition)) return options.Destination;
             InstalledModeDefinition installed;
@@ -921,7 +938,7 @@ namespace DshPortableBootstrap
         private void RestorePortableTransactionally(string backupRoot)
         {
             try { StopRunningPortable(); } catch { }
-            string[] preserved = new[] { "data", "workspace", "installed-mode.json" };
+            string[] preserved = new[] { "data", "workspace", "environments", "installed-mode.json" };
             foreach (string item in Directory.GetFileSystemEntries(options.Destination))
             {
                 string name = Path.GetFileName(item);
@@ -1061,7 +1078,7 @@ namespace DshPortableBootstrap
 
         private void ReplacePortableTransactionally(string extracted, string backupRoot)
         {
-            string[] preserved = new[] { "data", "workspace", "installed-mode.json" };
+            string[] preserved = new[] { "data", "workspace", "environments", "installed-mode.json" };
             Directory.CreateDirectory(backupRoot);
             System.Collections.Generic.List<string> movedOld = new System.Collections.Generic.List<string>();
             System.Collections.Generic.List<string> movedNew = new System.Collections.Generic.List<string>();
@@ -1318,7 +1335,7 @@ namespace DshPortableBootstrap
 
         private static PortablePayload ValidateManifest(PortableManifest manifest)
         {
-            if (manifest == null || manifest.SchemaVersion != 1 || manifest.Payloads == null || manifest.Payloads.WindowsX64 == null)
+            if (manifest == null || (manifest.SchemaVersion != 1 && manifest.SchemaVersion != 2) || manifest.Payloads == null || manifest.Payloads.WindowsX64 == null)
                 throw new InvalidDataException(BootstrapText.L("发布信息不兼容，请下载最新版启动器。", "The release information is incompatible. Download the latest bootstrap."));
             PortablePayload payload = manifest.Payloads.WindowsX64;
             if (String.IsNullOrWhiteSpace(manifest.Version)

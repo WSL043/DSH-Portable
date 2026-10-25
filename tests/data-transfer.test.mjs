@@ -160,6 +160,16 @@ test(`restore relocates ${sessionFilename} without rewriting historical event te
   await createDataArchive(source.layout, output, { categories: ['sessions'] })
   const targetRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-data-transfer-relocated-'))
   const target = layoutForRoot(targetRoot, process.platform)
+  if (sessionFilename === 'session.v4.jsonl') {
+    const originalBytes = await readFile(sourceSession)
+    const wrongHeader = `${JSON.stringify({ type: 'session', id: sessionId, cwd: path.join(source.layout.workspace, 'other') })}\n`
+    await writeFile(sourceSession, wrongHeader + events)
+    const incompatible = path.join(source.root, 'wrong-workspace.dshdata')
+    await createDataArchive(source.layout, incompatible, { categories: ['sessions'] })
+    await assert.rejects(restoreDataArchive(target, incompatible), /Session header does not match the source workspace metadata/)
+    assert.equal(existsSync(target.dataDir), false, 'reject before creating target data or an import journal')
+    await writeFile(sourceSession, originalBytes)
+  }
   await restoreDataArchive(target, output)
 
   const targetSession = path.join(target.dshHome, 'sessions', projectKey(target.workspace), sessionId, sessionFilename)

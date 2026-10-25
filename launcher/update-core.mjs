@@ -559,7 +559,8 @@ async function readLocalUpdateFiles({ layout, input, scope }, verifySignature) {
   }
   if (!manifest.portableVersion && manifest.version && manifest.payloads) {
     if (scope !== 'product') throw new Error('Update kind mismatch: a complete Portable package requires product scope.')
-    if (manifest.schemaVersion !== UPDATE_SCHEMA_VERSION) throw new Error('Unsupported update manifest schema.')
+    // Full schema 2 requires an updater that preserves named environments; component schema stays independent.
+    if (manifest.schemaVersion !== 1 && manifest.schemaVersion !== 2) throw new Error('Unsupported update manifest schema.')
     parseSemanticVersion(manifest.version)
     const releaseChannel = normalizeReleaseChannel(manifest.releaseChannel, manifest.version)
     result = { status: 'full-package-required', updateKind: 'product', delivery: 'full-package', existingFullUpdater: true,

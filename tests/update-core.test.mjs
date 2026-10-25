@@ -128,6 +128,13 @@ test('offline complete manifests preflight the signed Windows ZIP and delegate o
   assert.equal((await readLocalUpdate({ layout: { ...fixture.layout, platform: 'linux' }, input }, offlineVerification)).status, 'wrong-platform')
   if (process.arch !== 'x64') return
   const read = () => readLocalUpdate({ layout: { ...fixture.layout, platform: 'win32' }, input }, offlineVerification)
+  for (const schemaVersion of [1, 2]) {
+    await writeOfflineManifest(input, { ...full, schemaVersion })
+    assert.equal((await read()).status, 'full-package-required')
+  }
+  await writeOfflineManifest(input, { ...full, schemaVersion: 3 })
+  await assert.rejects(read(), localFailure(/manifest schema/i))
+  await writeOfflineManifest(input, full)
   const result = await read()
   assert.equal(result.status, 'full-package-required')
   assert.equal(result.existingFullUpdater, true)

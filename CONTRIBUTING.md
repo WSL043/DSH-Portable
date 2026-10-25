@@ -79,3 +79,5 @@ By contributing, you agree that your contribution is licensed under the reposito
 后台控制台程序必须明确使用 `CREATE_NO_WINDOW`，包括文件重定向场景；仅设置 `windowsHide` 或 `SW_HIDE` 不算保证。GUI 验收使用不切换输入桌面的私有桌面，记录实际控制台创建标志与前台状态，不向用户交互桌面发送输入。
 
 交付前核对实际新启动子进程的完整性级别。低完整性验收副本不能直接作为日常便携包；需要修复时只处理已确认无外部硬链接的受管执行文件，核对内容摘要及 DACL 不变，不递归修改用户数据或缓存目录权限。停止和状态查询不应依赖运行时准备或新租约；保持原有进程归属检查。
+
+Windows acceptance must run without taking the interactive desktop. Keep permission probes in an owned D-drive fixture. For an installed-package EPERM, inspect the package root’s inheritable integrity label as well as the executables; check for external hardlinks before any local label repair, and preserve file bytes and discretionary ACLs. A writable-cache test must use the actual packaged Node process and cache path.

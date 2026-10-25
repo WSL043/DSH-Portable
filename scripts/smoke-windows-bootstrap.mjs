@@ -95,6 +95,9 @@ try {
   console.log('[bootstrap-smoke] upgrading through the updater shipped inside the finished product')
   const dataMarker = path.join(destination, 'data', 'finished-product-session.json')
   const workspaceMarker = path.join(destination, 'workspace', 'finished-product-project.txt')
+  const environmentMarker = path.join(destination, 'environments', 'research', 'data', 'dsh-home', 'settings.yaml')
+  await mkdir(path.dirname(environmentMarker), { recursive: true })
+  await writeFile(environmentMarker, 'locale: zh-CN\n')
   await writeFile(dataMarker, '{"keep":true}\n')
   await writeFile(workspaceMarker, 'keep workspace\n')
   try {
@@ -114,6 +117,7 @@ try {
   assert.equal(upgraded.status, 'updated')
   assert.equal(await readFile(dataMarker, 'utf8'), '{"keep":true}\n')
   assert.equal(await readFile(workspaceMarker, 'utf8'), 'keep workspace\n')
+  assert.equal(await readFile(environmentMarker, 'utf8'), 'locale: zh-CN\n')
   assert.ok((await stat(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'))).isFile())
   console.log('[bootstrap-smoke] packaged full updater and durable-data preservation passed')
 
