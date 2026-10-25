@@ -24,7 +24,7 @@
 npm test
 ```
 
-平台或打包改动还必须通过 GitHub Actions 中对应的成品冒烟测试；源码能够构建不等于可以发布。
+平台或打包改动还必须通过 GitHub Actions 中对应的成品冒烟测试；源码能够构建不等于可以发布。PR 事件只运行轻量契约检查，平台成品验收须对同一分支手动触发完整 Build（当前为 39 项），不能把 PR 的少量绿色检查当成全矩阵通过。窗口验收要比较还原前后的尺寸，并确认普通缩放、移动仍有效；最终成品验收完成后再准备内核更新窗口。
 
 桌面改动以 0.6.4 的用户验收体验为基线：启动阶段保持连续加载与亮暗主题，原生导航和菜单一致，快捷键可用。默认插件也必须验证实际操作及受支持内核，不能只检查安装成功。Issue 关闭说明应对应具体修复和验证范围；包内组件版本、下载资产与 README 截图必须反映交付成品。保留失败日志和验收证据，不用重复重试代替定位。
 
@@ -56,7 +56,7 @@ Keep Portable-specific behavior in the launcher, desktop bridge, packaging, or u
 
 The official core declares the Node engine range `^22.19.0 || >=24.0.0`; existing compatibility tests retain Node 24.19.0 scenarios. Bundled runtimes and Node 24 CI jobs use the Node 24.22.1 security release pinned in `upstream.lock.json`. Compatibility does not imply a recommended distribution version; npm dependency overrides do not update the Undici built into Node.
 
-Run `npm test` before opening a pull request. Platform or packaging changes must also pass their finished-product smoke tests in GitHub Actions; a successful source build alone is not sufficient release evidence.
+Run `npm test` before opening a pull request. Platform or packaging changes must also pass their finished-product smoke tests in GitHub Actions; a successful source build alone is not sufficient release evidence. PR events run lightweight contracts only: dispatch the complete Build on the same branch for platform qualification (currently 39 jobs). A few green PR checks do not represent that matrix. Window acceptance compares restored dimensions and preserves ordinary resizing and movement. Prepare the core-update window after final-product acceptance.
 
 Use the user-accepted 0.6.4 desktop experience as the baseline: continuous loading and theme state, consistent native navigation and menus, and working shortcuts. Default plugins need real-operation checks on supported cores, beyond installation. Close issues with the specific fix and verification scope; keep component pins, assets and README screenshots aligned with the delivered product. Retain failure evidence instead of retrying until a check turns green.
 
@@ -78,6 +78,6 @@ By contributing, you agree that your contribution is licensed under the reposito
 
 后台控制台程序必须明确使用 `CREATE_NO_WINDOW`，包括文件重定向场景；仅设置 `windowsHide` 或 `SW_HIDE` 不算保证。GUI 验收使用不切换输入桌面的私有桌面，记录实际控制台创建标志与前台状态，不向用户交互桌面发送输入。
 
-交付前核对实际新启动子进程的完整性级别。低完整性验收副本不能直接作为日常便携包；需要修复时只处理已确认无外部硬链接的受管执行文件，核对内容摘要及 DACL 不变，不递归修改用户数据或缓存目录权限。停止和状态查询不应依赖运行时准备或新租约；保持原有进程归属检查。
+交付前核对实际新启动子进程的完整性级别。低完整性验收副本不能直接作为日常便携包；需要修复时先检查包根目录的可继承标签及外部硬链接，只修正已确认受管路径的完整性标签，核对内容摘要及 DACL 不变；不通过递归授权重置用户数据或缓存 DACL。停止和状态查询不应依赖运行时准备或新租约；保持原有进程归属检查。
 
 Windows acceptance must run without taking the interactive desktop. Keep permission probes in an owned D-drive fixture. For an installed-package EPERM, inspect the package root’s inheritable integrity label as well as the executables; check for external hardlinks before any local label repair, and preserve file bytes and discretionary ACLs. A writable-cache test must use the actual packaged Node process and cache path.

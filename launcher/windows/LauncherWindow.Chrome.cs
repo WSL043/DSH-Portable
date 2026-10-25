@@ -26,6 +26,12 @@ namespace DshPortable
 {
     internal sealed partial class LauncherWindow : Form
     {
+        private bool nativeWasMinimizedOrMaximized;
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DesktopWindowRect { public int Left, Top, Right, Bottom; }
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(IntPtr window, out DesktopWindowRect rectangle);
+
         private enum DwmWindowCornerPreference { Default = 0, DoNotRound = 1, Round = 2, RoundSmall = 3 }
         private static string L(string chinese, string english)
         {
@@ -101,6 +107,20 @@ namespace DshPortable
 
         protected override void WndProc(ref Message message)
         {
+            if (desktopStart && message.Msg == 0x0005)
+                nativeWasMinimizedOrMaximized = message.WParam == new IntPtr(1) || message.WParam == new IntPtr(2);
+            if (desktopStart && !fullscreen && message.Msg == 0x0047 && nativeWasMinimizedOrMaximized)
+            {
+                // Form.WindowState may already be Normal. Preserve the HWND size
+                // selected by Windows before WinForms adds its restore-frame metrics.
+                DesktopWindowRect rectangle;
+                bool captured = GetWindowRect(message.HWnd, out rectangle);
+                Size nativeSize = new Size(rectangle.Right - rectangle.Left, rectangle.Bottom - rectangle.Top);
+                base.WndProc(ref message);
+                if (captured && WindowState == FormWindowState.Normal && nativeSize.Width > 0 && nativeSize.Height > 0 && Size != nativeSize)
+                    Size = nativeSize;
+                return;
+            }
             if (desktopStart && !fullscreen && message.Msg == 0x0085)
             {
                 message.Result = IntPtr.Zero;

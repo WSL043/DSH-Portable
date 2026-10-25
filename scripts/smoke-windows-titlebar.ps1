@@ -10,6 +10,7 @@ using System;
 using System.Runtime.InteropServices;
 public static class TitlebarProbe {
  [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr handle, int command);
+ [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr handle, IntPtr after, int x, int y, int width, int height, uint flags);
  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr handle, IntPtr dc, uint flags);
  [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr handle, int message, IntPtr w, IntPtr l);
 }
@@ -57,6 +58,14 @@ try {
  $resizePacked=([long]($resizePoint.Y -band 65535) -shl 16) -bor ($resizePoint.X -band 65535)
  $resizeHit=[TitlebarProbe]::SendMessage($handle,0x84,[IntPtr]::Zero,[IntPtr]$resizePacked).ToInt32()
  if($resizeHit -ne 12){throw "Top resize edge is unavailable: $resizeHit; state=$($window.WindowState); menuTop=$($menu.Top); clientPoint=$($window.PointToClient($resizePoint)); client=$($window.ClientRectangle)"}
+$normalSize=$window.Size
+$normalClientSize=$window.ClientSize
+function Assert-NormalWindowSize([string]$Phase) {
+ [Windows.Forms.Application]::DoEvents()
+ if($window.WindowState -ne 'Normal' -or $window.Size -ne $normalSize -or $window.ClientSize -ne $normalClientSize){
+   throw "$Phase changed normal window size: outer=$($window.Size), client=$($window.ClientSize), expected=$normalSize/$normalClientSize"
+ }
+}
  # Hidden controls exercise the same caption handlers without moving a visible window.
  $menu.Items['caption-maximize'].PerformClick()
  if($window.WindowState -ne 'Maximized'){throw 'Maximize command failed'}
@@ -69,13 +78,50 @@ try {
  if($window.RectangleToScreen($window.ClientRectangle) -ne $maximizedClient){throw 'Fullscreen exit did not restore taskbar-preserving client bounds'}
  $menu.Items['caption-maximize'].PerformClick()
  if($window.WindowState -ne 'Normal'){throw 'Restore command failed'}
+ Assert-NormalWindowSize 'Maximize/fullscreen/restore'
  $menu.Items['caption-minimize'].PerformClick()
  if($window.WindowState -ne 'Minimized'){throw 'Minimize command failed'}
  $window.WindowState='Normal'
+ Assert-NormalWindowSize 'Minimize/restore'
  $window.Location=[Drawing.Point]::new(-32000,-32000)
  # Settle queued activation changes from fullscreen/minimize before opening
  # a popup. Otherwise an earlier WM_ACTIVATE closes the new popup in DoEvents.
  [Windows.Forms.Application]::DoEvents()
+ # Repeat both public control paths; sizes must not accumulate native frame pixels.
+ $chromeMethod=$type.GetMethod('SetPageWindowChrome',$flags)
+ $controlMethod=$type.GetMethod('PerformWindowControl',$flags)
+ foreach($pageChrome in @($false,$true)){
+   $chromeMethod.Invoke($window,@($pageChrome,$pageChrome)) | Out-Null
+   for($cycle=1;$cycle -le 3;$cycle++){
+     $controlMethod.Invoke($window,@('maximize')) | Out-Null
+     [Windows.Forms.Application]::DoEvents()
+     if($window.WindowState -ne 'Maximized'){throw 'Repeated maximize command failed'}
+     $controlMethod.Invoke($window,@('maximize')) | Out-Null
+     Assert-NormalWindowSize "Chrome=$pageChrome maximize/restore cycle $cycle"
+   }
+ }
+ $chromeMethod.Invoke($window,@($false,$false)) | Out-Null
+ [TitlebarProbe]::SendMessage($window.Handle,0x112,[IntPtr]0xF030,[IntPtr]::Zero) | Out-Null
+ [TitlebarProbe]::SendMessage($window.Handle,0x112,[IntPtr]0xF120,[IntPtr]::Zero) | Out-Null
+ Assert-NormalWindowSize 'System maximize/restore'
+ # Native resize/move bypasses managed Size setters; restore-cache fixes must not undo it.
+ foreach($delta in @(37,59)){
+   $resized=[Drawing.Size]::new($normalSize.Width+$delta,$normalSize.Height+$delta)
+   if(-not [TitlebarProbe]::SetWindowPos($window.Handle,[IntPtr]::Zero,0,0,$resized.Width,$resized.Height,0x16)){throw 'Native resize rejected'}
+   [Windows.Forms.Application]::DoEvents()
+   if($window.Size -ne $resized){throw 'Native resize was reverted'}
+   if(-not [TitlebarProbe]::SetWindowPos($window.Handle,[IntPtr]::Zero,-31990,-31990,0,0,0x15)){throw 'Native move rejected'}
+   [Windows.Forms.Application]::DoEvents()
+   if($window.Size -ne $resized){throw 'Native move reverted the resized window'}
+ }
+ $window.Size=$normalSize
+ Assert-NormalWindowSize 'Programmatic size restore'
+ [TitlebarProbe]::ShowWindow($window.Handle,6) | Out-Null
+ [Windows.Forms.Application]::DoEvents()
+ if($window.WindowState -ne 'Minimized'){throw 'Native minimize failed'}
+ [TitlebarProbe]::ShowWindow($window.Handle,9) | Out-Null
+ Assert-NormalWindowSize 'Native ShowWindow restore'
+ $window.Location=[Drawing.Point]::new(-32000,-32000)
  foreach($name in @('menu-file','menu-view','menu-help')) {
    $item=$menu.Items[$name]
    if($item.DropDown.DropShadowEnabled){throw "$name still enables the large native popup shadow"}
@@ -184,5 +230,5 @@ try {
      }
    }
  }
- @{passed=$true;captionInset=$inset;titleHeight=$menu.Height;contentTop=$content.Top;dragHitTest=$hit;captionCommands=@('minimize','maximize','restore');themes=@('dark','light');popupMenus=$popupCaptures;popupMenuCapture='DrawToBitmap';popupMenuShadowVerified=$false} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Evidence 'result.json') -Encoding UTF8
+ @{passed=$true;captionInset=$inset;restoreCyclesPerChromeMode=3;restoreSizesPreserved=$true;nativeResizePreserved=$true;titleHeight=$menu.Height;contentTop=$content.Top;dragHitTest=$hit;captionCommands=@('minimize','maximize','restore');themes=@('dark','light');popupMenus=$popupCaptures;popupMenuCapture='DrawToBitmap';popupMenuShadowVerified=$false} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Evidence 'result.json') -Encoding UTF8
 } finally { $window.Dispose() }
