@@ -166,8 +166,9 @@ namespace DshPortable
                     Marshal.Copy(client, 0, message.LParam, client.Length);
                     message.Result = IntPtr.Zero;
                 }
-                else if (WindowState == FormWindowState.Normal)
+                else
                 {
+                    // Use HWND state above; the managed state can lag during restoration.
                     Marshal.Copy(bounds, 0, message.LParam, bounds.Length);
                     message.Result = IntPtr.Zero;
                 }
