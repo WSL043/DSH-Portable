@@ -106,10 +106,10 @@ function Assert-NormalWindowSize([string]$Phase) {
  Assert-NormalWindowSize 'System maximize/restore'
  # Native resize/move bypasses managed Size setters; restore-cache fixes must not undo it.
  foreach($delta in @(37,59)){
-   $resized=[Drawing.Size]::new($normalSize.Width+$delta,$normalSize.Height+$delta)
+   $resized=[Drawing.Size]::new($window.MinimumSize.Width+$delta,$window.MinimumSize.Height+$delta)
    if(-not [TitlebarProbe]::SetWindowPos($window.Handle,[IntPtr]::Zero,0,0,$resized.Width,$resized.Height,0x16)){throw 'Native resize rejected'}
    [Windows.Forms.Application]::DoEvents()
-   if($window.Size -ne $resized){throw 'Native resize was reverted'}
+   if($window.Size -ne $resized){throw "Native resize not retained: actual=$($window.Size), requested=$resized, maxTrack=$([Windows.Forms.SystemInformation]::MaximumWindowTrackSize)"}
    if(-not [TitlebarProbe]::SetWindowPos($window.Handle,[IntPtr]::Zero,-31990,-31990,0,0,0x15)){throw 'Native move rejected'}
    [Windows.Forms.Application]::DoEvents()
    if($window.Size -ne $resized){throw 'Native move reverted the resized window'}

@@ -114,7 +114,7 @@ try {
     assert.equal(defaultUpdate?.kind, 'npm', `${plugin.name} is outside the market update lifecycle`)
     assert.equal(defaultUpdate?.version, plugin.version, `the market did not resolve ${plugin.name}`)
     assert.equal(defaultUpdate?.current, plugin.version, `the market did not retain the installed ${plugin.name} version`)
-    assert.equal(typeof defaultUpdate?.latest, 'string', `the market did not resolve the latest compatible ${plugin.name} version`)
+    assert.equal(typeof defaultUpdate?.latest, 'string', `the market did not resolve the latest compatible ${plugin.name} version: ${JSON.stringify(defaultUpdate)}`)
     assert.equal(defaultUpdate?.updateAvailable, comparePortableVersions(defaultUpdate.latest, plugin.version) > 0,
       `the market must offer ${plugin.name} only when its latest compatible version is newer`)
   }
@@ -144,6 +144,12 @@ try {
   assert.equal(new Set(identities).size, identities.length, 'the normalized catalog contains duplicate repositories')
 
   process.stdout.write(`[plugin-marketplace-smoke] ${catalog.registry.plugins.length} live plugins; ${productDefaults.length} compatible defaults verified through the official web profile\n`)
+} catch (error) {
+  // Retain only the bounded sanitized request events before the owned fixture is removed.
+  const stdout = await readFile(path.join(stateRoot, 'data', 'logs', 'dsh.stdout.log'), 'utf8').catch(() => '')
+  const requests = stdout.split(/\r?\n/).filter(line => line.includes('"event":"npm-tag-fetch"')).slice(-10)
+  process.stderr.write('[plugin-marketplace-smoke] npm tag diagnostics: ' + (requests.length ? requests.join('\n') : 'no request error recorded; inspect the update-status snapshot') + '\n')
+  throw error
 } finally {
   if (running) await stop().catch(() => {})
   await rm(stateRoot, { recursive: true, force: true })

@@ -6,6 +6,7 @@
 
 import { DIST_TAG, type Channel } from './channels.ts'
 import { marketFetch } from './net.ts'
+import { logEvent } from './log.ts'
 import { profileDir, readInstalled, readInstalledVersion, readLockCommits } from './profile.ts'
 import { indexSourceOf, latestCatalogTarball } from './index-sources.ts'
 import { externalUpdateSource, githubRefOfTarget } from './sources.ts'
@@ -247,10 +248,17 @@ async function tagManifest(name: string, tag: string): Promise<Manifest | null> 
     // The version-only fallback preserves existing registry-mirror behavior;
     // host compatibility stays unknown unless the full named manifest exists.
     return typeof meta?.version === 'string' && (meta.name === undefined || meta.name === name) ? meta : null
-  } catch {
+  } catch (error) {
     // An unpublished tag is the ordinary case for a channel nobody has cut
     // a build on yet, and a registry hiccup must not take the whole update
     // check down with it.
+    const failure = error as { message?: unknown; name?: unknown; code?: unknown; cause?: { code?: unknown } } | null
+    const code = failure?.cause?.code ?? failure?.code
+    const http = typeof failure?.message === 'string' && /^HTTP \d{3}$/.test(failure.message) ? failure.message : null
+    const label = typeof code === 'string' ? code : failure?.name
+    const reason = http ?? (typeof label === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(label) ? label : 'fetch-failed')
+    const packageName = /^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/i.test(name) ? name : 'invalid-package'
+    if (tag === 'latest' || http !== 'HTTP 404') logEvent('warn', 'npm-tag-fetch', `${packageName}@${tag}: ${reason}`)
     return null
   }
 }
