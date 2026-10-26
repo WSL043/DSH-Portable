@@ -56,7 +56,9 @@
 .\DSH-Portable-windows-x64.exe --manifest-file D:\Updates\portable-manifest.json --destination D:\Apps\DSH-Portable
 ```
 
-目标是完整的现有安装时，会原地更新并保留 `data`、`workspace`、`environments` 和 `installed-mode.json`；安装前仍需退出任务与其他环境。自定义数据根目录应放在程序目录之外。失败时沿用原来的回滚机制。备份重要数据仍可使用既有迁移导出。
+目标是完整的现有安装时，会原地更新并保留 `data`、`workspace`、`environments` 和 `installed-mode.json`；安装前仍需退出任务与其他环境。自定义数据根目录应放在程序目录之外。更新器会在替换程序文件前保存恢复记录。若进程被意外终止，再次运行更新器并选择同一目标目录，会先恢复未完成的操作，再检查更新。不要手动删除目录旁的 `.dsh-portable-update-*.json` 和 `.dsh-portable-backup-*`；它们属于尚未完成的恢复操作，成功验收后由更新器清理。备份重要数据仍可使用既有迁移导出。
+
+命令行 `--no-launch` 只替换程序文件，返回 `pending-validation` 并保留旧程序；它不代表启动验收通过。再次运行更新器时去掉 `--no-launch`，完成兼容性与工作台启动验证后才提交；验证失败会恢复上一版本。直接打开主程序不会完成这一步，待验证期间请勿移动安装目录。
 
 离线更新指更新器不下载清单或 ZIP；模型服务、用户插件以及下次正常启动的自动检查仍遵循各自设置。它不构成整机断网保证。
 
@@ -72,6 +74,10 @@ For a full Windows Portable update, download `portable-manifest.json` and `porta
 For a Portable component, get the platform's `portable-update-<platform>.json`, its `.json.sig`, and the ZIP at `component.urls`. For a core component, get `dsh-core-update-<platform>-<version>.json`, its `.json.sig`, and the ZIP named by that JSON. Keep the platform and version the same. The current-version JSON alias is also usable with its own signature and named ZIP.
 
 For a full upgrade from 0.9.6 or earlier, run the new Windows bootstrap from the target release, using `--manifest-file` for offline files. Full manifests now use schema 2 so legacy updaters refuse before changing files; Portable component and core manifests remain schema 1. Named environments are preserved by the new updater.
+
+If an update is interrupted, rerun the updater with the same destination. It processes the saved recovery record before checking for updates. Keep adjacent `.dsh-portable-update-*.json` records and `.dsh-portable-backup-*` folders until validation succeeds.
+
+`--no-launch` returns `pending-validation` and retains the previous program. Rerun the updater without that option to check compatibility and workspace startup, then commit or roll back. Opening the main app alone does not finish validation; keep the destination in place while validation is pending.
 
 Keep all three original files together. Copy them to the target computer and select the JSON. Do not edit the JSON, rename the ZIP, or mix signatures from different versions. Raw official Harness releases are not Portable core components.
 

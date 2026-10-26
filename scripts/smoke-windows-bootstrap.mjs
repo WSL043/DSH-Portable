@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { createReadStream } from 'node:fs'
 import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -9,6 +9,15 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
+// A validated desktop can outlive its updater; wait for process exit, not pipe EOF.
+function runUpdater(executable, args, env = process.env) {
+  return new Promise((resolve, reject) => {
+    const updater = spawn(executable, args, { windowsHide: true, stdio: 'ignore', env, timeout: 10 * 60 * 1000 })
+    updater.once('error', reject)
+    updater.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`The full updater exited with ${signal || code}.`)))
+  })
+}
+
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const artifacts = path.resolve(process.argv[2] || path.join(projectRoot, 'artifacts'))
 const bootstrap = path.join(artifacts, 'DSH-Portable-windows-x64.exe')
@@ -114,12 +123,24 @@ try {
     throw new Error(`the packaged full updater failed: ${diagnostic.trim()}`, { cause: error })
   }
   const upgraded = JSON.parse(await readFile(resultFile, 'utf8'))
-  assert.equal(upgraded.status, 'updated')
+  assert.equal(upgraded.status, 'pending-validation')
   assert.equal(await readFile(dataMarker, 'utf8'), '{"keep":true}\n')
   assert.equal(await readFile(workspaceMarker, 'utf8'), 'keep workspace\n')
   assert.equal(await readFile(environmentMarker, 'utf8'), 'locale: zh-CN\n')
   assert.ok((await stat(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'))).isFile())
   console.log('[bootstrap-smoke] packaged full updater and durable-data preservation passed')
+
+  console.log('[bootstrap-smoke] finishing pending validation without fetching a manifest')
+  await runUpdater(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+    '--destination', destination, '--manifest', 'http://127.0.0.1:1/unreachable.json',
+    '--allow-http', '--result', resultFile,
+  ])
+  assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, 'updated')
+  assert.deepEqual((await readdir(parent)).filter(name => /^\.dsh-portable-(backup-|update-)/.test(name)), [],
+    'validated updates must clear their recovery record and program backup')
+  await execFileAsync(path.join(destination, 'DeepSeek-Herness.exe'), ['stop', '--no-browser', '--json'], {
+    timeout: 90_000, windowsHide: true,
+  })
 
   console.log('[bootstrap-smoke] running and moving the installed product')
   await execFileAsync(process.execPath, [path.join(projectRoot, 'scripts', 'smoke-portable.mjs'), destination], {

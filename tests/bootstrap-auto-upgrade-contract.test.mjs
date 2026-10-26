@@ -125,19 +125,25 @@ internal static class HealthLauncher {
       bytes: payload.bytes.length, sha256: payload.sha256,
     } } }))
     const signature = sign('sha256', manifest, { key: keys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64')
-    const run = async (success) => {
+    const run = async (success, noLaunch = false) => {
       const result = await execFileAsync(executable, ['--manifest-file', manifestFile, '--destination', destination,
-        '--upgrade-existing', '--result', resultFile], { timeout: 30000, windowsHide: true,
+        '--upgrade-existing', '--result', resultFile, ...(noLaunch ? ['--no-launch'] : [])], { timeout: 30000, windowsHide: true,
         env: { ...process.env, OFFLINE_TEST_HEALTH_LOG: healthLog,
           DSH_PORTABLE_SKIP_UPDATE_CHECK: '0', DSH_PORTABLE_SKIP_CORE_RECONCILE: '0' },
       }).catch(error => error)
       if (success) assert.equal(result.code, undefined, result.stderr)
       else assert.equal(result.code, 1)
-      assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, success ? 'updated' : 'failed')
+      assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, success ? (noLaunch ? 'pending-validation' : 'updated') : 'failed')
     }
     await writeFile(manifestFile, manifest)
     await writeFile(`${manifestFile}.sig`, signature)
-    await run(true)
+    await run(true, true)
+    assert.equal(await exists(healthLog), false, '--no-launch does not silently run the updated program')
+    await execFileAsync(executable, ['--destination', destination, '--result', resultFile], {
+      timeout: 30000, windowsHide: true, env: { ...process.env, OFFLINE_TEST_HEALTH_LOG: healthLog,
+        DSH_PORTABLE_SKIP_UPDATE_CHECK: '0', DSH_PORTABLE_SKIP_CORE_RECONCILE: '0' },
+    })
+    assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, 'updated')
     assert.equal(await readFile(healthLog, 'utf8'), 'preflight\nupdated\n', 'both real child launches inherit offline-only startup flags')
     assert.equal(await readFile(path.join(destination, 'data/dsh-home/profiles/web/settings.json'), 'utf8'), '{"keep":true}\n')
     assert.equal(await readFile(path.join(destination, 'workspace/project.txt'), 'utf8'), 'keep workspace\n')
@@ -212,7 +218,7 @@ test('bootstrap automatically upgrades an older complete install and stays usabl
     ], { timeout: 120000, windowsHide: true })
 
     const updated = JSON.parse(await readFile(resultFile, 'utf8'))
-    assert.equal(updated.status, 'updated')
+    assert.equal(updated.status, 'pending-validation')
     assert.equal(updated.version, '0.2.5')
     assert.equal(manifestRequests, 1)
     assert.equal(payloadRequests, 1)
@@ -232,7 +238,7 @@ test('bootstrap automatically upgrades an older complete install and stays usabl
       '--result', resultFile,
     ], { timeout: 30000, windowsHide: true })
     const offline = JSON.parse(await readFile(resultFile, 'utf8'))
-    assert.equal(offline.status, 'ready')
+    assert.equal(offline.status, 'pending-validation')
     assert.equal(offline.version, '0.2.5')
     assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"new-app"}\n')
   } finally {

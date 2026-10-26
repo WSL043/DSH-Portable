@@ -13,6 +13,15 @@ import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs'
 import { comparePortableVersions } from '../launcher/update-core.mjs'
 
 const execFileAsync = promisify(execFile)
+// A validated desktop can outlive its updater; wait for process exit, not pipe EOF.
+function runUpdater(executable, args, env = process.env) {
+  return new Promise((resolve, reject) => {
+    const updater = spawn(executable, args, { windowsHide: true, stdio: 'ignore', env, timeout: 10 * 60 * 1000 })
+    updater.once('error', reject)
+    updater.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`The full updater exited with ${signal || code}.`)))
+  })
+}
+
 const projectRoot = path.resolve(import.meta.dirname, '..')
 const oldArchive = path.resolve(process.argv[2] || '')
 const artifacts = path.resolve(process.argv[3] || path.join(projectRoot, 'artifacts'))
@@ -247,34 +256,28 @@ try {
       const updaterExecutable = needsNewBootstrap
         ? path.join(artifacts, 'DSH-Portable-windows-x64.exe')
         : path.join(destination, 'launcher', 'DSH-FullUpdater.exe')
-      const updater = spawn(updaterExecutable, updaterArguments, {
-        windowsHide: true,
-        stdio: 'ignore',
-        env: runningHostUpgrade ? {
-          ...process.env,
-          DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
-          DSH_PORTABLE_TEST_HIDDEN: '1',
-        } : process.env,
-      })
-      await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          updater.kill()
-          reject(new Error('The full updater exceeded its 10-minute limit.'))
-        }, 10 * 60 * 1000)
-        updater.once('error', error => { clearTimeout(timer); reject(error) })
-        updater.once('exit', code => {
-          clearTimeout(timer)
-          if (code === 0) resolve()
-          else reject(new Error(`The full updater exited with status ${code}.`))
-        })
-      })
+      await runUpdater(updaterExecutable, updaterArguments, runningHostUpgrade ? {
+        ...process.env, DSH_PORTABLE_SKIP_UPDATE_CHECK: '1', DSH_PORTABLE_TEST_HIDDEN: '1',
+      } : process.env)
     } catch (error) {
       const diagnostic = await readFile(resultPath, 'utf8').catch(() => 'no updater result was written')
       throw new Error(`the prior full updater failed: ${diagnostic}`, { cause: error })
     }
     const result = JSON.parse(await readFile(resultPath, 'utf8'))
-    assert.equal(result.status, 'updated')
+    const deferredValidation = !runningHostUpgrade || sourceOverlay
+    if (deferredValidation && needsNewBootstrap) assert.equal(result.status, 'pending-validation')
+    else assert.ok(result.status === 'updated' || (deferredValidation && result.status === 'pending-validation'),
+      'a full update must be validated or explicitly pending validation')
     assert.equal(result.version, fullManifestSource.version)
+    if (result.status === 'pending-validation') {
+      await runUpdater(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+        '--destination', destination, '--manifest', 'http://127.0.0.1:1/unreachable.json',
+        '--allow-http', '--result', resultPath,
+      ])
+      assert.equal(JSON.parse(await readFile(resultPath, 'utf8')).status, 'updated')
+      assert.deepEqual((await readdir(path.dirname(destination))).filter(name => /^\.dsh-portable-(backup-|update-)/.test(name)), [])
+      await stopFinishedProduct()
+    }
   } else {
     const oldNode = path.join(destination, 'runtime', 'node', 'node.exe')
     const oldCli = path.join(destination, 'launcher', 'portable-cli.mjs')

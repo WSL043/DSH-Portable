@@ -264,6 +264,26 @@ namespace DshPortableBootstrap
         public string Message { get; set; }
     }
 
+    [DataContract]
+    internal sealed class SavedPortableProcess
+    {
+        [DataMember(Name = "pid")] public int Pid { get; set; }
+    }
+
+    [DataContract]
+    internal sealed class FullUpdateTransaction
+    {
+        [DataMember(Name = "schemaVersion")] public int SchemaVersion { get; set; }
+        [DataMember(Name = "operationId")] public string OperationId { get; set; }
+        [DataMember(Name = "destination")] public string Destination { get; set; }
+        [DataMember(Name = "phase")] public string Phase { get; set; }
+        [DataMember(Name = "targetVersion")] public string TargetVersion { get; set; }
+        [DataMember(Name = "previousVersion")] public string PreviousVersion { get; set; }
+        [DataMember(Name = "offline")] public bool Offline { get; set; }
+        [DataMember(Name = "oldEntries")] public string[] OldEntries { get; set; }
+        [DataMember(Name = "newEntries")] public string[] NewEntries { get; set; }
+    }
+
     internal sealed class BootstrapOptions
     {
         internal const string DefaultManifestUrl = "https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-manifest.json";
@@ -388,6 +408,7 @@ namespace DshPortableBootstrap
         private readonly BootstrapOptions options;
         private readonly Action<string> reportStatus;
         private readonly Action<long, long> reportProgress;
+        private bool recoveringOfflineUpdate;
 
         internal BootstrapInstaller(BootstrapOptions options, Action<string> reportStatus, Action<long, long> reportProgress)
         {
@@ -397,6 +418,16 @@ namespace DshPortableBootstrap
         }
 
         internal async Task<BootstrapResult> ExecuteAsync(CancellationToken cancellationToken)
+        {
+            options.Destination = NormalizeDestination(options.Destination);
+            if (File.Exists(UpdateJournalPath))
+            {
+                using (FileStream updateLock = AcquireUpdateLock()) return RecoverPendingUpdate();
+            }
+            return await ExecuteNewAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        private async Task<BootstrapResult> ExecuteNewAsync(CancellationToken cancellationToken)
         {
             bool existingComplete = IsCompletePortable(options.Destination);
             bool offline = !String.IsNullOrEmpty(options.OfflineManifest);
@@ -454,6 +485,13 @@ namespace DshPortableBootstrap
             if (String.IsNullOrEmpty(destinationParent)) throw new InvalidOperationException(BootstrapText.L("目标目录无效。", "The destination folder is invalid."));
             Directory.CreateDirectory(destinationParent);
 
+            using (FileStream updateLock = AcquireUpdateLock())
+            {
+            if (File.Exists(UpdateJournalPath)) return RecoverPendingUpdate();
+            if (existingComplete ? !IsCompletePortable(options.Destination)
+                || !String.Equals(installedVersion, ReadInstalledPortableVersion(options.Destination), StringComparison.Ordinal)
+                : Directory.Exists(options.Destination))
+                throw new IOException(BootstrapText.L("安装目录在检查期间发生变化，请重新运行更新器。", "The installation changed while it was being checked. Run the updater again."));
             string operationId = Guid.NewGuid().ToString("N");
             string temporaryArchive = Path.Combine(Path.GetTempPath(), "dsh-portable-" + operationId + ".zip");
             string stagingRoot = Path.Combine(destinationParent, ".dsh-portable-install-" + operationId);
@@ -521,31 +559,30 @@ namespace DshPortableBootstrap
                     }
                     reportStatus(BootstrapText.L("正在安装新版本并保留个人数据…", "Installing the new version and preserving your data…"));
                     string backupRoot = Path.Combine(destinationParent, ".dsh-portable-backup-" + operationId);
-                    ReplacePortableTransactionally(extracted, backupRoot);
+                    FullUpdateTransaction transaction = ReplacePortableTransactionally(extracted, backupRoot, manifest.Version, installedVersion);
                     if (options.NoLaunch)
                     {
-                        TryDeleteDirectory(backupRoot);
+                        transaction.Phase = "pending-validation";
+                        SaveUpdateTransaction(transaction);
+                        WriteUpdateOutcome("pending-validation", manifest.Version, null, PendingValidationMessage());
+                        reportStatus(PendingValidationMessage());
+                        return Result("pending-validation", manifest.Version, PendingValidationMessage());
                     }
-                    else
                     try
                     {
                         reportStatus(BootstrapText.L("正在验证新版本工作台…", "Verifying the updated workspace…"));
                         VerifyUpdatedPortableStartup(backupRoot, manifest.Version);
-                        TryDeleteDirectory(backupRoot);
-                        WriteUpdateOutcome("updated", manifest.Version, null, null);
                     }
                     catch (Exception startupError)
                     {
                         reportStatus(BootstrapText.L("新版本启动失败，正在恢复上一版本…", "The updated version could not start. Restoring the previous version…"));
-                        RestorePortableTransactionally(backupRoot);
-                        WriteUpdateOutcome("rolled-back", manifest.Version, installedVersion, BootstrapText.L(
-                            "上次更新未通过启动验证，已自动恢复上一版本。",
-                            "The last update did not pass startup verification, so the previous version was restored."));
+                        RestorePortableTransactionally(transaction);
+                        WriteUpdateOutcome("rolled-back", manifest.Version, installedVersion, RolledBackMessage());
                         LaunchIfRequested();
-                        throw new InvalidOperationException(BootstrapText.L(
-                            "更新后的工作台未通过启动验证，已自动恢复上一版本。",
-                            "The updated workspace did not pass startup verification. The previous version was restored."), startupError);
+                        throw new InvalidOperationException(RolledBackMessage(), startupError);
                     }
+                    CommitUpdateTransaction(transaction);
+                    WriteUpdateOutcome("updated", manifest.Version, null, null);
                 }
                 else
                 {
@@ -564,6 +601,7 @@ namespace DshPortableBootstrap
             {
                 TryDeleteFile(temporaryArchive);
                 TryDeleteDirectory(stagingRoot);
+            }
             }
         }
 
@@ -696,7 +734,7 @@ namespace DshPortableBootstrap
 
         private void ApplyOfflineStartupOptions(ProcessStartInfo start)
         {
-            if (String.IsNullOrEmpty(options.OfflineManifest)) return;
+            if (String.IsNullOrEmpty(options.OfflineManifest) && !recoveringOfflineUpdate) return;
             // Keep this update's health/recovery launches offline, without changing saved preferences.
             start.EnvironmentVariables["DSH_PORTABLE_SKIP_UPDATE_CHECK"] = "1";
             start.EnvironmentVariables["DSH_PORTABLE_SKIP_CORE_RECONCILE"] = "1";
@@ -935,26 +973,249 @@ namespace DshPortableBootstrap
             return "\"" + (value ?? String.Empty).Replace("\\", "\\\\").Replace("\"", "\\\"") + "\"";
         }
 
-        private void RestorePortableTransactionally(string backupRoot)
+        private static readonly string[] PreservedEntries = { "data", "workspace", "environments", "installed-mode.json" };
+
+        private static bool IsPreservedEntry(string name)
         {
-            try { StopRunningPortable(); } catch { }
-            string[] preserved = new[] { "data", "workspace", "environments", "installed-mode.json" };
-            foreach (string item in Directory.GetFileSystemEntries(options.Destination))
+            return Array.Exists(PreservedEntries, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static string NormalizeDestination(string destination)
+        {
+            string full = Path.GetFullPath(destination).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string volume = Path.GetPathRoot(Path.GetFullPath(destination)).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            if (String.Equals(full, volume, StringComparison.OrdinalIgnoreCase)) throw new InvalidOperationException("Choose an application folder, not a drive root.");
+            return full;
+        }
+
+        private static string JournalPathFor(string destination)
+        {
+            string full = NormalizeDestination(destination);
+            string parent = Path.GetDirectoryName(full);
+            if (String.IsNullOrEmpty(parent)) throw new InvalidOperationException("The destination folder is invalid.");
+            using (SHA256 hash = SHA256.Create())
+                return Path.Combine(parent, ".dsh-portable-update-" + BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(full.ToUpperInvariant()))).Replace("-", "").ToLowerInvariant() + ".json");
+        }
+
+        private string UpdateJournalPath { get { return JournalPathFor(options.Destination); } }
+
+        internal static bool HasPendingUpdate(string destination) { return File.Exists(JournalPathFor(destination)); }
+
+        private FileStream AcquireUpdateLock()
+        {
+            EnsureUnlinkedPath(options.Destination);
+            EnsureUnlinkedPath(UpdateJournalPath);
+            EnsureUnlinkedPath(UpdateJournalPath + ".lock");
+            try
             {
-                string name = Path.GetFileName(item);
-                if (Array.Exists(preserved, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase))) continue;
-                DeleteEntry(item);
-                if (Directory.Exists(item) || File.Exists(item))
-                    throw new IOException(BootstrapText.L("无法移除启动失败的新版本文件。", "A failed updated program file could not be removed."));
+                return new FileStream(UpdateJournalPath + ".lock", FileMode.OpenOrCreate, FileAccess.ReadWrite,
+                    FileShare.None, 1, FileOptions.DeleteOnClose);
             }
-            foreach (string item in Directory.GetFileSystemEntries(backupRoot))
+            catch (IOException error)
             {
-                string name = Path.GetFileName(item);
-                MoveEntry(item, Path.Combine(options.Destination, name));
+                throw new IOException(BootstrapText.L("另一个更新器可能仍在处理此目录，请稍后重试。", "Another updater may still be working on this folder. Try again shortly."), error);
             }
-            if (!IsCompletePortable(options.Destination))
-                throw new InvalidDataException(BootstrapText.L("上一版本恢复后缺少必要文件。", "Required files are missing after restoring the previous version."));
+        }
+
+        private static void EnsureUnlinkedPath(string filename)
+        {
+            for (string current = Path.GetFullPath(filename); !String.IsNullOrEmpty(current); current = Path.GetDirectoryName(current))
+                if ((File.Exists(current) || Directory.Exists(current)) && (File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+                    throw new IOException("The full-update path must not contain filesystem links: " + current);
+        }
+
+        private string BackupRoot(FullUpdateTransaction transaction)
+        {
+            return Path.Combine(Path.GetDirectoryName(options.Destination), ".dsh-portable-backup-" + transaction.OperationId);
+        }
+
+        private void SaveUpdateTransaction(FullUpdateTransaction transaction)
+        {
+            string temporary = UpdateJournalPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (FileStream stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    new DataContractJsonSerializer(typeof(FullUpdateTransaction)).WriteObject(stream, transaction);
+                    if (stream.Length > 1024 * 1024) throw new InvalidDataException("The full-update recovery record is too large.");
+                    stream.Flush(true);
+                }
+                if (File.Exists(UpdateJournalPath)) File.Replace(temporary, UpdateJournalPath, null);
+                else File.Move(temporary, UpdateJournalPath);
+            }
+            finally { TryDeleteFile(temporary); }
+        }
+
+        private FullUpdateTransaction ReadUpdateTransaction()
+        {
+            FullUpdateTransaction transaction;
+            using (FileStream stream = File.OpenRead(UpdateJournalPath))
+            {
+                if (stream.Length > 1024 * 1024) throw new InvalidDataException("The full-update recovery record is too large.");
+                transaction = (FullUpdateTransaction)new DataContractJsonSerializer(typeof(FullUpdateTransaction)).ReadObject(stream);
+            }
+            string[] phases = { "moving-old", "installing", "testing", "pending-validation", "removing-new", "restoring-old", "committed" };
+            if (transaction == null || transaction.SchemaVersion != 1
+                || !Regex.IsMatch(transaction.OperationId ?? "", "^[a-f0-9]{32}$", RegexOptions.CultureInvariant)
+                || !String.Equals(transaction.Destination, Path.GetFullPath(options.Destination), StringComparison.OrdinalIgnoreCase)
+                || !Array.Exists(phases, phase => phase == transaction.Phase))
+                throw new InvalidDataException("The full-update recovery record is invalid. No program files were changed.");
+            ValidateTransactionEntries(transaction.OldEntries);
+            ValidateTransactionEntries(transaction.NewEntries);
+            EnsureUnlinkedPath(BackupRoot(transaction));
+            return transaction;
+        }
+
+        private static void ValidateTransactionEntries(string[] entries)
+        {
+            if (entries == null || entries.Length > 4096) throw new InvalidDataException("Invalid full-update file list.");
+            System.Collections.Generic.HashSet<string> names = new System.Collections.Generic.HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string name in entries)
+                if (String.IsNullOrEmpty(name) || name == "." || name == ".." || name.Length > 255
+                    || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || name.TrimEnd(' ', '.') != name
+                    || IsPreservedEntry(name) || !names.Add(name)
+                    || Regex.IsMatch(name, "^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\\.|$)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+                    throw new InvalidDataException("Invalid full-update file name.");
+            foreach (string required in new[] { "DeepSeek-Herness.exe", "runtime", "app" })
+                if (!names.Contains(required)) throw new InvalidDataException("The full-update file list is incomplete.");
+        }
+
+        private static string PendingValidationMessage()
+        {
+            return BootstrapText.L("程序文件已更新；尚未验证启动，上一版本已保留。下次运行更新器完成验证。", "Program files were updated. Startup has not been verified; the previous version is retained. Run the updater again to finish validation.");
+        }
+
+        private static string RolledBackMessage()
+        {
+            return BootstrapText.L("上次更新未完成启动验证，已恢复上一版本。", "The last update did not complete startup verification. The previous version was restored.");
+        }
+
+        private BootstrapResult RecoverPendingUpdate()
+        {
+            FullUpdateTransaction transaction = ReadUpdateTransaction();
+            recoveringOfflineUpdate = transaction.Offline;
+            ValidatePreservedStateRoot();
+            string backupRoot = BackupRoot(transaction);
+            if (transaction.Phase == "committed")
+            {
+                CommitUpdateTransaction(transaction);
+                LaunchIfRequested();
+                return Result("updated", transaction.TargetVersion, null);
+            }
+            if ((transaction.Phase == "testing" || transaction.Phase == "pending-validation") && IsCompletePortable(options.Destination))
+            {
+                if (options.NoLaunch)
+                {
+                    reportStatus(PendingValidationMessage());
+                    return Result("pending-validation", transaction.TargetVersion, PendingValidationMessage());
+                }
+                try
+                {
+                    StopRunningPortable();
+                    VerifyStagedPortableCompatibility(options.Destination, transaction.TargetVersion);
+                    VerifyUpdatedPortableStartup(backupRoot, transaction.TargetVersion);
+                }
+                catch (Exception error)
+                {
+                    RestorePortableTransactionally(transaction);
+                    WriteUpdateOutcome("rolled-back", transaction.TargetVersion, transaction.PreviousVersion, RolledBackMessage());
+                    LaunchIfRequested();
+                    throw new InvalidOperationException(RolledBackMessage(), error);
+                }
+                CommitUpdateTransaction(transaction);
+                WriteUpdateOutcome("updated", transaction.TargetVersion, null, null);
+                return Result("updated", transaction.TargetVersion, null);
+            }
+            reportStatus(BootstrapText.L("正在恢复未完成的更新…", "Recovering an interrupted update…"));
+            RestorePortableTransactionally(transaction);
+            WriteUpdateOutcome("rolled-back", transaction.TargetVersion, transaction.PreviousVersion, RolledBackMessage());
+            LaunchIfRequested();
+            return Result("rolled-back", transaction.PreviousVersion, RolledBackMessage());
+        }
+
+        private void CommitUpdateTransaction(FullUpdateTransaction transaction)
+        {
+            transaction.Phase = "committed";
+            SaveUpdateTransaction(transaction);
+            TryDeleteDirectory(BackupRoot(transaction));
+            TryDeleteDirectory(Path.Combine(Path.GetDirectoryName(options.Destination), ".dsh-portable-install-" + transaction.OperationId));
+            if (!Directory.Exists(BackupRoot(transaction))) File.Delete(UpdateJournalPath);
+        }
+
+        private void StopForRecovery()
+        {
+            if (IsCompletePortable(options.Destination)) { StopRunningPortable(); return; }
+            if (HasRunningLauncher(Path.Combine(options.Destination, "DeepSeek-Herness.exe")))
+                throw new IOException("Close the running DSH-Portable window before recovering this update.");
+            // A half-moved program cannot run its stop command. Ignore only demonstrably stale records.
+            string stateRoot = ResolveProductStateRoot();
+            foreach (string environmentId in PreflightEnvironmentIds(stateRoot))
+            {
+                string environmentRoot = environmentId == "default" ? stateRoot : Path.Combine(stateRoot, "environments", environmentId);
+                string filename = Path.Combine(environmentRoot, "data", "runtime", "process.json");
+                if (!File.Exists(filename)) continue;
+                SavedPortableProcess recorded;
+                using (FileStream stream = File.OpenRead(filename))
+                    recorded = (SavedPortableProcess)new DataContractJsonSerializer(typeof(SavedPortableProcess)).ReadObject(stream);
+                if (recorded == null || recorded.Pid <= 0) throw new InvalidDataException("Cannot verify the saved DSH process before recovery.");
+                try
+                {
+                    using (Process process = Process.GetProcessById(recorded.Pid))
+                        if (!process.HasExited) throw new IOException("A recorded DSH process is still running. Close it before recovering this update.");
+                }
+                catch (ArgumentException) { }
+            }
+        }
+
+        private void RestorePortableTransactionally(FullUpdateTransaction transaction)
+        {
+            StopForRecovery();
+            string backupRoot = BackupRoot(transaction);
+            bool removingNew = transaction.Phase != "moving-old" && transaction.Phase != "restoring-old";
+            // Confirm rollback is possible before removing even one usable new program file.
+            foreach (string name in transaction.OldEntries)
+            {
+                string backup = Path.Combine(backupRoot, name);
+                string target = Path.Combine(options.Destination, name);
+                EnsureUnlinkedPath(backup);
+                EnsureUnlinkedPath(target);
+                bool hasBackup = Directory.Exists(backup) || File.Exists(backup);
+                bool hasTarget = Directory.Exists(target) || File.Exists(target);
+                if (removingNew ? !hasBackup : hasBackup == hasTarget)
+                    throw new IOException("The previous program is incomplete or conflicting; current files were left unchanged: " + name);
+            }
+            if (transaction.Phase == "moving-old") transaction.Phase = "restoring-old";
+            else if (transaction.Phase != "restoring-old") transaction.Phase = "removing-new";
+            SaveUpdateTransaction(transaction);
+            if (transaction.Phase == "removing-new")
+            {
+                foreach (string name in transaction.NewEntries)
+                {
+                    string target = Path.Combine(options.Destination, name);
+                    EnsureUnlinkedPath(target);
+                    DeleteEntry(target);
+                    if (Directory.Exists(target) || File.Exists(target)) throw new IOException("A failed updated program file could not be removed: " + target);
+                }
+                transaction.Phase = "restoring-old";
+                SaveUpdateTransaction(transaction);
+            }
+            foreach (string name in transaction.OldEntries)
+            {
+                string backup = Path.Combine(backupRoot, name);
+                string target = Path.Combine(options.Destination, name);
+                EnsureUnlinkedPath(backup);
+                EnsureUnlinkedPath(target);
+                if (Directory.Exists(backup) || File.Exists(backup))
+                {
+                    if (Directory.Exists(target) || File.Exists(target)) throw new IOException("Conflicting files prevent safe full-update recovery: " + target);
+                    MoveEntry(backup, target);
+                }
+                else if (!Directory.Exists(target) && !File.Exists(target)) throw new IOException("A previous program file is missing: " + target);
+            }
+            if (!IsCompletePortable(options.Destination)) throw new InvalidDataException("Required files are missing after restoring the previous version.");
             TryDeleteDirectory(backupRoot);
+            TryDeleteDirectory(Path.Combine(Path.GetDirectoryName(options.Destination), ".dsh-portable-install-" + transaction.OperationId));
+            File.Delete(UpdateJournalPath);
         }
 
         private void WaitForPortableWebViewRelease()
@@ -1076,40 +1337,48 @@ namespace DshPortableBootstrap
                 CopyBundledRuntimeDirectory(directory, Path.Combine(target, Path.GetFileName(directory)));
         }
 
-        private void ReplacePortableTransactionally(string extracted, string backupRoot)
+        private FullUpdateTransaction ReplacePortableTransactionally(string extracted, string backupRoot, string targetVersion, string previousVersion)
         {
-            string[] preserved = new[] { "data", "workspace", "environments", "installed-mode.json" };
+            FullUpdateTransaction transaction = new FullUpdateTransaction
+            {
+                SchemaVersion = 1,
+                OperationId = Path.GetFileName(backupRoot).Substring(".dsh-portable-backup-".Length),
+                Destination = Path.GetFullPath(options.Destination),
+                TargetVersion = targetVersion,
+                PreviousVersion = previousVersion,
+                Offline = !String.IsNullOrEmpty(options.OfflineManifest),
+                Phase = "moving-old",
+                OldEntries = Array.ConvertAll(Array.FindAll(Directory.GetFileSystemEntries(options.Destination), item => !IsPreservedEntry(Path.GetFileName(item))), Path.GetFileName),
+                NewEntries = Array.ConvertAll(Array.FindAll(Directory.GetFileSystemEntries(extracted), item => !IsPreservedEntry(Path.GetFileName(item))), Path.GetFileName),
+            };
+            ValidateTransactionEntries(transaction.OldEntries);
+            ValidateTransactionEntries(transaction.NewEntries);
+            foreach (string name in transaction.OldEntries) EnsureUnlinkedPath(Path.Combine(options.Destination, name));
+            foreach (string name in transaction.NewEntries) EnsureUnlinkedPath(Path.Combine(extracted, name));
+            SaveUpdateTransaction(transaction);
             Directory.CreateDirectory(backupRoot);
-            System.Collections.Generic.List<string> movedOld = new System.Collections.Generic.List<string>();
-            System.Collections.Generic.List<string> movedNew = new System.Collections.Generic.List<string>();
             try
             {
-                foreach (string item in Directory.GetFileSystemEntries(options.Destination))
-                {
-                    string name = Path.GetFileName(item);
-                    if (Array.Exists(preserved, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase))) continue;
-                    MoveEntry(item, Path.Combine(backupRoot, name));
-                    movedOld.Add(name);
-                }
+                foreach (string name in transaction.OldEntries)
+                    MoveEntry(Path.Combine(options.Destination, name), Path.Combine(backupRoot, name));
+                // Write the phase before the first new file can appear at the destination.
+                transaction.Phase = "installing";
+                SaveUpdateTransaction(transaction);
                 foreach (string item in Directory.GetFileSystemEntries(extracted))
                 {
                     string name = Path.GetFileName(item);
                     string target = Path.Combine(options.Destination, name);
-                    if (Array.Exists(preserved, value => String.Equals(value, name, StringComparison.OrdinalIgnoreCase))
-                        && (Directory.Exists(target) || File.Exists(target))) continue;
+                    if (IsPreservedEntry(name) && (Directory.Exists(target) || File.Exists(target))) continue;
                     MoveEntry(item, target);
-                    movedNew.Add(name);
                 }
-                if (!IsCompletePortable(options.Destination)) throw new InvalidDataException(BootstrapText.L("新版本安装后缺少必要文件。", "Required files are missing after the update."));
+                if (!IsCompletePortable(options.Destination)) throw new InvalidDataException("Required files are missing after the update.");
+                transaction.Phase = "testing";
+                SaveUpdateTransaction(transaction);
+                return transaction;
             }
             catch
             {
-                for (int index = movedNew.Count - 1; index >= 0; index -= 1) DeleteEntry(Path.Combine(options.Destination, movedNew[index]));
-                for (int index = movedOld.Count - 1; index >= 0; index -= 1)
-                {
-                    string backup = Path.Combine(backupRoot, movedOld[index]);
-                    if (Directory.Exists(backup) || File.Exists(backup)) MoveEntry(backup, Path.Combine(options.Destination, movedOld[index]));
-                }
+                RestorePortableTransactionally(transaction);
                 throw;
             }
         }
@@ -1920,7 +2189,7 @@ namespace DshPortableBootstrap
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
-                if (!options.DestinationExplicit && !BootstrapInstaller.IsCompletePortable(options.Destination))
+                if (!options.DestinationExplicit && !BootstrapInstaller.IsCompletePortable(options.Destination) && !BootstrapInstaller.HasPendingUpdate(options.Destination))
                 {
                     using (FolderBrowserDialog dialog = new FolderBrowserDialog())
                     {

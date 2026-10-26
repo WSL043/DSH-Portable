@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -50,7 +50,7 @@ test('interactive first launch lets the user choose the portable parent folder',
   assert.match(bootstrap, /FolderBrowserDialog/)
   assert.match(bootstrap, /BootstrapText\.L\("选择 DSH-Portable 的保存位置", "Choose where to save DSH-Portable"\)/)
   assert.match(bootstrap, /Path\.Combine\(dialog\.SelectedPath, "DSH-Portable"\)/)
-  assert.match(bootstrap, /if \(!options\.DestinationExplicit && !BootstrapInstaller\.IsCompletePortable\(options\.Destination\)\)/)
+  assert.match(bootstrap, /if \(!options\.DestinationExplicit && !BootstrapInstaller\.IsCompletePortable\(options\.Destination\) && !BootstrapInstaller\.HasPendingUpdate\(options\.Destination\)\)/)
 })
 
 test('bootstrap relaunch preserves the updater environment for bounded handoff recovery', async () => {
@@ -78,7 +78,7 @@ function cscPath() {
   return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
 }
 
-async function compileBootstrap(output) {
+async function compileBootstrap(output, inputSource = source, extra = []) {
   await execFileAsync(cscPath(), [
     '/nologo', '/target:winexe', '/platform:x64', '/optimize+',
     '/reference:System.dll', '/reference:System.Core.dll',
@@ -86,7 +86,7 @@ async function compileBootstrap(output) {
     '/reference:System.Net.Http.dll', '/reference:System.Runtime.Serialization.dll',
     '/reference:System.IO.Compression.dll',
     `/out:${output}`,
-    source,
+    ...extra, inputSource,
   ])
 }
 
@@ -174,7 +174,7 @@ test('a full-package update preflights the staged desktop against preserved stat
   assert.match(updateFlow, /VerifyStagedPortableCompatibility\(extracted, manifest\.Version\)/)
   assert.ok(
     updateFlow.indexOf('VerifyStagedPortableCompatibility(extracted, manifest.Version)')
-      < updateFlow.indexOf('ReplacePortableTransactionally(extracted, backupRoot)'),
+      < updateFlow.indexOf('ReplacePortableTransactionally(extracted, backupRoot, manifest.Version, installedVersion)'),
     'the staged product must pass compatibility preflight before program replacement begins',
   )
   assert.match(bootstrap, /DSH_PORTABLE_UPDATE_PREFLIGHT/)
@@ -331,6 +331,10 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     const destination = path.join(root, '移动目录', 'DSH-Portable')
     const fixture = await makeFixture(root)
     await compileBootstrap(executable)
+    await compileHealthFixture(path.join(root, 'payload', 'DSH-Portable', 'DeepSeek-Herness.exe'), 'ready')
+    await execFileAsync('tar.exe', ['-a', '-c', '-f', fixture.archive, '-C', path.join(root, 'payload'), 'DSH-Portable'])
+    fixture.bytes = await readFile(fixture.archive)
+    fixture.sha256 = createHash('sha256').update(fixture.bytes).digest('hex')
     await mkdir(path.join(destination, 'runtime', 'node'), { recursive: true })
     await mkdir(path.join(destination, 'app'), { recursive: true })
     await mkdir(path.join(destination, 'data'), { recursive: true })
@@ -359,17 +363,22 @@ test('bootstrap upgrades an existing portable folder in place without replacing 
     })
 
     const result = JSON.parse(await readFile(resultFile, 'utf8'))
-    assert.equal(result.status, 'updated')
+    assert.equal(result.status, 'pending-validation')
     assert.equal(result.version, 'test-portable')
     assert.equal(await readFile(path.join(destination, 'app', 'package.json'), 'utf8'), '{"name":"fixture"}\n')
     assert.equal(await readFile(path.join(destination, 'data', 'session.json'), 'utf8'), '{"keep":true}\n')
     assert.equal(await readFile(path.join(destination, 'workspace', 'project.txt'), 'utf8'), 'keep workspace\n')
     assert.equal(await readFile(path.join(destination, 'runtime', 'webview2', 'runtime', 'browser.dshpack'), 'utf8'), 'offline browser payload')
-    assert.deepEqual(
-      (await readdir(path.dirname(destination))).filter((name) => name.startsWith('.dsh-portable-')),
-      [],
-      'successful upgrades must remove staging and backup directories',
-    )
+    const pendingFiles = (await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-'))
+    assert.equal(pendingFiles.filter(name => name.startsWith('.dsh-portable-backup-')).length, 1)
+    assert.equal(pendingFiles.filter(name => name.endsWith('.json')).length, 1)
+    // Resume with an unreachable manifest: validation must use the already verified local package.
+    await execBootstrap(executable, [
+      '--manifest', 'http://127.0.0.1:1/unreachable.json', '--allow-http',
+      '--destination', destination, '--result', resultFile,
+    ], resultFile)
+    assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, 'updated')
+    assert.deepEqual((await readdir(path.dirname(destination))).filter(name => name.startsWith('.dsh-portable-')), [])
   } finally {
     await removeTestRoot(root)
   }
@@ -603,6 +612,106 @@ test('bootstrap removes a rejected long-path payload without leaving staging dat
         'rejected payloads must not leave long-path staging data behind',
       )
     })
+  } finally {
+    await removeTestRoot(root)
+  }
+})
+
+
+test('full-update recovery survives process loss and refuses unsafe rollback records', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-crash-'))
+  try {
+    const executable = path.join(root, 'crash-probe.exe')
+    const testSource = path.join(root, 'crash-probe.cs')
+    // Crash injection exists only in this disposable compiled copy, never in the shipped updater.
+    let injected = (await readFile(source, 'utf8'))
+      .replace('private static void MoveEntry(string source, string destination)', 'private static int testMoves;\n        private static void MoveEntry(string source, string destination)')
+      .replace('else File.Move(source, destination);', 'else File.Move(source, destination);\n            int limit; if (Int32.TryParse(Environment.GetEnvironmentVariable("DSH_TEST_CRASH_MOVE"), out limit) && ++testMoves == limit) Environment.Exit(73);')
+    injected += `
+namespace DshPortableBootstrap {
+  internal static class BootstrapCrashProbe {
+    [STAThread] private static int Main(string[] args) {
+      BootstrapOptions options = new BootstrapOptions { Destination = args[1], NoLaunch = true };
+      BootstrapInstaller installer = new BootstrapInstaller(options, null, null);
+      try {
+        if (args[0] == "replace") {
+          typeof(BootstrapInstaller).GetMethod("ReplacePortableTransactionally", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            .Invoke(installer, new object[] { args[2], args[3], "new", "old" });
+        } else {
+          BootstrapResult result = installer.ExecuteAsync(CancellationToken.None).GetAwaiter().GetResult();
+          File.WriteAllText(args[2], result.Status);
+        }
+        return 0;
+      } catch (Exception error) { File.WriteAllText(args[2] + ".error", error.ToString()); return 1; }
+    }
+  }
+}
+`
+    await writeFile(testSource, injected)
+    await compileBootstrap(executable, testSource, ['/main:DshPortableBootstrap.BootstrapCrashProbe'])
+    const run = async (args, crashMove = '') => execFileAsync(executable, args, {
+      windowsHide: true, timeout: 30000, env: { ...process.env, DSH_TEST_CRASH_MOVE: crashMove },
+    })
+    const setup = async name => {
+      const parent = path.join(root, name)
+      const destination = path.join(parent, 'DSH-Portable')
+      const extracted = path.join(parent, 'staged')
+      const backup = path.join(parent, '.dsh-portable-backup-0123456789abcdef0123456789abcdef')
+      for (const [directory, label] of [[destination, 'old'], [extracted, 'new']]) {
+        await mkdir(path.join(directory, 'runtime/node'), { recursive: true })
+        await mkdir(path.join(directory, 'app'), { recursive: true })
+        await writeFile(path.join(directory, 'DeepSeek-Herness.exe'), label)
+        await writeFile(path.join(directory, 'runtime/node/node.exe'), label)
+        await writeFile(path.join(directory, 'app/package.json'), label)
+      }
+      const preserved = ['data/session.json', 'workspace/project.txt', 'environments/research/data/session.json', 'installed-mode.json']
+      for (const filename of preserved) {
+        await mkdir(path.dirname(path.join(destination, filename)), { recursive: true })
+        await writeFile(path.join(destination, filename), filename === 'installed-mode.json'
+          ? JSON.stringify({ schemaVersion: 1, stateRoot: destination }) : 'keep')
+      }
+      return { parent, destination, extracted, backup, preserved, result: path.join(parent, 'result.txt') }
+    }
+    const assertPreserved = async fixture => {
+      for (const filename of fixture.preserved)
+        assert.equal(await readFile(path.join(fixture.destination, filename), 'utf8'), filename === 'installed-mode.json'
+          ? JSON.stringify({ schemaVersion: 1, stateRoot: fixture.destination }) : 'keep')
+    }
+    for (const [name, crashMove, repeatCrash] of [['moving-old', '1', false], ['installing', '4', false], ['restoring-twice', '4', true]]) {
+      const fixture = await setup(name)
+      await assert.rejects(run(['replace', fixture.destination, fixture.extracted, fixture.backup], crashMove), error => error.code === 73)
+      // An obsolete backend record must not make a half-moved installation impossible to recover.
+      await mkdir(path.join(fixture.destination, 'data/runtime'), { recursive: true })
+      if (name === 'moving-old') {
+        await writeFile(path.join(fixture.destination, 'data/runtime/process.json'), JSON.stringify({ pid: process.pid }))
+        const before = await readdir(fixture.destination)
+        await assert.rejects(run(['recover', fixture.destination, fixture.result]), error => error.code === 1)
+        assert.deepEqual(await readdir(fixture.destination), before, 'live PID must block recovery without changing program files')
+      }
+      await writeFile(path.join(fixture.destination, 'data/runtime/process.json'), '{"pid":2147483647}')
+      if (repeatCrash)
+        await assert.rejects(run(['recover', fixture.destination, fixture.result], '1'), error => error.code === 73)
+      await run(['recover', fixture.destination, fixture.result])
+      assert.equal(await readFile(fixture.result, 'utf8'), 'rolled-back', name)
+      assert.equal(await readFile(path.join(fixture.destination, 'app/package.json'), 'utf8'), 'old', name)
+      assert.equal(await readFile(path.join(fixture.destination, 'DeepSeek-Herness.exe'), 'utf8'), 'old', name)
+      await assertPreserved(fixture)
+      assert.deepEqual((await readdir(fixture.parent)).filter(entry => entry.startsWith('.dsh-portable-')), [], name)
+    }
+    const unsafe = await setup('missing-backup')
+    await assert.rejects(run(['replace', unsafe.destination, unsafe.extracted, unsafe.backup], '4'), error => error.code === 73)
+    await rename(path.join(unsafe.backup, 'app'), path.join(unsafe.parent, 'withheld-old-app'))
+    const currentNames = await readdir(unsafe.destination)
+    await assert.rejects(run(['recover', unsafe.destination, unsafe.result]), error => error.code === 1)
+    assert.deepEqual(await readdir(unsafe.destination), currentNames, 'missing backup must not delete the remaining new program')
+    await assertPreserved(unsafe)
+    const journalName = (await readdir(unsafe.parent)).find(entry => entry.startsWith('.dsh-portable-update-') && entry.endsWith('.json'))
+    const journalPath = path.join(unsafe.parent, journalName)
+    const journal = JSON.parse(await readFile(journalPath, 'utf8'))
+    journal.oldEntries.push('data')
+    await writeFile(journalPath, JSON.stringify(journal))
+    await assert.rejects(run(['recover', unsafe.destination, unsafe.result]), error => error.code === 1)
+    await assertPreserved(unsafe)
   } finally {
     await removeTestRoot(root)
   }
