@@ -1,9 +1,11 @@
 ﻿param(
     [Parameter(Mandatory = $true)][int]$TargetProcessId,
     [Parameter(Mandatory = $true)][string]$OutputDirectory,
-    [ValidateRange(1, 12)][int]$FrameCount = 12
+    [ValidateRange(1, 12)][int]$FrameCount = 12,
+    [ValidateRange(1, 180)][int]$WindowTimeoutSeconds = 10
 )
 $ErrorActionPreference = 'Stop'
+Write-Output 'native-capture phase=helper-start'
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
@@ -29,13 +31,15 @@ public static class NativeWindowCapture {
     }
 }
 '@
+Write-Output 'native-capture phase=helper-ready'
 $window = [IntPtr]::Zero
-$deadline = [DateTime]::UtcNow.AddSeconds(10)
+$deadline = [DateTime]::UtcNow.AddSeconds($WindowTimeoutSeconds)
 while ($window -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $deadline) {
     $window = [NativeWindowCapture]::Find($TargetProcessId)
     if ($window -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
 }
 if ($window -eq [IntPtr]::Zero) { throw 'Native test window was not found' }
+Write-Output 'native-capture phase=window-found'
 New-Item -ItemType Directory -Force -Path $OutputDirectory | Out-Null
 # WM_PRINT captures only the target HWND; it never activates or moves a window.
 # Off-screen windows do not receive normal compositor paints, so request them.

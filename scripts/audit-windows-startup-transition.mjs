@@ -229,12 +229,14 @@ try {
   // loader once: repeated synchronous WM_PRINT calls during WebView creation
   // can block the capture helper. Handoff continuity is checked below through
   // timed CDP samples and the native trace, not repeated loader screenshots.
+  const captureBudgetMs = startupDeadline - Date.now()
+  assert.ok(captureBudgetMs > 0, 'the startup deadline expired before native capture')
   const nativeCapture = requireLoading ? execFileAsync('powershell.exe', [
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
     path.join(import.meta.dirname, 'capture-windows-native-window.ps1'),
     '-TargetProcessId', String(launcher.pid), '-OutputDirectory', path.join(output, '01-native-loader'),
-    '-FrameCount', '1',
-  ], { windowsHide: true, timeout: 20000 }) : Promise.resolve()
+    '-FrameCount', '1', '-WindowTimeoutSeconds', String(Math.max(1, Math.ceil(captureBudgetMs / 1000))),
+  ], { windowsHide: true, timeout: captureBudgetMs }) : Promise.resolve()
   nativeCapture.catch(() => {}) // Keep errors for the awaited capture below.
   const page = await waitForTarget(debugPort, launcher, Math.max(1, startupDeadline - Date.now()))
   client = new CdpClient(page.webSocketDebuggerUrl)
