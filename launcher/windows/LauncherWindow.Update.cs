@@ -27,6 +27,18 @@ namespace DshPortable
 {
     internal sealed partial class LauncherWindow : Form
     {
+        private bool productUpdateAvailable;
+        private bool engineUpdateAvailable;
+
+        private void RememberUpdateAvailability(bool engineScope, string status)
+        {
+            if (status != "available" && status != "full-package-required" && status != "current"
+                && status != "ignored" && status != "deferred") return;
+            bool available = status == "available" || status == "full-package-required";
+            if (engineScope) engineUpdateAvailable = available;
+            else productUpdateAvailable = available;
+        }
+
         private async Task CheckForDesktopUpdateAsync(bool manual, string scope)
         {
             await CheckForDesktopUpdateAsync(manual, scope, String.Empty);
@@ -71,6 +83,9 @@ namespace DshPortable
                 string engineCurrent = JsonString(check.Item2, "engineCurrent");
                 string engineLatest = JsonString(check.Item2, "engineLatest");
                 string fullPackageManifestUrl = JsonString(check.Item2, "fullPackageManifestUrl");
+                RememberUpdateAvailability(engineScope, updateStatus);
+                // Background checks only record availability; interaction belongs to an explicit user action.
+                if (!manual) return;
                 FinishUpdateCheckPhase();
                 if (updateStatus == "current")
                 {
@@ -178,8 +193,8 @@ namespace DshPortable
                     if (!manual) return;
                     MessageBox.Show(this,
                         UpdateDescription(current, latest, engineCurrent, engineLatest, false, scope) + "\r\n\r\n"
-                            + L("为了确认不会中断任务，请稍后退出并重新打开；启动时可以选择“现在更新”或“稍后”。",
-                                "To avoid interrupting work, exit and reopen when convenient; startup will offer Update now or Later."),
+                            + L("为了确认不会中断任务，请等任务状态就绪后再检查更新。",
+                                "To avoid interrupting work, wait until the task state is ready, then check for updates again."),
                         targetName + L(" 更新", " update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -187,8 +202,8 @@ namespace DshPortable
                 {
                     if (!manual) return;
                     MessageBox.Show(this,
-                        L("任务仍在运行，本次不会中断它。任务完成后退出并重新打开，启动时再选择是否更新。",
-                          "A task is still running, so it will not be interrupted. When it finishes, exit and reopen the app to choose whether to update."),
+                        L("任务仍在运行，本次不会中断它。任务完成后可再次检查更新。",
+                          "A task is still running, so it will not be interrupted. Check for updates again when it finishes."),
                         L("稍后更新", "Update later"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
@@ -288,6 +303,7 @@ namespace DshPortable
                     "更新完成，但工作台没有返回可用的本地地址。请重新打开 DSH-Portable。",
                     "The update finished, but the workspace did not return a usable local address. Reopen DSH-Portable."));
                 await NavigateDesktopAsync(url);
+                RememberUpdateAvailability(engineScope, "current");
                 HideDesktopOperation();
                 string completionMessage = targetName + L(" 更新已完成。", " update is complete.");
                 string[] disabledPlugins = JsonUpdateWarningPlugins(updated.Item2);

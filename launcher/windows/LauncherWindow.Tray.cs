@@ -241,10 +241,14 @@ namespace DshPortable
             checkUpdateItem.Text = updateCheckRunning
                 ? L("正在检查…", "Checking…")
                 : L("Portable 更新", "Portable updates");
+            checkUpdateItem.ShowShortcutKeys = true;
+            checkUpdateItem.ShortcutKeyDisplayString = productUpdateAvailable ? L("有更新", "Available") : String.Empty;
             checkUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
             checkEngineUpdateItem.Text = updateCheckRunning
                 ? L("正在检查…", "Checking…")
                 : L("内核更新", "Core updates");
+            checkEngineUpdateItem.ShowShortcutKeys = true;
+            checkEngineUpdateItem.ShortcutKeyDisplayString = engineUpdateAvailable ? L("有更新", "Available") : String.Empty;
             checkEngineUpdateItem.Enabled = !updateCheckRunning && !updateInteractionRunning;
             RefreshAutomaticUpdateCheckItem();
             RefreshTaskNotificationsItem();
