@@ -9,10 +9,13 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
-// A validated desktop can outlive its updater; wait for process exit, not pipe EOF.
-function runUpdater(executable, args, env = process.env) {
+// Finish only this disposable installation; the desktop may outlive its updater.
+function validatePendingUpdate() {
   return new Promise((resolve, reject) => {
-    const updater = spawn(executable, args, { windowsHide: true, stdio: 'ignore', env, timeout: 10 * 60 * 1000 })
+    const updater = spawn(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
+      '--destination', destination, '--manifest', 'http://127.0.0.1:1/unreachable.json',
+      '--allow-http', '--result', resultFile,
+    ], { windowsHide: true, shell: false, stdio: 'ignore', timeout: 10 * 60 * 1000 })
     updater.once('error', reject)
     updater.once('exit', (code, signal) => code === 0 ? resolve() : reject(new Error(`The full updater exited with ${signal || code}.`)))
   })
@@ -131,10 +134,7 @@ try {
   console.log('[bootstrap-smoke] packaged full updater and durable-data preservation passed')
 
   console.log('[bootstrap-smoke] finishing pending validation without fetching a manifest')
-  await runUpdater(path.join(destination, 'launcher', 'DSH-FullUpdater.exe'), [
-    '--destination', destination, '--manifest', 'http://127.0.0.1:1/unreachable.json',
-    '--allow-http', '--result', resultFile,
-  ])
+  await validatePendingUpdate()
   assert.equal(JSON.parse(await readFile(resultFile, 'utf8')).status, 'updated')
   assert.deepEqual((await readdir(parent)).filter(name => /^\.dsh-portable-(backup-|update-)/.test(name)), [],
     'validated updates must clear their recovery record and program backup')
