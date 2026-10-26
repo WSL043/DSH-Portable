@@ -38,7 +38,7 @@ const jsExpr = new Type('tag:yaml.org,2002:js', {
   resolve: (data: unknown): boolean => typeof data === 'string',
   construct: (data: unknown): unknown => ({ __jsExpr: String(data) }),
 })
-const entrySchema = JSON_SCHEMA.extend(jsExpr)
+export const entrySchema = JSON_SCHEMA.extend(jsExpr)
 
 /** Boot-breaking or confirmed problems vs informational warnings. */
 export interface CheckSummary {

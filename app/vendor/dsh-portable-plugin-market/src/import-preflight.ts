@@ -5,7 +5,8 @@
 import { execFile } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { findDshInstallDir, parsePatchFile } from './check.ts'
+import { load } from 'js-yaml'
+import { entrySchema, findDshInstallDir } from './check.ts'
 import { resolveBundlePatchPaths } from './package-path.ts'
 import { entryArtifactExists } from './profile.ts'
 
@@ -56,13 +57,8 @@ function importTargets(dir: string): string[] {
   }
   const paths = resolveBundlePatchPaths(dir, manifest.dsh.bundle.patch)
   if (paths === null) return []
-  for (const patchPath of paths) {
-    // Same YAML dialect as boot: check.ts' parsePatchFile registers the
-    // `tag:yaml.org,2002:js` scalar, so bundle patches using `!!js` parse here
-    // instead of failing the preflight with "unknown tag !<...js>".
-    const rows = parsePatchFile(patchPath)
-    if (rows !== null) visit(rows)
-  }
+  // Match boot's dialect, but let read/parse failures reject the preflight.
+  for (const patchPath of paths) visit(load(readFileSync(patchPath, 'utf8'), { schema: entrySchema }))
   return targets
 }
 

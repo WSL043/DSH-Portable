@@ -37,10 +37,35 @@ test('checks bundle subpaths instead of an unrelated root entry', async t => {
   assert.deepEqual(await preflightPluginImports(root, ['candidate']), { ok: true, checked: ['candidate/host'] })
 })
 
-test('bundle patches may use !!js expressions, like the boot loader', async t => {
-  const { root, dir } = await fixture(t, 'export const apply = () => {}', { dsh: { bundle: { patch: './cordis.patch.yml' } } })
-  await writeFile(path.join(dir, 'cordis.patch.yml'), '- insert:\n    - id: test\n      name: candidate\n      disabled: !!js "[...loader.entries()].every((entry) => entry.options.id !== \'test\')"\n')
-  assert.deepEqual(await preflightPluginImports(root, ['candidate']), { ok: true, checked: ['candidate'] })
+test('bundle patches use boot !!js syntax without evaluating expressions or probing the root', async t => {
+  for (const expression of [
+    '!!js "(()=>{throw Error(\'must not evaluate\')})()"',
+    '!!js >-\n        (()=>{throw Error(\'must not evaluate\')})()',
+  ]) {
+    const { root, dir } = await fixture(t, "throw Error('root is not a host entry')", {
+      exports: { '.': './index.js', './host': './host.js' }, dsh: { bundle: { patch: './cordis.patch.yml' } },
+    })
+    await writeFile(path.join(dir, 'host.js'), 'export const apply = () => {}')
+    await writeFile(path.join(dir, 'cordis.patch.yml'), '- insert:\n    - id: test\n      name: candidate/host\n      disabled: ' + expression + '\n')
+    assert.deepEqual(await preflightPluginImports(root, ['candidate']), { ok: true, checked: ['candidate/host'] })
+  }
+})
+
+test('unreadable and invalid bundle patches fail preflight with or without a root entry', async t => {
+  for (const carrier of [false, true]) {
+    for (const patch of [null, '- insert: [', '- insert:\n    - name: !!unknown candidate/host\n']) {
+      const { root, dir } = await fixture(t, 'export const apply = () => {}', {
+        ...(carrier ? { main: './missing.js', exports: { './host': './host.js' } } : {}),
+        dsh: { bundle: { patch: './cordis.patch.yml' } },
+      })
+      await writeFile(path.join(dir, 'host.js'), 'export const apply = () => {}')
+      if (patch !== null) await writeFile(path.join(dir, 'cordis.patch.yml'), patch)
+      const result = await preflightPluginImports(root, ['candidate'])
+      assert.equal(result.ok, false, JSON.stringify({ carrier, patch, result }))
+      assert.deepEqual(result.checked, [])
+      assert.ok(result.detail)
+    }
+  }
 })
 
 test('a hanging import is bounded and fails the check', async t => {
