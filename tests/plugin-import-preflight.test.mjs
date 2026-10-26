@@ -37,6 +37,12 @@ test('checks bundle subpaths instead of an unrelated root entry', async t => {
   assert.deepEqual(await preflightPluginImports(root, ['candidate']), { ok: true, checked: ['candidate/host'] })
 })
 
+test('bundle patches may use !!js expressions, like the boot loader', async t => {
+  const { root, dir } = await fixture(t, 'export const apply = () => {}', { dsh: { bundle: { patch: './cordis.patch.yml' } } })
+  await writeFile(path.join(dir, 'cordis.patch.yml'), '- insert:\n    - id: test\n      name: candidate\n      disabled: !!js "[...loader.entries()].every((entry) => entry.options.id !== \'test\')"\n')
+  assert.deepEqual(await preflightPluginImports(root, ['candidate']), { ok: true, checked: ['candidate'] })
+})
+
 test('a hanging import is bounded and fails the check', async t => {
   const { root } = await fixture(t, 'await new Promise(resolve => setTimeout(resolve, 60000))')
   const result = await preflightPluginImports(root, ['candidate'], { timeoutMs: 300 })
