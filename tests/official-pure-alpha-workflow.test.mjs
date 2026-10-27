@@ -95,6 +95,7 @@ test('a static preflight gates the package job, and a draft is only created afte
   assert.match(preflightSource, /node --test/);
   const dependency = workflow.jobs.preflight.steps.find(step => step.name === 'Provide js-yaml for the static workflow tests').run;
   assert.match(dependency, /app\/package-lock\.json[\s\S]*node_modules\/js-yaml/);
+  assert.match(dependency, /ConvertFrom-Json -AsHashtable/, 'npm locks contain an empty root-package key; read them as a PowerShell 7 hashtable');
   assert.match(dependency, /npm pack "js-yaml@\$\(\$dependency\.version\)" --registry https:\/\/registry\.npmjs\.org --ignore-scripts/);
   assert.match(dependency, /Invalid locked js-yaml identity/);
   assert.ok(dependency.indexOf('Get-FileHash') < dependency.indexOf('tar -xzf'), 'authenticate the locked archive before extraction');

@@ -61,7 +61,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $dependency = (Get-Content -LiteralPath app/package-lock.json -Raw | ConvertFrom-Json).packages.'node_modules/js-yaml'
+          $dependency = (Get-Content -LiteralPath app/package-lock.json -Raw | ConvertFrom-Json -AsHashtable).packages.'node_modules/js-yaml'
           if ($dependency.version -isnot [string] -or $dependency.version -notmatch '^\d+\.\d+\.\d+$' -or $dependency.integrity -isnot [string] -or $dependency.integrity -notmatch '^sha512-[A-Za-z0-9+/]{86}==$') { throw 'Invalid locked js-yaml identity' }
           npm pack "js-yaml@$($dependency.version)" --registry https://registry.npmjs.org --ignore-scripts --silent --pack-destination $env:RUNNER_TEMP
           if ($LASTEXITCODE -ne 0) { throw 'Could not fetch the locked js-yaml test dependency' }
