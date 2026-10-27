@@ -126,7 +126,7 @@ export function buildPureE2EReport(input = {}) {
       passed = passed && VERSION_RE.test(String(expectedVersion ?? '')) && details.expectedVersion === expectedVersion &&
         details.operation === (repair ? 'repair' : 'rollback') && details.installerVerified === true && details.receiptVerified === true &&
         identitiesPreserved && retainedNewPreserved && requestsUnchanged &&
-        details.offlineScope === 'updater-index-and-download-endpoints-only' && processMatches && rendered &&
+        details.offlineScope === 'configured-index-and-launcher-feed-only' && processMatches && rendered &&
         launch.current?.version === expectedVersion && launch.current?.pendingHealth === false && launch.healthPassed === true &&
         launch.protocolRestored === true && launch.remainingOwnedProcesses === 0;
       evidence = { ...details, identitiesPreserved, retainedNewPreserved, requestsUnchanged, processMatches, rendered };

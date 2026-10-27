@@ -391,6 +391,7 @@ function Test-ProtocolOwnedStable([string]$Version) {
 
 # Scope the offline claim to the updater's existing index/download endpoints.
 # Official renderer/backend networking is recorded by the wider E2E, not denied here.
+# These fixture logs observe the configured index and launcher feed, not the official installer CDN or OS certificate traffic.
 function Get-MaintenanceRequestSnapshot {
     $rows = @()
     foreach ($file in @($script:IndexRequestLog, $script:RequestLog)) {
@@ -674,7 +675,7 @@ try {
         oldInstallerBefore=$oldInstallerHash; oldInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerOldPath -Algorithm SHA256).Hash
         newInstallerBefore=$newInstallerHash; newInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerNewPath -Algorithm SHA256).Hash
         dataBefore=$dataMarkerHash; dataAfter=(Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash
-        requestsBefore=$repairRequestsBefore; requestsAfter=$repairRequestsAfter; offlineScope='updater-index-and-download-endpoints-only'
+        requestsBefore=$repairRequestsBefore; requestsAfter=$repairRequestsAfter; offlineScope='configured-index-and-launcher-feed-only'
         preservedTreeBefore=$brokenTreeHash; preservedTreeAfter=(Get-PortablePayloadTreeHash ($newTree + '.repair-backup'))
         preservedReceiptBefore=$originalNewReceiptHash; preservedReceiptAfter=(Get-FileHash -LiteralPath ($newReceiptPath + '.repair-backup') -Algorithm SHA256).Hash
     }
@@ -701,7 +702,7 @@ try {
         oldInstallerBefore=$oldInstallerHash; oldInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerOldPath -Algorithm SHA256).Hash
         newInstallerBefore=$newInstallerHash; newInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerNewPath -Algorithm SHA256).Hash
         dataBefore=$dataMarkerHash; dataAfter=(Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash
-        requestsBefore=$rollbackRequestsBefore; requestsAfter=$rollbackRequestsAfter; offlineScope='updater-index-and-download-endpoints-only'
+        requestsBefore=$rollbackRequestsBefore; requestsAfter=$rollbackRequestsAfter; offlineScope='configured-index-and-launcher-feed-only'
         preservedTreeBefore=$retainedOldTreeHash; preservedTreeAfter=(Get-PortablePayloadTreeHash $oldTree)
         preservedReceiptBefore=$retainedOldReceiptHash; preservedReceiptAfter=(Get-FileHash -LiteralPath $oldReceiptPath -Algorithm SHA256).Hash
         retainedNewBefore=$retainedNewTreeHash; retainedNewAfter=(Get-PortablePayloadTreeHash $newTree)

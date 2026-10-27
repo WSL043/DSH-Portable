@@ -387,7 +387,7 @@ internal static class PortableLauncher {
 
         private string InitialDetail() {
             if (_operation == "rollback" || _operation == "recover") return T("只处理程序，不还原数据或工作区。", "Program files only. Data and workspaces are not restored.");
-            if (_installerFile != null) return T("使用本地安装包和已验收索引，不连接网络。", "Using the local installer and accepted index without network access.");
+            if (_installerFile != null) return T("使用本地安装包和已验收索引，不在线下载安装包。", "Using the local installer and accepted index without downloading a payload.");
             return T("从官方 CDN 下载并验证官方桌面端。", "Downloading and verifying the desktop app from the official CDN.");
         }
 

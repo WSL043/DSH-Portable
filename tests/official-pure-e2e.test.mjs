@@ -25,7 +25,7 @@ function maintenanceEvidence(operation, version) {
     preservedReceiptBefore: value, preservedReceiptAfter: value, retainedNewBefore: value, retainedNewAfter: value,
     requestsBefore: { index: 'one index request', feed: 'one feed request' },
     requestsAfter: { index: 'one index request', feed: 'one feed request' },
-    offlineScope: 'updater-index-and-download-endpoints-only',
+    offlineScope: 'configured-index-and-launcher-feed-only',
     launch: {
       portableRoot: root, primaryExecutablePath: root + '\\app\\' + version + '\\DeepSeek Harness.exe',
       ui: { rendered: true, title: 'DeepSeek Harness', bodyTextLength: 120 },
