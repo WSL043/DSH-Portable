@@ -1,11 +1,12 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { readdir } from 'node:fs/promises'
+import { readFile, readdir, realpath } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
 import { buildDshEnv, layoutForRoot, listEnvironmentLayouts } from './portable-core.mjs'
-import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule } from './runtime-capsule.mjs'
+import { acquireRuntimeLease, capsulePaths, cleanUnusedRuntimeCaches, ensureRuntimeCapsule } from './runtime-capsule.mjs'
+import { safeDataTarget } from './data-paths.mjs'
 
 const execFileAsync = promisify(execFile)
 const PROFILE_NAME = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
@@ -210,6 +211,7 @@ export async function preflightStagedDshProfiles({
   ensureCapsule = ensureRuntimeCapsule,
   acquireLease = acquireRuntimeLease,
   cleanCaches = cleanUnusedRuntimeCaches,
+  runtimeEnv = process.env,
 }) {
   const environments = []
   for (const candidate of await listEnvironmentLayouts(layout)) {
@@ -224,12 +226,37 @@ export async function preflightStagedDshProfiles({
   let release = async () => {}
   let failed = false
   try {
+    let stagedDshBin
     if (metadata.kind === 'dsh-runtime-capsule') {
-      const prepared = await ensureCapsule(stagedRoot)
+      const prepared = await ensureCapsule(stagedRoot, { env: runtimeEnv })
       if (prepared.mode !== 'capsule') throw new Error('The staged compact runtime did not prepare as a capsule.')
-      runtimeRoot = prepared.runtimeRoot
+      const paths = capsulePaths(stagedRoot, runtimeEnv)
+      const manifest = JSON.parse(await readFile(paths.manifestFile, 'utf8'))
+      if (paths.mode !== 'capsule' || manifest.schemaVersion !== 1 || manifest.format !== 'dshpack-zstd-v1'
+        || !/^[a-f0-9]{64}$/.test(String(manifest.sha256 ?? ''))) {
+        throw new Error('The staged compact runtime has no valid cache identity.')
+      }
+      const configuredRoot = path.resolve(paths.cacheParent, manifest.sha256)
+      if (typeof prepared.runtimeRoot !== 'string' || path.relative(configuredRoot, path.resolve(prepared.runtimeRoot)) !== '') {
+        throw new Error('The prepared compact runtime is outside its expected cache identity.')
+      }
+      // The configured cache root may be an intentional alias. Descendants must
+      // be plain owned paths; never follow a redirected hash tree or entry point.
+      const cacheRoot = await realpath(paths.cacheParent)
+      const readyFile = await safeDataTarget(cacheRoot, `${manifest.sha256}/.dsh-runtime-ready.json`, { createParents: false })
+      if (!readyFile) throw new Error('The prepared compact runtime has no ownership marker.')
+      const ready = JSON.parse(await readFile(readyFile, 'utf8'))
+      if (ready.schemaVersion !== 1 || ready.sha256 !== manifest.sha256) {
+        throw new Error('The prepared compact runtime ownership marker does not match its manifest.')
+      }
+      stagedDshBin = await safeDataTarget(cacheRoot, `${manifest.sha256}/app/node_modules/@deepseek-ai/dsh/lib/bin.js`, { createParents: false })
+      if (!stagedDshBin) throw new Error('The staged DSH command is missing after preparation.')
+      runtimeRoot = path.join(cacheRoot, manifest.sha256)
       preparedCapsule = true
       release = await acquireLease(runtimeRoot)
+    } else {
+      stagedDshBin = path.join(stagedRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js')
+      if (!existsSync(stagedDshBin)) throw new Error('The staged DSH command is missing after preparation.')
     }
     const warnings = []
     const unavailable = []
@@ -241,7 +268,6 @@ export async function preflightStagedDshProfiles({
         runtimeRoot,
         candidate.layout.environmentId,
       )
-      if (!existsSync(targetLayout.dshBin)) throw new Error('The staged DSH command is missing after preparation.')
       const environment = {
         ...buildDshEnv(targetLayout),
         DSH_PORTABLE_VERSION: metadata.portableVersion,
@@ -250,7 +276,7 @@ export async function preflightStagedDshProfiles({
       }
       for (const profile of candidate.profiles) {
         try {
-          await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
+          await run(targetLayout.nodeExe, [stagedDshBin, '--profile', profile, '--dump-config'], {
             cwd: targetLayout.workspace,
             env: environment,
             encoding: 'utf8',
@@ -287,6 +313,6 @@ export async function preflightStagedDshProfiles({
     } catch (releaseError) {
       if (!failed) throw releaseError
     }
-    if (failed && preparedCapsule) await cleanCaches(layout.root).catch(() => {})
+    if (failed && preparedCapsule) await cleanCaches(layout.root, { env: runtimeEnv }).catch(() => {})
   }
 }

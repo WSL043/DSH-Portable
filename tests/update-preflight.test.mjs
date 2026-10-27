@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -73,6 +73,19 @@ async function createPreflightFixture({ appBootSource = FAKE_APP_BOOT } = {}) {
   await mkdir(path.join(bootDir, 'lib'), { recursive: true })
   await writeFile(path.join(bootDir, 'lib', 'index.js'), appBootSource)
   return { root, layout, stagedRoot, stagedLayout }
+}
+
+async function writePreparedCapsule(stagedRoot, runtimeRoot) {
+  const sha256 = path.basename(runtimeRoot)
+  const command = 'app/node_modules/@deepseek-ai/dsh/lib/bin.js'
+  assert.match(sha256, /^[a-f0-9]{64}$/)
+  await writeJson(path.join(stagedRoot, 'runtime-capsule.json'), {
+    schemaVersion: 1, format: 'dshpack-zstd-v1', sha256, required: [command],
+  })
+  await writeJson(path.join(runtimeRoot, '.dsh-runtime-ready.json'), { schemaVersion: 1, sha256 })
+  await mkdir(path.dirname(path.join(runtimeRoot, command)), { recursive: true })
+  await writeFile(path.join(runtimeRoot, command), '// prepared fixture\n')
+  return { DSH_PORTABLE_RUNTIME_CACHE: path.dirname(runtimeRoot) }
 }
 
 async function writePlugin(profileDir, folder, manifest) {
@@ -283,13 +296,13 @@ test('failed capsule composition preflight releases its lease and removes the un
   try {
     await mkdir(path.join(layout.dshHome, 'profiles', 'web'), { recursive: true })
     await writeFile(path.join(layout.dshHome, 'profiles', 'web', 'package.json'), '{}\n')
-    await mkdir(path.join(runtimeRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib'), { recursive: true })
-    await writeFile(path.join(runtimeRoot, 'app', 'node_modules', '@deepseek-ai', 'dsh', 'lib', 'bin.js'), '// fixture\n')
+    const runtimeEnv = await writePreparedCapsule(stagedRoot, runtimeRoot)
 
     await assert.rejects(preflightStagedDshProfiles({
       layout,
       stagedRoot,
       metadata: { kind: 'dsh-runtime-capsule', dshVersion: '0.1.2-alpha.2', portableVersion: '0.6.0-rc.4' },
+      runtimeEnv,
       ensureCapsule: async () => ({ mode: 'capsule', runtimeRoot }),
       acquireLease: async () => async () => { released = true },
       cleanCaches: async (portableRoot) => {
@@ -342,18 +355,23 @@ test('shared core preflight rejects a broken profile in another stopped environm
 test('shared capsule preflight prepares and leases once for all initialized environments', async () => {
   const fixture = await createPreflightFixture()
   const currentId = 'research'
+  const baseStateRoot = path.join(fixture.root, 'external-state')
+  const baseLayout = layoutForRoot(fixture.root, process.platform, baseStateRoot)
+  const runtimeRoot = path.join(fixture.root, 'external-cache', 'b'.repeat(64))
   const currentLayout = layoutForRoot(fixture.root, process.platform,
-    environmentStateRoot(fixture.root, currentId), fixture.root, currentId)
+    environmentStateRoot(baseStateRoot, currentId), fixture.root, currentId)
   const counts = { prepared: 0, leased: 0, released: 0, cleaned: 0 }
   const visited = []
   try {
-    for (const candidate of [fixture.layout, currentLayout])
+    const runtimeEnv = await writePreparedCapsule(fixture.stagedRoot, runtimeRoot)
+    for (const candidate of [baseLayout, currentLayout])
       await writeJson(path.join(candidate.dshHome, 'profiles', 'web', 'package.json'), {})
     const result = await preflightStagedDshProfiles({
       layout: currentLayout,
       stagedRoot: fixture.stagedRoot,
       metadata: { kind: 'dsh-runtime-capsule', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
-      ensureCapsule: async () => { counts.prepared++; return { mode: 'capsule', runtimeRoot: fixture.stagedRoot } },
+      runtimeEnv,
+      ensureCapsule: async () => { counts.prepared++; return { mode: 'capsule', runtimeRoot } },
       acquireLease: async () => { counts.leased++; return async () => { counts.released++ } },
       cleanCaches: async () => { counts.cleaned++ },
       run: async (_command, args, options) => {
@@ -369,5 +387,42 @@ test('shared capsule preflight prepares and leases once for all initialized envi
     assert.deepEqual(counts, { prepared: 1, leased: 1, released: 1, cleaned: 0 })
   } finally {
     await rm(fixture.root, { recursive: true, force: true })
+  }
+})
+
+
+test('capsule preflight rejects an unowned or redirected cache before leasing, execution or cleanup', async () => {
+  for (const kind of ['wrong-root', 'wrong-marker', 'redirected-entry']) {
+    const fixture = await createPreflightFixture()
+    const runtimeRoot = path.join(fixture.root, 'external-cache', 'b'.repeat(64))
+    const counts = { leased: 0, run: 0, cleaned: 0 }
+    try {
+      await writeJson(path.join(fixture.layout.dshHome, 'profiles', 'web', 'package.json'), {})
+      const runtimeEnv = await writePreparedCapsule(fixture.stagedRoot, runtimeRoot)
+      const outside = path.join(fixture.root, 'outside')
+      await mkdir(path.join(outside, 'node_modules/@deepseek-ai/dsh/lib'), { recursive: true })
+      await writeFile(path.join(outside, 'marker.txt'), 'preserve unrelated files')
+      await writeFile(path.join(outside, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '// unrelated command\n')
+      if (kind === 'wrong-marker') await writeJson(path.join(runtimeRoot, '.dsh-runtime-ready.json'),
+        { schemaVersion: 1, sha256: 'a'.repeat(64) })
+      if (kind === 'redirected-entry') {
+        await rm(path.join(runtimeRoot, 'app'), { recursive: true, force: true })
+        await symlink(outside, path.join(runtimeRoot, 'app'), process.platform === 'win32' ? 'junction' : 'dir')
+      }
+      await assert.rejects(preflightStagedDshProfiles({
+        layout: fixture.layout,
+        stagedRoot: fixture.stagedRoot,
+        metadata: { kind: 'dsh-runtime-capsule', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
+        runtimeEnv,
+        ensureCapsule: async () => ({ mode: 'capsule', runtimeRoot: kind === 'wrong-root' ? outside : runtimeRoot }),
+        acquireLease: async () => { counts.leased++; return async () => {} },
+        run: async () => { counts.run++; return { stdout: '{}' } },
+        cleanCaches: async () => { counts.cleaned++ },
+      }), /expected cache identity|ownership marker|Unsafe restore path/)
+      assert.deepEqual(counts, { leased: 0, run: 0, cleaned: 0 })
+      assert.equal(await readFile(path.join(outside, 'marker.txt'), 'utf8'), 'preserve unrelated files')
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true })
+    }
   }
 })

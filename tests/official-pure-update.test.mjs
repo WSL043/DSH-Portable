@@ -456,3 +456,73 @@ test('repair interruption boundaries and untrusted recovery inputs preserve prog
     ps('Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(' + quote(fixture) + ',[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)');
   }
 });
+
+
+test('extraction recovery preserves unlocked scratch while this root extractor is alive', windows, async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'pure-extraction-writer-'));
+  const writerSource = join(fixture, 'ExtractorWriter.cs');
+  try {
+    await writeFile(join(fixture, 'apply-update.ps1'), await readFile(process.env.DSH_PORTABLE_TEST_UPDATE_ENGINE ?? engine));
+    await writeFile(join(fixture, 'Payload.psm1'), await readFile(payload));
+    await writeFile(writerSource, [
+      'using System; using System.IO; using System.Threading; using System.Diagnostics;',
+      'class ExtractorWriter { static int Main(string[] args) {',
+      ' File.WriteAllText(args[0], "writer marker; handle closed");',
+      ' File.WriteAllText(args[1], Process.GetCurrentProcess().Id.ToString());',
+      ' while (!File.Exists(args[2])) Thread.Sleep(25);',
+      ' try { File.AppendAllText(args[0], " released"); return 0; } catch (IOException) { return 42; }',
+      '} }',
+    ].join('\n'));
+    const observed = JSON.parse(ps([
+      '$root=' + quote(join(fixture, 'portable')) + ';$writer=$null',
+      "$null=New-Item -ItemType Directory -Path (Join-Path $root 'launcher'),(Join-Path $root 'data/launcher'),(Join-Path $root 'app/1.0.0/resources') -Force",
+      "$current=Join-Path $root 'app/current.json'; [IO.File]::WriteAllText($current,'{\"version\":\"1.0.0\",\"pendingHealth\":false}')",
+      "$beforeCurrent=(Get-FileHash -LiteralPath $current -Algorithm SHA256).Hash",
+      "$scratch=Join-Path $root 'app/2.0.0.partial'; foreach($tree in @($scratch,($scratch+'.outer'),($scratch+'.verify'))){$null=New-Item -ItemType Directory -Path $tree;[IO.File]::WriteAllText((Join-Path $tree 'marker.txt'),'owned scratch survives')}",
+      "$status=Join-Path $root 'data/launcher/update-status.json';@{status='extracting';transition=@{schemaVersion=1;operation='update';phase='extracting';version='2.0.0';currentSha256=$beforeCurrent}}|ConvertTo-Json -Depth 8|Set-Content -LiteralPath $status -Encoding UTF8",
+      "$writerPath=Join-Path $root 'launcher/7z.exe';$compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'",
+      '& $compiler /nologo /target:winexe /platform:x64 /optimize+ ' + quote('/out:' + join(fixture, 'portable/launcher/7z.exe')) + ' ' + quote(writerSource),
+      "if($LASTEXITCODE -ne 0){throw 'Extraction writer fixture compilation failed'}",
+      "$ready=Join-Path $root 'data/launcher/writer-ready.txt';$release=Join-Path $root 'data/launcher/writer-release.txt';$target=Join-Path $scratch 'writer.txt'",
+      "$start=[Diagnostics.ProcessStartInfo]::new($writerPath);$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.WindowStyle='Hidden';$start.Arguments='\"'+$target+'\" \"'+$ready+'\" \"'+$release+'\"'",
+      'try {',
+      ' $writer=[Diagnostics.Process]::Start($start)',
+      ' $deadline=[DateTime]::UtcNow.AddSeconds(10);while(-not(Test-Path -LiteralPath $ready)){if($writer.HasExited -or [DateTime]::UtcNow -gt $deadline){throw \'Extraction writer did not become ready\'};Start-Sleep -Milliseconds 25}',
+      " $identity=Get-CimInstance Win32_Process -Filter ('ProcessId='+$writer.Id) -ErrorAction Stop",
+      " if(-not $identity.ExecutablePath -or -not [IO.Path]::GetFullPath($identity.ExecutablePath).Equals([IO.Path]::GetFullPath($writerPath),[StringComparison]::OrdinalIgnoreCase) -or [int][IO.File]::ReadAllText($ready) -ne $writer.Id){throw 'Extraction writer identity mismatch'}",
+      " $probe=[IO.File]::Open($target,'Open','ReadWrite','None');$probe.Dispose() # prove no writer handle protects the file",
+      " $ErrorActionPreference='Continue'; & " + quote(powershell) + ' -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File ' + quote(join(fixture, 'apply-update.ps1')) + " -Root $root -SelfPath (Join-Path $root 'DeepSeek Harness Portable.exe') -Recover *> (Join-Path $root 'recover-live.log');$firstCode=$LASTEXITCODE;$ErrorActionPreference='Stop'",
+      ' $first=Get-Content -LiteralPath $status -Raw -Encoding UTF8|ConvertFrom-Json',
+      " $markers=@(@($scratch,($scratch+'.outer'),($scratch+'.verify'))|ForEach-Object{Test-Path -LiteralPath (Join-Path $_ 'marker.txt')})",
+      " $writerMarkerPresent=Test-Path -LiteralPath $target;$alive=-not $writer.HasExited;$currentUnchanged=(Get-FileHash -LiteralPath $current -Algorithm SHA256).Hash -ceq $beforeCurrent",
+      " [IO.File]::WriteAllText($release,'release only this fixture writer')",
+      " if(-not $writer.WaitForExit(10000)){throw 'Controlled extraction writer did not stop after release'};$writerCode=$writer.ExitCode",
+      " $ErrorActionPreference='Continue'; & " + quote(powershell) + ' -NoProfile -NonInteractive -OutputFormat Text -ExecutionPolicy Bypass -File ' + quote(join(fixture, 'apply-update.ps1')) + " -Root $root -SelfPath (Join-Path $root 'DeepSeek Harness Portable.exe') -Recover *> (Join-Path $root 'recover-exited.log');$secondCode=$LASTEXITCODE;$ErrorActionPreference='Stop'",
+      ' $final=Get-Content -LiteralPath $status -Raw -Encoding UTF8|ConvertFrom-Json',
+      " @{firstCode=$firstCode;first=$first;markers=@($markers);writerMarkerPresent=$writerMarkerPresent;alive=$alive;writerPid=$writer.Id;writerPath=$identity.ExecutablePath;writerCode=$writerCode;currentUnchanged=$currentUnchanged;secondCode=$secondCode;final=$final;remaining=@(@($scratch,($scratch+'.outer'),($scratch+'.verify'))|Where-Object{Test-Path -LiteralPath $_})}|ConvertTo-Json -Depth 10 -Compress",
+      '} finally {',
+      ' if($writer){try{if(-not $writer.HasExited){',
+      "  $owned=Get-CimInstance Win32_Process -Filter ('ProcessId='+$writer.Id) -ErrorAction Stop",
+      "  if(-not $owned.ExecutablePath -or -not [IO.Path]::GetFullPath($owned.ExecutablePath).Equals([IO.Path]::GetFullPath($writerPath),[StringComparison]::OrdinalIgnoreCase)){throw 'Refusing to stop an unverified fixture writer'}",
+      "  $writer.Kill();if(-not $writer.WaitForExit(10000)){throw 'Verified fixture writer did not stop'}",
+      ' }}finally{$writer.Dispose()}}',
+      '}',
+    ].join('\n')));
+    console.log('exact-root extraction writer:', JSON.stringify(observed));
+    assert.equal(observed.firstCode, 1, JSON.stringify(observed));
+    assert.match(observed.first.error, /extraction writer is still running/);
+    assert.equal(observed.first.transition.phase, 'extracting');
+    assert.equal(observed.alive, true);
+    assert.equal(observed.writerMarkerPresent, true);
+    assert.deepEqual(observed.markers, [true, true, true]);
+    assert.equal(observed.currentUnchanged, true);
+    assert.equal(observed.writerCode, 0, 'the unlocked writer can safely continue after the refused cleanup');
+    assert.equal(observed.secondCode, 0, JSON.stringify(observed));
+    assert.equal(observed.final.status, 'recovered');
+    assert.equal(observed.final.transition, null);
+    assert.deepEqual(observed.remaining, []);
+  } finally {
+    assert.ok(fixture.startsWith(join(tmpdir(), 'pure-extraction-writer-')));
+    ps('Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(' + quote(fixture) + ',[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)');
+  }
+});

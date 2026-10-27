@@ -81,8 +81,16 @@ function Get-Processes([string]$Kind) {
         $prefix = [IO.Path]::GetFullPath($appRoot).TrimEnd('\') + '\'
         return @($all | Where-Object { ($_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath).StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) -or ($_.Name -ceq 'DeepSeek Harness.exe' -and -not $_.ExecutablePath) })
     }
+    if ($Kind -eq 'extractor') {
+        $extractorExe = [IO.Path]::GetFullPath((Join-Path $launcherRoot '7z.exe'))
+        return @($all | Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath).Equals($extractorExe, [StringComparison]::OrdinalIgnoreCase) })
+    }
     $launcherExe = [IO.Path]::GetFullPath((Join-Path $Root 'DeepSeek Harness Portable.exe'))
     return @($all | Where-Object { $_.Name -ceq 'DeepSeek Harness Portable.exe' -and $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath).Equals($launcherExe,[StringComparison]::OrdinalIgnoreCase) })
+}
+
+function Assert-NoExtractionWriters {
+    if (@(Get-Processes 'extractor').Count -gt 0) { throw 'Portable extraction writer is still running; preserving extraction scratch' }
 }
 
 function Wait-NoOwnedProcesses {
@@ -150,6 +158,7 @@ function Complete-Transition($Transition) {
     foreach ($path in @($target, $prepared, $backup, $receiptPath)) { Assert-PlainPath $path }
     if ($Transition.phase -eq 'extracting') {
         Assert-UnchangedCurrent $Transition.currentSha256
+        Assert-NoExtractionWriters
         # This record was flushed before this attempt could create any extraction path.
         foreach ($scratch in @($prepared, ($prepared + '.outer'), ($prepared + '.verify'))) {
             if (Test-Path -LiteralPath $scratch) { Remove-PortableScratch $scratch $appRoot }
@@ -359,6 +368,7 @@ try {
 } finally {
     if ($lock -and $ownsPartial -and -not $committed -and $status.transition -and $status.transition.phase -eq 'extracting') {
         try {
+            Assert-NoExtractionWriters
             foreach ($scratch in @($partial, ($partial + '.outer'), ($partial + '.verify'))) { if (Test-Path -LiteralPath $scratch) { Remove-PortableScratch $scratch $appRoot } }
             $status.transition = $null
         } catch { }

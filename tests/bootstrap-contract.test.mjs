@@ -73,10 +73,20 @@ test('full-package cleanup does not depend on a user PATH entry for PowerShell',
   assert.doesNotMatch(bootstrap, /FileName = "powershell\.exe"/)
 })
 
-function cscPath() {
-  const windows = process.env.WINDIR || 'C:\\Windows'
-  return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
+function cscPath(systemRoot = process.env.SystemRoot) {
+  const selected = String(systemRoot ?? '').replaceAll('\\', '/').toLowerCase()
+  for (const drive of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') {
+    const root = `${drive}:/Windows`
+    if (selected === root.toLowerCase()) return `${root}/Microsoft.NET/Framework64/v4.0.30319/csc.exe`
+  }
+  throw new Error('Windows acceptance tests require a drive-root Windows installation')
 }
+
+test('the fixture compiler cannot be replaced through a user-provided Windows directory', () => {
+  assert.equal(cscPath('c:\\Windows'), 'C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe')
+  for (const selected of ['C:/Temp', 'C:/Windows/../Temp', 'C:/Windows/csc.exe --unsafe', '\\\\server\\Windows'])
+    assert.throws(() => cscPath(selected), /drive-root Windows installation/)
+})
 
 async function compileBootstrap(output, inputSource = source, extra = []) {
   await execFileAsync(cscPath(), [
