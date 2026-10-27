@@ -462,7 +462,7 @@ test('extraction recovery preserves unlocked scratch while this root extractor i
   const fixture = await mkdtemp(join(tmpdir(), 'pure-extraction-writer-'));
   const writerSource = join(fixture, 'ExtractorWriter.cs');
   try {
-    await writeFile(join(fixture, 'apply-update.ps1'), await readFile(process.env.DSH_PORTABLE_TEST_UPDATE_ENGINE ?? engine));
+    await writeFile(join(fixture, 'apply-update.ps1'), await readFile(engine));
     await writeFile(join(fixture, 'Payload.psm1'), await readFile(payload));
     await writeFile(writerSource, [
       'using System; using System.IO; using System.Threading; using System.Diagnostics;',

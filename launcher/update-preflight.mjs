@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { readFile, readdir, realpath } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
@@ -240,16 +240,20 @@ export async function preflightStagedDshProfiles({
       if (typeof prepared.runtimeRoot !== 'string' || path.relative(configuredRoot, path.resolve(prepared.runtimeRoot)) !== '') {
         throw new Error('The prepared compact runtime is outside its expected cache identity.')
       }
-      // The configured cache root may be an intentional alias. Descendants must
-      // be plain owned paths; never follow a redirected hash tree or entry point.
-      const cacheRoot = await realpath(paths.cacheParent)
-      const readyFile = await safeDataTarget(cacheRoot, `${manifest.sha256}/.dsh-runtime-ready.json`, { createParents: false })
+      const cacheRoot = path.resolve(paths.cacheParent)
+      const cacheDirectory = path.basename(cacheRoot)
+      if (!cacheDirectory) throw new Error('The runtime cache must be a directory below its selected parent.')
+      // Include the selected cache directory in the checked descendants, so the
+      // existing path guard rejects a linked cache root as well as linked entries.
+      const cacheParent = path.dirname(cacheRoot)
+      const cacheRelativeRoot = `${cacheDirectory}/${manifest.sha256}`
+      const readyFile = await safeDataTarget(cacheParent, `${cacheRelativeRoot}/.dsh-runtime-ready.json`, { createParents: false })
       if (!readyFile) throw new Error('The prepared compact runtime has no ownership marker.')
       const ready = JSON.parse(await readFile(readyFile, 'utf8'))
       if (ready.schemaVersion !== 1 || ready.sha256 !== manifest.sha256) {
         throw new Error('The prepared compact runtime ownership marker does not match its manifest.')
       }
-      stagedDshBin = await safeDataTarget(cacheRoot, `${manifest.sha256}/app/node_modules/@deepseek-ai/dsh/lib/bin.js`, { createParents: false })
+      stagedDshBin = await safeDataTarget(cacheParent, `${cacheRelativeRoot}/app/node_modules/@deepseek-ai/dsh/lib/bin.js`, { createParents: false })
       if (!stagedDshBin) throw new Error('The staged DSH command is missing after preparation.')
       runtimeRoot = path.join(cacheRoot, manifest.sha256)
       preparedCapsule = true

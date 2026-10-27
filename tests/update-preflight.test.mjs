@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
@@ -392,7 +392,7 @@ test('shared capsule preflight prepares and leases once for all initialized envi
 
 
 test('capsule preflight rejects an unowned or redirected cache before leasing, execution or cleanup', async () => {
-  for (const kind of ['wrong-root', 'wrong-marker', 'redirected-entry']) {
+  for (const kind of ['wrong-root', 'wrong-marker', 'redirected-cache-root', 'redirected-entry']) {
     const fixture = await createPreflightFixture()
     const runtimeRoot = path.join(fixture.root, 'external-cache', 'b'.repeat(64))
     const counts = { leased: 0, run: 0, cleaned: 0 }
@@ -405,6 +405,11 @@ test('capsule preflight rejects an unowned or redirected cache before leasing, e
       await writeFile(path.join(outside, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), '// unrelated command\n')
       if (kind === 'wrong-marker') await writeJson(path.join(runtimeRoot, '.dsh-runtime-ready.json'),
         { schemaVersion: 1, sha256: 'a'.repeat(64) })
+      if (kind === 'redirected-cache-root') {
+        const preservedCache = path.join(fixture.root, 'preserved-cache')
+        await rename(path.dirname(runtimeRoot), preservedCache)
+        await symlink(preservedCache, path.dirname(runtimeRoot), process.platform === 'win32' ? 'junction' : 'dir')
+      }
       if (kind === 'redirected-entry') {
         await rm(path.join(runtimeRoot, 'app'), { recursive: true, force: true })
         await symlink(outside, path.join(runtimeRoot, 'app'), process.platform === 'win32' ? 'junction' : 'dir')
