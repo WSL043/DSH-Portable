@@ -93,3 +93,88 @@ test('migration refuses used targets, redirected roots and damaged packages with
   await assert.rejects(importNativeData(archive, clean, { workspaceRoot: root }), /workspace metadata is required/)
   await assert.rejects(importNativeData(archive, clean, { workspaceRoot: source.root }), /escapes the selected working directory/)
 })
+
+
+test('encrypted Native data imports with a password file and never restores excluded credentials', async t => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'pure-native-encrypted-')))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const source = layoutForRoot(path.join(root, 'source'))
+  await mkdir(source.dshHome, { recursive: true })
+  await mkdir(source.workspace)
+  await writeFile(path.join(source.dshHome, 'settings.yaml'), 'language: zh-CN\n')
+  await writeFile(path.join(source.dshHome, '.credentials.yaml'), 'fixture-credential-not-imported\n')
+  await writeFile(path.join(source.workspace, '中文.txt'), 'encrypted migration workspace')
+  const password = 'synthetic-migration-passphrase'
+  const archive = path.join(root, 'encrypted.dshdata')
+  await createDataArchive(source, archive, { categories: ['settings', 'workspace', 'credentials'], password })
+  const original = hash(await readFile(archive))
+  const passwordFile = path.join(root, 'password.txt')
+  await writeFile(passwordFile, password + '\r\n', { mode: 0o600 })
+  for (const [name, options, reason] of [
+    ['missing', {}, /encrypted.*password/i],
+    ['wrong', { passwordFile: path.join(root, 'wrong.txt') }, /password is incorrect/i],
+  ]) {
+    await writeFile(path.join(root, 'wrong.txt'), 'synthetic-wrong-passphrase')
+    const desktop = path.join(root, name)
+    await mkdir(desktop)
+    await assert.rejects(importNativeData(archive, desktop, { workspaceRoot: root, ...options }), reason)
+    await assert.rejects(readFile(path.join(desktop, 'data/launcher/native-import.json')), { code: 'ENOENT' })
+    assert.equal(hash(await readFile(archive)), original)
+  }
+  const desktop = path.join(root, 'desktop')
+  await mkdir(desktop)
+  const result = await importNativeData(archive, desktop, { workspaceRoot: root, passwordFile })
+  assert.equal(result.importedFiles, 2)
+  assert.equal(result.archiveSha256, original)
+  assert.equal(hash(await readFile(archive)), original)
+  assert.equal(await readFile(path.join(desktop, 'data/workspace/中文.txt'), 'utf8'), 'encrypted migration workspace')
+  assert.equal(await readFile(path.join(desktop, 'data/dsh-home/settings.yaml'), 'utf8'), 'language: zh-CN\n')
+  await assert.rejects(readFile(path.join(desktop, 'data/dsh-home/.credentials.yaml')), { code: 'ENOENT' })
+  const receipt = await readFile(path.join(desktop, 'data/launcher/native-import.json'), 'utf8')
+  assert.ok(!receipt.includes(password) && !JSON.stringify(result).includes(password))
+  assert.ok(!receipt.includes('passwordFile'))
+  assert.equal((await readFile(path.join(result.stagingDirectory, 'source.dshdata'))).subarray(0, 8).toString(), 'DSHDAT1E')
+  assert.equal(await readFile(passwordFile, 'utf8'), password + '\r\n')
+})
+
+test('password paths remain local, ordinary and bounded while Windows casing follows the filesystem', async t => {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'pure-native-password-')))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  const workspace = path.join(root, 'Migration')
+  const source = layoutForRoot(path.join(workspace, 'source'))
+  await mkdir(source.dshHome, { recursive: true })
+  await writeFile(path.join(source.dshHome, 'settings.yaml'), 'language: en\n')
+  const archive = path.join(workspace, 'Native.dshdata')
+  await createDataArchive(source, archive, { categories: ['settings'] })
+  const original = hash(await readFile(archive))
+  const desktop = path.join(workspace, 'Desktop')
+  await mkdir(desktop)
+  const empty = path.join(workspace, 'empty.txt'), large = path.join(workspace, 'large.txt')
+  const directory = path.join(workspace, 'directory'), outside = path.join(root, 'outside.txt')
+  await writeFile(empty, '\r\n')
+  await writeFile(large, 'x'.repeat(4097))
+  await mkdir(directory)
+  await writeFile(path.join(directory, 'password.txt'), 'synthetic-passphrase')
+  await writeFile(outside, 'synthetic-outside-passphrase')
+  const redirected = path.join(workspace, 'redirected')
+  await symlink(directory, redirected, process.platform === 'win32' ? 'junction' : 'dir')
+  for (const [passwordFile, reason] of [
+    [empty, /password file is empty/], [large, /at most 4096 bytes/], [directory, /regular file/],
+    [outside, /escapes the selected working directory/], [path.join(redirected, 'password.txt'), /Redirected/],
+  ]) {
+    await assert.rejects(importNativeData(archive, desktop, { workspaceRoot: workspace, passwordFile }), reason)
+    assert.deepEqual(await readdir(desktop), [], 'invalid password inputs must not create staging or live data')
+  }
+  const sibling = path.join(root, 'Migration-other')
+  await mkdir(sibling)
+  await writeFile(path.join(sibling, 'password.txt'), 'synthetic-sibling-passphrase')
+  await assert.rejects(importNativeData(archive, desktop, { workspaceRoot: workspace, passwordFile: path.join(sibling, 'password.txt') }), /escapes/)
+  if (process.platform === 'win32') {
+    const passwordFile = path.join(workspace, 'Password.txt')
+    await writeFile(passwordFile, 'synthetic-passphrase\r\n')
+    const result = await importNativeData(archive.toUpperCase(), desktop.toLowerCase(), { workspaceRoot: workspace, passwordFile: passwordFile.toUpperCase() })
+    assert.equal(result.importedFiles, 1)
+    assert.equal(await readFile(path.join(desktop, 'data/dsh-home/settings.yaml'), 'utf8'), 'language: en\n')
+  }
+  assert.equal(hash(await readFile(archive)), original)
+})

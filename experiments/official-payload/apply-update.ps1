@@ -32,6 +32,9 @@ function Invoke-WithNetworkRetry([scriptblock]$Action, [int]$Attempts = 4) {
                 if ($failure -is [Net.WebException] -and [string]$failure.Status -in @('Timeout', 'ConnectFailure', 'NameResolutionFailure', 'ProxyNameResolutionFailure', 'ConnectionClosed', 'KeepAliveFailure', 'ReceiveFailure', 'SendFailure')) {
                     $transient = $true; break
                 }
+                if ($failure -is [Net.WebException] -and $failure.Status -eq [Net.WebExceptionStatus]::ProtocolError -and $failure.Data['DshPortableInstallerHttpStatus'] -is [int] -and $failure.Data['DshPortableInstallerHttpStatus'] -in @(408, 429, 500, 502, 503, 504)) {
+                    $transient = $true; break
+                }
             }
             if ($permanent -or -not $transient -or $attempt -ge $Attempts) { throw }
             $script:status.retry = $attempt; Write-Atomic $statusPath $script:status

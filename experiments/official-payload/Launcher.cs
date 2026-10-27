@@ -193,6 +193,9 @@ internal static class PortableLauncher {
                 if (app.WaitForExit(20000)) {
                     int exitCode = app.ExitCode;
                     if (ShouldRollback(true, exitCode) && !String.IsNullOrEmpty(previous) && VersionPattern.IsMatch(previous) && previous != version) {
+                        string rollbackExecutable = AppExecutable(previous);
+                        try { EnsureApplication(rollbackExecutable); }
+                        catch (IOException error) { throw new IOException(T("无法回退：旧版本不完整。当前版本信息与程序目录已保留。", "Cannot roll back: the previous version is incomplete. Current state and application files have been preserved."), error); }
                         state["version"] = previous; state["previous"] = ""; state["pendingHealth"] = false; state["switchedAt"] = DateTime.UtcNow.ToString("o");
                         // The failed version must never become the rollback target, and the update engine must not retry it right away.
                         state["rejected"] = new Dictionary<string, object> { { "version", version }, { "at", DateTime.UtcNow.ToString("o") } };
@@ -200,7 +203,7 @@ internal static class PortableLauncher {
                         try { CheckPath(Path.Combine(AppRoot, version)); Directory.Delete(Path.Combine(AppRoot, version), true); } catch (Exception cleanupError) { Log("could not remove the rejected version: " + SafeMessage(cleanupError.Message)); }
                         WriteJsonAtomic(Path.Combine(LauncherData, "update-status.json"), new Dictionary<string, object> { { "status", "rolled-back" }, { "version", version }, { "error", "New version exited before the 20-second health window." } });
                         Log("health rollback version=" + version + " exit=" + exitCode);
-                        version = previous; executable = AppExecutable(previous); EnsureApplication(executable);
+                        version = previous; executable = rollbackExecutable;
                         app = StartOfficialProcess(executable, null, probe);
                     } else {
                         Log("health process exited early with code=" + exitCode + "; no previous version available");

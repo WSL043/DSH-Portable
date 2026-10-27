@@ -129,11 +129,22 @@ jobs:
           retention-days: 14
 
   native-data-desktop:
+    name: Native data transfer (${{ matrix.os }}, ${{ matrix.mode }})
     needs: native-data-origin
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-2022, windows-2025]
+        include:
+          - os: windows-2022
+            mode: plain
+            archive: legacy.dshdata
+            origin: origin.json
+            password_file: ''
+          - os: windows-2025
+            mode: encrypted
+            archive: encrypted.dshdata
+            origin: origin-encrypted.json
+            password_file: synthetic-password.txt
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     steps:
@@ -170,16 +181,21 @@ jobs:
         shell: powershell
         env:
           NATIVE_INSTALLER: ${{ steps.stage-native.outputs.installer }}
+          NATIVE_ARCHIVE: ${{ matrix.archive }}
+          NATIVE_ORIGIN: ${{ matrix.origin }}
+          NATIVE_PASSWORD_FILE: ${{ matrix.password_file }}
         run: |
           $ErrorActionPreference = 'Stop'
+          $passwordFile = if ($env:NATIVE_PASSWORD_FILE) { Join-Path 'artifacts/native-transfer-origin' $env:NATIVE_PASSWORD_FILE } else { '' }
           ./experiments/official-payload/e2e/run-native-data-e2e.ps1 `
             -Installer $env:NATIVE_INSTALLER `
             -Candidate 'experiments/official-payload/candidate.json' `
             -IndexBaselineCandidate $env:NATIVE_INDEX_BASELINE `
             -SevenZip (Join-Path $env:ProgramFiles '7-Zip/7z.exe') `
-            -NativeArchive 'artifacts/native-transfer-origin/legacy.dshdata' `
-            -Origin 'artifacts/native-transfer-origin/origin.json' `
-            -WorkRoot (Join-Path $env:RUNNER_TEMP 'pure-native-data')
+            -NativeArchive (Join-Path 'artifacts/native-transfer-origin' $env:NATIVE_ARCHIVE) `
+            -Origin (Join-Path 'artifacts/native-transfer-origin' $env:NATIVE_ORIGIN) `
+            -WorkRoot (Join-Path $env:RUNNER_TEMP 'pure-native-data') `
+            -PasswordFile $passwordFile
       - uses: actions/upload-artifact@v7
         if: always()
         with:

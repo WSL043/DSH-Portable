@@ -93,6 +93,13 @@ test('a static preflight gates the package job, and a draft is only created afte
   const preflightSource = JSON.stringify(workflow.jobs.preflight.steps);
   assert.match(preflightSource, /Parser\]::ParseFile/);
   assert.match(preflightSource, /node --test/);
+  const dependency = workflow.jobs.preflight.steps.find(step => step.name === 'Provide js-yaml for the static workflow tests').run;
+  assert.match(dependency, /app\/package-lock\.json[\s\S]*node_modules\/js-yaml/);
+  assert.match(dependency, /npm pack "js-yaml@\$\(\$dependency\.version\)" --registry https:\/\/registry\.npmjs\.org --ignore-scripts/);
+  assert.match(dependency, /Invalid locked js-yaml identity/);
+  assert.ok(dependency.indexOf('Get-FileHash') < dependency.indexOf('tar -xzf'), 'authenticate the locked archive before extraction');
+  assert.match(dependency, /Get-FileHash[^\n]*-Algorithm SHA512[^\n]*-cne \$expected/);
+  assert.doesNotMatch(dependency, /npm ci|js-yaml@\d/);
 });
 
 test('manual alpha qualification creates no draft unless publication is explicitly enabled after both smokes', async () => {

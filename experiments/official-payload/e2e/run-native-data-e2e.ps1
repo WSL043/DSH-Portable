@@ -5,7 +5,8 @@ param(
     [Parameter(Mandatory=$true)][string]$NativeArchive,
     [Parameter(Mandatory=$true)][string]$Origin,
     [Parameter(Mandatory=$true)][string]$WorkRoot,
-    [string]$IndexBaselineCandidate = (Join-Path $PSScriptRoot '../candidate.json')
+    [string]$IndexBaselineCandidate = (Join-Path $PSScriptRoot '../candidate.json'),
+    [string]$PasswordFile = ''
 )
 $ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'
 Import-Module (Join-Path $PSScriptRoot '../Payload.psm1') -Force -DisableNameChecking
@@ -14,7 +15,7 @@ if (Test-Path -LiteralPath $WorkRoot) { throw 'Use a fresh acceptance work root'
 $evidence = Join-Path $WorkRoot 'evidence'; $portable = Join-Path $WorkRoot 'portable'
 $null = New-Item -ItemType Directory -Path $evidence -Force
 $node = (Get-Command node.exe -ErrorAction Stop | Select-Object -First 1).Source
-$report = [ordered]@{ passed=$false; sourceCommit=$env:GITHUB_SHA; rounds=@(); failure=$null; protocolRestored=$false; ownedProcessesRemaining=@(); releaseQualified=$false }
+$report = [ordered]@{ passed=$false; archiveMode=$(if ($PasswordFile) { 'encrypted' } else { 'plain' }); sourceCommit=$env:GITHUB_SHA; rounds=@(); failure=$null; protocolRestored=$false; ownedProcessesRemaining=@(); releaseQualified=$false }
 $indexProcess = $null; $launcher = $null; $probePort = 0
 $previousLocalFeed = [Environment]::GetEnvironmentVariable('DSH_PORTABLE_TEST_ALLOW_LOCAL_FEED')
 
@@ -71,9 +72,15 @@ try {
     $report.inputArchiveSha256 = (Get-FileHash -LiteralPath $inputArchive -Algorithm SHA256).Hash.ToLowerInvariant()
     # The maintenance CLI confines both inputs and outputs to the operator's cwd.
     # Only this new work root is used; the downloaded source archive stays intact.
+    $importArguments = @((Join-Path $PSScriptRoot '../import-native-data.mjs'), $inputArchive, $portable)
+    if ($PasswordFile) {
+        $inputPassword = Join-Path $WorkRoot 'synthetic-password.txt'
+        [IO.File]::Copy([IO.Path]::GetFullPath($PasswordFile), $inputPassword, $false)
+        $importArguments += @('--password-file', $inputPassword)
+    }
     Push-Location -LiteralPath $WorkRoot
     try {
-        & $node (Join-Path $PSScriptRoot '../import-native-data.mjs') $inputArchive $portable
+        & $node @importArguments
         if ($LASTEXITCODE -ne 0) { throw 'Native archive import failed' }
     } finally { Pop-Location }
     $version = [string](Get-Content -LiteralPath $current -Raw | ConvertFrom-Json).version

@@ -134,9 +134,16 @@ function Receive-OfficialInstallerBytes([string]$Destination, $Candidate, [scrip
         $request = [Net.HttpWebRequest]::Create([string]$Candidate.installerUrl)
         $request.AllowAutoRedirect = $false; $request.Timeout = 15000; $request.ReadWriteTimeout = 15000
         if ($offset -gt 0) { $request.AddRange($offset) }
-        try { $response = $request.GetResponse() } catch [Net.WebException] { if ($null -eq $_.Exception.Response) { throw }; $response = $_.Exception.Response }
+        $responseFailure = $null
+        try { $response = $request.GetResponse() } catch [Net.WebException] { if ($null -eq $_.Exception.Response) { throw }; $responseFailure = $_.Exception; $response = $_.Exception.Response }
         try {
             $code = [int]$response.StatusCode
+            if ($code -in @(408, 429, 500, 502, 503, 504)) {
+                $temporaryFailure = [Net.WebException]::new("Temporary installer response (HTTP $code).", $responseFailure, [Net.WebExceptionStatus]::ProtocolError, $response)
+                # .NET Framework clears Response.StatusCode when finally disposes it.
+                $temporaryFailure.Data['DshPortableInstallerHttpStatus'] = $code
+                throw $temporaryFailure
+            }
             if ($offset -gt 0 -and ($code -eq 200 -or $code -eq 416)) {
                 if ($restarted) { throw 'Installer server did not honor a clean restart' }
                 Remove-Item -LiteralPath $partial -Force -ErrorAction SilentlyContinue

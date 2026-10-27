@@ -1,8 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { exportFixture } from '../experiments/official-payload/e2e/native-data.mjs';
+import { inspectDataArchive } from '../launcher/data-transfer.mjs';
+import { importNativeData } from '../experiments/official-payload/import-native-data.mjs';
 import { windowsPowerShell } from './helpers/windows-powershell.mjs';
 import { buildAcceptedIndex, buildPureE2EReport, expectedProtocolCommand, isPathOwnedByRoot, normalizeOfficialCandidate, packageFeedContract, REQUIRED_IDS, serializeCandidateFile } from '../experiments/official-payload/e2e/report.mjs';
 
@@ -116,4 +121,42 @@ test('the actual write-audit predicate rejects global data/agents leaks without 
   const env = { ...process.env }; delete env.PSModulePath;
   const result = JSON.parse(execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true }).trim());
   assert.deepEqual(result, { agents: true, agentsRoot: true, dsh: true, electron: true, sibling: false, opaque: false });
+});
+
+
+test('the cross-host fixture supplies plain and encrypted imports with the same history and file-only password flow', async t => {
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'pure-cross-host-formats-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const output = join(root, 'origin');
+  const plain = await exportFixture(join(root, 'native-source'), output);
+  const encrypted = JSON.parse(await readFile(join(output, 'origin-encrypted.json'), 'utf8'));
+  const passwordFile = join(output, 'synthetic-password.txt');
+  const password = (await readFile(passwordFile, 'utf8')).replace(/[\r\n]+$/, '');
+  assert.deepEqual(encrypted.identity, plain.identity);
+  assert.equal(encrypted.sessionId, plain.sessionId);
+  assert.equal(encrypted.exported.encrypted, true);
+  assert.equal(plain.exported.encrypted, false);
+  assert.ok(!JSON.stringify([plain, encrypted]).includes(password), 'password must not enter origin evidence or CLI output');
+  const plainArchive = join(output, 'legacy.dshdata'), encryptedArchive = join(output, 'encrypted.dshdata');
+  assert.deepEqual((await inspectDataArchive(encryptedArchive, { password })).files, (await inspectDataArchive(plainArchive)).files);
+  for (const [name, archive, origin, options] of [
+    ['plain', plainArchive, plain, {}],
+    ['encrypted', encryptedArchive, encrypted, { passwordFile }],
+  ]) {
+    const bytes = await readFile(archive);
+    assert.equal(bytes.subarray(0, 8).toString(), name === 'encrypted' ? 'DSHDAT1E' : 'DSHDAT1U');
+    assert.equal(createHash('sha256').update(bytes).digest('hex'), origin.archiveSha256);
+    const desktop = join(root, name); await mkdir(desktop);
+    const result = await importNativeData(archive, desktop, { workspaceRoot: root, ...options });
+    assert.equal(result.archiveSha256, origin.archiveSha256);
+    assert.ok(!JSON.stringify(result).includes(password), 'password must not enter import evidence');
+  }
+  const workflow = await readFile(new URL('../.github/workflows/official-pure-e2e.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /os: windows-2022\s+mode: plain\s+archive: legacy\.dshdata\s+origin: origin\.json\s+password_file: ''/);
+  assert.match(workflow, /os: windows-2025\s+mode: encrypted\s+archive: encrypted\.dshdata\s+origin: origin-encrypted\.json\s+password_file: synthetic-password\.txt/);
+  assert.match(workflow, /NATIVE_PASSWORD_FILE: \$\{\{ matrix\.password_file \}\}/);
+  assert.doesNotMatch(workflow, /contents: write|publish_draft:|publish_channel:/);
+  const runner = await readFile(new URL('../experiments/official-payload/e2e/run-native-data-e2e.ps1', import.meta.url), 'utf8');
+  assert.match(runner, /\$importArguments \+= @\('--password-file', \$inputPassword\)/);
+  assert.doesNotMatch(runner, /Get-Content[^\r\n]*(?:Password|password)/);
 });

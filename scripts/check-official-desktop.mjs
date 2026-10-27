@@ -7,6 +7,9 @@ const repository = 'deepseek-ai/deepseek-harness';
 // catches new entry points as well as changes to the currently reviewed files.
 const sharedDesktopPackages = [
   'packages/util/home-paths/',
+  // Profile defaults and protected-plugin lists moved here from app-boot/plugin-manager.
+  // Keep watching until those responsibilities retire or their next owner has been reviewed.
+  'packages/util/official-bundles/',
   'packages/boot/app-boot/',
   'packages/boot/plugin-manager/',
   'packages/boot/plugin-market/',

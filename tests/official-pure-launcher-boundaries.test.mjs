@@ -214,3 +214,90 @@ test('health rollback model clears the failed previous target and records its re
   assert.deepEqual(result.state.rejected, { version: '2.0.0', at: '2026-10-22T00:00:00.000Z' });
   assert.equal(assessHealth(result.state, { exitCode: 8 }).action, 'supervise');
 });
+
+
+test('compiled health rollback preserves state and payloads when the previous program is incomplete', { skip: process.platform !== 'win32' }, async t => {
+  const scratch = await mkdtemp(join(tmpdir(), 'dsh-pure-health-'));
+  const registryRoot = String.raw`Software\DSHPortableAcceptance\health-` + crypto.randomUUID();
+  try {
+    const source = await readFile(join(repository, 'experiments/official-payload/Launcher.cs'), 'utf8');
+    let isolated = source.replace(String.raw`Software\Classes\dsh`, registryRoot + String.raw`\dsh`);
+    // Keep the full production supervisor and health branch. Only unrelated
+    // machine-wide conflict detection, updater pointer and protocol namespace are isolated.
+    for (const call of ['CheckExternalOfficialOrPort(executable);', 'WritePortableRootPointer(ReadCacheName());']) {
+      assert.equal(isolated.split(call).length, 2, 'health fixture isolation seam changed');
+      isolated = isolated.replace(call, '// Isolated by the health fixture.');
+    }
+    const fixtureSource = join(scratch, 'HealthLauncher.cs'), fixtureExe = join(scratch, 'HealthLauncher.exe');
+    const childSource = join(scratch, 'HealthChild.cs');
+    await writeFile(fixtureSource, isolated);
+    await writeFile(childSource, 'using System; using System.IO; class HealthChild { static int Main() {\n'
+      + '#if FAIL\nreturn 1;\n#else\nFile.AppendAllText(Path.Combine(Environment.GetEnvironmentVariable("DSH_HOME"),"health-starts.log"),"previous started\\n");return 0;\n#endif\n} }');
+    const output = ps(`
+      $ErrorActionPreference='Stop'; $fixture=${quote(registryRoot)}
+      $compiler=Join-Path ([Environment]::GetFolderPath('Windows')) 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+      function Compile-Health([string[]]$compilerArgs) {
+        $start=[Diagnostics.ProcessStartInfo]::new($compiler); $start.UseShellExecute=$false; $start.CreateNoWindow=$true
+        $start.RedirectStandardOutput=$true; $start.RedirectStandardError=$true
+        $start.Arguments=($compilerArgs|ForEach-Object{'"'+$_.Replace('"','\"')+'"'}) -join ' '
+        $child=[Diagnostics.Process]::Start($start)
+        try {
+          $output=$child.StandardOutput.ReadToEndAsync(); $errorOutput=$child.StandardError.ReadToEndAsync()
+          if(-not $child.WaitForExit(20000)){$child.Kill();throw 'Health fixture compiler timed out'}
+          if($child.ExitCode -ne 0){throw ('Health fixture compilation failed: '+$output.Result+$errorOutput.Result)}
+        } finally {$child.Dispose()}
+      }
+
+      Compile-Health @('/nologo','/target:winexe','/platform:x64','/optimize+','/r:System.Web.Extensions.dll','/r:System.Windows.Forms.dll','/r:System.Drawing.dll','/r:System.Management.dll',${quote('/out:' + fixtureExe)},${quote(fixtureSource)})
+      $type=[Reflection.Assembly]::Load([IO.File]::ReadAllBytes(${quote(fixtureExe)})).GetType('PortableLauncher'); $flags=[Reflection.BindingFlags]'NonPublic,Static'
+      $results=@()
+      try {
+        foreach($kind in @('missing-exe','missing-asar','valid')) {
+          $root=Join-Path ${quote(scratch)} $kind; $app=Join-Path $root 'app'; $data=Join-Path $root 'data'; $launcherData=Join-Path $data 'launcher'
+          $null=New-Item -ItemType Directory -Path (Join-Path $app '1.0.0/resources'),(Join-Path $app '2.0.0/resources'),$launcherData,(Join-Path $data 'dsh-home') -Force
+          $old=Join-Path $app '1.0.0/DeepSeek Harness.exe'; $new=Join-Path $app '2.0.0/DeepSeek Harness.exe'
+          Compile-Health @('/nologo','/target:winexe','/define:FAIL',('/out:'+$new),${quote(childSource)})
+          if($kind -ne 'missing-exe') { Compile-Health @('/nologo','/target:winexe',('/out:'+$old),${quote(childSource)}) }
+          [IO.File]::WriteAllText((Join-Path $app '2.0.0/resources/app.asar'),'synthetic current payload')
+          if($kind -ne 'missing-asar'){[IO.File]::WriteAllText((Join-Path $app '1.0.0/resources/app.asar'),'synthetic previous payload')}
+          $statePath=Join-Path $app 'current.json'; $before='{"version":"2.0.0","previous":"1.0.0","pendingHealth":true,"custom":"keep"}'
+          [IO.File]::WriteAllText($statePath,$before); [IO.File]::WriteAllText((Join-Path $data 'draft.txt'),'synthetic draft preserved')
+          $beforeTrees=@(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object Name -ne 'current.json' | ForEach-Object { $_.FullName+'|'+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join '\n'
+          foreach($pair in @(@('Root',$root),@('AppRoot',$app),@('DataRoot',$data),@('LauncherData',$launcherData))){$type.GetField($pair[0],$flags).SetValue($null,$pair[1])}
+          $errorMessage=''; $code=$null
+          try { $code=$type.GetMethod('Supervise',$flags).Invoke($null,@($null,$null,0)) }
+          catch { $failure=$_.Exception; while($failure.InnerException -and $failure.GetType().Name -in @('MethodInvocationException','TargetInvocationException')){$failure=$failure.InnerException}; $errorMessage=$failure.Message }
+          $afterTrees=@(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object Name -ne 'current.json' | ForEach-Object { $_.FullName+'|'+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join '\n'
+          $stateText=[IO.File]::ReadAllText($statePath)
+          $results+=@{kind=$kind;code=$code;error=$errorMessage;stateUnchanged=($stateText -ceq $before);treesUnchanged=($afterTrees -ceq $beforeTrees);state=($stateText|ConvertFrom-Json);currentExists=(Test-Path -LiteralPath $new);previousStarted=(Test-Path -LiteralPath (Join-Path $data 'dsh-home/health-starts.log'));draft=[IO.File]::ReadAllText((Join-Path $data 'draft.txt'))}
+        }
+      } finally {[Microsoft.Win32.Registry]::CurrentUser.DeleteSubKeyTree($fixture,$false)}
+      @{cases=$results;registryClean=($null -eq [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($fixture))}|ConvertTo-Json -Depth 8 -Compress
+    `);
+    const results = JSON.parse(output.trim().split(/\r?\n/).at(-1));
+    console.log('compiled health rollback:', JSON.stringify(results));
+    assert.equal(results.registryClean, true);
+    for (const item of results.cases) await t.test(item.kind, () => {
+      assert.equal(item.draft, 'synthetic draft preserved');
+      assert.equal(item.state.custom, 'keep');
+      if (item.kind === 'valid') {
+        assert.equal(item.code, 0, JSON.stringify(item));
+        assert.equal(item.state.version, '1.0.0');
+        assert.equal(item.state.previous, '');
+        assert.equal(item.state.pendingHealth, false);
+        assert.equal(item.state.rejected.version, '2.0.0');
+        assert.equal(item.previousStarted, true);
+        assert.equal(item.currentExists, false);
+      } else {
+        assert.match(item.error, /Cannot roll back|无法回退/);
+        assert.equal(item.stateUnchanged, true);
+        assert.equal(item.treesUnchanged, true);
+        assert.equal(item.previousStarted, false);
+      }
+    });
+  } finally {
+    assert.ok(scratch.startsWith(join(tmpdir(), 'dsh-pure-health-')));
+    try { ps(`Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(${quote(scratch)},[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)`); }
+    catch { t.diagnostic(`Health fixture retained for recoverable cleanup: ${scratch}`); }
+  }
+});

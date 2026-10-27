@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { execFileSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createServer } from 'node:http';
@@ -194,4 +195,80 @@ function Remove-OwnedOlderPayloads { throw 'Injected old payload sharing failure
       }
     }
   } finally { await rm(fixture, { recursive: true, force: true }); }
+});
+
+
+test('temporary installer HTTP failures share the bounded retry budget while permanent failures stop immediately', windows, async t => {
+  const fixture = await mkdtemp(join(tmpdir(), 'pure-http-retry-'));
+  const bytes = Buffer.alloc(1000000, 0x5a);
+  const digest = createHash('sha512').update(bytes).digest('base64');
+  const requests = new Map();
+  const server = createServer(async (request, response) => {
+    const scenario = request.url.split('/').at(-1);
+    const seen = requests.get(scenario) || [];
+    seen.push(request.headers.range || ''); requests.set(scenario, seen);
+    if (scenario === 'cancel') await writeFile(join(fixture, scenario, 'cancel.request'), 'cancel');
+    const code = scenario === '401' || scenario === '404' ? Number(scenario)
+      : scenario === 'exhausted' || scenario === 'cancel' ? 503
+      : ['503', 'range'].includes(scenario) && seen.length === 1 ? 503
+      : scenario === '429' && seen.length === 1 ? 429 : 200;
+    if (code !== 200) { response.writeHead(code).end(); return; }
+    const offset = scenario === 'range' ? 32768 : 0;
+    response.writeHead(offset ? 206 : 200, {
+      'Content-Length': bytes.length - offset,
+      ...(offset ? { 'Content-Range': `bytes ${offset}-${bytes.length - 1}/${bytes.length}` } : {}),
+    });
+    response.end(scenario === 'digest' ? Buffer.alloc(bytes.length, 0x79) : bytes.subarray(offset));
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    for (const scenario of ['503', '429', 'range', 'exhausted', '401', '404', 'digest', 'signature', 'version', 'cancel']) {
+      await t.test(scenario, async () => {
+        const directory = join(fixture, scenario); await mkdir(directory);
+        const destination = join(directory, 'installer.exe');
+        if (scenario === 'range') await writeFile(destination + '.part', bytes.subarray(0, 32768));
+        const candidate = { version: scenario === 'version' ? 'invalid-version' : '2.0.0', size: bytes.length, sha512: digest,
+          installerUrl: `http://127.0.0.1:${server.address().port}/dsh-desk/bin/win-x64/${scenario}` };
+        const candidateFile = join(directory, 'candidate.json'); await writeFile(candidateFile, JSON.stringify(candidate));
+        const script = `
+          $ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'
+          Import-Module ${quote(payload)} -Force -DisableNameChecking
+          $tokens=$null; $errors=$null; $ast=[Management.Automation.Language.Parser]::ParseFile(${quote(engine)},[ref]$tokens,[ref]$errors)
+          foreach($name in @('Invoke-WithNetworkRetry','Write-Atomic')) {
+            $definition=@($ast.FindAll({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -ceq $name},$true))
+            if($definition.Count -ne 1){throw 'Update retry function seam changed'}
+            . ([scriptblock]::Create($definition[0].Extent.Text))
+          }
+          $env:DSH_PORTABLE_TEST_ALLOW_LOCAL_INSTALLER='1'; $candidate=Get-Content -LiteralPath ${quote(candidateFile)} -Raw | ConvertFrom-Json
+          $script:status=@{retry=0}; $statusPath=${quote(join(directory, 'status.json'))}; $CancelFile=${quote(join(directory, 'cancel.request'))}
+          $ok=$false; $message=''; $watch=[Diagnostics.Stopwatch]::StartNew()
+          try { Invoke-WithNetworkRetry { ${scenario === 'signature' ? 'Get-OfficialInstaller' : 'Receive-OfficialInstallerBytes'} ${quote(destination)} $candidate $null $CancelFile | Out-Null }; $ok=$true }
+          catch { $message=$_.Exception.Message }
+          @{ok=$ok;error=$message;elapsedMs=$watch.ElapsedMilliseconds;partialExists=(Test-Path -LiteralPath ${quote(destination + '.part')})}|ConvertTo-Json -Compress
+        `;
+        const env = { ...process.env }; delete env.PSModulePath;
+        const { stdout } = await promisify(execFile)(powershell, ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true, timeout: 25000 });
+        const result = JSON.parse(stdout.trim().split(/\r?\n/).at(-1));
+        const observed = requests.get(scenario) || [];
+        console.log('real installer retry:', JSON.stringify({ scenario, attempts: observed.length, ...result }));
+        if (['503', '429', 'range'].includes(scenario)) {
+          assert.equal(result.ok, true, JSON.stringify(result));
+          assert.equal(observed.length, 2);
+          assert.deepEqual(await readFile(destination + '.part'), bytes);
+          if (scenario === 'range') assert.deepEqual(observed, ['bytes=32768-', 'bytes=32768-']);
+        } else {
+          assert.equal(result.ok, false);
+          assert.equal(observed.length, scenario === 'version' ? 0 : scenario === 'exhausted' ? 4 : 1);
+          assert.match(result.error, scenario === 'digest' ? /digest mismatch/ : scenario === 'signature' ? /signature validation failed/
+            : scenario === 'version' ? /Unsupported official version/ : scenario === 'cancel' ? /cancelled/ : scenario === 'exhausted' ? /HTTP 503/ : /Unexpected installer response/);
+          if (['digest', 'signature'].includes(scenario)) assert.equal(result.partialExists, false);
+        }
+      });
+    }
+  } finally {
+    await new Promise(resolve => server.close(resolve));
+    assert.ok(fixture.startsWith(join(tmpdir(), 'pure-http-retry-')));
+    try { ps(`Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(${quote(fixture)},[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)`); }
+    catch { t.diagnostic(`HTTP fixtures retained for recoverable cleanup: ${fixture}`); }
+  }
 });

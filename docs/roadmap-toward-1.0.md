@@ -2,6 +2,18 @@
 
 2026-09-29，用户确定方向。本文记录决定和可度量的现状，具体批次开工前仍以 [验收标准](native-release-exit-criteria.md) 与各任务记录为准。
 
+## 2026-10-28 维护批次
+
+继续维护 Portable 自身边界，不发布、不启用停用通道、不修改公开索引或用户本地包。[Windows nightly](https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml) 为 0.2.1-rc.3；下载的 289,415,960 B 安装包大小、SHA-512 与官方 feed 一致，Authenticode 及发布者有效。实际 ASAR 为 182,434,783 B，SHA-256 `04b32e3a872826ba15cfb2081c6a929a8d4ecaa65e09a2543e5a6b30e2eff1f0`；desktop/client/core 三份清单完整性核对通过，MCP client/core 仍为 2.2.0，命中[官方公告](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw)，发布资格继续 blocked。签名包依赖由官方修复，Portable 保持原始 EXE/ASAR。
+
+macOS ARM nightly 为 rc.3，Intel 为 rc.4，仅核实官方 feed 元数据，没有 macOS 实机验收；不能把 Intel 更新当成所有平台的新稳定内核。
+
+本批补健康回退的旧 EXE/ASAR 预检，避免先改 current、删除新程序后才发现上一版不完整；Native 数据迁入复用既有解密能力，提供受本地路径与大小限制的密码文件，保留默认凭据/插件排除；Windows 路径比较遵循系统大小写规则。Linux 导出继续复用原跨机流程，验收配置为 Windows 2022 明文、2025 加密各两轮真实 UI；结果以待验源码的 Actions 报告为准。下载的六种明确 HTTP 暂态复用原四次、2/4/8 秒有限重试，保留 Range 与取消，版本/摘要/签名错误仍立即停止。
+
+源码监控补入上游迁移后的 `packages/util/official-bundles/`，覆盖官方 profile、默认/可选/保护插件清单；不接管官方插件管理。master `22ddee3792402c3e70ec5f86a63c3e3e895a2f60` 相对已审基线已有 1,539 提交，本批只审 Portable 相关变化，继续保留 `687f282e8625c6b8d11ff58211a90524be2e4317` 基线。
+
+移除旧架构且已无生产者的 preview draft 工作流及其唯一 Python 检查器，保留当前纯包的完整冒烟、显式发布开关与实际 ASAR 授权。操作入口和验收边界见[运维说明](pure-portable-operations.md)。
+
 ## 2026-10-23 维护批次
 
 1.x 当前已走到 alpha.5 标识的原版成品便携层；公开旧包与零插件预装的开发代码不同。本轮不发布，具体上游/CI/实机结论见 [维护记录](one-x-maintenance-2026-10-23.md)。本轮先补独立 agents 数据根、目录重定向拒绝、更新/启动并发、保守清理和实际 ASAR 安全门槛，并清除当前说明中的旧 adapter/默认插件说法。

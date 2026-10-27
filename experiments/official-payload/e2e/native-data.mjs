@@ -5,6 +5,7 @@ import { createReadStream } from 'node:fs';
 import { lstat, mkdir, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { constants, zstdCompressSync } from 'node:zlib';
 import { createDataArchive, inspectDataArchive } from '../../../launcher/data-transfer.mjs';
 import { layoutForRoot, projectKey } from '../../../launcher/portable-core.mjs';
@@ -23,9 +24,10 @@ async function absent(filename) {
   throw new Error(`Acceptance requires a fresh path: ${filename}`);
 }
 
-async function exportFixture(source, output) {
+export async function exportFixture(source, output) {
   source = path.resolve(source); output = path.resolve(output);
-  await absent(source); await absent(path.join(output, 'legacy.dshdata')); await absent(path.join(output, 'origin.json'));
+  await absent(source);
+  for (const name of ['legacy.dshdata', 'origin.json', 'encrypted.dshdata', 'origin-encrypted.json', 'synthetic-password.txt']) await absent(path.join(output, name));
   const layout = layoutForRoot(source), fixtureId = randomUUID();
   const id = `session-${fixtureId}`, time = Date.parse('2026-09-04T00:00:00.000Z');
   const title = `Native transfer 中文 ${fixtureId.slice(0, 8)}`;
@@ -72,6 +74,14 @@ async function exportFixture(source, output) {
     source, workspace: layout.workspace, title, workspaceTitle, workspaceFile, workspaceText,
     userMessage, assistantMessage, settingsMarker, excludedMarker, archiveSha256: sha256(await readFile(archive)), exported };
   await writeFile(path.join(output, 'origin.json'), JSON.stringify(origin, null, 2) + '\n', { flag: 'wx' });
+  // The password is disposable synthetic acceptance data, transferred as a file.
+  // It never becomes an argument value, origin field or console output.
+  const password = 'native-transfer-' + randomUUID();
+  const encryptedArchive = path.join(output, 'encrypted.dshdata');
+  const encryptedExport = await createDataArchive(layout, encryptedArchive, { categories: ['settings', 'sessions', 'workspace'], password });
+  await writeFile(path.join(output, 'synthetic-password.txt'), password + '\n', { flag: 'wx', mode: 0o600 });
+  const encryptedOrigin = { ...origin, archiveSha256: await fileSha256(encryptedArchive), exported: encryptedExport };
+  await writeFile(path.join(output, 'origin-encrypted.json'), JSON.stringify(encryptedOrigin, null, 2) + '\n', { flag: 'wx' });
   return origin;
 }
 
@@ -182,9 +192,11 @@ async function verifyDesktop(root, originPath, port, output) {
   finally { client?.close(); await writeFile(prefix + '.json', JSON.stringify(evidence, null, 2) + '\n'); }
 }
 
-try {
-  const [mode, ...args] = process.argv.slice(2);
-  if (mode === 'export' && args.length === 2) console.log(JSON.stringify(await exportFixture(...args), null, 2));
-  else if (mode === 'verify' && (args.length === 3 || args.length === 4)) console.log(JSON.stringify(await verifyDesktop(...args), null, 2));
-  else throw new Error('usage: native-data.mjs export <fresh-source> <artifact-dir> | verify <desktop-root> <origin.json> <probe-port> [evidence-dir]');
-} catch (error) { console.error(error.message); process.exitCode = 1; }
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  try {
+    const [mode, ...args] = process.argv.slice(2);
+    if (mode === 'export' && args.length === 2) console.log(JSON.stringify(await exportFixture(...args), null, 2));
+    else if (mode === 'verify' && (args.length === 3 || args.length === 4)) console.log(JSON.stringify(await verifyDesktop(...args), null, 2));
+    else throw new Error('usage: native-data.mjs export <fresh-source> <artifact-dir> | verify <desktop-root> <origin.json> <probe-port> [evidence-dir]');
+  } catch (error) { console.error(error.message); process.exitCode = 1; }
+}

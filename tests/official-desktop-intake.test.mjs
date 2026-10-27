@@ -11,6 +11,8 @@ test('desktop intake includes host and package boundaries without unrelated app 
 test('desktop intake follows reviewed shared packages and locked external dependencies', () => {
   const included = [
     'packages/util/home-paths/src/index.ts',
+    'packages/util/official-bundles/src/bundles.ts',
+    'packages/util/official-bundles/src/plugin-manager.ts',
     'packages/boot/app-boot/src/profile-resolution/new-entry.ts',
     'packages/boot/plugin-manager/src/operations.ts',
     'packages/boot/plugin-market/src/index.ts',
@@ -23,17 +25,18 @@ test('desktop intake follows reviewed shared packages and locked external depend
     'packages/experimental/plugin-market-bundle/cordis.patch.yml',
     'pnpm-lock.yaml',
   ];
-  const unrelated = ['packages/util/home-paths-extra/src/index.ts', 'packages/boot/app-boot-other/package.json',
+  const unrelated = ['packages/util/home-paths-extra/src/index.ts', 'packages/util/official-bundles-extra/src/index.ts', 'packages/boot/app-boot-other/package.json',
     'packages/client/other/src/index.ts', 'packages/mcp/mcp-client-extra/package.json',
     'examples/pnpm-lock.yaml', 'apps/web/index.ts'];
   const tree = { tree: [...included, ...unrelated].map(path => ({ path, type: 'blob', sha: 'a' })) };
   assert.deepEqual(Object.keys(desktopFiles(tree)), included);
 });
 
-test('shared path, MCP and lock drift remains visible without desktop file changes', () => {
+test('shared path, official bundle lists, MCP and lock drift remains visible without desktop file changes', () => {
   const before = { tree: [
     { path: 'apps/desktop/src/main.ts', type: 'blob', sha: 'same' },
     { path: 'packages/util/home-paths/src/index.ts', type: 'blob', sha: 'old' },
+    { path: 'packages/util/official-bundles/src/plugin-manager.ts', type: 'blob', sha: 'old' },
     { path: 'packages/mcp/mcp-client/package.json', type: 'blob', sha: 'old' },
     { path: 'pnpm-lock.yaml', type: 'blob', sha: 'old' },
   ] };
@@ -41,6 +44,7 @@ test('shared path, MCP and lock drift remains visible without desktop file chang
   assert.deepEqual(changesBetween(desktopFiles(before), desktopFiles(after)), [
     { path: 'packages/mcp/mcp-client/package.json', status: 'modified' },
     { path: 'packages/util/home-paths/src/index.ts', status: 'modified' },
+    { path: 'packages/util/official-bundles/src/plugin-manager.ts', status: 'modified' },
     { path: 'pnpm-lock.yaml', status: 'modified' },
   ]);
 });
