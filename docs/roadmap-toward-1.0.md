@@ -14,6 +14,10 @@ macOS ARM nightly 为 rc.3，Intel 为 rc.4，仅核实官方 feed 元数据，�
 
 移除旧架构且已无生产者的 preview draft 工作流及其唯一 Python 检查器，保留当前纯包的完整冒烟、显式发布开关与实际 ASAR 授权。实机写入审计按进程创建/退出区分 PID 实例，保留存活子进程与有界原始上下文，允许名单保持不变。操作入口和验收边界见[运维说明](pure-portable-operations.md)。
 
+运行验收已完成：[rc.3 更新与回退 40546644364](https://github.com/WSL043/DSH-Portable/actions/runs/40546644364) 绑定源码 `17e5b14`，12/12 通过；[跨机迁移 40541268793](https://github.com/WSL043/DSH-Portable/actions/runs/40541268793) 绑定 `ed1fdbe`，Windows 2022 明文、2025 加密各两轮真实聊天/工作区界面通过，协议恢复且最终自有进程归零。[完整包/Bootstrap 40542849900](https://github.com/WSL043/DSH-Portable/actions/runs/40542849900) 绑定 `95c5e90`，使用生产已接纳的 0.2.0-rc.2 做首启/二启/搬迁兼容回归，发布 job 跳过；不作为 rc.3 Bootstrap 首装资格。三个阶段的源码、底包和发布资格分别保留。
+
+移除最后一个独立 Python 校验器后，main 首轮 CodeQL 的旧 Python 快照因无源文件失败，原记录保留。当前默认配置按 Actions、C#、JS/TS 扫描，查询集和 `remote_and_local` 威胁模型保持原值；最新提交另行验证当前配置，不用历史配置验证记录代替。
+
 ## 2026-10-23 维护批次
 
 1.x 当前已走到 alpha.5 标识的原版成品便携层；公开旧包与零插件预装的开发代码不同。本轮不发布，具体上游/CI/实机结论见 [维护记录](one-x-maintenance-2026-10-23.md)。本轮先补独立 agents 数据根、目录重定向拒绝、更新/启动并发、保守清理和实际 ASAR 安全门槛，并清除当前说明中的旧 adapter/默认插件说法。
