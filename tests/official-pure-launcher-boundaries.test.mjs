@@ -329,16 +329,21 @@ $state=if($mode -eq 'cancelled'){'cancelled'}elseif($Recover){'recovered'}else{'
 exit 0
 `);
     const fixtures = [];
-    for (const kind of ['cancelled', 'recover-repair', 'local-update', 'local-install', 'form-states']) {
+    for (const kind of ['cancelled', 'recover-repair', 'local-update', 'local-install', 'recover-local-install', 'recover-only', 'form-states']) {
       const root = join(scratch, kind);
       for (const directory of ['launcher', 'data/launcher', 'app/1.0.0/resources']) await mkdir(join(root, directory), { recursive: true });
       await writeFile(join(root, 'app/1.0.0/DeepSeek Harness.exe'), 'synthetic program; supervisor is isolated');
       await writeFile(join(root, 'app/1.0.0/resources/app.asar'), 'synthetic payload');
-      if (kind !== 'local-install') await writeFile(join(root, 'app/current.json'), '{"version":"1.0.0","pendingHealth":false}');
+      if (!['local-install', 'recover-local-install', 'recover-only'].includes(kind)) await writeFile(join(root, 'app/current.json'), '{"version":"1.0.0","pendingHealth":false}');
       await writeFile(join(root, 'fixture-mode.txt'), kind === 'cancelled' ? 'cancelled' : 'applied');
       await writeFile(join(root, 'installer.exe'), 'synthetic input; the engine stub captures arguments only');
       await writeFile(join(root, 'accepted-index.json'), '{}');
-      if (kind === 'recover-repair') await writeFile(join(root, 'data/launcher/update-status.json'), '{"status":"failed","transition":{"phase":"prepared"}}');
+      if (kind === 'recover-repair') await writeFile(join(root, 'data/launcher/update-status.json'),
+        JSON.stringify({ status: 'failed', transition: { schemaVersion: 1, operation: 'repair', phase: 'prepared', version: '1.0.0' } }));
+      if (['recover-local-install', 'recover-only'].includes(kind))
+        await writeFile(join(root, 'launcher/bootstrap.json'), '{"mode":"bootstrap"}');
+      if (kind === 'recover-local-install') await writeFile(join(root, 'data/launcher/update-status.json'),
+        JSON.stringify({ status: 'failed', transition: { schemaVersion: 1, operation: 'install', phase: 'extracting', version: '1.0.0', currentSha256: null } }));
       fixtures.push({ kind, root });
     }
     const input = join(scratch, 'fixtures.json');
@@ -355,7 +360,7 @@ exit 0
         [IO.File]::Copy(${quote(launcher)},$copy,$false)
         [IO.File]::Copy(${quote(engine)},(Join-Path $root 'launcher/apply-update.ps1'),$false)
         if($fixture.kind -eq 'form-states'){continue}
-        $args=if($fixture.kind -in @('cancelled','recover-repair')){'--repair'}else{
+        $args=if($fixture.kind -in @('cancelled','recover-repair')){'--repair'}elseif($fixture.kind -eq 'recover-only'){'--recover'}else{
           '--installer-file "'+(Join-Path $root 'installer.exe')+'" --index-file "'+(Join-Path $root 'accepted-index.json')+'"'
         }
         $start=[Diagnostics.ProcessStartInfo]::new($copy);$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.WindowStyle='Hidden';$start.WorkingDirectory=$root;$start.Arguments=$args
@@ -410,6 +415,21 @@ exit 0
     assert.equal(recovered.code, 0, JSON.stringify(recovered));
     assert.equal(recovered.continued, true);
     assert.deepEqual(recovered.records.map(item => item.operation), ['recover'], 'pending recovery must not run a second explicit repair');
+    const resumedInstall = observed.entries.find(item => item.kind === 'recover-local-install');
+    assert.equal(resumedInstall.code, 0, JSON.stringify(resumedInstall));
+    assert.equal(resumedInstall.continued, true, JSON.stringify(resumedInstall));
+    assert.deepEqual(resumedInstall.records.map(item => item.operation), ['recover', 'install'],
+      'extracting recovery must retry the explicit local installation instead of falling back to an online bootstrap');
+    const localRetry = resumedInstall.records[1];
+    assert.equal(localRetry.installer, join(scratch, 'recover-local-install/installer.exe'));
+    assert.equal(localRetry.index, join(scratch, 'recover-local-install/accepted-index.json'));
+    assert.ok(localRetry.caller > 0);
+    assert.equal(localRetry.caller, resumedInstall.records[0].caller, 'the same Root maintenance caller owns recovery and local retry');
+    const recoverOnly = observed.entries.find(item => item.kind === 'recover-only');
+    assert.equal(recoverOnly.code, 0, JSON.stringify(recoverOnly));
+    assert.deepEqual(recoverOnly.records.map(item => item.operation), ['recover'], 'explicit recovery must not start a bare bootstrap install');
+    assert.equal(recoverOnly.continued, false, 'explicit recovery must not start Supervise');
+    await assert.rejects(readFile(join(scratch, 'recover-only/app/current.json')), { code: 'ENOENT' });
     for (const kind of ['local-update', 'local-install']) {
       const entry = observed.entries.find(item => item.kind === kind);
       assert.equal(entry.code, 0, JSON.stringify(entry));

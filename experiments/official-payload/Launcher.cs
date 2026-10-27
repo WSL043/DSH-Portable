@@ -131,16 +131,24 @@ internal static class PortableLauncher {
                 return 0;
             }
             try {
-                if (HasPendingTransition()) {
+                Dictionary<string, object> pending = ReadPendingTransition();
+                if (pending != null) {
                     if (!RunMaintenance("recover", null, null)) return 1;
-                    // A restart consumes the pending operation once; do not run the same repair twice.
-                    maintenance = null; installerFile = null; indexFile = null;
+                    if (maintenance == "recover") return 0;
+                    // Extracting recovery only removes owned staging. Preserve explicit local
+                    // inputs for the retry; a prepared activation has already consumed its operation.
+                    if (GetString(pending, "phase") != "extracting") {
+                        maintenance = null; installerFile = null; indexFile = null;
+                    }
                 }
                 if (maintenance == "choose") {
                     maintenance = ChooseMaintenanceOperation(out installerFile, out indexFile);
                     if (maintenance == null) return 0;
                 }
-                if (maintenance != null && !RunMaintenance(maintenance, installerFile, indexFile)) return 1;
+                if (maintenance != null) {
+                    if (!RunMaintenance(maintenance, installerFile, indexFile)) return 1;
+                    if (maintenance == "recover") return 0;
+                }
                 if (NeedsBootstrap() && !RunBootstrapInstall()) return 1;
                 // Bootstrap itself needs the update engine's exclusive activation lock. Only
                 // hold this shared lease after it completes, through the full supervised run.
@@ -302,12 +310,18 @@ internal static class PortableLauncher {
     }
     private static void SeedLog(string message) { try { Log(message); } catch { } }
 
-    private static bool HasPendingTransition() {
+    private static bool HasPendingTransition() { return ReadPendingTransition() != null; }
+
+    private static Dictionary<string, object> ReadPendingTransition() {
         string file = Path.Combine(LauncherData, "update-status.json");
-        if (!File.Exists(file)) return false;
+        if (!File.Exists(file)) return null;
         CheckPath(file);
         if (new FileInfo(file).Length > 1048576) throw new IOException("Maintenance status exceeds 1 MiB; preserve it for review.");
-        object transition; return ReadJson(file).TryGetValue("transition", out transition) && transition != null;
+        object transition;
+        if (!ReadJson(file).TryGetValue("transition", out transition) || transition == null) return null;
+        var record = transition as Dictionary<string, object>;
+        if (record == null) throw new IOException("Maintenance record is invalid; preserve it for review.");
+        return record;
     }
 
     private static bool RunMaintenance(string operation, string installer, string index) {
