@@ -95,6 +95,24 @@ function Get-LatestAcceptedIndexCandidate($Index) {
     return $Index.versions[$Index.versions.Count - 1]
 }
 
+# Preserve Get-FileHash -LiteralPath semantics while coalescing large-file reads.
+function Get-PortableFileDigest([string]$Path, [ValidateSet('SHA256', 'SHA512')][string]$Algorithm) {
+    $file = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
+    $stream = $null; $hash = $null
+    try {
+        $info = [IO.FileInfo]::new($file)
+        $length = $info.Length
+        if ($info.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Redirected digest file is not supported' }
+        $bufferSize = if ($length -ge 1048576) { 1048576 } else { 4096 }
+        $stream = [IO.FileStream]::new($file, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read, $bufferSize, [IO.FileOptions]::SequentialScan)
+        $hash = if ($Algorithm -eq 'SHA256') { [Security.Cryptography.SHA256]::Create() } else { [Security.Cryptography.SHA512]::Create() }
+        return [BitConverter]::ToString($hash.ComputeHash($stream)).Replace('-', '')
+    } finally {
+        if ($hash) { $hash.Dispose() }
+        if ($stream) { $stream.Dispose() }
+    }
+}
+
 function Assert-Publisher([string]$File) {
     $signature = Get-AuthenticodeSignature -LiteralPath $File
     if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.GetNameInfo([Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false) -cne $script:OfficialPublisher) { throw 'Official signature validation failed' }
@@ -104,7 +122,7 @@ function Assert-Installer([string]$File, $Candidate) {
     Assert-Candidate $Candidate
     Assert-PlainPath $File
     if ((Get-Item -LiteralPath $File).Length -ne [long]$Candidate.size) { throw 'Installer size mismatch' }
-    $actual = (Get-FileHash -LiteralPath $File -Algorithm SHA512).Hash
+    $actual = (Get-PortableFileDigest $File 'SHA512')
     $expected = [BitConverter]::ToString([Convert]::FromBase64String([string]$Candidate.sha512)).Replace('-', '')
     if ($actual -cne $expected) { throw 'Installer digest mismatch' }
     Assert-Publisher $File
@@ -121,7 +139,7 @@ function Receive-OfficialInstallerBytes([string]$Destination, $Candidate, [scrip
     }
     if ((Test-Path -LiteralPath $partial) -and (Get-Item -LiteralPath $partial).Length -eq [long]$Candidate.size) {
         if ($Progress) { & $Progress ([long]$Candidate.size) ([long]$Candidate.size) }
-        $actual = (Get-FileHash -LiteralPath $partial -Algorithm SHA512).Hash
+        $actual = (Get-PortableFileDigest $partial 'SHA512')
         $expected = [BitConverter]::ToString([Convert]::FromBase64String([string]$Candidate.sha512)).Replace('-', '')
         if ($actual -cne $expected) { Remove-Item -LiteralPath $partial -Force; throw 'Installer digest mismatch; partial download discarded' }
         return $partial
@@ -176,7 +194,7 @@ function Receive-OfficialInstallerBytes([string]$Destination, $Candidate, [scrip
     $actualSize = (Get-Item -LiteralPath $partial).Length
     if ($actualSize -ne [long]$Candidate.size) { throw 'Download is incomplete; retry will resume the partial file' }
     if ($Progress) { & $Progress $actualSize ([long]$Candidate.size) }
-    $actual = (Get-FileHash -LiteralPath $partial -Algorithm SHA512).Hash
+    $actual = (Get-PortableFileDigest $partial 'SHA512')
     $expected = [BitConverter]::ToString([Convert]::FromBase64String([string]$Candidate.sha512)).Replace('-', '')
     if ($actual -cne $expected) { Remove-Item -LiteralPath $partial -Force; throw 'Installer digest mismatch; partial download discarded' }
     if ($Progress) { & $Progress ([long]$Candidate.size) ([long]$Candidate.size) }
@@ -240,7 +258,7 @@ function Get-PortablePayloadTreeHash([string]$Path) {
             if (-not $entry.FullName.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)) { throw 'Payload inventory escaped its directory' }
             $relative = $entry.FullName.Substring($root.Length + 1).Replace('\', '/')
             if ($entry.PSIsContainer) { $records.Add('d|' + $relative); $pending.Push($entry.FullName) }
-            else { $records.Add('f|' + $relative + '|' + (Get-FileHash -LiteralPath $entry.FullName -Algorithm SHA256 -ErrorAction Stop).Hash) }
+            else { $records.Add('f|' + $relative + '|' + (Get-PortableFileDigest $entry.FullName 'SHA256')) }
         }
     }
     $lines = $records.ToArray()
@@ -345,18 +363,19 @@ function Expand-OfficialPayload([string]$Installer, $Candidate, [string]$Output,
         foreach ($required in @($exe, $asar, $yml)) { if (-not (Test-Path -LiteralPath $required -PathType Leaf)) { throw 'Official application payload is incomplete' } }
         Assert-Publisher $exe
         if ((Get-AsarVersion $asar) -cne [string]$Candidate.version) { throw 'Official desktop version does not match the index' }
-        $asarHash = (Get-FileHash -LiteralPath $asar -Algorithm SHA256).Hash.ToLowerInvariant()
+        $asarHash = (Get-PortableFileDigest $asar 'SHA256').ToLowerInvariant()
         New-Item -ItemType Directory -Path $verify | Out-Null
         & $SevenZip x $inner "-o$verify" '-y' 'resources/app.asar' | Out-Null
         if ($LASTEXITCODE -ne 0) { throw 'Could not independently verify the packaged ASAR' }
         $verifiedAsar = Join-Path $verify 'resources/app.asar'
-        if (-not (Test-Path $verifiedAsar) -or (Get-FileHash -LiteralPath $verifiedAsar -Algorithm SHA256).Hash.ToLowerInvariant() -cne $asarHash) { throw 'Extracted ASAR differs from official installer contents' }
+        Assert-PlainPath $verifiedAsar
+        if (-not (Test-Path $verifiedAsar) -or (Get-PortableFileDigest $verifiedAsar 'SHA256').ToLowerInvariant() -cne $asarHash) { throw 'Extracted ASAR differs from official installer contents' }
         $originalConfig = [IO.File]::ReadAllText($yml, [Text.Encoding]::UTF8)
-        $originalConfigHash = (Get-FileHash -LiteralPath $yml -Algorithm SHA256).Hash.ToLowerInvariant()
+        $originalConfigHash = (Get-PortableFileDigest $yml 'SHA256').ToLowerInvariant()
         $rewritten = Rewrite-AppUpdateYml $originalConfig $FeedUrl $CacheDirName
         [IO.File]::WriteAllText($yml, $rewritten, (New-Object Text.UTF8Encoding($false)))
-        $rewrittenHash = (Get-FileHash -LiteralPath $yml -Algorithm SHA256).Hash.ToLowerInvariant()
-        return [pscustomobject]@{ version=[string]$Candidate.version; installerSha512=[string]$Candidate.sha512; installerSize=[long]$Candidate.size; appAsarSha256=$asarHash; officialExeSha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant(); appUpdateYmlOriginalSha256=$originalConfigHash; appUpdateYmlPortableSha256=$rewrittenHash; allowedModifiedFiles=@('resources/app-update.yml'); payloadTreeSha256=(Get-PortablePayloadTreeHash $Output) }
+        $rewrittenHash = (Get-PortableFileDigest $yml 'SHA256').ToLowerInvariant()
+        return [pscustomobject]@{ version=[string]$Candidate.version; installerSha512=[string]$Candidate.sha512; installerSize=[long]$Candidate.size; appAsarSha256=$asarHash; officialExeSha256=(Get-PortableFileDigest $exe 'SHA256').ToLowerInvariant(); appUpdateYmlOriginalSha256=$originalConfigHash; appUpdateYmlPortableSha256=$rewrittenHash; allowedModifiedFiles=@('resources/app-update.yml'); payloadTreeSha256=(Get-PortablePayloadTreeHash $Output) }
     } finally {
         $scratchBoundary = Split-Path -Parent $Output
         foreach ($scratch in @($outer, $verify)) { if (Test-Path -LiteralPath $scratch) { Remove-PortableScratch $scratch $scratchBoundary } }
@@ -407,7 +426,7 @@ function Get-AcceptedInstallerCandidate($Index, [string]$Installer) {
     if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw 'Local official installer is missing' }
     if ($null -eq $Index.versions -or $Index.versions.Count -lt 1 -or $Index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
     $size = (Get-Item -LiteralPath $Installer).Length
-    $digest = (Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash
+    $digest = (Get-PortableFileDigest $Installer 'SHA512')
     $matched = $null
     foreach ($entry in $Index.versions) {
         Assert-Candidate $entry

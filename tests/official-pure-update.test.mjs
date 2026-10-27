@@ -526,3 +526,38 @@ test('extraction recovery preserves unlocked scratch while this root extractor i
     ps('Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(' + quote(fixture) + ',[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)');
   }
 });
+
+
+test('private file digest matches Get-FileHash for literal relative empty, small and large inputs', windows, async () => {
+  const fixture = await mkdtemp(join(tmpdir(), 'pure-digest-oracle-'));
+  try {
+    await writeFile(join(fixture, 'empty [].bin'), Buffer.alloc(0));
+    await writeFile(join(fixture, 'small [literal].bin'), Buffer.alloc(4097, 0x3d));
+    await writeFile(join(fixture, 'large [literal].bin'), Buffer.alloc(1048576 + 17, 0xa7));
+    const result = JSON.parse(ps([
+      '$module=Import-Module ' + quote(payload) + ' -Force -DisableNameChecking -PassThru',
+      '$oldLocation=Get-Location;$oldCurrent=[Environment]::CurrentDirectory',
+      'try {',
+      ' Set-Location -LiteralPath ' + quote(fixture),
+      ' [Environment]::CurrentDirectory=[IO.Path]::GetPathRoot(' + quote(fixture) + ')',
+      ' $differentDotNetDirectory=([Environment]::CurrentDirectory -cne (Get-Location).Path)',
+      ' $rows=& $module {',
+      "  foreach($file in @('./empty [].bin','./small [literal].bin','./large [literal].bin')){",
+      "   foreach($algorithm in @('SHA256','SHA512')){",
+      '    $expected=(Get-FileHash -LiteralPath $file -Algorithm $algorithm -ErrorAction Stop).Hash',
+      '    $actual=Get-PortableFileDigest $file $algorithm',
+      '    [pscustomobject]@{file=$file;algorithm=$algorithm;expected=$expected;actual=$actual}',
+      '   }',
+      '  }',
+      ' }',
+      ' @{differentDotNetDirectory=$differentDotNetDirectory;rows=@($rows)}|ConvertTo-Json -Depth 5 -Compress',
+      '} finally { Set-Location -LiteralPath $oldLocation.Path; [Environment]::CurrentDirectory=$oldCurrent }',
+    ].join('\n')));
+    assert.equal(result.differentDotNetDirectory, true, 'relative paths must resolve through the PowerShell location');
+    assert.equal(result.rows.length, 6);
+    for (const row of result.rows) assert.equal(row.actual, row.expected, row.file + '/' + row.algorithm);
+  } finally {
+    assert.ok(fixture.startsWith(join(tmpdir(), 'pure-digest-oracle-')));
+    ps('Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(' + quote(fixture) + ',[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)');
+  }
+});
