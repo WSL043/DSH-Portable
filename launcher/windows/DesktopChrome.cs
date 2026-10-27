@@ -475,7 +475,10 @@ namespace DshPortable
                     pen.StartCap = pen.EndCap = LineCap.Flat;
                     pen.LineJoin = LineJoin.Miter;
                     GraphicsState iconState = e.Graphics.Save();
-                    float iconScale = Math.Max(1F, e.Graphics.DpiX / 96F);
+                    DesktopTitleStrip titleStrip = (DesktopTitleStrip)e.ToolStrip;
+                    float availableScale = Math.Max(1F, (Math.Min(e.Item.Width, e.Item.Height)
+                        - DesktopTitleStrip.ScalePixels(8, titleStrip.LayoutDpi)) / 16F);
+                    float iconScale = Math.Min(titleStrip.GlyphScale, availableScale);
                     e.Graphics.TranslateTransform(x - 8 * iconScale, y - 8 * iconScale);
                     e.Graphics.ScaleTransform(iconScale, iconScale);
                     if (e.Item.Name == "nav-sidebar")
@@ -567,6 +570,10 @@ namespace DshPortable
         internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
         // Follow the official desktop's 14px system UI type while retaining native menu behavior.
         internal readonly Font MenuFont = new Font("Segoe UI", 10.5F);
+        private int layoutDpi = 96;
+        internal int LayoutDpi { get { return layoutDpi; } }
+        internal float GlyphScale { get { return Math.Max(layoutDpi / 96F, Font.SizeInPoints / MenuFont.SizeInPoints); } }
+
         internal static int ScalePixels(int value, int dpi)
         {
             return Math.Max(1, (int)Math.Round(value * Math.Max(96, dpi) / 96.0));
@@ -583,7 +590,7 @@ namespace DshPortable
         internal void ApplyLayout(int dpi)
         {
             // Recalculate from logical values; never scale the previous item sizes.
-            int layoutDpi = Math.Max(96, dpi);
+            layoutDpi = Math.Max(96, dpi);
             int verticalMargin = ScalePixels(6, layoutDpi);
             int rowHeight = Math.Max(ScalePixels(28, layoutDpi),
                 MeasureText(this, "文件Ag", Font).Height + ScalePixels(4, layoutDpi));
