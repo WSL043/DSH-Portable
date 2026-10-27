@@ -55,7 +55,7 @@ node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/
 | 动作 | 输入与边界 |
 | --- | --- |
 | 从文件更新 | 官方 Windows x64 安装包和已验收索引快照；无 current 的轻量包也可离线首次安装。按完整大小与 SHA-512 唯一匹配版本，再验 Authenticode、发布者和解包边界，不按文件名猜版本。 |
-| 修复 | 同版本的官方安装包；数据原样保留。旧程序和收据放在固定 `.repair-backup` 槽，已有槽时停止，不堆叠备份。 |
+| 修复 | 同版本的官方安装包；数据原样保留。旧程序和收据放在固定 `.repair-backup` 槽；整个便携根只允许新增一组修复保全槽，任何版本已有槽时停止，核实后移回收站再修复。 |
 | 回退 | 只接受 current 中记录、完整树收据仍匹配的 previous。保留退下的程序，清空 previous，记录 rejected；不支持任意历史版本。 |
 
 GUI 优先读取安装包同目录的 `accepted-index.json`，否则使用随包快照；CLI 可用 `--index-file` 指定。随包 `launcher/accepted-index.json` 是打包时已验收目录的快照；在线更新成功读取的新目录也会刷新该快照。联网机器从索引条目的 `url` 下载官方安装包，将安装包和该快照一同带到离线机器。目录不包含的未来版本不能凭文件名强行接纳；需先取得维护方验收后的新快照。当前发布阻断仍生效，不能把测试专用候选索引当公开接纳。

@@ -314,7 +314,18 @@ try {
     $originalTreeHash = $null; $originalReceiptHash = $null
     if ($Repair) {
         foreach ($path in @($candidatePath, $repairBackup, ($receiptPath + '.repair-backup'))) { Assert-PlainPath $path }
-        if ((Test-Path -LiteralPath $repairBackup) -or (Test-Path -LiteralPath ($receiptPath + '.repair-backup'))) { throw 'Repair preservation slot already exists; preserve or recover it before repairing again' }
+        # One preservation slot for the whole root, including unknown or linked entries.
+        # Enumerate names only: never follow, inventory or delete a preserved entry.
+        foreach ($slotRoot in @($appRoot, (Join-Path $launcherRoot 'receipts'))) {
+            Assert-PlainPath $slotRoot
+            if (-not (Test-Path -LiteralPath $slotRoot)) { continue }
+            $suffix = if ($slotRoot -ceq $appRoot) { '.repair-backup' } else { '.json.repair-backup' }
+            foreach ($entry in Get-ChildItem -LiteralPath $slotRoot -Force -ErrorAction Stop) {
+                if ($entry.Name.EndsWith($suffix, [StringComparison]::OrdinalIgnoreCase)) {
+                    throw ('Repair preservation slot already exists: ' + $entry.FullName + '; preserve or recover it before repairing again')
+                }
+            }
+        }
         if ($hadTarget) { $originalTreeHash = Get-PortablePayloadTreeHash $candidatePath }
         if (Test-Path -LiteralPath $receiptPath) {
             Assert-PlainPath $receiptPath
