@@ -289,32 +289,9 @@ test('maintenance report rejects missing identity, real-launch, and endpoint-sil
 });
 
 
-test('Procmon streaming findings retain raw counts and exact system feature-usage boundaries', { skip: process.platform !== 'win32' }, async t => {
-  const scratch = await mkdtemp(join(tmpdir(), 'dsh-trace-streaming-'));
+async function runTraceParserFixture(rows, label, t) {
+  const scratch = await mkdtemp(join(tmpdir(), label));
   const quote = value => "'" + value.replaceAll("'", "''") + "'";
-  const stateKey = String.raw`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\418A073AA3BC1C75`;
-  const row = (pid, name, operation, path, detail = '') => ({ 'Time of Day': '16:30:00.0000000', 'Process Name': name, PID: String(pid), Operation: operation, Path: path, Result: 'SUCCESS', Detail: detail });
-  const binary = 'Type: REG_BINARY, Length: 930, Data: 01 02 03 04';
-  const rows = [row(100, 'DeepSeek Harness.exe', 'Process Start', String.raw`D:\portable\DeepSeek Harness.exe`, 'Parent PID: 4')];
-  for (const [pid, name, image] of [[200, 'powershell.exe', '@SYSTEM_PS@'], [201, 'powershell.exe', String.raw`D:\unrelated\powershell.exe`], [202, 'cmd.exe', String.raw`D:\unrelated\cmd.exe`]]) {
-    rows.push(row(100, 'DeepSeek Harness.exe', 'Process Create', image, 'PID: ' + pid));
-    rows.push(row(pid, name, 'Process Start', image, 'Parent PID: 100, Command line: fixture, Environment: SYNTHETIC_TRACE_SECRET=must-not-upload'));
-  }
-  const repeated = 1000;
-  for (let index = 0; index < repeated; index++) rows.push(row(200, 'powershell.exe', 'RegSetValue', stateKey, binary));
-  const negatives = [
-    row(201, 'powershell.exe', 'RegSetValue', stateKey, binary),
-    row(200, 'powershell.exe', 'RegSetValue', stateKey.slice(0, -1) + '6', binary),
-    row(200, 'powershell.exe', 'RegDeleteValue', stateKey, binary),
-    row(200, 'powershell.exe', 'RegSetValue', stateKey, 'Type: REG_SZ, Length: 4, Data: text'),
-    row(202, 'cmd.exe', 'RegSetValue', stateKey, binary),
-    row(100, 'DeepSeek Harness.exe', 'RegSetValue', stateKey, binary),
-    row(200, 'powershell.exe', 'RegSetValue', stateKey + String.raw`\child`, binary),
-    row(200, 'powershell.exe', 'RegCreateKey', stateKey, binary),
-  ];
-  rows.push(...negatives);
-  rows.push(row(203, 'powershell.exe', 'Process Start', '@SYSTEM_PS@', 'Parent PID: 300'));
-  rows.push(row(203, 'powershell.exe', 'RegSetValue', stateKey, binary));
   try {
     const file = resolve(import.meta.dirname, '../experiments/official-payload/trace-writes.ps1');
     const fixtureFile = join(scratch, 'rows.json');
@@ -351,31 +328,106 @@ test('Procmon streaming findings retain raw counts and exact system feature-usag
       output = execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true });
     } catch (error) { throw new Error('Trace parser fixture failed: ' + String(error.stderr || error.message).trim().slice(-2000)); }
     const observed = JSON.parse(output.trim().split(/\r?\n/).at(-1));
-    assert.equal(observed.rows, rows.length);
-    assert.equal(observed.summary.outsideWriteEvents, repeated + negatives.length);
-    assert.equal(observed.summary.unclassifiedEvents, negatives.length);
-    assert.equal(observed.summary.ownedProcesses, 4);
-    assert.equal(observed.summary.contextTruncated, false);
-    assert.equal(observed.storedFindings, observed.outside.length);
-    assert.ok(observed.storedFindings < 12, 'repeated identical findings must not accumulate objects');
-    assert.equal(observed.outside.filter(item => item.category === 'reviewed-windows-feature-usage').length, 1);
-    const samePath = observed.outside.filter(item => item.process === 'powershell.exe' && item.operation === 'RegSetValue' && item.path === stateKey);
-    assert.deepEqual(samePath.map(item => item.category).sort(), ['needs-review', 'reviewed-windows-feature-usage']);
-    assert.ok(observed.outside.every(item => item.pid !== '203'), 'unknown ownership must never gain the reviewed classification');
-    for (const pid of ['200', '201', '202']) assert.ok(observed.context.events.some(event => event.pid === pid && event.operation === 'RegSetValue' && event.parentPid === '100'));
-    assert.ok(observed.context.events.some(event => event.pid === '200' && event.path === stateKey && event.detail.startsWith('Type: REG_BINARY')));
-    assert.doesNotMatch(JSON.stringify(observed.context), /SYNTHETIC_TRACE_SECRET|must-not-upload|Environment:/);
-    assert.match(output, /\[write-trace\] stage=Parse state=completed .*rows=\d+ pmlBytes=\d+ csvBytes=\d+/);
-    const trace = await readFile(file, 'utf8');
-    for (const phase of ['Terminate', 'Export', 'Parse']) {
-      assert.ok(trace.includes("Write-TraceProgress '" + phase + "' 'started'"));
-      assert.ok(trace.includes("Write-TraceProgress '" + phase + "' 'completed'"));
-    }
+    return { observed, output, trace: await readFile(file, 'utf8') };
   } finally {
-    assert.ok(scratch.startsWith(join(tmpdir(), 'dsh-trace-streaming-')));
+    assert.ok(scratch.startsWith(join(tmpdir(), label)));
     try {
       const cleanup = String.raw`Add-Type -AssemblyName Microsoft.VisualBasic;[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(${quote(scratch)},[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)`;
       execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(cleanup, 'utf16le').toString('base64')], { windowsHide: true });
     } catch { t.diagnostic('Trace fixture retained for recoverable cleanup: ' + scratch); }
   }
+}
+
+test('Procmon streaming findings retain raw counts and exact system feature-usage boundaries', { skip: process.platform !== 'win32' }, async t => {
+  const stateKey = String.raw`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\418A073AA3BC1C75`;
+  const row = (pid, name, operation, path, detail = '') => ({ 'Time of Day': '16:30:00.0000000', 'Process Name': name, PID: String(pid), Operation: operation, Path: path, Result: 'SUCCESS', Detail: detail });
+  const binary = 'Type: REG_BINARY, Length: 930, Data: 01 02 03 04';
+  const rows = [row(100, 'DeepSeek Harness.exe', 'Process Start', String.raw`D:\portable\DeepSeek Harness.exe`, 'Parent PID: 4')];
+  for (const [pid, name, image] of [[200, 'powershell.exe', '@SYSTEM_PS@'], [201, 'powershell.exe', String.raw`D:\unrelated\powershell.exe`], [202, 'cmd.exe', String.raw`D:\unrelated\cmd.exe`]]) {
+    rows.push(row(100, 'DeepSeek Harness.exe', 'Process Create', image, 'PID: ' + pid));
+    rows.push(row(pid, name, 'Process Start', image, 'Parent PID: 100, Command line: fixture, Environment: SYNTHETIC_TRACE_SECRET=must-not-upload'));
+  }
+  const repeated = 1000;
+  for (let index = 0; index < repeated; index++) rows.push(row(200, 'powershell.exe', 'RegSetValue', stateKey, binary));
+  const negatives = [
+    row(201, 'powershell.exe', 'RegSetValue', stateKey, binary),
+    row(200, 'powershell.exe', 'RegSetValue', stateKey.slice(0, -1) + '6', binary),
+    row(200, 'powershell.exe', 'RegDeleteValue', stateKey, binary),
+    row(200, 'powershell.exe', 'RegSetValue', stateKey, 'Type: REG_SZ, Length: 4, Data: text'),
+    row(202, 'cmd.exe', 'RegSetValue', stateKey, binary),
+    row(100, 'DeepSeek Harness.exe', 'RegSetValue', stateKey, binary),
+    row(200, 'powershell.exe', 'RegSetValue', stateKey + String.raw`\child`, binary),
+    row(200, 'powershell.exe', 'RegCreateKey', stateKey, binary),
+  ];
+  rows.push(...negatives);
+  rows.push(row(203, 'powershell.exe', 'Process Start', '@SYSTEM_PS@', 'Parent PID: 300'));
+  rows.push(row(203, 'powershell.exe', 'RegSetValue', stateKey, binary));
+  const { observed, output, trace } = await runTraceParserFixture(rows, 'dsh-trace-streaming-', t);
+  assert.equal(observed.rows, rows.length);
+  assert.equal(observed.summary.outsideWriteEvents, repeated + negatives.length);
+  assert.equal(observed.summary.unclassifiedEvents, negatives.length);
+  assert.equal(observed.summary.ownedProcesses, 4);
+  assert.equal(observed.summary.contextTruncated, false);
+  assert.equal(observed.storedFindings, observed.outside.length);
+  assert.ok(observed.storedFindings < 12, 'repeated identical findings must not accumulate objects');
+  assert.equal(observed.outside.filter(item => item.category === 'reviewed-windows-feature-usage').length, 1);
+  const samePath = observed.outside.filter(item => item.process === 'powershell.exe' && item.operation === 'RegSetValue' && item.path === stateKey);
+  assert.deepEqual(samePath.map(item => item.category).sort(), ['needs-review', 'reviewed-windows-feature-usage']);
+  assert.ok(observed.outside.every(item => item.pid !== '203'), 'unknown ownership must never gain the reviewed classification');
+  for (const pid of ['200', '201', '202']) assert.ok(observed.context.events.some(event => event.pid === pid && event.operation === 'RegSetValue' && event.parentPid === '100'));
+  assert.ok(observed.context.events.some(event => event.pid === '200' && event.path === stateKey && event.detail.startsWith('Type: REG_BINARY')));
+  assert.doesNotMatch(JSON.stringify(observed.context), /SYNTHETIC_TRACE_SECRET|must-not-upload|Environment:/);
+  assert.match(output, /\[write-trace\] stage=Parse state=completed .*rows=\d+ pmlBytes=\d+ csvBytes=\d+/);
+  for (const phase of ['Terminate', 'Export', 'Parse']) {
+    assert.ok(trace.includes("Write-TraceProgress '" + phase + "' 'started'"));
+    assert.ok(trace.includes("Write-TraceProgress '" + phase + "' 'completed'"));
+  }
+});
+
+test('Procmon directory paging review requires the owned packaged extractor and exact volume metadata write', { skip: process.platform !== 'win32' }, async t => {
+  const metadata = String.raw`D:\$Directory`;
+  const extractor = String.raw`D:\portable\launcher\7z.exe`;
+  const row = (pid, name, operation, path, detail = '') => ({ 'Time of Day': '16:30:00.0000000', 'Process Name': name, PID: String(pid), Operation: operation, Path: path, Result: 'SUCCESS', Detail: detail });
+  const paging = 'Offset: 0, Length: 4,096, I/O Flags: Non-cached, Paging I/O, Priority: Normal';
+  const rows = [row(100, 'DeepSeek Harness.exe', 'Process Start', String.raw`D:\portable\DeepSeek Harness.exe`, 'Parent PID: 4')];
+  for (const [pid, name, image] of [[300, '7z.exe', extractor], [302, '7z.exe', String.raw`D:\portable\workspace\7z.exe`], [303, 'other.exe', String.raw`D:\portable\launcher\other.exe`]]) {
+    rows.push(row(100, 'DeepSeek Harness.exe', 'Process Create', image, 'PID: ' + pid));
+    rows.push(row(pid, name, 'Process Start', image, 'Parent PID: 100'));
+  }
+  const repeated = 16;
+  for (let index = 0; index < repeated; index++) rows.push(row(300, '7z.exe', 'WriteFile', metadata, paging));
+  const negatives = [
+    row(302, '7z.exe', 'WriteFile', metadata, paging),
+    row(300, '7z.exe', 'WriteFile', String.raw`E:\$Directory`, paging),
+    row(300, '7z.exe', 'WriteFile', metadata + String.raw`\child`, paging),
+    row(300, '7z.exe', 'WriteFile', metadata, 'Offset: 0, Length: 4,096, Priority: Normal'),
+    row(300, '7z.exe', 'RegSetValue', metadata, paging),
+    row(303, 'other.exe', 'WriteFile', metadata, paging),
+    row(300, '7z.exe', 'WriteFile', metadata, 'Offset: 0, Paging I/O-suffix, Length: 4,096'),
+  ];
+  rows.push(...negatives);
+  rows.push(row(301, '7z.exe', 'Process Start', extractor, 'Parent PID: 9000'));
+  rows.push(row(301, '7z.exe', 'WriteFile', metadata, paging));
+  const { observed } = await runTraceParserFixture(rows, 'dsh-trace-directory-', t);
+  assert.equal(observed.rows, rows.length);
+  assert.equal(observed.summary.outsideWriteEvents, repeated + negatives.length);
+  assert.equal(observed.summary.unclassifiedEvents, negatives.length, 'each owned negative must remain unclassified');
+  assert.equal(observed.summary.ownedProcesses, 4);
+  assert.equal(observed.summary.contextTruncated, false);
+  const reviewed = observed.outside.filter(item => item.category === 'reviewed-extractor-directory-paging');
+  assert.equal(reviewed.length, 1);
+  assert.deepEqual({ process: reviewed[0].process, pid: reviewed[0].pid, operation: reviewed[0].operation, path: reviewed[0].path },
+    { process: '7z.exe', pid: '300', operation: 'WriteFile', path: metadata });
+  const samePath = observed.outside.filter(item => item.process === '7z.exe' && item.operation === 'WriteFile' && item.path === metadata);
+  assert.deepEqual(samePath.map(item => item.category).sort(), ['needs-review', 'reviewed-extractor-directory-paging']);
+  assert.ok(observed.outside.every(item => item.pid !== '301'), 'an unowned process must not gain the reviewed classification');
+  assert.ok(observed.outside.some(item => item.path === String.raw`E:\$Directory` && item.category === 'needs-review'));
+  assert.ok(observed.outside.some(item => item.path === metadata + String.raw`\child` && item.category === 'needs-review'));
+  const context = observed.context.events.find(event => event.pid === '300' && event.operation === 'WriteFile' && event.path === metadata);
+  assert.ok(context, 'reviewed paging writes must retain context');
+  assert.equal(context.parentPid, '100');
+  assert.equal(context.imagePath, extractor);
+  assert.ok(context.generation > 0);
+  assert.equal(context.detail, paging);
+  assert.ok(observed.context.events.some(event => event.pid === '302' && event.operation === 'WriteFile' && event.path === metadata));
 });

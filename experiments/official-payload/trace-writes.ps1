@@ -40,7 +40,7 @@ function Update-TraceOwnership([hashtable]$State, $Row, [long]$Sequence) {
         $State.active[$childId] = $child
         if ($child.owned) { [void]$State.everOwned.Add($childId) }
     }
-    $result = [pscustomobject]@{ owned=[bool]$current.owned; generation=$current.generation; parentPid=$current.parentPid; imagePath=$current.path; childPid=$childId; childGeneration=if ($childId) { $State.active[$childId].generation } else { $null } }
+    $result = @{ owned=[bool]$current.owned; generation=$current.generation; parentPid=$current.parentPid; imagePath=$current.path; childPid=$childId; childGeneration=if ($childId) { $State.active[$childId].generation } else { $null } }
     if ($operation -eq 'Process Exit') { $State.active.Remove($processId) }
     return $result
 }
@@ -117,6 +117,8 @@ $unclassifiedEvents = [long]0
 $operations = @('WriteFile','SetEndOfFileInformationFile','SetRenameInformationFile','SetDispositionInformationFile','RegSetValue','RegDeleteValue','RegDeleteKey','RegCreateKey')
 $root = [IO.Path]::GetFullPath($PortableRoot).TrimEnd('\') + '\'
 $systemPowerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+$extractorPath = Join-Path $PortableRoot 'launcher\7z.exe'
+$directoryMetadataPath = [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($PortableRoot)).TrimEnd('\') + '\$Directory'
 $tempRoot = $env:TEMP.TrimEnd('\')+'\'
 $localTempRoot = (Join-Path $env:LOCALAPPDATA 'Temp')+'\'
 $shaderRoot = (Join-Path $env:LOCALAPPDATA 'D3DSCache')+'\'
@@ -140,6 +142,13 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
             if ($_.Path -match '^HKCU\\Software\\Classes\\dsh(\\|$)') { $category='known-protocol-registration' }
             if ($_.Path -match '^\\Device\\NamedPipe(\\|$)') { $category='ipc-not-a-disk-file' }
             if ($_.Path -match '^[A-Z]:$|^[A-Z]:\\\$(LogFile|Mft)$|^HKLM\\System\\CurrentControlSet\\Services\\bam\\') { $category='windows-system-record' }
+            # Reviewed in run 40577937354: the root extractor's directory-index paging I/O.
+            # The $Directory FILE_OBJECT is parsed as INDX pages by the original researcher:
+            # https://github.com/ufrisk/MemProcFS/blob/b3dee6a22f935e56cd54bc207ec0a0552e5d6bf3/vmm/modules/m_fc_ntfs.c#L634-L651
+            if ($owner.owned -and $_.'Process Name' -eq '7z.exe' -and $_.Operation -eq 'WriteFile' -and
+                [string]::Equals([string]$owner.imagePath, $extractorPath, [StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals([string]$_.Path, $directoryMetadataPath, [StringComparison]::OrdinalIgnoreCase) -and
+                $_.Detail -match '(?:^|,\s*)Paging I/O(?:,|$)') { $category='reviewed-extractor-directory-paging' }
             # Reviewed in alpha3 run 36404975086: paired .NET process registration
             # writes/deletes, not portable account, profile or application data.
             if ($_.'Process Name' -in @('DeepSeek Harness Portable.exe','powershell.exe') -and $_.Operation -in @('RegSetValue','RegDeleteValue') -and $_.Path -match '^HKLM\\System\\CurrentControlSet\\Services\\ASP\.NET_4\.0\.30319\\Names\\[A-Za-z0-9]+$') { $category='reviewed-dotnet-system-registration' }
@@ -165,7 +174,7 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
                     $findings.Add([pscustomobject]@{process=$_.'Process Name';pid=$_.PID;operation=$_.Operation;path=$_.Path;category=$category})
                 }
             }
-            if ($category -in @('needs-review','reviewed-windows-feature-usage')) {
+            if ($category -in @('needs-review','reviewed-windows-feature-usage','reviewed-extractor-directory-paging')) {
                 [void]$contextPids.Add([string]$_.PID)
                 $writeKey = ([string]$_.PID) + '|' + $owner.generation + '|' + $_.Operation + '|' + $_.Path
                 if ($contextWrites.Add($writeKey)) {

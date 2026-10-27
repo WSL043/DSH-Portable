@@ -778,7 +778,7 @@ try {
                 $rawTrace = Get-Content -LiteralPath $tracePath -Raw | ConvertFrom-Json
                 # Windows PowerShell 5.1 wraps a piped array as { value, Count }.
                 $script:OutsideWriteDifferences = if ($null -ne $rawTrace -and $null -ne $rawTrace.PSObject.Properties['value']) { @($rawTrace.value) } else { @($rawTrace) }
-                $systemCategories = @('temporary', 'ipc-not-a-disk-file', 'windows-system-record', 'windows-shared-spelling', 'reviewed-dotnet-system-registration', 'reviewed-windows-feature-usage', 'known-protocol-registration', 'windows-powershell-startup-cache')
+                $systemCategories = @('temporary', 'ipc-not-a-disk-file', 'windows-system-record', 'windows-shared-spelling', 'reviewed-dotnet-system-registration', 'reviewed-windows-feature-usage', 'reviewed-extractor-directory-paging', 'known-protocol-registration', 'windows-powershell-startup-cache')
                 $officialOwn = New-Object 'System.Collections.Generic.List[object]'
                 $unexpected = @($script:OutsideWriteDifferences | Where-Object {
                     $writePath = [string]$_.path
