@@ -121,6 +121,17 @@ namespace DshPortable
                     Size = nativeSize;
                 return;
             }
+            if (desktopStart && message.Msg == 0x02E0) // WM_DPICHANGED
+            {
+                base.WndProc(ref message);
+                if (desktopMenu != null)
+                {
+                    ((DesktopTitleStrip)desktopMenu).ApplyLayout((int)(message.WParam.ToInt64() & 0xffff));
+                    ApplyDesktopChrome();
+                    FitWebViewToClient();
+                }
+                return;
+            }
             if (desktopStart && !fullscreen && message.Msg == 0x0085)
             {
                 message.Result = IntPtr.Zero;
@@ -220,7 +231,7 @@ namespace DshPortable
             desktopShortcuts.Clear();
             desktopMenuLanguage = uiLanguage;
             desktopMenu = new DesktopTitleStrip { Dock = DockStyle.Top, GripStyle = ToolStripGripStyle.Hidden,
-                AutoSize = false, Height = 40, Padding = new Padding(12, 0, 0, 0), Visible = !fullscreen && !pageWindowChrome };
+                AutoSize = false, Visible = !fullscreen && !pageWindowChrome };
             desktopMenu.Font = ((DesktopTitleStrip)desktopMenu).MenuFont;
             MainMenuStrip = desktopMenu;
             Controls.Add(desktopMenu);
@@ -230,14 +241,6 @@ namespace DshPortable
             ToolStripMenuItem help = new DesktopMenuItem(L("帮助", "&Help"));
             file.Name = "menu-file"; view.Name = "menu-view"; help.Name = "menu-help";
             desktopMenu.Items.AddRange(new ToolStripItem[] { file, view, help });
-            foreach (ToolStripMenuItem menu in desktopMenu.Items)
-            {
-                menu.AutoSize = false;
-                menu.Size = new Size(TextRenderer.MeasureText(menu.Text, desktopMenu.Font,
-                    Size.Empty, TextFormatFlags.NoPadding | TextFormatFlags.SingleLine).Width + 20, 28);
-                menu.Margin = new Padding(0, 6, 2, 6);
-                menu.Padding = new Padding(10, 0, 10, 0);
-            }
             AddNavigationCommand(0, "nav-sidebar", "toggle-sidebar", L("切换侧栏", "Toggle sidebar"), Keys.Control | Keys.B);
             AddNavigationCommand(1, "nav-new-session", "new-session", L("新会话", "New session"), Keys.None);
             desktopMenu.ShowItemToolTips = true;
@@ -293,6 +296,7 @@ namespace DshPortable
                 "https://github.com/WSL043/DSH-Portable/discussions/new"));
             foreach (ToolStripMenuItem menu in desktopMenu.Items) menu.DropDownOpening += delegate { RefreshDesktopCommands(); };
             foreach (ToolStripMenuItem menu in desktopMenu.Items) AttachDesktopDropDownHandlers(menu);
+            ((DesktopTitleStrip)desktopMenu).ApplyLayout(DeviceDpi);
             RefreshDesktopCommands();
         }
 
@@ -315,7 +319,7 @@ namespace DshPortable
         {
             desktopMenu.Items.Add(new ToolStripMenuItem(glyph, null, action) {
                 Name = name, Alignment = ToolStripItemAlignment.Right, AutoSize = false,
-                Size = new Size(46, 40), Margin = Padding.Empty, Padding = Padding.Empty,
+                Margin = Padding.Empty, Padding = Padding.Empty,
                 Font = ((DesktopTitleStrip)desktopMenu).CaptionFont, AccessibleName = label, ToolTipText = label,
             });
         }
@@ -323,7 +327,7 @@ namespace DshPortable
         private void AddNavigationCommand(int index, string name, string action, string label, Keys shortcut)
         {
             ToolStripMenuItem item = new ToolStripMenuItem(" ", null, delegate { PostBridgeAction(action, null); }) {
-                Name = name, AutoSize = false, Size = new Size(28, 28), Margin = new Padding(0, 6, 8, 6),
+                Name = name, AutoSize = false,
                 AccessibleName = label, ToolTipText = shortcut == Keys.None ? label
                     : label + " (" + new KeysConverter().ConvertToString(shortcut) + ")",
             };
@@ -544,13 +548,11 @@ namespace DshPortable
                 ToolStripMenuItem menuItem = item as ToolStripMenuItem;
                 if (menuItem == null) continue;
                 Font font = menuItem.Font ?? dropDown.Font;
-                Size title = TextRenderer.MeasureText(menuItem.Text ?? "", font, Size.Empty,
-                    TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                Size title = DesktopTitleStrip.MeasureText(dropDown, menuItem.Text ?? "", font);
                 string shortcut = menuItem.ShowShortcutKeys ? menuItem.ShortcutKeyDisplayString ?? "" : "";
                 Size shortcutSize = String.IsNullOrEmpty(shortcut)
                     ? Size.Empty
-                    : TextRenderer.MeasureText(shortcut, font, Size.Empty,
-                        TextFormatFlags.NoPadding | TextFormatFlags.SingleLine);
+                    : DesktopTitleStrip.MeasureText(dropDown, shortcut, font);
                 int trailing = menuItem.DropDownItems.Count > 0 ? 30 : 12;
                 int measured = 12 + title.Width + (shortcutSize.Width > 0 ? 24 + shortcutSize.Width : 0) + trailing + 2;
                 desired = Math.Max(desired, measured);
@@ -570,7 +572,9 @@ namespace DshPortable
             dropDown.Renderer = renderer;
             dropDown.BackColor = colors.SurfaceColor;
             dropDown.ForeColor = colors.TextColor;
-            dropDown.Padding = new Padding(0, 6, 0, 6);
+            int dpi = dropDown.DeviceDpi;
+            int verticalPadding = DesktopTitleStrip.ScalePixels(6, dpi);
+            dropDown.Padding = new Padding(0, verticalPadding, 0, verticalPadding);
             dropDown.AutoSize = false;
             int width = MeasureDesktopDropDownWidth(dropDown);
             int itemWidth = Math.Max(1, width - 2);
@@ -584,12 +588,14 @@ namespace DshPortable
                 if (item is ToolStripSeparator)
                 {
                     item.Padding = Padding.Empty;
-                    item.Size = new Size(itemWidth, 13);
+                    item.Size = new Size(itemWidth, DesktopTitleStrip.ScalePixels(13, dpi));
                     height += item.Height;
                     continue;
                 }
                 item.Padding = new Padding(12, 0, 12, 0);
-                item.Size = new Size(itemWidth, 30);
+                int textHeight = DesktopTitleStrip.MeasureText(dropDown, item.Text ?? "", item.Font).Height;
+                item.Size = new Size(itemWidth, Math.Max(DesktopTitleStrip.ScalePixels(30, dpi),
+                    textHeight + DesktopTitleStrip.ScalePixels(8, dpi)));
                 height += item.Height;
                 ToolStripMenuItem menuItem = item as ToolStripMenuItem;
                 if (menuItem != null && menuItem.DropDownItems.Count > 0)

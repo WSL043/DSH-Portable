@@ -682,3 +682,51 @@ test('a fresh install checks for neither product nor core updates at start', asy
   assert.equal(settings.engineUpdateCheckEnabled, false)
   assert.equal(settings.updateCheckEnabled, false)
 })
+
+test('concurrent update reads share only identical in-flight CLI work within one environment', async t => {
+  const routes = new Map(), calls = []
+  const pending = []
+  const runCli = args => new Promise((resolve, reject) => { calls.push(args); pending.push({ resolve, reject }) })
+  t.after(mountPortableRoutes({ register(route) { routes.set(route.path, route); return () => {} } }, { runCli }))
+  const invoke = (route, body = null) => {
+    const result = response()
+    return { result, done: routes.get(route).handler(request(body ? 'POST' : 'GET', body), result) }
+  }
+  const specs = [
+    ['/dsh-portable/engine-versions', null], ['/dsh-portable/product-versions', null],
+    ['/dsh-portable/check-update', { scope: 'engine' }],
+    ['/dsh-portable/check-update', { scope: 'product' }],
+    ['/dsh-portable/check-update', { scope: 'engine', background: true }],
+  ]
+  const requests = specs.flatMap(([route, body]) => [invoke(route, body), invoke(route, body)])
+  // POST bodies and the deferred CLI callbacks settle on microtasks.
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(calls.length, specs.length, 'ten concurrent requests use five distinct CLI reads')
+  assert.equal(new Set(calls.map(args => JSON.stringify(args))).size, specs.length, 'scope, command and force remain distinct')
+  pending.forEach((item, index) => item.resolve({ status: 'current', request: index }))
+  await Promise.all(requests.map(item => item.done))
+  for (let index = 0; index < requests.length; index += 2) {
+    assert.equal(requests[index].result.status, 200)
+    assert.deepEqual(requests[index].result.json(), requests[index + 1].result.json())
+  }
+  const failed = invoke('/dsh-portable/engine-versions')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(calls.length, 6, 'a later refresh never receives a cached result')
+  pending.at(-1).reject(new Error('temporary network failure'))
+  await failed.done
+  assert.equal(failed.result.status, 500)
+  const retry = invoke('/dsh-portable/engine-versions')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(calls.length, 7, 'failed work is also removed')
+  const otherRoutes = new Map()
+  t.after(mountPortableRoutes({ register(route) { otherRoutes.set(route.path, route); return () => {} } }, { environmentId: 'another', runCli }))
+  const otherResponse = response()
+  const other = otherRoutes.get('/dsh-portable/engine-versions').handler(request('GET'), otherResponse)
+  await new Promise(resolve => setImmediate(resolve))
+  assert.equal(calls.length, 8, 'other environments never share the pending child')
+  pending.at(-2).resolve({ environment: 'default' })
+  pending.at(-1).resolve({ environment: 'another' })
+  await Promise.all([retry.done, other])
+  assert.equal(retry.result.json().environment, 'default')
+  assert.equal(otherResponse.json().environment, 'another')
+})

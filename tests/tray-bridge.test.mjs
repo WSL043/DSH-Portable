@@ -10,7 +10,11 @@ import test from 'node:test'
 const sourceUrl = new URL('../desktop-bridge/lib/client.js', import.meta.url)
 
 async function loadBridgeClient(options = {}) {
-  const source = await readFile(sourceUrl, 'utf8')
+  // Inspect private request state without adding a shipped plugin API.
+  const source = (await readFile(sourceUrl, 'utf8')).replace('exports.apply = apply', `exports.__requests = {
+    export: chooseDataExportPath, import: chooseDataImportPath, environment: openPortableEnvironment,
+    pending: () => [pendingDataExportRequests.size, pendingDataImportRequests.size, pendingHostRestartRequests.size, pendingEnvironmentRequests.size],
+  }; exports.apply = apply`)
   const posted = []
   const webMessageListeners = new Set()
   const pageListeners = new Map()
@@ -23,6 +27,7 @@ async function loadBridgeClient(options = {}) {
       openDataPackage: true,
       importData: true,
       restartHost: true,
+      ...(options.openEnvironment ? { openEnvironment: true } : {}),
       preferences: true,
       sessionProjection: true,
     },
@@ -59,7 +64,7 @@ async function loadBridgeClient(options = {}) {
     window.__DSH_PORTABLE_NATIVE__ = native
     delete window.chrome
   }
-  vm.runInNewContext(source, { console, queueMicrotask, setTimeout, clearTimeout, window })
+  vm.runInNewContext(source, { console, queueMicrotask, setTimeout: options.setTimeout ?? setTimeout, clearTimeout: options.clearTimeout ?? clearTimeout, window })
   assert.equal(definition?.id, '@wsl043/dsh-portable-desktop-bridge')
   const exports = definition.factory((id) => {
     if (id === 'react') return {}
@@ -67,6 +72,7 @@ async function loadBridgeClient(options = {}) {
   })
   return {
     exports,
+    requests: exports.__requests,
     window,
     posted,
     pageListeners,
@@ -457,6 +463,57 @@ for (const native of [false, true]) test(`workspace picker cancels on page exit 
   assert.equal(client.pageListeners.get('pagehide').size, 0)
 })
 
+for (const native of [false, true]) test(`native requests cancel on page exit and stale replies do not affect the next page (native=${native})`, async () => {
+  const client = await loadBridgeClient({ native, openEnvironment: true })
+  const runtime = fakeContext(sessionList(1))
+  client.exports.apply(runtime.ctx)
+  try {
+    const restart = client.window.__DSH_PORTABLE_HOST__.restart()
+    const first = Promise.allSettled([
+      client.requests.export('standard'), client.requests.import(), restart, client.requests.environment('work'),
+    ])
+    const old = client.posted.filter(message => message.requestId)
+    client.pageEvent('pagehide')
+    const settled = await first
+    assert.deepEqual(settled.slice(0, 2).map(result => result.value), [null, null])
+    assert.equal(settled[2].reason.code, 'DSH_PORTABLE_RESTART_UNCONFIRMED')
+    assert.match(settled[3].reason.message, /page closed/)
+    assert.deepEqual([...client.requests.pending()], [0, 0, 0, 0])
+
+    const next = client.requests.import()
+    const request = client.posted.at(-1)
+    let resolved = false
+    next.then(() => { resolved = true })
+    const previous = old.find(message => message.type === 'dsh-portable/pick-data-import')
+    client.send({ type: 'dsh-portable/pick-data-import-result', schemaVersion: 1, requestId: previous.requestId, path: 'old.zip' })
+    await Promise.resolve()
+    assert.equal(resolved, false)
+    client.send({ type: 'dsh-portable/pick-data-import-result', schemaVersion: 1, requestId: request.requestId, path: 'next.zip' })
+    assert.equal(await next, 'next.zip')
+  } finally { runtime.dispose() }
+  assert.equal(client.pageListeners.get('pagehide').size, 0)
+})
+
+for (const native of [false, true]) test(`failed native sends release request state and timers (native=${native})`, async () => {
+  const timers = new Set()
+  const client = await loadBridgeClient({ native, openEnvironment: true,
+    setTimeout(callback, delay) { const timer = setTimeout(callback, delay); timers.add(timer); return timer },
+    clearTimeout(timer) { timers.delete(timer); clearTimeout(timer) },
+  })
+  const runtime = fakeContext(sessionList(1))
+  client.exports.apply(runtime.ctx)
+  const bridge = native ? client.window.__DSH_PORTABLE_NATIVE__ : client.window.chrome.webview
+  bridge.postMessage = () => { throw new Error('host disconnected') }
+  try {
+    await assert.rejects(client.requests.export('standard'), /host disconnected/)
+    await assert.rejects(client.requests.import(), /host disconnected/)
+    await assert.rejects(client.requests.environment('work'), /host disconnected/)
+    await assert.rejects(client.window.__DSH_PORTABLE_HOST__.restart(), error => error.code === 'DSH_PORTABLE_RESTART_UNCONFIRMED')
+    assert.deepEqual([...client.requests.pending()], [0, 0, 0, 0])
+    assert.equal(timers.size, 0)
+  } finally { runtime.dispose() }
+})
+
 test('Portable exposes a native restart contract and returns the host decision', async () => {
   const client = await loadBridgeClient()
   const runtime = fakeContext(sessionList(1))
@@ -822,6 +879,37 @@ test('stream bursts coalesce, unchanged projections stay quiet, and disposal can
   runtime.dispose()
   await new Promise(resolve => setTimeout(resolve, 150))
   assert.equal(client.posted.length, before + 1, 'disposed bridges must not publish queued snapshots')
+})
+
+test('large histories retain stable recent ordering, all-session running protection and event-only changes', async () => {
+  const client = await loadBridgeClient()
+  const sessions = sessionList(12000)
+  for (let index = 0; index < sessions.ids.length; index++) {
+    const item = sessions.byId[sessions.ids[index]]
+    item.updatedAt = (index * 7919) % 101
+    item.running = false
+    item.blank = index % 19 === 0
+    if (index % 23 === 0) item.origin = 'subagent'
+  }
+  const expected = () => sessions.ids.map(id => sessions.byId[id])
+    .filter(item => item && !item.blank && item.origin !== 'subagent')
+    .sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0)).slice(0, 10).map(item => item.id)
+  sessions.byId['session-0'].running = true
+  const runtime = fakeContext(sessions)
+  client.exports.apply(runtime.ctx)
+  try {
+    assert.deepEqual(client.posted.at(-1).sessions.map(item => item.id), expected())
+    assert.equal(client.posted.at(-1).hasRunningSession, true, 'a running session outside the menu still protects shutdown')
+    const last = expected().at(-1)
+    sessions.byId[last].updatedAt = 1000
+    runtime.emitSessionEvent(last)
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.deepEqual(client.posted.at(-1).sessions.map(item => item.id), expected(), 'event-only updates must refresh ranking without a list notification')
+    delete sessions.byId[last]
+    runtime.setSessions(sessions)
+    await new Promise(resolve => setTimeout(resolve, 150))
+    assert.deepEqual(client.posted.at(-1).sessions.map(item => item.id), expected())
+  } finally { runtime.dispose() }
 })
 
 test('portable launch and packages compose the bridge as a private official DSH overlay', async () => {

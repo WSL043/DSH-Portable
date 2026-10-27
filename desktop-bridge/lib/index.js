@@ -190,7 +190,15 @@ export function mountPortableRoutes(webServer, options = {}) {
   const runCli = options.runCli || ((args) => defaultRunCli(root, baseStateRoot, currentEnvironment, args))
   // The catalog is read by the CLI process, which follows the system proxy; this host process must not, because
   // its own traffic (model requests) keeps the user's routing.
-  const listVersions = scope => runCli(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
+  // Share only reads that are already running in this environment. There is no result TTL:
+  // a later refresh still reaches the CLI, and manual checks never join a cached/background check.
+  const updateReads = new Map()
+  const runUpdateRead = args => {
+    const key = JSON.stringify(args)
+    if (!updateReads.has(key)) updateReads.set(key, Promise.resolve().then(() => runCli(args)).finally(() => updateReads.delete(key)))
+    return updateReads.get(key)
+  }
+  const listVersions = scope => runUpdateRead(['list-updates', '--scope', scope, '--json', '--wait-for-lock-ms', '10000'])
   const probeNotifications = options.notificationAvailability || windowsNotificationAvailability
   let notificationProbe = null
   const notificationAvailability = () => {
@@ -260,7 +268,7 @@ export function mountPortableRoutes(webServer, options = {}) {
       const args = ['check-update', '--scope', body.scope, '--json']
       if (body.background !== true) args.push('--force')
       args.push('--wait-for-lock-ms', '10000')
-      sendJson(response, 200, await runCli(args))
+      sendJson(response, 200, await runUpdateRead(args))
     } catch (error) { sendJson(response, 500, { error: String(error?.message || error) }) }
   } })
 

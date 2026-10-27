@@ -1623,3 +1623,60 @@ test('a package whose own contract disagrees with its manifest is refused before
     assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).dshVersion, '0.1.1-rc.2')
   } finally { await rm(fixture.root, { recursive: true, force: true }) }
 })
+
+test('a broken check cache is refreshed and cannot defeat selected-version validation', async t => {
+  const fixture = await makeUpdateFixture()
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  const { layout } = fixture
+  const manifest = updateManifest({ platform: platformUpdateKey() })
+  const manifestUrl = 'https://example.invalid/update.json'
+  let requests = 0
+  const fetchImpl = async () => { requests++; return new Response(JSON.stringify(manifest)) }
+  await mkdir(path.dirname(layout.productUpdateCheckCache), { recursive: true })
+  for (const broken of ['{truncated', JSON.stringify({ checkedAt: 1000, manifestUrl, manifest: { schemaVersion: 999 } })]) {
+    await writeFile(layout.productUpdateCheckCache, broken)
+    const result = await checkForUpdate({ layout, manifestUrl, fetchImpl, force: true, now: 2000 })
+    assert.equal(result.status, 'available')
+    assert.equal(result.cached, false)
+  }
+  assert.equal(requests, 2)
+  const selected = await checkForUpdate({ layout, manifestUrl, fetchImpl, expectedProductVersion: '0.9.99', now: 2100 })
+  assert.equal(requests, 3, 'a cached different version must not satisfy an explicit selection')
+  assert.equal(selected.status, 'unavailable')
+  assert.equal(selected.latest, undefined, 'a failed selection does not offer the older cached manifest')
+})
+
+test('temporary check failures retain reminder choices without advertising stale updates', async t => {
+  for (const scope of ['product', 'engine']) for (const choice of ['ignore', 'defer']) {
+    await t.test(scope + ' ' + choice, async t => {
+      const fixture = await makeUpdateFixture()
+      t.after(() => rm(fixture.root, { recursive: true, force: true }))
+      const { layout } = fixture
+      const manifest = updateManifest({ platform: platformUpdateKey(), ...(scope === 'engine'
+        ? { updateKind: 'engine', portableVersion: '0.1.0-rc.6-portable.5' } : {}) })
+      const manifestUrl = 'https://example.invalid/' + scope + '.json'
+      let requests = 0, offline = false
+      const fetchImpl = async () => {
+        requests++
+        if (offline) throw new Error('temporary network failure')
+        return new Response(JSON.stringify(manifest))
+      }
+      const check = (options = {}) => checkForUpdate({ layout, scope, manifestUrl, fetchImpl, ...options })
+      assert.equal((await check({ now: 1000 })).status, 'available')
+      if (choice === 'ignore') await ignoreUpdate(layout, '', { scope })
+      else await deferUpdate(layout, { scope, now: 1100, durationMs: 24 * 60 * 60 * 1000 })
+      offline = true
+      const failure = await check({ force: true, now: 2000 })
+      assert.equal(failure.status, 'unavailable')
+      assert.equal(failure.latest, undefined)
+      assert.equal((await check({ now: 3000 })).cached, true)
+      assert.equal(requests, 2, 'the failure backoff still avoids repeated network work')
+      offline = false
+      const recovered = await check({ now: 2000 + 60 * 60 * 1000 + 1 })
+      assert.equal(recovered.status, choice === 'ignore' ? 'ignored' : 'deferred')
+      assert.equal(recovered.cached, false, 'an expired failure must re-fetch before offering anything')
+      assert.equal(requests, 3)
+      assert.equal((await check({ force: true, now: 2000 + 60 * 60 * 1000 + 2 })).status, 'available', 'manual checks bypass reminders')
+    })
+  }
+})

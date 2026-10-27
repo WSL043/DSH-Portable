@@ -475,7 +475,9 @@ namespace DshPortable
                     pen.StartCap = pen.EndCap = LineCap.Flat;
                     pen.LineJoin = LineJoin.Miter;
                     GraphicsState iconState = e.Graphics.Save();
-                    e.Graphics.TranslateTransform(x - 8, y - 8);
+                    float iconScale = Math.Max(1F, e.Graphics.DpiX / 96F);
+                    e.Graphics.TranslateTransform(x - 8 * iconScale, y - 8 * iconScale);
+                    e.Graphics.ScaleTransform(iconScale, iconScale);
                     if (e.Item.Name == "nav-sidebar")
                     {
                         using (GraphicsPath outline = new GraphicsPath())
@@ -565,6 +567,69 @@ namespace DshPortable
         internal readonly Font CaptionFont = new Font("Segoe MDL2 Assets", 8.5F);
         // Follow the official desktop's 14px system UI type while retaining native menu behavior.
         internal readonly Font MenuFont = new Font("Segoe UI", 10.5F);
+        internal static int ScalePixels(int value, int dpi)
+        {
+            return Math.Max(1, (int)Math.Round(value * Math.Max(96, dpi) / 96.0));
+        }
+
+        internal static Size MeasureText(Control owner, string text, Font font)
+        {
+            const TextFormatFlags flags = TextFormatFlags.NoPadding | TextFormatFlags.SingleLine;
+            if (!owner.IsHandleCreated) return TextRenderer.MeasureText(text, font, Size.Empty, flags);
+            using (Graphics graphics = owner.CreateGraphics())
+                return TextRenderer.MeasureText(graphics, text, font, Size.Empty, flags);
+        }
+
+        internal void ApplyLayout(int dpi)
+        {
+            // Recalculate from logical values; never scale the previous item sizes.
+            int layoutDpi = Math.Max(96, dpi);
+            int verticalMargin = ScalePixels(6, layoutDpi);
+            int rowHeight = Math.Max(ScalePixels(28, layoutDpi),
+                MeasureText(this, "文件Ag", Font).Height + ScalePixels(4, layoutDpi));
+            SuspendLayout();
+            try
+            {
+                Height = Math.Max(ScalePixels(40, layoutDpi), rowHeight + verticalMargin * 2);
+                Padding = new Padding(ScalePixels(12, layoutDpi), 0, 0, 0);
+                foreach (ToolStripItem item in Items)
+                {
+                    item.AutoSize = false;
+                    if (item.Name.StartsWith("caption-"))
+                    {
+                        item.Size = new Size(ScalePixels(46, layoutDpi), Height);
+                        item.Margin = item.Padding = Padding.Empty;
+                    }
+                    else if (item.Name.StartsWith("nav-"))
+                    {
+                        item.Size = new Size(rowHeight, rowHeight);
+                        item.Padding = Padding.Empty;
+                        item.Margin = new Padding(0, verticalMargin, ScalePixels(8, layoutDpi), verticalMargin);
+                    }
+                    else
+                    {
+                        int horizontalPadding = ScalePixels(10, layoutDpi);
+                        item.Size = new Size(MeasureText(this, item.Text, Font).Width + horizontalPadding * 2, rowHeight);
+                        item.Margin = new Padding(0, verticalMargin, ScalePixels(2, layoutDpi), verticalMargin);
+                        item.Padding = new Padding(horizontalPadding, 0, horizontalPadding, 0);
+                    }
+                }
+            }
+            finally { ResumeLayout(); }
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            ApplyLayout(DeviceDpi);
+        }
+
+        protected override void OnFontChanged(EventArgs e)
+        {
+            base.OnFontChanged(e);
+            if (IsHandleCreated && Items.Count > 0) ApplyLayout(DeviceDpi);
+        }
+
         protected override void Dispose(bool disposing)
         {
             base.Dispose(disposing);

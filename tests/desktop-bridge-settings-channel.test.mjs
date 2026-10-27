@@ -169,7 +169,14 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeF
     addEventListener() {},
     removeEventListener() {},
   }
-  const window = { __ModuleLoader__: { load(value) { definition = value } }, ...(native ? { __DSH_PORTABLE_NATIVE__: native } : {}) }
+  const pageListeners = new Map()
+  const window = { __ModuleLoader__: { load(value) { definition = value } }, ...(native ? { __DSH_PORTABLE_NATIVE__: native } : {}),
+    addEventListener(name, listener) {
+      if (!pageListeners.has(name)) pageListeners.set(name, new Set())
+      pageListeners.get(name).add(listener)
+    },
+    removeEventListener(name, listener) { pageListeners.get(name)?.delete(listener) },
+  }
   if (webCacheHost) Object.assign(window, { __DSH_PORTABLE_WEB_CACHE__: true, chrome: { webview: webCacheHost } })
   vm.runInNewContext(source, {
     console,
@@ -212,7 +219,9 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeF
   const registration = registered.find(entry => entry.options.id === page)
   assert.ok(registration, 'Portable settings registration is present')
   assert.equal(registration.options.name, 'settings.section', 'Portable owns a settings navigation entry')
-  return { harness, mount: () => harness.mount(registration.component) }
+  return { harness, mount: () => harness.mount(registration.component), pageListeners,
+    pageEvent(name) { for (const listener of pageListeners.get(name) ?? []) listener() },
+  }
 }
 
 function settings(updateChannel = 'stable', overrides = {}) {
@@ -682,6 +691,29 @@ test('web cache maintenance requires host support and waits for the matching nat
     await settle()
     assert.ok(textContent(mounted.tree).includes('Web cache cleared.'))
     assert.equal(listeners.size, 0)
+    assert.equal(client.pageListeners.get('pagehide').size, 0)
+
+    menu.props.onSelect('web-cache')
+    await settle()
+    const abandoned = sent.at(-1)
+    client.pageEvent('pagehide')
+    await settle()
+    assert.equal(listeners.size, 0)
+    assert.equal(client.pageListeners.get('pagehide').size, 0)
+    assert.ok(!textContent(mounted.tree).includes('Web cache cleared.'))
+    assert.ok(!textContent(mounted.tree).includes('Operation failed:'))
+
+    menu.props.onSelect('web-cache')
+    await settle()
+    const next = sent.at(-1)
+    for (const fn of [...listeners]) fn({ data: { type: 'dsh-portable/clear-web-cache-result', requestId: abandoned.requestId, ok: true } })
+    await settle()
+    assert.ok(!textContent(mounted.tree).includes('Web cache cleared.'))
+    for (const fn of [...listeners]) fn({ data: { type: 'dsh-portable/clear-web-cache-result', requestId: next.requestId, ok: true } })
+    await settle()
+    assert.ok(textContent(mounted.tree).includes('Web cache cleared.'))
+    assert.equal(listeners.size, 0)
+    assert.equal(client.pageListeners.get('pagehide').size, 0)
   } finally { mounted.unmount() }
 })
 

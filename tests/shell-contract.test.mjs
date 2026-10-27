@@ -15,7 +15,11 @@ const copy = () => structuredClone(frozen)
 
 test('the interface between the shell and the app still matches its frozen record', async () => {
   const record = await readContractRecord(root)
-  const { breaking, compatible } = diffShellContract(record, await scanShellContract(root))
+  const scan = await scanShellContract(root)
+  for (const command of ['list-updates', 'check-update', 'doctor']) {
+    assert.ok(scan.app.cli.includes(command), 'bridge CLI extraction must include direct and shared-read calls: ' + command)
+  }
+  const { breaking, compatible } = diffShellContract(record, scan)
   assert.deepEqual([...breaking, ...compatible], [],
     'The shell/core interface changed. A compatible change: node scripts/shell-contract.mjs update. A breaking one: node scripts/shell-contract.mjs bump (older shells then stop accepting new cores).')
 })

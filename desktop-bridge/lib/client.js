@@ -220,12 +220,15 @@ window.__ModuleLoader__.load({
       return new Promise((resolve, reject) => {
         const requestId = `data-export-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         pendingDataExportRequests.set(requestId, { resolve, reject })
-        host.bridge.postMessage({
+        try { host.bridge.postMessage({
           type: 'dsh-portable/pick-data-export',
           schemaVersion: 1,
           requestId,
           kind,
-        })
+        }) } catch (error) {
+          pendingDataExportRequests.delete(requestId)
+          reject(error)
+        }
       })
     }
 
@@ -235,14 +238,30 @@ window.__ModuleLoader__.load({
       const bridge = host.bridge
       return new Promise((resolve, reject) => {
         const requestId = `web-cache-${Date.now().toString(36)}-${++dataExportRequestSequence}`
-        const finish = error => { clearTimeout(timer); bridge.removeEventListener('message', receive); error ? reject(error) : resolve() }
+        let settled = false
+        const finish = error => {
+          if (settled) return
+          settled = true
+          clearTimeout(timer)
+          bridge.removeEventListener('message', receive)
+          window.removeEventListener?.('pagehide', cancel)
+          error ? reject(error) : resolve()
+        }
+        const cancel = () => {
+          const error = new Error('Portable page closed before web cache cleanup was confirmed.')
+          error.code = 'REQUEST_CANCELLED'
+          finish(error)
+        }
         const receive = event => {
           if (event.data?.type !== 'dsh-portable/clear-web-cache-result' || event.data.requestId !== requestId) return
           finish(event.data.ok ? null : new Error(event.data.error || 'Web cache cleanup failed.'))
         }
         const timer = setTimeout(() => finish(new Error('Web cache cleanup has not been confirmed.')), 30000)
-        bridge.addEventListener('message', receive)
-        try { bridge.postMessage({ type: 'dsh-portable/clear-web-cache', requestId }) } catch (error) { finish(error) }
+        try {
+          bridge.addEventListener('message', receive)
+          window.addEventListener?.('pagehide', cancel)
+          bridge.postMessage({ type: 'dsh-portable/clear-web-cache', requestId })
+        } catch (error) { finish(error) }
       })
     }
 
@@ -252,7 +271,10 @@ window.__ModuleLoader__.load({
       return new Promise((resolve, reject) => {
         const requestId = `data-import-${Date.now().toString(36)}-${++dataExportRequestSequence}`
         pendingDataImportRequests.set(requestId, { resolve, reject })
-        host.bridge.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId })
+        try { host.bridge.postMessage({ type: 'dsh-portable/pick-data-import', schemaVersion: 1, requestId }) } catch (error) {
+          pendingDataImportRequests.delete(requestId)
+          reject(error)
+        }
       })
     }
 
@@ -296,7 +318,11 @@ window.__ModuleLoader__.load({
           resolve: value => { clearTimeout(timeout); resolve(value) },
           reject: error => { clearTimeout(timeout); reject(error) },
         })
-        host.bridge.postMessage({ type: 'dsh-portable/open-environment', schemaVersion: 1, requestId, environment })
+        try { host.bridge.postMessage({ type: 'dsh-portable/open-environment', schemaVersion: 1, requestId, environment }) } catch (error) {
+          pendingEnvironmentRequests.delete(requestId)
+          clearTimeout(timeout)
+          reject(error)
+        }
       })
     }
 
@@ -965,8 +991,9 @@ window.__ModuleLoader__.load({
           }
           else if (id === 'web-cache') {
             setBusy('web-cache')
+            setStatus('maintenance', '')
             clearWebCache().then(() => setStatus('maintenance', t('webCacheCleared')))
-              .catch(error => setStatus('maintenance', format(t('failed'), error.message)))
+              .catch(error => { if (error.code !== 'REQUEST_CANCELLED') setStatus('maintenance', format(t('failed'), error.message)) })
               .finally(() => setBusy(''))
           }
         },
@@ -1129,17 +1156,26 @@ window.__ModuleLoader__.load({
       return { prompt: String(questions[0]?.question || '').trim().slice(0, 512), options }
     }
 
-    function sessionState(ctx) {
-      const source = ctx.sessions.list.getSnapshot()
+    function recentSessions(source) {
+      // Keep the same stable newest-first order without sorting the whole history.
+      const recent = []
+      for (const id of source.ids ?? []) {
+        const item = source.byId?.[id]
+        if (!item || item.blank || item.origin === 'subagent') continue
+        const updatedAt = Number(item.updatedAt || 0)
+        if (recent.length === 10 && updatedAt <= Number(recent[9].updatedAt || 0)) continue
+        let index = 0
+        while (index < recent.length && updatedAt <= Number(recent[index].updatedAt || 0)) index++
+        recent.splice(index, 0, item)
+        if (recent.length > 10) recent.pop()
+      }
+      return recent
+    }
+
+    function sessionState(ctx, source, recent) {
       const current = currentSessionIdFromSnapshot(source)
-      const sourceSessions = (source.ids ?? [])
-        .map(id => source.byId?.[id])
-        .filter(Boolean)
-      const hasRunningSession = sourceSessions.some(item => Boolean(item.running))
-      const sessions = sourceSessions
-        .filter(item => item && !item.blank && item.origin !== 'subagent')
-        .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
-        .slice(0, 10)
+      const hasRunningSession = (source.ids ?? []).some(id => Boolean(source.byId?.[id]?.running))
+      const sessions = recent
         .map(item => {
           const completed = Boolean(item.completed)
           const interaction = item.pendingInteraction
@@ -1374,9 +1410,24 @@ window.__ModuleLoader__.load({
           pendingWorkspaceRequests.clear()
           workspacePickerPromise = null
         }
+        const cancelNativeRequests = () => {
+          cancelWorkspacePicker()
+          for (const pending of pendingDataExportRequests.values()) pending.resolve(null)
+          pendingDataExportRequests.clear()
+          for (const pending of pendingDataImportRequests.values()) pending.resolve(null)
+          pendingDataImportRequests.clear()
+          for (const pending of pendingHostRestartRequests.values()) {
+            const error = new Error('Portable page closed before the restart reply was received.')
+            error.code = 'DSH_PORTABLE_RESTART_UNCONFIRMED'
+            pending.reject(error)
+          }
+          pendingHostRestartRequests.clear()
+          for (const pending of pendingEnvironmentRequests.values()) pending.reject(new Error('Portable page closed.'))
+          pendingEnvironmentRequests.clear()
+        }
         // A page can enter the back/forward cache without disposing its plugins.
-        // Do not leave its picker promise waiting for a reply to the old page.
-        window.addEventListener?.('pagehide', cancelWorkspacePicker)
+        // Replies to its old dialogs must not settle requests after it returns.
+        window.addEventListener?.('pagehide', cancelNativeRequests)
         if (host.capabilities.pickDirectory === true && directoryPickers.length > 0) {
           nativePickDirectory = () => {
             if (!active) return Promise.resolve(null)
@@ -1400,14 +1451,8 @@ window.__ModuleLoader__.load({
           }
           for (const { owner } of directoryPickers) owner.pickDirectory = nativePickDirectory
         }
-        const syncSessionEventSubscriptions = () => {
-          const snapshot = ctx.sessions.list.getSnapshot()
-          const desired = new Set((snapshot.ids ?? [])
-            .map(id => snapshot.byId?.[id])
-            .filter(item => item && !item.blank && item.origin !== 'subagent')
-            .sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0))
-            .slice(0, 10)
-            .map(item => String(item.id)))
+        const syncSessionEventSubscriptions = recent => {
+          const desired = new Set(recent.map(item => String(item.id)))
           for (const [id, stop] of sessionEventStops) {
             if (desired.has(id)) continue
             stop?.()
@@ -1422,9 +1467,11 @@ window.__ModuleLoader__.load({
         }
         const publish = () => {
           if (!active) return
-          syncSessionEventSubscriptions()
+          const snapshot = ctx.sessions.list.getSnapshot()
+          const recent = recentSessions(snapshot)
+          syncSessionEventSubscriptions(recent)
           if (host.capabilities.sessionProjection !== true) return
-          const state = sessionState(ctx)
+          const state = sessionState(ctx, snapshot, recent)
           recordNavigation()
           state.canGoBack = navigationTarget(-1) >= 0
           state.canGoForward = navigationTarget(1) >= 0
@@ -1639,20 +1686,8 @@ window.__ModuleLoader__.load({
           for (const { owner, original } of directoryPickers) {
             if (nativePickDirectory && owner.pickDirectory === nativePickDirectory) owner.pickDirectory = original
           }
-          window.removeEventListener?.('pagehide', cancelWorkspacePicker)
-          cancelWorkspacePicker()
-          for (const pending of pendingDataExportRequests.values()) pending.resolve(null)
-          pendingDataExportRequests.clear()
-          for (const pending of pendingDataImportRequests.values()) pending.resolve(null)
-          pendingDataImportRequests.clear()
-          for (const pending of pendingHostRestartRequests.values()) {
-            const error = new Error('Portable host closed before the restart reply was received.')
-            error.code = 'DSH_PORTABLE_RESTART_UNCONFIRMED'
-            pending.reject(error)
-          }
-          pendingHostRestartRequests.clear()
-          for (const pending of pendingEnvironmentRequests.values()) pending.reject(new Error('Portable host closed.'))
-          pendingEnvironmentRequests.clear()
+          window.removeEventListener?.('pagehide', cancelNativeRequests)
+          cancelNativeRequests()
           if (window.__DSH_PORTABLE_HOST__?.restart === restartPortableHost) delete window.__DSH_PORTABLE_HOST__
           webview.removeEventListener?.('message', receive)
           stopSessions?.()

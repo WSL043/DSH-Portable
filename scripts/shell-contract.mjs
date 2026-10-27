@@ -31,7 +31,7 @@ const ENV = /\bDSH_PORTABLE_[A-Z0-9]+(?:_[A-Z0-9]+)*\b(?!_)/gu
 const BRIDGE = /\bdsh-portable\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\b/gu
 const FLAG = /'(--[a-z][a-z0-9]*(?:-[a-z0-9]+)*)'/gu
 const SHELL_COMMAND = /options\.command === '([a-z][a-z-]*)'/gu
-const APP_COMMAND = /(?:runCli\(\s*|\bargs\s*=\s*)\[\s*'([a-z][a-z-]*)'/gu
+const APP_COMMAND = /(?:(?:runCli|runUpdateRead)\(\s*|\bargs\s*=\s*)\[\s*'([a-z][a-z-]*)'/gu
 const APP_LAYOUT = /\bappDir,\s*((?:'[^']+',?\s*)+)\)/gu
 const CAPSULE_FORMAT = /\b(?:DSHPACK\d+|dshpack-[a-z0-9-]+)\b/gu
 const APP_LAUNCHER_FILE = /'launcher',\s*'([A-Za-z0-9._-]+)'/gu

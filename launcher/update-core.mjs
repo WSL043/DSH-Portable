@@ -810,7 +810,20 @@ async function checkForUpdateUnlocked({
     ? defaultEngineUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch, installed.portableVersion)
     : defaultUpdateManifestUrl(installed.releaseChannel, layout.platform, process.arch)
   const platform = platformUpdateKey(layout.platform, process.arch)
-  const cached = await readJson(updateCheckCache, null)
+  const evaluationOptions = { allowEngineVersionChange: scope === 'engine' && explicitManifest, allowProductVersionChange: scope === 'product' && explicitManifest && allowProductVersionChange }
+  let cached = null
+  try { cached = await readJson(updateCheckCache, null) } catch (error) {
+    // A broken cache is not installed state or an authenticated offline package. Re-fetch it;
+    // permission and I/O errors still surface instead of silently discarding user choices.
+    if (!(error instanceof SyntaxError)) throw error
+  }
+  let cachedResult = null
+  if (cached?.manifest) {
+    try {
+      if ((cached.manifest.updateKind || 'product') !== scope) throw new Error('Cached update scope mismatch.')
+      cachedResult = evaluateUpdate(cached.manifest, installed, platform, evaluationOptions)
+    } catch { cached = null }
+  }
   if (!force && cached?.manifestUrl === manifestUrl && cached?.retryAfter > now) {
     return {
       status: cached.errorStatus || 'unavailable', updateKind: scope,
@@ -818,12 +831,10 @@ async function checkForUpdateUnlocked({
       cached: true, checkedAt: cached.checkedAt, message: cached.error,
     }
   }
-  const cachedKind = cached?.manifest?.updateKind || 'product'
-  if (!force && cachedKind === scope && cached?.manifest && cached?.manifestUrl === manifestUrl && cached?.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS) {
-    const evaluated = evaluateUpdate(cached.manifest, installed, platform, {
-      allowEngineVersionChange: scope === 'engine' && explicitManifest,
-      allowProductVersionChange: scope === 'product' && explicitManifest && allowProductVersionChange,
-    })
+  if (!force && cached?.error === undefined && cachedResult && cached?.manifestUrl === manifestUrl && cached?.checkedAt
+    && now >= cached.checkedAt && now - cached.checkedAt < UPDATE_CHECK_TTL_MS
+    && (!expectedProductVersion || cached.manifest.portableVersion === expectedProductVersion)) {
+    const evaluated = cachedResult
     const ignoredIdentity = cached.ignoredIdentity || (cached.ignoredVersion ? `product:${cached.ignoredVersion}` : '')
     if (evaluated.updateIdentity && ignoredIdentity === evaluated.updateIdentity) {
       return { ...evaluated, status: 'ignored', cached: true, checkedAt: cached.checkedAt }
@@ -838,9 +849,7 @@ async function checkForUpdateUnlocked({
     if (expectedProductVersion && manifest.portableVersion !== expectedProductVersion) throw new Error('Selected Portable version does not match the downloaded manifest.')
     const manifestKind = manifest.updateKind || 'product'
     if (manifestKind !== scope) throw new Error(`Update kind mismatch: expected ${scope}, received ${manifestKind}.`)
-    const evaluationOptions = { allowEngineVersionChange: scope === 'engine' && explicitManifest, allowProductVersionChange: scope === 'product' && explicitManifest && allowProductVersionChange }
     const result = evaluateUpdate(manifest, installed, platform, evaluationOptions)
-    const cachedResult = cached?.manifest ? evaluateUpdate(cached.manifest, installed, platform, evaluationOptions) : null
     const deferredUntil = cachedResult?.updateIdentity === result.updateIdentity ? Number(cached.deferredUntil ?? 0) : 0
     const ignoredIdentity = (cached?.ignoredIdentity || (cached?.ignoredVersion ? `product:${cached.ignoredVersion}` : '')) === result.updateIdentity
       ? result.updateIdentity
@@ -859,6 +868,9 @@ async function checkForUpdateUnlocked({
       ? 'channel-unpublished'
       : 'unavailable'
     await writeJsonAtomic(updateCheckCache, {
+      // Keep reminder choices through a temporary outage, but never present the old manifest
+      // as a successful fresh check. retryAfter and error govern all automatic reads until re-fetch.
+      ...(cached?.manifestUrl === manifestUrl ? cached : {}),
       schemaVersion: 2,
       checkedAt: now,
       manifestUrl,
