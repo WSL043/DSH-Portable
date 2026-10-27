@@ -173,7 +173,7 @@ test('Procmon PID lifetimes retain a live child after parent exit and reject reu
     row(200, 'powershell.exe', 'RegSetValue', 'HKLM\\SOFTWARE\\Example', 'Type: REG_SZ, Length: 8, Data: update'),
     row(200, 'powershell.exe', 'Process Exit', '', 'Exit Status: 0'),
     row(300, 'unrelated.exe', 'Process Create', 'C:\\Windows\\System32\\powershell.exe', 'PID: 200, Command line: powershell.exe unrelated.ps1'),
-    row(200, 'powershell.exe', 'Process Start', 'C:\\Windows\\System32\\powershell.exe', 'Parent PID: 300, Command line: powershell.exe unrelated.ps1'),
+    row(200, 'powershell.exe', 'Process Start', 'C:\\Windows\\System32\\powershell.exe', 'Parent PID: 300, Command line: powershell.exe unrelated.ps1\r\nEnvironment:\r\nSYNTHETIC_TRACE_ENV_SECRET=must-not-upload'),
     row(200, 'powershell.exe', 'RegSetValue', 'HKLM\\SOFTWARE\\Example', 'Type: REG_SZ, Length: 8, Data: unrelated'),
     row(101, 'DeepSeek Harness.exe', 'Process Create', 'C:\\Windows\\System32\\powershell.exe', 'PID: 400, Command line: powershell.exe update.ps1'),
     row(400, 'powershell.exe', 'Process Start', 'C:\\Windows\\System32\\powershell.exe', 'Parent PID: 300, Command line: powershell.exe unrelated.ps1'),
@@ -194,11 +194,13 @@ test('Procmon PID lifetimes retain a live child after parent exit and reject reu
     $seen=@(); $sequence=0;
     foreach($row in $rows){$sequence++;$seen+=Update-TraceOwnership $state $row $sequence}
     $context=New-TraceContextEvent $rows[8] 9 $seen[8];
+    $startContext=New-TraceContextEvent $rows[7] 8 $seen[7];
+    $commaContext=New-TraceContextEvent ([pscustomobject]@{PID='200';Operation='Process Create';Detail='PID: 200, Command line: powershell.exe update.ps1, Environment: SYNTHETIC_TRACE_ENV_SECRET=must-not-upload'}) 13 $seen[7];
     $missing=New-TraceContextEvent ([pscustomobject]@{PID='200';Operation='RegSetValue'}) 10 $seen[8];
     $long=New-TraceContextEvent ([pscustomobject]@{PID='200';Detail=('x'*4096)}) 11 $seen[8];
     $seen[8].imagePath=('x'*4096);
     $longImage=New-TraceContextEvent ([pscustomobject]@{PID='200';Operation='Process Exit'}) 12 $seen[8];
-    @{ owned=@($seen|ForEach-Object {$_.owned}); firstGeneration=$seen[4].generation; reusedGeneration=$seen[8].generation; parentAfterExit=$state.active.ContainsKey('100'); childParent=$seen[4].parentPid; context=$context; missing=$missing; longLength=$long.detail.Length; longTruncated=$long.fieldTruncated; imageLength=$longImage.imagePath.Length; imageTruncated=$longImage.fieldTruncated }|ConvertTo-Json -Depth 6 -Compress`;
+    @{ owned=@($seen|ForEach-Object {$_.owned}); firstGeneration=$seen[4].generation; reusedGeneration=$seen[8].generation; parentAfterExit=$state.active.ContainsKey('100'); childParent=$seen[4].parentPid; context=$context; startContext=$startContext; commaContext=$commaContext; missing=$missing; longLength=$long.detail.Length; longTruncated=$long.fieldTruncated; imageLength=$longImage.imagePath.Length; imageTruncated=$longImage.fieldTruncated }|ConvertTo-Json -Depth 6 -Compress`;
   const env = { ...process.env }; delete env.PSModulePath;
   const result = JSON.parse(execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true }).trim());
   assert.deepEqual(result.owned, [true, true, true, true, true, true, false, false, false, true, false, false]);
@@ -210,6 +212,15 @@ test('Procmon PID lifetimes retain a live child after parent exit and reject reu
   assert.equal(result.context.time, rows[8]['Time of Day']);
   assert.equal(result.context.detail, rows[8].Detail);
   assert.equal(result.context.owned, false);
+  for (const context of [result.startContext, result.commaContext]) {
+    assert.equal(context.environmentOmitted, true);
+    assert.doesNotMatch(JSON.stringify(context), /SYNTHETIC_TRACE_ENV_SECRET|must-not-upload|Environment:/);
+    assert.match(context.detail, /Command line: powershell\.exe/);
+  }
+  assert.equal(result.startContext.parentPid, '300');
+  assert.match(result.startContext.detail, /Parent PID: 300/);
+  assert.match(result.commaContext.detail, /^PID: 200/);
+  assert.equal(result.context.environmentOmitted, false);
   assert.equal(result.missing.path, '');
   assert.equal(result.missing.time, '');
   assert.equal(result.longLength, 2048);

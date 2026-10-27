@@ -49,16 +49,22 @@ function New-TraceContextEvent($Row, [long]$Sequence, $Ownership) {
     # Keep the original field strings; missing Procmon fields stay empty rather
     # than being inferred as proof of a parent or executable identity.
     $fieldTruncated = $false
+    # Procmon appends the child's environment to Create/Start Detail. Preserve
+    # parent/command-line context, but never upload that environment block.
+    $contextDetail = [string]$Row.Detail
+    $environment = [regex]::Match($contextDetail, '(?is)(?:^|,\s*|[\r\n]+\s*)Environment:.*\z')
+    $environmentOmitted = $environment.Success
+    if ($environmentOmitted) { $contextDetail = $contextDetail.Substring(0, $environment.Index) }
     $fields = @{}
     foreach ($field in @('Time of Day','Process Name','PID','Operation','Path','Result','Detail')) {
-        $text = [string]$Row.$field
+        $text = if ($field -eq 'Detail') { $contextDetail } else { [string]$Row.$field }
         if ($text.Length -gt 2048) { $text = $text.Substring(0,2048); $fieldTruncated = $true }
         $fields[$field] = $text
     }
     $contextImagePath = [string]$Ownership.imagePath
     if ($contextImagePath.Length -gt 2048) { $contextImagePath = $contextImagePath.Substring(0,2048); $fieldTruncated = $true }
     return [pscustomobject]@{
-        fieldTruncated=$fieldTruncated
+        fieldTruncated=$fieldTruncated; environmentOmitted=$environmentOmitted
         sequence=$Sequence; time=$fields['Time of Day']; process=$fields['Process Name']; pid=$fields['PID']
         operation=$fields['Operation']; path=$fields['Path']; result=$fields['Result']; detail=$fields['Detail']
         generation=$Ownership.generation; parentPid=$Ownership.parentPid; imagePath=$contextImagePath
