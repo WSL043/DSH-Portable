@@ -778,7 +778,7 @@ try {
                 $rawTrace = Get-Content -LiteralPath $tracePath -Raw | ConvertFrom-Json
                 # Windows PowerShell 5.1 wraps a piped array as { value, Count }.
                 $script:OutsideWriteDifferences = if ($null -ne $rawTrace -and $null -ne $rawTrace.PSObject.Properties['value']) { @($rawTrace.value) } else { @($rawTrace) }
-                $systemCategories = @('temporary', 'ipc-not-a-disk-file', 'windows-system-record', 'windows-shared-spelling', 'reviewed-dotnet-system-registration', 'known-protocol-registration', 'windows-powershell-startup-cache')
+                $systemCategories = @('temporary', 'ipc-not-a-disk-file', 'windows-system-record', 'windows-shared-spelling', 'reviewed-dotnet-system-registration', 'reviewed-windows-feature-usage', 'known-protocol-registration', 'windows-powershell-startup-cache')
                 $officialOwn = New-Object 'System.Collections.Generic.List[object]'
                 $unexpected = @($script:OutsideWriteDifferences | Where-Object {
                     $writePath = [string]$_.path
@@ -787,9 +787,10 @@ try {
                     # Extraction tools stamp the directories that contain the portable root; that is directory metadata, not content written outside it.
                     $rootAncestor = $script:PortableRoot -and ([IO.Path]::GetFullPath($script:PortableRoot).TrimEnd('\') + '\').StartsWith($writePath.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
                     $runnerTemp = $env:RUNNER_TEMP -and ($writePath.TrimEnd('\') + '\').StartsWith($env:RUNNER_TEMP.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
-                    $systemNoise = $runnerTemp -or ($systemCategories -contains [string]$_.category) -or ($writePath -match '^[A-Za-z]:\\\$')
+                    $systemNoise = $runnerTemp -or ($systemCategories -contains [string]$_.category) -or ($writePath -match '^[A-Za-z]:\\\$(?:BitMap|LogFile|Mft(?:::\$BITMAP)?|MftMirr)$')
                     # Writes made by the official app itself (its native-addon cache, default workspace, spelling dictionary) are the official app's own behavior: recorded, not asserted.
-                    # Only the Portable components (launcher, update copy, update engine's PowerShell and 7-Zip) are audited; the official app and Windows' own helpers it triggers (for example directxdatabaseupdater.exe on a fresh machine) are recorded, not asserted.
+                    # These component rules apply only to the official EXE and its observed child chain.
+                    # Independently launched Root/maintenance processes may be outside these findings; official app/helper writes remain recorded.
                     $processName = [string]$_.process
                     $isPortableComponent = $processName -ceq 'DeepSeek Harness Portable.exe' -or $processName -like 'deepseek-harness-*-win-x64.exe' -or $processName -ceq 'powershell.exe' -or $processName -ceq '7z.exe'
                     $forbiddenOfficialExternalWrite = Test-ForbiddenOfficialExternalWrite $writePath

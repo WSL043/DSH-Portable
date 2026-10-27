@@ -72,6 +72,12 @@ function New-TraceContextEvent($Row, [long]$Sequence, $Ownership) {
     }
 }
 
+function Write-TraceProgress([string]$Stage, [string]$State, [long]$ElapsedMs, [long]$Rows = 0) {
+    $pmlBytes = if (Test-Path -LiteralPath $pml -PathType Leaf) { (Get-Item -LiteralPath $pml).Length } else { 0 }
+    $csvBytes = if (Test-Path -LiteralPath $csv -PathType Leaf) { (Get-Item -LiteralPath $csv).Length } else { 0 }
+    Write-Host ('[write-trace] stage={0} state={1} utc={2:o} elapsedMs={3} rows={4} pmlBytes={5} csvBytes={6}' -f $Stage, $State, [DateTime]::UtcNow, $ElapsedMs, $Rows, $pmlBytes, $csvBytes)
+}
+
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Trace only on disposable hosted runners' }
 $tools = Join-Path $env:RUNNER_TEMP 'portable-procmon'
@@ -86,10 +92,18 @@ if ($Mode -eq 'Start') {
     Start-Sleep -Seconds 2
     return
 }
-Start-Process -FilePath $exe -ArgumentList '/Terminate' -WindowStyle Hidden -Wait | Out-Null
 $csv = Join-Path $tools 'writes.csv'
+$stageWatch = [Diagnostics.Stopwatch]::StartNew()
+Write-TraceProgress 'Terminate' 'started' 0
+Start-Process -FilePath $exe -ArgumentList '/Terminate' -WindowStyle Hidden -Wait | Out-Null
+Write-TraceProgress 'Terminate' 'completed' $stageWatch.ElapsedMilliseconds
+$stageWatch.Restart()
+Write-TraceProgress 'Export' 'started' 0
 Start-Process -FilePath $exe -ArgumentList @('/Quiet','/OpenLog',"`"$pml`"",'/SaveAs',"`"$csv`"") -WindowStyle Hidden -Wait | Out-Null
+Write-TraceProgress 'Export' 'completed' $stageWatch.ElapsedMilliseconds
 if (-not (Test-Path $csv)) { throw 'Procmon export missing' }
+$parseWatch = [Diagnostics.Stopwatch]::StartNew()
+Write-TraceProgress 'Parse' 'started' 0
 $ownership = @{ active=@{}; everOwned=(New-Object 'System.Collections.Generic.HashSet[string]'); generation=0 }
 $contextEvents = New-Object 'System.Collections.Generic.List[object]'
 $contextPids = New-Object 'System.Collections.Generic.HashSet[string]'
@@ -97,10 +111,20 @@ $contextWrites = New-Object 'System.Collections.Generic.HashSet[string]'
 $contextTruncated = $false
 $sequence = 0
 $findings = New-Object 'System.Collections.Generic.List[object]'
+$findingKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+$outsideWriteEvents = [long]0
+$unclassifiedEvents = [long]0
 $operations = @('WriteFile','SetEndOfFileInformationFile','SetRenameInformationFile','SetDispositionInformationFile','RegSetValue','RegDeleteValue','RegDeleteKey','RegCreateKey')
 $root = [IO.Path]::GetFullPath($PortableRoot).TrimEnd('\') + '\'
+$systemPowerShell = Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe'
+$tempRoot = $env:TEMP.TrimEnd('\')+'\'
+$localTempRoot = (Join-Path $env:LOCALAPPDATA 'Temp')+'\'
+$shaderRoot = (Join-Path $env:LOCALAPPDATA 'D3DSCache')+'\'
+$documentsRoot = [Environment]::GetFolderPath('MyDocuments')
+$externalWorkspaceRoot = if ($documentsRoot) { Join-Path $documentsRoot 'deepseek-harness' } else { $null }
 Import-Csv -LiteralPath $csv | ForEach-Object {
     $sequence++
+    if ($sequence % 100000 -eq 0) { Write-TraceProgress 'Parse' 'heartbeat' $parseWatch.ElapsedMilliseconds $sequence }
     $owner = Update-TraceOwnership $ownership $_ $sequence
     $everOwned = $ownership.everOwned.Contains([string]$_.PID)
     if ($_.Operation -in @('Process Create','Process Start','Process Exit') -and
@@ -112,23 +136,36 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
         if ($_.Operation -eq 'RegCreateKey' -and $_.Detail -match 'REG_OPENED_EXISTING_KEY') { $write=$false }
         if ($_.Result -eq 'SUCCESS' -and $write -and -not $_.Path.StartsWith($root,[StringComparison]::OrdinalIgnoreCase)) {
             $category = 'needs-review'
-            if ($_.Path.StartsWith($env:TEMP.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith('C:\Windows\Temp\',[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith((Join-Path $env:LOCALAPPDATA 'Temp')+'\',[StringComparison]::OrdinalIgnoreCase)) { $category='temporary' }
+            if ($_.Path.StartsWith($tempRoot,[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith('C:\Windows\Temp\',[StringComparison]::OrdinalIgnoreCase) -or $_.Path.StartsWith($localTempRoot,[StringComparison]::OrdinalIgnoreCase)) { $category='temporary' }
             if ($_.Path -match '^HKCU\\Software\\Classes\\dsh(\\|$)') { $category='known-protocol-registration' }
             if ($_.Path -match '^\\Device\\NamedPipe(\\|$)') { $category='ipc-not-a-disk-file' }
             if ($_.Path -match '^[A-Z]:$|^[A-Z]:\\\$(LogFile|Mft)$|^HKLM\\System\\CurrentControlSet\\Services\\bam\\') { $category='windows-system-record' }
             # Reviewed in alpha3 run 36404975086: paired .NET process registration
             # writes/deletes, not portable account, profile or application data.
             if ($_.'Process Name' -in @('DeepSeek Harness Portable.exe','powershell.exe') -and $_.Operation -in @('RegSetValue','RegDeleteValue') -and $_.Path -match '^HKLM\\System\\CurrentControlSet\\Services\\ASP\.NET_4\.0\.30319\\Names\\[A-Za-z0-9]+$') { $category='reviewed-dotnet-system-registration' }
+            # Reviewed in hosted run 40568630750: this exact system PowerShell
+            # REG_BINARY state is WNF_WIL_FEATURE_DEVICE_USAGE_TRACKING_1.
+            # https://github.com/ionescu007/wnfun/blob/5e7ae991ee8a9557c63c841d67b57cd1e36c617d/script_python/WellKnownWnfNames.py#L1008
+            if ($owner.owned -and $_.'Process Name' -eq 'powershell.exe' -and $_.Operation -eq 'RegSetValue' -and
+                [string]::Equals([string]$owner.imagePath, $systemPowerShell, [StringComparison]::OrdinalIgnoreCase) -and
+                [string]::Equals([string]$_.Path, 'HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\418A073AA3BC1C75', [StringComparison]::OrdinalIgnoreCase) -and
+                $_.Detail -match '^Type: REG_BINARY(?:,|$)') { $category='reviewed-windows-feature-usage' }
             if ($_.Path -match '\\Microsoft\\Spelling\\|^HKCU\\Software\\Microsoft\\Spelling') { $category='windows-shared-spelling' }
             # Reviewed in native run 36409052501: DirectX shader cache files,
             # https://microsoft.github.io/DirectX-Specs/d3d/ShaderCache.html
             # Retain them in evidence; do not classify other LocalAppData writes here.
-            $shaderRoot=(Join-Path $env:LOCALAPPDATA 'D3DSCache')+'\'
             if ($_.'Process Name' -eq 'DeepSeek Harness.exe' -and $_.Path.StartsWith($shaderRoot,[StringComparison]::OrdinalIgnoreCase) -and $_.Path.Substring($shaderRoot.Length) -match '^[a-f0-9]+(?:\\[a-f0-9-]+\.dxcache(?:-journal|-shm|-wal)?)?$') { $category='windows-directx-shader-cache' }
             if ($_.Path -match '\\Microsoft\\Windows\\PowerShell\\StartupProfileData-NonInteractive$') { $category='windows-powershell-startup-cache' }
-            if ($_.Path.StartsWith((Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'deepseek-harness'),[StringComparison]::OrdinalIgnoreCase)) { $category='official-external-workspace' }
-            if ($owner.owned) { $findings.Add([pscustomobject]@{process=$_.'Process Name';pid=$_.PID;operation=$_.Operation;path=$_.Path;category=$category}) }
-            if ($category -eq 'needs-review') {
+            if ($externalWorkspaceRoot -and $_.Path.StartsWith($externalWorkspaceRoot,[StringComparison]::OrdinalIgnoreCase)) { $category='official-external-workspace' }
+            if ($owner.owned) {
+                $outsideWriteEvents++
+                if ($category -eq 'needs-review') { $unclassifiedEvents++ }
+                $findingKey = ([string]$_.'Process Name') + [char]0 + ([string]$_.Operation) + [char]0 + ([string]$_.Path) + [char]0 + $category
+                if ($findingKeys.Add($findingKey)) {
+                    $findings.Add([pscustomobject]@{process=$_.'Process Name';pid=$_.PID;operation=$_.Operation;path=$_.Path;category=$category})
+                }
+            }
+            if ($category -in @('needs-review','reviewed-windows-feature-usage')) {
                 [void]$contextPids.Add([string]$_.PID)
                 $writeKey = ([string]$_.PID) + '|' + $owner.generation + '|' + $_.Operation + '|' + $_.Path
                 if ($contextWrites.Add($writeKey)) {
@@ -138,8 +175,10 @@ Import-Csv -LiteralPath $csv | ForEach-Object {
         }
     }
 }
-$findings | Sort-Object process,operation,path -Unique | ConvertTo-Json -Depth 4 | Set-Content "$Evidence/outside-writes.json"
+$findings | Sort-Object process,operation,path,category -Unique | ConvertTo-Json -Depth 4 | Set-Content "$Evidence/outside-writes.json"
 $relevantContext = @($contextEvents | Where-Object { $contextPids.Contains([string]$_.pid) -or ($_.childPid -and $contextPids.Contains([string]$_.childPid)) })
 @{ schemaVersion=1; sourceCsv=$csv; sourcePml=$pml; maxEvents=512; truncated=($contextTruncated -or @($relevantContext | Where-Object fieldTruncated).Count -gt 0); events=$relevantContext } | ConvertTo-Json -Depth 6 | Set-Content -Encoding UTF8 "$Evidence/write-trace-context.json"
-@{ captured=$true; ownedProcesses=$ownership.everOwned.Count; ownedProcessesStillActive=@($ownership.active.Values | Where-Object owned).Count; outsideWriteEvents=$findings.Count; unclassifiedEvents=@($findings|Where-Object category -eq 'needs-review').Count; contextTruncated=$contextTruncated } | ConvertTo-Json | Set-Content "$Evidence/write-trace-summary.json"
+@{ captured=$true; ownedProcesses=$ownership.everOwned.Count; ownedProcessesStillActive=@($ownership.active.Values | Where-Object owned).Count; outsideWriteEvents=$outsideWriteEvents; unclassifiedEvents=$unclassifiedEvents; contextTruncated=$contextTruncated } | ConvertTo-Json | Set-Content "$Evidence/write-trace-summary.json"
+Write-TraceProgress 'Parse' 'completed' $parseWatch.ElapsedMilliseconds $sequence
+Write-Host ('[write-trace] outsideWriteEvents={0} unclassifiedEvents={1} storedFindings={2}' -f $outsideWriteEvents, $unclassifiedEvents, $findings.Count)
 if ($ownership.everOwned.Count -eq 0) { throw 'Procmon captured no official processes' }

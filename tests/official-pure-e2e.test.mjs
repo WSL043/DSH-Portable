@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
@@ -285,5 +285,97 @@ test('maintenance report rejects missing identity, real-launch, and endpoint-sil
       const evidence = maintenanceEvidence(operation, version); evidence.retainedNewAfter = 'b'.repeat(64);
       assert.equal(report(evidence).passed, false);
     }
+  }
+});
+
+
+test('Procmon streaming findings retain raw counts and exact system feature-usage boundaries', { skip: process.platform !== 'win32' }, async t => {
+  const scratch = await mkdtemp(join(tmpdir(), 'dsh-trace-streaming-'));
+  const quote = value => "'" + value.replaceAll("'", "''") + "'";
+  const stateKey = String.raw`HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Notifications\Data\418A073AA3BC1C75`;
+  const row = (pid, name, operation, path, detail = '') => ({ 'Time of Day': '16:30:00.0000000', 'Process Name': name, PID: String(pid), Operation: operation, Path: path, Result: 'SUCCESS', Detail: detail });
+  const binary = 'Type: REG_BINARY, Length: 930, Data: 01 02 03 04';
+  const rows = [row(100, 'DeepSeek Harness.exe', 'Process Start', String.raw`D:\portable\DeepSeek Harness.exe`, 'Parent PID: 4')];
+  for (const [pid, name, image] of [[200, 'powershell.exe', '@SYSTEM_PS@'], [201, 'powershell.exe', String.raw`D:\unrelated\powershell.exe`], [202, 'cmd.exe', String.raw`D:\unrelated\cmd.exe`]]) {
+    rows.push(row(100, 'DeepSeek Harness.exe', 'Process Create', image, 'PID: ' + pid));
+    rows.push(row(pid, name, 'Process Start', image, 'Parent PID: 100, Command line: fixture, Environment: SYNTHETIC_TRACE_SECRET=must-not-upload'));
+  }
+  const repeated = 1000;
+  for (let index = 0; index < repeated; index++) rows.push(row(200, 'powershell.exe', 'RegSetValue', stateKey, binary));
+  const negatives = [
+    row(201, 'powershell.exe', 'RegSetValue', stateKey, binary),
+    row(200, 'powershell.exe', 'RegSetValue', stateKey.slice(0, -1) + '6', binary),
+    row(200, 'powershell.exe', 'RegDeleteValue', stateKey, binary),
+    row(200, 'powershell.exe', 'RegSetValue', stateKey, 'Type: REG_SZ, Length: 4, Data: text'),
+    row(202, 'cmd.exe', 'RegSetValue', stateKey, binary),
+    row(100, 'DeepSeek Harness.exe', 'RegSetValue', stateKey, binary),
+    row(200, 'powershell.exe', 'RegSetValue', stateKey + String.raw`\child`, binary),
+    row(200, 'powershell.exe', 'RegCreateKey', stateKey, binary),
+  ];
+  rows.push(...negatives);
+  rows.push(row(203, 'powershell.exe', 'Process Start', '@SYSTEM_PS@', 'Parent PID: 300'));
+  rows.push(row(203, 'powershell.exe', 'RegSetValue', stateKey, binary));
+  try {
+    const file = resolve(import.meta.dirname, '../experiments/official-payload/trace-writes.ps1');
+    const fixtureFile = join(scratch, 'rows.json');
+    await writeFile(fixtureFile, JSON.stringify(rows));
+    const script = String.raw`$ErrorActionPreference='Stop';
+      $text=[IO.File]::ReadAllText(${quote(file)});
+      $tokens=$null;$errors=$null;
+      $ast=[Management.Automation.Language.Parser]::ParseFile(${quote(file)},[ref]$tokens,[ref]$errors);
+      if($errors.Count){throw 'Trace script syntax failed'};
+      foreach($name in @('Update-TraceOwnership','New-TraceContextEvent','Write-TraceProgress')){
+        $fn=$ast.Find({param($n)$n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true);
+        if(-not $fn){throw ('Trace function missing: '+$name)};
+        . ([scriptblock]::Create($fn.Extent.Text));
+      }
+      $Evidence=${quote(scratch)};$PortableRoot='D:\portable';
+      $csv=Join-Path $Evidence 'writes.csv';$pml=Join-Path $Evidence 'writes.pml';
+      [IO.File]::WriteAllText($pml,'synthetic');
+      $systemImage=Join-Path ([Environment]::SystemDirectory) 'WindowsPowerShell\v1.0\powershell.exe';
+      $fixtureRows=Get-Content -LiteralPath ${quote(fixtureFile)} -Raw -Encoding UTF8|ConvertFrom-Json;
+      @(foreach($fixtureRow in $fixtureRows){
+        if($fixtureRow.Path -eq '@SYSTEM_PS@'){$fixtureRow.Path=$systemImage};$fixtureRow
+      })|Export-Csv -LiteralPath $csv -NoTypeInformation -Encoding UTF8;
+      $offset=$text.IndexOf('$ownership = @{',[StringComparison]::Ordinal);
+      if($offset -lt 0){throw 'Real parser boundary missing'};
+      $parseWatch=[Diagnostics.Stopwatch]::StartNew();
+      . ([scriptblock]::Create($text.Substring($offset)));
+      @{summary=(Get-Content -LiteralPath (Join-Path $Evidence 'write-trace-summary.json') -Raw|ConvertFrom-Json);
+        outside=@(foreach($finding in (Get-Content -LiteralPath (Join-Path $Evidence 'outside-writes.json') -Raw|ConvertFrom-Json)){$finding});
+        context=(Get-Content -LiteralPath (Join-Path $Evidence 'write-trace-context.json') -Raw|ConvertFrom-Json);
+        storedFindings=$findings.Count;rows=$sequence}|ConvertTo-Json -Depth 9 -Compress`;
+    const env = { ...process.env }; delete env.PSModulePath;
+    let output;
+    try {
+      output = execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true });
+    } catch (error) { throw new Error('Trace parser fixture failed: ' + String(error.stderr || error.message).trim().slice(-2000)); }
+    const observed = JSON.parse(output.trim().split(/\r?\n/).at(-1));
+    assert.equal(observed.rows, rows.length);
+    assert.equal(observed.summary.outsideWriteEvents, repeated + negatives.length);
+    assert.equal(observed.summary.unclassifiedEvents, negatives.length);
+    assert.equal(observed.summary.ownedProcesses, 4);
+    assert.equal(observed.summary.contextTruncated, false);
+    assert.equal(observed.storedFindings, observed.outside.length);
+    assert.ok(observed.storedFindings < 12, 'repeated identical findings must not accumulate objects');
+    assert.equal(observed.outside.filter(item => item.category === 'reviewed-windows-feature-usage').length, 1);
+    const samePath = observed.outside.filter(item => item.process === 'powershell.exe' && item.operation === 'RegSetValue' && item.path === stateKey);
+    assert.deepEqual(samePath.map(item => item.category).sort(), ['needs-review', 'reviewed-windows-feature-usage']);
+    assert.ok(observed.outside.every(item => item.pid !== '203'), 'unknown ownership must never gain the reviewed classification');
+    for (const pid of ['200', '201', '202']) assert.ok(observed.context.events.some(event => event.pid === pid && event.operation === 'RegSetValue' && event.parentPid === '100'));
+    assert.ok(observed.context.events.some(event => event.pid === '200' && event.path === stateKey && event.detail.startsWith('Type: REG_BINARY')));
+    assert.doesNotMatch(JSON.stringify(observed.context), /SYNTHETIC_TRACE_SECRET|must-not-upload|Environment:/);
+    assert.match(output, /\[write-trace\] stage=Parse state=completed .*rows=\d+ pmlBytes=\d+ csvBytes=\d+/);
+    const trace = await readFile(file, 'utf8');
+    for (const phase of ['Terminate', 'Export', 'Parse']) {
+      assert.ok(trace.includes("Write-TraceProgress '" + phase + "' 'started'"));
+      assert.ok(trace.includes("Write-TraceProgress '" + phase + "' 'completed'"));
+    }
+  } finally {
+    assert.ok(scratch.startsWith(join(tmpdir(), 'dsh-trace-streaming-')));
+    try {
+      const cleanup = String.raw`Add-Type -AssemblyName Microsoft.VisualBasic;[Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(${quote(scratch)},[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)`;
+      execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(cleanup, 'utf16le').toString('base64')], { windowsHide: true });
+    } catch { t.diagnostic('Trace fixture retained for recoverable cleanup: ' + scratch); }
   }
 });

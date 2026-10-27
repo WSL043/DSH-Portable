@@ -57,7 +57,7 @@
 - [真实跨版本 E2E 39802825055](https://github.com/WSL043/DSH-Portable/actions/runs/39802825055)，源码 `d83fb329c9c86b4ee82854d9510331ec5c814c52`，0.1.7-rc.2 → 0.2.1-rc.2，`overallPassed=true`，12/12 通过。实际点击更新/安装重启、应用切换、健康清除、协议恢复与崩溃回退均有证据。
 - [完整包/Bootstrap 39802832641](https://github.com/WSL043/DSH-Portable/actions/runs/39802832641)，同一源码，`alpha=99`、`smoke=all`、`publish_draft=false`，preflight/package 成功，完整包和轻量包首启/二启/搬迁及配置检查全部通过，draft-release 跳过。两根实际 MCP 2.0.0 的安全报告与 provenance 均 blocked，运行成功没有授予发布资格。
 
-E2E 实际捕获进程写入，意外写入列表为空；另记录官方自身创建 `Documents/deepseek-harness/default-workspace`、父目录及一条 Windows Notifications 注册表记录。默认工作区和用户另选工作区仍可位于根外，不能只说“用户主动选择才有外写”。当前门槛审计 Portable 组件并禁止已知全局数据根泄漏，其他官方自身写入宽泛记录不作失败判定；后续收窄为逐项审核的允许清单，不能宣称全应用零外写。
+E2E 实际捕获进程写入，意外写入列表为空；另记录官方自身创建 `Documents/deepseek-harness/default-workspace`、父目录及一条 Windows Notifications 注册表记录。默认工作区和用户另选工作区仍可位于根外，不能只说“用户主动选择才有外写”。当前写入门槛覆盖官方 EXE 及实际观察到的子进程链，禁止其中的已知全局数据根泄漏；不代表完整审计独立 Root 或控制器直接执行的修复、回退引擎。其他官方自身写入记录不作失败判定，不能宣称全应用零外写。
 
 PR 安全扫描随后发现共享 CLI 的环境路径和测试 executable 选择缺少显式边界。本轮继续收紧：CLI 输入/输出限定当前工作区、拒绝路径逃逸和现存链接、版本/报告 kind 只接受规定形状；summary 留在证据目录，由 workflow 写 GitHub 文件命令。测试环境只从固定系统路径允许项选择 PowerShell；原生 cache pointer 写入前增加规范化、单叶名称和分隔符包含校验。修正后 56 个定向检查通过，新增实际越界/链接拒绝覆盖；静态扫描以最终 PR 运行结果为准，不用单测替代。
 
