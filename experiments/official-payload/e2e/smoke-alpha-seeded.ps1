@@ -4,12 +4,14 @@ param(
     [Parameter(Mandatory=$true)][string]$WorkRoot,
     [Parameter(Mandatory=$true)][string]$EvidenceRoot,
     [switch]$Bootstrap,
+    [string]$LocalInstallerFile,
     # 1.0 packages no longer preinstall plugins: nothing is seeded, no seed manifest is packaged and the profile must
     # stay plugin-free; the second start and the moved-root dump still have to work.
     [switch]$NoSeed
 )
 
 $ErrorActionPreference = 'Stop'
+if ($LocalInstallerFile -and -not $Bootstrap) { throw 'LocalInstallerFile requires the Lite bootstrap smoke.' }
 if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this script with Windows PowerShell 5.1.' }
 $Archive = [IO.Path]::GetFullPath($Archive)
 $WorkRoot = [IO.Path]::GetFullPath($WorkRoot)
@@ -202,8 +204,9 @@ function Save-TextEvidence([string]$Source, [string]$Name) {
 try {
     New-Item -ItemType Directory -Path $EvidenceRoot -Force | Out-Null
     if (Test-Path -LiteralPath $MovedRoot) { throw "Smoke move destination already exists: $MovedRoot" }
-    & $SmokePackage -Archive $Archive -WorkRoot $WorkRoot -Bootstrap:$Bootstrap -EvidenceRoot $EvidenceRoot
-    if ($LASTEXITCODE -ne 0) { throw 'First-start package smoke failed.' }
+    & $SmokePackage -Archive $Archive -WorkRoot $WorkRoot -Bootstrap:$Bootstrap -LocalInstallerFile $LocalInstallerFile -EvidenceRoot $EvidenceRoot
+    $firstStartReport = Read-SharedJson (Join-Path $WorkRoot 'smoke-report.json')
+    if ($null -eq $firstStartReport -or $firstStartReport.overallPassed -ne $true -or $firstStartReport.launcherExitCode -ne 0) { throw 'First-start package smoke did not report a verified normal exit.' }
     $script:FirstStartPassed = $true
 
     Start-SecondPortableRun $WorkRoot
@@ -254,6 +257,7 @@ try {
     $report = [ordered]@{
         firstStartSmokePassed = $script:FirstStartPassed
         bootstrapInstallExpected = [bool]$Bootstrap
+        localFirstInstallExpected = [bool]$LocalInstallerFile
         secondStartSeedPassed = $script:SeedPassed
         secondStartHealthPassed = $script:SecondStartHealthPassed
         secondStartNormalExitPassed = $script:NormalExitPassed

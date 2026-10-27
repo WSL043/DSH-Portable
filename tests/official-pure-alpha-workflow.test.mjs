@@ -50,7 +50,7 @@ test('the 1.0 alpha preinstalls no plugins: no plugin sources, no seed packaging
   const pluginCheckouts = workflow.jobs.package.steps.filter(step => step.uses === 'actions/checkout@v7' && step.with?.repository);
   assert.deepEqual(pluginCheckouts, []);
   const smokes = workflow.jobs.package.steps.filter(step => /smoke-alpha-seeded\.ps1/.test(step.run ?? ''));
-  assert.equal(smokes.length, 2);
+  assert.equal(smokes.length, 3);
   for (const step of smokes) assert.match(step.run, /-NoSeed/);
 });
 

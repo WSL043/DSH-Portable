@@ -34,3 +34,28 @@ test('alpha seed smoke preserves the first launch and verifies seeding, health, 
   assert.doesNotMatch(source, /New-Object System\.Collections\.Generic\.List/);
   assert.doesNotMatch(source, /[^\x00-\x7F]/);
 });
+
+
+test('all alpha smokes retain online Lite install and additionally exercise the signed local Root handoff', async () => {
+  const workflow = yaml.load(await readFile(new URL('../.github/workflows/official-pure-alpha.yml', import.meta.url), 'utf8'));
+  const steps = workflow.jobs.package.steps;
+  const online = steps.find(step => step.name === 'Smoke lite bootstrap install from the accepted channel and official CDN');
+  const local = steps.find(step => step.name === 'Smoke lite first install from the already downloaded signed installer');
+  assert.equal(online.if, "inputs.smoke == 'all' || inputs.smoke == 'lite'");
+  assert.ok(!online.run.includes('LocalInstallerFile'));
+  assert.equal(local.if, "inputs.smoke == 'all'");
+  assert.equal(local.env.INSTALLER, '${{ steps.installer.outputs.installer }}');
+  assert.ok(local.run.includes('-LocalInstallerFile $env:INSTALLER'));
+  assert.ok(local.run.includes("-EvidenceRoot 'build/orch-080/T32/lite-evidence/local-first-install'"));
+  assert.doesNotMatch(local.run, /Invoke-WebRequest|download|publish/);
+  const wrapper = await readFile(new URL('../experiments/official-payload/e2e/smoke-alpha-seeded.ps1', import.meta.url), 'utf8');
+  assert.ok(wrapper.includes('-LocalInstallerFile $LocalInstallerFile'));
+  assert.ok(wrapper.includes('$firstStartReport.overallPassed -ne $true'));
+  assert.ok(wrapper.includes('$firstStartReport.launcherExitCode -ne 0'));
+  assert.ok(!wrapper.includes("$LASTEXITCODE -ne 0) { throw 'First-start package smoke failed."));
+  const smoke = await readFile(new URL('../experiments/official-payload/channel/smoke-package.ps1', import.meta.url), 'utf8');
+  assert.ok(!smoke.includes('Get-LatestAcceptedIndexCandidate'), 'local smoke must allow any uniquely matched accepted installer, including an explicitly selected older version');
+  for (const boundary of ['Get-AcceptedInstallerCandidate (Read-LocalAcceptedIndex $snapshotPath) $LocalInstallerFile', 'Assert-Installer $LocalInstallerFile $localCandidate',
+    "$arguments = '--installer-file", 'MaintenanceCallerPid', 'Get-LocalOfficialWindow $current.version',
+    '$localWindow.CloseMainWindow()', '$launcherProcess.ExitCode -ne 0', 'if ($Bootstrap) { $current = Read-SharedJson $currentPath }', 'cdpDeferredToSecondStart=$true']) assert.ok(smoke.includes(boundary), boundary);
+});

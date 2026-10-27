@@ -167,6 +167,17 @@ jobs:
             -EvidenceRoot 'build/orch-080/T32/lite-evidence' `
             -Bootstrap `
             -NoSeed
+      - name: Smoke lite first install from the already downloaded signed installer
+        if: inputs.smoke == 'all'
+        shell: powershell
+        env:
+          INSTALLER: ${{ steps.installer.outputs.installer }}
+        run: |
+          ./experiments/official-payload/e2e/smoke-alpha-seeded.ps1 `
+            -Archive 'build/orch-080/T32/DSH-Portable-1.0.0-alpha.${{ env.ALPHA }}-windows-x64-lite.zip' `
+            -WorkRoot 'build/orch-080/T32/smoke-lite-local-root' `
+            -EvidenceRoot 'build/orch-080/T32/lite-evidence/local-first-install' `
+            -Bootstrap -NoSeed -LocalInstallerFile $env:INSTALLER
       - name: Collect actual accepted ASAR security evidence without blocking runtime artifacts
         if: always()
         shell: pwsh
