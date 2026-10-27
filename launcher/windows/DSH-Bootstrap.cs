@@ -742,7 +742,7 @@ namespace DshPortableBootstrap
 
         private void StopRunningPortable()
         {
-            string stateFile = Path.Combine(options.Destination, "data", "runtime", "process.json");
+            string stateFile = Path.Combine(ResolveProductStateRoot(), "data", "runtime", "process.json");
             string launcher = Path.Combine(options.Destination, "DeepSeek-Herness.exe");
             bool shouldStop = File.Exists(stateFile) || HasRunningLauncher(launcher);
             if (!shouldStop) return;
@@ -773,7 +773,7 @@ namespace DshPortableBootstrap
         {
             try
             {
-                string runtime = Path.Combine(options.Destination, "data", "runtime");
+                string runtime = Path.Combine(ResolveProductStateRoot(), "data", "runtime");
                 Directory.CreateDirectory(runtime);
                 string destination = Path.Combine(runtime, "last-update-result.json");
                 string temporary = destination + "." + Process.GetCurrentProcess().Id + ".tmp";
@@ -799,7 +799,7 @@ namespace DshPortableBootstrap
 
         private void VerifyUpdatedPortableStartup(string backupRoot, string targetVersion)
         {
-            string runtime = Path.Combine(options.Destination, "data", "runtime");
+            string runtime = Path.Combine(ResolveProductStateRoot(), "data", "runtime");
             Directory.CreateDirectory(runtime);
             string token = Guid.NewGuid().ToString("N");
             string marker = Path.Combine(runtime, "full-update-health-" + token + ".ready");
@@ -1303,7 +1303,7 @@ namespace DshPortableBootstrap
 
         private void ResetManagedProfileModuleFallback()
         {
-            string fallback = Path.Combine(options.Destination, "data", "dsh-home", "profiles", "node_modules");
+            string fallback = Path.Combine(ResolveProductStateRoot(), "data", "dsh-home", "profiles", "node_modules");
             if (!Directory.Exists(fallback) && !File.Exists(fallback)) return;
             if (Directory.Exists(fallback)) TryDeleteDirectory(fallback);
             else TryDeleteFile(fallback);

@@ -301,3 +301,129 @@ test('compiled health rollback preserves state and payloads when the previous pr
     catch { t.diagnostic(`Health fixture retained for recoverable cleanup: ${scratch}`); }
   }
 });
+
+
+test('compiled maintenance rejects cancelled or unfinished work and preserves the Root to PowerShell handoff', { skip: process.platform !== 'win32' }, async t => {
+  const scratch = await mkdtemp(join(tmpdir(), 'dsh-pure-maintenance-'));
+  try {
+    const original = await readFile(join(repository, 'experiments/official-payload/Launcher.cs'), 'utf8');
+    const supervised = 'return Supervise(link, probe, restartPid);';
+    assert.equal(original.split(supervised).length, 2, 'the fixture must preserve all production maintenance code');
+    const source = join(scratch, 'MaintenanceLauncher.cs'), launcher = join(scratch, 'MaintenanceLauncher.exe');
+    // The production entry point, forms, arguments and process launches stay real.
+    // Stop only at the boundary where a successfully maintained official app would start.
+    await writeFile(source, original.replace(supervised,
+      'File.AppendAllText(Path.Combine(LauncherData, "fixture-supervise"), "started"); return 0;'));
+    const engine = join(scratch, 'apply-update.ps1');
+    await writeFile(engine, `
+param([string]$Root,[string]$SelfPath,[string]$CancelFile,[int]$MaintenanceCallerPid,
+  [switch]$Install,[switch]$Repair,[switch]$Rollback,[switch]$Recover,[string]$InstallerFile,[string]$IndexFile,[string]$Version)
+$ErrorActionPreference='Stop'
+$operation=if($Recover){'recover'}elseif($Repair){'repair'}elseif($Rollback){'rollback'}elseif($Install){'install'}else{'update'}
+$record=@{operation=$operation;installer=$InstallerFile;index=$IndexFile;version=$Version;caller=$MaintenanceCallerPid}
+Add-Content -LiteralPath (Join-Path $Root 'data/launcher/captured.jsonl') -Value ($record|ConvertTo-Json -Compress) -Encoding UTF8
+$mode=[IO.File]::ReadAllText((Join-Path $Root 'fixture-mode.txt')).Trim()
+if($Install){[IO.File]::WriteAllText((Join-Path $Root 'app/current.json'),'{"version":"1.0.0","pendingHealth":false}')}
+$state=if($mode -eq 'cancelled'){'cancelled'}elseif($Recover){'recovered'}else{'applied'}
+@{status=$state;phase=$state;transition=$null}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $Root 'data/launcher/update-status.json') -Encoding UTF8
+exit 0
+`);
+    const fixtures = [];
+    for (const kind of ['cancelled', 'recover-repair', 'local-update', 'local-install', 'form-states']) {
+      const root = join(scratch, kind);
+      for (const directory of ['launcher', 'data/launcher', 'app/1.0.0/resources']) await mkdir(join(root, directory), { recursive: true });
+      await writeFile(join(root, 'app/1.0.0/DeepSeek Harness.exe'), 'synthetic program; supervisor is isolated');
+      await writeFile(join(root, 'app/1.0.0/resources/app.asar'), 'synthetic payload');
+      if (kind !== 'local-install') await writeFile(join(root, 'app/current.json'), '{"version":"1.0.0","pendingHealth":false}');
+      await writeFile(join(root, 'fixture-mode.txt'), kind === 'cancelled' ? 'cancelled' : 'applied');
+      await writeFile(join(root, 'installer.exe'), 'synthetic input; the engine stub captures arguments only');
+      await writeFile(join(root, 'accepted-index.json'), '{}');
+      if (kind === 'recover-repair') await writeFile(join(root, 'data/launcher/update-status.json'), '{"status":"failed","transition":{"phase":"prepared"}}');
+      fixtures.push({ kind, root });
+    }
+    const input = join(scratch, 'fixtures.json');
+    await writeFile(input, JSON.stringify(fixtures));
+    const output = ps(`
+      $ErrorActionPreference='Stop'
+      $compiler=Join-Path $env:WINDIR 'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+      & $compiler /nologo /target:winexe /platform:x64 /optimize+ /r:System.Web.Extensions.dll /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Management.dll ${quote('/out:' + launcher)} ${quote(source)}
+      if($LASTEXITCODE -ne 0){throw 'Maintenance launcher compilation failed'}
+      $fixtures=Get-Content -LiteralPath ${quote(input)} -Raw -Encoding UTF8 | ConvertFrom-Json
+      $results=@()
+      foreach($fixture in $fixtures) {
+        $root=[string]$fixture.root; $copy=Join-Path $root 'DeepSeek Harness Portable.exe'
+        [IO.File]::Copy(${quote(launcher)},$copy,$false)
+        [IO.File]::Copy(${quote(engine)},(Join-Path $root 'launcher/apply-update.ps1'),$false)
+        if($fixture.kind -eq 'form-states'){continue}
+        $args=if($fixture.kind -in @('cancelled','recover-repair')){'--repair'}else{
+          '--installer-file "'+(Join-Path $root 'installer.exe')+'" --index-file "'+(Join-Path $root 'accepted-index.json')+'"'
+        }
+        $start=[Diagnostics.ProcessStartInfo]::new($copy);$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.WindowStyle='Hidden';$start.WorkingDirectory=$root;$start.Arguments=$args
+        $child=[Diagnostics.Process]::Start($start)
+        try {
+          if(-not $child.WaitForExit(15000)){$child.Kill();throw ('Maintenance entry did not finish: '+$fixture.kind)}
+          $capture=Join-Path $root 'data/launcher/captured.jsonl'
+          $records=if(Test-Path -LiteralPath $capture){@(Get-Content -LiteralPath $capture -Encoding UTF8 | ForEach-Object {$_|ConvertFrom-Json})}else{@()}
+          $results+=@{kind=$fixture.kind;code=$child.ExitCode;continued=(Test-Path -LiteralPath (Join-Path $root 'data/launcher/fixture-supervise'));records=@($records)}
+        } finally {$child.Dispose()}
+      }
+      # Exercise the real unshown progress window directly so a deliberately
+      # unfinished status produces a retry state without blocking the test.
+      Add-Type -AssemblyName System.Windows.Forms
+      [Windows.Forms.Application]::EnableVisualStyles();[Windows.Forms.Application]::SetCompatibleTextRenderingDefault($false)
+      $type=[Reflection.Assembly]::Load([IO.File]::ReadAllBytes(${quote(launcher)})).GetType('PortableLauncher')
+      $nested=$type.GetNestedType('BootstrapInstallForm',[Reflection.BindingFlags]::NonPublic)
+      $flags=[Reflection.BindingFlags]'Instance,NonPublic';$constructorFlags=[Reflection.BindingFlags]'Instance,Public,NonPublic'
+      $ctor=@($nested.GetConstructors($constructorFlags)|Where-Object {$_.GetParameters().Length -eq 6})[0]
+      $formRoot=[string]($fixtures|Where-Object kind -eq 'form-states').root
+      $forms=@()
+      foreach($case in @(
+        @{kind='requested-cancel';state='applied';pending=$false;cancel=$true;expected=$false},
+        @{kind='status-cancel';state='cancelled';pending=$false;cancel=$false;expected=$false},
+        @{kind='prepared';state='applied';pending=$true;cancel=$false;expected=$false},
+        @{kind='failed-zero';state='failed';pending=$false;cancel=$false;expected=$false},
+        @{kind='applied';state='applied';pending=$false;cancel=$false;expected=$true}
+      )) {
+        [object[]]$formArgs=@([string]$formRoot,[string](Join-Path $formRoot 'DeepSeek Harness Portable.exe'),[string](Join-Path $formRoot 'data/launcher/cancel.request'),[string]'repair',[string]'',[string]'')
+        $form=$ctor.Invoke($formArgs)
+        $start=[Diagnostics.ProcessStartInfo]::new(${quote(powershell)});$start.UseShellExecute=$false;$start.CreateNoWindow=$true;$start.WindowStyle='Hidden';$start.Arguments='-NoProfile -NonInteractive -Command exit 0'
+        $child=[Diagnostics.Process]::Start($start)
+        try {
+          if(-not $child.WaitForExit(10000)){$child.Kill();throw 'Progress fixture process did not finish'}
+          $transition=if($case.pending){@{phase='prepared'}}else{$null}
+          @{status=$case.state;phase=$case.state;transition=$transition}|ConvertTo-Json -Compress|Set-Content -LiteralPath (Join-Path $formRoot 'data/launcher/update-status.json') -Encoding UTF8
+          $nested.GetField('_engine',$flags).SetValue($form,$child)
+          $nested.GetField('_cancelRequested',$flags).SetValue($form,[bool]$case.cancel)
+          $nested.GetMethod('PollEngine',$flags).Invoke($form,@())|Out-Null
+          $forms+=@{kind=$case.kind;installed=[bool]$nested.GetProperty('Installed').GetValue($form,$null);expected=$case.expected}
+        } finally {$form.Dispose();$child.Dispose()}
+      }
+      @{entries=$results;forms=$forms}|ConvertTo-Json -Depth 8 -Compress
+    `);
+    const observed = JSON.parse(output.trim().split(/\r?\n/).at(-1));
+    console.log('compiled maintenance observed:', JSON.stringify(observed));
+    for (const form of observed.forms) await t.test(form.kind, () => assert.equal(form.installed, form.expected));
+    const cancelled = observed.entries.find(item => item.kind === 'cancelled');
+    assert.equal(cancelled.code, 1, JSON.stringify(cancelled));
+    assert.equal(cancelled.continued, false, 'cancelling maintenance must not launch the installed program');
+    const recovered = observed.entries.find(item => item.kind === 'recover-repair');
+    assert.equal(recovered.code, 0, JSON.stringify(recovered));
+    assert.equal(recovered.continued, true);
+    assert.deepEqual(recovered.records.map(item => item.operation), ['recover'], 'pending recovery must not run a second explicit repair');
+    for (const kind of ['local-update', 'local-install']) {
+      const entry = observed.entries.find(item => item.kind === kind);
+      assert.equal(entry.code, 0, JSON.stringify(entry));
+      assert.equal(entry.continued, true, JSON.stringify(entry));
+      assert.equal(entry.records.length, 1);
+      assert.equal(entry.records[0].operation, kind === 'local-install' ? 'install' : 'update');
+      assert.equal(entry.records[0].version, '', 'Root file updates intentionally let the engine identify the accepted local installer');
+      assert.equal(entry.records[0].installer, join(scratch, kind, 'installer.exe'));
+      assert.equal(entry.records[0].index, join(scratch, kind, 'accepted-index.json'));
+      assert.ok(entry.records[0].caller > 0);
+    }
+  } finally {
+    assert.ok(scratch.startsWith(join(tmpdir(), 'dsh-pure-maintenance-')));
+    try { ps(`Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(${quote(scratch)},[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)`); }
+    catch { t.diagnostic(`Maintenance fixture retained for recoverable cleanup: ${scratch}`); }
+  }
+});

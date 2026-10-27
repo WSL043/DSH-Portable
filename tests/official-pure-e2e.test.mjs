@@ -15,6 +15,30 @@ const digest = Buffer.alloc(64, 7).toString('base64');
 const oldCandidate = { version: '0.1.7-rc.2', url: 'https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.1.7-rc.2-win-x64.exe', sha512: digest, size: 288245480 };
 const newCandidate = { version: '0.2.0-rc.2', url: 'https://download.deepseek.com/dsh-desk/bin/win-x64/deepseek-harness-0.2.0-rc.2-win-x64.exe', sha512: digest, size: 289313640 };
 
+function maintenanceEvidence(operation, version) {
+  const root = 'C:\\runner\\work\\portable';
+  const value = 'a'.repeat(64);
+  return {
+    operation, expectedVersion: version, installerVerified: true, receiptVerified: true,
+    oldInstallerBefore: value, oldInstallerAfter: value, newInstallerBefore: value, newInstallerAfter: value,
+    dataBefore: value, dataAfter: value, preservedTreeBefore: value, preservedTreeAfter: value,
+    preservedReceiptBefore: value, preservedReceiptAfter: value, retainedNewBefore: value, retainedNewAfter: value,
+    requestsBefore: { index: 'one index request', feed: 'one feed request' },
+    requestsAfter: { index: 'one index request', feed: 'one feed request' },
+    offlineScope: 'updater-index-and-download-endpoints-only',
+    launch: {
+      portableRoot: root, primaryExecutablePath: root + '\\app\\' + version + '\\DeepSeek Harness.exe',
+      ui: { rendered: true, title: 'DeepSeek Harness', bodyTextLength: 120 },
+      current: { version, pendingHealth: false }, healthPassed: true, protocolRestored: true, remainingOwnedProcesses: 0,
+    },
+  };
+}
+
+function addMaintenanceEvidence(checks) {
+  checks['offline-repair-real-launch'].evidence = maintenanceEvidence('repair', newCandidate.version);
+  checks['retained-version-rollback-real-launch'].evidence = maintenanceEvidence('rollback', oldCandidate.version);
+}
+
 test('pure report treats missing evidence as failures and preserves explicit failures', () => {
   const missing = buildPureE2EReport();
   assert.equal(missing.results.length, REQUIRED_IDS.length);
@@ -40,10 +64,11 @@ test('pure report passes only when every required evidence item passed', () => {
     samples: [{ valueExists: true, value: protocol }, { valueExists: true, value: protocol }],
     linkHandoff: { passed: true, noNewOfficialInstance: true, noErrorDialog: true },
   };
+  addMaintenanceEvidence(checks);
   const report = buildPureE2EReport({ oldVersion: oldCandidate.version, newVersion: newCandidate.version, checks });
   assert.equal(report.overallPassed, true);
   assert.deepEqual(report.results.map(item => item.id), REQUIRED_IDS);
-  assert.equal(buildPureE2EReport({ checks, failure: 'cache cleanup failed' }).overallPassed, false);
+  assert.equal(buildPureE2EReport({ oldVersion: oldCandidate.version, newVersion: newCandidate.version, checks, failure: 'cache cleanup failed' }).overallPassed, false);
 });
 
 test('pure report rechecks process path ownership and the exact protocol command', () => {
@@ -60,10 +85,11 @@ test('pure report rechecks process path ownership and the exact protocol command
     samples: [{ valueExists: true, value: protocol }],
     linkHandoff: { passed: true, noNewOfficialInstance: true, noErrorDialog: true },
   };
-  assert.equal(buildPureE2EReport({ checks }).overallPassed, true);
+  addMaintenanceEvidence(checks);
+  assert.equal(buildPureE2EReport({ oldVersion: oldCandidate.version, newVersion: newCandidate.version, checks }).overallPassed, true);
   checks['old-app-running-from-root'].evidence.primaryExecutablePath = 'C:\\runner\\work\\portable-other\\DeepSeek Harness.exe';
   checks['protocol-owned-while-running'].evidence.samples[0].value = '"C:\\other.exe" --open "%1"';
-  const rejected = buildPureE2EReport({ checks });
+  const rejected = buildPureE2EReport({ oldVersion: oldCandidate.version, newVersion: newCandidate.version, checks });
   assert.equal(rejected.results.find(item => item.id === 'old-app-running-from-root').passed, false);
   assert.equal(rejected.results.find(item => item.id === 'protocol-owned-while-running').passed, false);
   assert.equal(rejected.overallPassed, false);
@@ -227,4 +253,37 @@ test('Procmon PID lifetimes retain a live child after parent exit and reject reu
   assert.equal(result.longTruncated, true);
   assert.equal(result.imageLength, 2048);
   assert.equal(result.imageTruncated, true);
+});
+
+
+test('maintenance report rejects missing identity, real-launch, and endpoint-silence evidence', () => {
+  for (const [id, operation, version] of [
+    ['offline-repair-real-launch', 'repair', newCandidate.version],
+    ['retained-version-rollback-real-launch', 'rollback', oldCandidate.version],
+  ]) {
+    const report = evidence => buildPureE2EReport({ oldVersion: oldCandidate.version, newVersion: newCandidate.version,
+      checks: { [id]: { passed: true, evidence } } }).results.find(item => item.id === id);
+    assert.equal(report(maintenanceEvidence(operation, version)).passed, true);
+    for (const mutate of [
+      evidence => { evidence.installerVerified = false; },
+      evidence => { evidence.receiptVerified = false; },
+      evidence => { evidence.dataAfter = 'b'.repeat(64); },
+      evidence => { evidence.preservedTreeAfter = 'b'.repeat(64); },
+      evidence => { evidence.requestsAfter.index += 'new request'; },
+      evidence => { evidence.requestsAfter.feed += 'new download'; },
+      evidence => { evidence.launch.ui.rendered = false; },
+      evidence => { evidence.launch.current.pendingHealth = true; },
+      evidence => { evidence.launch.primaryExecutablePath = 'C:\\outside\\DeepSeek Harness.exe'; },
+      evidence => { evidence.launch.protocolRestored = false; },
+      evidence => { evidence.launch.remainingOwnedProcesses = 1; },
+      evidence => { evidence.offlineScope = 'all-official-app-network-blocked'; },
+    ]) {
+      const evidence = maintenanceEvidence(operation, version); mutate(evidence);
+      assert.equal(report(evidence).passed, false, JSON.stringify(evidence));
+    }
+    if (operation === 'rollback') {
+      const evidence = maintenanceEvidence(operation, version); evidence.retainedNewAfter = 'b'.repeat(64);
+      assert.equal(report(evidence).passed, false);
+    }
+  }
 });

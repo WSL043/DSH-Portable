@@ -7,7 +7,6 @@ import { gzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createRequire } from 'node:module'
 
 const root = resolve(import.meta.dirname ?? fileURLToPath(new URL('.', import.meta.url)), '..')
 const powershell = process.env.SystemRoot
@@ -16,13 +15,13 @@ const powershell = process.env.SystemRoot
 const onWindows = process.platform === 'win32'
 const literal = value => `'${String(value).replaceAll("'", "''")}'`
 
-function runPowerShell(source) {
+function runPowerShell(source, timeoutMs = 30000) {
   const env = { ...process.env }
   delete env.PSModulePath
   return execFileSync(powershell, [
     '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand',
     Buffer.from(source, 'utf16le').toString('base64'),
-  ], { encoding: 'utf8', windowsHide: true, timeout: 30000, env }).trim()
+  ], { encoding: 'utf8', windowsHide: true, timeout: timeoutMs, env }).trim()
 }
 
 function tarArchive(entries) {
@@ -80,29 +79,20 @@ test('seed.json manifest generation reads package metadata and Cordis id from tg
   assert.equal(result.runtimeSha512, createHash('sha512').update(bytes).digest('hex'))
 })
 
-test('seed helpers preserve patches, honor recorded names, and rewrite lockfile paths', { skip: !onWindows }, () => {
+test('seed helpers honor recorded names and rewrite lockfile paths', { skip: !onWindows }, () => {
   const module = resolve(root, 'experiments/official-payload/seed-plugins-core.psm1')
   const seed = join(tmpdir(), 'portable seed space', 'data', 'dsh-home', 'profiles', 'desktop', 'seed', 'test-plugin-1.2.3.tgz')
   const output = runPowerShell(`
     Import-Module ${literal(module)} -Force
-    $old = ([string]::Join([char]10, @('# preserve this comment', '- id: existing', '  disabled: false')) + [char]10)
-    $first = Merge-SeedCordisPatch -Content $old -EntryId 'new-entry'
-    $again = Merge-SeedCordisPatch -Content $first.content -EntryId 'new-entry'
-    $keep = Merge-SeedCordisPatch -Content $old -EntryId 'existing'
     $seeded = '{"schemaVersion":1,"plugins":[{"name":"new-plugin","version":"1.0.0","nameVersion":"new-plugin@1.0.0"}]}' | ConvertFrom-Json
     $absolute = 'file:' + [IO.Path]::GetFullPath(${literal(seed)}).Replace('\\', '/')
     $lock = [string]::Join([char]10, @('importers:', '  .:', '    dependencies:', '      new-plugin:', "        specifier: $absolute", '        version: file:seed/test-plugin-1.2.3.tgz')) + [char]10
     $rewritten = Rewrite-SeedLockfilePackagePath -Content $lock -AbsolutePackagePath ${literal(seed)} -RelativePackagePath './seed/test-plugin-1.2.3.tgz'
     $modules = [string]::Join([char]10, @('"virtualStoreDir": "C:\\old\\profile\\node_modules\\.pnpm"', '"virtualStoreDirMaxLength": 60')) + [char]10
     $relativeModules = Rewrite-SeedVirtualStorePath -Content $modules
-    [ordered]@{ first=$first.content; second=$again.content; repeated=$again.existed; kept=$keep.content; recorded=(Test-SeedRecordedName -Seeded $seeded -Name 'new-plugin'); relative=$rewritten.relativeSpecifier; lock=$rewritten.content; replacements=$rewritten.replacements; modules=$relativeModules.content } | ConvertTo-Json -Depth 8 -Compress
+    [ordered]@{ recorded=(Test-SeedRecordedName -Seeded $seeded -Name 'new-plugin'); relative=$rewritten.relativeSpecifier; lock=$rewritten.content; replacements=$rewritten.replacements; modules=$relativeModules.content } | ConvertTo-Json -Depth 8 -Compress
   `)
   const result = JSON.parse(output)
-  assert.ok(result.first.startsWith('# preserve this comment\n- id: existing\n  disabled: false\n'))
-  assert.match(result.first, /- id: new-entry\n  disabled: true\n$/)
-  assert.equal(result.second, result.first)
-  assert.equal(result.repeated, true)
-  assert.equal(result.kept, '# preserve this comment\n- id: existing\n  disabled: false\n')
   assert.equal(result.recorded, true)
   assert.equal(result.relative, 'file:./seed/test-plugin-1.2.3.tgz')
   assert.match(result.lock, /specifier: file:\.\/seed\/test-plugin-1\.2\.3\.tgz/)
@@ -288,21 +278,74 @@ test('packaging gates all seed payload changes on the optional SeedPlugin parame
   assert.match(packageScript, /if \(\$null -ne \$seedManifest\)[\s\S]+seed\.json[\s\S]+seed-plugins\.ps1/)
 })
 
-test('the official first-run patch file (header comments plus an empty list) stays valid YAML after seeding', { skip: !onWindows }, () => {
-  const module = resolve(root, 'experiments/official-payload/seed-plugins-core.psm1')
-  const output = runPowerShell(`
-    Import-Module ${literal(module)} -Force
-    $official = ([string]::Join([char]10, @('# Your patch layer for this dsh profile, applied after every bundle layer:', '# a top-level YAML array of load overrides, disables, and inserts.', '[]')) + [char]10)
-    $one = Merge-SeedCordisPatch -Content $official -EntryId 'first-entry'
-    $two = Merge-SeedCordisPatch -Content $one.content -EntryId 'second-entry'
-    $crlf = Merge-SeedCordisPatch -Content ($official.Replace([string][char]10, [string][char]13 + [char]10)) -EntryId 'first-entry'
-    [ordered]@{ one=$one.content; two=$two.content; crlf=$crlf.content } | ConvertTo-Json -Compress
-  `)
-  const result = JSON.parse(output.split(/\r?\n/).at(-1))
-  assert.equal(result.two, '# Your patch layer for this dsh profile, applied after every bundle layer:\n# a top-level YAML array of load overrides, disables, and inserts.\n- id: first-entry\n  disabled: true\n- id: second-entry\n  disabled: true\n')
-  assert.doesNotMatch(result.one, /^\[\]/m)
-  assert.doesNotMatch(result.crlf, /^\[\]/m)
-  const requireApp = createRequire(new URL('../app/package.json', import.meta.url))
-  const parsed = requireApp('js-yaml').load(result.two)
-  assert.deepEqual(parsed, [{ id: 'first-entry', disabled: true }, { id: 'second-entry', disabled: true }])
+
+for (const mode of ['rollback-failure', 'unknown-writer']) {
+  test(`seed preserves recovery and stops the batch after ${mode}`, { skip: !onWindows }, async t => {
+    const temp = await mkdtemp(join(tmpdir(), 'official-seed-preserve-'))
+    t.after(() => rm(temp, { recursive: true, force: true }))
+    const profile = join(temp, 'data', 'dsh-home', 'profiles', 'desktop')
+    const seedDirectory = join(temp, 'launcher', 'seed')
+    const appDirectory = join(temp, 'app', '0.2.0-rc.2', 'resources', 'runtime', 'cli', 'bin')
+    await mkdir(join(profile, 'node_modules', 'test-plugin'), { recursive: true })
+    await mkdir(seedDirectory, { recursive: true })
+    await mkdir(appDirectory, { recursive: true })
+    const bytes = testPluginArchive()
+    const plugin = { name: 'test-plugin', file: 'test-plugin-1.2.3.tgz', entryId: 'test-plugin-entry', sha512: createHash('sha512').update(bytes).digest('hex') }
+    await writeFile(join(seedDirectory, plugin.file), bytes)
+    await writeFile(join(seedDirectory, 'seed.json'), JSON.stringify({ schemaVersion: 1, plugins: [plugin, { ...plugin, name: 'must-not-run' }] }))
+    await writeFile(join(temp, 'app', 'current.json'), JSON.stringify({ version: '0.2.0-rc.2' }))
+    await writeFile(join(appDirectory, 'dsh.cmd'), '@echo off\r\nexit /b 99\r\n')
+    await writeFile(join(profile, 'package.json'), '{"dependencies":{"test-plugin":"file:old.tgz"},"dsh":{"profile":{"bundles":[]}}}')
+    await writeFile(join(profile, 'node_modules', 'test-plugin', 'package.json'), '{"name":"test-plugin","version":"0.9.0"}')
+    const script = resolve(root, 'launcher/seed-plugins.ps1')
+    const invoke = mode === 'unknown-writer'
+      ? "throw (New-SeedUnsafeError 'injected live writer')"
+      : "throw 'injected plugin failure'"
+    const result = JSON.parse(runPowerShell(`
+      . ${literal(script)} -Root ${literal(temp)} -LibraryOnly
+      function Test-SeedOfficialProcess { return $false }
+      function Invoke-SeedPluginAdd { ${invoke} }
+      function Restore-SeedNodeModules { throw 'injected rollback failure' }
+      $code = Invoke-SeedPlugins -Root ${literal(temp)}
+      [ordered]@{code=$code; status=(Get-Content -LiteralPath (Join-Path ${literal(temp)} 'data/launcher/seed-status.json') -Raw | ConvertFrom-Json)} | ConvertTo-Json -Depth 10 -Compress
+    `))
+    assert.equal(result.code, 2)
+    assert.equal(result.status.status, 'recovery-required')
+    assert.equal(result.status.plugins.length, 1, 'a later plugin must never write after an unsafe result')
+    const error = result.status.plugins[0].error
+    assert.match(error, /recovery preserved at:/)
+    assert.equal(error.includes('injected rollback failure'), mode === 'rollback-failure', 'unknown writers must prevent rollback writes')
+    const retry = Number(runPowerShell(`
+      . ${literal(script)} -Root ${literal(temp)} -LibraryOnly
+      function Test-SeedOfficialProcess { return $false }
+      function Invoke-SeedPluginAdd { throw 'retry must never invoke the installer' }
+      Invoke-SeedPlugins -Root ${literal(temp)}
+    `))
+    assert.equal(retry, 2, 'a later launch must preserve the recovery hold')
+    const backup = error.split('recovery preserved at: ').at(-1)
+    assert.equal(await readFile(join(backup, 'previous-module', 'package.json'), 'utf8'), '{"name":"test-plugin","version":"0.9.0"}')
+  })
+}
+
+// This proves only this cmd -> PowerShell fixture exits, not arbitrary detached descendants.
+test('a real seed command timeout stops its fixed child tree and remains unsafe', { skip: !onWindows }, async t => {
+  const temp = await mkdtemp(join(tmpdir(), 'official-seed-timeout-'))
+  t.after(() => rm(temp, { recursive: true, force: true }))
+  const command = join(temp, 'dsh.cmd')
+  const pidFile = join(temp, 'child.pid')
+  await writeFile(command, '@echo off\r\n"' + powershell + '" -NoProfile -NonInteractive -Command "[IO.File]::WriteAllText(' + literal(pidFile) + ', [string]$PID); Start-Sleep -Seconds 120"\r\n')
+  const script = resolve(root, 'launcher/seed-plugins.ps1')
+  const result = JSON.parse(runPowerShell(`
+    . ${literal(script)} -Root ${literal(temp)} -LibraryOnly
+    try { Invoke-SeedPluginAdd -Root ${literal(temp)} -ProfileDirectory ${literal(temp)} -DshCmd ${literal(command)} -RelativePackage './seed/test.tgz'; throw 'timeout was not reported' }
+    catch {
+      $failure = $_.Exception
+      $childId = [int](Get-Content -LiteralPath ${literal(pidFile)} -Raw)
+      [ordered]@{ unsafe=[bool]$failure.Data['DSHSeedUnsafe']; message=$failure.Message; childAlive=([bool](Get-Process -Id $childId -ErrorAction SilentlyContinue)) } | ConvertTo-Json -Compress
+    }
+  `, 45000))
+  assert.equal(result.unsafe, true)
+  assert.match(result.message, /25 second seed limit/)
+  assert.match(result.message, /confirm no seed writers remain before recovery/)
+  assert.equal(result.childAlive, false)
 })

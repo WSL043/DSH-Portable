@@ -147,25 +147,44 @@ namespace DshPortableBootstrap {
 })
 
 async function compileHealthFixture(output, mode = 'ready') {
-  const sourceFile = `${output}.cs`
-  await writeFile(sourceFile, `
-using System;
-using System.IO;
-using System.Text;
-internal static class FixtureLauncher {
-  [STAThread] private static void Main() {
-    string marker = Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_FILE");
-    string token = Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_TOKEN");
-    bool preflight = String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"), "1", StringComparison.Ordinal);
-    bool ready = ${JSON.stringify(mode)} == "ready" || (${JSON.stringify(mode)} == "preflight-only" && preflight);
-    if (ready && !String.IsNullOrWhiteSpace(marker) && !String.IsNullOrWhiteSpace(token)) {
-      Directory.CreateDirectory(Path.GetDirectoryName(marker));
-      File.WriteAllText(marker, token + "\\r\\n", new UTF8Encoding(false));
-    }
+  const nativeMethods = []
+  for (const [filename, signature] of [
+    ['LauncherWindow.Navigation.cs', 'private bool WriteUpdateHealthMarker()'],
+    ['LauncherWindow.Data.cs', 'private string ResolveProductDataRoot()'],
+    ['LauncherWindow.Host.cs', 'internal static string ResolveStateRoot(string executableRoot, string selectedEnvironmentId)'],
+    ['LauncherWindow.Host.cs', 'internal static string ResolveEnvironmentId(string[] args)'],
+  ]) {
+    const native = await readFile(path.join(projectRoot, 'launcher', 'windows', filename), 'utf8')
+    const start = native.indexOf('        ' + signature)
+    const end = native.indexOf('\n        }', start)
+    assert.ok(start >= 0 && end > start, 'the fixture must execute the current Native path admission methods')
+    nativeMethods.push(native.slice(start, end + '\n        }'.length))
   }
-}
-`)
-  await execFileAsync(cscPath(), ['/nologo', '/target:winexe', '/platform:x64', '/optimize+', `/out:${output}`, sourceFile])
+  const sourceFile = output + '.cs'
+  await writeFile(sourceFile, [
+    'using System;', 'using System.IO;', 'using System.Text;', 'using System.Text.RegularExpressions;',
+    'internal sealed class FixtureLauncher {',
+    '  private string stateRoot;',
+    '  private void WriteLauncherLog(string scope, string message) { }',
+    ...nativeMethods,
+    '  [STAThread] private static int Main(string[] args) {',
+    '    var launcher = new FixtureLauncher();',
+    '    launcher.stateRoot = ResolveStateRoot(AppDomain.CurrentDomain.BaseDirectory, ResolveEnvironmentId(args));',
+    '    if (args.Length > 0 && args[0] == "stop") {',
+    '      string runtime = Path.Combine(launcher.ResolveProductDataRoot(), "runtime");',
+    '      Directory.CreateDirectory(runtime);',
+    '      File.WriteAllText(Path.Combine(runtime, "fixture-stopped"), "stopped");',
+    '      File.Delete(Path.Combine(runtime, "process.json"));',
+    '      return 0;',
+    '    }',
+    '    bool preflight = String.Equals(Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_PREFLIGHT"), "1", StringComparison.Ordinal);',
+    '    bool ready = ' + JSON.stringify(mode) + ' == "ready" || (' + JSON.stringify(mode) + ' == "preflight-only" && preflight);',
+    '    if (ready && !String.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("DSH_PORTABLE_UPDATE_HEALTH_FILE")))',
+    '      return launcher.WriteUpdateHealthMarker() ? 0 : 21;',
+    '    return 0;',
+    '  }', '}',
+  ].join('\n'))
+  await execFileAsync(cscPath(), ['/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/reference:System.Core.dll', '/out:' + output, sourceFile])
 }
 
 test('a full-package update preflights the staged desktop against preserved state before replacing program files', async () => {
@@ -712,6 +731,56 @@ namespace DshPortableBootstrap {
     await writeFile(journalPath, JSON.stringify(journal))
     await assert.rejects(run(['recover', unsafe.destination, unsafe.result]), error => error.code === 1)
     await assertPreserved(unsafe)
+  } finally {
+    await removeTestRoot(root)
+  }
+})
+
+
+test('full updater uses the external state root for Native health, stop and outcome paths', { skip: process.platform !== 'win32' }, async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-bootstrap-external-state-'))
+  try {
+    const destination = path.join(root, 'DSH-Portable')
+    const stateRoot = path.join(root, 'external-state')
+    const executable = path.join(root, 'state-probe.exe')
+    const probe = path.join(root, 'state-probe.cs')
+    const resultFile = path.join(root, 'result.txt')
+    await mkdir(destination, { recursive: true })
+    await mkdir(path.join(stateRoot, 'data', 'runtime'), { recursive: true })
+    await compileHealthFixture(path.join(destination, 'DeepSeek-Herness.exe'))
+    await writeFile(probe, [
+      'using System;', 'using System.IO;', 'using System.Reflection;',
+      'namespace DshPortableBootstrap { internal static class ExternalStateProbe {',
+      '  [STAThread] private static int Main(string[] args) {',
+      '    try {',
+      '      var installer = new BootstrapInstaller(new BootstrapOptions { Destination = args[0] }, null, null);',
+      '      string method = args[2] == "health" ? "VerifyUpdatedPortableStartup" : args[2] == "stop" ? "StopRunningPortable" : args[2] == "fallback" ? "ResetManagedProfileModuleFallback" : "WriteUpdateOutcome";',
+      '      object[] values = args[2] == "health" ? new object[] { null, "test-portable" } : args[2] == "outcome" ? new object[] { "updated", "test-portable", null, null } : new object[0];',
+      '      typeof(BootstrapInstaller).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic).Invoke(installer, values);',
+      '      File.WriteAllText(args[1], "ok"); return 0;',
+      '    } catch (Exception error) { File.WriteAllText(args[1], error.ToString()); return 1; }',
+      '  }', '} }',
+    ].join('\n'))
+    await compileBootstrap(executable, source, [probe, '/main:DshPortableBootstrap.ExternalStateProbe'])
+    const run = async mode => {
+      await execFileAsync(executable, [destination, resultFile, mode], {
+        windowsHide: true, timeout: 15000,
+        env: { ...process.env, DSH_PORTABLE_STATE_ROOT: stateRoot, DSH_PORTABLE_ENVIRONMENT: 'default' },
+      })
+      assert.equal(await readFile(resultFile, 'utf8'), 'ok')
+    }
+    await run('health')
+    await run('outcome')
+    assert.equal(JSON.parse(await readFile(path.join(stateRoot, 'data/runtime/last-update-result.json'), 'utf8')).status, 'updated')
+    await writeFile(path.join(stateRoot, 'data/runtime/process.json'), '{}')
+    await run('stop')
+    assert.equal(await readFile(path.join(stateRoot, 'data/runtime/fixture-stopped'), 'utf8'), 'stopped')
+    const fallback = path.join(stateRoot, 'data/dsh-home/profiles/node_modules')
+    await mkdir(fallback, { recursive: true })
+    await writeFile(path.join(fallback, 'generated'), 'regenerable')
+    await run('fallback')
+    await assert.rejects(stat(fallback), { code: 'ENOENT' })
+    await assert.rejects(stat(path.join(destination, 'data')), { code: 'ENOENT' })
   } finally {
     await removeTestRoot(root)
   }

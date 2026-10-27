@@ -4,7 +4,7 @@ import { readdir } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
-import { buildDshEnv, layoutForRoot } from './portable-core.mjs'
+import { buildDshEnv, layoutForRoot, listEnvironmentLayouts } from './portable-core.mjs'
 import { acquireRuntimeLease, cleanUnusedRuntimeCaches, ensureRuntimeCapsule } from './runtime-capsule.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -130,10 +130,10 @@ export async function discoverExistingDshProfiles(layout) {
     .sort((left, right) => left.localeCompare(right, 'en'))
 }
 
-function preflightFailure(profile, error) {
+function preflightFailure(profile, error, environmentId = 'default') {
   const detail = String(error?.stderr || error?.message || error || 'unknown error').trim().slice(-2000)
   const failure = new Error(
-    `The target DSH update cannot compose existing profile "${profile}"${detail ? `: ${detail}` : '.'}`,
+    `The target DSH update cannot compose existing profile "${profile}" in environment "${environmentId}"${detail ? `: ${detail}` : '.'}`,
     { cause: error },
   )
   failure.code = 'DSH_PROFILE_PREFLIGHT_FAILED'
@@ -211,7 +211,12 @@ export async function preflightStagedDshProfiles({
   acquireLease = acquireRuntimeLease,
   cleanCaches = cleanUnusedRuntimeCaches,
 }) {
-  const profiles = await discoverExistingDshProfiles(layout)
+  const environments = []
+  for (const candidate of await listEnvironmentLayouts(layout)) {
+    const profiles = await discoverExistingDshProfiles(candidate)
+    if (profiles.length) environments.push({ layout: candidate, profiles })
+  }
+  const profiles = [...new Set(environments.flatMap(item => item.profiles))]
   if (profiles.length === 0) return { status: 'skipped', profiles, warnings: [], checkUnavailable: null }
 
   let runtimeRoot = stagedRoot
@@ -226,43 +231,53 @@ export async function preflightStagedDshProfiles({
       preparedCapsule = true
       release = await acquireLease(runtimeRoot)
     }
-    const targetLayout = layoutForRoot(
-      layout.root,
-      layout.platform,
-      layout.stateRoot,
-      runtimeRoot,
-      layout.environmentId,
-    )
-    if (!existsSync(targetLayout.dshBin)) throw new Error('The staged DSH command is missing after preparation.')
-    const environment = {
-      ...buildDshEnv(targetLayout),
-      DSH_PORTABLE_VERSION: metadata.portableVersion,
-      DSH_PORTABLE_DSH_VERSION: metadata.dshVersion,
-      DSH_PORTABLE_DSH_COMMIT: metadata.dshCommit || '',
-    }
-    for (const profile of profiles) {
-      try {
-        await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
-          cwd: targetLayout.workspace,
-          env: environment,
-          encoding: 'utf8',
-          maxBuffer: 4 * 1024 * 1024,
-          timeout: timeoutMs,
-          windowsHide: true,
-        })
-      } catch (error) {
-        throw preflightFailure(profile, error)
+    const warnings = []
+    const unavailable = []
+    for (const candidate of environments) {
+      const targetLayout = layoutForRoot(
+        layout.root,
+        layout.platform,
+        candidate.layout.stateRoot,
+        runtimeRoot,
+        candidate.layout.environmentId,
+      )
+      if (!existsSync(targetLayout.dshBin)) throw new Error('The staged DSH command is missing after preparation.')
+      const environment = {
+        ...buildDshEnv(targetLayout),
+        DSH_PORTABLE_VERSION: metadata.portableVersion,
+        DSH_PORTABLE_DSH_VERSION: metadata.dshVersion,
+        DSH_PORTABLE_DSH_COMMIT: metadata.dshCommit || '',
       }
-    }
+      for (const profile of candidate.profiles) {
+        try {
+          await run(targetLayout.nodeExe, [targetLayout.dshBin, '--profile', profile, '--dump-config'], {
+            cwd: targetLayout.workspace,
+            env: environment,
+            encoding: 'utf8',
+            maxBuffer: 4 * 1024 * 1024,
+            timeout: timeoutMs,
+            windowsHide: true,
+          })
+        } catch (error) {
+          throw preflightFailure(profile, error, targetLayout.environmentId)
+        }
+      }
 
-    const compatibility = await checkStagedDshProfileCompatibility({
-      layout: targetLayout,
-      profiles,
-      timeoutMs,
-      run,
-      environment,
-    })
-    return { status: 'passed', profiles, ...compatibility }
+      const compatibility = await checkStagedDshProfileCompatibility({
+        layout: targetLayout,
+        profiles: candidate.profiles,
+        timeoutMs,
+        run,
+        environment,
+      })
+      for (const warning of compatibility.warnings) warnings.push(targetLayout.environmentId === 'default'
+        ? warning
+        : { ...warning, environment: targetLayout.environmentId })
+      if (compatibility.checkUnavailable) unavailable.push(targetLayout.environmentId === 'default'
+        ? compatibility.checkUnavailable
+        : `Environment "${targetLayout.environmentId}": ${compatibility.checkUnavailable}`)
+    }
+    return { status: 'passed', profiles, warnings, checkUnavailable: unavailable.length ? unavailable.join('\n') : null }
   } catch (error) {
     failed = true
     throw error

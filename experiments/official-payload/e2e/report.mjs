@@ -18,6 +18,8 @@ export const REQUIRED_IDS = [
   'only-two-versions-kept',
   'no-outside-writes',
   'rollback-to-previous',
+  'offline-repair-real-launch',
+  'retained-version-rollback-real-launch',
 ];
 
 export function normalizeOfficialCandidate(source) {
@@ -104,6 +106,30 @@ export function buildPureE2EReport(input = {}) {
       const linkHandoffPassed = link?.passed === true && link.noNewOfficialInstance === true && link.noErrorDialog === true;
       passed = passed && commandsMatch && linkHandoffPassed;
       evidence = { ...details, expectedCommand: expected, allObservedCommandsMatch: commandsMatch, linkHandoffPassed };
+    } else if (id === 'offline-repair-real-launch' || id === 'retained-version-rollback-real-launch') {
+      const details = evidence && typeof evidence === 'object' ? evidence : {};
+      const repair = id === 'offline-repair-real-launch';
+      const expectedVersion = repair ? input.newVersion : input.oldVersion;
+      const launch = details.launch ?? {};
+      const ui = launch.ui ?? {};
+      const sameDigest = (before, after) => typeof before === 'string' && /^[0-9a-f]{64}$/i.test(before) && before === after;
+      const identitiesPreserved = ['oldInstaller', 'newInstaller', 'data', 'preservedTree', 'preservedReceipt']
+        .every(key => sameDigest(details[key + 'Before'], details[key + 'After']));
+      const retainedNewPreserved = repair || sameDigest(details.retainedNewBefore, details.retainedNewAfter);
+      const requestsUnchanged = ['index', 'feed'].every(key => typeof details.requestsBefore?.[key] === 'string' &&
+        details.requestsBefore[key] === details.requestsAfter?.[key]);
+      const expectedExecutable = expectedVersion && launch.portableRoot
+        ? path.win32.join(launch.portableRoot, 'app', expectedVersion, 'DeepSeek Harness.exe') : null;
+      const processMatches = typeof launch.primaryExecutablePath === 'string' && Boolean(expectedExecutable) &&
+        path.win32.resolve(launch.primaryExecutablePath).toLowerCase() === path.win32.resolve(expectedExecutable).toLowerCase();
+      const rendered = ui.rendered === true && typeof ui.title === 'string' && ui.title.trim().length > 0 && ui.bodyTextLength >= 5;
+      passed = passed && VERSION_RE.test(String(expectedVersion ?? '')) && details.expectedVersion === expectedVersion &&
+        details.operation === (repair ? 'repair' : 'rollback') && details.installerVerified === true && details.receiptVerified === true &&
+        identitiesPreserved && retainedNewPreserved && requestsUnchanged &&
+        details.offlineScope === 'updater-index-and-download-endpoints-only' && processMatches && rendered &&
+        launch.current?.version === expectedVersion && launch.current?.pendingHealth === false && launch.healthPassed === true &&
+        launch.protocolRestored === true && launch.remainingOwnedProcesses === 0;
+      evidence = { ...details, identitiesPreserved, retainedNewPreserved, requestsUnchanged, processMatches, rendered };
     }
     return { id, passed, evidence };
   });

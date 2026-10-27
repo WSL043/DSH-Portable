@@ -27,6 +27,32 @@ function Get-SeedModulePath {
     return $full
 }
 
+function New-SeedUnsafeError {
+    param([string]$Message)
+    $unsafeError = [InvalidOperationException]::new($Message)
+    $unsafeError.Data['DSHSeedUnsafe'] = $true
+    return $unsafeError
+}
+
+function Stop-SeedPluginProcessTree {
+    param([Parameter(Mandatory=$true)]$Process)
+    $Process.Refresh()
+    if ($Process.HasExited) { return }
+    $killer = Join-Path $env:SystemRoot 'System32/taskkill.exe'
+    $start = [Diagnostics.ProcessStartInfo]::new()
+    $start.FileName = $killer; $start.Arguments = '/PID ' + $Process.Id + ' /T /F'
+    $start.UseShellExecute = $false; $start.CreateNoWindow = $true
+    $start.WindowStyle = [Diagnostics.ProcessWindowStyle]::Hidden
+    $start.RedirectStandardOutput = $true; $start.RedirectStandardError = $true
+    $kill = [Diagnostics.Process]::Start($start)
+    $killOutput = $kill.StandardOutput.ReadToEndAsync(); $killError = $kill.StandardError.ReadToEndAsync()
+    try {
+        if (-not $kill.WaitForExit(10000)) { try { $kill.Kill() } catch { }; throw 'Seed process-tree termination timed out.' }
+        if ($kill.ExitCode -ne 0) { throw 'Seed process-tree termination failed.' }
+    } finally { $kill.Dispose() }
+    if (-not $Process.WaitForExit(5000)) { throw 'The seed command is still running.' }
+}
+
 function Invoke-SeedPluginAdd {
     param([string]$Root, [string]$ProfileDirectory, [string]$DshCmd, [string]$RelativePackage)
     $commandShell = Join-Path $env:SystemRoot 'System32/cmd.exe'
@@ -42,10 +68,12 @@ function Invoke-SeedPluginAdd {
     $process = [Diagnostics.Process]::Start($start)
     try {
         if (-not $process.WaitForExit(25000)) {
-            $killer = Join-Path $env:SystemRoot 'System32/taskkill.exe'
-            if (Test-Path -LiteralPath $killer -PathType Leaf) { & $killer /PID $process.Id /T /F 2>$null | Out-Null }
-            try { $process.WaitForExit(5000) | Out-Null } catch { }
-            throw 'Official plugin add exceeded the 25 second seed limit.'
+            $stopFailure = ''
+            try { Stop-SeedPluginProcessTree -Process $process }
+            catch { $stopFailure = '; stop attempt: ' + $_.Exception.Message }
+            # Even a successful taskkill cannot prove that an earlier orphan stopped.
+            # Preserve the transaction and refuse to open this profile after any timeout.
+            throw (New-SeedUnsafeError ('Official plugin add exceeded the 25 second seed limit; confirm no seed writers remain before recovery' + $stopFailure))
         }
         if ($process.ExitCode -ne 0) { throw "Official plugin add returned exit code $($process.ExitCode)." }
     } finally { $process.Dispose() }
@@ -94,6 +122,7 @@ function Invoke-SeedPlugin {
     $seededPluginsBefore = @($Seeded.plugins)
     $profileSeedDirectoryCreated = $false
     $profileSeedFileCreated = $false
+    $recoveryComplete = $false
     New-Item -ItemType Directory -Path $backupDirectory -Force | Out-Null
     try {
         if (Test-Path -LiteralPath $modulePath) { Move-Item -LiteralPath $modulePath -Destination $backupModule }
@@ -144,10 +173,13 @@ function Invoke-SeedPlugin {
         $records += [pscustomobject]@{ name=$name; version=[string]$installed.version; nameVersion=($name + '@' + $installed.version); entryId=[string]$Plugin.entryId }
         $Seeded.plugins = $records
         Write-SeedJsonAtomic -Path $seededPath -Value $Seeded
-        Remove-SeedPath -Path $backupDirectory
+        $recoveryComplete = $true
         return [pscustomobject]@{ name=$name; version=[string]$installed.version; status='seeded'; disabledBy='profile-bundles' }
     } catch {
         $failure = $_.Exception.Message
+        if ($_.Exception.Data['DSHSeedUnsafe']) {
+            throw (New-SeedUnsafeError ($failure + '; recovery preserved at: ' + $backupDirectory))
+        }
         try {
             [IO.File]::WriteAllBytes($packagePath, $packageBytes)
             if ($patchExisted) { [IO.File]::WriteAllBytes($patchPath, $patchBytes) } elseif (Test-Path -LiteralPath $patchPath) { Remove-Item -LiteralPath $patchPath -Force }
@@ -157,10 +189,13 @@ function Invoke-SeedPlugin {
             if ($profileSeedDirectoryCreated -and (Test-Path -LiteralPath $profileSeedDirectory) -and @(Get-ChildItem -LiteralPath $profileSeedDirectory -Force).Count -eq 0) { Remove-Item -LiteralPath $profileSeedDirectory -Force }
             if ($seededBytesExisted) { [IO.File]::WriteAllBytes($seededPath, $seededBytes) } elseif (Test-Path -LiteralPath $seededPath) { Remove-Item -LiteralPath $seededPath -Force }
             $Seeded.plugins = $seededPluginsBefore
-        } catch { $failure += '; rollback error: ' + $_.Exception.Message }
+            $recoveryComplete = $true
+        } catch {
+            throw (New-SeedUnsafeError ($failure + '; rollback error: ' + $_.Exception.Message + '; recovery preserved at: ' + $backupDirectory))
+        }
         throw $failure
     } finally {
-        if (Test-Path -LiteralPath $backupDirectory) { Remove-SeedPath -Path $backupDirectory }
+        if ($recoveryComplete -and (Test-Path -LiteralPath $backupDirectory)) { Remove-SeedPath -Path $backupDirectory }
     }
 }
 
@@ -180,6 +215,18 @@ function Invoke-SeedPlugins {
             $status.status = 'official-process-running'
             return 0
         }
+        try {
+            $recoveryRoot = Join-Path $Root 'data/launcher'
+            [IO.Directory]::CreateDirectory($recoveryRoot) | Out-Null
+            $recoveryDirectories = @(Get-ChildItem -LiteralPath $recoveryRoot -Directory -Filter '.seed-rollback-*' -Force -ErrorAction Stop)
+        } catch { throw (New-SeedUnsafeError ('Could not inspect seed recovery state: ' + $_.Exception.Message)) }
+        if ($recoveryDirectories.Count -gt 0) {
+            $exitCode = 2; $status.status = 'recovery-required'
+            $message = 'An earlier seed operation requires recovery; preserved at: ' + [string]::Join('; ', @($recoveryDirectories | ForEach-Object { $_.FullName }))
+            $results.Add([pscustomobject]@{ status='recovery-required'; error=$message })
+            [Console]::Error.WriteLine($message)
+            return 2
+        }
         $manifest = [IO.File]::ReadAllText($manifestPath, [Text.Encoding]::UTF8) | ConvertFrom-Json
         if ($manifest.schemaVersion -ne 1 -or @($manifest.plugins).Count -gt 32) { throw 'Seed manifest schema is invalid.' }
         $appStatePath = Join-Path $Root 'app/current.json'
@@ -196,13 +243,20 @@ function Invoke-SeedPlugins {
 
         foreach ($plugin in @($manifest.plugins)) {
             try { $results.Add((Invoke-SeedPlugin -Root $Root -ProfileDirectory $profileDirectory -DshCmd $dshCmd -SeedDirectory $seedDirectory -Plugin $plugin -Seeded $seeded)) }
-            catch { $exitCode = 1; $results.Add([pscustomobject]@{ name=[string]$plugin.name; status='failed'; error=$_.Exception.Message }) }
+            catch {
+                $unsafe = [bool]$_.Exception.Data['DSHSeedUnsafe']
+                $exitCode = if ($unsafe) { 2 } else { 1 }
+                $results.Add([pscustomobject]@{ name=[string]$plugin.name; status=$(if ($unsafe) { 'recovery-required' } else { 'failed' }); error=$_.Exception.Message })
+                if ($unsafe) { [Console]::Error.WriteLine($_.Exception.Message); break }
+            }
         }
-        $status.status = if ($exitCode -eq 0) { 'complete' } else { 'partial-failure' }
+        $status.status = if ($exitCode -eq 0) { 'complete' } elseif ($exitCode -eq 2) { 'recovery-required' } else { 'partial-failure' }
     } catch {
-        $exitCode = 1
-        $status.status = 'failed'
-        $results.Add([pscustomobject]@{ status='failed'; error=$_.Exception.Message })
+        $unsafe = [bool]$_.Exception.Data['DSHSeedUnsafe']
+        $exitCode = if ($unsafe) { 2 } else { 1 }
+        $status.status = if ($unsafe) { 'recovery-required' } else { 'failed' }
+        $results.Add([pscustomobject]@{ status=$status.status; error=$_.Exception.Message })
+        if ($unsafe) { [Console]::Error.WriteLine($_.Exception.Message) }
     } finally {
         $status.plugins = @($results.ToArray())
         $status.completedAt = [DateTime]::UtcNow.ToString('o')

@@ -27,25 +27,6 @@ function Test-SeedRecordedName {
     return $false
 }
 
-function Merge-SeedCordisPatch {
-    param(
-        [AllowEmptyString()][string]$Content,
-        [Parameter(Mandatory=$true)][string]$EntryId
-    )
-    $idPattern = '(?m)^\s*-\s*id\s*:\s*(?:"(?<double>[^"]+)"|''(?<single>[^'']+)''|(?<plain>[A-Za-z0-9._:-]+))\s*(?:#.*)?$'
-    foreach ($match in [Regex]::Matches($Content, $idPattern)) {
-        $value = if ($match.Groups['double'].Success) { $match.Groups['double'].Value } elseif ($match.Groups['single'].Success) { $match.Groups['single'].Value } else { $match.Groups['plain'].Value }
-        if ($value -ceq $EntryId) { return [pscustomobject]@{ content=$Content; existed=$true } }
-    }
-    # The official app creates this file as an empty YAML list (a bare `[]` line under its header comments).
-    # Entries appended after it would make the document invalid, so the empty list is replaced, not extended.
-    $Content = [Regex]::Replace($Content, '(?m)^[ \t]*\[[ \t]*\][ \t]*(?:#.*)?(?:\r?\n|\z)', '')
-    $newline = if ($Content.Contains("`r`n")) { "`r`n" } else { "`n" }
-    $separator = if ($Content.Length -eq 0 -or $Content.EndsWith("`n") -or $Content.EndsWith("`r")) { '' } else { $newline }
-    $addition = "- id: $EntryId${newline}  disabled: true${newline}"
-    return [pscustomobject]@{ content=($Content + $separator + $addition); existed=$false }
-}
-
 function Rewrite-SeedLockfilePackagePath {
     param(
         [AllowEmptyString()][string]$Content,
@@ -197,4 +178,4 @@ function Write-SeedTextAtomic {
     }
 }
 
-Export-ModuleMember -Function Get-SeedReadiness, Get-SeedSha512, Test-SeedRecordedName, Merge-SeedCordisPatch, Rewrite-SeedLockfilePackagePath, Rewrite-SeedVirtualStorePath, Get-SeedNodeModulesSnapshot, Restore-SeedNodeModules, Remove-SeedPath, Write-SeedJsonAtomic, Write-SeedTextAtomic
+Export-ModuleMember -Function Get-SeedReadiness, Get-SeedSha512, Test-SeedRecordedName, Rewrite-SeedLockfilePackagePath, Rewrite-SeedVirtualStorePath, Get-SeedNodeModulesSnapshot, Restore-SeedNodeModules, Remove-SeedPath, Write-SeedJsonAtomic, Write-SeedTextAtomic

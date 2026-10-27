@@ -40,6 +40,8 @@ internal static class PortableLauncher {
     private static int Main(string[] args) {
         // Without this, Windows bitmap-stretches the dialogs on scaled displays and the text turns blurry.
         try { SetProcessDPIAware(); } catch { }
+        Application.EnableVisualStyles();
+        Application.SetCompatibleTextRenderingDefault(false);
         try {
             string updateVersion;
             if (TryUpdatedVersion(Path.GetFileName(Process.GetCurrentProcess().MainModule.FileName), args, out updateVersion))
@@ -93,7 +95,7 @@ internal static class PortableLauncher {
         if (Root.Length <= 3) throw new IOException("Extract into a folder, not a drive root. / 请解压到独立文件夹。");
         CheckPath(Root);
         AppRoot = Path.Combine(Root, "app"); DataRoot = Path.Combine(Root, "data"); LauncherData = Path.Combine(DataRoot, "launcher");
-        string link = null, probe = null; int restartPid = 0;
+        string link = null, probe = null, maintenance = null, installerFile = null, indexFile = null; int restartPid = 0;
         for (int i = 0; i < args.Length; i++) {
             string arg = args[i]; int value;
             if (arg.StartsWith("--probe-port=") && probe == null && Int32.TryParse(arg.Substring(13), out value) && value >= 1024 && value <= 65535) probe = value.ToString();
@@ -104,17 +106,41 @@ internal static class PortableLauncher {
                 link = args[++i];
             }
             else if (arg.StartsWith("dsh://", StringComparison.OrdinalIgnoreCase) && link == null && IsValidLink(arg)) link = arg;
+            else if (arg == "--maintenance" && maintenance == null) maintenance = "choose";
+            else if (arg == "--repair" && maintenance == null) maintenance = "repair";
+            else if (arg == "--rollback" && maintenance == null) maintenance = "rollback";
+            else if (arg == "--recover" && maintenance == null) maintenance = "recover";
+            else if (arg == "--installer-file" && installerFile == null && i + 1 < args.Length) installerFile = args[++i];
+            else if (arg == "--index-file" && indexFile == null && i + 1 < args.Length) indexFile = args[++i];
             else throw new IOException("Unsupported portable launch argument. / 不支持此启动参数。");
         }
 
+        if (installerFile != null && maintenance == null) maintenance = "update";
+        if (args.Length == 0 && (Control.ModifierKeys & Keys.Shift) != 0) maintenance = "choose";
+        if (maintenance != null && (link != null || probe != null || restartPid != 0)) throw new IOException(T("维护不能与会话跳转同时执行。", "Maintenance cannot be combined with a session handoff."));
+        if (indexFile != null && installerFile == null) throw new IOException("An index file requires an installer file.");
         CheckDataDirectories(); Directory.CreateDirectory(LauncherData);
         bool created;
         using (var mutex = new Mutex(true, MutexName(Root), out created)) {
             if (!created) {
-                if (link != null) { StartOfficial(link, probe, false); return 0; }
+                if (maintenance != null) throw new IOException(T("请先退出当前便携窗口，再执行维护。", "Exit this Portable window before maintenance."));
+                if (link != null) {
+                    if (HasPendingTransition()) throw new IOException(T("正在维护，请稍后打开会话。", "Maintenance is in progress. Open the session afterwards."));
+                    using (FileStream handoff = OpenActivationLock()) StartOfficial(link, probe, false); return 0;
+                }
                 return 0;
             }
             try {
+                if (HasPendingTransition()) {
+                    if (!RunMaintenance("recover", null, null)) return 1;
+                    // A restart consumes the pending operation once; do not run the same repair twice.
+                    maintenance = null; installerFile = null; indexFile = null;
+                }
+                if (maintenance == "choose") {
+                    maintenance = ChooseMaintenanceOperation(out installerFile, out indexFile);
+                    if (maintenance == null) return 0;
+                }
+                if (maintenance != null && !RunMaintenance(maintenance, installerFile, indexFile)) return 1;
                 if (NeedsBootstrap() && !RunBootstrapInstall()) return 1;
                 // Bootstrap itself needs the update engine's exclusive activation lock. Only
                 // hold this shared lease after it completes, through the full supervised run.
@@ -148,8 +174,6 @@ internal static class PortableLauncher {
     private static bool RunBootstrapInstall() {
         string selfPath = Process.GetCurrentProcess().MainModule.FileName;
         string cancelPath = Path.Combine(LauncherData, "bootstrap-cancel.request");
-        Application.EnableVisualStyles();
-        Application.SetCompatibleTextRenderingDefault(false);
         using (var form = new BootstrapInstallForm(Root, selfPath, cancelPath)) {
             Application.Run(form);
             return form.Installed;
@@ -270,25 +294,55 @@ internal static class PortableLauncher {
         var start = new ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = Root };
         start.EnvironmentVariables.Remove("PSModulePath");
         start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(script) + " -Root " + Quote(Root);
-        try {
-            using (Process child = Process.Start(start)) {
-                if (!child.WaitForExit(30000)) {
-                    try { child.Kill(); child.WaitForExit(5000); } catch { }
-                    SeedLog("plugin seed timed out; continuing official app startup");
-                } else if (child.ExitCode != 0) {
-                    SeedLog("plugin seed failed exit=" + child.ExitCode + "; continuing official app startup");
-                } else {
-                    SeedLog("plugin seed completed; continuing official app startup");
-                }
-            }
-        } catch (Exception error) {
-            SeedLog("plugin seed could not run: " + SafeMessage(error.Message) + "; continuing official app startup");
-        }
+        int code;
+        try { using (Process child = Process.Start(start)) { child.WaitForExit(); code = child.ExitCode; } }
+        catch (Exception error) { throw new IOException(T("无法确认插件准备已停止，启动已取消。", "Could not confirm plugin preparation stopped; startup cancelled."), error); }
+        if (code != 0 && code != 1) throw new IOException(T("插件准备需要恢复，已保留恢复目录；请先确认没有写入进程。", "Plugin preparation needs recovery. Its backup is preserved; first confirm no writer remains."));
+        SeedLog(code == 0 ? "plugin seed completed" : "plugin seed failed safely; rollback completed");
     }
     private static void SeedLog(string message) { try { Log(message); } catch { } }
 
+    private static bool HasPendingTransition() {
+        string file = Path.Combine(LauncherData, "update-status.json");
+        if (!File.Exists(file)) return false;
+        CheckPath(file);
+        if (new FileInfo(file).Length > 1048576) throw new IOException("Maintenance status exceeds 1 MiB; preserve it for review.");
+        object transition; return ReadJson(file).TryGetValue("transition", out transition) && transition != null;
+    }
+
+    private static bool RunMaintenance(string operation, string installer, string index) {
+        using (var form = new BootstrapInstallForm(Root, Process.GetCurrentProcess().MainModule.FileName,
+                Path.Combine(LauncherData, "maintenance-cancel.request"), operation, installer, index)) {
+            Application.Run(form); return form.Installed;
+        }
+    }
+
+    private static string ChooseMaintenanceOperation(out string installer, out string index) {
+        installer = null; index = null; string selected = null;
+        using (var form = new Form { Text=T("便携版维护", "Portable maintenance"), Font=SystemFonts.MessageBoxFont,
+                ClientSize=new Size(440,144), FormBorderStyle=FormBorderStyle.FixedDialog,
+                StartPosition=FormStartPosition.CenterScreen, MaximizeBox=false, MinimizeBox=false }) {
+            form.Controls.Add(new Label { Location=new Point(16,16), Size=new Size(408,44),
+                Text=T("更新和修复只处理程序。回退程序不会回退数据或工作区。", "Update and repair affect program files. Rollback does not restore data or workspaces.") });
+            string[] labels={T("从文件更新", "Update from file"),T("修复", "Repair"),T("回退", "Roll back")};
+            string[] operations={"update","repair","rollback"};
+            for(int i=0;i<labels.Length;i++){string choice=operations[i];var button=new Button { Text=labels[i],Location=new Point(16+i*138,80),Size=new Size(128,32) };button.Click+=delegate {selected=choice;form.Close();};form.Controls.Add(button);}
+            Application.Run(form);
+        }
+        if(selected == null || selected == "rollback") return selected;
+        using(var file=new OpenFileDialog { Title=T("选择官方安装包（索引快照可放在同目录）", "Choose the official installer (index snapshot may be beside it)"),Filter="Windows installer (*.exe)|*.exe",CheckFileExists=true }) {
+            if(file.ShowDialog()!=DialogResult.OK)return null;installer=file.FileName;
+        }
+        string companion=Path.Combine(Path.GetDirectoryName(installer),"accepted-index.json");
+        index=File.Exists(companion) ? companion : Path.Combine(Root,"launcher","accepted-index.json");
+        if(!File.Exists(index)) using(var file=new OpenFileDialog { Title=T("选择离线索引快照", "Choose the offline index snapshot"),Filter="JSON (*.json)|*.json",CheckFileExists=true }) {
+            if(file.ShowDialog()!=DialogResult.OK)return null;index=file.FileName;
+        }
+        return selected;
+    }
+
     private sealed class BootstrapInstallForm : Form {
-        private readonly string _root, _selfPath, _cancelPath, _statusPath;
+        private readonly string _root, _selfPath, _cancelPath, _statusPath, _operation, _installerFile, _indexFile;
         private readonly Label _stage, _detail;
         private readonly ProgressBar _progress;
         private readonly Button _retry, _cancel;
@@ -297,18 +351,19 @@ internal static class PortableLauncher {
         private bool _allowClose, _cancelRequested;
         public bool Installed { get; private set; }
 
-        public BootstrapInstallForm(string root, string selfPath, string cancelPath) {
-            _root = root; _selfPath = selfPath; _cancelPath = cancelPath;
+        public BootstrapInstallForm(string root, string selfPath, string cancelPath) : this(root, selfPath, cancelPath, "install", null, null) { }
+        public BootstrapInstallForm(string root, string selfPath, string cancelPath, string operation, string installerFile, string indexFile) {
+            _root = root; _selfPath = selfPath; _cancelPath = cancelPath; _operation = operation; _installerFile = installerFile; _indexFile = indexFile;
             _statusPath = Path.Combine(root, "data", "launcher", "update-status.json");
-            Text = "DeepSeek Harness Portable - " + T("首次安装", "First-time setup");
+            Text = "DeepSeek Harness Portable - " + (_operation == "install" ? T("首次安装", "First-time setup") : T("维护", "Maintenance"));
             // Lay out at 96 DPI in the system UI font, then let WinForms scale to the display.
             SuspendLayout();
             Font = SystemFonts.MessageBoxFont;
             AutoScaleDimensions = new SizeF(96F, 96F); AutoScaleMode = AutoScaleMode.Dpi;
             ClientSize = new Size(470, 154); FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterScreen; MaximizeBox = false; MinimizeBox = false;
-            _stage = new Label { AutoSize = false, Location = new Point(18, 16), Size = new Size(434, 24), Text = T("正在准备首次安装...", "Preparing first-time setup...") };
-            _detail = new Label { AutoSize = false, Location = new Point(18, 43), Size = new Size(434, 38), Text = T("首次启动将从官方 CDN 下载并验证官方桌面端。", "The official desktop app is downloaded from the official CDN and verified on first launch.") };
+            _stage = new Label { AutoSize = false, Location = new Point(18, 16), Size = new Size(434, 24), Text = InitialStage() };
+            _detail = new Label { AutoSize = false, Location = new Point(18, 43), Size = new Size(434, 38), Text = InitialDetail() };
             _progress = new ProgressBar { Location = new Point(18, 88), Size = new Size(434, 18), Minimum = 0, Maximum = 100, Style = ProgressBarStyle.Continuous };
             _retry = new Button { Location = new Point(282, 116), Size = new Size(80, 26), Text = T("重试", "Retry"), Visible = false, Enabled = false };
             _cancel = new Button { Location = new Point(372, 116), Size = new Size(80, 26), Text = T("取消", "Cancel") };
@@ -323,20 +378,37 @@ internal static class PortableLauncher {
             FormClosing += OnFormClosing;
         }
 
+        private string InitialStage() {
+            if (_operation == "rollback") return T("正在核验保留版本...", "Checking the retained version...");
+            if (_operation == "recover") return T("正在恢复未完成的操作...", "Recovering the interrupted operation...");
+            if (_operation == "repair") return T("正在准备修复...", "Preparing repair...");
+            return _installerFile == null ? T("正在准备首次安装...", "Preparing first-time setup...") : T("正在核验本地安装包...", "Checking the local installer...");
+        }
+
+        private string InitialDetail() {
+            if (_operation == "rollback" || _operation == "recover") return T("只处理程序，不还原数据或工作区。", "Program files only. Data and workspaces are not restored.");
+            if (_installerFile != null) return T("使用本地安装包和已验收索引，不连接网络。", "Using the local installer and accepted index without network access.");
+            return T("从官方 CDN 下载并验证官方桌面端。", "Downloading and verifying the desktop app from the official CDN.");
+        }
+
         private void StartAttempt() {
             if (_engine != null) { _engine.Dispose(); _engine = null; }
             try {
                 if (File.Exists(_cancelPath)) File.Delete(_cancelPath);
                 _cancelRequested = false; _retry.Visible = false; _retry.Enabled = false;
                 _cancel.Visible = true; _cancel.Enabled = true; _cancel.Text = T("取消", "Cancel");
-                _stage.Text = T("正在读取已验收版本索引...", "Reading the accepted version index...");
-                _detail.Text = T("连接官方服务并准备下载。", "Connecting to the official service.");
+                _stage.Text = InitialStage();
+                _detail.Text = InitialDetail();
                 _progress.Value = 0;
                 string powershell = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe");
                 string engine = Path.Combine(_root, "launcher", "apply-update.ps1");
                 var start = new ProcessStartInfo(powershell) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden, WorkingDirectory = _root };
                 start.EnvironmentVariables.Remove("PSModulePath");
-                start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(engine) + " -Root " + Quote(_root) + " -Install -SelfPath " + Quote(_selfPath) + " -CancelFile " + Quote(_cancelPath);
+                start.Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(engine) + " -Root " + Quote(_root) + " -SelfPath " + Quote(_selfPath) + " -CancelFile " + Quote(_cancelPath)
+                    + " -MaintenanceCallerPid " + Process.GetCurrentProcess().Id.ToString()
+                    + (_operation == "install" || (_operation == "update" && !File.Exists(Path.Combine(_root, "app", "current.json"))) ? " -Install" : _operation == "repair" ? " -Repair" : _operation == "rollback" ? " -Rollback" : _operation == "recover" ? " -Recover" : "")
+                    + (_installerFile == null ? "" : " -InstallerFile " + Quote(_installerFile))
+                    + (_indexFile == null ? "" : " -IndexFile " + Quote(_indexFile));
                 _engine = Process.Start(start);
                 if (_engine == null) throw new IOException("Could not start the Windows PowerShell update engine.");
             } catch (Exception error) { ShowFailure(error.Message); }
@@ -366,12 +438,15 @@ internal static class PortableLauncher {
             }
             if (_engine == null || !_engine.HasExited) return;
             int code = _engine.ExitCode;
-            if (code == 0 && IsInstalled()) {
-                Installed = true; _allowClose = true; _timer.Stop(); Close(); return;
-            }
             string state = status == null ? "" : GetString(status, "status");
             if (_cancelRequested || state == "cancelled") {
                 _timer.Stop(); _allowClose = true; Close(); return;
+            }
+            object transition;
+            bool pending = status != null && status.TryGetValue("transition", out transition) && transition != null;
+            if (code == 0 && !pending && (state == "applied" || state == "recovered")
+                    && (IsInstalled() || (_operation == "recover" && state == "recovered"))) {
+                Installed = true; _allowClose = true; _timer.Stop(); Close(); return;
             }
             string errorText = status == null ? "Update engine exited with code " + code + "." : GetString(status, "error");
             ShowFailure(errorText);
@@ -388,7 +463,7 @@ internal static class PortableLauncher {
         }
 
         private void ShowFailure(string detail) {
-            _stage.Text = T("首次安装失败", "First-time setup failed");
+            _stage.Text = _operation == "install" ? T("首次安装失败", "First-time setup failed") : T("维护未完成", "Maintenance did not complete");
             _detail.Text = FriendlyFailure(detail);
             _progress.Value = 0; _cancel.Visible = false;
             // Retry takes Cancel's place so the only action sits at the right edge.
@@ -402,6 +477,7 @@ internal static class PortableLauncher {
             if (phase == "extracting") return T("解包中...", "Extracting...");
             if (phase == "switching" || phase == "waiting-for-exit") return T("切换中...", "Switching...");
             if (phase == "reading-index") return T("正在读取已验收版本索引...", "Reading the accepted version index...");
+            if (phase == "recovering" || phase == "recovered") return T("恢复中...", "Recovering...");
             return T("正在准备首次安装...", "Preparing first-time setup...");
         }
 

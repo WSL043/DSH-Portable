@@ -372,4 +372,53 @@ function Remove-PortableScratch([string]$Path, [string]$Boundary) {
     Remove-Item -LiteralPath $resolved -Recurse -Force
 }
 
-Export-ModuleMember -Function Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-PortablePayloadTreeHash,Remove-OwnedOlderPayloads,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch
+
+# The offline source is the existing accepted-index format. It supplies package identity,
+# never publication/security qualification, and has no network fallback.
+function Read-LocalAcceptedIndex([string]$Path) {
+    Assert-PlainPath $Path
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw 'Local accepted index is missing' }
+    $stream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    $snapshot = New-Object IO.MemoryStream
+    try {
+        if ($stream.Length -gt 1048576) { throw 'Local accepted index is too large' }
+        $buffer = New-Object byte[] 4096
+        while (($count = $stream.Read($buffer, 0, $buffer.Length)) -gt 0) {
+            if ($snapshot.Length + $count -gt 1048576) { throw 'Local accepted index is too large' }
+            $snapshot.Write($buffer, 0, $count)
+        }
+        $text = [Text.UTF8Encoding]::new($false, $true).GetString($snapshot.ToArray()).TrimStart([char]0xfeff)
+        return ($text | ConvertFrom-Json)
+    } finally { $snapshot.Dispose(); $stream.Dispose() }
+}
+
+function Assert-ReceiptedPayload([string]$Path, $Receipt, [string]$Version) {
+    Assert-PlainPath $Path
+    if ($null -eq $Receipt -or $Receipt.version -cne $Version -or $null -eq $Receipt.PSObject.Properties['payloadTreeSha256'] -or [string]$Receipt.payloadTreeSha256 -cnotmatch '^[0-9a-f]{64}$') { throw 'Payload ownership receipt is missing or invalid' }
+    foreach ($required in @('DeepSeek Harness.exe', 'resources/app.asar')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Path $required) -PathType Leaf)) { throw 'Receipted payload is incomplete' }
+    }
+    if ((Get-PortablePayloadTreeHash $Path) -cne [string]$Receipt.payloadTreeSha256) { throw 'Payload tree does not match its ownership receipt' }
+}
+
+
+function Get-AcceptedInstallerCandidate($Index, [string]$Installer) {
+    Assert-PlainPath $Installer
+    if (-not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw 'Local official installer is missing' }
+    if ($null -eq $Index.versions -or $Index.versions.Count -lt 1 -or $Index.versions.Count -gt 100) { throw 'Accepted index has an invalid versions list' }
+    $size = (Get-Item -LiteralPath $Installer).Length
+    $digest = (Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash
+    $matched = $null
+    foreach ($entry in $Index.versions) {
+        Assert-Candidate $entry
+        if ([long]$entry.size -eq $size -and [BitConverter]::ToString([Convert]::FromBase64String([string]$entry.sha512)).Replace('-', '') -ceq $digest) {
+            if ($null -ne $matched) { throw 'Local installer identity is ambiguous in the accepted index' }
+            $matched = $entry
+        }
+    }
+    if ($null -eq $matched) { throw 'Local installer identity does not match the accepted index' }
+    # This also rejects duplicate versions anywhere in the supplied snapshot.
+    return Get-AcceptedIndexCandidate $Index ([string]$matched.version)
+}
+
+Export-ModuleMember -Function Get-AcceptedInstallerCandidate,Read-LocalAcceptedIndex,Assert-ReceiptedPayload,Assert-PlainPath,Assert-FeedUrl,Read-BoundedHttpText,Assert-Candidate,Get-AcceptedIndexCandidate,Get-LatestAcceptedIndexCandidate,Assert-Installer,Receive-OfficialInstallerBytes,Get-OfficialInstaller,Assert-Archive,Assert-ArchiveEntryPath,Get-VersionRetentionPlan,Get-PortablePayloadTreeHash,Remove-OwnedOlderPayloads,Get-AsarVersion,Rewrite-AppUpdateYml,Expand-OfficialPayload,Remove-PortableScratch

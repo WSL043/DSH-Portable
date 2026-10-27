@@ -16,7 +16,8 @@ if ($PSVersionTable.PSEdition -ne 'Desktop') { throw 'Run this script with Windo
 $script:Ids = @(
     'old-app-running-from-root', 'update-copy-executed', 'update-applied', 'current-switched',
     'new-app-running', 'health-cleared', 'rewritten-app-update-yml', 'protocol-owned-while-running',
-    'protocol-restored-after-exit', 'only-two-versions-kept', 'no-outside-writes', 'rollback-to-previous'
+    'protocol-restored-after-exit', 'only-two-versions-kept', 'no-outside-writes', 'rollback-to-previous',
+    'offline-repair-real-launch', 'retained-version-rollback-real-launch'
 )
 $script:Checks = [ordered]@{}
 foreach ($id in $script:Ids) { $script:Checks[$id] = @{ passed = $false; evidence = 'Not run' } }
@@ -388,6 +389,45 @@ function Test-ProtocolOwnedStable([string]$Version) {
     [pscustomobject]@{ passed = ($link.passed); samples = $samples.ToArray(); expected = $script:ProtocolExpected; launcherPath = $launcherPath; linkHandoff = $link }
 }
 
+# Scope the offline claim to the updater's existing index/download endpoints.
+# Official renderer/backend networking is recorded by the wider E2E, not denied here.
+function Get-MaintenanceRequestSnapshot {
+    $rows = @()
+    foreach ($file in @($script:IndexRequestLog, $script:RequestLog)) {
+        $rows += $(if (Test-Path -LiteralPath $file -PathType Leaf) { [IO.File]::ReadAllText($file) } else { '' })
+    }
+    return [pscustomobject]@{ index = $rows[0]; feed = $rows[1] }
+}
+
+function Test-MaintainedOfficialVersion([string]$Version, [string]$Stage) {
+    $probePort = Get-FreeLoopbackPort
+    $launcher = Start-PortableLauncher $probePort
+    try {
+        $processes = Wait-ForVersionProcess $Version 120
+        $main = $processes | Select-Object -First 1
+        $uiOutput = Join-Path $script:EvidenceRoot ($Stage + '-ui.json')
+        $uiError = Join-Path $script:EvidenceRoot ($Stage + '-ui-stderr.log')
+        $script:UiProcess = Start-NodeProcess (Join-Path $PSScriptRoot '../channel/verify-smoke-page.mjs') @([string]$probePort) $uiOutput $uiError
+        if (-not $script:UiProcess.WaitForExit(100000)) { throw ($Stage + ' rendered-page probe timed out') }
+        $script:UiProcess.WaitForExit()
+        if ($script:UiProcess.ExitCode -ne 0) { throw ($Stage + ' rendered-page probe failed: ' + [IO.File]::ReadAllText($uiError)) }
+        $ui = Read-JsonFile $uiOutput
+        if ($ui.rendered -ne $true) { throw ($Stage + ' did not render an official page') }
+        for ($second = 0; $second -lt 25; $second++) {
+            Assert-E2ETime ($Stage + ' health observation')
+            if (@(Get-VersionProcesses $Version | Where-Object { $_.ProcessId -eq $main.ProcessId }).Count -eq 0) { throw ($Stage + ' official process exited during health observation') }
+            Start-Sleep -Seconds 1
+        }
+        $current = Read-JsonFile (Join-Path $script:PortableRoot 'app/current.json')
+        if ($current.version -cne $Version -or $current.pendingHealth -ne $false) { throw ($Stage + ' did not complete startup health') }
+        Close-CurrentOfficial $probePort $Stage
+        $protocolRestored = Test-ProtocolSnapshotEqual $script:ProtocolBefore (Get-ProtocolSnapshot)
+        $remaining = @(Get-ProcessesInPortableRoot).Count
+        if (-not $protocolRestored -or $remaining -ne 0) { throw ($Stage + ' did not exit and restore protocol ownership') }
+        return [pscustomobject]@{ portableRoot=$script:PortableRoot; primaryExecutablePath=$main.ExecutablePath; ui=$ui; current=$current; healthPassed=$true; protocolRestored=$protocolRestored; remainingOwnedProcesses=$remaining }
+    } finally { if ($launcher) { $launcher.Dispose() } }
+}
+
 function Copy-E2EEvidence {
     if (-not $script:PortableRoot -or -not (Test-Path -LiteralPath $script:PortableRoot)) { return }
     $copies = @(
@@ -596,6 +636,82 @@ try {
     if (-not $restored) { throw 'The dsh protocol registration did not return to its exact pre-run state after normal exit' }
     Write-Stage 'Normal updated-app exit restored the original dsh protocol registration'
 
+    # Reuse this same signed old/new package. Only the Portable-owned updater YAML
+    # is made missing; official EXE/ASAR bytes are never edited by this scenario.
+    $localIndex = Join-Path $script:EvidenceRoot 'maintenance-accepted-index.json'
+    Write-JsonFile $localIndex ([ordered]@{ versions = @($oldIdentity, $newIdentity) })
+    $engine = Join-Path $script:PortableRoot 'launcher/apply-update.ps1'
+    $self = Join-Path $script:PortableRoot 'DeepSeek Harness Portable.exe'
+    $dataMarker = Join-Path $script:PortableRoot 'data/e2e-maintenance-marker.txt'
+    [IO.File]::WriteAllText($dataMarker, 'synthetic maintenance data marker')
+    $dataMarkerHash = (Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash
+    $oldInstallerHash = (Get-FileHash -LiteralPath $script:InstallerOldPath -Algorithm SHA256).Hash
+    $newInstallerHash = (Get-FileHash -LiteralPath $script:InstallerNewPath -Algorithm SHA256).Hash
+    $newTree = Join-Path $script:PortableRoot ('app/' + $script:NewVersion)
+    $oldTree = Join-Path $script:PortableRoot ('app/' + $script:OldVersion)
+    $newReceiptPath = Join-Path $script:PortableRoot ('launcher/receipts/' + $script:NewVersion + '.json')
+    $oldReceiptPath = Join-Path $script:PortableRoot ('launcher/receipts/' + $script:OldVersion + '.json')
+    Assert-ReceiptedPayload $newTree (Read-JsonFile $newReceiptPath) $script:NewVersion
+    Assert-ReceiptedPayload $oldTree (Read-JsonFile $oldReceiptPath) $script:OldVersion
+    $originalNewReceiptHash = (Get-FileHash -LiteralPath $newReceiptPath -Algorithm SHA256).Hash
+    [IO.File]::Move((Join-Path $newTree 'resources/app-update.yml'), (Join-Path $script:EvidenceRoot 'repair-missing-app-update-yml.txt'))
+    $brokenTreeHash = Get-PortablePayloadTreeHash $newTree
+    $repairRequestsBefore = Get-MaintenanceRequestSnapshot
+    Write-Stage 'Repairing the current signed payload from local installer/index; only updater endpoint silence is claimed'
+    & $engine -Root $script:PortableRoot -SelfPath $self -Repair -InstallerFile $script:InstallerNewPath -IndexFile $localIndex
+    if ($LASTEXITCODE -ne 0) { throw 'Local signed-payload repair failed' }
+    $repairRequestsAfter = Get-MaintenanceRequestSnapshot
+    if ($repairRequestsBefore.index -cne $repairRequestsAfter.index -or $repairRequestsBefore.feed -cne $repairRequestsAfter.feed) { throw 'Local repair contacted an index or download feed' }
+    $repairStatus = Read-JsonFile (Join-Path $script:PortableRoot 'data/launcher/update-status.json')
+    if ($repairStatus.status -cne 'applied' -or $repairStatus.operation -cne 'repair') { throw 'Local repair did not commit a repair operation' }
+    Assert-Installer $script:InstallerOldPath $oldIdentity
+    Assert-Installer $script:InstallerNewPath $newIdentity
+    Assert-ReceiptedPayload $newTree (Read-JsonFile $newReceiptPath) $script:NewVersion
+    $repairLaunch = Test-MaintainedOfficialVersion $script:NewVersion 'offline-repair'
+    Assert-ReceiptedPayload $newTree (Read-JsonFile $newReceiptPath) $script:NewVersion
+    $repairEvidence = [pscustomobject]@{
+        operation='repair'; expectedVersion=$script:NewVersion; installerVerified=$true; receiptVerified=$true; launch=$repairLaunch
+        oldInstallerBefore=$oldInstallerHash; oldInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerOldPath -Algorithm SHA256).Hash
+        newInstallerBefore=$newInstallerHash; newInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerNewPath -Algorithm SHA256).Hash
+        dataBefore=$dataMarkerHash; dataAfter=(Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash
+        requestsBefore=$repairRequestsBefore; requestsAfter=$repairRequestsAfter; offlineScope='updater-index-and-download-endpoints-only'
+        preservedTreeBefore=$brokenTreeHash; preservedTreeAfter=(Get-PortablePayloadTreeHash ($newTree + '.repair-backup'))
+        preservedReceiptBefore=$originalNewReceiptHash; preservedReceiptAfter=(Get-FileHash -LiteralPath ($newReceiptPath + '.repair-backup') -Algorithm SHA256).Hash
+    }
+    $repairPassed = $repairEvidence.dataBefore -ceq $repairEvidence.dataAfter -and $repairEvidence.oldInstallerBefore -ceq $repairEvidence.oldInstallerAfter -and $repairEvidence.newInstallerBefore -ceq $repairEvidence.newInstallerAfter -and $repairEvidence.preservedTreeBefore -ceq $repairEvidence.preservedTreeAfter -and $repairEvidence.preservedReceiptBefore -ceq $repairEvidence.preservedReceiptAfter
+    Set-Check 'offline-repair-real-launch' $repairPassed $repairEvidence
+    if (-not $repairPassed) { throw 'Repair failed source/data or preservation-slot identity checks' }
+
+    $retainedOldTreeHash = Get-PortablePayloadTreeHash $oldTree
+    $retainedOldReceiptHash = (Get-FileHash -LiteralPath $oldReceiptPath -Algorithm SHA256).Hash
+    $retainedNewTreeHash = Get-PortablePayloadTreeHash $newTree
+    $rollbackRequestsBefore = Get-MaintenanceRequestSnapshot
+    Write-Stage 'Rolling back to the retained, receipted official old version without fetching a candidate'
+    & $engine -Root $script:PortableRoot -SelfPath $self -Rollback
+    if ($LASTEXITCODE -ne 0) { throw 'Retained-version rollback failed' }
+    $rollbackRequestsAfter = Get-MaintenanceRequestSnapshot
+    if ($rollbackRequestsBefore.index -cne $rollbackRequestsAfter.index -or $rollbackRequestsBefore.feed -cne $rollbackRequestsAfter.feed) { throw 'Retained-version rollback contacted an index or download feed' }
+    $manualRollbackStatus = Read-JsonFile (Join-Path $script:PortableRoot 'data/launcher/update-status.json')
+    if ($manualRollbackStatus.status -cne 'applied' -or $manualRollbackStatus.operation -cne 'rollback') { throw 'Retained-version rollback did not commit' }
+    Assert-ReceiptedPayload $oldTree (Read-JsonFile $oldReceiptPath) $script:OldVersion
+    $manualRollbackLaunch = Test-MaintainedOfficialVersion $script:OldVersion 'retained-version-rollback'
+    Assert-ReceiptedPayload $oldTree (Read-JsonFile $oldReceiptPath) $script:OldVersion
+    $manualRollbackEvidence = [pscustomobject]@{
+        operation='rollback'; expectedVersion=$script:OldVersion; installerVerified=$true; receiptVerified=$true; launch=$manualRollbackLaunch
+        oldInstallerBefore=$oldInstallerHash; oldInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerOldPath -Algorithm SHA256).Hash
+        newInstallerBefore=$newInstallerHash; newInstallerAfter=(Get-FileHash -LiteralPath $script:InstallerNewPath -Algorithm SHA256).Hash
+        dataBefore=$dataMarkerHash; dataAfter=(Get-FileHash -LiteralPath $dataMarker -Algorithm SHA256).Hash
+        requestsBefore=$rollbackRequestsBefore; requestsAfter=$rollbackRequestsAfter; offlineScope='updater-index-and-download-endpoints-only'
+        preservedTreeBefore=$retainedOldTreeHash; preservedTreeAfter=(Get-PortablePayloadTreeHash $oldTree)
+        preservedReceiptBefore=$retainedOldReceiptHash; preservedReceiptAfter=(Get-FileHash -LiteralPath $oldReceiptPath -Algorithm SHA256).Hash
+        retainedNewBefore=$retainedNewTreeHash; retainedNewAfter=(Get-PortablePayloadTreeHash $newTree)
+    }
+    $manualRollbackPassed = $manualRollbackEvidence.dataBefore -ceq $manualRollbackEvidence.dataAfter -and $manualRollbackEvidence.oldInstallerBefore -ceq $manualRollbackEvidence.oldInstallerAfter -and $manualRollbackEvidence.newInstallerBefore -ceq $manualRollbackEvidence.newInstallerAfter -and $manualRollbackEvidence.preservedTreeBefore -ceq $manualRollbackEvidence.preservedTreeAfter -and $manualRollbackEvidence.preservedReceiptBefore -ceq $manualRollbackEvidence.preservedReceiptAfter -and $manualRollbackEvidence.retainedNewBefore -ceq $manualRollbackEvidence.retainedNewAfter
+    Set-Check 'retained-version-rollback-real-launch' $manualRollbackPassed $manualRollbackEvidence
+    if (-not $manualRollbackPassed) { throw 'Retained-version rollback changed source/data or retained program identity' }
+
+    # The existing synthetic crash case now selects the still-retained new tree as
+    # previous, restoring new without deleting/reinstalling either signed payload.
     $crashVersion = '9.9.9-crash'
     $crashRoot = Join-Path $script:PortableRoot ('app\' + $crashVersion)
     $null = New-Item -ItemType Directory -Path (Join-Path $crashRoot 'resources') -Force

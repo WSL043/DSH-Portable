@@ -6,7 +6,7 @@ import path from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
 
-import { layoutForRoot } from '../launcher/portable-core.mjs'
+import { environmentStateRoot, layoutForRoot } from '../launcher/portable-core.mjs'
 import { discoverExistingDshProfiles, preflightStagedDshProfiles } from '../launcher/update-preflight.mjs'
 
 const execFileAsync = promisify(execFile)
@@ -303,5 +303,71 @@ test('failed capsule composition preflight releases its lease and removes the un
     assert.equal(cleaned, true)
   } finally {
     await rm(root, { recursive: true, force: true })
+  }
+})
+
+
+test('shared core preflight rejects a broken profile in another stopped environment', async () => {
+  for (const currentId of ['default', 'research']) {
+    const fixture = await createPreflightFixture()
+    const otherId = currentId === 'default' ? 'research' : 'default'
+    const currentLayout = layoutForRoot(fixture.root, process.platform,
+      environmentStateRoot(fixture.root, currentId), fixture.root, currentId)
+    const otherLayout = layoutForRoot(fixture.root, process.platform,
+      environmentStateRoot(fixture.root, otherId), fixture.root, otherId)
+    const visited = []
+    try {
+      for (const candidate of [currentLayout, otherLayout])
+        await writeJson(path.join(candidate.dshHome, 'profiles', 'web', 'package.json'), {})
+      await assert.rejects(preflightStagedDshProfiles({
+        layout: currentLayout,
+        stagedRoot: fixture.stagedRoot,
+        metadata: { kind: 'dsh-app', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
+        run: async (_command, args, options) => {
+          if (!args.includes('--dump-config')) return { stdout: JSON.stringify({ items: [] }) }
+          visited.push(options.env.DSH_PORTABLE_ENVIRONMENT)
+          assert.equal(options.env.DSH_HOME, options.env.DSH_PORTABLE_ENVIRONMENT === currentId
+            ? currentLayout.dshHome : otherLayout.dshHome)
+          if (options.env.DSH_PORTABLE_ENVIRONMENT === otherId) throw new Error('other environment cannot compose')
+          return { stdout: '{}' }
+        },
+      }), error => error.code === 'DSH_PROFILE_PREFLIGHT_FAILED' && error.message.includes('environment "' + otherId + '"'))
+      assert.ok(visited.includes(otherId), 'another stopped environment must be checked before shared files are replaced')
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true })
+    }
+  }
+})
+
+test('shared capsule preflight prepares and leases once for all initialized environments', async () => {
+  const fixture = await createPreflightFixture()
+  const currentId = 'research'
+  const currentLayout = layoutForRoot(fixture.root, process.platform,
+    environmentStateRoot(fixture.root, currentId), fixture.root, currentId)
+  const counts = { prepared: 0, leased: 0, released: 0, cleaned: 0 }
+  const visited = []
+  try {
+    for (const candidate of [fixture.layout, currentLayout])
+      await writeJson(path.join(candidate.dshHome, 'profiles', 'web', 'package.json'), {})
+    const result = await preflightStagedDshProfiles({
+      layout: currentLayout,
+      stagedRoot: fixture.stagedRoot,
+      metadata: { kind: 'dsh-runtime-capsule', dshVersion: '0.2.0-rc.1', portableVersion: '0.8.0' },
+      ensureCapsule: async () => { counts.prepared++; return { mode: 'capsule', runtimeRoot: fixture.stagedRoot } },
+      acquireLease: async () => { counts.leased++; return async () => { counts.released++ } },
+      cleanCaches: async () => { counts.cleaned++ },
+      run: async (_command, args, options) => {
+        if (args.includes('--dump-config')) {
+          visited.push(options.env.DSH_PORTABLE_ENVIRONMENT)
+          return { stdout: '{}' }
+        }
+        return { stdout: JSON.stringify({ items: [] }) }
+      },
+    })
+    assert.equal(result.status, 'passed')
+    assert.deepEqual(visited, ['default', 'research'])
+    assert.deepEqual(counts, { prepared: 1, leased: 1, released: 1, cleaned: 0 })
+  } finally {
+    await rm(fixture.root, { recursive: true, force: true })
   }
 })

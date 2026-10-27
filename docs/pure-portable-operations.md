@@ -44,9 +44,31 @@ node scripts/check-official-payload-security.mjs '<portable-root>/app/<version>/
 
 旧官方包有固定端口 19387；本轮新成品实测使用动态端口。启动器仍保留跨旧版本的冲突保护，不结束外来进程。动态端口也不等于任意多实例已经验收。
 
-更新成功后，仅完整树摘要与收据匹配的更旧程序允许自动清理；当前/上一版本、旧格式收据、未知或改动目录保留。锁定、路径异常或清理失败记录 deferred，不能回滚已提交更新。崩溃遗留的 `.partial` 和目标冲突仍拒绝覆盖，保留日志并人工核实。
+更新成功后，仅完整树摘要与收据匹配的更旧程序允许自动清理；当前/上一版本、旧格式收据、未知或改动目录保留。锁定、路径异常或清理失败记录 deferred，不能回滚已提交更新。未登记的 `.partial`、目标冲突和固定修复备份槽仍拒绝覆盖；已登记的中断操作由同一引擎按状态与完整树收据恢复，外部改动则保留现场并拒绝继续。
 
 本地构建和验收临时副本完成后移回收站并验证可恢复记录；失败运行只保留日志。不要复用没有回收记录的旧清理 helper，不对原便携目录运行清理。CI 使用一次性 runner。
+
+## 离线更新、修复和程序回退
+
+完全退出本包窗口后，按住 Shift 启动 `DeepSeek Harness Portable.exe`，或使用 `--maintenance` 打开维护入口。入口由外置启动器提供，不改官方菜单。三个动作复用同一个 `launcher/apply-update.ps1` 和进度窗：
+
+| 动作 | 输入与边界 |
+| --- | --- |
+| 从文件更新 | 官方 Windows x64 安装包和已验收索引快照；无 current 的轻量包也可离线首次安装。按完整大小与 SHA-512 唯一匹配版本，再验 Authenticode、发布者和解包边界，不按文件名猜版本。 |
+| 修复 | 同版本的官方安装包；数据原样保留。旧程序和收据放在固定 `.repair-backup` 槽，已有槽时停止，不堆叠备份。 |
+| 回退 | 只接受 current 中记录、完整树收据仍匹配的 previous。保留退下的程序，清空 previous，记录 rejected；不支持任意历史版本。 |
+
+GUI 优先读取安装包同目录的 `accepted-index.json`，否则使用随包快照；CLI 可用 `--index-file` 指定。随包 `launcher/accepted-index.json` 是打包时已验收目录的快照；在线更新成功读取的新目录也会刷新该快照。联网机器从索引条目的 `url` 下载官方安装包，将安装包和该快照一同带到离线机器。目录不包含的未来版本不能凭文件名强行接纳；需先取得维护方验收后的新快照。当前发布阻断仍生效，不能把测试专用候选索引当公开接纳。
+
+自动化维护可使用同一启动器参数，无需第二套安装器：
+
+```powershell
+& '<root>/DeepSeek Harness Portable.exe' --installer-file '<official-installer.exe>' --index-file '<accepted-index.json>'
+& '<root>/DeepSeek Harness Portable.exe' --repair --installer-file '<same-version-official-installer.exe>'
+& '<root>/DeepSeek Harness Portable.exe' --rollback
+```
+
+本地安装包模式不回退到网络，索引最多 1 MiB，验证与解包期间持有安装包只读租约。正常启动优先恢复已登记的中断操作，只消费一次；恢复时核验 current 摘要、待切换目录和收据，无法确认所有权或发现外部改动则保留材料并停止。共享用户数据、工作区、登录状态及官方数据 schema 不在程序回退范围，旧二进制是否兼容新数据由官方决定。
 
 ## 旧 Native 数据迁入
 

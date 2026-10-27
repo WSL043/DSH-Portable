@@ -66,6 +66,7 @@ try {
         if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Required 7-Zip component is missing: $file" }
         Copy-Item -LiteralPath $source -Destination (Join-Path $launcherRoot $file)
     }
+    [IO.File]::WriteAllText((Join-Path $launcherRoot 'accepted-index.json'), $indexText, (New-Object Text.UTF8Encoding($false)))
     $follow = [ordered]@{ indexUrl=$IndexUrl; feedUrl=$FeedUrl; cacheDirName=$CacheDirName }
     [IO.File]::WriteAllText((Join-Path $launcherRoot 'follow.json'), (($follow | ConvertTo-Json -Depth 4) + "`n"), (New-Object Text.UTF8Encoding($false)))
     if ($Bootstrap) {
@@ -84,6 +85,8 @@ try {
 
 **更新：** 官方自己的更新提示与“安装并重启”按钮保持启用。点击后官方运行缓存中的本启动器副本；启动器从 `launcher/follow.json` 的已验收索引取得官方安装包，验证大小、SHA-512 和 Authenticode 发布者，再解包到版本目录。当前版和上一版保留，更旧目录只在完整树收据匹配时清理；未知、改动或占用目录保留。新版首次启动 20 秒异常退出时自动回退一次。
 
+**维护：** 完全退出后按住 Shift 启动，或使用 `--maintenance`。从文件更新/修复使用官方安装包与 `launcher/accepted-index.json` 快照，可把新快照以 `accepted-index.json` 放在安装包旁；全程不回退到网络；索引外版本须先取得已验收的新快照。同版本修复保留一份固定 `.repair-backup`，已有备份时停止；回退仅限收据匹配的上一程序版本，不还原数据、工作区或登录状态，也不保证官方数据 schema 可降级。中断操作在下次启动时核验并恢复；未知材料保留，不覆盖。
+
 **`dsh://`：** 启动器驻留时临时接管当前用户的 `HKCU\Software\Classes\dsh`，退出时还原原有注册表树。已知根外写入包括 `%LOCALAPPDATA%\<cacheDirName>`（专用更新缓存与根指针）、该用户协议项，以及官方应用自行创建的默认工作区和系统集成项；不承诺全应用零外写。受管应用数据、日志、下载暂存与版本目录位于本目录。
 
 **运行限制：** 旧官方包使用固定端口 19387，新包可使用动态端口；仍请先关闭其他 DeepSeek Harness 桌面实例。启动器检测到冲突时只提示、不结束进程。官方默认工作区创建在系统“文档”文件夹（`文档\deepseek-harness`），与官方安装版一致，不随本目录搬走；你自己的项目可放在任何位置。启动器不修改官方 EXE、ASAR 或运行库，也不包含适配器、默认插件或市场文件。
@@ -95,6 +98,8 @@ try {
 **Portable data:** `data/dsh-home/` (`DSH_HOME`), `data/agents/` (separate agents home), `data/electron/` (Chromium/Electron user data), `data/cache/native-addons/` (native addon cache), and `data/launcher/` (logs, update status and staging). Exit fully before moving the complete root folder.
 
 **Updates:** The official update prompt and Install and Restart flow remain enabled. The updater runs a cached copy of this launcher, which reads the accepted index from `launcher/follow.json`, downloads the official installer, verifies its size, SHA-512 and Authenticode publisher, and extracts a versioned app directory. Current and previous versions are retained; older trees are cleaned only when their complete ownership receipts match. Unknown, modified or busy directories are preserved. A non-zero exit during the first 20 seconds triggers one rollback.
+
+**Maintenance:** Exit fully, then hold Shift while starting, or use `--maintenance`. Update from file and repair use the official installer plus `launcher/accepted-index.json`, without network fallback. A newer snapshot can be placed beside the installer as `accepted-index.json`. New versions require an accepted snapshot. Same-version repair retains one fixed `.repair-backup`; an occupied slot stops another repair. Rollback accepts only the retained, receipt-matching previous program. It does not restore data, workspaces or login state, and cannot guarantee schema downgrade compatibility. The next launch validates and recovers recorded interruptions; unknown materials are preserved.
 
 **`dsh://`:** While resident, the launcher temporarily owns `HKCU\Software\Classes\dsh` and restores its original registry tree on exit. Known external writes include `%LOCALAPPDATA%\<cacheDirName>` (dedicated update cache and root pointer), that per-user protocol key, and the official app's default workspace and system integration. This is not a zero-external-write guarantee. Managed app data, logs, staging and version directories remain inside the root.
 

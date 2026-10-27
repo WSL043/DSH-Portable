@@ -4,6 +4,8 @@
 
 **2026-10-23 状态校正：** 本文保留原设计与实验日期，当前实现/证据以 [维护记录](one-x-maintenance-2026-10-23.md) 和 [运维说明](pure-portable-operations.md) 为准。当前默认不带插件或市场，旧 adapter 已退出交付路线；增加独立 `DSH_AGENTS_HOME=data/agents`、启动/切换锁与完整树收据。官方 0.2.1-rc.2 实物已使用动态后端端口，下面固定 19387 的描述只适用于旧包；仍保留旧版本保护，不宣称多实例已验收。桌面通道当前人为停用，本轮不发布；MCP 安全债另行阻断发布，不能按原“一小时内自动跟进”描述现行服务承诺。
 
+**2026-10-28 维护：** 离线文件更新、同版本修复、上一程序回退与中断恢复复用现有引擎、状态文件和进度窗，入口在外置启动器（Shift 启动 / `--maintenance`）；不增加官方菜单补丁。完整操作与固定备份槽边界见 [运维说明](pure-portable-operations.md#离线更新修复和程序回退)。默认仍无种子插件，本轮不发布，也不改公开接纳目录。
+
 ## 目标与不变量
 
 用户要求：Portable 只做便携化，官方桌面端所有能力保持；不预装插件、不带市场；官方发新版后自动跟进，我们维护最少，官方更新时 Portable 本身不必发版。
@@ -133,7 +135,7 @@ macOS：官方有桌面端，同架构可移植，另立阶段。Linux：官方�
 - alpha.4 Windows CI 会沿用插件仓库的安装、行为测试、构建及 `pnpm pack` 流程生成种子包；冒烟覆盖第一次启动、第二次启动播种和健康检查、`probe` profile 的 disabled dump，以及整根搬动后的再次 dump。该工作流尚待 runner 执行，本地脚本和静态测试不构成 CI 验收。
 - 启动器只在官方 `desktop` profile 已存在、未记录该插件且无官方进程时，在启动官方应用前调用官方 `dsh.cmd plugin add`。
 - 首次启动创建 profile，因此预装插件在第二次启动前播种；这是预期时序。
-- 官方 `plugin add` 自动将包名加入 `dsh.profile.bundles`；种子脚本不手改 bundles。归档保留在 profile 的 `seed/`，依赖及 `pnpm-lock.yaml` specifier 使用 `file:./seed/...`，`.modules.yaml` 的虚拟存储路径为相对 `.pnpm`；patch 条目默认 `disabled: true`。
-- 播种校验 SHA-512；单插件失败回滚其 profile/patch/`node_modules` 改动并记状态，失败不阻断官方应用启动。
+- 官方 `plugin add` 自动将包名加入 `dsh.profile.bundles`；种子脚本随后从 bundles 移除该包，按官方插件页的关闭状态记录，保留依赖。归档保留在 profile 的 `seed/`，依赖及 `pnpm-lock.yaml` specifier 使用 `file:./seed/...`，`.modules.yaml` 的虚拟存储路径为相对 `.pnpm`；不再另写重复的 patch 禁用条目。
+- 播种校验 SHA-512；单插件失败且完整回滚后可继续启动。脚本独占批次生命周期并对每项设置有限预算；超时尽力终止受管命令树，保留 `.seed-rollback-*` 恢复目录并拒绝继续启动，不把父进程退出当作所有孤儿写入者均已停止。回滚失败也保留恢复目录并报告精确路径；重新启动仍保持恢复阻断，须先确认没有写入者再恢复。当前默认包不预装种子，仅显式 `SeedPlugin` 包走此路径。
 - 2026-09-30 已用两个真实插件包和官方 rc.2 `dsh.cmd` 验证播种；复制为 `probe` 后 `--dump-config` 两条均为 disabled，整根移动后重复通过，移动后再用官方命令添加另一包也成功。
 - 启动器第二次启动确实完成播种、官方界面显示两个插件关闭，仍待主管真机验证；本机 CLI 验收未启动官方应用。
