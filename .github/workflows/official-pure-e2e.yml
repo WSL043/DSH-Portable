@@ -103,6 +103,7 @@ jobs:
             build/orch-080/T27/index-server-stderr.log
             build/orch-080/T27/outside-writes.json
             build/orch-080/T27/write-trace-summary.json
+            build/orch-080/T27/write-trace-context.json
             build/orch-080/T27/protocol-before.json
             build/orch-080/T27/protocol-after.json
           if-no-files-found: warn

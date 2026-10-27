@@ -12,7 +12,7 @@ macOS ARM nightly 为 rc.3，Intel 为 rc.4，仅核实官方 feed 元数据，�
 
 源码监控补入上游迁移后的 `packages/util/official-bundles/`，覆盖官方 profile、默认/可选/保护插件清单；不接管官方插件管理。master `22ddee3792402c3e70ec5f86a63c3e3e895a2f60` 相对已审基线已有 1,539 提交，本批只审 Portable 相关变化，继续保留 `687f282e8625c6b8d11ff58211a90524be2e4317` 基线。
 
-移除旧架构且已无生产者的 preview draft 工作流及其唯一 Python 检查器，保留当前纯包的完整冒烟、显式发布开关与实际 ASAR 授权。操作入口和验收边界见[运维说明](pure-portable-operations.md)。
+移除旧架构且已无生产者的 preview draft 工作流及其唯一 Python 检查器，保留当前纯包的完整冒烟、显式发布开关与实际 ASAR 授权。实机写入审计按进程创建/退出区分 PID 实例，保留存活子进程与有界原始上下文，允许名单保持不变。操作入口和验收边界见[运维说明](pure-portable-operations.md)。
 
 ## 2026-10-23 维护批次
 

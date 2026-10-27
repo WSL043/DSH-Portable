@@ -160,3 +160,60 @@ test('the cross-host fixture supplies plain and encrypted imports with the same 
   assert.match(runner, /\$importArguments \+= @\('--password-file', \$inputPassword\)/);
   assert.doesNotMatch(runner, /Get-Content[^\r\n]*(?:Password|password)/);
 });
+
+
+test('Procmon PID lifetimes retain a live child after parent exit and reject reuse by an unrelated parent', { skip: process.platform !== 'win32' }, () => {
+  const file = resolve(import.meta.dirname, '../experiments/official-payload/trace-writes.ps1');
+  const row = (pid, name, operation, path, detail = '') => ({ 'Time of Day': '16:30:00.0000000', 'Process Name': name, PID: String(pid), Operation: operation, Path: path, Result: 'SUCCESS', Detail: detail });
+  const rows = [
+    row(100, 'DeepSeek Harness.exe', 'Process Start', 'D:\\portable\\DeepSeek Harness.exe', 'Parent PID: 4, Command line: official'),
+    row(100, 'DeepSeek Harness.exe', 'Process Create', 'C:\\Windows\\System32\\PowerShell.EXE', 'PID: 200, Command line: powershell.exe update.ps1'),
+    row(100, 'DeepSeek Harness.exe', 'Process Exit', '', 'Exit Status: 0'),
+    row(200, 'powershell.exe', 'Process Start', 'C:\\Windows\\System32\\powershell.exe', 'Parent PID: 100, Command line: powershell.exe update.ps1'),
+    row(200, 'powershell.exe', 'RegSetValue', 'HKLM\\SOFTWARE\\Example', 'Type: REG_SZ, Length: 8, Data: update'),
+    row(200, 'powershell.exe', 'Process Exit', '', 'Exit Status: 0'),
+    row(300, 'unrelated.exe', 'Process Create', 'C:\\Windows\\System32\\powershell.exe', 'PID: 200, Command line: powershell.exe unrelated.ps1'),
+    row(200, 'powershell.exe', 'Process Start', 'C:\\Windows\\System32\\powershell.exe', 'Parent PID: 300, Command line: powershell.exe unrelated.ps1'),
+    row(200, 'powershell.exe', 'RegSetValue', 'HKLM\\SOFTWARE\\Example', 'Type: REG_SZ, Length: 8, Data: unrelated'),
+    row(101, 'DeepSeek Harness.exe', 'Process Create', 'C:\\Windows\\System32\\powershell.exe', 'PID: 400, Command line: powershell.exe update.ps1'),
+    row(400, 'powershell.exe', 'Process Start', 'C:\\Windows\\System32\\powershell.exe', 'Parent PID: 300, Command line: powershell.exe unrelated.ps1'),
+    row(400, 'powershell.exe', 'RegSetValue', 'HKLM\\SOFTWARE\\Example', 'Type: REG_SZ, Length: 8, Data: unrelated'),
+  ];
+  const quote = value => "'" + value.replaceAll("'", "''") + "'";
+  const fixture = Buffer.from(JSON.stringify(rows), 'utf8').toString('base64');
+  const script = String.raw`$ErrorActionPreference='Stop';
+    $ast=[Management.Automation.Language.Parser]::ParseFile(${quote(file)},[ref]$null,[ref]$null);
+    foreach($name in @('Update-TraceOwnership','New-TraceContextEvent')) {
+      $fn=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true);
+      . ([scriptblock]::Create($fn.Extent.Text));
+    }
+    $fixtureRows=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${fixture}'))|ConvertFrom-Json;
+    $csvRows=@(foreach($fixtureRow in $fixtureRows) { $fixtureRow });
+    $rows=@($csvRows|ConvertTo-Csv -NoTypeInformation|ConvertFrom-Csv);
+    $state=@{active=@{};everOwned=(New-Object 'System.Collections.Generic.HashSet[string]');generation=0};
+    $seen=@(); $sequence=0;
+    foreach($row in $rows){$sequence++;$seen+=Update-TraceOwnership $state $row $sequence}
+    $context=New-TraceContextEvent $rows[8] 9 $seen[8];
+    $missing=New-TraceContextEvent ([pscustomobject]@{PID='200';Operation='RegSetValue'}) 10 $seen[8];
+    $long=New-TraceContextEvent ([pscustomobject]@{PID='200';Detail=('x'*4096)}) 11 $seen[8];
+    $seen[8].imagePath=('x'*4096);
+    $longImage=New-TraceContextEvent ([pscustomobject]@{PID='200';Operation='Process Exit'}) 12 $seen[8];
+    @{ owned=@($seen|ForEach-Object {$_.owned}); firstGeneration=$seen[4].generation; reusedGeneration=$seen[8].generation; parentAfterExit=$state.active.ContainsKey('100'); childParent=$seen[4].parentPid; context=$context; missing=$missing; longLength=$long.detail.Length; longTruncated=$long.fieldTruncated; imageLength=$longImage.imagePath.Length; imageTruncated=$longImage.fieldTruncated }|ConvertTo-Json -Depth 6 -Compress`;
+  const env = { ...process.env }; delete env.PSModulePath;
+  const result = JSON.parse(execFileSync(windowsPowerShell(), ['-NoProfile', '-NonInteractive', '-OutputFormat', 'Text', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')], { encoding: 'utf8', env, windowsHide: true }).trim());
+  assert.deepEqual(result.owned, [true, true, true, true, true, true, false, false, false, true, false, false]);
+  assert.notEqual(result.firstGeneration, result.reusedGeneration);
+  assert.equal(result.parentAfterExit, false);
+  assert.equal(result.childParent, '100');
+  assert.equal(result.context.sequence, 9);
+  assert.equal(result.context.parentPid, '300');
+  assert.equal(result.context.time, rows[8]['Time of Day']);
+  assert.equal(result.context.detail, rows[8].Detail);
+  assert.equal(result.context.owned, false);
+  assert.equal(result.missing.path, '');
+  assert.equal(result.missing.time, '');
+  assert.equal(result.longLength, 2048);
+  assert.equal(result.longTruncated, true);
+  assert.equal(result.imageLength, 2048);
+  assert.equal(result.imageTruncated, true);
+});
