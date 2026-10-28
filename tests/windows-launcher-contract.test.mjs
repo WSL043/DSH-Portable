@@ -196,18 +196,36 @@ test('native startup history survives a locked latest log and concurrent writers
   const start = host.indexOf('        private void AppendHistoryLog(')
   const end = host.indexOf('        private async Task<List<string>> InspectWebViewForShutdownAsync(', start)
   assert.ok(start > 0 && end > start, 'the real native trace methods must be compiled')
+  const webview = await readFile(path.join(projectRoot, 'launcher/windows/LauncherWindow.WebView.cs'), 'utf8')
+  const checkedStart = webview.indexOf('        private string ResolveLauncherLogDirectory()')
+  const checkedEnd = webview.indexOf('        private string ResolvePortableInstanceId()', checkedStart)
+  assert.ok(checkedStart > 0 && checkedEnd > checkedStart, 'the real selected-root log checks must be compiled')
+  const checkedLogMethod = webview.slice(checkedStart, checkedEnd).replace('ResolveLauncherLogDirectory()', 'ResolveCheckedLogDirectory()')
   const cs = path.join(fixture, 'TraceProbe.cs'), exe = path.join(fixture, 'TraceProbe.exe')
   await writeFile(cs, [
     'using System; using System.Collections.Generic; using System.Diagnostics; using System.Globalization;',
     'using System.IO; using System.Text; using System.Text.RegularExpressions; using System.Threading;',
     'using System.Web.Script.Serialization;',
     'class TraceProbe {',
-    '  string directory, startupId; long startupStartedAt; bool startupTraceActive = true;',
+    '  string directory, startupId, stateRoot; long startupStartedAt; bool startupTraceActive = true;',
     '  JavaScriptSerializer json = new JavaScriptSerializer();',
     '  string ResolveLauncherLogDirectory() { return directory; }',
     host.slice(start, end),
+    checkedLogMethod,
     '  static int Main(string[] args) {',
     '    var probe = new TraceProbe { directory = args[0], startupId = args[1], startupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };',
+    '    if (args[2] == "selected-root") {',
+    '      try {',
+    '        probe.stateRoot = args[0];',
+    '        probe.directory = probe.ResolveCheckedLogDirectory();',
+    '        Directory.CreateDirectory(probe.directory);',
+    '        probe.AppendStartupTrace("native-host", "selected-root", null);',
+    '        return 0;',
+    '      } catch (IOException error) {',
+    '        Console.Error.WriteLine(error.Message);',
+    '        return 2;',
+    '      }',
+    '    }',
     '    if (args[2] == "reparse") {',
     '      AppendStartupTraceLine(probe.directory, Path.Combine(probe.directory, "startup-latest.jsonl"), "must-not-append");',
     '      return 0;',
@@ -220,6 +238,28 @@ test('native startup history survives a locked latest log and concurrent writers
     '    if (args[2] == "locked") {',
     '      using (var held = new FileStream(Path.Combine(probe.directory, "startup-latest.jsonl"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {',
     '        probe.AppendStartupTrace("native-host", "native-loading-ready", new Dictionary<string, object> { { "paintedFrames", 1 } });',
+    '      }',
+    '      return 0;',
+    '    }',
+    '    if (args[2] == "history-contended") {',
+    '      string directory = probe.directory;',
+    '      probe.directory = Path.Combine(directory, "warmup");',
+    '      probe.AppendStartupTrace("native-host", "history-warmup", null);',
+    '      probe.directory = directory;',
+    '      string history = Path.Combine(directory, "history", probe.startupId);',
+    '      Directory.CreateDirectory(history);',
+    '      string filename = Path.Combine(history, "startup.jsonl");',
+    '      File.WriteAllText(filename, String.Empty);',
+    '      using (var held = new FileStream(filename, FileMode.Open, FileAccess.ReadWrite, FileShare.None))',
+    '      using (var releasing = new ManualResetEvent(false))',
+    '      using (var released = new ManualResetEvent(false)) {',
+    '        ThreadPool.QueueUserWorkItem(delegate(object unused) {',
+    '          releasing.Set();',
+    '          try { Thread.Sleep(30); held.Dispose(); } finally { released.Set(); }',
+    '        });',
+    '        if (!releasing.WaitOne(5000)) throw new TimeoutException("history lock releaser did not start");',
+    '        probe.AppendStartupTrace("native-host", "history-contended", null);',
+    '        if (!released.WaitOne(5000)) throw new TimeoutException("history lock was not released");',
     '      }',
     '      return 0;',
     '    }',
@@ -246,6 +286,15 @@ test('native startup history survives a locked latest log and concurrent writers
   assert.equal(lockedEvents[0].phase, 'native-loading-ready')
   assert.equal(lockedEvents[0].paintedFrames, 1)
   assert.equal(await readFile(path.join(locked, 'startup-latest.jsonl'), 'utf8'), '')
+  const historyContended = path.join(fixture, 'history-contended')
+  await execFileAsync(exe, [historyContended, id, 'history-contended'], { windowsHide: true, timeout: 15000 })
+  for (const relative of ['startup-latest.jsonl', path.join('history', id, 'startup.jsonl')]) {
+    const written = events(await readFile(path.join(historyContended, relative), 'utf8'))
+    assert.equal(written.length, 1, relative + ' must preserve the event after a transient exclusive history lock')
+    assert.equal(written[0].phase, 'history-contended')
+    assert.equal(written[0].startupId, id)
+    assert.equal(written[0].component, 'native-host')
+  }
   const outside = path.join(fixture, 'outside.jsonl')
   const sentinel = Buffer.from('external sentinel\r\n')
   await writeFile(outside, sentinel)
@@ -261,6 +310,29 @@ test('native startup history survives a locked latest log and concurrent writers
   await execFileAsync(exe, [reparse, id, 'reparse'], { windowsHide: true, timeout: 15000 })
   assert.deepEqual(await readFile(externalLatest), sentinel, 'a junction log root must never alter its external target')
   assert.deepEqual((await readdir(externalDirectory)).sort(), externalEntries, 'a rejected junction log root must not create external entries')
+  const selectedRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-native-外置 state root-'))
+  const redirectedRoot = await mkdtemp(path.join(os.tmpdir(), 'dsh-native-重定向 state root-'))
+  for (const root of [selectedRoot, redirectedRoot]) {
+    t.after(() => rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  }
+  await execFileAsync(exe, [selectedRoot, id, 'selected-root'], { windowsHide: true, timeout: 15000 })
+  const selectedLogs = path.join(selectedRoot, 'data', 'logs')
+  for (const relative of ['startup-latest.jsonl', path.join('history', id, 'startup.jsonl')]) {
+    const written = events(await readFile(path.join(selectedLogs, relative), 'utf8'))
+    assert.equal(written.length, 1, relative + ' must be written below the explicitly selected external root')
+    assert.equal(written[0].phase, 'selected-root')
+    assert.equal(written[0].startupId, id)
+    assert.equal(written[0].component, 'native-host')
+  }
+  await mkdir(path.join(redirectedRoot, 'data'))
+  await symlink(externalDirectory, path.join(redirectedRoot, 'data', 'logs'), 'junction')
+  await assert.rejects(execFileAsync(exe, [redirectedRoot, id, 'selected-root'], { windowsHide: true, timeout: 15000 }), error => {
+    assert.equal(error.code, 2, 'the real selected-root method must explicitly reject the redirected log directory')
+    assert.match(error.stderr, /Launcher log directory must not contain a reparse point/)
+    return true
+  })
+  assert.deepEqual(await readFile(externalLatest), sentinel, 'a redirected selected-root log directory must preserve external bytes')
+  assert.deepEqual((await readdir(externalDirectory)).sort(), externalEntries, 'a redirected selected-root log directory must preserve external entries')
   const concurrent = path.join(fixture, 'concurrent')
   await Promise.all(['one', 'two'].map(worker => execFileAsync(exe, [concurrent, id, worker], { windowsHide: true, timeout: 15000 })))
   for (const relative of ['startup-latest.jsonl', path.join('history', id, 'startup.jsonl')]) {

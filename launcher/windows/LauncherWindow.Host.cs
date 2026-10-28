@@ -76,12 +76,12 @@ namespace DshPortable
                     File.Delete(filename + ".previous");
                     File.Move(filename, filename + ".previous");
                 }
-                AppendStartupTraceLine(directory, filename, line);
+                AppendStartupTraceLine(directory, filename, line, 20);
             }
             catch { }
         }
 
-        private static void AppendStartupTraceLine(string directory, string filename, string line)
+        private static void AppendStartupTraceLine(string directory, string filename, string line, int attempts = 3)
         {
             string prefix = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
             string target = Path.GetFullPath(filename);
@@ -93,7 +93,7 @@ namespace DshPortable
             }
             catch (FileNotFoundException) { }
             catch (DirectoryNotFoundException) { }
-            for (int attempt = 0; attempt < 3; attempt++)
+            for (int attempt = 0; attempt < attempts; attempt++)
             {
                 try
                 {
@@ -103,7 +103,7 @@ namespace DshPortable
                 }
                 catch (IOException)
                 {
-                    if (attempt == 2) return;
+                    if (attempt == attempts - 1) return;
                     Thread.Sleep(5);
                 }
             }
