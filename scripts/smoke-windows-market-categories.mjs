@@ -256,15 +256,74 @@ try {
   }
   await sample('market-ready')
   const checks=[];
+  const categoryGeometry = []
+  const categoryState = `(() => {
+    const wrap=document.querySelector('[class*="catsWrap"]');
+    const button=wrap?.querySelector('[class*="catsToggle"]');
+    if(!wrap || !button || button.getBoundingClientRect().width===0) return null;
+    let scroller=wrap.parentElement;
+    while(scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller=scroller.parentElement;
+    if(!scroller) return null;
+    // Normal collapsed rows and sticky rows intentionally have different
+    // budgets. Compare the toggle in the same real, unpinned scroll context.
+    scroller.scrollTop=0;
+    const rect=wrap.getBoundingClientRect();
+    const scrollerRect=scroller.getBoundingClientRect();
+    const sentinel=wrap.closest('[class*="stickyHead"]')?.previousElementSibling?.getBoundingClientRect();
+    const chips=[...wrap.querySelectorAll('[data-chip="1"]')];
+    const rounded=value=>Math.round(value*100)/100;
+    return { label:button.getAttribute('aria-label'), count:chips.length,
+      measuring:wrap.className.includes('catsCollapsed'),
+      wrapWidth:rounded(rect.width), wrapHeight:rounded(rect.height),
+      scrollerWidth:scroller.clientWidth, scrollerHeight:scroller.clientHeight,
+      scrollTop:scroller.scrollTop, scrollHeight:scroller.scrollHeight,
+      sentinelOffset:sentinel ? rounded(sentinel.top-scrollerRect.top) : null,
+      sentinelVisible:Boolean(sentinel && sentinel.top>=scrollerRect.top-1 && sentinel.bottom<=scrollerRect.bottom+1),
+      rows:[...new Set(chips.map(chip=>rounded(chip.getBoundingClientRect().top-rect.top)))] };
+  })()`
+  const toggleCategories = labels => `(() => {
+    const button=document.querySelector('[class*="catsWrap"] [class*="catsToggle"]');
+    if(!button || button.disabled || button.getBoundingClientRect().width===0
+      || !${JSON.stringify(labels)}.includes(button.getAttribute('aria-label'))) return false;
+    button.click(); return true;
+  })()`
+  const moreLabels=['More','更多分类'], lessLabels=['Less','收起']
   for(const width of (soak ? Array.from({length: 30}, (_, i) => i % 2 ? 1200 : 580) : [580,1200,580])){
     await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-    await delay(400);
-    const count=()=>evaluate(`document.querySelector('[class*="catsWrap"]')?.querySelectorAll('[data-chip="1"]').length`);
-    const collapsed=await count();
-    await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`);await delay(300);
-    const expanded=await count();assert.ok(expanded>collapsed, 'expand must show more categories');
-    await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`);await delay(300);
-    assert.equal(await count(),collapsed,'collapse must restore measured budget');
+    await evaluate(`document.fonts.ready.then(() => true)`)
+    const settled = async (phase, labels) => {
+      let previous, consecutive=0, last, complete=false
+      try {
+        const result=await until(categoryState, state => {
+          last=state
+          if(!state || state.measuring || state.scrollTop!==0 || !state.sentinelVisible || !labels.includes(state.label)) {
+            consecutive=0; previous=undefined; return false
+          }
+          const signature=JSON.stringify(state)
+          consecutive=signature===previous ? consecutive+1 : 1
+          previous=signature
+          return consecutive>=3
+        }, `stable category ${phase} at ${width}`)
+        complete=true
+        return result
+      } finally {
+        categoryGeometry.push({width,phase,settled:complete,state:last})
+        await writeFile(path.join(output,'category-geometry.json'),JSON.stringify(categoryGeometry,null,2))
+      }
+    }
+    let baseline=await settled('initial',[...moreLabels,...lessLabels])
+    if(lessLabels.includes(baseline.label)) {
+      await until(toggleCategories(lessLabels),Boolean,'initial category collapse')
+      baseline=await settled('collapsed',moreLabels)
+    }
+    const collapsed=baseline.count;
+    await until(toggleCategories(moreLabels),Boolean,'expand category button')
+    const opened=await settled('expanded',lessLabels)
+    const expanded=opened.count;assert.ok(expanded>collapsed, 'expand must show more categories');
+    await until(toggleCategories(lessLabels),Boolean,'collapse category button')
+    const restored=await settled('restored',moreLabels)
+    assert.equal(restored.wrapWidth,baseline.wrapWidth,'collapse comparison must keep the same measured width');
+    assert.equal(restored.count,collapsed,'collapse must restore measured budget');
     checks.push({width,collapsed,expanded});
     if (checks.length % 5 === 0) await sample(`cycle-${checks.length}`)
   }

@@ -1,29 +1,31 @@
 # 0.x Native：DSH 0.2.2-alpha.2 候选接入
 
-本页只记录 0.x Native 源包候选和独立插件接口，不代表 Portable 1.x 官方成品便携线。1.x 保持官方 EXE/ASAR/运行库字节，不预装插件或市场；其状态见 [纯便携架构](pure-portable-architecture.md)。
+核对日期：2026-10-28。候选状态与逐项证据见 [PR #222](https://github.com/WSL043/DSH-Portable/pull/222)；本页不代替绑定具体提交和成品摘要的资格记录。
 
-官方已发布 [0.2.2-alpha.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-alpha.2)（源码 f3803c96974ad4a94195fb97e5c637e9c2a3afe3）和 [0.2.1-rc.4](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.4)。alpha 将默认组合包清单从 app-boot 移至 [dsh-official-bundles](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-alpha.2/packages/util/official-bundles/src/index.ts)；Portable 的插件事务和旧会话导入预检共用按导出能力选择的解析器，旧内核仍复用原导出，不猜版本、不吞加载错误。最低 Node.js 24.9，当前固定 24.22.1 满足。本次在 [PR #222](https://github.com/WSL043/DSH-Portable/pull/222) 的隔离候选分支更新 preview 锁；稳定锁和公开通道不改。源码与真实 npm 字节核验不等于整套 alpha 产品验收，成品资格单独绑定候选提交。
+## 产品边界
 
-本次只读核对时，[Windows 官方 nightly feed](https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml) 仍是 0.2.1-rc.3；GitHub/npm alpha 不等于已交付的新桌面成品。alpha 与 rc.4 的官方 MCP 清单仍固定 client 2.2.0，处于 [GHSA-6prh-2h8m-c8cw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) 影响范围，不能据发布名称解除 1.x 安全阻断，也不覆盖官方 SDK。 0.x Native 已有 override 将实际安装的 MCP client/core 锁到修复版 2.3.0，preview staging 继承它；配置继承不能代替新 Alpha 成品的依赖安全验收。1.x 使用官方签名 ASAR，不应用这组 override，仍等官方修复。
+- **1.x 官方成品便携线**：保持官方 EXE、ASAR 和运行库字节，只允许既定 `resources/app-update.yml` 配置差异；不预装 Portable 插件、市场或页面桥，不修改内核。见[纯便携架构](pure-portable-architecture.md)。
+- **0.x Native 稳定线**：稳定来源、默认插件和公开更新通道独立保留。
+- **本候选**：仅审核 Native 的 [0.2.2-alpha.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-alpha.2)，固定官方源码 `f3803c96974ad4a94195fb97e5c637e9c2a3afe3`。上游 Alpha 版本号不表示 Portable 1.x。Node 最低 24.9，当前固定 24.22.1。
 
-Alpha compatibility preparation follows the official export owner by capability and retains legacy app-boot support. It does not promote the alpha runtime, qualify a new desktop payload, or remove the upstream MCP security hold. Full candidate qualification must bind the immutable source and built artifact on an isolated review branch.
+## 已实现的适配
 
-候选同时复用官方公开插件槽位与版本更新能力，完整能力存在时原样保留官方管理器，不再注入旧更新按钮/额外刷新；部分公开契约缺失时明确拒绝。官方实验市场属于可选组合包；Portable 既有首次引导策略可启用它并保留后续关闭选择，此次不新增强开。按当前 profile 的既有启用检测切换高级/市场入口，未知、关闭或失败保留原发现与确认安装，避免把槽位声明误当市场已可用；正常已装插件更新由官方负责，Portable 保留分组总开关、诊断和显式修复保全。
+官方默认组合包的新导出归属由实际能力识别，旧内核继续复用 app-boot；不猜版本、不吞加载错误。历史格式适配只登记精确 Alpha2 源码和生成 lib 身份，未知版本/字段/不成对模型路由仍拒绝。真实继续探针按官方能力补注册独立 native executor，保留模型请求、中断及继续断言。
 
-新版历史读取仅登记精确 0.2.2-alpha.2 的源码与生成 lib 身份，不扩大到相邻 alpha；真实原库拒绝 v2，经既有补丁后接受合法 one-shot/continuable v2，仍拒绝未知版本、字段和不成对模型路由，输入不变。完整旧 writer/继续验收仍是独立门槛，不能由本次 schema 单测代替。候选核验修正摘要别名误差和 review 锁与 main 冻结 SHA 的测试耦合，main 固定来源保护不变。
+插件管理完整公开契约存在时保留官方管理器和更新确认；不再注入重复更新按钮。官方 Discover 仍是可选能力，按 profile 的实际启用状态选择入口；未启用或未知时保留现有发现与确认安装。Portable 只保留其外层诊断、显式修复和分组等已有能力，不另建一套官方会话或插件管理器。独立会话/图片插件候选不因此进入 1.x。
 
-市场默认 client.js 以现有锁和工具实际重建；既有规范化步骤记录 LF 一致的源输入摘要，测试只读检查漏重建，压缩参数名和重复执行保持幂等。不新增打包流程或策略文件。
+Preview 仅采用真实已发布的 image 0.1.17 / chat 1.5.19，核对 registry 归档、来源声明与固定 pnpm 锁；不改第三方 peer。稳定 pins/module/store 保持分离。对应运行字节与旧稳定版本相同，不将元数据声明当作新内核实物验收。
 
-Public plugin slots preserve the official manager and regular update UI. The existing profile activation check controls the Advanced/Discover fallback; unknown or inactive optional-market state keeps discovery and the existing confirmation/install path. Exact migration identities and the existing full historical-writer qualification remain separate gates. The rebuilt client is checked against its normalized source inputs without changing release channels.
+源码 client 复用既有锁和构建，规范化后的源摘要检查漏重建。平台可选依赖按生产闭包保留。体积以同口径 rc.3 成品比较：Windows/Linux app 增长约 9.31 MB，来自已核对的官方功能、依赖与素材；只调整 preview 的实测绝对预算，stable baseline、5% 相对限制和 1.15 guard 不变。
 
-**默认插件声明门槛已解除，完整 alpha 交付仍待验收：** 发布者新增 [image 0.1.17](https://registry.npmjs.org/dsh-image-viewer/0.1.17) 和 [chat 1.5.19](https://registry.npmjs.org/dsh-chat-manager/1.5.19)，明确声明支持 0.2.2-alpha.2 与 Cordis 4.0.6-alpha.1。候选只更新 preview pins、PREVIEW_DEFAULT_PLUGINS 和 preview store；真实 registry 归档摘要、来源声明的摘要/仓库/提交绑定及固定 pnpm 锁刷新已核验，未改写发布包或豁免 peer。两个包的运行字节分别与 0.1.16、1.5.18 相同，但旧候选 beta 与新正式版之间不能据此视为小改动。候选完整界面、官方更新确认、卸载/重装和历史 writer 继续仍须独立实物验收，尚不允许晋级或发布。
+## MCP 安全边界
 
-Published image 0.1.17 and chat 1.5.19 now declare alpha.2 compatibility. The candidate adopts their real verified archives only in its preview pins/module/store. This removes the declaration hold, not the complete UI, historical-writer or product qualification gates. No peer exemption or republished package bypasses them.
+官方 Alpha2 源码/锁/npm 清单仍使用 client 2.2.0；当前官方 Windows feed 仍是已实物核验的 rc.3，签名 ASAR 中 client/core 均为 2.2.0。没有 Alpha2 签名桌面包的实物安全证明，1.x 继续受 [GHSA-6prh-2h8m-c8cw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) 阻断，等官方修复。
 
-## 实际候选门槛
+Native 继承既有 2.3.0 override。新增门槛检查实际安装树内的根目录、嵌套、alias 与 vendor MCP 清单：与生成锁精确匹配，客户端复用已有公告判定，受影响或未知版本拒绝；缺锁副本和越界链接拒绝。清单路径、版本及 SHA256 写入现有 staging receipt。Core 版本留证，不将客户端公告误套到 core。本门槛没有改 SDK 实现，也不是全面无漏洞证明。
 
-0511814 的真实继续会话探针已走过模型请求与中断继续断言；此前缺少官方拆出的 native executor 只在探针中按能力补注册，未改官方实现。候选仍未通过整套成品验收：Windows/Linux 受旧 candidate 绝对体积预算阻断，macOS 实际文件更新失败且原 workflow 未保留细因。
+## 最终资格
 
-已用同口径 rc.3 成功成品逐包比较：Windows/Linux app 约增加 9.31 MB，主要为官方功能、依赖闭包和详情素材。Office、语音、sharp、pnpm 无增长，没有混入异平台原生包。仅据该实际差异修订 preview 的五个数值，stable 预算、baseline、5% 相对限制和 1.15 guard 不变；不是以体积门槛通过代替运行资格。macOS 下一轮只新增现有脱敏 update-smoke-evidence.json 的失败留证，更新命令及断言不变。
+`7a510d6` 实际全套任务通过 35/39：五平台构建、文件更新、Windows 官方插件生命周期及桌面生命周期等已过；余下是升级烟测误用稳定默认插件列表，以及市场折叠测量跨滚动/字体上下文。验收脚本分别改为目标包的既有 defaultsForProduct 校验，以及同一稳定几何条件下的真实 More→Less→More，保留严格断言。
 
-完整 writer、实物更新、安全及发布 readiness 继续独立核验。没有修改公开通道或发布版本。
+这些脚本修正和实际 MCP 留证须在最终候选重新完整验收；历史 writer/继续与发布 readiness 仍各自核对。只有对应成品证据满足全部门槛才可晋级。此工作不发布版本或修改公开通道。

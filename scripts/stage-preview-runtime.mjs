@@ -3,11 +3,12 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { classifyProductVersion } from './version-policy.mjs'
+import { ADVISORY, affectedClientVersion } from './check-official-payload-security.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -135,26 +136,80 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
   const lock = JSON.parse(await readFile(path.join(runtimeRoot, 'package-lock.json'), 'utf8'))
   assert.ok(lock.packages && typeof lock.packages === 'object', 'staged npm lock must inventory installed packages')
   const checked = []
-  for (const [location, entry] of Object.entries(lock.packages)) {
-    const name = /(?:^|\/)node_modules\/(zod|undici|fast-uri)$/.exec(location)?.[1]
-    if (!name) continue
+  const checkedLocations = new Set()
+  const mcpName = /^@modelcontextprotocol\/(?:client|core)$/
+  const lockedName = /(?:^|\/)node_modules\/(zod|undici|fast-uri|@modelcontextprotocol\/(?:client|core))$/
+  const canonicalRoot = await realpath(runtimeRoot)
+  function assertContained(filename) {
+    const relative = path.relative(canonicalRoot, filename)
+    assert.ok(relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+      `dependency path escapes runtime: ${filename}`)
+  }
+  async function checkInstalled(location, name, entry, bytes) {
     const manifestPath = path.resolve(runtimeRoot, location, 'package.json')
     const relative = path.relative(path.resolve(runtimeRoot), manifestPath)
     assert.ok(!path.isAbsolute(location) && !path.win32.isAbsolute(location) && !location.split(/[\\/]/).includes('..')
       && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `dependency location escapes runtime: ${location}`)
-    const installed = JSON.parse(await readFile(manifestPath, 'utf8'))
+    assertContained(await realpath(manifestPath))
+    bytes ??= await readFile(manifestPath)
+    const installed = JSON.parse(bytes.toString('utf8'))
     assert.equal(installed.name, name, `installed package at ${location}`)
+    if (entry.name !== undefined) assert.equal(installed.name, entry.name, `installed name at ${location} must match the generated lock`)
     assert.equal(installed.version, entry.version, `installed version at ${location} must match the generated lock`)
+    assert.ok(typeof installed.version === 'string' && installed.version.length > 0, `installed version at ${location} is missing`)
+    if (name === '@modelcontextprotocol/client') {
+      assert.equal(affectedClientVersion(installed.version), false,
+        `${ADVISORY.id}: affected or unknown MCP client version at ${location}@${installed.version}`)
+    }
     const version = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/.exec(installed.version)
     const major = Number(installed.version.split('.')[0])
-    const minimum = minimums[name][major]
+    const minimum = minimums[name]?.[major]
     if (minimum) {
       assert.ok(version, `${location} must use a patched stable version`)
       const actual = version.slice(1, 4).map(Number)
       const comparison = actual.map((part, index) => part - minimum[index]).find((difference) => difference !== 0) ?? 0
       assert.ok(comparison >= 0, `${location}@${installed.version} requires >=${minimum.join('.')}`)
     }
-    checked.push({ path: location, name, version: installed.version })
+    checked.push({ path: location, name, version: installed.version,
+      ...(mcpName.test(name) ? { manifestSha256: createHash('sha256').update(bytes).digest('hex') } : {}),
+    })
+    checkedLocations.add(location)
+  }
+  for (const [location, entry] of Object.entries(lock.packages)) {
+    const name = lockedName.exec(location)?.[1]
+    if (name) await checkInstalled(location, name, entry)
+  }
+
+  // Bundled or vendored copies may be absent from npm's generated lock. Inspect
+  // actual package metadata too, including aliases, without reading SDK code.
+  const seenDirectories = new Set()
+  const pending = [{ directory: path.resolve(runtimeRoot), location: '' }]
+  while (pending.length) {
+    const { directory, location } = pending.pop()
+    const canonical = await realpath(directory)
+    assertContained(canonical)
+    if (seenDirectories.has(canonical)) continue
+    seenDirectories.add(canonical)
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+      const filename = path.join(directory, entry.name)
+      let directoryEntry = entry.isDirectory()
+      if (entry.isSymbolicLink()) {
+        assertContained(await realpath(filename))
+        directoryEntry = (await stat(filename)).isDirectory()
+      }
+      if (directoryEntry) {
+        pending.push({ directory: filename, location: location ? `${location}/${entry.name}` : entry.name })
+      } else if (entry.name === 'package.json') {
+        const bytes = await readFile(filename)
+        let installed
+        try { installed = JSON.parse(bytes.toString('utf8')) }
+        catch (error) { if (mcpName.test(lockedName.exec(location)?.[1] ?? '')) throw error; continue }
+        const expected = lockedName.exec(location)?.[1]
+        if (!mcpName.test(installed?.name ?? '') && !mcpName.test(expected ?? '')) continue
+        assert.ok(Object.hasOwn(lock.packages, location), `installed MCP copy is missing from the generated lock: ${location}`)
+        if (!checkedLocations.has(location)) await checkInstalled(location, expected ?? installed.name, lock.packages[location], bytes)
+      }
+    }
   }
   return checked
 }
@@ -290,6 +345,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     packageCount: packages.length,
     runtimePackageCount: runtimePackages.length,
     packageSetSha256: aggregate.digest('hex'),
+    dependencySecurity,
     packages: packages.map(({ family, name, version, sha256: digest }) => ({ family, name, version, sha256: digest })),
   }
   await writeFile(path.join(output, 'preview-runtime.json'), `${JSON.stringify(receipt, null, 2)}\n`, 'utf8')

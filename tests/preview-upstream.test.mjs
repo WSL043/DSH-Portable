@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -67,6 +68,7 @@ test('preview staging is an explicit build input and never rewrites the stable a
   assert.match(script, /--packed-root/)
   assert.match(script, /preview-runtime\.json/)
   assert.match(script, /packageSetSha256/)
+  assert.match(script, /dependencySecurity,/)
   assert.doesNotMatch(script, /writeFile\([^\n]+upstream\.lock\.json/)
   assert.doesNotMatch(script, /writeFile\([^\n]+app[^\n]+package-lock\.json/)
 })
@@ -312,4 +314,68 @@ test('source-pack staging rejects affected nested and vendor dependencies before
     }))
     await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency location escapes runtime/)
   }
+})
+
+test('source-pack staging checks actual root, nested and vendor MCP manifests against the lock and shared advisory', async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const clients = [
+    'node_modules/@modelcontextprotocol/client',
+    'node_modules/official/node_modules/@modelcontextprotocol/client',
+    'vendor/market/node_modules/@modelcontextprotocol/client',
+  ]
+  const core = 'node_modules/@modelcontextprotocol/core'
+  const packages = Object.fromEntries([...clients, core].map(location => [location, { version: '2.3.0' }]))
+  async function writeManifest(location, name, version) {
+    await mkdir(path.join(fixture, location), { recursive: true })
+    await writeFile(path.join(fixture, location, 'package.json'), JSON.stringify({ name, version }))
+  }
+  async function writeLock() {
+    await writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }))
+  }
+  for (const location of clients) await writeManifest(location, '@modelcontextprotocol/client', '2.3.0')
+  await writeManifest(core, '@modelcontextprotocol/core', '2.3.0')
+  await writeLock()
+  const checked = await verifyInstalledRuntimeDependencies(fixture)
+  assert.equal(checked.length, 4)
+  for (const entry of checked) {
+    assert.equal(entry.version, '2.3.0')
+    assert.equal(entry.manifestSha256, createHash('sha256').update(await readFile(path.join(fixture, entry.path, 'package.json'))).digest('hex'))
+  }
+  for (const location of clients) {
+    for (const version of ['2.2.0', '2.3.0-rc.1']) {
+      packages[location].version = version
+      await writeManifest(location, '@modelcontextprotocol/client', version)
+      await writeLock()
+      await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /GHSA-6prh-2h8m-c8cw: affected or unknown MCP client/)
+    }
+    packages[location].version = '2.3.0'
+    await writeManifest(location, '@modelcontextprotocol/client', '2.3.0')
+  }
+  await writeLock()
+  await writeManifest(core, '@modelcontextprotocol/core', '2.2.0')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /must match the generated lock/)
+  packages[core].version = '2.2.0'
+  await writeLock()
+  assert.equal((await verifyInstalledRuntimeDependencies(fixture)).find(entry => entry.path === core).version, '2.2.0',
+    'the shared advisory applies to client; core is recorded and must match its actual locked version')
+  const bundled = 'node_modules/bundler/dist/mcp-copy'
+  await writeManifest(bundled, '@modelcontextprotocol/client', '2.3.0')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /installed MCP copy is missing from the generated lock/)
+  packages[bundled] = { name: '@modelcontextprotocol/client', version: '2.3.0' }
+  await writeLock()
+  assert.ok((await verifyInstalledRuntimeDependencies(fixture)).some(entry => entry.path === bundled && entry.manifestSha256))
+})
+
+test('source-pack staging rejects external dependency links and terminates on internal directory cycles', async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-links-'))
+  const external = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-external-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  t.after(() => rm(external, { recursive: true, force: true }))
+  await writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: {} }))
+  const cycle = path.join(fixture, 'cycle')
+  await symlink(fixture, cycle, process.platform === 'win32' ? 'junction' : 'dir')
+  assert.deepEqual(await verifyInstalledRuntimeDependencies(fixture), [])
+  await symlink(external, path.join(fixture, 'external'), process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency path escapes runtime/)
 })
