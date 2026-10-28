@@ -77,9 +77,27 @@ namespace DshPortable
                     File.Delete(filename + ".previous");
                     File.Move(filename, filename + ".previous");
                 }
-                File.AppendAllText(filename, line + Environment.NewLine, new UTF8Encoding(false));
+                AppendStartupTraceLine(filename, line);
             }
             catch { }
+        }
+
+        private static void AppendStartupTraceLine(string filename, string line)
+        {
+            for (int attempt = 0; attempt < 3; attempt++)
+            {
+                try
+                {
+                    // Keep exclusive writers: shared append handles can race at EOF.
+                    File.AppendAllText(filename, line + Environment.NewLine, new UTF8Encoding(false));
+                    return;
+                }
+                catch (IOException)
+                {
+                    if (attempt == 2) return;
+                    Thread.Sleep(5);
+                }
+            }
         }
 
         private void AppendStartupTrace(string component, string phase, IDictionary<string, object> fields)
@@ -106,11 +124,10 @@ namespace DshPortable
                 }
                 string directory = ResolveLauncherLogDirectory();
                 Directory.CreateDirectory(directory);
-                File.AppendAllText(
-                    Path.Combine(directory, "startup-latest.jsonl"),
-                    json.Serialize(entry) + Environment.NewLine,
-                    new UTF8Encoding(false));
-                AppendHistoryLog("startup.jsonl", json.Serialize(entry));
+                string line = json.Serialize(entry);
+                // Preserve the authoritative event even when the shared latest log is busy.
+                AppendHistoryLog("startup.jsonl", line);
+                AppendStartupTraceLine(Path.Combine(directory, "startup-latest.jsonl"), line);
             }
             catch { }
         }
