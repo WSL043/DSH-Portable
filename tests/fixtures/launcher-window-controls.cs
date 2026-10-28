@@ -3,12 +3,26 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows.Forms;
 
 internal static class WindowControlsFixture
 {
     private const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
     private static void Check(bool value, string message) { if (!value) throw new Exception(message); }
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr handle);
+
+    private static void Pump()
+    {
+        for (int index = 0; index < 120; index++)
+        {
+            Application.DoEvents();
+            Thread.Sleep(10);
+        }
+    }
 
     [STAThread]
     private static void Main(string[] args)
@@ -101,6 +115,21 @@ internal static class WindowControlsFixture
             form.FormClosing += delegate(object sender, FormClosingEventArgs e) { closeRequests++; e.Cancel = true; };
             message("control", "close");
             Check(closeRequests == 1 && !form.IsDisposed, "close uses normal cancellable form close");
+            // Closing to the tray must keep a maximized window hidden. Setting
+            // ShowInTaskbar on a maximized form recreates the handle, and WinForms shows
+            // the recreated window again: the tray close then left an empty shell whose
+            // WebView2 document was gone (black window) until a tray restore reloaded it.
+            type.GetField("desktopReady", Private).SetValue(form, true);
+            type.GetField("hiddenForAutomation", Private).SetValue(form, false);
+            form.ShowInTaskbar = true;
+            form.WindowState = FormWindowState.Maximized;
+            Pump();
+            invoke("HideToTray", new object[0]);
+            Pump();
+            Check(!form.Visible && !IsWindowVisible(form.Handle), "tray close keeps the window hidden");
+            invoke("RestoreFromTray", new object[0]);
+            Pump();
+            Check(form.Visible && IsWindowVisible(form.Handle), "tray restore shows the window again");
             ((NotifyIcon)type.GetField("trayIcon", Private).GetValue(form)).Dispose();
             Console.WriteLine("window-controls-composite-ok");
         }
