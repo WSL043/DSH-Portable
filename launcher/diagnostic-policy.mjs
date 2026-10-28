@@ -79,7 +79,11 @@ export function portablePublicError(error) {
     UPDATE_FAILED: 'The update could not be completed. The installation was left in a recoverable state; export a support report for details.',
     PORTABLE_COMMAND_FAILED: 'DSH-Portable could not complete the requested operation. Export a support report for details.',
   }
-  return { code, message: messages[code] }
+  const localReason = code === 'UPDATE_LOCAL_PACKAGE_INVALID'
+    && ['manifest-required', 'missing-manifest', 'missing-signature', 'missing-archive',
+      'scope-mismatch', 'signature-mismatch', 'archive-mismatch', 'invalid-package'].includes(error?.reason)
+    ? error.reason : undefined
+  return { code, message: messages[code], ...(localReason ? { reason: localReason } : {}) }
 }
 
 export async function recordPortableDiagnostic(logsDir, { operation = 'unknown', error } = {}) {

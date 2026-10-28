@@ -4,6 +4,16 @@
 
 从 0.9.5 起，Windows Native 在既有更新流程上提供本地文件入口，适用于 0.x Portable 和内核。1.x 官方 Electron 纯便携线不使用这套 Native 桥，其发布仍等待官方成品修复内置 MCP 依赖；本次更新不修改官方 ASAR，也不解除该阻断。详见 [1.x MCP 复核与处理边界](one-x-mcp-followup-2026-10-23.md)。
 
+## 自动准备文件（0.9.8）
+
+以下为 0.9.8 主线改进，正式交付状态以 Release 为准。
+
+1. 在联网的 Windows Native 打开 **设置 → 更新**，选择 Portable 或内核的目标版本，点击 **获取文件**，再选择保存目录。
+2. 程序自动取得并校验同版的原始 JSON、签名和指定 ZIP，保存到一个新子目录；不会安装更新、停止工作台或覆盖已有文件。下载可以取消。
+3. 将该子目录整体复制到离线电脑，点击对应区域的 **从文件更新**，选择其中的 JSON。无需自行匹配三个附件。
+
+旧版或其他宿主可按下方步骤手动准备；仍不要混用版本或修改清单。
+
 ## 准备
 
 在联网电脑上准备原始清单、原始签名和对应 ZIP，复制到同一个目录：
@@ -67,6 +77,8 @@
 离线更新指更新器不下载清单或 ZIP；模型服务、用户插件以及下次正常启动的自动检查仍遵循各自设置。它不构成整机断网保证。
 
 ## Download files (English)
+
+In 0.9.8 Windows Native update settings, select the target Portable/core version and choose **Get files**, then a destination folder. This main-branch improvement is subject to the published Release status. The application downloads and verifies the matching original JSON, signature and ZIP into a new subfolder without installing, stopping the workspace or overwriting existing files; the download can be cancelled. Copy that folder to the offline computer and select its JSON under **Update from file**. Older hosts can use the manual instructions below.
 
 Use a connected computer first. Open the release and expand **Assets**:
 

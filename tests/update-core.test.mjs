@@ -30,6 +30,7 @@ import {
   listInstalledVersions,
   listProductVersions,
   platformUpdateKey,
+  prepareOfflineUpdateFiles,
   readInstalledUpdateState,
   readLocalUpdate,
   rollbackPendingAppUpdate,
@@ -44,8 +45,10 @@ const projectRoot = path.resolve(import.meta.dirname, '..')
 const offlineKeys = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
 const offlineVerification = { verifySignature: (bytes, signature) => verifyUpdateSignature(bytes, signature,
   [offlineKeys.publicKey.export({ type: 'spki', format: 'pem' })]) }
-const localFailure = expected => error => error.code === 'UPDATE_LOCAL_PACKAGE_INVALID'
-  && (expected instanceof RegExp ? expected.test(error.cause?.message) : error.cause?.code === expected)
+const localFailure = (expected, reason) => error => error.code === 'UPDATE_LOCAL_PACKAGE_INVALID'
+  && (!reason || error.reason === reason)
+  && (expected instanceof RegExp ? expected.test(error.cause?.message)
+    : (error.cause?.code || error.cause?.cause?.code) === expected)
 async function writeOfflineManifest(filename, manifest) {
   const bytes = Buffer.from(`${JSON.stringify(manifest)}\n`)
   await writeFile(filename, bytes)
@@ -69,7 +72,12 @@ test('offline updates require the original signature and local attachment withou
   await writeOfflineManifest(input, manifest)
   await writeFile(archive, payload)
   assert.equal((await read()).status, 'available')
-  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input }), localFailure(/signature/i), 'a package signed by an unknown key is rejected by production defaults')
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input: archive }, offlineVerification),
+    localFailure(/manifest/i, 'manifest-required'), 'a bare ZIP still cannot bypass the signed manifest')
+  await rename(input, `${input}.saved`)
+  await assert.rejects(read(), localFailure('ENOENT', 'missing-manifest'))
+  await rename(`${input}.saved`, input)
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input }), localFailure(/signature/i, 'signature-mismatch'), 'a package signed by an unknown key is rejected by production defaults')
   await mkdir(path.join(fixture.root, 'launcher'), { recursive: true })
   for (const name of (await readdir(path.join(projectRoot, 'launcher'))).filter(name => name.endsWith('.mjs'))) {
     await copyFile(path.join(projectRoot, 'launcher', name), path.join(fixture.root, 'launcher', name))
@@ -78,23 +86,24 @@ test('offline updates require the original signature and local attachment withou
     'check-update', '--input', input, '--json', '--allow-http'], { windowsHide: true, timeout: 10000 }),
   error => {
     const response = JSON.parse(error.stderr.trim())
-    return response.code === 'UPDATE_LOCAL_PACKAGE_INVALID' && !response.message.includes(fixture.root)
+    return response.code === 'UPDATE_LOCAL_PACKAGE_INVALID' && response.reason === 'signature-mismatch'
+      && !JSON.stringify(response).includes(fixture.root) && response.stack === undefined && response.cause === undefined
       && /offline update is invalid or incomplete/i.test(response.message)
   })
   assert.match(await readFile(path.join(fixture.layout.logsDir, 'portable-errors.jsonl'), 'utf8'), /manifest signature is invalid/)
   await writeFile(input, `${JSON.stringify(manifest)}  \n`)
-  await assert.rejects(read(), localFailure(/signature/i), 'equivalent JSON with different bytes fails authentication')
+  await assert.rejects(read(), localFailure(/signature/i, 'signature-mismatch'), 'equivalent JSON with different bytes fails authentication')
   await writeOfflineManifest(input, manifest)
   await rename(`${input}.sig`, `${input}.saved`)
-  await assert.rejects(read(), localFailure('ENOENT'))
+  await assert.rejects(read(), localFailure('ENOENT', 'missing-signature'))
   await rename(`${input}.saved`, `${input}.sig`)
   await rename(archive, `${archive}.saved`)
-  await assert.rejects(read(), localFailure('ENOENT'), 'missing attachments do not fall back to component.urls')
+  await assert.rejects(read(), localFailure('ENOENT', 'missing-archive'), 'missing attachments do not fall back to component.urls')
   await rename(`${archive}.saved`, archive)
   await writeFile(archive, Buffer.alloc(payload.length, 1))
-  await assert.rejects(read(), localFailure(/digest/i))
+  await assert.rejects(read(), localFailure(/digest/i, 'archive-mismatch'))
   await writeFile(archive, payload)
-  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification), localFailure(/kind mismatch/i))
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification), localFailure(/kind mismatch/i, 'scope-mismatch'))
   for (const [patch, status] of [
     [{ platform: 'wrong-platform' }, 'wrong-platform'],
     [{ requiredShellFingerprint: 'f'.repeat(64) }, 'full-package-required'],
@@ -106,7 +115,7 @@ test('offline updates require the original signature and local attachment withou
     assert.equal((await readLocalUpdate({ layout: fixture.layout, input, scope: patch.updateKind || 'product' }, offlineVerification)).status, status)
   }
   await writeOfflineManifest(input, { ...manifest, component: { ...manifest.component, urls: ['https://example.invalid/%2e%2e%2foutside.zip'] } })
-  await assert.rejects(read(), localFailure(/archive name/i))
+  await assert.rejects(read(), localFailure(/archive name/i, 'invalid-package'))
   assert.equal(requests, 0)
   assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
   assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
@@ -124,7 +133,7 @@ test('offline complete manifests preflight the signed Windows ZIP and delegate o
   } } }
   await writeOfflineManifest(input, full)
   await writeFile(path.join(fixture.root, 'complete.zip'), payload)
-  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification), localFailure(/product scope/i))
+  await assert.rejects(readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification), localFailure(/product scope/i, 'scope-mismatch'))
   assert.equal((await readLocalUpdate({ layout: { ...fixture.layout, platform: 'linux' }, input }, offlineVerification)).status, 'wrong-platform')
   if (process.arch !== 'x64') return
   const read = () => readLocalUpdate({ layout: { ...fixture.layout, platform: 'win32' }, input }, offlineVerification)
@@ -146,6 +155,108 @@ test('offline complete manifests preflight the signed Windows ZIP and delegate o
     await assert.rejects(read(), localFailure(message))
   }
   assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+  await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
+})
+
+test('preparing offline files saves signed originals, follows full-package requirements and cancels without overwriting', async t => {
+  const fixture = await makeUpdateFixture()
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  const output = path.join(fixture.root, 'downloads')
+  await mkdir(output)
+  await writeFile(path.join(output, 'keep.txt'), 'user file')
+  const payload = Buffer.alloc(64 * 1024, 7)
+  const digest = createHash('sha256').update(payload).digest('hex')
+  const responses = new Map([['engine.zip', payload], ['complete.zip', payload]])
+  const publish = (name, manifest) => {
+    const bytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\r\n`)
+    const signature = Buffer.from(`${sign('sha256', bytes, { key: offlineKeys.privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64')}\n`)
+    responses.set(name, bytes)
+    responses.set(`${name}.sig`, signature)
+    return { bytes, signature }
+  }
+  const engine = updateManifest({ updateKind: 'engine', portableVersion: '0.1.0-rc.6-portable.5', platform: platformUpdateKey(),
+    component: { ...updateManifest().component, bytes: payload.length, sha256: digest, urls: ['https://example.invalid/engine.zip'] } })
+  const originalEngine = publish('engine.json', engine)
+  const requests = []
+  let slowZip = false
+  const server = http.createServer((request, response) => {
+    const name = new URL(request.url, 'http://localhost').pathname.slice(1)
+    requests.push(name)
+    const body = responses.get(name)
+    if (!body) { response.writeHead(404).end(); return }
+    response.writeHead(200, { 'content-length': body.length })
+    if (slowZip && name === 'engine.zip') response.write(body.subarray(0, 1024))
+    else response.end(body)
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  t.after(() => { server.closeAllConnections(); return new Promise(resolve => server.close(resolve)) })
+  const fetchImpl = (url, options) => fetch(`http://127.0.0.1:${server.address().port}/${new URL(url).pathname.split('/').at(-1)}`, options)
+  const prepare = (options = {}) => prepareOfflineUpdateFiles({ layout: fixture.layout, output, scope: 'engine',
+    manifestUrl: 'https://example.invalid/engine.json', fetchImpl, ...options }, offlineVerification)
+  const progress = []
+  const first = await prepare({ onProgress: event => progress.push(event) })
+  assert.equal(first.status, 'saved')
+  assert.equal(first.scope, 'engine')
+  assert.equal(first.version, engine.component.dshVersion)
+  assert.deepEqual(await readFile(first.files.manifest), originalEngine.bytes)
+  assert.deepEqual(await readFile(first.files.signature), originalEngine.signature)
+  assert.deepEqual(await readFile(first.files.archive), payload)
+  assert.equal(progress.at(-1).phase, 'complete')
+  assert.ok(progress.some(event => event.phase === 'downloading' && event.receivedBytes > 0))
+  await writeFile(path.join(first.directory, 'keep.txt'), 'saved folder file')
+  const second = await prepare()
+  assert.notEqual(second.directory, first.directory)
+  assert.equal(await readFile(path.join(first.directory, 'keep.txt'), 'utf8'), 'saved folder file')
+
+  if (process.arch === 'x64') {
+    publish('product.json', updateManifest({ portableVersion: '0.9.8', component: {
+      ...updateManifest().component, requiredNodeVersion: '99.0.0',
+    } }))
+    const full = publish('portable-manifest.json', { schemaVersion: 2, version: '0.9.8', releaseChannel: 'stable',
+      payloads: { windowsX64: { filename: 'complete.zip', url: 'https://example.invalid/complete.zip', bytes: payload.length, sha256: digest } } })
+    const saved = await prepare({ layout: { ...fixture.layout, platform: 'win32' }, scope: 'product', manifestUrl: 'https://example.invalid/product.json' })
+    assert.equal(saved.status, 'saved')
+    assert.equal(saved.version, '0.9.8')
+    assert.deepEqual(await readFile(saved.files.manifest), full.bytes)
+    assert.deepEqual(await readFile(saved.files.signature), full.signature)
+    assert.deepEqual(await readFile(saved.files.archive), payload)
+    assert.ok(requests.includes('portable-manifest.json'))
+    assert.ok(!requests.includes('dsh-app.zip'), 'a full-package requirement must not silently save the incompatible component')
+    const componentsFile = path.join(fixture.root, 'licenses', 'COMPONENTS.json')
+    const previous = await readFile(componentsFile)
+    const components = JSON.parse(previous)
+    try {
+      await writeFile(componentsFile, JSON.stringify({ ...components, portableVersion: '0.9.8', shellFingerprint: 'f'.repeat(64) }))
+      publish('product.json', updateManifest({ portableVersion: '0.9.8', requiredShellFingerprint: 'f'.repeat(64) }))
+      const current = await prepare({ layout: { ...fixture.layout, platform: 'win32' }, scope: 'product', manifestUrl: 'https://example.invalid/product.json' })
+      assert.equal(path.basename(current.files.manifest), 'portable-manifest.json', 'a current connected machine still saves the full package')
+      assert.deepEqual(await readFile(current.files.manifest), full.bytes)
+      assert.deepEqual(await readFile(current.files.signature), full.signature)
+      await writeFile(componentsFile, JSON.stringify({ ...components, portableVersion: '0.9.7', shellFingerprint: 'a'.repeat(64) }))
+      const offline = await readLocalUpdate({ layout: { ...fixture.layout, platform: 'win32' }, input: current.files.manifest }, offlineVerification)
+      assert.equal(offline.existingFullUpdater, true, 'the older offline machine is not bound to the connected machine fingerprint')
+      assert.equal(offline.latest, '0.9.8')
+      assert.equal(offline.localArchive, current.files.archive)
+    } finally { await writeFile(componentsFile, previous) }
+  }
+  const before = (await readdir(output)).sort()
+  responses.set('engine.json.sig', Buffer.from('invalid'))
+  await assert.rejects(prepare(), { code: 'UPDATE_LOCAL_PACKAGE_INVALID', reason: 'signature-mismatch' })
+  assert.deepEqual((await readdir(output)).sort(), before)
+  responses.set('engine.json.sig', originalEngine.signature)
+  responses.set('engine.zip', Buffer.alloc(payload.length, 9))
+  await assert.rejects(prepare(), /digest mismatch/)
+  assert.deepEqual((await readdir(output)).sort(), before)
+  responses.set('engine.zip', payload)
+  const controller = new AbortController()
+  slowZip = true
+  await assert.rejects(prepare({ signal: controller.signal, onProgress: event => {
+    if (event.phase === 'downloading' && event.receivedBytes > 0) controller.abort()
+  } }), { name: 'AbortError' })
+  assert.deepEqual((await readdir(output)).sort(), before, 'cancelled downloads leave no incomplete operation folder')
+  assert.equal(await readFile(path.join(output, 'keep.txt'), 'utf8'), 'user file')
+  assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+  assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
   await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
 })
 

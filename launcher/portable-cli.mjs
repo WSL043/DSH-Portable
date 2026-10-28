@@ -10,6 +10,7 @@ import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createInterface } from 'node:readline'
 
 import {
   PORT_RANGE,
@@ -42,6 +43,7 @@ import {
   installAvailableAppUpdate,
   listInstalledVersions,
   listProductVersions,
+  prepareOfflineUpdateFiles,
   readInstalledUpdateState,
   readLocalUpdate,
   reconcilePreferredCore,
@@ -867,6 +869,29 @@ async function listUpdates(options) {
   })
 }
 
+async function prepareUpdateFiles(options) {
+  if (!options.output || options.input) throw new Error('prepare-update-files requires --output and does not accept --input.')
+  const controller = new AbortController()
+  const input = createInterface({ input: process.stdin, terminal: false })
+  const cancel = line => { if (line === 'cancel') controller.abort() }
+  input.on('line', cancel)
+  try {
+    return await prepareOfflineUpdateFiles({
+      layout, output: options.output, scope: options.updateScope, manifestUrl: options.updateManifest || undefined,
+      allowHttp: options.allowHttp, signal: controller.signal,
+      onProgress: options.progressJson ? event => process.stdout.write(`${JSON.stringify({ type: 'update-progress', ...event })}\n`) : () => {},
+    })
+  } catch (error) {
+    if (controller.signal.aborted) return { status: 'cancelled', scope: options.updateScope,
+      ...(error.offlineUpdateCleanupPending ? { cleanupPending: true, directory: error.offlineUpdateDirectory } : {}) }
+    throw error
+  } finally {
+    input.off('line', cancel)
+    input.close()
+    process.stdin.pause()
+  }
+}
+
 async function update(options) {
   requireRuntime()
   await ensurePortableDirectories(layout)
@@ -1010,6 +1035,7 @@ async function main() {
   // Network reads and feed-cache choices must not block native start or close.
   if (options.command === 'check-update') { print(await checkUpdate(options), options.json); return }
   if (options.command === 'list-updates') { print(await listUpdates(options), options.json); return }
+  if (options.command === 'prepare-update-files') { print(await prepareUpdateFiles(options), options.json); return }
   if (options.command === 'defer-update') { print(await deferUpdate(layout, { scope: options.updateScope }), options.json); return }
   if (options.command === 'ignore-update') { print(await ignoreUpdate(layout, '', { scope: options.updateScope }), options.json); return }
   if (options.command === 'plugin-cache-clean') {

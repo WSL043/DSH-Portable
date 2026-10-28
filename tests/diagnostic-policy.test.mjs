@@ -38,6 +38,25 @@ test('rolled-back update failures have a stable machine-readable code', () => {
   assert.match(portablePublicError(importFailure).message, /data package was not applied.*previous data was restored/i)
 })
 
+test('offline errors expose only an allowlisted reason without raw paths or exceptions', () => {
+  const code = 'UPDATE_LOCAL_PACKAGE_INVALID'
+  const makeError = reason => Object.assign(new Error('C:/private/update.json token=private-token', {
+    cause: new Error('private stack and cause'),
+  }), { code, reason })
+  const baseline = portablePublicError(makeError(undefined))
+  for (const reason of ['manifest-required', 'missing-manifest', 'missing-signature', 'missing-archive',
+    'scope-mismatch', 'signature-mismatch', 'archive-mismatch', 'invalid-package']) {
+    assert.deepEqual(portablePublicError(makeError(reason)), { ...baseline, reason })
+  }
+  for (const reason of ['C:/private/update.json', 'token=private-token', { path: 'private' }]) {
+    assert.deepEqual(portablePublicError(makeError(reason)), baseline)
+  }
+  const unrelated = makeError('missing-signature')
+  unrelated.code = 'DSH_PROFILE_PREFLIGHT_FAILED'
+  assert.equal(portablePublicError(unrelated).reason, undefined)
+  assert.doesNotMatch(JSON.stringify(baseline), /private|stack|cause/)
+})
+
 test('full diagnostics are stored redacted and bounded outside the user-facing error', async (t) => {
   const logsDir = await mkdtemp(path.join(os.tmpdir(), 'dsh-diagnostic-policy-'))
   t.after(() => rm(logsDir, { recursive: true, force: true }))

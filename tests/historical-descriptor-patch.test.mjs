@@ -47,6 +47,8 @@ test('other core versions are untouched; reviewed version with wrong bytes fails
     await assert.rejects(prepareHistoricalDescriptor(root), /Unreviewed/)
     await writeFile(path.join(core, 'package.json'), JSON.stringify({ version: '0.2.0-rc.1' }))
     await assert.rejects(prepareHistoricalDescriptor(root), /Unreviewed/)
+    await writeFile(path.join(core, 'package.json'), JSON.stringify({ version: '0.2.1-rc.4' }))
+    await assert.rejects(prepareHistoricalDescriptor(root), /Unreviewed/)
     assert.equal(await readFile(path.join(migration, 'index.js'), 'utf8'), 'unknown bundle')
     await assert.rejects(readFile(path.join(root, 'portable-session-compatibility.json')), { code: 'ENOENT' })
   } finally { await rm(root, { recursive: true, force: true }) }
@@ -59,6 +61,18 @@ test('0.2.0-rc.1 has a separate exact digest-bound identity', () => {
   assert.equal(identity.patchedSha256, '18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6')
   // Never-recorded versions fail closed; the intake automation appends newly reviewed versions to the allowlist.
   assert.equal(descriptorV2PatchIdentityFor('0.2.0-rc.99'), null)
+})
+
+test('RC4 uses the reviewed legacy migration identity and keeps unknown versions closed', () => {
+  assert.deepEqual(descriptorV2PatchIdentityFor('0.2.1-rc.4'), { ...EXPECTED_IDENTITY, dshVersion: '0.2.1-rc.4' })
+  const reviewed = descriptorV2ReviewedInputsFor('0.2.1-rc.4')
+  assert.equal(reviewed.identity.sourceSha256, EXPECTED_IDENTITY.sourceSha256)
+  assert.equal(reviewed.identity.patchedSha256, EXPECTED_IDENTITY.patchedSha256)
+  assert.deepEqual(reviewed.validationBlobs, {
+    'packages/session/session-format-v0-to-v1/src/validation.ts': '762ed963f73c7159f5309176cc69b11db25ac634',
+    'packages/session/session-format-v0-to-v1/src/payload-validation.ts': '5b19f7cc6668d8e9bfc1c75806d3898132eb94ee',
+  })
+  assert.equal(descriptorV2PatchIdentityFor('0.2.1-rc.99'), null)
 })
 
 test('historical descriptor versions come from a unique exact-string allowlist', () => {

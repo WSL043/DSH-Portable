@@ -72,7 +72,7 @@ namespace DshPortable
                     MessageBox.Show(this,
                         String.IsNullOrEmpty(input)
                             ? L("现在无法检查更新，请稍后再试。", "Updates could not be checked right now. Try again later.")
-                            : L("离线更新包未通过验证。请确认清单、签名和对应 ZIP 完整并放在同一目录。", "The offline update failed verification. Keep the manifest, signature and matching ZIP together in one folder."),
+                            : OfflineUpdateFailureMessage(check.Item2),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
@@ -96,6 +96,13 @@ namespace DshPortable
                                 ? (String.IsNullOrEmpty(engineCurrent) ? "" : "\r\n\r\nDeepSeek Harness " + engineCurrent)
                                 : (String.IsNullOrEmpty(current) ? "" : "\r\n\r\nDSH-Portable " + current)),
                         L("检查更新", "Check for updates"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                if (updateStatus == "wrong-platform" && !String.IsNullOrEmpty(input))
+                {
+                    MessageBox.Show(this, L("所选离线包不适用于当前系统或架构，请下载对应平台的文件。",
+                        "This offline package is for another system or architecture. Download the matching platform files."),
+                        L("离线更新", "Offline update"), MessageBoxButtons.OK, MessageBoxIcon.Information);
                     return;
                 }
                 if (updateStatus == "core-incompatible")
@@ -233,17 +240,159 @@ namespace DshPortable
             }
         }
 
+        private string OfflineUpdateFailureMessage(string output)
+        {
+            if (JsonString(output, "code") == "UPDATE_LOCAL_PACKAGE_INVALID")
+            {
+                switch (JsonString(output, "reason"))
+                {
+                    case "manifest-required": return L("请选择原始更新清单（.json），不能直接选择 ZIP。", "Select the original update manifest (.json), not the ZIP.");
+                    case "missing-manifest": return L("找不到更新清单，请重新选择原始 JSON 文件。", "The update manifest is missing. Select the original JSON file again.");
+                    case "missing-signature": return L("缺少所选 JSON 的 .json.sig 签名文件，请将原始签名放在同一目录。", "The matching .json.sig signature is missing. Keep the original signature beside the JSON.");
+                    case "missing-archive": return L("缺少清单指定的 ZIP，请将对应 ZIP 按原文件名放在同一目录。", "The ZIP named by the manifest is missing. Keep it in the same folder with its original filename.");
+                    case "scope-mismatch": return L("所选文件与入口不匹配。Portable 包请从「从文件更新 Portable」导入，内核包请从「从文件更新内核」导入。", "The file does not match this update section. Use Update Portable from file for Portable packages, or Update core from file for cores.");
+                    case "signature-mismatch": return L("清单签名未通过验证，请重新下载配套的原始 JSON 和 .sig，勿编辑文件。", "The manifest signature is invalid. Download the matching original JSON and .sig again without editing them.");
+                    case "archive-mismatch": return L("ZIP 大小或校验值不匹配，请重新下载清单指定的 ZIP，勿混用版本。", "The ZIP size or checksum does not match. Download the ZIP named by this manifest without mixing versions.");
+                }
+            }
+            return L("离线更新包未通过验证。请选择原始 JSON，并将同名 .json.sig 和清单指定的 ZIP 放在同一目录。",
+                "The offline update failed verification. Select the original JSON and keep its matching .json.sig and named ZIP in the same folder.");
+        }
+
         private async Task SelectOfflineUpdateAsync(string scope)
         {
             if (updateCheckRunning || updateInteractionRunning) return;
             using (OpenFileDialog dialog = new OpenFileDialog {
                 Filter = L("签名更新清单 (*.json)|*.json", "Signed update manifest (*.json)|*.json"),
-                Title = L("选择离线更新清单", "Select offline update manifest"),
+                Title = String.Equals(scope, "engine", StringComparison.Ordinal)
+                    ? L("选择内核更新清单（JSON）", "Select core update manifest (JSON)")
+                    : L("选择 Portable 更新清单（JSON）", "Select Portable update manifest (JSON)"),
                 CheckFileExists = true, Multiselect = false, RestoreDirectory = true
             })
             {
                 if (dialog.ShowDialog(this) == DialogResult.OK)
                     await CheckForDesktopUpdateAsync(true, scope, String.Empty, Path.GetFullPath(dialog.FileName));
+            }
+        }
+
+        private async Task PrepareOfflineUpdateFilesAsync(string scope, string manifestUrl)
+        {
+            if (updateCheckRunning || updateInteractionRunning) return;
+            updateInteractionRunning = true;
+            RebuildTrayMenu();
+            string title = L("获取更新文件", "Get update files");
+            try
+            {
+                string parent;
+                using (FolderBrowserDialog picker = new FolderBrowserDialog {
+                    Description = L("选择保存目录；会新建文件夹，下载并验证配套的 JSON、签名和 ZIP。", "Choose a folder. The matching JSON, signature and ZIP will be downloaded and verified in a new subfolder."),
+                    ShowNewFolderButton = true
+                })
+                {
+                    if (picker.ShowDialog(this) != DialogResult.OK) return;
+                    parent = Path.GetFullPath(picker.SelectedPath);
+                }
+                List<string> arguments = new List<string> { "prepare-update-files", "--scope", scope, "--output", parent, "--json", "--progress-json" };
+                if (!String.IsNullOrEmpty(manifestUrl)) { arguments.Add("--update-manifest"); arguments.Add(manifestUrl); }
+                Tuple<int, string> result;
+                using (CancellationTokenSource cancellation = new CancellationTokenSource())
+                using (Form progress = new Form {
+                    Text = title, ClientSize = new Size(460, 180), FormBorderStyle = FormBorderStyle.FixedDialog,
+                    StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
+                    ShowInTaskbar = false, AutoScaleMode = AutoScaleMode.Font, Font = Font
+                })
+                {
+                    Label stage = new Label { Location = new Point(20, 20), Size = new Size(420, 24), Text = L("正在准备下载…", "Preparing download…") };
+                    ProgressBar bar = new ProgressBar { Location = new Point(20, 54), Size = new Size(420, 18), Style = ProgressBarStyle.Marquee };
+                    Label detail = new Label { Location = new Point(20, 84), Size = new Size(420, 36), Text = L("只获取文件，不安装或切换版本。", "Downloads files without installing or switching versions.") };
+                    Button cancel = new Button { Text = L("取消", "Cancel"), Location = new Point(340, 132), Size = new Size(100, 30) };
+                    progress.Controls.AddRange(new Control[] { stage, bar, detail, cancel });
+                    progress.CancelButton = cancel;
+                    bool finished = false;
+                    Action requestCancellation = delegate {
+                        if (finished || cancellation.IsCancellationRequested) return;
+                        cancel.Enabled = false;
+                        stage.Text = L("正在取消并清理下载…", "Cancelling and cleaning up…");
+                        bar.Style = ProgressBarStyle.Marquee;
+                        detail.Text = L("请稍等，当前安装的版本不会更改。", "Please wait. The installed version will not change.");
+                        cancellation.Cancel();
+                    };
+                    cancel.Click += delegate { requestCancellation(); };
+                    progress.FormClosing += delegate(object sender, FormClosingEventArgs args) {
+                        if (!finished) { args.Cancel = true; requestCancellation(); }
+                    };
+                    Action<string> onProgress = delegate(string jsonLine) {
+                        if (progress.IsDisposed || !progress.IsHandleCreated) return;
+                        try { progress.BeginInvoke((MethodInvoker)delegate {
+                            if (finished || cancellation.IsCancellationRequested) return;
+                            string phase = JsonString(jsonLine, "phase");
+                            if (phase == "downloading")
+                            {
+                                long received = JsonLong(jsonLine, "receivedBytes");
+                                long total = JsonLong(jsonLine, "totalBytes");
+                                int percent = (int)Math.Max(0, Math.Min(100, JsonLong(jsonLine, "percent")));
+                                stage.Text = L("正在下载更新文件…", "Downloading update files…");
+                                bar.Style = total > 0 ? ProgressBarStyle.Continuous : ProgressBarStyle.Marquee;
+                                bar.Value = percent;
+                                detail.Text = total > 0 ? percent + "%  ·  " + FormatBytes(received) + " / " + FormatBytes(total) : FormatBytes(received);
+                            }
+                            else if (phase == "verifying")
+                            {
+                                stage.Text = L("正在验证更新文件…", "Verifying update files…");
+                                bar.Style = ProgressBarStyle.Marquee;
+                                detail.Text = L("正在检查签名和 ZIP 校验值。", "Checking the signature and ZIP checksum.");
+                            }
+                            else if (phase == "complete")
+                            {
+                                stage.Text = L("文件已下载并验证。", "Files downloaded and verified.");
+                                bar.Style = ProgressBarStyle.Continuous;
+                                bar.Value = 100;
+                                detail.Text = "100%";
+                            }
+                        }); }
+                        catch (InvalidOperationException) { }
+                    };
+                    TaskCompletionSource<Tuple<int, string>> completion = new TaskCompletionSource<Tuple<int, string>>();
+                    progress.Shown += async delegate {
+                        try { completion.TrySetResult(await Task.Run(() => InvokePortableCli(arguments.ToArray(), onProgress, cancellation.Token))); }
+                        catch (OperationCanceledException) { completion.TrySetResult(Tuple.Create(0, "{\"status\":\"cancelled\"}")); }
+                        catch (Exception error) { completion.TrySetException(error); }
+                        finally { finished = true; if (!progress.IsDisposed) progress.Close(); }
+                    };
+                    progress.ShowDialog(this);
+                    result = await completion.Task;
+                }
+                if (IsDisposed) return;
+                string status = JsonString(result.Item2, "status");
+                string directory = JsonString(result.Item2, "directory");
+                if (status == "cancelled")
+                {
+                    if (String.Equals(JsonString(result.Item2, "cleanupPending"), "true", StringComparison.OrdinalIgnoreCase))
+                        MessageBox.Show(this, L("已取消，部分下载文件暂时无法清理。请稍后删除此文件夹：", "Cancelled. Some downloaded files could not be cleaned up. Remove this folder later:")
+                            + "\r\n\r\n" + directory, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+                string version = JsonString(result.Item2, "version");
+                if (result.Item1 == 0 && status == "saved" && !String.IsNullOrEmpty(directory) && !String.IsNullOrEmpty(version))
+                    MessageBox.Show(this, version + "\r\n\r\n" + directory + "\r\n\r\n"
+                        + L("JSON、签名和 ZIP 已配齐并验证。之后从「从文件更新」选择其中的原始 JSON。", "The JSON, signature and ZIP are ready and verified. Later, use Update from file and select the original JSON in this folder."),
+                        title, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else
+                    MessageBox.Show(this, result.Item1 == 0
+                        ? L("未保存更新文件。当前通道或所选版本没有适用于此环境的更新包。", "No update files were saved. This channel or selected version has no update package applicable to this environment.")
+                        : L("下载或验证未完成。请检查网络或保存目录，稍后再试；未完成的文件不能用于更新。", "The download or verification did not finish. Check the network or save folder and try again; incomplete files cannot be used for updating."),
+                        title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            catch (Exception)
+            {
+                if (!IsDisposed) MessageBox.Show(this,
+                    L("未能获取更新文件，请检查网络或保存目录，稍后再试。当前版本不受影响。", "Update files could not be prepared. Check the network or save folder and try again. The installed version is unaffected."),
+                    title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+            finally
+            {
+                updateInteractionRunning = false;
+                if (!IsDisposed) RebuildTrayMenu();
             }
         }
 
@@ -291,7 +440,8 @@ namespace DshPortable
                     string code = JsonString(updated.Item2, "code");
                     string safeDetail = RedactSensitiveText(updated.Item2);
                     WriteLauncherLog("portable-cli-error", safeDetail.Length > 4096 ? safeDetail.Substring(0, 4096) : safeDetail);
-                    throw new InvalidOperationException(FriendlyPortableUpdateError(code));
+                    throw new InvalidOperationException(code == "UPDATE_LOCAL_PACKAGE_INVALID"
+                        ? OfflineUpdateFailureMessage(updated.Item2) : FriendlyPortableUpdateError(code));
                 }
                 string url = JsonString(updated.Item2, "url");
                 if (!IsTrustedLoopbackUrl(url))

@@ -787,7 +787,7 @@ export function parseCli(argv) {
       command = 'plugin-storage-migrate'
       commandSeen = true
     }
-    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recovery-plugins', 'recovery-pause-plugin', 'recovery-restore-plugin', 'recover-update', 'recover-data', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'plugin-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'update'].includes(arg)) {
+    else if (['start', 'stop', 'status', 'open', 'doctor', 'repair', 'recovery-plugins', 'recovery-pause-plugin', 'recovery-restore-plugin', 'recover-update', 'recover-data', 'support-report', 'backup-data', 'inspect-data', 'restore-data', 'runtime-cache-status', 'runtime-cache-clean', 'plugin-cache-clean', 'check-update', 'list-updates', 'defer-update', 'ignore-update', 'prepare-update-files', 'update'].includes(arg)) {
       if (commandSeen) throw new Error('Specify no more than one command.')
       command = arg
       commandSeen = true
