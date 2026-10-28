@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
+import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { promisify } from 'node:util'
 
 import { platformUpdateKey } from '../launcher/update-core.mjs'
 
@@ -256,4 +261,111 @@ test('Linux native loading surface follows Chinese or English without an externa
   assert.match(loading, /class="spinner"/)
   assert.doesNotMatch(loading, /class="bar"/)
   assert.doesNotMatch(loading, /https?:\/\//)
+})
+
+
+test('macOS and Linux reuse the same verified Node archive downloader', async () => {
+  for (const filename of ['scripts/build-macos.sh', 'scripts/build-linux.sh']) {
+    assert.match(await read(filename), /bash "\$PROJECT_ROOT\/scripts\/download-pinned-node\.sh" "\$ARCHIVE" "\$NODE_SHA256" "\$NODE_BASE_URL\/\$NODE_ARCHIVE"/)
+  }
+})
+
+test('pinned Node downloads reuse verified caches and replace files only after verification', { skip: process.platform === 'win32' }, async t => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-node-download-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const bin = path.join(fixture, 'bin')
+  const source = path.join(fixture, 'source')
+  const log = path.join(fixture, 'curl.log')
+  await mkdir(bin)
+  await writeFile(source, 'verified runtime fixture')
+  const expected = createHash('sha256').update(await readFile(source)).digest('hex')
+  const curl = path.join(bin, 'curl')
+  await writeFile(curl, [
+    '#!/bin/bash', 'set -euo pipefail',
+    'while [[ "$#" -gt 0 ]]; do if [[ "$1" == --output ]]; then output="$2"; shift; fi; shift; done',
+    'echo called >> "$DSH_TEST_CURL_LOG"',
+    'case "$DSH_TEST_CURL_MODE" in',
+    '  fail) echo truncated > "$output"; exit 28 ;;',
+    '  bad) echo wrong > "$output" ;;',
+    '  good) cp "$DSH_TEST_CURL_SOURCE" "$output" ;;',
+    'esac', '',
+  ].join('\n'))
+  await chmod(curl, 0o755)
+  const execFileAsync = promisify(execFile)
+  async function download(archive, mode) {
+    await writeFile(log, '')
+    return execFileAsync('/bin/bash', [path.join(root, 'scripts/download-pinned-node.sh'), archive, expected,
+      'https://nodejs.org/dist/fixture.tgz'], {
+      env: { ...process.env, PATH: bin + path.delimiter + process.env.PATH,
+        DSH_TEST_CURL_MODE: mode, DSH_TEST_CURL_SOURCE: source, DSH_TEST_CURL_LOG: log },
+      windowsHide: true, timeout: 10000,
+    })
+  }
+  const archive = path.join(fixture, 'node.tgz')
+  await writeFile(archive, await readFile(source))
+  await download(archive, 'fail')
+  assert.equal(await readFile(log, 'utf8'), '', 'a verified cache must not call curl')
+  await writeFile(archive, 'old partial cache')
+  await assert.rejects(download(archive, 'bad'), error => error.code === 1)
+  assert.equal(await readFile(archive, 'utf8'), 'old partial cache', 'wrong SHA must preserve the old archive')
+  const absent = path.join(fixture, 'absent.tgz')
+  await assert.rejects(download(absent, 'fail'), error => error.code === 28)
+  await assert.rejects(lstat(absent), { code: 'ENOENT' })
+  await download(archive, 'good')
+  assert.equal(await readFile(archive, 'utf8'), await readFile(source, 'utf8'), 'a verified download replaces the partial cache')
+  assert.equal(await readFile(log, 'utf8'), 'called\n')
+  for (const kind of ['symlink', 'directory', 'fifo']) {
+    const target = path.join(fixture, kind)
+    if (kind === 'symlink') await symlink(source, target)
+    else if (kind === 'directory') await mkdir(target)
+    else await execFileAsync('mkfifo', [target], { windowsHide: true, timeout: 10000 })
+    await assert.rejects(download(target, 'good'), error => error.code === 1)
+    assert.equal(await readFile(log, 'utf8'), '', kind + ' must be refused before curl')
+    assert.equal((await lstat(target))[kind === 'symlink' ? 'isSymbolicLink' : kind === 'directory' ? 'isDirectory' : 'isFIFO'](), true)
+  }
+  assert.deepEqual((await readdir(fixture)).filter(name => name.includes('.part.')), [], 'private partial files must be cleaned')
+})
+
+
+test('pinned Node downloads resume interrupted HTTP transfers and restart when Range is unsupported', { skip: process.platform === 'win32' }, async t => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-node-resume-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const body = Buffer.from('bounded resumable runtime fixture\n'.repeat(2048))
+  const half = body.length / 2
+  const digest = createHash('sha256').update(body).digest('hex')
+  const execFileAsync = promisify(execFile)
+  for (const supportsRange of [true, false]) {
+    await t.test(supportsRange ? 'resumes with HTTP 206' : 'restarts after curl 33', async t => {
+      const requests = []
+      const server = createServer((request, response) => {
+        const range = request.headers.range ?? null
+        requests.push(range)
+        if (requests.length === 1) {
+          // Advertise the complete body, then close early: real curl exits 18.
+          response.writeHead(200, { 'content-length': body.length, connection: 'close' }).end(body.subarray(0, half))
+        } else if (range && supportsRange) {
+          const start = Number(/^bytes=(\d+)-$/.exec(range)?.[1])
+          response.writeHead(206, { 'content-length': body.length - start,
+            'content-range': 'bytes ' + start + '-' + (body.length - 1) + '/' + body.length,
+            connection: 'close' }).end(body.subarray(start))
+        } else {
+          response.writeHead(200, { 'content-length': body.length, connection: 'close' }).end(body)
+        }
+      })
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+      t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections() }))
+      const archive = path.join(fixture, supportsRange ? 'resumed.tgz' : 'restarted.tgz')
+      await writeFile(archive, 'old invalid cache must never seed a resume')
+      const { stderr } = await execFileAsync('/bin/bash', [path.join(root, 'scripts/download-pinned-node.sh'),
+        archive, digest, 'http://127.0.0.1:' + server.address().port + '/node.tgz'], {
+        env: { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' },
+        windowsHide: true, timeout: 20000,
+      })
+      assert.match(stderr, /curl 18/)
+      if (!supportsRange) assert.match(stderr, /curl 33/)
+      assert.deepEqual(requests, supportsRange ? [null, 'bytes=' + half + '-'] : [null, 'bytes=' + half + '-', null])
+      assert.deepEqual(await readFile(archive), body)
+      assert.deepEqual((await readdir(fixture)).filter(name => name.includes('.part.')), [])
+    })
+  }
 })

@@ -63,11 +63,7 @@ trap cleanup EXIT
 mkdir -p "$OUTPUT_DIR" "$DOWNLOAD_DIR" "$STAGE"/{app,launcher,runtime/node,licenses,default-plugins,data,workspace,docs}
 cp -R "$PROJECT_ROOT/desktop-bridge" "$STAGE/desktop-bridge"
 
-if [[ ! -f "$ARCHIVE" ]]; then
-  echo "Downloading pinned Node.js runtime: $NODE_BASE_URL/$NODE_ARCHIVE"
-  curl --fail --location --retry 3 --output "$ARCHIVE" "$NODE_BASE_URL/$NODE_ARCHIVE"
-fi
-printf '%s  %s\n' "$NODE_SHA256" "$ARCHIVE" | sha256sum --check
+bash "$PROJECT_ROOT/scripts/download-pinned-node.sh" "$ARCHIVE" "$NODE_SHA256" "$NODE_BASE_URL/$NODE_ARCHIVE"
 
 if [[ ! -x "$NODE_FOLDER/bin/node" ]]; then
   if [[ -e "$NODE_CACHE" ]]; then

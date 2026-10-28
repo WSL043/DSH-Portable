@@ -24,6 +24,8 @@
 npm test
 ```
 
+市场客户端改动须在 `app/vendor/dsh-portable-plugin-market` 运行已有的 `pnpm run build:client`，并提交生成的 `client/client.js`。同目录下的 `node scripts/normalize-client-banner.mjs --check` 只读核对产物与源码/构建配置；CI 会拒绝漏重建的改动。
+
 平台或打包改动还必须通过 GitHub Actions 中对应的成品冒烟测试；源码能够构建不等于可以发布。PR 事件只运行轻量契约检查，平台成品验收须对同一分支手动触发完整 Build（当前为 39 项），不能把 PR 的少量绿色检查当成全矩阵通过。窗口验收要比较还原前后的尺寸，并确认普通缩放、移动仍有效；最终成品验收完成后再准备内核更新窗口。
 
 桌面改动以 0.6.4 的用户验收体验为基线：启动阶段保持连续加载与亮暗主题，原生导航和菜单一致，快捷键可用。默认插件也必须验证实际操作及受支持内核，不能只检查安装成功。Issue 关闭说明应对应具体修复和验证范围；包内组件版本、下载资产与 README 截图必须反映交付成品。保留失败日志和验收证据，不用重复重试代替定位。
@@ -55,6 +57,8 @@ Thanks for helping improve DSH-Portable. Small, focused changes are easier to re
 Keep Portable-specific behavior in the launcher, desktop bridge, packaging, or update boundary. Preserve sessions, credentials, plugins, and workspaces across updates and repairs. Local upgrades use a complete qualified Portable package or update transaction; an EXE-only replacement is a hotfix preview. Verify the version page, `licenses/COMPONENTS.json`, runtime capsule and actual Node version afterward; never relabel a mixed package as an upgraded release. Never commit credentials, private conversations, generated release artifacts, or local build caches.
 
 The official core declares the Node engine range `^22.19.0 || >=24.0.0`; existing compatibility tests retain Node 24.19.0 scenarios. Bundled runtimes and Node 24 CI jobs use the Node 24.22.1 security release pinned in `upstream.lock.json`. Compatibility does not imply a recommended distribution version; npm dependency overrides do not update the Undici built into Node.
+
+For market-client changes, run the existing `pnpm run build:client` in `app/vendor/dsh-portable-plugin-market` and commit `client/client.js`. In that directory, `node scripts/normalize-client-banner.mjs --check` verifies the source/build-input stamp without writing; CI rejects stale client output.
 
 Run `npm test` before opening a pull request. Platform or packaging changes must also pass their finished-product smoke tests in GitHub Actions; a successful source build alone is not sufficient release evidence. PR events run lightweight contracts only: dispatch the complete Build on the same branch for platform qualification (currently 39 jobs). A few green PR checks do not represent that matrix. Window acceptance compares restored dimensions and preserves ordinary resizing and movement. Prepare the core-update window after final-product acceptance.
 
