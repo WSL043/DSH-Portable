@@ -189,7 +189,8 @@ test('Windows exit does not complete until the owned WebView2 runtime releases t
   assert.doesNotMatch(webViewDataRoot, /Path\.Combine\(root, "data", "webview2"\)/)
   assert.match(host, /private string ResolvePortableLocationKey\(\)/)
   assert.match(host, /private string ResolveLauncherLogDirectory\(\)/)
-  assert.match(host, /Path\.Combine\(stateRoot, "data", "logs"\)/)
+  assert.match(host, /Path\.GetFullPath\(stateRoot\)/)
+  assert.match(host, /Path\.Combine\(baseDirectory, "data", "logs"\)/)
 
   const releaseFailure = host.slice(host.indexOf('await WaitForWebViewExitAsync'), host.indexOf('allowClose = true;', host.indexOf('await WaitForWebViewExitAsync')))
   assert.doesNotMatch(releaseFailure, /shutdownRunning\s*=\s*false/)

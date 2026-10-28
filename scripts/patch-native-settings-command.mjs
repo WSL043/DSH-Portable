@@ -174,26 +174,44 @@ function patchPluginManagerToolbar(source) {
   return source.replace(toolbar, '$1renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec }), ')
 }
 
-// New official managers expose public extension slots and own version updates.
-// Verify declarations, render consumers and operations together before retiring the old overlay.
+// Slot presence predates native version updates: RC3 has the public slots but still needs the 0.x overlay.
+const PUBLIC_PLUGIN_DECLARATIONS = [
+  /"plugins\.add\.actions": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
+  /"plugins\.tab": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
+]
+const PUBLIC_PLUGIN_CONSUMERS = [
+  'renderSlot("plugins.add.actions", { onDismiss })',
+  'renderSlot("plugins.tab", {',
+  'this.ctx.remote.pluginManager.listVersions(packageName, {})',
+  'this.ctx.remote.pluginManager.updateBundle(update.packageName, update.to, {',
+]
+const LEGACY_PLUGIN_MARKERS = ['dsh-portable-plugin-manager-actions-v2', 'dsh-portable-plugin-refresh-v1', 'dsh-portable-plugin-card-updates-v1']
+const once = (source, anchor) => source.split(anchor).length === 2
+function hasPublicPluginSlots(source) {
+  return PUBLIC_PLUGIN_DECLARATIONS.every(pattern => [...source.matchAll(pattern)].length === 1)
+    && PUBLIC_PLUGIN_CONSUMERS.slice(0, 2).every(anchor => once(source, anchor))
+}
 export function hasOfficialPluginManagement(source) {
-  const declarations = [
-    /"plugins\.add\.actions": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
-    /"plugins\.tab": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
-  ]
-  const consumers = [
-    'renderSlot("plugins.add.actions", { onDismiss })',
-    'renderSlot("plugins.tab", {',
-    'this.ctx.remote.pluginManager.listVersions(packageName, {})',
-    'this.ctx.remote.pluginManager.updateBundle(update.packageName, update.to, {',
-  ]
-  return declarations.every(pattern => [...source.matchAll(pattern)].length === 1)
-    && consumers.every(anchor => source.split(anchor).length === 2)
+  return hasPublicPluginSlots(source) && PUBLIC_PLUGIN_CONSUMERS.slice(2).every(anchor => once(source, anchor))
+}
+function hasReviewedLegacyPluginManager(source) {
+  if (!hasPublicPluginSlots(source) || /\b(?:listVersions|updateBundle)\b/u.test(source)) return false
+  const card = 'function PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnabled })'
+  const patchedCard = card.replace('onSetEnabled })', 'onSetEnabled, renderSlot })')
+  if (once(source, card) && !source.includes(patchedCard) && LEGACY_PLUGIN_MARKERS.every(marker => !source.includes(marker))) return true
+  // Reentry is allowed only for the complete adapter, not for a marker on partial native code.
+  return !source.includes(card) && once(source, patchedCard) && LEGACY_PLUGIN_MARKERS.every(marker => once(source, marker))
+    && [
+      'renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec })',
+      'renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "summary" })',
+      'renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "action" })',
+      'window.dispatchEvent(new Event("dsh-portable/refresh-plugins")); props.refresh();',
+    ].every(anchor => once(source, anchor))
 }
 
 export function patchPluginManagerActions(source) {
   if (hasOfficialPluginManagement(source)) return source
-  if (source.includes('"plugins.add.actions":') && source.includes('"plugins.tab":')) {
+  if (source.includes('"plugins.add.actions":') && source.includes('"plugins.tab":') && !hasReviewedLegacyPluginManager(source)) {
     throw new Error('official plugin manager public capabilities changed upstream; refusing legacy overlay')
   }
   source = patchPluginManagerToolbar(source)

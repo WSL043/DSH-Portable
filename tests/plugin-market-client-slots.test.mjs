@@ -9,11 +9,11 @@ import {
   supportsPortableActions,
 } from '../app/vendor/dsh-portable-plugin-market/src/client/slot-compat.ts'
 
-function fakeSlots({ modern = false, official = false } = {}) {
+function fakeSlots({ modern = false, official = false, updates = true } = {}) {
   const declared = new Map([
     [PORTABLE_ACTIONS_SLOT, modern],
     [LEGACY_PLUGIN_TAB_SLOT, true],
-    ['plugins.portable.update', true],
+    ['plugins.portable.update', updates],
     [OFFICIAL_PLUGIN_TAB_SLOT, official],
     [OFFICIAL_PLUGIN_ACTIONS_SLOT, official],
   ])
@@ -167,8 +167,8 @@ test('queued declaration changes after unload cannot register a surface', async 
   assert.equal(slots.activeEntries().length, 0)
 })
 
-test('public Plugins slots keep one Advanced tab without legacy update contributions', async () => {
-  const slots = fakeSlots({ modern: true, official: true })
+test('native public Plugins without the Portable renderer keep Advanced and no legacy updates', async () => {
+  const slots = fakeSlots({ official: true, updates: false })
   let updateRegistrations = 0
   const dispose = coordinateMarketSurfaces(slots, {
     ...factories(slots),
@@ -183,7 +183,7 @@ test('public Plugins slots keep one Advanced tab without legacy update contribut
   assert.equal(slots.activeEntries().length, 0)
 })
 
-test('late public slots dispose legacy updates and collapse restores the supported legacy surface', async () => {
+test('RC3 public slots retain Portable updates until the actual native renderer replaces the adapter', async () => {
   const slots = fakeSlots({ modern: true })
   const dispose = coordinateMarketSurfaces(slots, {
     ...factories(slots),
@@ -197,11 +197,17 @@ test('late public slots dispose legacy updates and collapse restores the support
   assert.deepEqual(surfaces(), ['modern', 'updates'], 'one public slot cannot establish the complete host contract')
   slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, true)
   await slots.flush()
-  assert.deepEqual(surfaces(), ['advanced'])
-  slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, false)
+  assert.deepEqual(surfaces(), ['modern', 'updates'], 'RC3 public tabs do not supply native version-update consumers')
+  slots.setModern(false)
+  slots.setSlot('plugins.portable.update', false)
   await slots.flush()
-  assert.deepEqual(surfaces(), ['modern', 'updates'])
-  slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, true)
+  assert.deepEqual(surfaces(), ['advanced'])
+  slots.setModern(true)
+  slots.setSlot('plugins.portable.update', true)
+  await slots.flush()
+  assert.deepEqual(surfaces(), ['modern', 'updates'], 'restoring the actual legacy renderer creates one toolbar and update contribution')
+  slots.setModern(false)
+  slots.setSlot('plugins.portable.update', false)
   dispose()
   await slots.flush()
   assert.deepEqual(surfaces(), [], 'queued public declarations cannot revive an unloaded plugin')
@@ -213,20 +219,31 @@ test('shipped default client follows actual official-market state and keeps publ
   const { runInNewContext } = await import('node:vm')
   const require = createRequire(new URL('../app/package.json', import.meta.url))
   const React = require('react')
+  let hookEffects = []
+  const hookReact = { ...React,
+    useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useSyncExternalStore: (_subscribe, get) => get(), useCallback: callback => callback,
+    useEffect: callback => hookEffects.push(callback),
+  }
   const externals = {
-    react: React, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-dom': require('react-dom'),
+    react: hookReact, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-dom': require('react-dom'),
     '@deepseek-ai/dsh-client-ui-primitives': Object.fromEntries(['Menu', 'DisclosureRow', 'Tooltip', 'Toast'].map(name => [name, () => null])),
   }
   const bundle = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/client/client.js', import.meta.url), 'utf8')
   for (const state of ['active', 'inactive', 'failed']) {
     let client
-    const requests = []
+    const requests = [], updateChecks = []
+    hookEffects = []
     let respondingActive = state === 'active', failing = state === 'failed'
     const window = { __ModuleLoader__: { load: definition => {
       assert.equal(definition.id, '@wsl043/dsh-portable-plugin-market')
       client = definition.factory(name => { assert.ok(name in externals, `unexpected host import: ${name}`); return externals[name] })
-    } } }
+    } }, addEventListener() {}, removeEventListener() {} }
     const fetch = async url => {
+      if (url === '/dsh-market/updates' || url === '/dsh-market/installed') {
+        updateChecks.push(url)
+        return { ok: true, json: async () => url === '/dsh-market/updates' ? { updates: {} } : { bundles: [], activation: {} } }
+      }
       requests.push(url)
       if (failing) throw new Error('offline')
       return { ok: true, json: async () => ({ active: respondingActive }) }
@@ -244,6 +261,25 @@ test('shipped default client follows actual official-market state and keeps publ
     assert.deepEqual(names(), ['plugins.portable.actions', 'plugins.portable.update'])
     slots.setSlot(OFFICIAL_PLUGIN_TAB_SLOT, true)
     slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, true)
+    await slots.flush()
+    assert.deepEqual(names(), ['plugins.portable.actions', 'plugins.portable.update'], 'the delivered RC3 branch retains real legacy update surfaces')
+    // Exercise the delivered toolbar/status components; this is not a substitute for actual UI clicks.
+    const toolbarEntry = slots.activeEntries().find(entry => entry.meta.name === PORTABLE_ACTIONS_SLOT)
+    const toolbarElement = toolbarEntry.component({ refresh() {}, openInstall() {}, editInstallSpec() {} })
+    const toolbar = toolbarElement.type(toolbarElement.props)
+    const statusBoundary = React.Children.toArray(toolbar.props.children).find(child => React.isValidElement(child?.props?.children) && typeof child.props.children.props.zh === 'boolean')
+    assert.ok(statusBoundary, 'the real legacy toolbar mounts its update status component')
+    hookEffects = []
+    const status = statusBoundary.props.children
+    status.type(status.props)
+    assert.equal(hookEffects.length, 1)
+    const stopStatus = hookEffects[0]()
+    await new Promise(setImmediate)
+    assert.deepEqual(updateChecks, ['/dsh-market/updates', '/dsh-market/installed'], 'initial legacy update checking runs without opening another tab or pressing refresh')
+    stopStatus()
+
+    slots.setModern(false)
+    slots.setSlot('plugins.portable.update', false)
     await slots.flush()
     assert.ok(slots.activeEntries().every(entry => entry.meta.name === 'plugins.tab'))
     await new Promise(setImmediate)
@@ -275,10 +311,14 @@ test('shipped default client follows actual official-market state and keeps publ
       assert.equal(slots.activeEntries().length, active ? 1 : 2, 'external official market changes must refresh the delivered client')
     }
     assert.equal(requests.length, 3)
+    slots.setModern(true)
+    slots.setSlot('plugins.portable.update', true)
     slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, false)
     await slots.flush()
     assert.deepEqual(names(), ['plugins.portable.actions', 'plugins.portable.update'])
     slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, true)
+    slots.setModern(false)
+    slots.setSlot('plugins.portable.update', false)
     for (const stop of effects.reverse()) stop()
     await slots.flush()
     assert.deepEqual(names(), [], 'queued declarations and fetch results must not revive an unloaded bundle')

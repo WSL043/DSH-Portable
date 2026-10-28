@@ -316,3 +316,23 @@ test('partial public plugin operations never fall back to a still-matchable lega
   assert.throws(() => patchPluginManagerActions(legacy + slots), /public capabilities changed upstream; refusing legacy overlay/)
   assert.match(patchPluginManagerActions(legacy + '"plugins.tab": { kind: "list", scope: "root" };'), /plugins.portable.update/)
 })
+
+
+test('verified raw RC3 public slots retain the complete legacy overlay, while partial or native-update shapes fail closed', async () => {
+  const fixture = JSON.parse(await readFile(new URL('./fixtures/native-plugin-manager-rc3.json', import.meta.url), 'utf8'))
+  assert.equal(fixture.version, '0.2.1-rc.3')
+  assert.equal(fixture.rawClientSha256, '61beea0fe856b054fe9dee4cfa5492f54df973ffd18ab85d5ea37beff52991d1')
+  const source = Object.values(fixture.segments).join('\n')
+  assert.equal(hasOfficialPluginManagement(source), false)
+  const patched = patchPluginManagerActions(source)
+  for (const marker of ['dsh-portable-plugin-manager-actions-v2', 'dsh-portable-plugin-refresh-v1', 'dsh-portable-plugin-card-updates-v1']) assert.equal(patched.split(marker).length - 1, 1)
+  assert.equal(patchPluginManagerActions(patched), patched)
+  for (const omitted of Object.keys(fixture.segments)) {
+    const partial = Object.entries(fixture.segments).filter(([key]) => key !== omitted).map(([, text]) => text).join('\n')
+    assert.throws(() => patchPluginManagerActions(partial), undefined, omitted)
+  }
+  for (const operation of ['this.ctx.remote.pluginManager.listVersions(otherName, { fresh: true })', 'this.ctx.remote.pluginManager.updateBundle(otherName, otherVersion, {})']) assert.throws(() => patchPluginManagerActions(source + '\n' + operation), /changed upstream/)
+  assert.throws(() => patchPluginManagerActions(source.replace('highlighted, onOpen', 'highlighted, newer, onOpen')), /changed upstream/)
+  assert.throws(() => patchPluginManagerActions(source + '\nfunction PackageCard({ pkg, t, resolveText, busy, highlighted, onOpen, onSetEnabled }) {}'), /changed upstream/)
+  assert.throws(() => patchPluginManagerActions(patched.replace('renderSlot("plugins.portable.update", { name: pkg.name, busy, view: "summary" })', 'missingSummary')), /changed upstream/)
+})

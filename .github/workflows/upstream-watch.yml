@@ -98,7 +98,7 @@ jobs:
         # earlier, so a missing compatible release keeps the reviewed pin and is retried on the next run.
         run: |
           npm ci --prefix app --ignore-scripts
-          node scripts/adopt-default-plugins.mjs --write
+          node scripts/adopt-default-plugins.mjs --write --github-output >> "$GITHUB_OUTPUT"
       - id: market
         env:
           GITHUB_TOKEN: ${{ github.token }}
