@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises'
-import { basename, dirname, resolve as resolvePath } from 'node:path'
+import { basename, dirname, relative, resolve as resolvePath } from 'node:path'
 import { defineConfig } from 'tsdown'
 import { transform } from 'lightningcss'
 
@@ -37,14 +37,14 @@ export default defineConfig({
       this.addWatchFile(fileId)
       const source = await readFile(fileId)
       const { code, exports } = transform({
-        filename: fileId,
+        filename: relative(process.cwd(), fileId).replaceAll('\\', '/'),
         code: source,
         cssModules: { pattern: '[hash]_[local]' },
         minify: true,
         targets: { chrome: 90 << 16, firefox: 100 << 16, safari: 13 << 16, edge: 90 << 16 },
       })
       const classMap = {}
-      for (const [local, value] of Object.entries(exports ?? {})) classMap[local] = value.name
+      for (const [local, value] of Object.entries(exports ?? {}).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) classMap[local] = value.name
       return [
         `const css = ${JSON.stringify(code.toString())};`,
         `const tagId = ${JSON.stringify(`${id}/${basename(fileId)}`)};`,

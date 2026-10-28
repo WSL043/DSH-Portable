@@ -156,16 +156,26 @@ test('all product builds use measured relative baselines and defer baseline upda
   assert.match(updater, /usage: node scripts\/update-footprint-baseline\.mjs <footprint\.json>/)
 })
 
+function assertReviewedSourceRouting(workflow, stableLock) {
+  const expected = workflow.match(/const expected=preview\?'([^']+)':'([^']+)'/)
+  const pnpm = workflow.match(/pnpm\.sourceBuild\.reviewedCommit!=='([^']+)'/)?.[1]
+  assert.ok(expected, 'the main guard must name its fixed source pins')
+  const [, preview, stable] = expected
+  for (const pin of [preview, stable, pnpm]) assert.match(pin ?? '', /^[0-9a-f]{40}$/)
+  assert.equal(stable, stableLock.dsh.reviewedCommit)
+  assert.equal(pnpm, stableLock.pnpm.sourceBuild.reviewedCommit)
+  assert.ok(workflow.includes("if(process.env.GITHUB_REF==='refs/heads/main')"))
+  assert.ok(workflow.includes("if(lock.dsh.reviewedCommit!==expected||require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit!=='" + pnpm + "')throw Error"))
+  assert.ok(workflow.includes("ref: ${{ github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '" + preview + "' || '" + stable + "') || steps.preview.outputs.commit }}"))
+  assert.ok(workflow.includes("ref: ${{ github.ref == 'refs/heads/main' && '" + pnpm + "' || steps.preview.outputs.pnpmCommit }}"))
+}
+
 test('CI builds one immutable official source package set and stages it natively on every platform', async () => {
   const workflow = await readFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8')
   assert.match(workflow, /preview-packed-runtime:/)
   assert.match(workflow, /repository: deepseek-ai\/deepseek-harness/)
   const stableLock = JSON.parse(await readFile(path.join(root, 'upstream.lock.json'), 'utf8'))
-  const previewLock = JSON.parse(await readFile(path.join(root, 'upstream.preview.lock.json'), 'utf8'))
-  assert.ok(workflow.includes("ref: ${{ github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '" + previewLock.dsh.reviewedCommit + "' || '" + stableLock.dsh.reviewedCommit + "') || steps.preview.outputs.commit }}"))
-  assert.ok(workflow.includes("ref: ${{ github.ref == 'refs/heads/main' && '" + stableLock.pnpm.sourceBuild.reviewedCommit + "' || steps.preview.outputs.pnpmCommit }}"))
-  assert.ok(workflow.includes("if(process.env.GITHUB_REF==='refs/heads/main')"))
-  assert.ok(workflow.includes("if(lock.dsh.reviewedCommit!==expected||require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit!=='" + stableLock.pnpm.sourceBuild.reviewedCommit + "')throw Error"))
+  assertReviewedSourceRouting(workflow, stableLock)
   assert.match(workflow, /pnpm --dir upstream run build:official/)
   assert.match(workflow, /pnpm --dir upstream run release:pack --family dsh --out dist\/npm --concurrency 8/)
   assert.match(workflow, /pnpm --dir upstream run release:pack --family vendor --out dist\/npm-vendor --concurrency 8/)
@@ -176,6 +186,16 @@ test('CI builds one immutable official source package set and stages it natively
   assert.match(workflow, /build-windows\.ps1 -PreviewAppSource preview-app/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-macos\.sh/)
   assert.match(workflow, /PREVIEW_APP_SOURCE="\$PWD\/preview-app" bash scripts\/build-linux\.sh/)
+})
+
+test('source routing rejects mismatched fixed pins and a pinned non-main checkout', async () => {
+  const workflow = await readFile(path.join(root, '.github', 'workflows', 'ci.yml'), 'utf8')
+  const stable = JSON.parse(await readFile(path.join(root, 'upstream.lock.json'), 'utf8'))
+  const changedGuard = workflow.replace(/const expected=preview\?'([0-9a-f]{40})'/,
+    (_match, pin) => "const expected=preview?'" + (pin[0] === '0' ? '1' : '0') + pin.slice(1) + "'")
+  assert.throws(() => assertReviewedSourceRouting(changedGuard, stable))
+  const pinnedCandidate = workflow.replace('|| steps.preview.outputs.commit }}', "|| '" + '0'.repeat(40) + "' }}")
+  assert.throws(() => assertReviewedSourceRouting(pinnedCandidate, stable))
 })
 
 test('preview footprint has a separate reviewed budget without weakening stable releases', async () => {

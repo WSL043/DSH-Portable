@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { once } from 'node:events'
 import { mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { createServer } from 'node:http'
@@ -8,6 +9,12 @@ import test from 'node:test'
 
 const root = path.resolve(import.meta.dirname, '..')
 const read = (name) => readFile(path.join(root, name), 'utf8')
+
+test('the shipped market client matches its source and build inputs', () => {
+  execFileSync(process.execPath, ['scripts/normalize-client-banner.mjs', '--check'], {
+    cwd: path.join(root, 'app/vendor/dsh-portable-plugin-market'), windowsHide: true, stdio: 'pipe',
+  })
+})
 
 test('retired cloud backup routes and credential discovery are absent from the shipped market', async () => {
   const [routes, server] = await Promise.all([
