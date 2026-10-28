@@ -141,15 +141,14 @@ test('adoption validates all archives and refreshes the selected store before wr
   assert.equal(messages.length, 1)
   assert.equal(messages[0].changed, true)
   assert.ok(messages[0].plugins.some(plugin => plugin.endsWith(' (selected)')))
-  assert.match(await readFile(output, 'utf8'), /changed=true/)
-  assert.doesNotMatch(await readFile(output, 'utf8'), /\(adopted\)/)
+  assert.equal(await readFile(output, 'utf8'), sentinel, 'default JSON mode never writes an ENV-selected file')
   await writeFile(output, sentinel)
   messages.length = 0
   let expectedStore = path.join(fixture, 'scripts/default-plugin-store/pnpm-lock.preview.yaml')
   const refreshStoreLock = async (_pins, archives, selected) => { assert.equal(selected, expectedStore); assert.deepEqual(archives.get(same.package), unchangedBytes); return 'refreshed store\n' }
   await main(args, { root: fixture, refreshStoreLock })
   assert.ok(messages[0].plugins.some(plugin => plugin.endsWith(' (adopted)')))
-  assert.match(await readFile(output, 'utf8'), /changed=true/)
+  assert.equal(await readFile(output, 'utf8'), sentinel, 'write mode reports JSON without opening GITHUB_OUTPUT')
   const adopted = JSON.parse(await readFile(path.join(fixture, 'upstream.preview.lock.json'), 'utf8'))
   assert.equal(adopted.defaultPlugins.changed.version, next.version)
   assert.equal(adopted.defaultPlugins.changed.releaseChannel, 'stable')
@@ -171,4 +170,25 @@ test('adoption validates all archives and refreshes the selected store before wr
   assert.equal(stableText.slice(stableText.indexOf(marker)), previewText.slice(previewText.indexOf(marker)))
   assert.equal(await readFile(path.join(fixture, 'upstream.preview.lock.json'), 'utf8'), previewLock)
   assert.equal(await readFile(path.join(fixture, 'scripts/default-plugin-store/pnpm-lock.preview.yaml'), 'utf8'), 'refreshed store\n')
+})
+
+test('GitHub output mode emits complete single-line records and never opens GITHUB_OUTPUT', async t => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-adopt-output-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const oldFetch = globalThis.fetch, oldOutput = process.env.GITHUB_OUTPUT, oldLog = console.log
+  t.after(() => { globalThis.fetch = oldFetch; console.log = oldLog; if (oldOutput === undefined) delete process.env.GITHUB_OUTPUT; else process.env.GITHUB_OUTPUT = oldOutput })
+  const output = path.join(fixture, 'must-not-change')
+  await writeFile(output, 'sentinel')
+  process.env.GITHUB_OUTPUT = output
+  const name = 'dsh-waiting\nchanged=true'
+  await writeFile(path.join(fixture, 'upstream.lock.json'), JSON.stringify({
+    dsh: { version: '0.2.2-alpha.2' }, defaultPlugins: { waiting: { package: name, version: '1.0.0' } },
+  }))
+  globalThis.fetch = async () => Response.json({ versions: {} })
+  const lines = []
+  console.log = line => lines.push(line)
+  await main(['--github-output'], { root: fixture })
+  assert.deepEqual(lines, ['changed=false', 'waiting=dsh-waiting changed=true', 'plugins=dsh-waiting changed=true@1.0.0'])
+  assert.ok(lines.every(line => !/[\r\n]/.test(line)))
+  assert.equal(await readFile(output, 'utf8'), 'sentinel')
 })

@@ -286,8 +286,21 @@ namespace DshPortable
             AddDesktopCommand(help, "engine-file-update", L("从文件更新内核", "Update core from file"), Keys.None,
                 async delegate { await SelectOfflineUpdateAsync("engine"); });
             AddDesktopCommand(help, "logs", L("日志文件夹", "Logs folder"), Keys.None,
-                delegate { string directory = ResolveLauncherLogDirectory(); Directory.CreateDirectory(directory);
-                    Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true }); });
+                delegate
+                {
+                    try
+                    {
+                        string directory = ResolveLauncherLogDirectory();
+                        Directory.CreateDirectory(directory);
+                        Process.Start(new ProcessStartInfo(directory) { UseShellExecute = true });
+                    }
+                    catch (Exception)
+                    {
+                        MessageBox.Show(this,
+                            L("无法打开日志文件夹。请检查目录位置和权限。", "Cannot open the logs folder. Check its location and permissions."),
+                            L("日志文件夹", "Logs folder"), MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                });
             help.DropDownItems.Add(new ToolStripSeparator());
             help.DropDownItems.Add(CreateExternalLinkItem(L("项目主页", "Project page"),
                 "https://github.com/WSL043/DSH-Portable"));

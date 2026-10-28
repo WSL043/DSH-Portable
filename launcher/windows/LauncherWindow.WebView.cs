@@ -589,7 +589,22 @@ namespace DshPortable
 
         private string ResolveLauncherLogDirectory()
         {
-            return Path.Combine(stateRoot, "data", "logs");
+            string baseDirectory = Path.GetFullPath(stateRoot).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string directory = Path.GetFullPath(Path.Combine(baseDirectory, "data", "logs"));
+            if (!directory.StartsWith(baseDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("Launcher log directory escapes its selected state root.");
+            // A selected state root is explicit; its managed children must not redirect log writes.
+            foreach (string child in new[] { Path.Combine(baseDirectory, "data"), directory })
+            {
+                try
+                {
+                    if ((File.GetAttributes(child) & FileAttributes.ReparsePoint) != 0)
+                        throw new IOException("Launcher log directory must not contain a reparse point.");
+                }
+                catch (FileNotFoundException) { }
+                catch (DirectoryNotFoundException) { }
+            }
+            return directory;
         }
 
         private string ResolvePortableInstanceId()

@@ -77,19 +77,29 @@ namespace DshPortable
                     File.Delete(filename + ".previous");
                     File.Move(filename, filename + ".previous");
                 }
-                AppendStartupTraceLine(filename, line);
+                AppendStartupTraceLine(directory, filename, line);
             }
             catch { }
         }
 
-        private static void AppendStartupTraceLine(string filename, string line)
+        private static void AppendStartupTraceLine(string directory, string filename, string line)
         {
+            string prefix = Path.GetFullPath(directory).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string target = Path.GetFullPath(filename);
+            if (!target.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return;
+            try
+            {
+                if ((File.GetAttributes(Path.GetDirectoryName(target)) & FileAttributes.ReparsePoint) != 0) return;
+                if ((File.GetAttributes(target) & FileAttributes.ReparsePoint) != 0) return;
+            }
+            catch (FileNotFoundException) { }
+            catch (DirectoryNotFoundException) { }
             for (int attempt = 0; attempt < 3; attempt++)
             {
                 try
                 {
                     // Keep exclusive writers: shared append handles can race at EOF.
-                    File.AppendAllText(filename, line + Environment.NewLine, new UTF8Encoding(false));
+                    File.AppendAllText(target, line + Environment.NewLine, new UTF8Encoding(false));
                     return;
                 }
                 catch (IOException)
@@ -127,7 +137,7 @@ namespace DshPortable
                 string line = json.Serialize(entry);
                 // Preserve the authoritative event even when the shared latest log is busy.
                 AppendHistoryLog("startup.jsonl", line);
-                AppendStartupTraceLine(Path.Combine(directory, "startup-latest.jsonl"), line);
+                AppendStartupTraceLine(directory, Path.Combine(directory, "startup-latest.jsonl"), line);
             }
             catch { }
         }

@@ -2,7 +2,7 @@ import { launcherSourceFiles } from './helpers/launcher-source.mjs'
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -17,9 +17,26 @@ const sources = [
 const utf8FailureFixture = path.join(projectRoot, 'tests', 'fixtures', 'launcher-error-utf8.mjs')
 
 function cscPath() {
-  const windows = process.env.WINDIR || 'C:\\Windows'
-  return path.join(windows, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe')
+  // This compile-only contract supports the Windows CI system layout, not an ENV-selected executable.
+  const windows = process.env.WINDIR
+  if (windows && path.win32.normalize(windows).replace(/\\+$/, '').toLowerCase() !== 'c:\\windows') {
+    throw new Error('Windows launcher contracts require C:/Windows; custom WINDIR compiler locations are unsupported')
+  }
+  return 'C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe'
 }
+
+test('the contract compiler uses the fixed system path and rejects custom WINDIR layouts', t => {
+  const original = process.env.WINDIR
+  t.after(() => { if (original === undefined) delete process.env.WINDIR; else process.env.WINDIR = original })
+  for (const windows of ['C:/Windows', 'c:/WINDOWS/']) {
+    process.env.WINDIR = windows
+    assert.equal(cscPath(), 'C:/Windows/Microsoft.NET/Framework64/v4.0.30319/csc.exe')
+  }
+  for (const windows of ['D:/Windows', 'C:/Users/runner/fake-Windows', '//server/Windows']) {
+    process.env.WINDIR = windows
+    assert.throws(cscPath, /custom WINDIR compiler locations are unsupported/)
+  }
+})
 
 async function prepareWebView2(root) {
   const lock = JSON.parse(await readFile(path.join(projectRoot, 'upstream.lock.json'), 'utf8'))
@@ -191,7 +208,15 @@ test('native startup history survives a locked latest log and concurrent writers
     host.slice(start, end),
     '  static int Main(string[] args) {',
     '    var probe = new TraceProbe { directory = args[0], startupId = args[1], startupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };',
+    '    if (args[2] == "reparse") {',
+    '      AppendStartupTraceLine(probe.directory, Path.Combine(probe.directory, "startup-latest.jsonl"), "must-not-append");',
+    '      return 0;',
+    '    }',
     '    Directory.CreateDirectory(probe.directory);',
+    '    if (args[2] == "outside") {',
+    '      AppendStartupTraceLine(probe.directory, Path.GetFullPath(Path.Combine(probe.directory, "..", "outside.jsonl")), "must-not-append");',
+    '      return 0;',
+    '    }',
     '    if (args[2] == "locked") {',
     '      using (var held = new FileStream(Path.Combine(probe.directory, "startup-latest.jsonl"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {',
     '        probe.AppendStartupTrace("native-host", "native-loading-ready", new Dictionary<string, object> { { "paintedFrames", 1 } });',
@@ -221,6 +246,21 @@ test('native startup history survives a locked latest log and concurrent writers
   assert.equal(lockedEvents[0].phase, 'native-loading-ready')
   assert.equal(lockedEvents[0].paintedFrames, 1)
   assert.equal(await readFile(path.join(locked, 'startup-latest.jsonl'), 'utf8'), '')
+  const outside = path.join(fixture, 'outside.jsonl')
+  const sentinel = Buffer.from('external sentinel\r\n')
+  await writeFile(outside, sentinel)
+  await execFileAsync(exe, [path.join(fixture, 'contained'), id, 'outside'], { windowsHide: true, timeout: 15000 })
+  assert.deepEqual(await readFile(outside), sentinel, 'the real append helper must reject a lexical escape')
+  const externalDirectory = path.join(fixture, 'reparse-outside')
+  await mkdir(externalDirectory)
+  const externalLatest = path.join(externalDirectory, 'startup-latest.jsonl')
+  await writeFile(externalLatest, sentinel)
+  const externalEntries = (await readdir(externalDirectory)).sort()
+  const reparse = path.join(fixture, 'reparse')
+  await symlink(externalDirectory, reparse, 'junction')
+  await execFileAsync(exe, [reparse, id, 'reparse'], { windowsHide: true, timeout: 15000 })
+  assert.deepEqual(await readFile(externalLatest), sentinel, 'a junction log root must never alter its external target')
+  assert.deepEqual((await readdir(externalDirectory)).sort(), externalEntries, 'a rejected junction log root must not create external entries')
   const concurrent = path.join(fixture, 'concurrent')
   await Promise.all(['one', 'two'].map(worker => execFileAsync(exe, [concurrent, id, worker], { windowsHide: true, timeout: 15000 })))
   for (const relative of ['startup-latest.jsonl', path.join('history', id, 'startup.jsonl')]) {

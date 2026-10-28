@@ -4,6 +4,7 @@
 // when no newer compatible release exists.
 //   node scripts/adopt-default-plugins.mjs [--write] [--lock upstream.lock.json]
 // Select upstream.preview.lock.json to update only preview pins and its store.
+// --github-output emits key=value records on stdout instead of the default JSON summary.
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
@@ -114,6 +115,7 @@ export async function main(args = process.argv.slice(2), adapters = {}) {
   const projectRoot = adapters.root ?? root
   const { values } = parseArgs({ args, strict: true, options: {
     write: { type: 'boolean', default: false }, lock: { type: 'string', default: 'upstream.lock.json' },
+    'github-output': { type: 'boolean', default: false },
   } })
   const write = values.write
   const lockPath = path.resolve(projectRoot, values.lock)
@@ -145,12 +147,14 @@ export async function main(args = process.argv.slice(2), adapters = {}) {
     await writeFile(modulePath, moduleSource)
     await writeFile(storeLockPath, storeLock)
   }
-  const outputFile = process.env.GITHUB_OUTPUT
-  if (outputFile) {
-    const lines = [`changed=${changed}`, `waiting=${waiting.join(',')}`, `plugins=${summary.join(', ')}`]
-    await writeFile(outputFile, `${lines.join('\n')}\n`, { flag: 'a' })
+  if (values['github-output']) {
+    // The workflow redirects these records to GitHub's own command file.
+    for (const line of [`changed=${changed}`, `waiting=${waiting.join(',')}`, `plugins=${summary.join(', ')}`]) {
+      console.log(line.replace(/[\r\n]/g, ' '))
+    }
+  } else {
+    console.log(JSON.stringify({ core: coreVersion, plugins: summary, changed, waiting }))
   }
-  console.log(JSON.stringify({ core: coreVersion, plugins: summary, changed, waiting }))
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) await main()
