@@ -35,7 +35,11 @@ namespace DshPortable
                 : FormWindowState.Normal;
             SaveDesktopWindowState();
             Hide();
-            ShowInTaskbar = false;
+            // Do not change ShowInTaskbar here. On a maximized form the setter recreates
+            // the window handle, and WinForms shows the recreated maximized window again:
+            // closing to the tray then left a visible but empty shell whose hosted
+            // WebView2 document was lost in the recreation (black window) until a tray
+            // restore reloaded the page. A hidden window has no taskbar button anyway.
             trayIcon.Visible = true;
             if (!trayNoticeShown)
             {
@@ -71,7 +75,9 @@ namespace DshPortable
         {
             if (!desktopReady) return;
             if (hiddenForAutomation) return;
-            ShowInTaskbar = true;
+            // Only change ShowInTaskbar when it is actually out of sync: the setter
+            // recreates the window handle, which also reinitializes the hosted WebView.
+            if (!ShowInTaskbar) ShowInTaskbar = true;
             Show();
             WindowState = windowStateBeforeHide;
             Activate();
