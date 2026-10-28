@@ -5,8 +5,8 @@ import { descriptorV2PatchIdentityFor } from './patch-historical-descriptor.mjs'
 
 export function assertPublishReadiness({ productVersion, stableLock, previewLock, readiness }) {
   const policy = classifyProductVersion(productVersion)
-  if (/^1\.0\.0-alpha\./.test(policy.version)) {
-    throw new Error('Portable 1.0.0 alpha requires separate clean-install qualification; Native publication and public update catalogs are disabled.')
+  if (/^1\./.test(policy.version)) {
+    throw new Error('Portable 1.x requires separate clean-install qualification of the official desktop package; Native publication and public update catalogs are disabled.')
   }
   const prerelease = policy.prerelease
   if (!prerelease) {

@@ -2,16 +2,19 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createServer } from 'node:net'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
 const root = process.argv[2] && path.resolve(process.argv[2])
-const output = process.argv[3] && path.resolve(process.argv[3])
+const requestedOutput = process.argv[3] && path.resolve(process.argv[3])
 assert.ok(process.argv.includes('--disposable'), 'use an isolated test installation with --disposable')
-assert.ok(root && output)
-await mkdir(output, { recursive: true })
+assert.ok(root && requestedOutput)
+await mkdir(requestedOutput, { recursive: true })
+const output = await realpath(requestedOutput)
 const exec = promisify(execFile)
 // Never inherit the developer's selected profile/data environment into a
 // disposable test that can now explicitly reclaim managed logs and caches.
@@ -87,12 +90,11 @@ try {
   }
   const click = (names, scope = 'body') => `(() => {const names=${JSON.stringify(names)};const root=document.querySelector(${JSON.stringify(scope)});const button=[...(root?.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')||[])].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
   const advancedTab = '[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-advanced"]'
-  const discoverTab = '[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-market"]'
-  const clickElement = selector => `(() => { const item=document.querySelector(${JSON.stringify(selector)}); if(!item || item.getBoundingClientRect().width===0 || item.disabled) return false; item.scrollIntoView({block:'center'}); item.click(); return true })()`
+  const clickDiscoverTab = `(() => { const item=document.querySelector('[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-market"]'); if(!item || item.getBoundingClientRect().width===0 || item.disabled) return false; item.scrollIntoView({block:'center'}); item.click(); return true })()`
   const openMarket = async () => {
     await until(`Boolean(document.querySelector(${JSON.stringify(advancedTab)})) || [...document.querySelectorAll('button')].some(item => ['Plugin Market','插件市场'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)`, Boolean, 'Portable market entry is ready')
     publicMarket = await evaluate(`Boolean(document.querySelector(${JSON.stringify(advancedTab)}))`)
-    if (publicMarket) await until(clickElement(discoverTab), Boolean, 'public Discover tab')
+    if (publicMarket) await until(clickDiscoverTab, Boolean, 'public Discover tab')
     else await until(click(['Plugin Market','插件市场']), Boolean, 'legacy market action')
   }
   const nativeStateExpression = key => `new Promise(resolve => {
@@ -308,7 +310,13 @@ try {
         return result
       } finally {
         categoryGeometry.push({width,phase,settled:complete,state:last})
-        await writeFile(path.join(output,'category-geometry.json'),JSON.stringify(categoryGeometry,null,2))
+        const report=JSON.stringify(categoryGeometry,null,2)
+        const target=await safeDataTarget(output,'category-geometry.json')
+        try { await writeFile(target,report,{flag:'wx'}) }
+        catch (error) {
+          if(error.code!=='EEXIST') throw error
+          await writeFile(await verifiedPackageFile(output,'category-geometry.json'),report)
+        }
       }
     }
     let baseline=await settled('initial',[...moreLabels,...lessLabels])

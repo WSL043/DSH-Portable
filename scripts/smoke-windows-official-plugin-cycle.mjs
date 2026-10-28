@@ -2,10 +2,12 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { createRequire } from 'node:module'
 import { createServer } from 'node:net'
-import { cp, mkdir, readFile, writeFile, utimes, access } from 'node:fs/promises'
+import { cp, readFile, writeFile, utimes, access, realpath, readdir } from 'node:fs/promises'
 import path from 'node:path'
+import os from 'node:os'
 import { promisify } from 'node:util'
 import { verifiedPackageFile } from './verified-package-file.mjs'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { createHash, randomBytes } from 'node:crypto'
 
@@ -13,63 +15,108 @@ const [rootArg, driverPackage, evidenceArg, disposable, mode, concurrency, histo
 if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable') {
   throw new Error('Expected a disposable extracted product, Playwright driver package and evidence directory.')
 }
-const root = path.resolve(rootArg)
-const evidence = path.resolve(evidenceArg)
-await mkdir(evidence, { recursive: true })
-const components = JSON.parse(await readFile(await verifiedPackageFile(root, 'licenses', 'COMPONENTS.json'), 'utf8'))
-const reviewedPlugins = ['dsh-image-viewer', 'dsh-chat-manager'].map(name => {
-  const plugin = components.defaultPlugins?.find(item => item.package === name)
-  assert.match(plugin?.version ?? '', /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/, `reviewed ${name} version`)
-  return plugin
+
+async function disposablePackage(argument) {
+  const directory = await realpath(argument)
+  const temporaryRoots = [...new Set([process.env.RUNNER_TEMP, os.tmpdir()].filter(Boolean))]
+  let insideTemporaryRoot = false
+  for (const temporaryRoot of temporaryRoots) {
+    let base
+    try { base = await realpath(temporaryRoot) }
+    catch (error) { if (error.code === 'ENOENT') continue; throw error }
+    const relative = path.relative(base, directory)
+    if (relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) insideTemporaryRoot = true
+  }
+  assert.ok(insideTemporaryRoot, 'Disposable product must be below an actual temporary directory')
+  const components = JSON.parse(await readFile(await verifiedPackageFile(directory, 'licenses', 'COMPONENTS.json'), 'utf8'))
+  assert.equal(components.product, 'DSH-Portable', 'expected a real Portable component manifest')
+  assert.equal(components.platform, 'windows-x64', 'only the Windows disposable package is supported')
+  assert.match(components.portableVersion ?? '', /^0\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, 'only the owned 0.x Portable host is supported')
+  // A copied user installation is not a disposable fixture, even below TEMP.
+  for (const name of ['data', 'workspace']) {
+    const entries = await readdir(await verifiedPackageFile(directory, name))
+    assert.ok(entries.every(entry => entry === 'README.txt'), 'Disposable product must have fresh data and workspace directories')
+  }
+  return {
+    root: directory, components,
+    node: await verifiedPackageFile(directory, 'runtime', 'node', 'node.exe'),
+    entry: await verifiedPackageFile(directory, 'launcher', 'runtime-entry.mjs'),
+    host: await verifiedPackageFile(directory, 'DeepSeek-Herness.exe'),
+  }
+}
+
+const product = await disposablePackage(rootArg)
+const { root, components, node: nodeExecutable, entry: runtimeEntry, host: hostExecutable } = product
+const evidenceRelative = 'acceptance/official-plugin-cycle'
+assert.equal(path.resolve(evidenceArg), path.resolve(root, evidenceRelative), 'Evidence directory must be the disposable product acceptance/official-plugin-cycle directory')
+const resultFile = await safeDataTarget(root, `${evidenceRelative}/result.json`)
+const evidence = path.dirname(resultFile)
+assert.deepEqual(await readdir(evidence), [], 'Evidence directory must be new or empty')
+const evidenceFile = name => safeDataTarget(root, `${evidenceRelative}/${name}`)
+const reviewedNames = ['dsh-image-viewer', 'dsh-chat-manager']
+assert.deepEqual(components.defaultPlugins?.map(plugin => plugin.package).sort(), [...reviewedNames].sort(),
+  'the disposable component manifest must contain exactly the two reviewed default plugins')
+const reviewedPlugins = reviewedNames.map(name => {
+  const plugin = components.defaultPlugins.find(item => item.package === name)
+  assert.match(plugin.version ?? '', /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/, `reviewed ${name} version`)
+  return { package: name, version: plugin.version }
 })
+assert.ok(mode === undefined || mode === '--upgrade-defaults', 'unknown acceptance mode')
+assert.ok(concurrency === undefined || concurrency === '--concurrent-writers' && mode === '--upgrade-defaults', 'concurrent acceptance requires historical upgrade mode')
+let seed
+if (mode === '--upgrade-defaults') {
+  assert.ok(historicalSeedArg, 'Historical upgrade requires the isolated 0.7.7 seed runtime')
+  seed = await disposablePackage(historicalSeedArg)
+  assert.notEqual(seed.root, root, 'Historical seed runtime must be separate from the candidate')
+  assert.equal(seed.components.portableVersion, '0.7.7')
+  assert.equal(seed.components.dshVersion, '0.1.7-alpha.1')
+}
 const { chromium } = createRequire(path.resolve(driverPackage))('playwright')
 const env = {
   ...process.env,
+  DSH_PORTABLE_ROOT: root,
+  DSH_PORTABLE_BASE_STATE_ROOT: root,
   DSH_PORTABLE_STATE_ROOT: root,
   DSH_HOME: path.join(root, 'data', 'dsh-home'),
   DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
+  DSH_PORTABLE_WEBVIEW_CACHE: path.join(root, 'acceptance-webview-cache'),
   DSH_PORTABLE_ENVIRONMENT: 'default',
   DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
   DSH_TELEMETRY_MODE: 'DISABLED',
 }
-assert.ok(mode === undefined || mode === '--upgrade-defaults', 'unknown acceptance mode')
-assert.ok(concurrency === undefined || concurrency === '--concurrent-writers' && mode === '--upgrade-defaults', 'concurrent acceptance requires historical upgrade mode')
+for (const key of Object.keys(env)) {
+  if (key.toUpperCase() === 'DSH_PORTABLE_RUNTIME_ROOT') delete env[key]
+}
 const historicalVersions = { 'dsh-chat-manager': '1.4.0-beta.3', 'dsh-image-viewer': '0.1.1' }
 // Establish maintenance inputs before any CLI helper or native host can start
 // the long-lived host's one-minute maintenance timer.
-const managedLogs = path.join(root, 'data/dsh-home/profiles/web/.plugin-manager/logs')
-const oldLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
-const recentLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
-for (const file of [oldLog, recentLog]) {
-  await mkdir(path.dirname(file), { recursive: true })
+const managedLogsRelative = 'data/dsh-home/profiles/web/.plugin-manager/logs'
+const oldLogRelative = `${managedLogsRelative}/operation-${randomBytes(3).toString('hex')}/pnpm.log`
+const recentLogRelative = `${managedLogsRelative}/operation-${randomBytes(3).toString('hex')}/pnpm.log`
+for (const relative of [oldLogRelative, recentLogRelative]) {
+  const file = await safeDataTarget(root, relative)
   await writeFile(file, 'Disposable maintenance acceptance\n', { flag: 'wx' })
 }
 const expired = new Date(Date.now() - 30 * 86400000)
-await utimes(oldLog, expired, expired)
+await utimes(await verifiedPackageFile(root, oldLogRelative), expired, expired)
 if (mode === '--upgrade-defaults') {
-  assert.ok(historicalSeedArg, 'Historical upgrade requires the isolated 0.7.7 seed runtime')
-  const seedRoot = path.resolve(historicalSeedArg)
-  assert.notEqual(seedRoot, root, 'Historical seed runtime must be separate from the candidate')
-  const seedComponents = JSON.parse(await readFile(await verifiedPackageFile(seedRoot, 'licenses', 'COMPONENTS.json'), 'utf8'))
-  assert.equal(seedComponents.portableVersion, '0.7.7')
-  assert.equal(seedComponents.dshVersion, '0.1.7-alpha.1')
+  const seedRoot = seed.root
   const seedEnv = { ...env, DSH_PORTABLE_RUNTIME_CACHE: path.join(seedRoot, 'acceptance-runtime-cache') }
   for (const key of Object.keys(seedEnv)) {
     if (['DSH_PORTABLE_ROOT', 'DSH_PORTABLE_RUNTIME_ROOT', 'DSH_PORTABLE_BASE_STATE_ROOT'].includes(key.toUpperCase())) delete seedEnv[key]
   }
-  assert.equal(await access(path.join(root, 'data/dsh-home/profiles/web/.dsh-portable-default-seed.json'))
-    .then(() => true, error => { if (error.code === 'ENOENT') return false; throw error }), false,
+  assert.equal(await safeDataTarget(root, 'data/dsh-home/profiles/web/.dsh-portable-default-seed.json', { createParents: false }) !== null, false,
   'Historical upgrade acceptance requires a freshly extracted disposable profile; startup refreshes existing defaults.')
   // Establish a real old profile with its compatible released core before upgrading.
   // rc.2 correctly refuses a fresh install of these old peers; do not bypass it.
-  const result = await promisify(execFile)(path.join(seedRoot, 'runtime/node/node.exe'), [
-    path.join(seedRoot, 'launcher/runtime-entry.mjs'), 'dsh-cli.mjs',
+  const result = await promisify(execFile)(seed.node, [
+    seed.entry, 'dsh-cli.mjs',
     'plugin', '--profile', 'web', 'add',
     ...Object.entries(historicalVersions).map(([name, version]) => `${name}@${version}`),
   ], { cwd: seedRoot, env: seedEnv, windowsHide: true, timeout: 180_000, maxBuffer: 8 * 1024 * 1024 })
-  await writeFile(path.join(evidence, 'historical-seed.log'), `${result.stdout}\n${result.stderr}`)
+  await writeFile(await evidenceFile('historical-seed.log'), `${result.stdout}\n${result.stderr}`)
   for (const [name, version] of Object.entries(historicalVersions)) {
-    const installed = JSON.parse(await readFile(path.join(root, 'data/dsh-home/profiles/web/node_modules', name, 'package.json'), 'utf8'))
+    const installed = JSON.parse(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/node_modules', name, 'package.json'), 'utf8'))
     assert.equal(installed.version, version, `historical ${name} must be seeded into the candidate profile`)
   }
 }
@@ -77,7 +124,7 @@ const listener = createServer()
 await new Promise(resolve => listener.listen(0, '127.0.0.1', resolve))
 const debugPort = listener.address().port
 await new Promise(resolve => listener.close(resolve))
-const host = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], {
+const host = spawn(hostExecutable, [], {
   cwd: root,
   windowsHide: true,
   stdio: 'ignore',
@@ -94,8 +141,8 @@ const host = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], {
 const report = { ok: false, portableVersion: components.portableVersion, dshVersion: components.dshVersion, pageErrors: [] }
 async function verifyInstalledDefaults(expected = Object.fromEntries(reviewedPlugins.map(plugin => [plugin.package, plugin.version]))) {
   const versions = {}
-  for (const plugin of components.defaultPlugins ?? []) {
-    const manifest = JSON.parse(await readFile(path.join(root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', plugin.package, 'package.json'), 'utf8'))
+  for (const plugin of reviewedPlugins) {
+    const manifest = JSON.parse(await readFile(await verifiedPackageFile(root, 'data', 'dsh-home', 'profiles', 'web', 'node_modules', plugin.package, 'package.json'), 'utf8'))
     assert.equal(manifest.name, plugin.package, 'installed default plugin identity')
     assert.equal(manifest.version, expected[plugin.package], `installed ${plugin.package} must match the expected version`)
     versions[plugin.package] = manifest.version
@@ -132,12 +179,12 @@ try {
   const maintenanceDeadline = Date.now() + 80000
   let removed = false
   while (Date.now() < maintenanceDeadline) {
-    try { await access(oldLog) }
+    try { await verifiedPackageFile(root, oldLogRelative) }
     catch (error) { if (error.code !== 'ENOENT') throw error; removed = true; break }
     await new Promise(resolve => setTimeout(resolve, 500))
   }
   assert.ok(removed, 'real host did not run deferred plugin log maintenance')
-  await access(recentLog)
+  await access(await verifiedPackageFile(root, recentLogRelative))
   report.deferredLogMaintenance = true
 
   // The first-run notice and model prompt are official DSH UI. No model key is
@@ -173,10 +220,10 @@ try {
       await secondPage.goto(page.url(), { waitUntil: 'domcontentloaded' })
       assert.equal(await secondPage.evaluate(async () => (await fetch('/dsh-market/installed')).status), 200)
     }
-    const writerLock = path.join(root, 'data/dsh-home/profiles/web/package.json.lock')
+    const writerLockExists = async () => await safeDataTarget(root, 'data/dsh-home/profiles/web/package.json.lock', { createParents: false }) !== null
     async function probeConcurrentWriters(plugin) {
       const deadline = Date.now() + 10_000
-      while (!await access(writerLock).then(() => true, () => false)) {
+      while (!await writerLockExists()) {
         assert.ok(Date.now() < deadline, `${publicManager ? 'official manager' : 'Portable'} profile writer lock was not observed within 10s of update confirmation`)
         await new Promise(resolve => setTimeout(resolve, 5))
       }
@@ -185,8 +232,8 @@ try {
           headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })
         return { status: response.status, body: await response.json() }
       }, plugin.package)
-      const cliRequest = promisify(execFile)(path.join(root, 'runtime/node/node.exe'), [
-        path.join(root, 'launcher/runtime-entry.mjs'), 'dsh-cli.mjs', 'plugin', '--profile', 'web', 'install',
+      const cliRequest = promisify(execFile)(nodeExecutable, [
+        runtimeEntry, 'dsh-cli.mjs', 'plugin', '--profile', 'web', 'install',
       ], { cwd: root, env, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 })
         .then(value => ({ code: 0, ...value }), error => ({ code: error.code, stdout: error.stdout, stderr: error.stderr }))
       const [second, cli] = await Promise.all([secondRequest, cliRequest])
@@ -224,7 +271,7 @@ try {
       pending.catch(() => {})
       let writerProbe
       if (secondPage && report.upgrades.length === 0) {
-        assert.equal(await access(writerLock).then(() => true, () => false), false, 'profile already had an unrelated writer before update')
+        assert.equal(await writerLockExists(), false, 'profile already had an unrelated writer before update')
         // Arm the actual lock observer before the UI starts either transaction.
         writerProbe = probeConcurrentWriters(plugin)
         writerProbe.catch(() => {})
@@ -245,21 +292,20 @@ try {
         assert.equal(response.status(), 200, JSON.stringify(body))
         assert.equal(body.ok, true, JSON.stringify(body))
       }
-      const installed = JSON.parse(await readFile(path.join(root, 'data/dsh-home/profiles/web/node_modules', plugin.package, 'package.json'), 'utf8'))
+      const installed = JSON.parse(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/node_modules', plugin.package, 'package.json'), 'utf8'))
       assert.equal(installed.version, plugin.version, 'update must reach the exact reviewed product version')
       assert.equal(await card.isVisible(), true, 'download/install must preserve the plugin page')
       assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), enabledBefore, 'update must preserve enablement')
       assert.equal(navigations, 0, 'update must not navigate before restart')
       report.upgrades.push({ package: plugin.package, from: historicalVersions[plugin.package], to: installed.version, enabledBefore })
       if (publicManager) report.ownedPublicUpdate = report.upgrades
-      await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-update.png`) })
+      await page.screenshot({ path: await evidenceFile(`${plugin.package}-after-update.png`) })
     }
     page.off('framenavigated', observeNavigation)
     report.updatedDefaultVersions = await verifyInstalledDefaults()
     if (concurrency) {
-      const profile = path.join(root, 'data/dsh-home/profiles/web')
       const files = ['package.json', 'pnpm-lock.yaml', 'node_modules/.modules.yaml']
-      const snapshot = () => Promise.all(files.map(async file => createHash('sha256').update(await readFile(path.join(profile, file))).digest('hex')))
+      const snapshot = () => Promise.all(files.map(async file => createHash('sha256').update(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web', file))).digest('hex')))
       const hashes = await snapshot()
       await new Promise(resolve => setTimeout(resolve, 500))
       assert.deepEqual(await snapshot(), hashes, 'rejected writers changed the completed profile')
@@ -286,7 +332,7 @@ try {
     await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).waitFor({ timeout: 90_000 })
     await page.waitForFunction(selector => !document.querySelector(selector), selector, { timeout: 90_000 })
     cycle.uninstalled = true
-    await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-uninstall.png`) })
+    await page.screenshot({ path: await evidenceFile(`${plugin.package}-after-uninstall.png`) })
 
     await page.getByRole('button', { name: /^(添加插件|Add plugin)$/ }).click()
     dialog = page.getByRole('dialog').last()
@@ -309,7 +355,7 @@ try {
     assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), 'true')
     cycle.reinstalledAndEnabled = true
     cycle.reinstalledDefaultVersions = await verifyInstalledDefaults()
-    await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-install.png`) })
+    await page.screenshot({ path: await evidenceFile(`${plugin.package}-after-install.png`) })
 
   }
   if (!publicManager) {
@@ -367,31 +413,36 @@ try {
   const composer = page.locator('[contenteditable="true"][role="textbox"]').first()
   await composer.fill('Disposable official plugin lifecycle check')
   assert.equal(await composer.isEditable(), true)
-  await page.screenshot({ path: path.join(evidence, publicManager ? 'after-plugin-cycle-composer.png' : 'after-restart-composer.png') })
+  await page.screenshot({ path: await evidenceFile(publicManager ? 'after-plugin-cycle-composer.png' : 'after-restart-composer.png') })
   assert.deepEqual(report.pageErrors, [])
   report.composer = true
   report.ok = true
 } catch (error) {
   report.failure = String(error)
-  await page?.screenshot({ path: path.join(evidence, 'failure.png') }).catch(() => {})
+  try { await page?.screenshot({ path: await evidenceFile('failure.png') }) } catch {}
   throw error
 } finally {
   await secondBrowser?.close().catch(() => {})
-  await writeFile(path.join(evidence, 'result.json'), JSON.stringify(report, null, 2))
-  await cp(path.join(root, 'data', 'dsh-home', 'profiles', 'web', '.plugin-manager', 'logs'),
-    path.join(evidence, 'plugin-manager-logs'), { recursive: true }).catch(() => {})
-  await browser?.close().catch(() => {})
-  const node = path.join(root, 'runtime', 'node', 'node.exe')
-  const launcher = path.join(root, 'launcher', 'runtime-entry.mjs')
-  await promisify(execFile)(node, [launcher, 'portable-cli.mjs', 'stop', '--json'], {
-    cwd: root, env, windowsHide: true, timeout: 120_000,
-  }).catch(() => {})
-  if (host.exitCode === null) host.kill()
-  // Restart replaces the original child. Restrict cleanup to this disposable
-  // executable, never to all Portable processes on the machine.
-  await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-    'try { Get-Process -Name DeepSeek-Herness -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $env:DSH_ACCEPTANCE_HOST_EXE } | Stop-Process -ErrorAction Stop; exit 0 } catch { Write-Error $_; exit 1 }'], {
-    windowsHide: true, timeout: 30000,
-    env: { ...process.env, DSH_ACCEPTANCE_HOST_EXE: path.join(root, 'DeepSeek-Herness.exe') },
-  })
+  try {
+    await writeFile(await evidenceFile('result.json'), JSON.stringify(report, null, 2), { flag: 'wx' })
+    try {
+      await cp(await verifiedPackageFile(root, managedLogsRelative),
+        await safeDataTarget(root, `${evidenceRelative}/plugin-manager-logs`, { leaf: 'any' }), {
+          recursive: true, filter: async source => { await verifiedPackageFile(root, path.relative(root, source)); return true },
+        })
+    } catch {}
+  } finally {
+    await browser?.close().catch(() => {})
+    await promisify(execFile)(nodeExecutable, [runtimeEntry, 'portable-cli.mjs', 'stop', '--json'], {
+      cwd: root, env, windowsHide: true, timeout: 120_000,
+    }).catch(() => {})
+    if (host.exitCode === null) host.kill()
+    // Restart replaces the original child. Restrict cleanup to this disposable
+    // executable, never to all Portable processes on the machine.
+    await promisify(execFile)('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      'try { Get-Process -Name DeepSeek-Herness -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $env:DSH_ACCEPTANCE_HOST_EXE } | Stop-Process -ErrorAction Stop; exit 0 } catch { Write-Error $_; exit 1 }'], {
+      windowsHide: true, timeout: 30000,
+      env: { ...process.env, DSH_ACCEPTANCE_HOST_EXE: hostExecutable },
+    })
+  }
 }

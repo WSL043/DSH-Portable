@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
-import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
 import { dismissOfficialOnboardingExpression } from '../scripts/lib/official-onboarding.mjs'
+import { clickButton, builtInPluginCard, officialPowerShellDetailsReady } from '../scripts/lib/native-smoke-interaction.mjs'
 
 test('late API Key onboarding is dismissed without touching unrelated dialogs', async () => {
   const expression = dismissOfficialOnboardingExpression
@@ -34,11 +34,7 @@ test('late API Key onboarding is dismissed without touching unrelated dialogs', 
 })
 
 test('native acceptance waits for an actionable control after a tab change', async () => {
-  const source = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
-  const start = source.indexOf('const clickButton =')
-  const end = source.indexOf('const clickChoice =', start)
-  assert.ok(start >= 0 && end > start)
-  const expression = vm.runInNewContext(`${source.slice(start, end)}; clickButton(['Light'])`, { settingsMenuFallbackExpression: 'null' })
+  const expression = clickButton(['Light'])
   let clicks = 0
   const button = overrides => ({
     textContent: 'Light',
@@ -63,12 +59,8 @@ test('native acceptance waits for an actionable control after a tab change', asy
   assert.equal(clicks, 1)
 })
 
-async function officialCardExpressions() {
-  const source = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
-  const start = source.indexOf('// Alpha.2 exposes official read-only inventory cards')
-  const end = source.indexOf('const clickChoice =', start)
-  assert.ok(start >= 0 && end > start)
-  return vm.runInNewContext(source.slice(start, end) + "; ({ open: builtInPluginCard('tool-pwsh', true), close: builtInPluginCard('tool-pwsh', false), inspect: builtInPluginCard('tool-pwsh'), ready: officialPowerShellDetailsReady })")
+function officialCardExpressions() {
+  return { open: builtInPluginCard('tool-pwsh', true), close: builtInPluginCard('tool-pwsh', false), inspect: builtInPluginCard('tool-pwsh'), ready: officialPowerShellDetailsReady }
 }
 function inventoryCardFixture() {
   let open = false, clicks = 0
