@@ -102,12 +102,10 @@ jobs:
           RELEASE_TAG: ${{ inputs.tag }}
         run: node scripts/render-release-notes.mjs templates/RELEASE-NOTES.md release-staging/RELEASE-NOTES.md "$RELEASE_TAG"
       - name: Sign the update metadata so mirrors can serve it safely
-        if: ${{ inputs.prepare_only || inputs.publish_feed }}
         env:
           UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
         run: node scripts/sign-update-metadata.mjs product-catalog release-staging/update-assets
       - name: Verify signed metadata with the product trust key
-        if: ${{ inputs.prepare_only || inputs.publish_feed }}
         run: |
           node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises'
@@ -119,6 +117,9 @@ jobs:
             if (!verifyUpdateSignature(await readFile(file), await readFile(`${file}.sig`, 'utf8'))) {
               throw new Error(`Prepared metadata is not signed by the product trust key: ${file}`)
             }
+          }
+          if (!verifyUpdateSignature(await readFile('release-staging/user-assets/portable-manifest.json'), await readFile('release-staging/update-assets/portable-manifest.json.sig', 'utf8'))) {
+            throw new Error('The user full-package manifest does not match the verified signature')
           }
           NODE
       - name: Retain signed metadata for final acceptance without publication
@@ -153,6 +154,9 @@ jobs:
             gh release create "$RELEASE_TAG" --draft --target "$GITHUB_SHA" --title "DSH-Portable ${RELEASE_TAG#v}" --notes-file release-staging/RELEASE-NOTES.md
           fi
           node scripts/upload-release-assets.mjs "$RELEASE_TAG" "${VERIFY_FLAGS[@]}" release-staging/user-assets/*
+          # Re-signing unchanged metadata can produce different valid signature bytes.
+          # Keep the original manifest immutable and publish its verified sidecar on every release, including feed=false.
+          node scripts/upload-release-assets.mjs "$RELEASE_TAG" --mutable release-staging/update-assets/portable-manifest.json.sig
           gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
       - name: Publish the stable update feed and legacy candidate mirror
         if: ${{ !inputs.prepare_only && inputs.publish_feed }}
