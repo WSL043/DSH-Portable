@@ -292,13 +292,14 @@ namespace DshPortable
                     {
                         string directory = ResolveLauncherLogDirectory();
                         Directory.CreateDirectory(directory);
-                        Process.Start(new ProcessStartInfo
+                        Type shellType = Type.GetTypeFromProgID("Shell.Application", true);
+                        object shell = Activator.CreateInstance(shellType);
+                        try
                         {
-                            FileName = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"),
-                            Arguments = QuoteArgument(directory),
-                            UseShellExecute = false,
-                            CreateNoWindow = true
-                        });
+                            shellType.InvokeMember("Explore", System.Reflection.BindingFlags.InvokeMethod,
+                                null, shell, new object[] { directory });
+                        }
+                        finally { System.Runtime.InteropServices.Marshal.ReleaseComObject(shell); }
                     }
                     catch (Exception)
                     {
