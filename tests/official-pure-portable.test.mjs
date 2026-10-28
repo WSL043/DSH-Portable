@@ -132,10 +132,10 @@ test('launcher fixes found by the real end-to-end run stay in place', async () =
   assert.doesNotMatch(source, /nextProtocolRepair/);
   // The update root pointer is written only after the port and foreign-instance checks pass.
   assert.ok(source.indexOf('CheckExternalOfficialOrPort(executable);') < source.indexOf('WritePortableRootPointer(ReadCacheName());'));
-  // A rolled-back version is never the rollback target, is removed, and is not retried for 24 hours.
+  // A rejected version is preserved, never becomes the rollback target, and is not retried for 24 hours.
   assert.match(source, /state\["previous"\] = ""/);
   assert.match(source, /state\["rejected"\]/);
-  assert.match(source, /Directory\.Delete\(Path\.Combine\(AppRoot, version\), true\)/);
+  assert.doesNotMatch(source, /Directory\.Delete\(Path\.Combine\(AppRoot, version\), true\)/);
   assert.match(engine, /rejected/);
   assert.match(engine, /rolled back within the last 24 hours/);
 });

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { loadOfficialProfileBundles } from './official-profile-bundles.mjs'
 
 async function loadOperations(layout) {
   const require = createRequire(path.join(layout.appDir, 'package.json'))
@@ -12,7 +13,7 @@ async function loadOperations(layout) {
     load('@deepseek-ai/dsh-plugin-manager/operations'),
     load('@deepseek-ai/dsh-app-boot'),
   ])
-  return { ...atomic, ...operations, ...boot }
+  return { ...atomic, ...operations, ...boot, ...await loadOfficialProfileBundles(load, boot) }
 }
 
 /** Modern CLI operations share the profile writer with the running official manager.

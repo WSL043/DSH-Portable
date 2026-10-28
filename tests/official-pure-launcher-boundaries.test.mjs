@@ -216,7 +216,7 @@ test('health rollback model clears the failed previous target and records its re
 });
 
 
-test('compiled health rollback preserves state and payloads when the previous program is incomplete', { skip: process.platform !== 'win32' }, async t => {
+test('compiled health rollback preserves failed payloads and refuses an incomplete previous program', { skip: process.platform !== 'win32' }, async t => {
   const scratch = await mkdtemp(join(tmpdir(), 'dsh-pure-health-'));
   const registryRoot = String.raw`Software\DSHPortableAcceptance\health-` + crypto.randomUUID();
   try {
@@ -262,6 +262,7 @@ test('compiled health rollback preserves state and payloads when the previous pr
           if($kind -ne 'missing-asar'){[IO.File]::WriteAllText((Join-Path $app '1.0.0/resources/app.asar'),'synthetic previous payload')}
           $statePath=Join-Path $app 'current.json'; $before='{"version":"2.0.0","previous":"1.0.0","pendingHealth":true,"custom":"keep"}'
           [IO.File]::WriteAllText($statePath,$before); [IO.File]::WriteAllText((Join-Path $data 'draft.txt'),'synthetic draft preserved')
+          [IO.File]::WriteAllText((Join-Path $app '2.0.0/user-added.txt'),'unreceipted file must survive rollback')
           $beforeTrees=@(Get-ChildItem -LiteralPath $app -Recurse -File | Where-Object Name -ne 'current.json' | ForEach-Object { $_.FullName+'|'+(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }) -join '\n'
           foreach($pair in @(@('Root',$root),@('AppRoot',$app),@('DataRoot',$data),@('LauncherData',$launcherData))){$type.GetField($pair[0],$flags).SetValue($null,$pair[1])}
           $errorMessage=''; $code=$null
@@ -287,7 +288,8 @@ test('compiled health rollback preserves state and payloads when the previous pr
         assert.equal(item.state.pendingHealth, false);
         assert.equal(item.state.rejected.version, '2.0.0');
         assert.equal(item.previousStarted, true);
-        assert.equal(item.currentExists, false);
+        assert.equal(item.currentExists, true);
+        assert.equal(item.treesUnchanged, true, 'rollback must preserve the complete failed tree, including user-added files');
       } else {
         assert.match(item.error, /Cannot roll back|无法回退/);
         assert.equal(item.stateUnchanged, true);

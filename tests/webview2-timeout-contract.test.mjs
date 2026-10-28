@@ -169,7 +169,7 @@ test('Windows product and engine update choices share the live workspace and res
   )
   const choice = source.slice(
     source.indexOf('private async Task<int> ShowUpdateChoiceOverlayAsync('),
-    source.indexOf('private void ResetOperationUi'),
+    source.indexOf('private void HandleUpdateProgress'),
   )
 
   assert.match(updateCheck, /int choice = await ShowUpdateChoiceOverlayAsync\(/)

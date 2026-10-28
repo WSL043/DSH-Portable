@@ -590,15 +590,21 @@ async function readLocalUpdateFiles({ layout, input, scope }, verifySignature) {
   const archive = await localFile(archiveName)
   if (archive.info.size !== Number(component.bytes)) throw new Error('Local update component size mismatch.')
   // The read-only check verifies the actual attachment; installation verifies again while copying its bytes.
+  const actual = await boundedFileDigest(archive.filename, Number(component.bytes))
+  if (actual.bytes > Number(component.bytes)) throw new Error('Local update component size mismatch.')
+  if (actual.bytes !== Number(component.bytes) || actual.sha256 !== component.sha256.toLowerCase()) throw new Error('Local update component digest mismatch.')
+  return { ...result, localArchive: archive.filename }
+}
+
+async function boundedFileDigest(filename, maxBytes) {
   const digest = createHash('sha256')
-  let received = 0
-  for await (const chunk of createReadStream(archive.filename)) {
-    received += chunk.length
-    if (received > Number(component.bytes)) throw new Error('Local update component size mismatch.')
+  let bytes = 0
+  for await (const chunk of createReadStream(filename)) {
+    bytes += chunk.length
+    if (bytes > maxBytes) return { bytes, sha256: null }
     digest.update(chunk)
   }
-  if (received !== Number(component.bytes) || digest.digest('hex') !== component.sha256.toLowerCase()) throw new Error('Local update component digest mismatch.')
-  return { ...result, localArchive: archive.filename }
+  return { bytes, sha256: digest.digest('hex') }
 }
 
 export async function copyVerifiedLocalComponent({ source, destination, bytes, sha256, onProgress = () => {} }) {
@@ -1108,9 +1114,9 @@ export async function applyStagedCapsuleUpdate({ layout, stagedRoot, healthCheck
   if (!existsSync(stagedCapsuleFile) || UPDATE_LICENSE_FILES.some((name) => !existsSync(path.join(stagedLicenses, name)))) {
     throw new Error('Staged compact runtime update is incomplete.')
   }
-  const capsuleBytes = await readFile(stagedCapsuleFile)
-  if (capsuleBytes.length !== Number(stagedManifest.bytes)
-    || createHash('sha256').update(capsuleBytes).digest('hex') !== stagedManifest.sha256) {
+  const capsuleDigest = await boundedFileDigest(stagedCapsuleFile, Number(stagedManifest.bytes))
+  if (capsuleDigest.bytes !== Number(stagedManifest.bytes)
+    || capsuleDigest.sha256 !== stagedManifest.sha256) {
     throw new Error('Staged compact runtime failed integrity verification.')
   }
 

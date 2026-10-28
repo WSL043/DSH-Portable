@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { lstat, readFile, readdir } from 'node:fs/promises'
 import { dataPathKey, normalizeDataPath, safeDataTarget } from './data-paths.mjs'
+import { loadOfficialProfileBundles } from './official-profile-bundles.mjs'
 
 const BACKEND = '@deepseek-ai/dsh-session-persistence-jsonl'
 const INCLUDE = '@deepseek-ai/cordis-plugin-include'
@@ -88,7 +89,8 @@ export async function assertImportedSessionCompatibility(layout, plannedFiles) {
     }
     const baseFile = path.join(profileDir, 'cordis.yml')
     if (patches(await bytesAt(baseFile), baseFile).length) throw new Error('Non-empty profile base configuration cannot be verified offline.')
-    const bundles = manifestBytes === null ? boot.PROFILE_TEMPLATES?.web?.bundles : manifest?.dsh?.profile?.bundles
+    const bundles = manifestBytes === null
+      ? (await loadOfficialProfileBundles(load, boot)).PROFILE_TEMPLATES.web?.bundles : manifest?.dsh?.profile?.bundles
     if (!Array.isArray(bundles) || !bundles.every(name => typeof name === 'string')) throw new Error('Unknown web profile bundles.')
     const anchor = path.join(layout.appDir, 'node_modules', '@deepseek-ai', 'dsh', 'package.json')
     const layers = []

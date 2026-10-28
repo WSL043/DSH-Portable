@@ -313,7 +313,13 @@ test('offline repair and retained rollback recover a failed atomic activation wi
       "[IO.File]::WriteAllText((Join-Path $root 'app/1.0.0/unknown.txt'),'unknown user content')",
       "$call=@('-NoProfile','-NonInteractive','-OutputFormat','Text','-ExecutionPolicy','Bypass','-File'," + quote(join(fixture, 'apply-update.ps1')) + ",'-Root',$root,'-SelfPath',(Join-Path $root 'DeepSeek Harness Portable.exe'))",
       "$operation=@('-Repair','-InstallerFile'," + quote(join(fixture, 'installer.exe')) + ",'-IndexFile'," + quote(join(fixture, 'index.json')) + ')',
-      '$identity=(Get-AcceptedInstallerCandidate (Read-LocalAcceptedIndex ' + quote(join(fixture, 'index.json')) + ') ' + quote(join(fixture, 'installer.exe')) + ').version',
+      '$index=Read-LocalAcceptedIndex ' + quote(join(fixture, 'index.json')),
+      '$installer=' + quote(join(fixture, 'installer.exe')),
+      '$identity=(Get-AcceptedInstallerCandidate $index $installer).version',
+      "$other=$index.versions[0].PSObject.Copy(); $other.version='1.0.1'; $ambiguous=''",
+      "try { Get-AcceptedInstallerCandidate @{versions=@($index.versions[0],$other)} $installer | Out-Null } catch { $ambiguous=$_.Exception.Message }",
+      "$other=$index.versions[0].PSObject.Copy(); $other.size++; $duplicate=''",
+      "try { Get-AcceptedInstallerCandidate @{versions=@($index.versions[0],$other)} $installer | Out-Null } catch { $duplicate=$_.Exception.Message }",
       "$env:PURE_SIGNATURE_FAIL='1'; $ErrorActionPreference='Continue'; & " + quote(powershell) + " @call @operation *> (Join-Path $root 'signature.log'); $signatureCode=$LASTEXITCODE; $ErrorActionPreference='Stop'; $env:PURE_SIGNATURE_FAIL='0'",
       "$signature=Get-Content (Join-Path $root 'data/launcher/update-status.json') -Raw|ConvertFrom-Json",
       "$held=[IO.File]::Open((Join-Path $root 'app/current.json'),'Open','Read','Read')",
@@ -330,9 +336,11 @@ test('offline repair and retained rollback recover a failed atomic activation wi
       "[IO.File]::WriteAllText((Join-Path $root 'app/0.9.0/resources/app.asar'),'original asar')",
       "$ErrorActionPreference='Continue'; & " + quote(powershell) + " @call -Rollback *> (Join-Path $root 'rollback.log'); $rollbackCode=$LASTEXITCODE; $ErrorActionPreference='Stop'",
       "$current=Get-Content (Join-Path $root 'app/current.json') -Raw|ConvertFrom-Json",
-      "@{identity=$identity;signatureCode=$signatureCode;signature=$signature;corruptRollbackCode=$corruptRollbackCode;corruptRollback=$corruptRollback;firstCode=$firstCode;first=$first;recoverCode=$recoverCode;recovered=$recovered;repeatCode=$repeatCode;repeat=$repeat;rollbackCode=$rollbackCode;current=$current;backup=[IO.File]::ReadAllText((Join-Path $root 'app/1.0.0.repair-backup/unknown.txt'));draft=[IO.File]::ReadAllText((Join-Path $root 'data/draft.txt'))}|ConvertTo-Json -Depth 12 -Compress",
+      "@{identity=$identity;ambiguous=$ambiguous;duplicate=$duplicate;signatureCode=$signatureCode;signature=$signature;corruptRollbackCode=$corruptRollbackCode;corruptRollback=$corruptRollback;firstCode=$firstCode;first=$first;recoverCode=$recoverCode;recovered=$recovered;repeatCode=$repeatCode;repeat=$repeat;rollbackCode=$rollbackCode;current=$current;backup=[IO.File]::ReadAllText((Join-Path $root 'app/1.0.0.repair-backup/unknown.txt'));draft=[IO.File]::ReadAllText((Join-Path $root 'data/draft.txt'))}|ConvertTo-Json -Depth 12 -Compress",
     ].join('\n')));
     assert.equal(result.identity, '1.0.0');
+    assert.match(result.ambiguous, /identity is ambiguous/);
+    assert.match(result.duplicate, /duplicate versions/);
     assert.equal(result.signatureCode, 1);
     assert.match(result.signature.error, /signature/);
     assert.equal(result.corruptRollbackCode, 1);
@@ -560,4 +568,47 @@ test('private file digest matches Get-FileHash for literal relative empty, small
     assert.ok(fixture.startsWith(join(tmpdir(), 'pure-digest-oracle-')));
     ps('Add-Type -AssemblyName Microsoft.VisualBasic; [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory(' + quote(fixture) + ',[Microsoft.VisualBasic.FileIO.UIOption]::OnlyErrorDialogs,[Microsoft.VisualBasic.FileIO.RecycleOption]::SendToRecycleBin)');
   }
+});
+
+test('update waits share one process snapshot per poll and preserve ownership boundaries', windows, () => {
+  const result = JSON.parse(ps(`
+    $tokens=$null; $errors=$null
+    $ast=[Management.Automation.Language.Parser]::ParseFile(${quote(engine)},[ref]$tokens,[ref]$errors)
+    if($errors.Count){throw 'Update engine parse failed'}
+    foreach($name in @('Get-Processes','Wait-NoOwnedProcesses')) {
+      $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$false)
+      if(-not $definition){throw ('Missing process helper: '+$name)}
+      Invoke-Expression $definition.Extent.Text
+    }
+    $appRoot='D:\\portable\\app'; $launcherRoot='D:\\portable\\launcher'; $Root='D:\\portable'; $MaintenanceCallerPid=10
+    $script:queries=0; $script:sleeps=0; $script:failSnapshot=$false
+    function Get-CimInstance {
+      [CmdletBinding()]param([string]$ClassName,[string[]]$Property)
+      $script:queries++
+      if($script:failSnapshot){throw 'Snapshot denied'}
+      if($script:queries -eq 1){[pscustomobject]@{Name='DeepSeek Harness.exe';ExecutablePath=$null;ProcessId=20}}
+    }
+    function Start-Sleep { param([int]$Milliseconds) $script:sleeps++ }
+    $snapshot=@(
+      [pscustomobject]@{Name='DeepSeek Harness.exe';ExecutablePath='D:\\portable\\app\\1.0.0\\DeepSeek Harness.exe';ProcessId=1},
+      [pscustomobject]@{Name='DeepSeek Harness.exe';ExecutablePath='D:\\portable\\app-neighbor\\DeepSeek Harness.exe';ProcessId=2},
+      [pscustomobject]@{Name='DeepSeek Harness.exe';ExecutablePath=$null;ProcessId=3},
+      [pscustomobject]@{Name='DeepSeek Harness Portable.exe';ExecutablePath='D:\\portable\\DeepSeek Harness Portable.exe';ProcessId=10},
+      [pscustomobject]@{Name='DeepSeek Harness Portable.exe';ExecutablePath='D:\\other\\DeepSeek Harness Portable.exe';ProcessId=11}
+    )
+    $apps=@(Get-Processes 'app' $snapshot | ForEach-Object ProcessId)
+    $launchers=@(Get-Processes 'launcher' $snapshot | ForEach-Object ProcessId)
+    $beforeWait=$script:queries
+    Wait-NoOwnedProcesses
+    $waitQueries=$script:queries
+    $script:failSnapshot=$true; $denied=$false
+    try { Wait-NoOwnedProcesses } catch { $denied=$_.Exception.Message -match 'Snapshot denied' }
+    @{apps=$apps;launchers=$launchers;beforeWait=$beforeWait;waitQueries=$waitQueries;sleeps=$script:sleeps;denied=$denied}|ConvertTo-Json -Compress
+  `));
+  assert.deepEqual(result.apps, [1, 3], 'unknown official paths remain conservative; adjacent roots are excluded');
+  assert.deepEqual(result.launchers, [10]);
+  assert.equal(result.beforeWait, 0, 'supplied snapshots must avoid another CIM query');
+  assert.equal(result.waitQueries, 2, 'one query for each of two polling rounds');
+  assert.equal(result.sleeps, 1);
+  assert.equal(result.denied, true, 'an unreadable process snapshot must not allow activation');
 });

@@ -143,6 +143,7 @@
       "launcher-log.mjs",
       "log-history.mjs",
       "official-market.mjs",
+      "official-profile-bundles.mjs",
       "operation-trace.mjs",
       "plugin-command-check.mjs",
       "plugin-log-maintenance.mjs",

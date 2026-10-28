@@ -32,13 +32,7 @@ if ($Bootstrap) {
     $candidate = Get-LatestAcceptedIndexCandidate $index
 } else {
     if (-not $Installer -or -not (Test-Path -LiteralPath $Installer -PathType Leaf)) { throw 'Official installer is missing' }
-    $installerHash = (Get-FileHash -LiteralPath $Installer -Algorithm SHA512).Hash
-    $installerSize = (Get-Item -LiteralPath $Installer).Length
-    foreach ($entry in $index.versions) {
-        Assert-Candidate $entry
-        if ([long]$entry.size -eq $installerSize -and [BitConverter]::ToString([Convert]::FromBase64String([string]$entry.sha512)).Replace('-', '') -ceq $installerHash) { $candidate = $entry }
-    }
-    if ($null -eq $candidate) { throw 'Installer identity does not match any accepted index entry' }
+    $candidate = Get-AcceptedInstallerCandidate $index $Installer
     Assert-Installer $Installer $candidate
 }
 $appRoot = Join-Path $Output 'app'; $launcherRoot = Join-Path $Output 'launcher'; $dataRoot = Join-Path $Output 'data'
@@ -83,7 +77,7 @@ try {
 
 **便携数据：** `data/dsh-home/`（官方 `DSH_HOME`）、`data/agents/`（独立 agents home）、`data/electron/`（Chromium/Electron user data）、`data/cache/native-addons/`（原生模块缓存）及 `data/launcher/`（日志、更新状态与暂存）。搬动时完全退出并移动整个根目录。
 
-**更新：** 官方自己的更新提示与“安装并重启”按钮保持启用。点击后官方运行缓存中的本启动器副本；启动器从 `launcher/follow.json` 的已验收索引取得官方安装包，验证大小、SHA-512 和 Authenticode 发布者，再解包到版本目录。当前版和上一版保留，更旧目录只在完整树收据匹配时清理；未知、改动或占用目录保留。新版首次启动 20 秒异常退出时自动回退一次。
+**更新：** 官方自己的更新提示与“安装并重启”按钮保持启用。点击后官方运行缓存中的本启动器副本；启动器从 `launcher/follow.json` 的已验收索引取得官方安装包，验证大小、SHA-512 和 Authenticode 发布者，再解包到版本目录。当前版和上一版保留，更旧目录只在完整树收据匹配时清理；未知、改动或占用目录保留。新版首次启动 20 秒异常退出时自动回退一次并保留失败程序；后续更新仅按完整树收据清理。
 
 **维护：** 完全退出后按住 Shift 启动，或使用 `--maintenance`。从文件更新/修复使用官方安装包与 `launcher/accepted-index.json` 快照，可把新快照以 `accepted-index.json` 放在安装包旁；全程不回退到网络；索引外版本须先取得已验收的新快照。同版本修复保留一份固定 `.repair-backup`，整个便携根已有任何版本的修复备份时停止；回退仅限收据匹配的上一程序版本，不还原数据、工作区或登录状态，也不保证官方数据 schema 可降级。中断操作在下次启动时核验并恢复；未知材料保留，不覆盖。
 
@@ -97,7 +91,7 @@ try {
 
 **Portable data:** `data/dsh-home/` (`DSH_HOME`), `data/agents/` (separate agents home), `data/electron/` (Chromium/Electron user data), `data/cache/native-addons/` (native addon cache), and `data/launcher/` (logs, update status and staging). Exit fully before moving the complete root folder.
 
-**Updates:** The official update prompt and Install and Restart flow remain enabled. The updater runs a cached copy of this launcher, which reads the accepted index from `launcher/follow.json`, downloads the official installer, verifies its size, SHA-512 and Authenticode publisher, and extracts a versioned app directory. Current and previous versions are retained; older trees are cleaned only when their complete ownership receipts match. Unknown, modified or busy directories are preserved. A non-zero exit during the first 20 seconds triggers one rollback.
+**Updates:** The official update prompt and Install and Restart flow remain enabled. The updater runs a cached copy of this launcher, which reads the accepted index from `launcher/follow.json`, downloads the official installer, verifies its size, SHA-512 and Authenticode publisher, and extracts a versioned app directory. Current and previous versions are retained; older trees are cleaned only when their complete ownership receipts match. Unknown, modified or busy directories are preserved. A non-zero exit during the first 20 seconds triggers one rollback and preserves the failed program; subsequent updates clean older trees only when their complete ownership receipts match.
 
 **Maintenance:** Exit fully, then hold Shift while starting, or use `--maintenance`. Update from file and repair use the official installer plus `launcher/accepted-index.json`, without network fallback. A newer snapshot can be placed beside the installer as `accepted-index.json`. New versions require an accepted snapshot. Same-version repair retains one fixed `.repair-backup`; a recovery slot for any version stops another repair. Rollback accepts only the retained, receipt-matching previous program. It does not restore data, workspaces or login state, and cannot guarantee schema downgrade compatibility. The next launch validates and recovers recorded interruptions; unknown materials are preserved.
 

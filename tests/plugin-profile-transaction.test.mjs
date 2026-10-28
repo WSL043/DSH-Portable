@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { withPluginProfileTransaction } from '../launcher/plugin-profile-transaction.mjs'
 import { runCheckedPluginMutation } from '../launcher/plugin-command-check.mjs'
+import { loadOfficialProfileBundles } from '../launcher/official-profile-bundles.mjs'
 
 async function fixture(t) {
   const root = await mkdtemp(path.join(tmpdir(), 'cli-profile-transaction-'))
@@ -61,4 +62,39 @@ test('wrong profile, expired operation and validation exceptions cannot write un
   await assert.rejects(withPluginProfileTransaction(bed.spec, '../escape', async () => {}, async () => api), /Invalid/)
   await assert.rejects(withPluginProfileTransaction(bed.spec, 'web', async () => { throw Error('failure') }, async () => api), /failure/)
   await bed.withFileLock(bed.file, async () => {})
+})
+
+test('profile defaults follow the official export owner without masking broken runtimes', async () => {
+  const defaults = { PROFILE_TEMPLATES: { web: { bundles: ['official-web'] } }, DEFAULT_PROFILE_BUNDLES: ['official-base'] }
+  assert.deepEqual(await loadOfficialProfileBundles(async () => { throw Error('legacy must not import new owner') }, defaults), defaults)
+  assert.deepEqual(await loadOfficialProfileBundles(async name => {
+    assert.equal(name, '@deepseek-ai/dsh-official-bundles')
+    return defaults
+  }, {}), defaults)
+  await assert.rejects(loadOfficialProfileBundles(async () => { throw Error('broken official owner') }, {}), /broken official owner/)
+  await assert.rejects(loadOfficialProfileBundles(async () => ({}), {}), /no official profile bundle defaults/)
+})
+
+for (const modern of [false, true]) test(`CLI initializes with ${modern ? 'new bundle owner' : 'legacy boot'} defaults`, async t => {
+  const bed = await fixture(t)
+  await unlink(bed.file)
+  bed.spec.layout.appDir = path.join(bed.root, 'app')
+  const defaults = "export const PROFILE_TEMPLATES = { web: { bundles: ['official-web'] } }; export const DEFAULT_PROFILE_BUNDLES = ['official-base'];"
+  const packages = {
+    'dsh-atomic-write': 'export async function withFileLock(_file, fn) { return fn() }',
+    'dsh-plugin-manager': 'export async function runProfilePnpm() { return { exitCode: 0 } }',
+    'dsh-app-boot': `import { writeFileSync } from 'node:fs'; import path from 'node:path'; export function initProfile(dir, bundles) { writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ bundles })) }; ${modern ? '' : defaults}`,
+    ...(modern ? { 'dsh-official-bundles': defaults } : {}),
+  }
+  for (const [name, code] of Object.entries(packages)) {
+    const dir = path.join(bed.spec.layout.appDir, 'node_modules', '@deepseek-ai', name)
+    await mkdir(dir, { recursive: true })
+    await writeFile(path.join(dir, 'package.json'), JSON.stringify({ type: 'module', exports: { '.': './index.js', './operations': './index.js' } }))
+    await writeFile(path.join(dir, 'index.js'), code)
+  }
+  await withPluginProfileTransaction(bed.spec, 'web', async () => {})
+  assert.deepEqual(JSON.parse(await readFile(bed.file, 'utf8')), { bundles: ['official-web'] })
+  await unlink(bed.file)
+  await withPluginProfileTransaction(bed.spec, 'custom', async () => {})
+  assert.deepEqual(JSON.parse(await readFile(path.join(bed.root, 'profiles/custom/package.json'), 'utf8')), { bundles: ['official-base'] })
 })

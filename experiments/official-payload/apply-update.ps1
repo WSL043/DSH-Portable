@@ -75,8 +75,8 @@ function Get-StrictJson([string]$Url) {
     return ((Read-BoundedHttpText $Url) | ConvertFrom-Json)
 }
 
-function Get-Processes([string]$Kind) {
-    $all = @(Get-CimInstance Win32_Process -ErrorAction Stop)
+function Get-Processes([string]$Kind, [object[]]$Snapshot = $null) {
+    $all = if ($null -eq $Snapshot) { @(Get-CimInstance Win32_Process -Property Name, ExecutablePath, ProcessId -ErrorAction Stop) } else { $Snapshot }
     if ($Kind -eq 'app') {
         $prefix = [IO.Path]::GetFullPath($appRoot).TrimEnd('\') + '\'
         return @($all | Where-Object { ($_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath).StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)) -or ($_.Name -ceq 'DeepSeek Harness.exe' -and -not $_.ExecutablePath) })
@@ -96,7 +96,8 @@ function Assert-NoExtractionWriters {
 function Wait-NoOwnedProcesses {
     $deadline = [DateTime]::UtcNow.AddSeconds(60)
     do {
-        if (@(Get-Processes 'app').Count -eq 0 -and @(Get-Processes 'launcher' | Where-Object { $_.ProcessId -ne $MaintenanceCallerPid }).Count -eq 0) { return }
+        $snapshot = @(Get-CimInstance Win32_Process -Property Name, ExecutablePath, ProcessId -ErrorAction Stop)
+        if (@(Get-Processes 'app' $snapshot).Count -eq 0 -and @(Get-Processes 'launcher' $snapshot | Where-Object { $_.ProcessId -ne $MaintenanceCallerPid }).Count -eq 0) { return }
         Start-Sleep -Milliseconds 500
     } while ([DateTime]::UtcNow -lt $deadline)
     throw 'Portable application or root launcher is still running after 60 seconds'
@@ -174,7 +175,8 @@ function Complete-Transition($Transition) {
     $script:activation = [IO.File]::Open($activationPath, [IO.FileMode]::OpenOrCreate, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
     # A protocol handoff can start a process after the wait and release its shared
     # lease before this exclusive open. Recheck while no new handoff can enter.
-    if (@(Get-Processes 'app').Count -gt 0 -or @(Get-Processes 'launcher' | Where-Object { $_.ProcessId -ne $MaintenanceCallerPid }).Count -gt 0) { throw 'Portable started during activation; exit it before recovering this operation' }
+    $snapshot = @(Get-CimInstance Win32_Process -Property Name, ExecutablePath, ProcessId -ErrorAction Stop)
+    if (@(Get-Processes 'app' $snapshot).Count -gt 0 -or @(Get-Processes 'launcher' $snapshot | Where-Object { $_.ProcessId -ne $MaintenanceCallerPid }).Count -gt 0) { throw 'Portable started during activation; exit it before recovering this operation' }
     $alreadyCommitted = $false
     if (Test-Path -LiteralPath $currentPath -PathType Leaf) {
         $live = Get-Content -LiteralPath $currentPath -Raw | ConvertFrom-Json

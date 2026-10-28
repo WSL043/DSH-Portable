@@ -1132,13 +1132,12 @@ async function makeUpdateFixture() {
   return { dshRelative, layout, root, stagedRoot }
 }
 
-async function makeCapsuleUpdateFixture() {
+async function makeCapsuleUpdateFixture(newCapsule = Buffer.from('new capsule')) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-capsule-update-'))
   const runtimeRoot = path.join(root, 'machine-cache', 'old-runtime')
   const layout = layoutForRoot(root, process.platform, root, runtimeRoot)
   const stagedRoot = path.join(root, '.dsh-portable-update', 'capsule-fixture', 'staged')
   const oldCapsule = Buffer.from('old capsule')
-  const newCapsule = Buffer.from('new capsule')
   await mkdir(path.join(root, 'runtime'), { recursive: true })
   await mkdir(path.join(stagedRoot, 'runtime'), { recursive: true })
   await mkdir(path.join(root, 'licenses'), { recursive: true })
@@ -1185,7 +1184,7 @@ async function makeCapsuleUpdateFixture() {
 }
 
 test('compact runtime update swaps only the capsule and preserves portable data', async () => {
-  const fixture = await makeCapsuleUpdateFixture()
+  const fixture = await makeCapsuleUpdateFixture(Buffer.alloc(131073, 0x5a))
   try {
     const result = await applyStagedCapsuleUpdate({
       layout: fixture.layout,
@@ -1199,6 +1198,29 @@ test('compact runtime update swaps only the capsule and preserves portable data'
   } finally {
     await rm(fixture.root, { recursive: true, force: true })
   }
+})
+
+test('compact runtime integrity rejects truncated, oversized and changed payloads before preflight', async t => {
+  for (const change of ['truncated', 'oversized', 'changed']) await t.test(change, async () => {
+    const fixture = await makeCapsuleUpdateFixture(Buffer.alloc(131073, 0x5a))
+    try {
+      const original = fixture.newCapsule
+      const changed = change === 'truncated' ? original.subarray(0, original.length - 1)
+        : change === 'oversized' ? Buffer.concat([original, Buffer.from([0])]) : Buffer.from(original)
+      if (change === 'changed') changed[65536] ^= 0xff
+      await writeFile(path.join(fixture.stagedRoot, 'runtime', 'DSH-App.dshpack'), changed)
+      let inspected = false
+      await assert.rejects(applyStagedCapsuleUpdate({
+        layout: fixture.layout, stagedRoot: fixture.stagedRoot,
+        preflight: async () => { inspected = true }, healthCheck: async () => { inspected = true; return true },
+      }), /integrity verification/i)
+      assert.equal(inspected, false, 'unverified bytes never reach preflight or activation')
+      assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+      await assert.rejects(lstat(fixture.layout.updateJournal), { code: 'ENOENT' })
+    } finally {
+      await rm(fixture.root, { recursive: true, force: true })
+    }
+  })
 })
 
 test('failed compact runtime health check restores the prior capsule and metadata', async () => {

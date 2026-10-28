@@ -126,7 +126,7 @@ internal static class PortableLauncher {
                 if (maintenance != null) throw new IOException(T("请先退出当前便携窗口，再执行维护。", "Exit this Portable window before maintenance."));
                 if (link != null) {
                     if (HasPendingTransition()) throw new IOException(T("正在维护，请稍后打开会话。", "Maintenance is in progress. Open the session afterwards."));
-                    using (FileStream handoff = OpenActivationLock()) StartOfficial(link, probe, false); return 0;
+                    using (FileStream handoff = OpenActivationLock()) StartOfficial(link, probe); return 0;
                 }
                 return 0;
             }
@@ -232,9 +232,10 @@ internal static class PortableLauncher {
                         // The failed version must never become the rollback target, and the update engine must not retry it right away.
                         state["rejected"] = new Dictionary<string, object> { { "version", version }, { "at", DateTime.UtcNow.ToString("o") } };
                         WriteJsonAtomic(Path.Combine(AppRoot, "current.json"), state);
-                        try { CheckPath(Path.Combine(AppRoot, version)); Directory.Delete(Path.Combine(AppRoot, version), true); } catch (Exception cleanupError) { Log("could not remove the rejected version: " + SafeMessage(cleanupError.Message)); }
+                        // Preserve the failed tree: only the update engine may remove an older
+                        // payload after matching its complete ownership receipt.
                         WriteJsonAtomic(Path.Combine(LauncherData, "update-status.json"), new Dictionary<string, object> { { "status", "rolled-back" }, { "version", version }, { "error", "New version exited before the 20-second health window." } });
-                        Log("health rollback version=" + version + " exit=" + exitCode);
+                        Log("health rollback version=" + version + " exit=" + exitCode + " failed-program-preserved=true");
                         version = previous; executable = rollbackExecutable;
                         app = StartOfficialProcess(executable, null, probe);
                     } else {
@@ -568,7 +569,7 @@ internal static class PortableLauncher {
         Directory.CreateDirectory(Path.Combine(DataRoot, "electron")); Directory.CreateDirectory(Path.Combine(DataRoot, "dsh-home")); Directory.CreateDirectory(agentsHome); Directory.CreateDirectory(nativeAddonCache);
         return Process.Start(start);
     }
-    private static void StartOfficial(string link, string probe, bool unused) {
+    private static void StartOfficial(string link, string probe) {
         Dictionary<string, object> state = ReadJson(Path.Combine(AppRoot, "current.json"));
         string version = GetString(state, "version"); if (!VersionPattern.IsMatch(version)) throw new IOException("Invalid current version.");
         EnsureApplication(AppExecutable(version)); StartOfficialProcess(AppExecutable(version), link, probe);

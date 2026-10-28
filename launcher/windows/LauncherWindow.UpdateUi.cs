@@ -140,24 +140,6 @@ namespace DshPortable
             }
         }
 
-        private void ResetOperationUi()
-        {
-            ClientSize = new Size(560, 220);
-            launchContent.Size = new Size(504, 144);
-            CenterLaunchContent();
-            statusLabel.AutoEllipsis = true;
-            statusLabel.Location = new Point(80, 53);
-            statusLabel.Size = new Size(400, 36);
-            statusLabel.ForeColor = Color.FromArgb(72, 72, 72);
-            statusLabel.Text = IsStopCommand(launcherArgs)
-                ? L("正在停止 DeepSeek Harness…", "Stopping DeepSeek Harness…")
-                : L("正在启动 DeepSeek Harness…", "Starting DeepSeek Harness…");
-            progressDetail.Visible = false;
-            activityRing.Indeterminate = true;
-            activityRing.Value = 0;
-            activityRing.Visible = true;
-        }
-
         private void HandleUpdateProgress(string jsonLine)
         {
             if (InvokeRequired) { BeginInvoke(new Action<string>(HandleUpdateProgress), jsonLine); return; }

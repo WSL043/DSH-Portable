@@ -1,5 +1,21 @@
 # 1.x 基线维护与验收（2026-10-23）
 
+## 2026-10-28 续：效率与代码精简
+
+0.x 胶囊安装前校验复用本地附件的有界流式 SHA-256，不再整体读入压缩包；字节数、摘要和安装前拒绝顺序保留。删除未调用的 ResetOperationUi。1.x 每轮进程等待复用一次 CIM 快照，激活锁后与解包写入者检查仍重新查询；打包复用既有安装包身份匹配，歧义候选继续拒绝。自动健康回退保留失败程序及附加文件，后续仍由完整树收据门槛决定清理。
+
+128 MiB 合成文件两轮摘要完全一致，旧读取持有约 128 MiB Buffer；新实现不保留整包 Buffer。独立进程观测内存增量约 130 MiB 对比约 17 MiB；这不是整体启动或更新速度结论。本批定向实执行覆盖损坏拒绝、旧/新官方默认清单、真实 Windows 进程快照与编译后回退。完整依赖和成品矩阵结果以本批精确提交的 CI 为准；本机缺依赖及测试工具环境失败保留日志，不算通过。
+
+The bounded streaming digest avoids retaining a complete capsule in memory without skipping integrity checks. Process snapshots are shared only within one polling round; activation still rechecks. Failed health targets are preserved for receipt-based cleanup. The synthetic memory comparison does not establish faster startup, and alpha compatibility preparation is not full candidate acceptance.
+
+## 2026-10-28 上游 alpha 接口核对
+
+官方已发布 [0.2.2-alpha.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-alpha.2)（源码 f3803c96974ad4a94195fb97e5c637e9c2a3afe3）和 [0.2.1-rc.4](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.4)。alpha 将默认组合包清单从 app-boot 移至 [dsh-official-bundles](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-alpha.2/packages/util/official-bundles/src/index.ts)；Portable 的插件事务和旧会话导入预检共用按导出能力选择的解析器，旧内核仍复用原导出，不猜版本、不吞加载错误。最低 Node.js 24.9，当前固定 24.22.1 满足。此项是兼容准备，尚不表示整套 alpha 已通过产品验收；不改公开候选或现有内核锁。
+
+本次只读核对时，[Windows 官方 nightly feed](https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml) 仍是 0.2.1-rc.3；GitHub/npm alpha 不等于已交付的新桌面成品。alpha 与 rc.4 的官方 MCP 清单仍固定 client 2.2.0，处于 [GHSA-6prh-2h8m-c8cw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) 影响范围，不能据发布名称解除 1.x 安全阻断，也不覆盖官方 SDK。
+
+Alpha compatibility preparation follows the official export owner by capability and retains legacy app-boot support. It does not promote the alpha runtime, qualify a new desktop payload, or remove the upstream MCP security hold. Full candidate qualification must bind the immutable source and built artifact on an isolated review branch.
+
 ## 2026-10-28 续：离线维护与恢复
 
 Native 产品版本保持 0.9.7，1.x 不发布、不改公开目录、不启用桌面通道。本批代码见 [PR #220](https://github.com/WSL043/DSH-Portable/pull/220)。

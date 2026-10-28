@@ -719,6 +719,8 @@ try {
     $crashExe = Join-Path $crashRoot 'DeepSeek Harness.exe'
     Add-Type -Path (Join-Path $PSScriptRoot 'CrashStub.cs') -OutputAssembly $crashExe -OutputType WindowsApplication
     [IO.File]::WriteAllBytes((Join-Path $crashRoot 'resources\app.asar'), [byte[]]@())
+    [IO.File]::WriteAllText((Join-Path $crashRoot 'user-added.txt'), 'Unreceipted files must survive health rollback')
+    $crashTreeBefore = Get-PortablePayloadTreeHash $crashRoot
     $crashCurrent = [ordered]@{ version = $crashVersion; previous = $script:NewVersion; pendingHealth = $true; switchedAt = [DateTime]::UtcNow.ToString('o') }
     Write-JsonFile (Join-Path $script:PortableRoot 'app\current.json') $crashCurrent
     $crashProbePort = Get-FreeLoopbackPort
@@ -740,13 +742,18 @@ try {
     }
     $rollbackApp = @(Get-PrimaryVersionProcesses $script:NewVersion)
     $rollbackAlive = $false
-    if ($rollbackEvidence -and -not $rollbackEvidence.rejectedDirectoryExists -and $rollbackApp.Count -gt 0) {
+    if ($rollbackEvidence -and $rollbackEvidence.rejectedDirectoryExists -and $rollbackApp.Count -gt 0) {
         $pidAfterRollback = [int]$rollbackApp[0].ProcessId
         Start-Sleep -Seconds 5
         $rollbackAlive = @(Get-VersionProcesses $script:NewVersion | Where-Object { [int]$_.ProcessId -eq $pidAfterRollback }).Count -gt 0
     }
     if ($rollbackEvidence) { $rollbackEvidence | Add-Member -NotePropertyName officialPreviousVersionAlive -NotePropertyValue $rollbackAlive }
-    $rollbackPassed = $null -ne $rollbackEvidence -and -not $rollbackEvidence.rejectedDirectoryExists -and $rollbackAlive
+    $crashTreeAfter = if (Test-Path -LiteralPath $crashRoot -PathType Container) { Get-PortablePayloadTreeHash $crashRoot } else { $null }
+    if ($rollbackEvidence) {
+        $rollbackEvidence | Add-Member -NotePropertyName failedTreeBefore -NotePropertyValue $crashTreeBefore
+        $rollbackEvidence | Add-Member -NotePropertyName failedTreeAfter -NotePropertyValue $crashTreeAfter
+    }
+    $rollbackPassed = $null -ne $rollbackEvidence -and $rollbackEvidence.rejectedDirectoryExists -and $crashTreeBefore -ceq $crashTreeAfter -and $rollbackAlive
     Set-Check 'rollback-to-previous' $rollbackPassed ([pscustomobject]@{ expectedCurrentVersion = $script:NewVersion; failedVersion = $crashVersion; evidence = $rollbackEvidence; officialPreviousVersionAlive = $rollbackAlive })
     if (-not $rollbackPassed) { throw 'Crash rollback did not restore and run the previous official version with the expected rejected-state record' }
 
