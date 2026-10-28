@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -67,6 +68,7 @@ test('preview staging is an explicit build input and never rewrites the stable a
   assert.match(script, /--packed-root/)
   assert.match(script, /preview-runtime\.json/)
   assert.match(script, /packageSetSha256/)
+  assert.match(script, /dependencySecurity,/)
   assert.doesNotMatch(script, /writeFile\([^\n]+upstream\.lock\.json/)
   assert.doesNotMatch(script, /writeFile\([^\n]+app[^\n]+package-lock\.json/)
 })
@@ -84,6 +86,37 @@ test('preview staging follows the production dependency closure instead of every
     productionPackageClosure(packages, '@deepseek-ai/dsh').map((entry) => entry.name),
     ['@deepseek-ai/dsh', '@deepseek-ai/peer', '@deepseek-ai/runtime'],
   )
+})
+
+test('preview staging preserves optional platform branches and their production descendants', () => {
+  const packages = [
+    { name: 'entry', manifest: { dependencies: { shadowed: '1' }, optionalDependencies: { platform: '1', shadowed: '2' } } },
+    { name: 'platform', manifest: { os: ['darwin'], dependencies: { child: '1' }, peerDependencies: { peer: '1', skipped: '1' }, peerDependenciesMeta: { skipped: { optional: true } } } },
+    { name: 'child', manifest: { dependencies: { platform: '1' } } },
+    { name: 'peer', manifest: {} },
+    { name: 'shadowed', manifest: { dependencies: { descendant: '1' } } },
+    { name: 'descendant', manifest: {} },
+    { name: 'skipped', manifest: {} },
+  ]
+  assert.deepEqual(Object.fromEntries(productionPackageClosure(packages, 'entry').map(({ name, optional }) => [name, optional])), {
+    child: true, descendant: true, entry: false, peer: true, platform: true, shadowed: true,
+  })
+})
+
+test('preview staging upgrades shared optional subtrees when a required path reaches them later', () => {
+  const packages = [
+    { name: 'entry', manifest: { dependencies: { required: '1' }, optionalDependencies: { platform: '1' } } },
+    { name: 'platform', manifest: { os: ['darwin'], dependencies: { shared: '1', optionalOnly: '1' } } },
+    { name: 'required', manifest: { dependencies: { shared: '1' } } },
+    { name: 'shared', manifest: { dependencies: { child: '1' } } },
+    { name: 'child', manifest: { dependencies: { shared: '1', entry: '1' } } },
+    { name: 'optionalOnly', manifest: {} },
+  ]
+  for (const entries of [packages, [...packages].reverse()]) {
+    assert.deepEqual(Object.fromEntries(productionPackageClosure(entries, 'entry').map(({ name, optional }) => [name, optional])), {
+      child: false, entry: false, optionalOnly: true, platform: true, required: false, shared: false,
+    })
+  }
 })
 
 test('preview staging resolves npm from standard Windows and Unix Node layouts', () => {
@@ -281,4 +314,103 @@ test('source-pack staging rejects affected nested and vendor dependencies before
     }))
     await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency location escapes runtime/)
   }
+})
+
+test('source-pack staging checks actual root, nested and vendor MCP manifests against the lock and shared advisory', async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const clients = [
+    'node_modules/@modelcontextprotocol/client',
+    'node_modules/official/node_modules/@modelcontextprotocol/client',
+    'vendor/market/node_modules/@modelcontextprotocol/client',
+  ]
+  const core = 'node_modules/@modelcontextprotocol/core'
+  const packages = Object.fromEntries([...clients, core].map(location => [location, { version: '2.3.0' }]))
+  async function writeManifest(location, name, version) {
+    await mkdir(path.join(fixture, location), { recursive: true })
+    await writeFile(path.join(fixture, location, 'package.json'), JSON.stringify({ name, version }))
+  }
+  async function writeLock() {
+    await writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }))
+  }
+  for (const location of clients) await writeManifest(location, '@modelcontextprotocol/client', '2.3.0')
+  await writeManifest(core, '@modelcontextprotocol/core', '2.3.0')
+  await writeLock()
+  const checked = await verifyInstalledRuntimeDependencies(fixture)
+  assert.equal(checked.length, 4)
+  for (const entry of checked) {
+    assert.equal(entry.version, '2.3.0')
+    assert.equal(entry.manifestSha256, createHash('sha256').update(await readFile(path.join(fixture, entry.path, 'package.json'))).digest('hex'))
+  }
+  for (const location of clients) {
+    for (const version of ['2.2.0', '2.3.0-rc.1']) {
+      packages[location].version = version
+      await writeManifest(location, '@modelcontextprotocol/client', version)
+      await writeLock()
+      await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /GHSA-6prh-2h8m-c8cw: affected or unknown MCP client/)
+    }
+    packages[location].version = '2.3.0'
+    await writeManifest(location, '@modelcontextprotocol/client', '2.3.0')
+  }
+  await writeLock()
+  await writeManifest(core, '@modelcontextprotocol/core', '2.2.0')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /must match the generated lock/)
+  packages[core].version = '2.2.0'
+  await writeLock()
+  assert.equal((await verifyInstalledRuntimeDependencies(fixture)).find(entry => entry.path === core).version, '2.2.0',
+    'the shared advisory applies to client; core is recorded and must match its actual locked version')
+  const bundled = 'node_modules/bundler/dist/mcp-copy'
+  await writeManifest(bundled, '@modelcontextprotocol/client', '2.3.0')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /installed MCP copy is missing from the generated lock/)
+  packages[bundled] = { name: '@modelcontextprotocol/client', version: '2.3.0' }
+  await writeLock()
+  assert.ok((await verifyInstalledRuntimeDependencies(fixture)).some(entry => entry.path === bundled && entry.manifestSha256))
+})
+
+test('source-pack staging rejects external links unless a development source workspace matches its installed lock link', async (t) => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-links-'))
+  const external = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-external-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  t.after(() => rm(external, { recursive: true, force: true }))
+  await writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: {} }))
+  const cycle = path.join(fixture, 'cycle')
+  await symlink(fixture, cycle, process.platform === 'win32' ? 'junction' : 'dir')
+  assert.deepEqual(await verifyInstalledRuntimeDependencies(fixture), [])
+  await mkdir(path.join(fixture, 'node_modules'), { recursive: true })
+  await symlink(external, path.join(fixture, 'node_modules', 'bridge'), process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency path escapes runtime/)
+  const options = { sourceWorkspaceRoots: [external] }
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /must match a generated lock file-link target/)
+  const sourceLocation = path.relative(fixture, external).split(path.sep).join('/')
+  const packages = {
+    'node_modules/bridge': { resolved: sourceLocation, link: true },
+    [sourceLocation]: { name: 'bridge', version: '1.0.0' },
+  }
+  await writeFile(path.join(external, 'package.json'), JSON.stringify({ name: 'bridge', version: '1.0.0' }))
+  const writeLock = () => writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }))
+  await writeLock()
+  assert.deepEqual(await verifyInstalledRuntimeDependencies(fixture, options), [])
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency path escapes runtime/,
+    'the same lock file link remains forbidden for production staging without explicit development roots')
+  const mcp = 'node_modules/@modelcontextprotocol/client'
+  await mkdir(path.join(external, mcp), { recursive: true })
+  const writeClient = version => writeFile(path.join(external, mcp, 'package.json'), JSON.stringify({ name: '@modelcontextprotocol/client', version }))
+  await writeClient('2.2.0')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /installed MCP copy is missing from the generated lock/)
+  packages[`${sourceLocation}/${mcp}`] = { version: '2.2.0' }
+  await writeLock()
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /GHSA-6prh-2h8m-c8cw: affected or unknown MCP client/)
+  packages[`${sourceLocation}/${mcp}`].version = '2.3.0'
+  await writeClient('2.3.0')
+  await writeLock()
+  const [checked] = await verifyInstalledRuntimeDependencies(fixture, options)
+  assert.equal(checked.path, `${sourceLocation}/${mcp}`)
+  assert.equal(checked.version, '2.3.0')
+  assert.equal(checked.manifestSha256, createHash('sha256').update(await readFile(path.join(external, mcp, 'package.json'))).digest('hex'))
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, { sourceWorkspaceRoots: [path.dirname(fixture)] }),
+    /not its repository ancestor/)
+  const third = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-third-'))
+  t.after(() => rm(third, { recursive: true, force: true }))
+  await symlink(third, path.join(external, 'third'), process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /dependency path escapes runtime/)
 })

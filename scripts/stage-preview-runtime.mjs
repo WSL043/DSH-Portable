@@ -3,11 +3,12 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { pathToFileURL, fileURLToPath } from 'node:url'
 import { parseArgs } from 'node:util'
 import { classifyProductVersion } from './version-policy.mjs'
+import { ADVISORY, affectedClientVersion } from './check-official-payload-security.mjs'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -101,28 +102,33 @@ export function productionPackageClosure(packages, entryName) {
   const byName = new Map(packages.map((entry) => [entry.name, entry]))
   assert.equal(byName.has(entryName), true, `preview entry package is missing: ${entryName}`)
   const selected = new Map()
-  const pending = [entryName]
+  const pending = [[entryName, false]]
   while (pending.length > 0) {
-    const name = pending.pop()
-    if (selected.has(name)) continue
+    const [name, optional] = pending.pop()
+    const previous = selected.get(name)
+    // A required path upgrades an optional subtree and revisits its descendants.
+    if (previous && (!previous.optional || optional)) continue
     const entry = byName.get(name)
     if (!entry) continue
-    selected.set(name, entry)
+    selected.set(name, { ...entry, optional })
     const manifest = entry.manifest ?? {}
+    const optionalDependencies = manifest.optionalDependencies ?? {}
     const peerMeta = manifest.peerDependenciesMeta ?? {}
     const required = new Set([
-      ...Object.keys(manifest.dependencies ?? {}),
-      ...Object.keys(manifest.optionalDependencies ?? {}),
+      ...Object.keys(manifest.dependencies ?? {}).filter((dependency) => !Object.hasOwn(optionalDependencies, dependency)),
       ...Object.keys(manifest.peerDependencies ?? {}).filter((dependency) => peerMeta[dependency]?.optional !== true),
     ])
     for (const dependency of required) {
-      if (byName.has(dependency) && !selected.has(dependency)) pending.push(dependency)
+      if (byName.has(dependency)) pending.push([dependency, optional])
+    }
+    for (const dependency of Object.keys(optionalDependencies)) {
+      if (byName.has(dependency)) pending.push([dependency, true])
     }
   }
   return [...selected.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
+export async function verifyInstalledRuntimeDependencies(runtimeRoot, { sourceWorkspaceRoots = [] } = {}) {
   // Source-pack staging resolves a fresh graph, then discards its generated lock.
   // Check every matching lock location against installed manifests first, including
   // nested packages and local vendor packages; root-only resolution misses exact pins.
@@ -130,26 +136,120 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
   const lock = JSON.parse(await readFile(path.join(runtimeRoot, 'package-lock.json'), 'utf8'))
   assert.ok(lock.packages && typeof lock.packages === 'object', 'staged npm lock must inventory installed packages')
   const checked = []
-  for (const [location, entry] of Object.entries(lock.packages)) {
-    const name = /(?:^|\/)node_modules\/(zod|undici|fast-uri)$/.exec(location)?.[1]
-    if (!name) continue
+  const checkedLocations = new Set()
+  const checkedManifests = new Set()
+  const mcpName = /^@modelcontextprotocol\/(?:client|core)$/
+  const lockedName = /(?:^|\/)node_modules\/(zod|undici|fast-uri|@modelcontextprotocol\/(?:client|core))$/
+  const canonicalRoot = await realpath(runtimeRoot)
+  const sourceWorkspaces = []
+  function within(directory, filename) {
+    const relative = path.relative(directory, filename)
+    return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+  }
+  // Development npm installs retain source file links. This opt-in is only for
+  // explicitly reviewed link targets; production staging passes no extra roots.
+  for (const sourceRoot of sourceWorkspaceRoots) {
+    assert.ok(path.isAbsolute(sourceRoot), 'source workspace root must be explicit and absolute')
+    const canonical = await realpath(sourceRoot)
+    assert.ok(!within(canonical, canonicalRoot) && !within(canonicalRoot, canonical),
+      'source workspace must be separate from the runtime, not its repository ancestor')
+    let sourceLocation
+    for (const [linkLocation, entry] of Object.entries(lock.packages)) {
+      if (entry.link !== true || typeof entry.resolved !== 'string') continue
+      if (await realpath(path.resolve(runtimeRoot, entry.resolved)) === canonical) {
+        assert.ok(!path.isAbsolute(linkLocation) && !path.win32.isAbsolute(linkLocation)
+          && !linkLocation.split(/[\\/]/).includes('..'), 'source workspace link must be inside the runtime')
+        assert.equal(await realpath(path.resolve(runtimeRoot, linkLocation)), canonical,
+          'installed source workspace file link must match its generated lock target')
+        sourceLocation = entry.resolved.replaceAll('\\', '/')
+        break
+      }
+    }
+    assert.ok(sourceLocation && Object.hasOwn(lock.packages, sourceLocation),
+      `source workspace must match a generated lock file-link target: ${sourceRoot}`)
+    sourceWorkspaces.push({ canonical, sourceLocation })
+  }
+  function assertContained(filename) {
+    assert.ok([canonicalRoot, ...sourceWorkspaces.map(source => source.canonical)].some(directory => within(directory, filename)),
+      `dependency path escapes runtime: ${filename}`)
+  }
+  async function checkInstalled(location, name, entry, bytes) {
     const manifestPath = path.resolve(runtimeRoot, location, 'package.json')
     const relative = path.relative(path.resolve(runtimeRoot), manifestPath)
-    assert.ok(!path.isAbsolute(location) && !path.win32.isAbsolute(location) && !location.split(/[\\/]/).includes('..')
-      && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `dependency location escapes runtime: ${location}`)
-    const installed = JSON.parse(await readFile(manifestPath, 'utf8'))
+    const sourceLocation = sourceWorkspaces.some(source => location.startsWith(`${source.sourceLocation}/`)
+      && !location.slice(source.sourceLocation.length + 1).split(/[\\/]/).includes('..'))
+    assert.ok(!path.isAbsolute(location) && !path.win32.isAbsolute(location) && (sourceLocation
+      || !location.split(/[\\/]/).includes('..') && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)),
+      `dependency location escapes runtime: ${location}`)
+    const canonicalManifest = await realpath(manifestPath)
+    assertContained(canonicalManifest)
+    bytes ??= await readFile(manifestPath)
+    const installed = JSON.parse(bytes.toString('utf8'))
     assert.equal(installed.name, name, `installed package at ${location}`)
+    if (entry.name !== undefined) assert.equal(installed.name, entry.name, `installed name at ${location} must match the generated lock`)
     assert.equal(installed.version, entry.version, `installed version at ${location} must match the generated lock`)
+    assert.ok(typeof installed.version === 'string' && installed.version.length > 0, `installed version at ${location} is missing`)
+    if (name === '@modelcontextprotocol/client') {
+      assert.equal(affectedClientVersion(installed.version), false,
+        `${ADVISORY.id}: affected or unknown MCP client version at ${location}@${installed.version}`)
+    }
     const version = /^(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/.exec(installed.version)
     const major = Number(installed.version.split('.')[0])
-    const minimum = minimums[name][major]
+    const minimum = minimums[name]?.[major]
     if (minimum) {
       assert.ok(version, `${location} must use a patched stable version`)
       const actual = version.slice(1, 4).map(Number)
       const comparison = actual.map((part, index) => part - minimum[index]).find((difference) => difference !== 0) ?? 0
       assert.ok(comparison >= 0, `${location}@${installed.version} requires >=${minimum.join('.')}`)
     }
-    checked.push({ path: location, name, version: installed.version })
+    checked.push({ path: location, name, version: installed.version,
+      ...(mcpName.test(name) ? { manifestSha256: createHash('sha256').update(bytes).digest('hex') } : {}),
+    })
+    checkedLocations.add(location)
+    checkedManifests.add(canonicalManifest)
+  }
+  for (const [location, entry] of Object.entries(lock.packages)) {
+    const name = lockedName.exec(location)?.[1]
+    if (name) await checkInstalled(location, name, entry)
+  }
+
+  // Bundled or vendored copies may be absent from npm's generated lock. Inspect
+  // actual package metadata too, including aliases, without reading SDK code.
+  const seenDirectories = new Set()
+  const pending = [{ directory: path.resolve(runtimeRoot), location: '' }]
+  while (pending.length) {
+    const { directory, location } = pending.pop()
+    const canonical = await realpath(directory)
+    assertContained(canonical)
+    if (seenDirectories.has(canonical)) continue
+    seenDirectories.add(canonical)
+    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+      const filename = path.join(directory, entry.name)
+      let directoryEntry = entry.isDirectory()
+      if (entry.isSymbolicLink()) {
+        assertContained(await realpath(filename))
+        directoryEntry = (await stat(filename)).isDirectory()
+      }
+      if (directoryEntry) {
+        pending.push({ directory: filename, location: location ? `${location}/${entry.name}` : entry.name })
+      } else if (entry.name === 'package.json') {
+        const bytes = await readFile(filename)
+        let installed
+        try { installed = JSON.parse(bytes.toString('utf8')) }
+        catch (error) { if (mcpName.test(lockedName.exec(location)?.[1] ?? '')) throw error; continue }
+        const expected = lockedName.exec(location)?.[1]
+        if (!mcpName.test(installed?.name ?? '') && !mcpName.test(expected ?? '')) continue
+        let lockLocation = location
+        if (!Object.hasOwn(lock.packages, lockLocation) && sourceWorkspaces.length) {
+          const canonicalManifest = await realpath(filename)
+          if (checkedManifests.has(canonicalManifest)) continue
+          const source = sourceWorkspaces.find(source => within(source.canonical, canonicalManifest))
+          if (source) lockLocation = `${source.sourceLocation}/${path.relative(source.canonical, path.dirname(canonicalManifest)).split(path.sep).join('/')}`
+        }
+        assert.ok(Object.hasOwn(lock.packages, lockLocation), `installed MCP copy is missing from the generated lock: ${location}`)
+        if (!checkedLocations.has(lockLocation)) await checkInstalled(lockLocation, expected ?? installed.name, lock.packages[lockLocation], bytes)
+      }
+    }
   }
   return checked
 }
@@ -206,7 +306,12 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
   // separately installable providers. A normal npm install starts at the DSH
   // entry package and follows production dependencies; mirror that contract
   // instead of turning every packed tarball into a product dependency.
-  const dependencies = Object.fromEntries(runtimePackages.map((entry) => [entry.name, pathToFileURL(entry.tarball).href]))
+  const dependencies = {}
+  const optionalDependencies = {}
+  for (const entry of runtimePackages) {
+    const target = entry.optional ? optionalDependencies : dependencies
+    target[entry.name] = pathToFileURL(entry.tarball).href
+  }
   dependencies['@wsl043/dsh-portable-desktop-bridge'] = 'file:desktop-bridge'
   dependencies[stableLock.pluginMarket.package] = 'file:vendor/dsh-portable-plugin-market'
   const pnpmSpec = reviewedBuild ? `file:vendor/pnpm-${stableLock.pnpm.version}-portable.tgz` : stableLock.pnpm.version
@@ -218,6 +323,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     private: true,
     license: 'Apache-2.0',
     dependencies,
+    optionalDependencies,
     overrides: stableRuntimeManifest.overrides,
   }
   await writeFile(path.join(output, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
@@ -279,6 +385,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     packageCount: packages.length,
     runtimePackageCount: runtimePackages.length,
     packageSetSha256: aggregate.digest('hex'),
+    dependencySecurity,
     packages: packages.map(({ family, name, version, sha256: digest }) => ({ family, name, version, sha256: digest })),
   }
   await writeFile(path.join(output, 'preview-runtime.json'), `${JSON.stringify(receipt, null, 2)}\n`, 'utf8')

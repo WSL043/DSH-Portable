@@ -14,7 +14,8 @@ import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
 import { MarketAction } from './MarketAction.tsx'
 import { PluginUpdateRow } from './PluginUpdates.tsx'
-import { coordinateMarketSurfaces, LEGACY_PLUGIN_TAB_SLOT, PORTABLE_ACTIONS_SLOT } from './slot-compat.ts'
+import { forgetOfficialMarket, readOfficialMarket } from './official-market.ts'
+import { coordinateMarketSurfaces, LEGACY_PLUGIN_TAB_SLOT, PORTABLE_ACTIONS_SLOT, OFFICIAL_PLUGIN_TAB_SLOT } from './slot-compat.ts'
 import type { Translate } from './market-data.ts'
 
 const NS = 'dsh-portable-plugin-market'
@@ -57,6 +58,43 @@ interface MarketClientContext {
   slots: SlotsService
 }
 
+function registerPublicMarket(ctx: MarketClientContext, t: Translate): () => void {
+  let stopped = false, checking = false, recheck = false
+  const register = (id: string, view: 'discover' | 'installed', label: string, order: number) => ctx.slots.register({
+    name: OFFICIAL_PLUGIN_TAB_SLOT, id, order, label: () => t(label), locale: NS,
+  }, owner => {
+    const manager = owner as { openPackage: (name: string) => void }
+    return h(MarketErrorBoundary, { view }, h(MarketSection, {
+      t, locale: ctx.locale, view, officialUpdates: true, onOfficialManage: manager.openPackage,
+    }))
+  }) as () => void
+  const advanced = register('dsh-portable-plugin-advanced', 'installed', 'navAdvanced', 50)
+  let discover: (() => void) | undefined = register('dsh-portable-plugin-market', 'discover', 'nav', 40)
+  const refresh = async () => {
+    if (stopped) return
+    if (checking) { recheck = true; return }
+    checking = true
+    try {
+      do {
+        recheck = false
+        forgetOfficialMarket()
+        const state = await readOfficialMarket()
+        if (stopped) return
+        if (state === 'active') { const previous = discover; discover = undefined; previous?.() }
+        else if (!discover) discover = register('dsh-portable-plugin-market', 'discover', 'nav', 40)
+      } while (recheck && !stopped)
+    } finally { checking = false }
+  }
+  // An optional official Discover contribution can appear or disappear while
+  // Plugins stays open; recheck enablement without replacing Advanced.
+  const unsubscribe = ctx.slots.subscribe?.(OFFICIAL_PLUGIN_TAB_SLOT, () => { void refresh() })
+  void refresh()
+  return () => {
+    stopped = true
+    if (typeof unsubscribe === 'function') unsubscribe()
+    discover?.(); advanced()
+  }
+}
 export const name = 'dsh-portable-plugin-market'
 export const inject = ['slots', 'locale']
 export function apply(ctx: MarketClientContext): void {
@@ -72,16 +110,16 @@ export function apply(ctx: MarketClientContext): void {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-portable-plugin-market: dictionaries')
   const t = ctx.locale.bind(NS)
 
-  ctx.slots.inject('plugins.portable.update', () => ctx.slots.register({
-    name: 'plugins.portable.update', id: 'portable-update', order: 10,
-  }, owner => {
-    const item = owner as { name: string; busy?: boolean; view: 'summary' | 'action' }
-    return h(MarketErrorBoundary, { view: 'installed' }, h(PluginUpdateRow, {
-      ...item, zh: ctx.locale.getSnapshot().active.toLowerCase().startsWith('zh'),
-    }))
-  }))
-
   ctx.effect(() => coordinateMarketSurfaces(ctx.slots, {
+    updates: () => ctx.slots.inject('plugins.portable.update', () => ctx.slots.register({
+      name: 'plugins.portable.update', id: 'portable-update', order: 10,
+    }, owner => {
+      const item = owner as { name: string; busy?: boolean; view: 'summary' | 'action' }
+      return h(MarketErrorBoundary, { view: 'installed' }, h(PluginUpdateRow, {
+        ...item, zh: ctx.locale.getSnapshot().active.toLowerCase().startsWith('zh'),
+      }))
+    })),
+    official: () => registerPublicMarket(ctx, t),
     modern: () => ctx.slots.register({
       name: PORTABLE_ACTIONS_SLOT,
       id: 'dsh-portable-plugin-market',

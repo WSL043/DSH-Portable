@@ -2,16 +2,53 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createServer } from 'node:net'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { realpath, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
+import { safeDataTarget } from '../launcher/data-paths.mjs'
+import { verifiedPackageFile } from './verified-package-file.mjs'
 
+const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
+
+export function marketEvidenceLocation(value) {
+  assert.ok(typeof value === 'string' && value.length > 0, 'market evidence directory is required')
+  const requested = path.resolve(value)
+  const base = path.resolve(tmpdir())
+  if (path.dirname(base) !== base) {
+    const relative = path.relative(base, requested)
+    if (relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+      return { base, relative }
+    }
+  }
+  const relative = path.relative(repositoryRoot, requested)
+  const storage = path.join('complete-evidence', 'storage')
+  if (relative === storage || relative.startsWith(`${storage}${path.sep}`)) {
+    return { base: repositoryRoot, relative }
+  }
+  throw new Error('Market evidence must be below an actual temporary root or the fixed complete-evidence/storage directory')
+}
+
+export async function prepareMarketEvidenceOutput(value) {
+  // Reject unapproved lexical paths before touching the requested directory.
+  const selected = marketEvidenceLocation(value)
+  const base = await realpath(selected.base)
+  // The report is a fixed leaf; safeDataTarget checks every output-directory
+  // ancestor, including dangling links, before creating missing directories.
+  const report = await safeDataTarget(base, `${selected.relative.split(path.sep).join('/')}/category-geometry.json`)
+  const output = await realpath(path.dirname(report))
+  const relative = path.relative(base, output)
+  assert.ok(relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+    'Market evidence directory escapes its approved root')
+  return output
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const root = process.argv[2] && path.resolve(process.argv[2])
-const output = process.argv[3] && path.resolve(process.argv[3])
 assert.ok(process.argv.includes('--disposable'), 'use an isolated test installation with --disposable')
-assert.ok(root && output)
-await mkdir(output, { recursive: true })
+assert.ok(root && process.argv[3])
+const output = await prepareMarketEvidenceOutput(process.argv[3])
 const exec = promisify(execFile)
 // Never inherit the developer's selected profile/data environment into a
 // disposable test that can now explicitly reclaim managed logs and caches.
@@ -50,6 +87,7 @@ const child = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], { cwd: root, en
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 let socket, evaluate, passed = false
 const exceptions = []
+let publicMarket = false
 try {
   let page
   const deadline = Date.now() + 90000
@@ -85,6 +123,14 @@ try {
     throw new Error(`${label}: ${JSON.stringify(result)}`)
   }
   const click = (names, scope = 'body') => `(() => {const names=${JSON.stringify(names)};const root=document.querySelector(${JSON.stringify(scope)});const button=[...(root?.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')||[])].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
+  const advancedTab = '[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-advanced"]'
+  const clickDiscoverTab = `(() => { const item=document.querySelector('[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-market"]'); if(!item || item.getBoundingClientRect().width===0 || item.disabled) return false; item.scrollIntoView({block:'center'}); item.click(); return true })()`
+  const openMarket = async () => {
+    await until(`Boolean(document.querySelector(${JSON.stringify(advancedTab)})) || [...document.querySelectorAll('button')].some(item => ['Plugin Market','插件市场'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)`, Boolean, 'Portable market entry is ready')
+    publicMarket = await evaluate(`Boolean(document.querySelector(${JSON.stringify(advancedTab)}))`)
+    if (publicMarket) await until(clickDiscoverTab, Boolean, 'public Discover tab')
+    else await until(click(['Plugin Market','插件市场']), Boolean, 'legacy market action')
+  }
   const nativeStateExpression = key => `new Promise(resolve => {
     const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
       chrome.webview.removeEventListener('message', listener); resolve(event.data); };
@@ -213,7 +259,8 @@ try {
       labels.has((item.getAttribute('aria-label') || item.textContent || '').trim()) &&
       item.getBoundingClientRect().width > 0 && !item.disabled)
   })()`)
-  if (hasBuiltInPluginsNavigation) {
+  const sidebarPlugins = await evaluate(`Boolean([...document.querySelectorAll('button')].find(item => !item.closest('dialog,[role="dialog"]') && ['Plugins','插件'].includes((item.textContent || '').trim())))`)
+  if (hasBuiltInPluginsNavigation || sidebarPlugins) {
     await until(`(() => {
       const dialog = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
         .filter(item => item.getBoundingClientRect().width > 0)
@@ -224,7 +271,7 @@ try {
       return Boolean(button)
     })()`, Boolean, 'close settings dialog');
     await until(click(['Plugins', '插件']), Boolean, 'sidebar plugins');
-    await until(click(['Plugin Market', '插件市场']), Boolean, 'market');
+    await openMarket();
   } else {
     await until(click(['Plugins','插件']), Boolean, 'plugins');
     await until(click(['Plugin configuration','插件配置']), Boolean, 'plugin configuration');
@@ -233,7 +280,7 @@ try {
     await until(click(['Plugin list','插件列表']), Boolean, 'official plugin list');
     await delay(500);
     await writeFile(path.join(output, 'plugin-list.txt'), await evaluate('document.body.innerText'));
-    await until(click(['Plugin Market','插件市场']), Boolean, 'market');
+    await openMarket();
   }
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
   if (verifyTotal) {
@@ -245,15 +292,80 @@ try {
   }
   await sample('market-ready')
   const checks=[];
+  const categoryGeometry = []
+  const categoryState = `(() => {
+    const wrap=document.querySelector('[class*="catsWrap"]');
+    const button=wrap?.querySelector('[class*="catsToggle"]');
+    if(!wrap || !button || button.getBoundingClientRect().width===0) return null;
+    let scroller=wrap.parentElement;
+    while(scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller=scroller.parentElement;
+    if(!scroller) return null;
+    // Normal collapsed rows and sticky rows intentionally have different
+    // budgets. Compare the toggle in the same real, unpinned scroll context.
+    scroller.scrollTop=0;
+    const rect=wrap.getBoundingClientRect();
+    const scrollerRect=scroller.getBoundingClientRect();
+    const sentinel=wrap.closest('[class*="stickyHead"]')?.previousElementSibling?.getBoundingClientRect();
+    const chips=[...wrap.querySelectorAll('[data-chip="1"]')];
+    const rounded=value=>Math.round(value*100)/100;
+    return { label:button.getAttribute('aria-label'), count:chips.length,
+      measuring:wrap.className.includes('catsCollapsed'),
+      wrapWidth:rounded(rect.width), wrapHeight:rounded(rect.height),
+      scrollerWidth:scroller.clientWidth, scrollerHeight:scroller.clientHeight,
+      scrollTop:scroller.scrollTop, scrollHeight:scroller.scrollHeight,
+      sentinelOffset:sentinel ? rounded(sentinel.top-scrollerRect.top) : null,
+      sentinelVisible:Boolean(sentinel && sentinel.top>=scrollerRect.top-1 && sentinel.bottom<=scrollerRect.bottom+1),
+      rows:[...new Set(chips.map(chip=>rounded(chip.getBoundingClientRect().top-rect.top)))] };
+  })()`
+  const toggleCategories = labels => `(() => {
+    const button=document.querySelector('[class*="catsWrap"] [class*="catsToggle"]');
+    if(!button || button.disabled || button.getBoundingClientRect().width===0
+      || !${JSON.stringify(labels)}.includes(button.getAttribute('aria-label'))) return false;
+    button.click(); return true;
+  })()`
+  const moreLabels=['More','更多分类'], lessLabels=['Less','收起']
   for(const width of (soak ? Array.from({length: 30}, (_, i) => i % 2 ? 1200 : 580) : [580,1200,580])){
     await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-    await delay(400);
-    const count=()=>evaluate(`document.querySelector('[class*="catsWrap"]')?.querySelectorAll('[data-chip="1"]').length`);
-    const collapsed=await count();
-    await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`);await delay(300);
-    const expanded=await count();assert.ok(expanded>collapsed, 'expand must show more categories');
-    await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`);await delay(300);
-    assert.equal(await count(),collapsed,'collapse must restore measured budget');
+    await evaluate(`document.fonts.ready.then(() => true)`)
+    const settled = async (phase, labels) => {
+      let previous, consecutive=0, last, complete=false
+      try {
+        const result=await until(categoryState, state => {
+          last=state
+          if(!state || state.measuring || state.scrollTop!==0 || !state.sentinelVisible || !labels.includes(state.label)) {
+            consecutive=0; previous=undefined; return false
+          }
+          const signature=JSON.stringify(state)
+          consecutive=signature===previous ? consecutive+1 : 1
+          previous=signature
+          return consecutive>=3
+        }, `stable category ${phase} at ${width}`)
+        complete=true
+        return result
+      } finally {
+        categoryGeometry.push({width,phase,settled:complete,state:last})
+        const report=JSON.stringify(categoryGeometry,null,2)
+        const target=await safeDataTarget(output,'category-geometry.json')
+        try { await writeFile(target,report,{flag:'wx'}) }
+        catch (error) {
+          if(error.code!=='EEXIST') throw error
+          await writeFile(await verifiedPackageFile(output,'category-geometry.json'),report)
+        }
+      }
+    }
+    let baseline=await settled('initial',[...moreLabels,...lessLabels])
+    if(lessLabels.includes(baseline.label)) {
+      await until(toggleCategories(lessLabels),Boolean,'initial category collapse')
+      baseline=await settled('collapsed',moreLabels)
+    }
+    const collapsed=baseline.count;
+    await until(toggleCategories(moreLabels),Boolean,'expand category button')
+    const opened=await settled('expanded',lessLabels)
+    const expanded=opened.count;assert.ok(expanded>collapsed, 'expand must show more categories');
+    await until(toggleCategories(lessLabels),Boolean,'collapse category button')
+    const restored=await settled('restored',moreLabels)
+    assert.equal(restored.wrapWidth,baseline.wrapWidth,'collapse comparison must keep the same measured width');
+    assert.equal(restored.count,collapsed,'collapse must restore measured budget');
     checks.push({width,collapsed,expanded});
     if (checks.length % 5 === 0) await sample(`cycle-${checks.length}`)
   }
@@ -307,27 +419,28 @@ try {
     await until(`Boolean(document.querySelector('[class*="lightboxImg"]'))`, Boolean, 'preview opens lightbox')
     await send('Input.dispatchKeyEvent', {type:'keyDown', key:'Escape', code:'Escape', windowsVirtualKeyCode:27})
     await until(`!document.querySelector('[class*="lightboxImg"]') && Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Escape closes only preview')
+    const dialogsBeforeDetails = await evaluate(`document.querySelectorAll('[role="dialog"]').length`)
     await evaluate(`document.querySelector('[class*="nameButton"]')?.click()`)
-    await until(`document.querySelectorAll('[role="dialog"]').length > 1`, Boolean, 'plugin details open from name')
+    await until(`document.querySelectorAll('[role="dialog"]').length === ${dialogsBeforeDetails + 1}`, Boolean, 'plugin details open from name')
     const closeDialog = `(() => {const dialog=[...document.querySelectorAll('[role="dialog"]')].at(-1);const button=[...dialog.querySelectorAll('button')].find(b=>['Close','关闭','Cancel','取消'].includes(b.getAttribute('aria-label')||b.textContent.trim()));button?.click();return Boolean(button)})()`
     await until(closeDialog, Boolean, 'close plugin details')
-    await until(closeDialog, Boolean, 'close plugin market')
+    if (!publicMarket) await until(closeDialog, Boolean, 'close plugin market')
     await nativeState(131260)
     await until(click(['General', 'General settings', '通用设置']), Boolean, 'general appearance')
     await until(click(['Dark', '深色']), Boolean, 'official dark appearance')
     await until(closeDialog, Boolean, 'close appearance settings')
     await until(click(['Plugins', '插件']), Boolean, 'plugins in dark theme')
-    await until(click(['Plugin Market', '插件市场']), Boolean, 'market in dark theme')
+    await openMarket()
     await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'dark market ready')
     await captureLayout('dark')
-    await until(closeDialog, Boolean, 'close dark market')
+    if (!publicMarket) await until(closeDialog, Boolean, 'close dark market')
     await nativeState(131260)
     await until(click(['General', 'General settings', '通用设置']), Boolean, 'general language')
     await until(click(['English']), Boolean, 'language selector')
     await until(click(['简体中文', '中文', '中文（简体）', 'Chinese', 'Simplified Chinese']), Boolean, 'choose Chinese')
     await until(closeDialog, Boolean, 'close Chinese settings')
     await until(click(['插件']), Boolean, 'Chinese plugins')
-    await until(click(['插件市场']), Boolean, 'Chinese market entry')
+    await openMarket()
     await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Chinese market ready')
     assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label^="预览 "]'))`), true, 'localized preview label')
     await until(click(['筛选']), Boolean, 'Chinese filter trigger')
@@ -352,7 +465,7 @@ try {
     await captureLayout('zh-compact')
     await until(click(['图文']), Boolean, 'restore gallery view')
     // Leave the disposable fixture in English for subsequent independent probes.
-    await until(closeDialog, Boolean, 'close Chinese market')
+    if (!publicMarket) await until(closeDialog, Boolean, 'close Chinese market')
     await nativeState(131260)
     await until(click(['通用设置']), Boolean, 'restore language settings')
     await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
@@ -392,8 +505,9 @@ try {
           assert.equal(samples.at(-1).processes.length, 0, 'isolated Portable processes remain after exit')
         }
       } catch (error) { passed = false; throw error }
-      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
+      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, publicMarket, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
     }
   }
 }
 console.log(JSON.stringify({ passed, output }))
+}

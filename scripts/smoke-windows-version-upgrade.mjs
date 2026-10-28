@@ -134,11 +134,11 @@ const server = createServer((request, response) => {
 
 try {
   await mkdir(targetSourceRoot, { recursive: true })
-  await execFileAsync('tar.exe', ['-x', '-f', newArchive, '-C', targetSourceRoot, 'DSH-Portable/launcher'], {
+  await execFileAsync('tar.exe', ['-x', '-f', newArchive, '-C', targetSourceRoot, 'DSH-Portable/launcher', 'DSH-Portable/licenses/COMPONENTS.json'], {
     timeout: 5 * 60 * 1000, windowsHide: true,
   })
-  const { DEFAULT_PLUGINS } = await import(pathToFileURL(path.join(targetSourceRoot, 'DSH-Portable', 'launcher', 'default-plugins.mjs')).href)
-  expectedPluginVersions = Object.fromEntries(DEFAULT_PLUGINS.map(plugin => [plugin.name, plugin.version]))
+  const { defaultsForProduct } = await import(pathToFileURL(path.join(targetSourceRoot, 'DSH-Portable', 'launcher', 'default-plugins.mjs')).href)
+  expectedPluginVersions = Object.fromEntries(defaultsForProduct({ root: path.join(targetSourceRoot, 'DSH-Portable') }).map(plugin => [plugin.name, plugin.version]))
   await execFileAsync('tar.exe', ['-x', '-f', oldArchive, '-C', root], { timeout: 5 * 60 * 1000, windowsHide: true })
   await rename(extracted, destination)
   const oldComponents = JSON.parse(await readFile(path.join(destination, 'licenses', 'COMPONENTS.json'), 'utf8'))

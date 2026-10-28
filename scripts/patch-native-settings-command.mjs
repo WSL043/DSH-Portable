@@ -174,7 +174,28 @@ function patchPluginManagerToolbar(source) {
   return source.replace(toolbar, '$1renderSlot("plugins.portable.actions", { refresh: props.refresh, openInstall: props.openInstall, editInstallSpec: props.editInstallSpec }), ')
 }
 
+// New official managers expose public extension slots and own version updates.
+// Verify declarations, render consumers and operations together before retiring the old overlay.
+export function hasOfficialPluginManagement(source) {
+  const declarations = [
+    /"plugins\.add\.actions": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
+    /"plugins\.tab": \{\s*kind: "list",\s*scope: "root"\s*\}/g,
+  ]
+  const consumers = [
+    'renderSlot("plugins.add.actions", { onDismiss })',
+    'renderSlot("plugins.tab", {',
+    'this.ctx.remote.pluginManager.listVersions(packageName, {})',
+    'this.ctx.remote.pluginManager.updateBundle(update.packageName, update.to, {',
+  ]
+  return declarations.every(pattern => [...source.matchAll(pattern)].length === 1)
+    && consumers.every(anchor => source.split(anchor).length === 2)
+}
+
 export function patchPluginManagerActions(source) {
+  if (hasOfficialPluginManagement(source)) return source
+  if (source.includes('"plugins.add.actions":') && source.includes('"plugins.tab":')) {
+    throw new Error('official plugin manager public capabilities changed upstream; refusing legacy overlay')
+  }
   source = patchPluginManagerToolbar(source)
   const refreshMarker = 'dsh-portable-plugin-refresh-v1'
   if (!source.includes(refreshMarker)) {

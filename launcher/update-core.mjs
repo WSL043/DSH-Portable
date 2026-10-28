@@ -238,6 +238,8 @@ export function evaluateUpdate(manifest, installed, platform, { allowEngineVersi
     platform: manifest.platform,
     minimumUpdaterSchema: Number(manifest.minimumUpdaterSchema),
     requiredShellSchema: Number(manifest.requiredShellSchema),
+    // Feed aliases do not change the channel declared by the downloaded package.
+    declaredReleaseChannel: manifest.releaseChannel ?? manifestReleaseChannel,
     requiredShellFingerprint: manifest.requiredShellFingerprint || null,
     requiredShellContract: usesShellContract(manifest, updateKind) ? manifest.requiredShellContract : null,
     component,
@@ -1243,11 +1245,12 @@ export async function installAvailableAppUpdate({
     const components = await readJson(path.join(stagedRoot, 'licenses', 'COMPONENTS.json'), null)
     if (metadata?.schemaVersion !== UPDATE_SCHEMA_VERSION || metadata.kind !== update.component.kind) throw new Error('Downloaded update metadata is invalid.')
     if (metadata.portableVersion !== update.latest || metadata.dshVersion !== update.component.dshVersion) throw new Error('Downloaded update version does not match its manifest.')
-    if (metadata.releaseChannel !== update.releaseChannel) throw new Error('Downloaded update channel does not match its manifest.')
+    const declaredReleaseChannel = update.declaredReleaseChannel ?? update.releaseChannel
+    if (metadata.releaseChannel !== declaredReleaseChannel) throw new Error('Downloaded update channel does not match its manifest.')
     if (update.component.dshCommit && metadata.dshCommit !== update.component.dshCommit) throw new Error('Downloaded update commit does not match its manifest.')
     if (!components
       || components.nodeVersion !== update.component.requiredNodeVersion
-      || components.releaseChannel !== update.releaseChannel
+      || components.releaseChannel !== declaredReleaseChannel
       || components.platform !== update.platform
       || Number(components.updaterSchema) < Number(update.minimumUpdaterSchema)
       || Number(components.shellSchema) < Number(update.requiredShellSchema)) {

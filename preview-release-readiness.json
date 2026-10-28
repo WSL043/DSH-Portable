@@ -1,15 +1,21 @@
 {
   "schemaVersion": 1,
-  "dshReviewedCommit": "46a7f68b0922371ce7144b668b90e377d8e799f4",
-  "dshNpmIntegrity": "sha512-O1K076aCmqE+h4fB5J+mi3twNSAnh26OqHepaqvS5f1tccFnxhVyGpUmjcncVM5x1SX4niznmvsGrsRo9p733A==",
+  "dshReviewedCommit": "f3803c96974ad4a94195fb97e5c637e9c2a3afe3",
+  "dshNpmIntegrity": "sha512-mdcpgF8D1eFQV8Gu3T/sYLkBwfw9h/Li0uPIxXyby1VybJgrFg8BU1Le40FiMnN+heL7k3zOMuAVe7sFq/JO4w==",
   "historicalSessionMigration": {
-    "status": "blocked",
-    "evidence": null,
-    "reason": "Official 0.1.7-rc.1 rejects released subagent descriptor v2 sessions; see https://github.com/deepseek-ai/deepseek-harness/discussions/7576"
+    "status": "passed",
+    "evidence": "docs/core-alpha2-historical-result-2026-10-28.json",
+    "compatibilityPatch": {
+      "id": "released-v0-descriptor-v2-read-v1",
+      "dshVersion": "0.2.2-alpha.2",
+      "sourceSha256": "8a78721683388aef35c70c274b27c7700f9cc8deb42cb3d7a1f562a6aa6b7607",
+      "patchedSha256": "97880785fab8cadf1c0344b4dcd4426040a443be9253c590ce0dc3886d49b1f2"
+    },
+    "reason": "Exact Alpha2 staged runtimes on all five platforms passed the released 0.1.1-rc.2 writer, actual official AgentLoop continuation, save/reopen, interrupted-journal recovery and original-byte preservation. Deterministic local adapters only; original unpatched refusal was not rechecked. Physical power loss and a physical second-machine restore are not claimed."
   },
   "dependencySecurity": {
-    "status": "blocked",
-    "evidence": "docs/bundled-dependency-security.md",
-    "reason": "Application dependency overrides and Node24.22.1 do not rewrite upstream prebuilt frontend or pnpm internal bundles. Current rc3 frontend includes Zod4.4.3; pnpm11.11.0 includes Undici7.28.0/6.27.0, and reviewed pnpm11 releases through11.28.8 still inline affected7.29.1. Require repaired upstream packages or a separately reviewed rebuild and final packaged verification before publication."
+    "status": "passed",
+    "evidence": "docs/core-alpha2-historical-result-2026-10-28.json",
+    "reason": "Native qualification run40666325544 passed39/39. All five installed trees recorded MCP client/core2.3.0 manifest SHA256; affected/unknown clients, untracked copies and external staged links are rejected. Actual reviewed frontend uses Zod4.6.7; reviewed pnpm11.11.0 records inline Undici7.30.1/distributed6.29.1 and passing normal/malformed consumers. This is scoped evidence for known dependency guards, not a comprehensive zero-vulnerability claim or official1.x ASAR repair. No version, public channel or publication is requested."
   }
 }

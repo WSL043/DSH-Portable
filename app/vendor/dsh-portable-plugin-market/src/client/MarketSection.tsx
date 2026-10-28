@@ -381,6 +381,9 @@ export interface MarketSectionProps {
   view: 'discover' | 'installed'
   /** Modern hosts own install approval, cancellation and live activation. */
   onOfficialInstall?: (spec: string) => void
+  /** Public Plugins hosts own ordinary package updates and management. */
+  officialUpdates?: boolean
+  onOfficialManage?: (name: string) => void
   locale: {
     subscribe(callback: () => void): () => void
     getSnapshot(): { active: string }
@@ -389,6 +392,7 @@ export interface MarketSectionProps {
 
 export function MarketSection(props: MarketSectionProps) {
   const t = props.t
+  const officialUpdates = props.officialUpdates === true
   const localeSnap = useSyncExternalStore(
     cb => props.locale.subscribe(cb),
     () => props.locale.getSnapshot(),
@@ -656,11 +660,13 @@ export function MarketSection(props: MarketSectionProps) {
         setHostDependencyFindings(findings)
       })
       .catch(() => {})
-    fetch('/dsh-market/updates' + (force === true ? '?force=1' : ''), { cache: 'no-store' })
-      .then(res => res.json())
-      .then(body => setUpdates(body.updates || {}))
-      .catch(() => {})
-  }, [])
+    if (!officialUpdates) {
+      fetch('/dsh-market/updates' + (force === true ? '?force=1' : ''), { cache: 'no-store' })
+        .then(res => res.json())
+        .then(body => setUpdates(body.updates || {}))
+        .catch(() => {})
+    }
+  }, [officialUpdates])
 
   /** Lookup set for the persisted disable list (#60). */
   const disabledSet = useMemo(() => new Set(disabledNames), [disabledNames])
@@ -743,6 +749,7 @@ export function MarketSection(props: MarketSectionProps) {
   }, [refreshInstalled, loadCatalog])
 
   useEffect(() => {
+    if (props.view !== 'discover') return
     const controller = new AbortController()
     fetch('/dsh-market/download-totals', { cache: 'no-store', signal: controller.signal })
       .then(async response => {
@@ -779,7 +786,7 @@ export function MarketSection(props: MarketSectionProps) {
       })
       .catch(() => { if (!controller.signal.aborted) setDownloadTotalsState('failed') })
     return () => controller.abort()
-  }, [])
+  }, [props.view])
 
   // Pending-restart flags survive tab switches and page reloads, scoped to
   // one host process: a different boot id means the restart happened and the
@@ -1224,6 +1231,7 @@ export function MarketSection(props: MarketSectionProps) {
   }, [])
 
   const doUpdate = useCallback((name: string, selectedVersion?: { betaVersion?: string; stableVersion?: string }) => {
+    if (officialUpdates) { props.onOfficialManage?.(name); return Promise.resolve() }
     setInstallError(null)
     setActivationWarnings([])
     setStaleName(null)
@@ -1291,7 +1299,7 @@ export function MarketSection(props: MarketSectionProps) {
         setInstallError(t('updateFail') + ': ' + detail)
       })
       .finally(() => setUpdatingName(null))
-  }, [nextRecordId, refreshInstalled, t, updates])
+  }, [nextRecordId, refreshInstalled, t, updates, officialUpdates, props.onOfficialManage])
 
   const doUseSkin = useCallback((name: string) => {
     setInstallError(null)
@@ -1526,7 +1534,7 @@ export function MarketSection(props: MarketSectionProps) {
   // mid-run, which would strand the remaining items.
   const selfName = installed['dshmarket'] !== undefined ? 'dshmarket' : 'dsh-market'
   const installedCount = Object.keys(installed).filter(name => name !== selfName).length
-  const updatableNames = batchUpdateNames(installed, updates, effectiveDisabledSet, updatedNames, selfName)
+  const updatableNames = officialUpdates ? [] : batchUpdateNames(installed, updates, effectiveDisabledSet, updatedNames, selfName)
   // The market manages itself from its own settings card (Settings → Plugins
   // → Plugin configuration), not as a row here — listing it in both places
   // read as two different controls for the same thing.
@@ -1950,7 +1958,7 @@ export function MarketSection(props: MarketSectionProps) {
         <div className={css.err}>
           {installError}
           <div className={css.staleAction}>
-            {staleName !== null && (
+            {!officialUpdates && staleName !== null && (
               <Button size="sm" onClick={() => doUpdate(staleName)}>{t('updateNow')}</Button>
             )}
           </div>
@@ -2281,6 +2289,7 @@ export function MarketSection(props: MarketSectionProps) {
                                             <span className={css.nm}>{member}</span>
                                             {effectiveDisabledSet.has(member) && <span className={css.spec}>{t('disabledState')}</span>}
                                             <span className={css.grow} />
+                                            {!officialUpdates && (
                                             <button
                                               type="button"
                                               role="switch"
@@ -2292,6 +2301,10 @@ export function MarketSection(props: MarketSectionProps) {
                                             >
                                               <span className={css.switchKnob} />
                                             </button>
+                                            )}
+                                            {officialUpdates && props.onOfficialManage && (
+                                              <Button variant="outline" size="sm" onClick={() => props.onOfficialManage!(member)}>{t('managePlugin')}</Button>
+                                            )}
                                             <Button variant="ghost" size="sm" onClick={() => doRemoveMember(gid, member)}>{t('groupRemove')}</Button>
                                           </div>
                                         ))}
@@ -2376,7 +2389,7 @@ export function MarketSection(props: MarketSectionProps) {
                             // the disable list (to re-enable), plus live/restart
                             // states. inert/broken rows keep their diagnosis
                             // without a misleading toggle (#60).
-                            const toggleable = off || (act !== undefined && (act.state === 'live' || act.state === 'restart'))
+                            const toggleable = !officialUpdates && (off || (act !== undefined && (act.state === 'live' || act.state === 'restart')))
                             return (
                               <div key={name} className={css.irow}>
                                 <div style={{ minWidth: 0 }}>
@@ -2484,7 +2497,7 @@ export function MarketSection(props: MarketSectionProps) {
                                     switch's x depended on whether the update
                                     slot rendered a button or a tag. */}
                                 <span className={css.grow} />
-                                {entry !== undefined && entry.deprecated === true && entry.replacement !== undefined && (() => {
+                                {!officialUpdates && entry !== undefined && entry.deprecated === true && entry.replacement !== undefined && (() => {
                                   const replacement = data?.plugins.find(r => r.name === entry.replacement)
                                   if (replacement === undefined) return null
                                   return (
@@ -2495,6 +2508,7 @@ export function MarketSection(props: MarketSectionProps) {
                                     </>
                                   )
                                 })()}
+                                {!officialUpdates && <>
                                 {updatedNames.includes(name)
                                     ? <span className={`${css.metaTag} ${css.metaTagOk}`}>{act?.state === 'live' ? t('updatedLive') : t('updated')}</span>
                                     : updatingName === name
@@ -2526,7 +2540,11 @@ export function MarketSection(props: MarketSectionProps) {
                                     {t('returnStable').replace('{0}', status.stableAvailable)}
                                   </Button>
                                 )}
-                                {name !== 'dsh-market' && name !== 'dshmarket' && (
+                                </>}
+                                {officialUpdates && props.onOfficialManage && (
+                                  <Button variant="outline" size="sm" onClick={() => props.onOfficialManage!(name)}>{t('managePlugin')}</Button>
+                                )}
+                                {!officialUpdates && name !== 'dsh-market' && name !== 'dshmarket' && (
                                   removingName === name
                                     ? <Button variant="outline" size="sm" className={css.dangerBtn} disabled>{t('uninstalling')}</Button>
                                     : (

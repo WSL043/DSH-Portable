@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import test from 'node:test'
 import vm from 'node:vm'
-import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, patchPluginManagerActions, patchWorkspaceHeaderActions } from '../scripts/patch-native-settings-command.mjs'
+import { patchNativeSettingsCommand, patchPortableUpdatesIcon, patchPluginSettingsNavigation, patchPluginInstallationGuidance, hasOfficialPluginManagement, patchPluginManagerActions, patchWorkspaceHeaderActions } from '../scripts/patch-native-settings-command.mjs'
 
 test('workspace header extension keeps official controls and allocates room without changing hidden state', () => {
   const source = '"sidebar.workspaces.session.menu.item": { kind: "list" }; children: [wide && (0, react_jsx_runtime.jsx)(ViewOptionsMenu, { original: true })]; .abc_headerActions{opacity:1;max-width:60px;display:flex}.abc_headerActionsHidden{max-width:0}'
@@ -288,4 +288,31 @@ test('alpha.4 plugin manager toolbar with an extra hidden prop still gets the ac
   const patched = patchPluginManagerActions(source)
   assert.match(patched, /children: \[renderSlot\("plugins.portable.actions"/)
   assert.match(patched, /hidden: !onInstalled/)
+})
+
+test('official public slots and update operations retain the manager byte for byte', () => {
+  const capabilities = [
+    '"plugins.add.actions": { kind: "list", scope: "root" }',
+    '"plugins.tab": { kind: "list", scope: "root" }',
+    'renderSlot("plugins.add.actions", { onDismiss })',
+    'renderSlot("plugins.tab", {',
+    'this.ctx.remote.pluginManager.listVersions(packageName, {})',
+    'this.ctx.remote.pluginManager.updateBundle(update.packageName, update.to, {',
+  ]
+  const source = capabilities.join('\n')
+  assert.equal(hasOfficialPluginManagement(source), true)
+  assert.equal(patchPluginManagerActions(source), source)
+  for (const capability of capabilities) {
+    const partial = source.replace(capability, '')
+    assert.equal(hasOfficialPluginManagement(partial), false)
+    assert.throws(() => patchPluginManagerActions(partial), /changed upstream/)
+  }
+  assert.equal(hasOfficialPluginManagement(source + '\n' + capabilities[2]), false)
+})
+
+test('partial public plugin operations never fall back to a still-matchable legacy overlay', () => {
+  const legacy = pluginManagerFixture(currentRefreshAnchor)
+  const slots = '"plugins.add.actions": { kind: "list", scope: "root" }; "plugins.tab": { kind: "list", scope: "root" };'
+  assert.throws(() => patchPluginManagerActions(legacy + slots), /public capabilities changed upstream; refusing legacy overlay/)
+  assert.match(patchPluginManagerActions(legacy + '"plugins.tab": { kind: "list", scope: "root" };'), /plugins.portable.update/)
 })

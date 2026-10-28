@@ -19,8 +19,8 @@ const passed = {
   historicalSessionMigration: { status: 'passed', evidence: 'documented historical-data acceptance', compatibilityPatch: descriptorV2PatchIdentity },
 }
 
-test('1.0.0 alpha cannot use Native publication even with passing core acceptance', () => {
-  for (const productVersion of ['1.0.0-alpha.1', '1.0.0-alpha.199']) {
+test('the entire official Portable 1.x line cannot use Native publication even with passing core acceptance', () => {
+  for (const productVersion of ['1.0.0-alpha.1', '1.0.0-alpha.199', '1.0.0', '1.1.0-beta.1', '1.4.2']) {
     assert.throws(() => assertPublishReadiness({ productVersion, previewLock, readiness: passed }), /separate clean-install qualification/)
   }
 })

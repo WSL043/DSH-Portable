@@ -7,7 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
-import { settingsMenuFallbackExpression } from './lib/settings-entry.mjs'
+import { clickButton, builtInPluginCard, officialPowerShellDetailsReady } from './lib/native-smoke-interaction.mjs'
 
 const execFileAsync = promisify(execFile)
 const root = path.resolve(process.argv[2] || '')
@@ -233,36 +233,6 @@ const initScript = String.raw`(() => {
   window.chrome = window.chrome || {}
   Object.defineProperty(window.chrome, 'webview', { configurable: true, value: webview })
   Object.defineProperty(window, '__dshTrayMessages', { configurable: true, get: () => posted })
-})()`
-
-const clickButton = names => `(() => {
-  const names = ${JSON.stringify(names)}
-  const button = [...document.querySelectorAll('button,[role="button"]')].find(item => {
-    const rect = item.getBoundingClientRect()
-    const style = getComputedStyle(item)
-    if (rect.width <= 0 || rect.height <= 0 || item.disabled
-      || item.getAttribute('aria-disabled') === 'true'
-      || item.closest('[inert],[aria-hidden="true"]')
-      || style.visibility === 'hidden' || style.visibility === 'collapse') return false
-    const label = item.getAttribute('aria-label') || item.getAttribute('title') || item.textContent || ''
-    return names.includes(label.trim())
-  })
-  if (!button && names.includes('设置')) {
-    const viaMenu = ${settingsMenuFallbackExpression}
-    if (viaMenu.clicked) return viaMenu
-  }
-  if (!button) return {
-    clicked: false,
-    controls: [...document.querySelectorAll('button,[role="button"],a')].slice(0, 80).map(item => ({
-      tag: item.tagName,
-      role: item.getAttribute('role') || '',
-      ariaLabel: item.getAttribute('aria-label') || '',
-      title: item.getAttribute('title') || '',
-      text: (item.textContent || '').trim().slice(0, 80),
-    })),
-  }
-  button.click()
-  return { clicked: true }
 })()`
 
 const clickChoice = names => `(() => {
@@ -797,19 +767,22 @@ try {
     ['Built-in plugins', '内置插件'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0))()`)
   if (modernBuiltIns) {
     // Alpha.2 replaces the legacy Installed/Diagnostics surface. Exercise its
-    // real configuration UI in both themes; do not pretend old override tags exist.
+    // real inventory details in both themes; do not pretend old forms or override tags exist.
     for (const theme of ['light', 'dark']) {
       await waitForValue(client, clickButton(['General', 'General settings', '通用设置']), value => value?.clicked, `${theme} general settings`)
       await waitForValue(client, clickButton(theme === 'light' ? ['Light', '浅色', '亮色'] : ['Dark', '深色']), value => value?.clicked, `${theme} theme`)
       await waitForValue(client, stateExpression, value => value?.theme === theme, `${theme} theme state`)
       await waitForValue(client, clickButton(['Built-in plugins', '内置插件']), value => value?.clicked, `${theme} built-in plugin settings`)
-      // The official manager retains its detail route across settings tabs.
-      await evaluate(client, clickButton(['Back to plugins', '返回插件列表', '返回插件']))
-      await waitForValue(client, clickButton(['View Shell', '查看 终端', 'Shell', '终端']), value => value?.clicked, `${theme} official Shell configuration`)
-      await waitForValue(client, `(() => ({
-        fields: [...document.querySelectorAll('input[inputmode="numeric"]')].filter(item => item.getBoundingClientRect().width > 0).length,
-        description: /Command timeout|命令超时/.test(document.body.innerText),
-      }))()`, value => value?.fields >= 2 && value.description, `${theme} official Shell fields`)
+      // Use the exact Windows tool card and its official aria-controls detail.
+      // Collapse first so each theme must prove a real expansion click.
+      await waitForValue(client, builtInPluginCard('tool-pwsh', false), value => value?.ready, `${theme} official PowerShell card`)
+      await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, `${theme} collapsed official PowerShell details`)
+      const expanded = await waitForValue(client, builtInPluginCard('tool-pwsh', true), value => value?.ready, `${theme} expand official PowerShell card`)
+      assert.equal(expanded.clicked, true, 'the exact official PowerShell card must be clicked open')
+      await waitForValue(client, builtInPluginCard('tool-pwsh'), officialPowerShellDetailsReady, `${theme} official PowerShell inventory facts`)
+      const collapsed = await waitForValue(client, builtInPluginCard('tool-pwsh', false), value => value?.ready, `${theme} collapse official PowerShell card`)
+      assert.equal(collapsed.clicked, true, 'the exact official PowerShell card must be clicked closed')
+      await waitForValue(client, builtInPluginCard('tool-pwsh'), value => value?.ready && !value.expanded && !value.detailsPresent, `${theme} official PowerShell details removed`)
     }
     if (diagnosticsScreenshotPath) {
       const screenshot = await client.send('Page.captureScreenshot', { format: 'png', fromSurface: true })
