@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
+import { createServer } from 'node:http'
 import { chmod, lstat, mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
@@ -323,4 +324,48 @@ test('pinned Node downloads reuse verified caches and replace files only after v
     assert.equal((await lstat(target))[kind === 'symlink' ? 'isSymbolicLink' : kind === 'directory' ? 'isDirectory' : 'isFIFO'](), true)
   }
   assert.deepEqual((await readdir(fixture)).filter(name => name.includes('.part.')), [], 'private partial files must be cleaned')
+})
+
+
+test('pinned Node downloads resume interrupted HTTP transfers and restart when Range is unsupported', { skip: process.platform === 'win32' }, async t => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-node-resume-'))
+  t.after(() => rm(fixture, { recursive: true, force: true }))
+  const body = Buffer.from('bounded resumable runtime fixture\n'.repeat(2048))
+  const half = body.length / 2
+  const digest = createHash('sha256').update(body).digest('hex')
+  const execFileAsync = promisify(execFile)
+  for (const supportsRange of [true, false]) {
+    await t.test(supportsRange ? 'resumes with HTTP 206' : 'restarts after curl 33', async t => {
+      const requests = []
+      const server = createServer((request, response) => {
+        const range = request.headers.range ?? null
+        requests.push(range)
+        if (requests.length === 1) {
+          // Advertise the complete body, then close early: real curl exits 18.
+          response.writeHead(200, { 'content-length': body.length, connection: 'close' }).end(body.subarray(0, half))
+        } else if (range && supportsRange) {
+          const start = Number(/^bytes=(\d+)-$/.exec(range)?.[1])
+          response.writeHead(206, { 'content-length': body.length - start,
+            'content-range': 'bytes ' + start + '-' + (body.length - 1) + '/' + body.length,
+            connection: 'close' }).end(body.subarray(start))
+        } else {
+          response.writeHead(200, { 'content-length': body.length, connection: 'close' }).end(body)
+        }
+      })
+      await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+      t.after(() => new Promise(resolve => { server.close(resolve); server.closeAllConnections() }))
+      const archive = path.join(fixture, supportsRange ? 'resumed.tgz' : 'restarted.tgz')
+      await writeFile(archive, 'old invalid cache must never seed a resume')
+      const { stderr } = await execFileAsync('/bin/bash', [path.join(root, 'scripts/download-pinned-node.sh'),
+        archive, digest, 'http://127.0.0.1:' + server.address().port + '/node.tgz'], {
+        env: { ...process.env, NO_PROXY: '127.0.0.1', no_proxy: '127.0.0.1' },
+        windowsHide: true, timeout: 20000,
+      })
+      assert.match(stderr, /curl 18/)
+      if (!supportsRange) assert.match(stderr, /curl 33/)
+      assert.deepEqual(requests, supportsRange ? [null, 'bytes=' + half + '-'] : [null, 'bytes=' + half + '-', null])
+      assert.deepEqual(await readFile(archive), body)
+      assert.deepEqual((await readdir(fixture)).filter(name => name.includes('.part.')), [])
+    })
+  }
 })
