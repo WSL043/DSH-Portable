@@ -86,6 +86,37 @@ test('preview staging follows the production dependency closure instead of every
   )
 })
 
+test('preview staging preserves optional platform branches and their production descendants', () => {
+  const packages = [
+    { name: 'entry', manifest: { dependencies: { shadowed: '1' }, optionalDependencies: { platform: '1', shadowed: '2' } } },
+    { name: 'platform', manifest: { os: ['darwin'], dependencies: { child: '1' }, peerDependencies: { peer: '1', skipped: '1' }, peerDependenciesMeta: { skipped: { optional: true } } } },
+    { name: 'child', manifest: { dependencies: { platform: '1' } } },
+    { name: 'peer', manifest: {} },
+    { name: 'shadowed', manifest: { dependencies: { descendant: '1' } } },
+    { name: 'descendant', manifest: {} },
+    { name: 'skipped', manifest: {} },
+  ]
+  assert.deepEqual(Object.fromEntries(productionPackageClosure(packages, 'entry').map(({ name, optional }) => [name, optional])), {
+    child: true, descendant: true, entry: false, peer: true, platform: true, shadowed: true,
+  })
+})
+
+test('preview staging upgrades shared optional subtrees when a required path reaches them later', () => {
+  const packages = [
+    { name: 'entry', manifest: { dependencies: { required: '1' }, optionalDependencies: { platform: '1' } } },
+    { name: 'platform', manifest: { os: ['darwin'], dependencies: { shared: '1', optionalOnly: '1' } } },
+    { name: 'required', manifest: { dependencies: { shared: '1' } } },
+    { name: 'shared', manifest: { dependencies: { child: '1' } } },
+    { name: 'child', manifest: { dependencies: { shared: '1', entry: '1' } } },
+    { name: 'optionalOnly', manifest: {} },
+  ]
+  for (const entries of [packages, [...packages].reverse()]) {
+    assert.deepEqual(Object.fromEntries(productionPackageClosure(entries, 'entry').map(({ name, optional }) => [name, optional])), {
+      child: false, entry: false, optionalOnly: true, platform: true, required: false, shared: false,
+    })
+  }
+})
+
 test('preview staging resolves npm from standard Windows and Unix Node layouts', () => {
   const candidates = npmCliCandidates(process.execPath, undefined)
   assert.ok(candidates.some((candidate) => candidate.endsWith(path.join('node_modules', 'npm', 'bin', 'npm-cli.js'))))

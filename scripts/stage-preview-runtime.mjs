@@ -101,22 +101,27 @@ export function productionPackageClosure(packages, entryName) {
   const byName = new Map(packages.map((entry) => [entry.name, entry]))
   assert.equal(byName.has(entryName), true, `preview entry package is missing: ${entryName}`)
   const selected = new Map()
-  const pending = [entryName]
+  const pending = [[entryName, false]]
   while (pending.length > 0) {
-    const name = pending.pop()
-    if (selected.has(name)) continue
+    const [name, optional] = pending.pop()
+    const previous = selected.get(name)
+    // A required path upgrades an optional subtree and revisits its descendants.
+    if (previous && (!previous.optional || optional)) continue
     const entry = byName.get(name)
     if (!entry) continue
-    selected.set(name, entry)
+    selected.set(name, { ...entry, optional })
     const manifest = entry.manifest ?? {}
+    const optionalDependencies = manifest.optionalDependencies ?? {}
     const peerMeta = manifest.peerDependenciesMeta ?? {}
     const required = new Set([
-      ...Object.keys(manifest.dependencies ?? {}),
-      ...Object.keys(manifest.optionalDependencies ?? {}),
+      ...Object.keys(manifest.dependencies ?? {}).filter((dependency) => !Object.hasOwn(optionalDependencies, dependency)),
       ...Object.keys(manifest.peerDependencies ?? {}).filter((dependency) => peerMeta[dependency]?.optional !== true),
     ])
     for (const dependency of required) {
-      if (byName.has(dependency) && !selected.has(dependency)) pending.push(dependency)
+      if (byName.has(dependency)) pending.push([dependency, optional])
+    }
+    for (const dependency of Object.keys(optionalDependencies)) {
+      if (byName.has(dependency)) pending.push([dependency, true])
     }
   }
   return [...selected.values()].sort((left, right) => left.name.localeCompare(right.name))
@@ -206,7 +211,12 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
   // separately installable providers. A normal npm install starts at the DSH
   // entry package and follows production dependencies; mirror that contract
   // instead of turning every packed tarball into a product dependency.
-  const dependencies = Object.fromEntries(runtimePackages.map((entry) => [entry.name, pathToFileURL(entry.tarball).href]))
+  const dependencies = {}
+  const optionalDependencies = {}
+  for (const entry of runtimePackages) {
+    const target = entry.optional ? optionalDependencies : dependencies
+    target[entry.name] = pathToFileURL(entry.tarball).href
+  }
   dependencies['@wsl043/dsh-portable-desktop-bridge'] = 'file:desktop-bridge'
   dependencies[stableLock.pluginMarket.package] = 'file:vendor/dsh-portable-plugin-market'
   const pnpmSpec = reviewedBuild ? `file:vendor/pnpm-${stableLock.pnpm.version}-portable.tgz` : stableLock.pnpm.version
@@ -218,6 +228,7 @@ export async function stagePreviewRuntime({ packedRoot, output, npmCli, lockFile
     private: true,
     license: 'Apache-2.0',
     dependencies,
+    optionalDependencies,
     overrides: stableRuntimeManifest.overrides,
   }
   await writeFile(path.join(output, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
