@@ -62,5 +62,5 @@ gh workflow run sync-core.yml --repo WSL043/DSH-Portable-Updates --ref main -f r
 ## 3. 注意
 
 - 验收脚本放在更新仓库（`scripts/verify-default-plugin-ui.mjs`）。界面新增弹窗、改按钮位置的改动，要在同一次发版前同步改它；否则内核验收会失败。
-- 新内核只能在**已发布**的稳定版上验收：更新仓库用已发布版本的源码构建，所以补丁、名单和默认插件的改动要随下一个稳定版一起发布。
+- 内核**正式发布**绑定已发布的稳定外壳。发布前可用更新仓库的 `prepare-core.yml`，传入已通过完整 CI 的确切 main `source_sha` 和窗口内 `prepare_version`，先做五平台隔离验收；此模式只保留工件，不发布内核、更新目录或正式资格状态。外壳发布后，`publish-prepared-core.yml` 用 `prepared_run_id` 重新核对已发布基线与原工件身份，再复用已验收 ZIP 晋升；不能把准备成功写成公开目录已可用。
 - 旧的公开 preview 内核渠道已退役。`automation/official-preview` 的隔离 Native 候选验收仍保留，且不同于公开更新源；不要通过开通道、放宽版本或沿用 stable 成果来消除候选的预期未发布状态。
