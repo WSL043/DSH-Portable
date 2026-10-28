@@ -40,8 +40,19 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 echo "Downloading pinned Node.js runtime: $URL"
-curl --fail --location --connect-timeout 20 --max-time 300 \
-  --speed-time 60 --speed-limit 16384 --retry 2 --output "$PARTIAL" "$URL"
+for attempt in 1 2 3; do
+  if curl --fail --location --connect-timeout 20 --max-time 300 \
+    --speed-time 60 --speed-limit 16384 --continue-at - --output "$PARTIAL" "$URL"; then
+    break
+  else
+    status="$?"
+  fi
+  echo "Pinned Node download attempt $attempt failed (curl $status)." >&2
+  # A server ignoring Range requires a fresh transfer, never an appended body.
+  if [[ "$status" -eq 33 ]]; then : > "$PARTIAL"; fi
+  [[ "$attempt" -lt 3 ]] || exit "$status"
+  sleep "$attempt"
+done
 verify_archive "$PARTIAL" || { echo "Pinned Node archive SHA256 mismatch" >&2; exit 1; }
 require_regular_target
 mv -f "$PARTIAL" "$ARCHIVE"

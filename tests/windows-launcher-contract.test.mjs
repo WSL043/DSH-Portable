@@ -170,3 +170,65 @@ test('the startup theme smoke attaches its colour probe before any slow step', a
   assert.ok(probe < capture, 'the probe is registered before the native-window capture')
   assert.equal(smoke.split('Page.addScriptToEvaluateOnNewDocument').length - 1, 1)
 })
+
+
+test('native startup history survives a locked latest log and concurrent writers preserve complete events', { skip: process.platform !== 'win32' }, async t => {
+  const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-native-trace-'))
+  t.after(() => rm(fixture, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }))
+  const host = await readFile(path.join(projectRoot, 'launcher/windows/LauncherWindow.Host.cs'), 'utf8')
+  const start = host.indexOf('        private void AppendHistoryLog(')
+  const end = host.indexOf('        private async Task<List<string>> InspectWebViewForShutdownAsync(', start)
+  assert.ok(start > 0 && end > start, 'the real native trace methods must be compiled')
+  const cs = path.join(fixture, 'TraceProbe.cs'), exe = path.join(fixture, 'TraceProbe.exe')
+  await writeFile(cs, [
+    'using System; using System.Collections.Generic; using System.Diagnostics; using System.Globalization;',
+    'using System.IO; using System.Text; using System.Text.RegularExpressions; using System.Threading;',
+    'using System.Web.Script.Serialization;',
+    'class TraceProbe {',
+    '  string directory, startupId; long startupStartedAt; bool startupTraceActive = true;',
+    '  JavaScriptSerializer json = new JavaScriptSerializer();',
+    '  string ResolveLauncherLogDirectory() { return directory; }',
+    host.slice(start, end),
+    '  static int Main(string[] args) {',
+    '    var probe = new TraceProbe { directory = args[0], startupId = args[1], startupStartedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() };',
+    '    Directory.CreateDirectory(probe.directory);',
+    '    if (args[2] == "locked") {',
+    '      using (var held = new FileStream(Path.Combine(probe.directory, "startup-latest.jsonl"), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None)) {',
+    '        probe.AppendStartupTrace("native-host", "native-loading-ready", new Dictionary<string, object> { { "paintedFrames", 1 } });',
+    '      }',
+    '      return 0;',
+    '    }',
+    '    File.WriteAllText(Path.Combine(probe.directory, args[2] + ".ready"), "ready");',
+    '    var barrier = Stopwatch.StartNew();',
+    '    while (Directory.GetFiles(probe.directory, "*.ready").Length < 2) {',
+    '      if (barrier.ElapsedMilliseconds > 5000) throw new TimeoutException("trace writer barrier");',
+    '      Thread.Sleep(1);',
+    '    }',
+    '    for (int i = 0; i < 32; i++) probe.AppendStartupTrace("native-host", args[2] + "-" + i, null);',
+    '    return 0;',
+    '  }',
+    '}', '',
+  ].join('\n'))
+  await execFileAsync(cscPath(), ['/nologo', '/target:exe', '/reference:System.dll',
+    '/reference:System.Core.dll', '/reference:System.Web.Extensions.dll', '/out:' + exe, cs],
+  { windowsHide: true, timeout: 30000 })
+  const id = 'a'.repeat(32)
+  const locked = path.join(fixture, 'locked')
+  await execFileAsync(exe, [locked, id, 'locked'], { windowsHide: true, timeout: 15000 })
+  const events = text => text.trim().split(/\r?\n/).map(JSON.parse)
+  const lockedEvents = events(await readFile(path.join(locked, 'history', id, 'startup.jsonl'), 'utf8'))
+  assert.equal(lockedEvents.length, 1)
+  assert.equal(lockedEvents[0].phase, 'native-loading-ready')
+  assert.equal(lockedEvents[0].paintedFrames, 1)
+  assert.equal(await readFile(path.join(locked, 'startup-latest.jsonl'), 'utf8'), '')
+  const concurrent = path.join(fixture, 'concurrent')
+  await Promise.all(['one', 'two'].map(worker => execFileAsync(exe, [concurrent, id, worker], { windowsHide: true, timeout: 15000 })))
+  for (const relative of ['startup-latest.jsonl', path.join('history', id, 'startup.jsonl')]) {
+    const written = events(await readFile(path.join(concurrent, relative), 'utf8'))
+    assert.equal(written.length, 64, relative + ' must preserve every event')
+    assert.ok(written.every(entry => entry.startupId === id && entry.component === 'native-host'))
+    const phases = new Set(written.map(entry => entry.phase))
+    assert.equal(phases.size, 64, relative + ' must not contain overwritten or duplicate events')
+    for (const worker of ['one', 'two']) for (let index = 0; index < 32; index++) assert.ok(phases.has(worker + '-' + index))
+  }
+})

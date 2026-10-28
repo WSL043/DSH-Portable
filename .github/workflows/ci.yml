@@ -841,6 +841,25 @@ jobs:
           node-version: 24.22.1
           cache: npm
           cache-dependency-path: app/package-lock.json
+      - name: Read the locked Node archive identity
+        id: node_archive
+        env:
+          NODE_RUNTIME: darwin-${{ matrix.arch }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const runtime = JSON.parse(fs.readFileSync('upstream.lock.json', 'utf8')).node.runtimes[process.env.NODE_RUNTIME]
+          if (!runtime || typeof runtime.archive !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runtime.archive)
+            || typeof runtime.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(runtime.sha256)) throw new Error('Invalid locked Node archive identity')
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `archive=${runtime.archive}\nsha256=${runtime.sha256}\n`)
+          NODE
+      - name: Restore the locked Node archive
+        id: node_archive_cache
+        continue-on-error: true
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: .cache/downloads/${{ steps.node_archive.outputs.archive }}
+          key: node-archive-${{ runner.os }}-${{ matrix.arch }}-${{ steps.node_archive.outputs.sha256 }}
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -853,6 +872,24 @@ jobs:
         run: |
           node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
           PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-macos.sh "${{ matrix.arch }}"
+      - name: Verify the completed Node archive before caching
+        id: node_archive_verified
+        if: always() && !cancelled() && steps.node_archive.outputs.archive != ''
+        env:
+          NODE_ARCHIVE: .cache/downloads/${{ steps.node_archive.outputs.archive }}
+          NODE_SHA256: ${{ steps.node_archive.outputs.sha256 }}
+        run: |
+          if [ -f "$NODE_ARCHIVE" ] && [ ! -L "$NODE_ARCHIVE" ]; then
+            printf '%s  %s\n' "$NODE_SHA256" "$NODE_ARCHIVE" | shasum -a 256 -c -
+            echo 'verified=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Cache the verified Node archive
+        if: always() && !cancelled() && steps.node_archive_verified.outputs.verified == 'true' && steps.node_archive_cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .cache/downloads/${{ steps.node_archive.outputs.archive }}
+          key: node-archive-${{ runner.os }}-${{ matrix.arch }}-${{ steps.node_archive.outputs.sha256 }}
       - name: Compare package size with the previous qualified main build
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1006,6 +1043,25 @@ jobs:
           cache-dependency-path: |
             app/package-lock.json
             launcher/linux/package-lock.json
+      - name: Read the locked Node archive identity
+        id: node_archive
+        env:
+          NODE_RUNTIME: linux-${{ matrix.arch }}
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs')
+          const runtime = JSON.parse(fs.readFileSync('upstream.lock.json', 'utf8')).node.runtimes[process.env.NODE_RUNTIME]
+          if (!runtime || typeof runtime.archive !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(runtime.archive)
+            || typeof runtime.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(runtime.sha256)) throw new Error('Invalid locked Node archive identity')
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `archive=${runtime.archive}\nsha256=${runtime.sha256}\n`)
+          NODE
+      - name: Restore the locked Node archive
+        id: node_archive_cache
+        continue-on-error: true
+        uses: actions/cache/restore@v6.1.0
+        with:
+          path: .cache/downloads/${{ steps.node_archive.outputs.archive }}
+          key: node-archive-${{ runner.os }}-${{ matrix.arch }}-${{ steps.node_archive.outputs.sha256 }}
       - name: Select an isolated candidate version for official preview qualification
         if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
         shell: bash
@@ -1027,6 +1083,24 @@ jobs:
         run: |
           node scripts/stage-preview-runtime.mjs --packed-root preview-packed --output preview-app
           PREVIEW_APP_SOURCE="$PWD/preview-app" bash scripts/build-linux.sh "${{ matrix.arch }}"
+      - name: Verify the completed Node archive before caching
+        id: node_archive_verified
+        if: always() && !cancelled() && steps.node_archive.outputs.archive != ''
+        env:
+          NODE_ARCHIVE: .cache/downloads/${{ steps.node_archive.outputs.archive }}
+          NODE_SHA256: ${{ steps.node_archive.outputs.sha256 }}
+        run: |
+          if [ -f "$NODE_ARCHIVE" ] && [ ! -L "$NODE_ARCHIVE" ]; then
+            printf '%s  %s\n' "$NODE_SHA256" "$NODE_ARCHIVE" | sha256sum -c -
+            echo 'verified=true' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Cache the verified Node archive
+        if: always() && !cancelled() && steps.node_archive_verified.outputs.verified == 'true' && steps.node_archive_cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v6.1.0
+        with:
+          path: .cache/downloads/${{ steps.node_archive.outputs.archive }}
+          key: node-archive-${{ runner.os }}-${{ matrix.arch }}-${{ steps.node_archive.outputs.sha256 }}
       - name: Compare package size with the previous qualified main build
         env:
           GH_TOKEN: ${{ github.token }}
