@@ -115,6 +115,17 @@ try {
   assert.equal(routeStatus, 200, 'Portable bridge route is unavailable')
   report.initialDefaultVersions = await verifyInstalledDefaults(mode === '--upgrade-defaults' ? historicalVersions : undefined)
 
+  // Seed before the long-lived host's deferred maintenance window elapses.
+  const managedLogs = path.join(root, 'data/dsh-home/profiles/web/.plugin-manager/logs')
+  const oldLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
+  const recentLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
+  for (const file of [oldLog, recentLog]) {
+    await mkdir(path.dirname(file), { recursive: true })
+    await writeFile(file, 'Disposable maintenance acceptance\n', { flag: 'wx' })
+  }
+  const expired = new Date(Date.now() - 30 * 86400000)
+  await utimes(oldLog, expired, expired)
+
   // The first-run notice and model prompt are official DSH UI. No model key is
   // needed for this disposable package-manager acceptance.
   for (let attempt = 0; attempt < 20; attempt++) {
@@ -133,6 +144,9 @@ try {
   }
 
   await page.getByRole('button', { name: /^(Plugins|插件)$/ }).first().click()
+  await page.locator(`[data-plugin-package="${reviewedPlugins[0].package}"]`).waitFor()
+  const publicManager = await page.locator('[data-plugin-header-part="toolbar"]').count() > 0
+  report.pluginManagerPath = publicManager ? 'official-public-update-ui' : 'legacy-portable-update-row'
   if (mode === '--upgrade-defaults') {
     report.upgrades = []
     let secondPage
@@ -145,51 +159,85 @@ try {
       await secondPage.goto(page.url(), { waitUntil: 'domcontentloaded' })
       assert.equal(await secondPage.evaluate(async () => (await fetch('/dsh-market/installed')).status), 200)
     }
+    const writerLock = path.join(root, 'data/dsh-home/profiles/web/package.json.lock')
+    async function probeConcurrentWriters(plugin) {
+      const deadline = Date.now() + 10_000
+      while (!await access(writerLock).then(() => true, () => false)) {
+        assert.ok(Date.now() < deadline, `${publicManager ? 'official manager' : 'Portable'} profile writer lock was not observed within 10s of update confirmation`)
+        await new Promise(resolve => setTimeout(resolve, 5))
+      }
+      const secondRequest = secondPage.evaluate(async name => {
+        const response = await fetch('/dsh-market/update', { method: 'POST',
+          headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })
+        return { status: response.status, body: await response.json() }
+      }, plugin.package)
+      const cliRequest = promisify(execFile)(path.join(root, 'runtime/node/node.exe'), [
+        path.join(root, 'launcher/runtime-entry.mjs'), 'dsh-cli.mjs', 'plugin', '--profile', 'web', 'install',
+      ], { cwd: root, env, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 })
+        .then(value => ({ code: 0, ...value }), error => ({ code: error.code, stdout: error.stdout, stderr: error.stderr }))
+      const [second, cli] = await Promise.all([secondRequest, cliRequest])
+      report.concurrentWriters = { owner: publicManager ? 'official-plugin-manager' : 'portable-market', scope: 'shared-profile-writer-lock', secondPageStatus: second.status, cliExitCode: cli.code, actualWriterLockObserved: true }
+      assert.equal(second.status, 409, JSON.stringify(second))
+      assert.match(second.body.error, /operation|install.*running/i)
+      assert.equal(cli.code, 1, JSON.stringify(cli))
+      assert.match(cli.stderr, /lock|busy|already.*running/i)
+    }
     let navigations = 0
     const observeNavigation = frame => { if (frame === page.mainFrame()) navigations++ }
     page.on('framenavigated', observeNavigation)
     for (const plugin of reviewedPlugins) {
       const card = page.locator(`[data-plugin-package="${plugin.package}"]`)
       const enabledBefore = await card.getByRole('switch').getAttribute('aria-checked')
-      const update = card.getByRole('button', { name: /^(更新|Update)$/ })
-      await update.waitFor({ timeout: 60_000 })
-      const pending = page.waitForResponse(response => new URL(response.url()).pathname === '/dsh-market/update'
-        && response.request().method() === 'POST', { timeout: 180_000 })
-      await update.click()
-      if (secondPage && report.upgrades.length === 0) {
-        const profile = path.join(root, 'data/dsh-home/profiles/web')
-        const lock = path.join(profile, 'package.json.lock')
-        const deadline = Date.now() + 10_000
-        while (!await access(lock).then(() => true, () => false)) {
-          assert.ok(Date.now() < deadline, 'actual profile writer lock did not appear')
-          await new Promise(resolve => setTimeout(resolve, 5))
-        }
-        const secondRequest = secondPage.evaluate(async name => {
-          const response = await fetch('/dsh-market/update', { method: 'POST',
-            headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name }) })
-          return { status: response.status, body: await response.json() }
-        }, plugin.package)
-        const cliRequest = promisify(execFile)(path.join(root, 'runtime/node/node.exe'), [
-          path.join(root, 'launcher/runtime-entry.mjs'), 'dsh-cli.mjs', 'plugin', '--profile', 'web', 'install',
-        ], { cwd: root, env, windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 })
-          .then(value => ({ code: 0, ...value }), error => ({ code: error.code, stdout: error.stdout, stderr: error.stderr }))
-        const [second, cli] = await Promise.all([secondRequest, cliRequest])
-        assert.equal(second.status, 409, JSON.stringify(second))
-        assert.match(second.body.error, /operation|install.*running/i)
-        assert.equal(cli.code, 1, JSON.stringify(cli))
-        assert.match(cli.stderr, /lock|busy|already.*running/i)
-        report.concurrentWriters = { secondPageStatus: second.status, cliExitCode: cli.code, actualWriterLockObserved: true }
+      let update = card.getByRole('button', { name: /^(更新|Update)$/ })
+      let detail
+      if (publicManager) {
+        await card.getByRole('button').first().click()
+        detail = page.locator(`[data-plugin-detail="${plugin.package}"]`)
+        const versions = detail.locator('[data-plugin-versions]')
+        const expand = versions.locator('button[aria-expanded="false"]').first()
+        await expand.waitFor({ timeout: 60_000 })
+        await expand.click()
+        await versions.locator(`[data-plugin-version="${plugin.version}"]`).getByRole('button', { name: /^(更新到 |Update to )/ }).click()
+        await page.locator('[data-plugin-update="confirm"]').waitFor()
+        update = page.getByRole('dialog').last().getByRole('button', { name: /^(更新|Update)$/ })
       }
-      const response = await pending
-      const body = await response.json()
-      assert.equal(response.status(), 200, JSON.stringify(body))
-      assert.equal(body.ok, true, JSON.stringify(body))
+      await update.waitFor({ timeout: 60_000 })
+      await update.click({ trial: true })
+      const pending = publicManager
+        ? page.locator('[data-plugin-update="done"]').waitFor({ timeout: 180_000 })
+        : page.waitForResponse(response => new URL(response.url()).pathname === '/dsh-market/update'
+          && response.request().method() === 'POST', { timeout: 180_000 })
+      pending.catch(() => {})
+      let writerProbe
+      if (secondPage && report.upgrades.length === 0) {
+        assert.equal(await access(writerLock).then(() => true, () => false), false, 'profile already had an unrelated writer before update')
+        // Arm the actual lock observer before the UI starts either transaction.
+        writerProbe = probeConcurrentWriters(plugin)
+        writerProbe.catch(() => {})
+      }
+      await update.click()
+      await writerProbe
+      if (publicManager) {
+        await pending
+        const result = page.locator('[data-plugin-update="done"]')
+        assert.equal(await result.locator('[data-state="failed"],[data-state="unknown"]').count(), 0, await result.innerText())
+        await detail.getByText(`v${plugin.version}`, { exact: true }).waitFor()
+        await page.getByRole('dialog').last().getByRole('button', { name: /^(完成|Done)$/ }).click()
+        await detail.getByRole('button', { name: /^(返回插件|Back to plugins)$/ }).click()
+        await card.waitFor()
+      } else {
+        const response = await pending
+        const body = await response.json()
+        assert.equal(response.status(), 200, JSON.stringify(body))
+        assert.equal(body.ok, true, JSON.stringify(body))
+      }
       const installed = JSON.parse(await readFile(path.join(root, 'data/dsh-home/profiles/web/node_modules', plugin.package, 'package.json'), 'utf8'))
       assert.equal(installed.version, plugin.version, 'update must reach the exact reviewed product version')
       assert.equal(await card.isVisible(), true, 'download/install must preserve the plugin page')
       assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), enabledBefore, 'update must preserve enablement')
       assert.equal(navigations, 0, 'update must not navigate before restart')
       report.upgrades.push({ package: plugin.package, from: historicalVersions[plugin.package], to: installed.version, enabledBefore })
+      if (publicManager) report.ownedPublicUpdate = report.upgrades
       await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-update.png`) })
     }
     page.off('framenavigated', observeNavigation)
@@ -233,11 +281,15 @@ try {
     const enableNow = page.getByRole('button', { name: /^(立即启用|Enable now)$/ })
     const installResult = await Promise.race([
       enableNow.waitFor({ timeout: 120_000 }).then(() => 'ready'),
-      page.getByText(/(?:could not be installed|无法安装)/i).waitFor({ timeout: 120_000 }).then(() => 'failed'),
+      (publicManager ? page.locator('[data-install-phase="failed"]') : page.getByText(/(?:could not be installed|无法安装)/i)).waitFor({ timeout: 120_000 }).then(() => 'failed'),
     ])
     assert.equal(installResult, 'ready', `Official plugin installation failed: ${await page.getByRole('dialog').last().innerText()}`)
     await enableNow.click()
-    await page.getByRole('button', { name: /^(返回插件列表|Back to plugins)$/ }).click()
+    if (publicManager) {
+      await page.getByRole('dialog').last().waitFor({ state: 'hidden' })
+      const back = page.getByRole('button', { name: /^(返回插件|Back to plugins)$/ })
+      if (await back.isVisible()) await back.click()
+    } else await page.getByRole('button', { name: /^(返回插件列表|Back to plugins)$/ }).click()
     await card.waitFor()
     await page.waitForFunction(selector => document.querySelector(`${selector} [role="switch"]`)?.getAttribute('aria-checked') === 'true', selector)
     assert.equal(await card.getByRole('switch').getAttribute('aria-checked'), 'true')
@@ -246,51 +298,46 @@ try {
     await page.screenshot({ path: path.join(evidence, `${plugin.package}-after-install.png`) })
 
   }
-  const card = page.locator('[data-plugin-package="dsh-image-viewer"]')
+  if (!publicManager) {
+    const card = page.locator('[data-plugin-package="dsh-image-viewer"]')
 
-  // The official switch may hot-unload immediately. Supply a loader mismatch
-  // only for this view-layer check, then verify the Portable recovery action
-  // is actually clickable and confirms a new native boot.
-  await page.route('**/dsh-market/installed', async route => {
-    const response = await route.fetch()
-    const body = await response.json()
-    body.bundles = body.bundles.filter(name => name !== 'dsh-image-viewer')
-    body.activation['dsh-image-viewer'] = { state: 'live' }
-    await route.fulfill({ response, json: body })
-  })
-  await page.evaluate(() => window.dispatchEvent(new Event('dsh-portable/refresh-plugins')))
-  const restartToVerify = card.getByRole('button', { name: /^(重启后确认|Restart to verify)$/ })
-  await restartToVerify.waitFor({ state: 'visible', timeout: 15_000 })
-  // Playwright's visible state includes elements below the viewport. Bring
-  // the action into view before hit-testing so a tall plugin list does not
-  // turn an offscreen button into a false overlay failure.
-  await restartToVerify.scrollIntoViewIfNeeded()
-  const clickTargetIsButton = await restartToVerify.evaluate(button => {
-    const bounds = button.getBoundingClientRect()
-    return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === button
-  })
-  assert.equal(clickTargetIsButton, true, 'plugin card title intercepts the Portable restart action')
-  const previousBoot = await page.evaluate(async () => (await (await fetch('/dsh-market/status')).json()).boot)
-  await restartToVerify.click()
-  await page.waitForFunction(async boot => {
-    try {
-      const response = await fetch('/dsh-market/status', { cache: 'no-store' })
-      return response.ok && (await response.json()).boot !== boot
-    } catch { return false }
-  }, previousBoot, { timeout: 90_000 })
-  report.pluginMismatchRestart = true
-
-  // Exercise maintenance through the actual long-lived host, not a helper call.
-  // The native restart above gives the deferred maintenance a fresh 60s window.
-  const managedLogs = path.join(root, 'data/dsh-home/profiles/web/.plugin-manager/logs')
-  const oldLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
-  const recentLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
-  for (const file of [oldLog, recentLog]) {
-    await mkdir(path.dirname(file), { recursive: true })
-    await writeFile(file, 'Disposable maintenance acceptance\n', { flag: 'wx' })
+    // The official switch may hot-unload immediately. Supply a loader mismatch
+    // only for this view-layer check, then verify the Portable recovery action
+    // is actually clickable and confirms a new native boot.
+    await page.route('**/dsh-market/installed', async route => {
+      const response = await route.fetch()
+      const body = await response.json()
+      body.bundles = body.bundles.filter(name => name !== 'dsh-image-viewer')
+      body.activation['dsh-image-viewer'] = { state: 'live' }
+      await route.fulfill({ response, json: body })
+    })
+    await page.evaluate(() => window.dispatchEvent(new Event('dsh-portable/refresh-plugins')))
+    const restartToVerify = card.getByRole('button', { name: /^(重启后确认|Restart to verify)$/ })
+    await restartToVerify.waitFor({ state: 'visible', timeout: 15_000 })
+    // Playwright's visible state includes elements below the viewport. Bring
+    // the action into view before hit-testing so a tall plugin list does not
+    // turn an offscreen button into a false overlay failure.
+    await restartToVerify.scrollIntoViewIfNeeded()
+    const clickTargetIsButton = await restartToVerify.evaluate(button => {
+      const bounds = button.getBoundingClientRect()
+      return document.elementFromPoint(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2) === button
+    })
+    assert.equal(clickTargetIsButton, true, 'plugin card title intercepts the Portable restart action')
+    const previousBoot = await page.evaluate(async () => (await (await fetch('/dsh-market/status')).json()).boot)
+    await restartToVerify.click()
+    await page.waitForFunction(async boot => {
+      try {
+        const response = await fetch('/dsh-market/status', { cache: 'no-store' })
+        return response.ok && (await response.json()).boot !== boot
+      } catch { return false }
+    }, previousBoot, { timeout: 90_000 })
+    report.pluginMismatchRestart = true
+    report.legacyRestart = true
+  } else {
+    report.legacyRestart = { status: 'not-applicable', reason: 'The official manager has no Portable private update row.' }
   }
-  const expired = new Date(Date.now() - 30 * 86400000)
-  await utimes(oldLog, expired, expired)
+
+  // The real host must expire old managed logs while preserving recent logs.
   const maintenanceDeadline = Date.now() + 80000
   let removed = false
   while (Date.now() < maintenanceDeadline) {
@@ -318,7 +365,7 @@ try {
   const composer = page.locator('[contenteditable="true"][role="textbox"]').first()
   await composer.fill('Disposable official plugin lifecycle check')
   assert.equal(await composer.isEditable(), true)
-  await page.screenshot({ path: path.join(evidence, 'after-restart-composer.png') })
+  await page.screenshot({ path: path.join(evidence, publicManager ? 'after-plugin-cycle-composer.png' : 'after-restart-composer.png') })
   assert.deepEqual(report.pageErrors, [])
   report.composer = true
   report.ok = true
