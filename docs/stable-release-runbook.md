@@ -42,7 +42,7 @@ scripts/ship-stable.sh x.y.z
 
 内核验收失败时：修原因（多半是更新仓库的验收脚本或补丁锚点），再运行 `scripts/ship-stable.sh x.y.z --resume`。常规维护不得用 `--skip-gate` 绕过内核窗口；它会立即发布并翻更新源，不属于本流程。
 
-更新仓库已有其他内核随后发布时，不要 rerun 旧运行来恢复发布：旧 resolve/selection/qualification-state 快照可能覆盖新记录，使目录或资格状态回退。保留原失败与当前目录。下面的 fresh dispatch 只适用于重验当前 Portable `upstream.lock.json` 锁定的内核（以已发布 Portable 对应的锁文件为准；0.9.7 的发布基线为 0.2.1-rc.3，未发布 main 不能冒充已发布基线），让它重新读取已发布状态；未指定版本时，它不是指定任意失败内核的通用恢复命令：
+更新仓库已有其他内核随后发布时，不要 rerun 旧运行来恢复发布：旧 resolve/selection/qualification-state 快照可能覆盖新记录，使目录或资格状态回退。保留原失败与当前目录。下面的 fresh dispatch 重新读取当前发布与资格状态，重建当前已接受的内核；该版本可能高于已发布 Portable 的 `upstream.lock.json`，以新运行的 selection 为准。未发布 main 不能冒充已发布外壳基线；未指定 `rebuild_version` 时，也不能把该命令当作精确版本的恢复命令：
 
 ```bash
 gh workflow run sync-core.yml --repo WSL043/DSH-Portable-Updates --ref main -f remaining=0 -f accepted_only=false -f rebuild=true
