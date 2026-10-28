@@ -35,6 +35,17 @@ const env = {
 assert.ok(mode === undefined || mode === '--upgrade-defaults', 'unknown acceptance mode')
 assert.ok(concurrency === undefined || concurrency === '--concurrent-writers' && mode === '--upgrade-defaults', 'concurrent acceptance requires historical upgrade mode')
 const historicalVersions = { 'dsh-chat-manager': '1.4.0-beta.3', 'dsh-image-viewer': '0.1.1' }
+// Establish maintenance inputs before any CLI helper or native host can start
+// the long-lived host's one-minute maintenance timer.
+const managedLogs = path.join(root, 'data/dsh-home/profiles/web/.plugin-manager/logs')
+const oldLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
+const recentLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
+for (const file of [oldLog, recentLog]) {
+  await mkdir(path.dirname(file), { recursive: true })
+  await writeFile(file, 'Disposable maintenance acceptance\n', { flag: 'wx' })
+}
+const expired = new Date(Date.now() - 30 * 86400000)
+await utimes(oldLog, expired, expired)
 if (mode === '--upgrade-defaults') {
   assert.ok(historicalSeedArg, 'Historical upgrade requires the isolated 0.7.7 seed runtime')
   const seedRoot = path.resolve(historicalSeedArg)
@@ -115,16 +126,19 @@ try {
   assert.equal(routeStatus, 200, 'Portable bridge route is unavailable')
   report.initialDefaultVersions = await verifyInstalledDefaults(mode === '--upgrade-defaults' ? historicalVersions : undefined)
 
-  // Seed before the long-lived host's deferred maintenance window elapses.
-  const managedLogs = path.join(root, 'data/dsh-home/profiles/web/.plugin-manager/logs')
-  const oldLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
-  const recentLog = path.join(managedLogs, `operation-${randomBytes(3).toString('hex')}`, 'pnpm.log')
-  for (const file of [oldLog, recentLog]) {
-    await mkdir(path.dirname(file), { recursive: true })
-    await writeFile(file, 'Disposable maintenance acceptance\n', { flag: 'wx' })
+  // Observe the first real deferred pass before UI package writers can take
+  // the profile lock. A busy pass deliberately defers for six hours; the
+  // official manager path does not restart the host to reset that timer.
+  const maintenanceDeadline = Date.now() + 80000
+  let removed = false
+  while (Date.now() < maintenanceDeadline) {
+    try { await access(oldLog) }
+    catch (error) { if (error.code !== 'ENOENT') throw error; removed = true; break }
+    await new Promise(resolve => setTimeout(resolve, 500))
   }
-  const expired = new Date(Date.now() - 30 * 86400000)
-  await utimes(oldLog, expired, expired)
+  assert.ok(removed, 'real host did not run deferred plugin log maintenance')
+  await access(recentLog)
+  report.deferredLogMaintenance = true
 
   // The first-run notice and model prompt are official DSH UI. No model key is
   // needed for this disposable package-manager acceptance.
@@ -336,18 +350,6 @@ try {
   } else {
     report.legacyRestart = { status: 'not-applicable', reason: 'The official manager has no Portable private update row.' }
   }
-
-  // The real host must expire old managed logs while preserving recent logs.
-  const maintenanceDeadline = Date.now() + 80000
-  let removed = false
-  while (Date.now() < maintenanceDeadline) {
-    try { await access(oldLog) }
-    catch (error) { if (error.code !== 'ENOENT') throw error; removed = true; break }
-    await new Promise(resolve => setTimeout(resolve, 500))
-  }
-  assert.ok(removed, 'real host did not run deferred plugin log maintenance')
-  await access(recentLog)
-  report.deferredLogMaintenance = true
 
   if (page.isClosed() || !browser.isConnected()) {
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${debugPort}`, { timeout: 30000 })

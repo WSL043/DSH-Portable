@@ -1049,7 +1049,11 @@ test('CI upgrades the immediate prior Windows release through the declared compo
   // The 1.0 pure-portable alpha is a side-by-side package, never the prior release of the 0.x line.
   assert.match(workflow, /\$_\.isPrerelease -and \$_\.tagName -match '\^v0\\\./)
   assert.match(workflow, /alpha\|beta\|rc/)
-  assert.match(workflow, /Target\.releaseChannel -ne 'stable'/)
+  assert.match(workflow, /Read-PackageComponents 'artifacts\/DSH-Portable-windows-x64-offline\.zip'/)
+  assert.match(workflow, /TargetComponents\.portableVersion -notmatch '\^0\\\.'/)
+  assert.match(workflow, /TargetChannel -notin @\('stable', 'candidate'\)/)
+  assert.match(workflow, /-not \$Eligible -and \$TargetChannel -eq 'stable'/)
+  assert.match(workflow, /TargetChannel -eq 'candidate' -and \[string\]\$Components\.releaseChannel -cne 'candidate'/)
   assert.match(workflow, /Upgrade a legacy candidate user to the single release line/)
   assert.match(workflow, /Components\.releaseChannel -notin @\('stable', 'candidate'\)/)
   assert.doesNotMatch(workflow, /--allow-channel-migration/)

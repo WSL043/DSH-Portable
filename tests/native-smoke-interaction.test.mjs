@@ -62,3 +62,69 @@ test('native acceptance waits for an actionable control after a tab change', asy
   assert.equal(vm.runInNewContext(expression, context).clicked, true)
   assert.equal(clicks, 1)
 })
+
+async function officialCardExpressions() {
+  const source = await readFile(new URL('../scripts/smoke-windows-tray-bridge.mjs', import.meta.url), 'utf8')
+  const start = source.indexOf('// Alpha.2 exposes official read-only inventory cards')
+  const end = source.indexOf('const clickChoice =', start)
+  assert.ok(start >= 0 && end > start)
+  return vm.runInNewContext(source.slice(start, end) + "; ({ open: builtInPluginCard('tool-pwsh', true), close: builtInPluginCard('tool-pwsh', false), inspect: builtInPluginCard('tool-pwsh'), ready: officialPowerShellDetailsReady })")
+}
+function inventoryCardFixture() {
+  let open = false, clicks = 0
+  const box = { width: 300, height: 50 }
+  const facts = [['Module', '@deepseek-ai/dsh-tool-pwsh'], ['From', 'Standard'], ['Configuration', 'Enabled']]
+  const detail = { getBoundingClientRect: () => box, closest: () => null,
+    querySelector: selector => selector === '[data-loader-entry]' ? { textContent: 'tool-pwsh' } : null,
+    querySelectorAll: () => facts.map(([label, value]) => ({ querySelector: selector => ({ textContent: selector === 'dt' ? label : value }) })),
+  }
+  const button = { disabled: false, closest: () => null, getBoundingClientRect: () => box, scrollIntoView() {},
+    getAttribute: name => name === 'aria-controls' ? 'plugin-details-fixture' : name === 'aria-expanded' ? String(open) : null,
+    click() { clicks++; open = !open },
+  }
+  const card = { getBoundingClientRect: () => box, closest: () => null,
+    getAttribute: name => name === 'data-plugin-entry' ? 'tool-pwsh' : name === 'data-plugin-module' ? '@deepseek-ai/dsh-tool-pwsh' : null,
+    querySelector: () => button, contains: element => open && element === detail,
+  }
+  const cards = [card]
+  const context = { document: { querySelectorAll: () => cards, getElementById: id => open && id === 'plugin-details-fixture' ? detail : null }, getComputedStyle: () => ({ visibility: 'visible' }) }
+  return { context, card, button, detail, facts, cards, clicks: () => clicks }
+}
+
+test('Alpha native smoke clicks the exact official Windows tool card and observes owned facts then removal', async () => {
+  const expressions = await officialCardExpressions(), fixture = inventoryCardFixture()
+  fixture.cards.unshift({ ...fixture.card, getAttribute: () => 'tool-bash' })
+  const expanded = vm.runInNewContext(expressions.open, fixture.context)
+  assert.equal(expanded.clicked, true); assert.equal(fixture.clicks(), 1)
+  assert.equal(expressions.ready(expanded), true)
+  const closed = vm.runInNewContext(expressions.close, fixture.context)
+  assert.equal(closed.clicked, true); assert.equal(closed.expanded, false)
+  assert.equal(closed.detailsPresent, false); assert.equal(fixture.clicks(), 2)
+  assert.equal(expressions.ready(closed), false)
+})
+
+test('Alpha native smoke rejects hidden, disabled, inert and duplicate exact cards', async () => {
+  const expressions = await officialCardExpressions()
+  for (const fault of ['hidden', 'disabled', 'inert', 'duplicate']) {
+    const fixture = inventoryCardFixture()
+    if (fault === 'hidden') fixture.card.getBoundingClientRect = () => ({ width: 0, height: 0 })
+    if (fault === 'disabled') fixture.button.disabled = true
+    if (fault === 'inert') fixture.card.closest = () => ({ inert: true })
+    if (fault === 'duplicate') fixture.cards.push(fixture.card)
+    assert.equal(vm.runInNewContext(expressions.open, fixture.context).ready, false, fault)
+    assert.equal(fixture.clicks(), 0, fault)
+  }
+})
+
+test('Alpha native smoke cannot accept another module, unrelated controlled detail or missing official facts', async () => {
+  const expressions = await officialCardExpressions()
+  for (const fault of ['module', 'ownership', 'facts', 'hidden-details']) {
+    const fixture = inventoryCardFixture()
+    if (fault === 'module') fixture.card.getAttribute = name => name === 'data-plugin-entry' ? 'tool-pwsh' : '@other/module'
+    if (fault === 'ownership') fixture.card.contains = () => false
+    if (fault === 'facts') fixture.facts.pop()
+    if (fault === 'hidden-details') fixture.detail.getBoundingClientRect = () => ({ width: 0, height: 0 })
+    const snapshot = vm.runInNewContext(expressions.open, fixture.context)
+    assert.equal(expressions.ready(snapshot), false, fault)
+  }
+})

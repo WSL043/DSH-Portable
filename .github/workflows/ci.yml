@@ -741,15 +741,35 @@ jobs:
         run: |
           $CandidateVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
           $Policy = node scripts/version-policy.mjs $CandidateVersion | ConvertFrom-StringData
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          function Read-PackageComponents([string]$ZipPath) {
+            $Archive = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
+            try {
+              $Entries = @($Archive.Entries | Where-Object {
+                $_.FullName -ceq 'DSH-Portable/licenses/COMPONENTS.json'
+              })
+              if ($Entries.Count -ne 1) { throw "Expected exactly one COMPONENTS.json in $ZipPath." }
+              $Reader = [System.IO.StreamReader]::new($Entries[0].Open(), [System.Text.Encoding]::UTF8, $true)
+              try { $Json = $Reader.ReadToEnd() } finally { $Reader.Dispose() }
+            } finally { $Archive.Dispose() }
+            if ([string]::IsNullOrWhiteSpace($Json)) { throw "COMPONENTS.json is empty in $ZipPath." }
+            return $Json | ConvertFrom-Json
+          }
           $Target = Get-Content artifacts/portable-update-windows-x64.json -Raw | ConvertFrom-Json
-          if ([string]$Target.releaseChannel -ne 'stable') { throw 'The Windows migration smoke must target the stable single release line.' }
+          $TargetComponents = Read-PackageComponents 'artifacts/DSH-Portable-windows-x64-offline.zip'
+          $TargetChannel = [string]$TargetComponents.releaseChannel
+          if ([string]$TargetComponents.portableVersion -notmatch '^0\.' -or $TargetChannel -notin @('stable', 'candidate')) {
+            throw 'The in-place upgrade smoke only supports 0.x stable or candidate Portable packages.'
+          }
+          if ([string]$TargetComponents.portableVersion -cne $CandidateVersion -or [string]$Target.portableVersion -cne $CandidateVersion `
+            -or [string]$Target.releaseChannel -cne $TargetChannel) { throw 'The target package does not match its version and update manifest.' }
           $Releases = gh release list --repo "$env:GITHUB_REPOSITORY" --exclude-drafts `
             --limit 100 --json tagName,isPrerelease,publishedAt | ConvertFrom-Json
           # Only the 0.x line upgrades in place; the 1.0 pure-portable alpha is a separate, side-by-side package.
           $Eligible = $Releases | Where-Object {
             $_.isPrerelease -and $_.tagName -match '^v0\.\d+\.\d+-(alpha|beta|rc)\.\d+$'
           } | Sort-Object publishedAt -Descending
-          if (-not $Eligible) {
+          if (-not $Eligible -and $TargetChannel -eq 'stable') {
             $Eligible = $Releases | Where-Object {
               -not $_.isPrerelease -and $_.tagName -match '^v0\.\d+\.\d+$' -and $_.tagName -ne "v$CandidateVersion"
             } | Sort-Object publishedAt -Descending
@@ -757,6 +777,7 @@ jobs:
           $Prior = $Eligible | Select-Object -First 1
           $PriorTag = $Prior.tagName
           if (-not $PriorTag) {
+            if ($TargetChannel -eq 'candidate') { throw 'No published 0.x candidate package is available for a same-line upgrade smoke.' }
             Write-Host 'No prior candidate or stable release exists; nothing to test.'
             exit 0
           }
@@ -771,33 +792,10 @@ jobs:
           if (-not (Test-Path -LiteralPath $PriorZip -PathType Leaf)) {
             throw "gh release download did not produce DSH-Portable-windows-x64-offline.zip for $PriorTag."
           }
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          $Archive = $null
-          $EntryStream = $null
-          $Reader = $null
-          try {
-            $Archive = [System.IO.Compression.ZipFile]::OpenRead($PriorZip)
-            $ComponentEntries = @($Archive.Entries | Where-Object {
-              $_.FullName -ceq 'DSH-Portable/licenses/COMPONENTS.json'
-            })
-            if ($ComponentEntries.Count -ne 1) {
-              throw "Expected exactly one DSH-Portable/licenses/COMPONENTS.json entry, found $($ComponentEntries.Count)."
-            }
-            $EntryStream = $ComponentEntries[0].Open()
-            $Reader = [System.IO.StreamReader]::new($EntryStream, [System.Text.Encoding]::UTF8, $true)
-            $ComponentsJson = $Reader.ReadToEnd()
-          } catch {
-            throw "Could not read COMPONENTS.json from ${PriorTag}: $($_.Exception.Message)"
-          } finally {
-            if ($null -ne $Reader) { $Reader.Dispose() }
-            elseif ($null -ne $EntryStream) { $EntryStream.Dispose() }
-            if ($null -ne $Archive) { $Archive.Dispose() }
-          }
-          if ([string]::IsNullOrWhiteSpace($ComponentsJson)) {
-            throw "Could not read COMPONENTS.json from ${PriorTag}: ZIP entry was empty."
-          }
-          $Components = $ComponentsJson | ConvertFrom-Json
+          $Components = Read-PackageComponents $PriorZip
+          if ([string]$Components.portableVersion -notmatch '^0\.' -or [string]$Components.portableVersion -cne $PriorTag.TrimStart('v')) { throw 'The prior package is not the selected 0.x release.' }
           if ([string]$Components.releaseChannel -notin @('stable', 'candidate')) { throw 'The prior package has an unsupported legacy channel.' }
+          if ($TargetChannel -eq 'candidate' -and [string]$Components.releaseChannel -cne 'candidate') { throw 'A candidate target requires a real published candidate source package.' }
           Write-Host "Testing declared upgrade path from $PriorTag to $CandidateVersion."
           $UpgradeArguments = @(
             'scripts/smoke-windows-version-upgrade.mjs',

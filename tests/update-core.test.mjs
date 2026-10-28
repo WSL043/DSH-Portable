@@ -593,6 +593,61 @@ test('single-line clients accept legacy candidate metadata without a channel-mis
   assert.equal(evaluateUpdate(final, { ...base, portableVersion: '0.4.0-rc.2', releaseChannel: 'candidate' }, 'windows-x64').status, 'available')
 })
 
+test('package channel declarations survive stable feed aliases and reject mismatched payload metadata', async t => {
+  for (const [manifestChannel, metadataChannel, componentsChannel] of [
+    ['candidate', 'candidate', 'candidate'],
+    ['stable', 'stable', 'stable'],
+    ['candidate', 'stable', 'stable'],
+    ['stable', 'candidate', 'candidate'],
+    ['candidate', 'candidate', 'stable'],
+    ['stable', 'stable', 'candidate'],
+  ]) {
+    await t.test(`manifest=${manifestChannel}, metadata=${metadataChannel}, components=${componentsChannel}`, async () => {
+      const fixture = await makeUpdateFixture()
+      try {
+        const installedFile = path.join(fixture.root, 'licenses', 'COMPONENTS.json')
+        const originalInstalled = await readFile(installedFile, 'utf8')
+        for (const [file, releaseChannel] of [
+          [path.join(fixture.stagedRoot, 'component.json'), metadataChannel],
+          [path.join(fixture.stagedRoot, 'licenses', 'COMPONENTS.json'), componentsChannel],
+        ]) {
+          const value = JSON.parse(await readFile(file, 'utf8'))
+          await writeFile(file, JSON.stringify({ ...value, releaseChannel }))
+        }
+        const manifest = updateManifest({ releaseChannel: manifestChannel })
+        const update = evaluateUpdate(manifest, await readInstalledUpdateState(fixture.layout), 'windows-x64')
+        assert.equal(update.status, 'available')
+        assert.equal(update.releaseChannel, 'stable', 'the existing machine-feed alias remains stable')
+        assert.equal(update.declaredReleaseChannel, manifestChannel)
+        let applyStarted = false
+        let healthChecked = false
+        const apply = () => installAvailableAppUpdate({
+          layout: fixture.layout, update, cleanOperationDirectories: async () => {},
+          download: async () => {},
+          extract: async (_archive, destination) => cp(fixture.stagedRoot, destination, { recursive: true }),
+          beforeApply: async () => { applyStarted = true },
+          healthCheck: async () => { healthChecked = true; return true },
+        })
+        if (metadataChannel !== manifestChannel || componentsChannel !== manifestChannel) {
+          await assert.rejects(apply(), metadataChannel !== manifestChannel
+            ? /Downloaded update channel does not match its manifest/
+            : /Downloaded component compatibility metadata does not match its manifest/)
+          assert.equal(applyStarted, false, 'channel mismatches are rejected before apply starts')
+          assert.equal(healthChecked, false)
+          assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'old app')
+          assert.equal(await readFile(installedFile, 'utf8'), originalInstalled)
+        } else {
+          assert.equal((await apply()).status, 'updated')
+          assert.equal(healthChecked, true)
+          assert.equal(await readFile(path.join(fixture.layout.appDir, fixture.dshRelative), 'utf8'), 'new app')
+          assert.equal(JSON.parse(await readFile(installedFile, 'utf8')).releaseChannel, manifestChannel)
+        }
+        assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+      } finally { await rm(fixture.root, { recursive: true, force: true }) }
+    })
+  }
+})
+
 test('full-package decisions carry immutable release and package-manifest targets', () => {
   const installed = {
     portableVersion: '0.4.0-rc.1',
