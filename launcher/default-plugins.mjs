@@ -85,13 +85,13 @@ const PREVIOUS_DEFAULT_PLUGINS = Object.freeze([Object.freeze({
 export const DEFAULT_PLUGINS = Object.freeze([
   {
     "name": "dsh-image-viewer",
-    "version": "0.1.16",
-    "spec": "0.1.16",
-    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.16.tgz",
-    "sha256": "282bb7cec94eabb95a5a2185c99ee332fb85a2f2deccf6ae8b174f98fda1d45b",
-    "integrity": "sha512-25rutyfkQTc8lax1EA+AzwI8oI4D4MNXbJy1+s0wMqmJ2h2Ud9WxhUGxZvH+CwGMuXDalVR/4H0ZAHez2grOmg==",
+    "version": "0.1.17",
+    "spec": "0.1.17",
+    "url": "https://registry.npmjs.org/dsh-image-viewer/-/dsh-image-viewer-0.1.17.tgz",
+    "sha256": "aa541b4403f811ee74d9193e13bb4fa3b790531e1f2eabd9277393be11e7e775",
+    "integrity": "sha512-2DV1teU4JMsZzdyV1rkd1Dm1qd72NUsLjyU9zyzVX1JuY66G8yWkF83h8LaRD3Iczd4k54dcQejawVCgAADKNw==",
     "license": "MIT",
-    "reviewedCommit": "ee63158bb5be78498ed99cfa41df55abb98bb1eb",
+    "reviewedCommit": "8d03fe4942f1f0d31e4c5c34c83df79ff7a94d29",
     "filename": "dsh-image-viewer.tgz"
   },
   {

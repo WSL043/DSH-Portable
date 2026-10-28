@@ -56,15 +56,15 @@ packages:
         optional: true
 
   dsh-image-viewer@file:.dsh-portable-archives/dsh-image-viewer.tgz:
-    resolution: {integrity: sha512-25rutyfkQTc8lax1EA+AzwI8oI4D4MNXbJy1+s0wMqmJ2h2Ud9WxhUGxZvH+CwGMuXDalVR/4H0ZAHez2grOmg==, tarball: file:.dsh-portable-archives/dsh-image-viewer.tgz}
-    version: 0.1.16
+    resolution: {integrity: sha512-2DV1teU4JMsZzdyV1rkd1Dm1qd72NUsLjyU9zyzVX1JuY66G8yWkF83h8LaRD3Iczd4k54dcQejawVCgAADKNw==, tarball: file:.dsh-portable-archives/dsh-image-viewer.tgz}
+    version: 0.1.17
     engines: {node: ^22.19.0 || >=24.0.0}
     peerDependencies:
-      '@deepseek-ai/cordis': 4.0.1 || 4.0.2 || 4.0.3 || 4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2 || 4.0.5
-      '@deepseek-ai/dsh-client-locale': 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-layout': 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-primitives': 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
-      '@deepseek-ai/dsh-client-ui-slots': 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.1-alpha.5 || 0.2.1-alpha.4 || 0.2.0-rc.2
+      '@deepseek-ai/cordis': 4.0.1 || 4.0.2 || 4.0.3 || 4.0.4 || 4.0.5-alpha.1 || 4.0.5-alpha.2 || 4.0.5 || 4.0.6-alpha.1
+      '@deepseek-ai/dsh-client-locale': 0.2.2-alpha.2 || 0.2.1-rc.4 || 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-layout': 0.2.2-alpha.2 || 0.2.1-rc.4 || 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-primitives': 0.2.2-alpha.2 || 0.2.1-rc.4 || 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.0-rc.2
+      '@deepseek-ai/dsh-client-ui-slots': 0.2.2-alpha.2 || 0.2.1-rc.4 || 0.2.1-rc.3 || 0.2.1-rc.2 || 0.2.1-rc.1 || 0.2.0-rc.2
       react: ^18.2.0
     peerDependenciesMeta:
       '@deepseek-ai/cordis':
