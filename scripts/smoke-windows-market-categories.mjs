@@ -15,9 +15,8 @@ const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
 export function marketEvidenceLocation(value) {
   assert.ok(typeof value === 'string' && value.length > 0, 'market evidence directory is required')
   const requested = path.resolve(value)
-  const temporaryRoots = [tmpdir(), process.env.GITHUB_ACTIONS === 'true' ? process.env.RUNNER_TEMP : undefined]
-  for (const base of new Set(temporaryRoots.filter(value => typeof value === 'string' && path.isAbsolute(value)).map(value => path.resolve(value)))) {
-    if (path.dirname(base) === base) continue
+  const base = path.resolve(tmpdir())
+  if (path.dirname(base) !== base) {
     const relative = path.relative(base, requested)
     if (relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
       return { base, relative }

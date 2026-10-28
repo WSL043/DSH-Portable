@@ -40,6 +40,21 @@ test('market evidence permits its real temporary fixture and fixed repository st
     const outside = path.join(path.parse(os.tmpdir()).root, path.basename(temporary))
     await assert.rejects(prepareMarketEvidenceOutput(outside), /must be below an actual temporary root/)
     await assert.rejects(access(outside), { code: 'ENOENT' })
+    const previousActions = process.env.GITHUB_ACTIONS
+    const previousRunnerTemp = process.env.RUNNER_TEMP
+    try {
+      process.env.GITHUB_ACTIONS = 'true'
+      const forgedRoot = `${outside}-forged-runner`
+      process.env.RUNNER_TEMP = forgedRoot
+      const forgedOutput = path.join(forgedRoot, 'evidence')
+      await assert.rejects(prepareMarketEvidenceOutput(forgedOutput), /must be below an actual temporary root/)
+      await assert.rejects(access(forgedOutput), { code: 'ENOENT' })
+    } finally {
+      if (previousActions === undefined) delete process.env.GITHUB_ACTIONS
+      else process.env.GITHUB_ACTIONS = previousActions
+      if (previousRunnerTemp === undefined) delete process.env.RUNNER_TEMP
+      else process.env.RUNNER_TEMP = previousRunnerTemp
+    }
     assert.throws(() => marketEvidenceLocation(os.tmpdir()), /must be below an actual temporary root/)
     for (const relative of ['docs', 'complete-evidence-other/storage', 'complete-evidence/storage-other']) {
       assert.throws(() => marketEvidenceLocation(path.join(repository, relative)), /must be below an actual temporary root/)

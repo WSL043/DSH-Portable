@@ -445,6 +445,9 @@ jobs:
           Write-Output ('Complete offline packaging seconds: ' + $Timer.Elapsed.TotalSeconds)
       - name: Verify the bundled runtime in a fresh native host
         shell: powershell
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: |
           $Root = Join-Path $env:RUNNER_TEMP 'dsh-complete-offline'
           New-Item -ItemType Directory -Path $Root | Out-Null
@@ -648,6 +651,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Startup theme and history acceptance failed.' }
       - name: Verify maintenance actions and market category expansion
         shell: powershell
+        env:
+          TEMP: ${{ runner.temp }}
+          TMP: ${{ runner.temp }}
         run: |
           $MarketRoot = Join-Path $env:RUNNER_TEMP 'dsh-market-layout'
           New-Item -ItemType Directory -Force -Path $MarketRoot | Out-Null
