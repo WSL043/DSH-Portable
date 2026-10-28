@@ -62,5 +62,7 @@ gh workflow run sync-core.yml --repo WSL043/DSH-Portable-Updates --ref main -f r
 ## 3. 注意
 
 - 验收脚本放在更新仓库（`scripts/verify-default-plugin-ui.mjs`）。界面新增弹窗、改按钮位置的改动，要在同一次发版前同步改它；否则内核验收会失败。
-- 内核**正式发布**绑定已发布的稳定外壳。发布前可用更新仓库的 `prepare-core.yml`，传入已通过完整 CI 的确切 main `source_sha` 和窗口内 `prepare_version`，先做五平台隔离验收；此模式只保留工件，不发布内核、更新目录或正式资格状态。外壳发布后，`publish-prepared-core.yml` 用 `prepared_run_id` 重新核对已发布基线与原工件身份，再复用已验收 ZIP 晋升；不能把准备成功写成公开目录已可用。
+- 内核包包含 Portable 的页面桥接资源。跨内核验收还要确认通用窗口入口、插件管理和离线更新入口不会恢复旧实现；必要时在同一最终外壳源码上重新准备受影响内核，接口号相同不代替这项检查。
+- 同接口的最早公开外壳仍可能固定较旧的默认插件。发布时按固定源码锚点与锁定摘要读取这些插件的真实包清单；目标内核也兼容该基线时才保留 `requiredShellContract`。明确的 peer 不匹配改用现有确切 Portable 版本与指纹绑定；元数据缺失、摘要或版本范围错误直接阻止发布，不按兼容处理。基线不能随当前 feed 前移。
+- 内核**正式发布**绑定已发布的稳定外壳。发布前可用更新仓库的 `prepare-core.yml`，传入已通过完整 CI 的确切 main `source_sha` 和窗口内 `prepare_version`，先做五平台隔离验收；此模式只保留工件，不发布内核、更新目录或正式资格状态。外壳发布后，`publish-prepared-core.yml` 用 `prepared_run_id` 重新核对已发布基线与原工件身份，再复用已验收 ZIP 晋升；不能把准备成功写成公开目录已可用。 晋升须串行：确认一个运行完全结束，再派发下一版；该并发组只保留一个待运行项，提前派发多个会替换排队项。取消运行也可能写入失败/冷却资格记录，须回读实际状态，并以之后的成功新运行修复，不能假定取消没有外写。
 - 旧的公开 preview 内核渠道已退役。`automation/official-preview` 的隔离 Native 候选验收仍保留，且不同于公开更新源；不要通过开通道、放宽版本或沿用 stable 成果来消除候选的预期未发布状态。

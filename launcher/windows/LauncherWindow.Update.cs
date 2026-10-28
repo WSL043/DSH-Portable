@@ -497,30 +497,35 @@ namespace DshPortable
 
         private static string[] JsonUpdateWarningPlugins(string json)
         {
-            try
+            string input = json ?? String.Empty;
+            // CLI stderr JSONL precedes the final stdout result; retain standalone pretty JSON too.
+            IEnumerable<string> candidates = new[] { input }.Concat(
+                input.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).Reverse());
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            foreach (string candidate in candidates)
             {
-                IDictionary<string, object> payload = new JavaScriptSerializer().DeserializeObject(json ?? String.Empty) as IDictionary<string, object>;
-                if (payload == null) return new string[0];
-                object warningsValue;
-                if (!payload.TryGetValue("warnings", out warningsValue)) return new string[0];
-                object[] warnings = warningsValue as object[];
-                if (warnings == null) return new string[0];
-
-                List<string> plugins = new List<string>();
-                foreach (object warningValue in warnings)
+                try
                 {
-                    IDictionary<string, object> warning = warningValue as IDictionary<string, object>;
-                    object pluginValue;
-                    if (warning == null || !warning.TryGetValue("plugin", out pluginValue)) continue;
-                    string plugin = Convert.ToString(pluginValue, CultureInfo.InvariantCulture);
-                    if (!String.IsNullOrWhiteSpace(plugin)) plugins.Add(plugin);
+                    IDictionary<string, object> payload = serializer.DeserializeObject(candidate) as IDictionary<string, object>;
+                    object warningsValue;
+                    if (payload == null || payload.ContainsKey("type") || !payload.TryGetValue("warnings", out warningsValue)) continue;
+                    object[] warnings = warningsValue as object[];
+                    if (warnings == null) return new string[0];
+
+                    List<string> plugins = new List<string>();
+                    foreach (object warningValue in warnings)
+                    {
+                        IDictionary<string, object> warning = warningValue as IDictionary<string, object>;
+                        object pluginValue;
+                        if (warning == null || !warning.TryGetValue("plugin", out pluginValue)) continue;
+                        string plugin = Convert.ToString(pluginValue, CultureInfo.InvariantCulture);
+                        if (!String.IsNullOrWhiteSpace(plugin)) plugins.Add(plugin);
+                    }
+                    return plugins.Distinct(StringComparer.Ordinal).ToArray();
                 }
-                return plugins.Distinct(StringComparer.Ordinal).ToArray();
+                catch { }
             }
-            catch
-            {
-                return new string[0];
-            }
+            return new string[0];
         }
 
         private void StartFullPackageUpdate(string manifestUrl, string offlineManifestPath = "")
