@@ -996,8 +996,6 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
     'windows-native-ui:',
     'windows-extractor-smoke:',
     'macos-build:',
-    'macos-portable-smoke:',
-    'macos-desktop-host:',
   ]) assert.match(workflow, new RegExp(`^  ${job.replace(':', '\\:')}`, 'm'))
   assert.match(workflow, /actionlint_1\.7\.12_linux_amd64\.tar\.gz/)
   assert.match(workflow, /8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8/)
@@ -1033,7 +1031,7 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(desktopMoveSmoke, /Move-Item/)
   assert.match(desktopMoveSmoke, /smoke-windows-desktop-host\.ps1/g)
   assert.doesNotMatch(desktopMoveSmoke, /Wait-ForPortableWebViewExit|msedgewebview2\.exe/)
-  assert.match(workflow, /macos-desktop-host:[\s\S]+needs:\s*macos-build/)
+  assert.match(workflow, /macos-build:[\s\S]+smoke-macos-desktop-host\.sh/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.match(macDesktopHostSmoke, /DSH-Portable\.app/)
   assert.match(macDesktopHostSmoke, /WebKit|WKWebView/)
@@ -1100,4 +1098,62 @@ test('Windows packages pin the native notification runtime and its notices', asy
   assert.match(build, /Microsoft\.Toolkit\.Uwp\.Notifications\.dll/)
   assert.match(build, /System\.ValueTuple\.dll/)
   assert.match(build, /Windows-Notifications-LICENSE\.txt/)
+})
+
+
+test('macOS qualification reuses one runner per architecture without omitting product gates', async () => {
+  const workflow = await read('.github/workflows/ci.yml')
+  const mac = workflow.match(/\n  macos-build:[\s\S]+?(?=\n  linux-build:)/)?.[0] || ''
+  const qualification = workflow.match(/\n  product-qualification:[\s\S]+/)?.[0] || ''
+  assert.match(mac, /name: Build and qualify macOS/)
+  assert.match(mac, /fail-fast: false/)
+  assert.match(mac, /runner: macos-15\n\s+arch: arm64/)
+  assert.match(mac, /runner: macos-15-intel\n\s+arch: x64/)
+  assert.doesNotMatch(workflow, /^  macos-(?:portable-smoke|desktop-host|plugin-smoke):/m)
+  assert.match(qualification, /- macos-build\n/)
+  assert.doesNotMatch(qualification, /- macos-(?:portable-smoke|desktop-host|plugin-smoke)/)
+  // Every smoke still extracts a fresh copy of the exact built ZIP. No previous
+  // gate's mutable data or moved root becomes the next gate's test input.
+  for (const directory of ['dsh-macos-extensions', 'dsh-desktop-host', 'dsh-portable-smoke']) {
+    assert.ok(mac.includes('ROOT="$RUNNER_TEMP/' + directory + '"'))
+  }
+  assert.equal((mac.match(/ditto -x -k "artifacts\/DSH-Portable-macos-/g) || []).length, 3)
+  assert.equal((mac.match(/actions\/checkout@/g) || []).length, 1)
+  assert.doesNotMatch(mac, /name: macos-\$\{\{ matrix\.arch \}\}-build\n\s+path: artifacts/)
+  for (const command of [
+    'bash scripts/build-macos.sh',
+    'scripts/smoke-portable-extensions.mjs',
+    'scripts/smoke-plugin-marketplace.mjs',
+    'scripts/smoke-macos-desktop-host.sh',
+    'node scripts/verify-update-artifact.mjs',
+    'node scripts/smoke-update-artifact.mjs',
+    'node scripts/smoke-portable.mjs',
+  ]) assert.equal(mac.split(command).length - 1, 1, command)
+  assert.ok(mac.indexOf('scripts/smoke-plugin-marketplace.mjs') < mac.indexOf('scripts/smoke-macos-desktop-host.sh'))
+  assert.ok(mac.indexOf('scripts/smoke-macos-desktop-host.sh') < mac.indexOf('node scripts/smoke-portable.mjs'))
+  assert.ok(mac.indexOf('node scripts/smoke-update-artifact.mjs') < mac.indexOf('node scripts/smoke-portable.mjs'))
+  assert.match(mac, /Verify the real WKWebView app and graceful close\n\s+timeout-minutes: 15/)
+  // Native app-ID cleanup can be best effort after an error. A failed smoke
+  // must fail the job and prevent the next smoke from using a contaminated host.
+  for (const step of mac.split(/\n      - /).filter(step => /run: \|/.test(step) && /smoke-/.test(step))) {
+    assert.doesNotMatch(step, /continue-on-error:|if:/)
+  }
+  assert.match(mac, /Upload macOS native diagnostics[\s\S]+if: always\(\)/)
+  assert.match(mac, /Upload macOS portable update diagnostics\n\s+if: always\(\)/)
+
+  // Exercise the actual final workflow gate, including failure/cancellation or
+  // skipping of the consolidated macOS matrix, rather than a second evaluator.
+  const gate = qualification.match(/node <<'NODE'\n([\s\S]+?)\n          NODE/)?.[1]
+  assert.ok(gate)
+  const evaluate = new Function('process', 'console', gate)
+  const run = result => evaluate({
+    env: { EVENT_NAME: 'push', NEEDS: JSON.stringify({
+      'workflow-lint': { result: 'success' }, contracts: { result: 'success' }, 'macos-build': { result },
+    }) },
+    exit: code => { throw new Error('qualification exit ' + code) },
+  }, { error() {} })
+  assert.doesNotThrow(() => run('success'))
+  for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
+    assert.throws(() => run(result), /qualification exit 1/)
+  }
 })

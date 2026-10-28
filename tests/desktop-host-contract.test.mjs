@@ -600,7 +600,7 @@ test('CI release gate verifies native desktop ownership, lifecycle, and applicat
   assert.match(detachedUpdaterSmoke, /StartDetachedUpdater/)
   assert.match(detachedUpdaterSmoke, /survived/)
   assert.match(detachedUpdaterSmoke, /-File \"\{0\}\" -Launcher \"\{1\}\" -Writer \"\{2\}\" -Sentinel \"\{3\}\"/)
-  assert.match(workflow, /macos-desktop-host:/)
+  assert.match(workflow, /macos-build:/)
   assert.match(workflow, /smoke-macos-desktop-host\.sh/)
   assert.doesNotMatch(workflow, /browser ownership and Stop|windows-browser-lifecycle:|macos-browser-lifecycle:/)
 

@@ -66,3 +66,30 @@ gh workflow run sync-core.yml --repo WSL043/DSH-Portable-Updates --ref main -f r
 - 同接口的最早公开外壳仍可能固定较旧的默认插件。发布时按固定源码锚点与锁定摘要读取这些插件的真实包清单；目标内核也兼容该基线时才保留 `requiredShellContract`。明确的 peer 不匹配改用现有确切 Portable 版本与指纹绑定；元数据缺失、摘要或版本范围错误直接阻止发布，不按兼容处理。基线不能随当前 feed 前移。
 - 内核**正式发布**绑定已发布的稳定外壳。发布前可用更新仓库的 `prepare-core.yml`，传入已通过完整 CI 的确切 main `source_sha` 和窗口内 `prepare_version`，先做五平台隔离验收；此模式只保留工件，不发布内核、更新目录或正式资格状态。外壳发布后，`publish-prepared-core.yml` 用 `prepared_run_id` 重新核对已发布基线与原工件身份，再复用已验收 ZIP 晋升；不能把准备成功写成公开目录已可用。 晋升须串行：确认一个运行完全结束，再派发下一版；该并发组只保留一个待运行项，提前派发多个会替换排队项。取消运行也可能写入失败/冷却资格记录，须回读实际状态，并以之后的成功新运行修复，不能假定取消没有外写。
 - 旧的公开 preview 内核渠道已退役。`automation/official-preview` 的隔离 Native 候选验收仍保留，且不同于公开更新源；不要通过开通道、放宽版本或沿用 stable 成果来消除候选的预期未发布状态。
+
+## 4. 本机验收复用与恢复
+
+同版本、同摘要的隔离包复用原解压目录和已打开的 owned Native；本机短 UI 检查可从已验证私有 worker 的正常 Node 进程导入 `scripts/lib/local-native-acceptance.mjs`。该模块复用的 Node helpers 需要真实 `process` 等运行时全局；不要直接在 `process` 不可用的受限 REPL 中 import。REPL 仅派发正常 worker 并读取 checkpoint，不能因此重建另一套 FFI/进程控制。该入口只附着已有 page，不创建/切换桌面，不启动、结束进程或解压包，也不发送系统键鼠输入。
+
+先用实际 OS 探针确认私有 worker 与目标 Native 在同一个命名 `DSH-*` desktop、输入桌面仍为 `Default`，worker 使用 `CREATE_NO_WINDOW|CREATE_UNICODE_ENVIRONMENT`。`identity` 固定 canonical `root`、Native `pid`、真实 `startedAt`、`hostSha256`、已核原始包的 `artifactSha256`、`desktop`、`inputDesktop`、owned page 的无查询参数 `origin` 和 `user`；每次 `verifyOwner()` 返回这组实时字段，另带 `workerDesktop`、`hostDesktop` 和数值 `creationFlags`（`0x08000400`）。探针还须核对实际进程路径及 CDP 连接属于该 Native 的进程树。包摘要复用已核原始 ZIP/签名验收记录，每步核对 fixture 引用和宿主身份，不重新读取整个 ZIP；旧 proof JSON 和 checkpoint 都不能代替实时授权，日常便携包不得作为 fixture。
+
+```js
+const session = await openLocalNativeAcceptance({
+  page, identity: ownedIdentity, verifyOwner: probeOwnedProcessAndDesktop,
+})
+// 先通过既有设置入口打开 Settings；初次 Continue 后也可能异步出现此 onboarding。
+await session.step('keyless-onboarding', () => session.dismissKeylessOnboarding(), {
+  recheck: async () => !(await session.dialogs()).some(dialog => ['Get started', '开始使用'].includes(dialog.label)),
+})
+await session.step('settings-english', () => session.setLanguage('en'), {
+  recheck: () => session.languageIs('en'),
+})
+```
+
+普通 UI 动作默认 3 秒，单次工具窗口至少 20 秒；不要让 Playwright 默认 30 秒等待撞上更短的 REPL 超时。下载、安装、更新等长事务继续交给已有私有 worker，按原明确事务时限等待和读取进度，不把短 UI 时限套到网络或更新事务。设置按钮先按实际当前语言定位，支持 `English`、`中文` 等已知标签，不假定 fixture 初始为英文。
+
+每步先后重查所有权，并通过既有原子写入保存 `acceptance/local-native-<pid>.json`；只记录身份、阶段和有限的弹窗标签，不保存环境或凭据。工具重连后复用原 fixture/page，从 checkpoint 的下一未完成阶段继续；重新调用已通过阶段必须提供只读 `recheck`。`running`/`failed` 阶段先确认旧动作已结束并检查实际结果，再显式 `{ retry: true }`；换 PID 启动身份、宿主字节、包或目录后不得沿用旧验收。
+
+控件被遮罩拦住时先看 `session.dialogs()`：按钮必须同时检查 `aria-label` 与文本。此次旧 fixture 在 Continue 后异步弹出 `role=dialog, aria-label=Get started`，其空文本 `aria-label=Close` 按钮曾被文本枚举遗漏；显式可选的 `dismissKeylessOnboarding()` 只关闭精确白名单中的英文 `Get started`/`Close` 或实机核实的中文 `开始使用`/`关闭` 对话框/按钮组合，不填写 Key、不 force 点击、不移除 DOM、不关闭其他弹窗。无该对话框时短等后返回，不改变页面。用真实 locator 的遮罩/可操作性失败保留问题证据。
+
+完成后按项目约定将 owned 临时目录移回收站，只保留必要 JSON/日志；上述入口的单元测试不代替最终成品实机验收。

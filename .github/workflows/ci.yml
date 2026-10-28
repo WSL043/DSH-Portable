@@ -827,7 +827,7 @@ jobs:
         run: ./scripts/smoke-windows-portable-extractor.ps1
 
   macos-build:
-    name: Build macOS (${{ matrix.arch }})
+    name: Build and qualify macOS (${{ matrix.arch }})
     needs: preview-packed-runtime
     strategy:
       fail-fast: false
@@ -918,68 +918,22 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
-  macos-portable-smoke:
-    name: macOS portable (${{ matrix.arch }})
-    needs: macos-build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24.22.1
-      - name: Select an isolated candidate version for official preview qualification
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/automation/official-preview'
-        shell: bash
-        run: node scripts/prepare-preview-qualification.mjs
-      - uses: actions/download-artifact@v8
-        with:
-          name: macos-${{ matrix.arch }}-build
-          path: artifacts
-      - run: node scripts/verify-update-artifact.mjs "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
-      - name: Extract, update, run, move, and stop portable ZIP
+      # Keep separate fresh package roots, but reuse this architecture's runner.
+      # Stop on a failed gate: native app identity is shared and cleanup can be best effort.
+      - name: Install, compose, record, and remove an independent extension from the finished product
         run: |
-          ROOT="$RUNNER_TEMP/dsh-portable-smoke"
+          ROOT="$RUNNER_TEMP/dsh-macos-extensions"
           mkdir -p "$ROOT"
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
-          node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
-          node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
-      - name: Upload macOS portable update diagnostics
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: macos-portable-update-diagnostics-${{ matrix.arch }}
-          path: ${{ runner.temp }}/dsh-portable-smoke/DSH-Portable/data/logs/update-smoke-evidence.json
-          if-no-files-found: warn
-          retention-days: 7
-
-  macos-desktop-host:
-    name: macOS native desktop identity and lifecycle (${{ matrix.arch }})
-    needs: macos-build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: macos-${{ matrix.arch }}-build
-          path: artifacts
+          "$ROOT/DSH-Portable/runtime/node/bin/node" \
+            scripts/smoke-portable-extensions.mjs \
+            "$ROOT/DSH-Portable" \
+            tests/fixtures/dsh-portable-smoke-plugin
+          "$ROOT/DSH-Portable/runtime/node/bin/node" \
+            scripts/smoke-plugin-marketplace.mjs \
+            "$ROOT/DSH-Portable"
       - name: Verify the real WKWebView app and graceful close
+        timeout-minutes: 15
         run: |
           ROOT="$RUNNER_TEMP/dsh-desktop-host"
           mkdir -p "$ROOT"
@@ -1002,37 +956,24 @@ jobs:
           path: ${{ runner.temp }}/dsh-desktop-host/DSH-Portable/data/logs/native-smoke-diagnostics
           if-no-files-found: ignore
           overwrite: true
-
-  macos-plugin-smoke:
-    name: macOS plugin portability (${{ matrix.arch }})
-    needs: macos-build
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v8
-        with:
-          name: macos-${{ matrix.arch }}-build
-          path: artifacts
-      - name: Install, compose, record, and remove an independent extension from the finished product
+      - run: node scripts/verify-update-artifact.mjs "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
+      - name: Extract, update, run, move, and stop portable ZIP
         run: |
-          ROOT="$RUNNER_TEMP/dsh-macos-extensions"
+          ROOT="$RUNNER_TEMP/dsh-portable-smoke"
           mkdir -p "$ROOT"
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
-          "$ROOT/DSH-Portable/runtime/node/bin/node" \
-            scripts/smoke-portable-extensions.mjs \
-            "$ROOT/DSH-Portable" \
-            tests/fixtures/dsh-portable-smoke-plugin
-          "$ROOT/DSH-Portable/runtime/node/bin/node" \
-            scripts/smoke-plugin-marketplace.mjs \
-            "$ROOT/DSH-Portable"
+          node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
+          node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
+      - name: Upload macOS portable update diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-portable-update-diagnostics-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/dsh-portable-smoke/DSH-Portable/data/logs/update-smoke-evidence.json
+            ${{ runner.temp }}/dsh-portable-smoke/DSH-Portable moved ü/data/logs/update-smoke-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
 
   linux-build:
     name: Build Linux (${{ matrix.arch }})
@@ -1264,9 +1205,7 @@ jobs:
       - windows-bootstrap-smoke
       - windows-version-upgrade-smoke
       - windows-extractor-smoke
-      - macos-portable-smoke
-      - macos-desktop-host
-      - macos-plugin-smoke
+      - macos-build
       - linux-portable-smoke
       - linux-plugin-smoke
       - linux-desktop-host
