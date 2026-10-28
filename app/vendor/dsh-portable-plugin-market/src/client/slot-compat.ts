@@ -1,7 +1,7 @@
 /**
  * Keep the market reachable across Plugins hosts:
  *
- * - public Plugins slots contribute one Advanced tab and keep updates official;
+ * - public Plugins slots without a Portable legacy renderer contribute one Advanced tab;
  * - the Portable adapter exposes `plugins.portable.actions` on the modern
  *   manager toolbar;
  * - older hosts only expose `settings.plugins.tab`.
@@ -154,6 +154,8 @@ export function coordinateMarketSurfaces(slots: CompatibleSlots, factories: Mark
   const publicSlots = [OFFICIAL_PLUGIN_TAB_SLOT, OFFICIAL_PLUGIN_ACTIONS_SLOT]
   const declared = () => {
     try {
+      // RC3 already has public tabs, but its qualified renderer still needs Portable updates.
+      if (hasPortableActions(slots)) return false
       return publicSlots.every(slot => {
         const spec = slots.spec!(slot) as { kind?: unknown; scope?: unknown } | undefined
         return spec?.kind === 'list' && spec.scope === 'root'
@@ -184,7 +186,7 @@ export function coordinateMarketSurfaces(slots: CompatibleSlots, factories: Mark
     current()
   }
   try {
-    for (const slot of publicSlots) subscriptions.push(disposer(slots.subscribe!(slot, sync)))
+    for (const slot of [...publicSlots, PORTABLE_ACTIONS_SLOT]) subscriptions.push(disposer(slots.subscribe!(slot, sync)))
     sync()
   } catch (error) { dispose(); throw error }
   return dispose
