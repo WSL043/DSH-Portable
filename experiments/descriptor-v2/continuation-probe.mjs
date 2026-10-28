@@ -13,6 +13,8 @@ const { Context } = await load('cordis')
 const { LlmAdapter, createUserMessage } = await load('dsh-llm')
 const ctx = new Context()
 const requests = []
+const agentErrors = []
+ctx.on('agent/error', ({ error }) => { agentErrors.push(error) })
 let lease
 try {
   for (const [name, config] of [
@@ -23,6 +25,11 @@ try {
     ['dsh-agent-loop', { agents: [], maxParallelToolCalls: 1 }],
   ]) {
     // Newer cores export a plugin object ({ name, apply }) instead of a default export.
+    // Mount the real native executor when tools delegates execution to a plugin.
+    if (name === 'dsh-agent-loop' && typeof ctx.tools.setExecutor === 'function') {
+      const executor = await load('dsh-tool-executor-native')
+      await ctx.plugin(executor).await()
+    }
     const plugin = await load(name)
     await ctx.plugin(plugin.default ?? plugin, config).await()
   }
@@ -50,6 +57,7 @@ try {
   lease = await ctx.agentLoop.resume(ctx, { resumeSessionId: 'writer-child', agentOptions: { provider: 'fixture', model: 'fixture' } })
   lease.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'continue fixture' }] }))
   await lease.agent.whenIdle()
+  if (agentErrors.length) throw new AggregateError(agentErrors, 'Historical continuation emitted agent/error')
   assert.equal(requests.length, 1)
   assert.match(JSON.stringify(requests[0]), /parent-tool-result/)
   assert.match(JSON.stringify(requests[0]), /child-tool-result/)
@@ -73,6 +81,7 @@ try {
   assert.ok(lease.agent.session.snapshotEvents().some(e => e.type === 'turn/end' && e.data.turn === interruptedTurn && e.data.reason.kind === 'interrupted'))
   lease.agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'continue after interrupted journal' }] }))
   await lease.agent.whenIdle()
+  if (agentErrors.length) throw new AggregateError(agentErrors, 'Historical continuation emitted agent/error')
   assert.equal(requests.length, 2)
   await lease.dispose()
   lease = undefined
