@@ -947,6 +947,14 @@ jobs:
           ditto -x -k "artifacts/DSH-Portable-macos-${{ matrix.arch }}.zip" "$ROOT"
           node scripts/smoke-update-artifact.mjs "$ROOT/DSH-Portable" "artifacts/portable-update-macos-${{ matrix.arch }}.json" "artifacts/DSH-Portable-update-macos-${{ matrix.arch }}.zip"
           node scripts/smoke-portable.mjs "$ROOT/DSH-Portable"
+      - name: Upload macOS portable update diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-portable-update-diagnostics-${{ matrix.arch }}
+          path: ${{ runner.temp }}/dsh-portable-smoke/DSH-Portable/data/logs/update-smoke-evidence.json
+          if-no-files-found: warn
+          retention-days: 7
 
   macos-desktop-host:
     name: macOS native desktop identity and lifecycle (${{ matrix.arch }})
