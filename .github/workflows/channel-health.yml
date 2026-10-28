@@ -25,7 +25,9 @@ jobs:
       - name: Check that the feed offers a shell whose newest cores are qualified
         id: health
         continue-on-error: true
-        run: node scripts/channel-health.mjs | tee health.json
+        run: |
+          set -o pipefail
+          node scripts/channel-health.mjs | tee health.json
       - name: Open or update the channel-health issue when unhealthy
         if: steps.health.outcome == 'failure'
         env:
@@ -55,3 +57,6 @@ jobs:
           for number in $(gh issue list --label channel-health --state open --json number -q '.[].number'); do
             gh issue close "$number" --comment "The update channel is healthy again."
           done
+      - name: Fail when the update channel is unhealthy
+        if: steps.health.outcome == 'failure'
+        run: exit 1
