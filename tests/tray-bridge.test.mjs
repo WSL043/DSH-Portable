@@ -578,6 +578,7 @@ test('Portable uses one capability-aware host transport outside WebView2', async
       openEnvironment: false,
       openUpdate: false,
       openUpdateFromFile: false,
+      prepareOfflineUpdateFiles: false,
       preferences: true,
       sessionProjection: true,
       clearWebCache: false,

@@ -29,6 +29,8 @@ namespace DshPortable
     {
         private bool productUpdateAvailable;
         private bool engineUpdateAvailable;
+        private Action cancelOfflineUpdateFiles;
+        private bool exitAfterOfflineUpdateFiles;
 
         private void RememberUpdateAvailability(bool engineScope, string status)
         {
@@ -277,10 +279,12 @@ namespace DshPortable
 
         private async Task PrepareOfflineUpdateFilesAsync(string scope, string manifestUrl)
         {
-            if (updateCheckRunning || updateInteractionRunning) return;
+            if (shutdownRunning || updateCheckRunning || updateInteractionRunning || exitAfterOfflineUpdateFiles) return;
             updateInteractionRunning = true;
             RebuildTrayMenu();
             string title = L("获取更新文件", "Get update files");
+            CancellationTokenSource cancellation = new CancellationTokenSource();
+            cancelOfflineUpdateFiles = cancellation.Cancel;
             try
             {
                 string parent;
@@ -292,10 +296,10 @@ namespace DshPortable
                     if (picker.ShowDialog(this) != DialogResult.OK) return;
                     parent = Path.GetFullPath(picker.SelectedPath);
                 }
+                if (cancellation.IsCancellationRequested) return;
                 List<string> arguments = new List<string> { "prepare-update-files", "--scope", scope, "--output", parent, "--json", "--progress-json" };
                 if (!String.IsNullOrEmpty(manifestUrl)) { arguments.Add("--update-manifest"); arguments.Add(manifestUrl); }
                 Tuple<int, string> result;
-                using (CancellationTokenSource cancellation = new CancellationTokenSource())
                 using (Form progress = new Form {
                     Text = title, ClientSize = new Size(460, 180), FormBorderStyle = FormBorderStyle.FixedDialog,
                     StartPosition = FormStartPosition.CenterParent, MinimizeBox = false, MaximizeBox = false,
@@ -303,7 +307,7 @@ namespace DshPortable
                 })
                 {
                     Label stage = new Label { Location = new Point(20, 20), Size = new Size(420, 24), Text = L("正在准备下载…", "Preparing download…") };
-                    ProgressBar bar = new ProgressBar { Location = new Point(20, 54), Size = new Size(420, 18), Style = ProgressBarStyle.Marquee };
+                    ProgressBar bar = new ProgressBar { Location = new Point(20, 54), Size = new Size(420, 18), Style = ProgressBarStyle.Continuous };
                     Label detail = new Label { Location = new Point(20, 84), Size = new Size(420, 36), Text = L("只获取文件，不安装或切换版本。", "Downloads files without installing or switching versions.") };
                     Button cancel = new Button { Text = L("取消", "Cancel"), Location = new Point(340, 132), Size = new Size(100, 30) };
                     progress.Controls.AddRange(new Control[] { stage, bar, detail, cancel });
@@ -313,10 +317,11 @@ namespace DshPortable
                         if (finished || cancellation.IsCancellationRequested) return;
                         cancel.Enabled = false;
                         stage.Text = L("正在取消并清理下载…", "Cancelling and cleaning up…");
-                        bar.Style = ProgressBarStyle.Marquee;
+                        bar.Value = 0;
                         detail.Text = L("请稍等，当前安装的版本不会更改。", "Please wait. The installed version will not change.");
                         cancellation.Cancel();
                     };
+                    cancelOfflineUpdateFiles = requestCancellation;
                     cancel.Click += delegate { requestCancellation(); };
                     progress.FormClosing += delegate(object sender, FormClosingEventArgs args) {
                         if (!finished) { args.Cancel = true; requestCancellation(); }
@@ -324,7 +329,7 @@ namespace DshPortable
                     Action<string> onProgress = delegate(string jsonLine) {
                         if (progress.IsDisposed || !progress.IsHandleCreated) return;
                         try { progress.BeginInvoke((MethodInvoker)delegate {
-                            if (finished || cancellation.IsCancellationRequested) return;
+                            if (finished || cancellation.IsCancellationRequested || exitAfterOfflineUpdateFiles) return;
                             string phase = JsonString(jsonLine, "phase");
                             if (phase == "downloading")
                             {
@@ -332,14 +337,14 @@ namespace DshPortable
                                 long total = JsonLong(jsonLine, "totalBytes");
                                 int percent = (int)Math.Max(0, Math.Min(100, JsonLong(jsonLine, "percent")));
                                 stage.Text = L("正在下载更新文件…", "Downloading update files…");
-                                bar.Style = total > 0 ? ProgressBarStyle.Continuous : ProgressBarStyle.Marquee;
-                                bar.Value = percent;
-                                detail.Text = total > 0 ? percent + "%  ·  " + FormatBytes(received) + " / " + FormatBytes(total) : FormatBytes(received);
+                                bar.Value = total > 0 ? percent : 0;
+                                detail.Text = total > 0 ? percent + "%  ·  " + FormatBytes(received) + " / " + FormatBytes(total)
+                                    : FormatBytes(received) + " · " + L("总大小未知", "total size unknown");
                             }
                             else if (phase == "verifying")
                             {
                                 stage.Text = L("正在验证更新文件…", "Verifying update files…");
-                                bar.Style = ProgressBarStyle.Marquee;
+                                bar.Value = 0;
                                 detail.Text = L("正在检查签名和 ZIP 校验值。", "Checking the signature and ZIP checksum.");
                             }
                             else if (phase == "complete")
@@ -367,11 +372,12 @@ namespace DshPortable
                 string directory = JsonString(result.Item2, "directory");
                 if (status == "cancelled")
                 {
-                    if (String.Equals(JsonString(result.Item2, "cleanupPending"), "true", StringComparison.OrdinalIgnoreCase))
+                    if (JsonBoolean(result.Item2, "cleanupPending"))
                         MessageBox.Show(this, L("已取消，部分下载文件暂时无法清理。请稍后删除此文件夹：", "Cancelled. Some downloaded files could not be cleaned up. Remove this folder later:")
                             + "\r\n\r\n" + directory, title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                     return;
                 }
+                if (exitAfterOfflineUpdateFiles) return;
                 string version = JsonString(result.Item2, "version");
                 if (result.Item1 == 0 && status == "saved" && !String.IsNullOrEmpty(directory) && !String.IsNullOrEmpty(version))
                     MessageBox.Show(this, version + "\r\n\r\n" + directory + "\r\n\r\n"
@@ -385,14 +391,22 @@ namespace DshPortable
             }
             catch (Exception)
             {
-                if (!IsDisposed) MessageBox.Show(this,
+                if (!IsDisposed && !exitAfterOfflineUpdateFiles) MessageBox.Show(this,
                     L("未能获取更新文件，请检查网络或保存目录，稍后再试。当前版本不受影响。", "Update files could not be prepared. Check the network or save folder and try again. The installed version is unaffected."),
                     title, MessageBoxButtons.OK, MessageBoxIcon.Warning);
             }
             finally
             {
+                cancelOfflineUpdateFiles = null;
+                cancellation.Dispose();
                 updateInteractionRunning = false;
-                if (!IsDisposed) RebuildTrayMenu();
+                bool shouldExit = exitAfterOfflineUpdateFiles;
+                exitAfterOfflineUpdateFiles = false;
+                if (!IsDisposed)
+                {
+                    if (shouldExit) BeginDesktopShutdown();
+                    else RebuildTrayMenu();
+                }
             }
         }
 

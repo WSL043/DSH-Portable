@@ -28,6 +28,7 @@ test('getting update files only prepares a native-selected directory and require
   assert.match(prepare, /arguments\.Add\("--update-manifest"\); arguments\.Add\(manifestUrl\)/)
   assert.match(prepare, /result\.Item1 == 0 && status == "saved" && !String\.IsNullOrEmpty\(directory\) && !String\.IsNullOrEmpty\(version\)/)
   assert.match(prepare, /if \(status == "cancelled"\)[\s\S]*?"cleanupPending"[\s\S]*?return;/)
+  assert.match(prepare, /JsonBoolean\(result\.Item2, "cleanupPending"\)/)
   assert.doesNotMatch(prepare, /CheckForDesktopUpdateAsync|ApplyDesktopUpdateAsync|RestoreDesktopAfterUpdateAttemptAsync|"(?:start|stop|apply-update)"/)
   const route = section(source, 'String.Equals(Convert.ToString(messageType), "dsh-portable/open-update"', 'String.Equals(Convert.ToString(messageType), "dsh-portable/pick-directory"')
   assert.match(route, /downloadFilesValue is bool && \(bool\)downloadFilesValue/)
@@ -39,6 +40,7 @@ test('getting update files only prepares a native-selected directory and require
 test('download cancellation waits for the held child cleanup and leaves existing CLI commands unchanged', async () => {
   const source = await readLauncherSource()
   const prepare = section(source, 'private async Task PrepareOfflineUpdateFilesAsync(', 'private void FinishUpdateCheckPhase(')
+  assert.doesNotMatch(prepare, /ProgressBarStyle\.Marquee/)
   assert.match(prepare, /progress\.CancelButton = cancel/)
   assert.match(prepare, /progress\.FormClosing[\s\S]*?if \(!finished\) \{ args\.Cancel = true; requestCancellation\(\); \}/)
   assert.match(prepare, /cancellation\.Cancel\(\)/)
@@ -54,4 +56,6 @@ test('download cancellation waits for the held child cleanup and leaves existing
   assert.match(helper, /process\.StandardInput\.BaseStream\.Flush\(\)/)
   assert.match(helper, /process\.StandardOutput.ReadLine\(\)[\s\S]*?process\.WaitForExit\(\)/)
   assert.doesNotMatch(helper, /\.Kill\(|GetProcessById/)
+  const shutdown = section(source, 'private async void BeginDesktopShutdown(', 'private void ScheduleRequestedRestart(')
+  assert.match(shutdown, /if \(cancelOfflineUpdateFiles != null\)\s*\{\s*if \(!exitAfterOfflineUpdateFiles\)\s*\{\s*exitAfterOfflineUpdateFiles = true;\s*cancelOfflineUpdateFiles\(\);\s*\}\s*return;\s*\}\s*shutdownRunning = true/)
 })
