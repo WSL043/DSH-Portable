@@ -69,6 +69,13 @@ namespace DshPortable
 
         private Tuple<int, string> InvokePortableCli(string[] actionArgs, Action<string> progressCallback)
         {
+            return InvokePortableCli(actionArgs, progressCallback, CancellationToken.None);
+        }
+
+        private Tuple<int, string> InvokePortableCli(string[] actionArgs, Action<string> progressCallback, CancellationToken cancellationToken)
+        {
+            bool prepareFiles = actionArgs.Length > 0 && actionArgs[0] == "prepare-update-files";
+            if (prepareFiles) cancellationToken.ThrowIfCancellationRequested();
             string node = Path.Combine(root, "runtime", "node", "node.exe");
             string runtimeEntry = Path.Combine(root, "launcher", "runtime-entry.mjs");
             string cli = Path.Combine(root, "launcher", "portable-cli.mjs");
@@ -92,6 +99,7 @@ namespace DshPortable
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                RedirectStandardInput = prepareFiles,
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             };
@@ -114,6 +122,19 @@ namespace DshPortable
             }
 
             using (Process process = Process.Start(start))
+            using (CancellationTokenRegistration cancellation = prepareFiles
+                ? cancellationToken.Register(delegate {
+                    // Only this held download child accepts graceful cancellation.
+                    try
+                    {
+                        byte[] request = Encoding.ASCII.GetBytes("cancel\n");
+                        process.StandardInput.BaseStream.Write(request, 0, request.Length);
+                        process.StandardInput.BaseStream.Flush();
+                    }
+                    catch (IOException) { }
+                    catch (InvalidOperationException) { }
+                })
+                : default(CancellationTokenRegistration))
             {
                 Task<string> stderr = process.StandardError.ReadToEndAsync();
                 List<string> stdout = new List<string>();

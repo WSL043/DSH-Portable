@@ -18,12 +18,14 @@ test('versioned native capabilities are opt-in, strictly boolean and limited to 
   const messages = []
   const { host, post } = transport({ __DSH_PORTABLE_NATIVE__: bridge({
     protocolVersion: 1,
-    capabilities: { preferences: true, restartHost: 'true', clearWebCache: true, futureAction: true },
+    capabilities: { preferences: true, restartHost: 'true', clearWebCache: true, prepareOfflineUpdateFiles: true, futureAction: true },
     postMessage: value => messages.push(value),
   }) })
   assert.equal(host.capabilities.preferences, true)
   assert.equal(host.capabilities.restartHost, false)
   assert.equal(host.capabilities.importData, false)
+  assert.equal(host.capabilities.prepareOfflineUpdateFiles, true)
+  assert.equal(transport({ __DSH_PORTABLE_NATIVE__: bridge({ protocolVersion: 1, capabilities: { prepareOfflineUpdateFiles: 'true' } }) }).host.capabilities.prepareOfflineUpdateFiles, false)
   assert.equal(host.capabilities.futureAction, undefined)
   assert.equal(post({ type: 'cache' }, 'clearWebCache'), true)
   assert.equal(post({ type: 'restart' }, 'restartHost'), false)
@@ -41,5 +43,7 @@ test('legacy hosts retain existing capabilities and cache support remains opt-in
   assert.equal(transport({ __DSH_PORTABLE_NATIVE__: bridge() }).host.capabilities.restartHost, true)
   assert.equal(transport({ chrome: { webview: bridge() } }).host.capabilities.clearWebCache, false)
   assert.equal(transport({ chrome: { webview: bridge() }, __DSH_PORTABLE_WEB_CACHE__: true }).host.capabilities.clearWebCache, true)
+  assert.equal(transport({ __DSH_PORTABLE_NATIVE__: bridge() }).host.capabilities.prepareOfflineUpdateFiles, false)
+  assert.equal(transport({ chrome: { webview: bridge() } }).host.capabilities.prepareOfflineUpdateFiles, false)
   assert.equal(transport({}).host, null)
 })

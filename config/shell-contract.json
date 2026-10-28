@@ -84,6 +84,7 @@
       "open",
       "plugin-cache-clean",
       "plugin-storage-migrate",
+      "prepare-update-files",
       "recover-data",
       "recover-update",
       "recovery-pause-plugin",

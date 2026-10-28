@@ -1,13 +1,13 @@
 {
   "version": "0.9.8",
   "zh": {
-    "summary": "完善桌面交互、更新恢复与默认插件管理。",
+    "summary": "完善离线更新文件准备、桌面交互与更新恢复。",
     "highlights": [
+      "离线文件：在更新页选择保存目录，自动下载并校验同版清单、签名和对应 ZIP，无需手动配齐；支持取消，并明确提示缺失或不匹配的文件。",
       "窗口：高 DPI 下菜单、导航图标和窗口按钮按实际布局缩放；最大化窗口关闭到托盘后保持隐藏，恢复时减少不必要的窗口重建。",
-      "更新：相同的在途检查共用一次查询；查询不再准备内核或新建运行租约，损坏缓存可重新获取，网络失败明确显示不可用。",
+      "更新：相同的在途检查共用一次查询；查询不再准备内核或新建运行租约，损坏缓存可重新获取，网络失败明确显示不可用。 版本下载页同时提供完整包清单的原始签名。",
       "恢复：整包升级中断后可继续处理恢复记录；仅安装不启动时保留待验证状态，启动验收通过后才提交更新。",
-      "插件：修复 rc.3 官方页面缺少更新入口的问题；更新检查接受与启动一致的合法 YAML 配置，保留错误配置拒绝及并发写入保护。",
-      "默认插件：更新至已发布的 Image Viewer 0.1.17、Chat Manager 1.5.19，默认内核保持 0.2.1-rc.3。",
+      "插件：修复 rc.3 官方页面缺少更新入口的问题；更新检查接受与启动一致的合法 YAML 配置，保留错误配置拒绝及并发写入保护。 默认采用更新至已发布的 Image Viewer 0.1.17、Chat Manager 1.5.19，默认内核保持 0.2.1-rc.3。",
       "诊断与性能：收紧日志路径和目录打开操作，改善并发日志写入；大文件校验使用流式读取，减少额外内存。"
     ],
     "upgradeNotes": [
@@ -20,13 +20,13 @@
     ]
   },
   "en": {
-    "summary": "Improves desktop interactions, update recovery and default-plugin management.",
+    "summary": "Improves offline update preparation, desktop interactions and update recovery.",
     "highlights": [
+      "Offline files: choose a destination in update settings to download and verify the matching manifest, signature and ZIP together, with cancellation and specific missing-file or mismatch messages.",
       "Windows: scales menus, navigation icons and window controls with the effective layout at high DPI; maximized windows stay hidden when closed to the tray, with fewer unnecessary window-handle recreations on restore.",
-      "Update checks: share identical in-flight requests without preparing the core or acquiring runtime leases; recover damaged caches and report network failures explicitly.",
+      "Update checks: share identical in-flight requests without preparing the core or acquiring runtime leases; recover damaged caches and report network failures explicitly. Version downloads also include the original full-package manifest signature.",
       "Recovery: resume interrupted full-upgrade records; installation without launching remains pending verification until startup acceptance commits the update.",
-      "Plugins: restores update controls on the rc.3 official page; update preflight accepts the same valid YAML dialect as startup while rejecting invalid configuration and concurrent writers.",
-      "Default plugins: adopts the published Image Viewer 0.1.17 and Chat Manager 1.5.19; the default core remains 0.2.1-rc.3.",
+      "Plugins: restores update controls on the rc.3 official page; update preflight accepts the same valid YAML dialect as startup while rejecting invalid configuration and concurrent writers. Defaults adopt the published Image Viewer 0.1.17 and Chat Manager 1.5.19; the default core remains 0.2.1-rc.3.",
       "Diagnostics and performance: guards log paths and folder opening, improves concurrent log writes and streams large-file verification to reduce additional memory use."
     ],
     "upgradeNotes": [

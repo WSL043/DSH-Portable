@@ -188,9 +188,13 @@ namespace DshPortable
                         && (String.Equals(requestedScope, "engine", StringComparison.Ordinal) ? !IsTrustedEngineManifestUrl(requestedManifest) : !IsTrustedProductManifestUrl(requestedManifest))) return;
                     object offlineValue;
                     bool offline = message.TryGetValue("offline", out offlineValue) && offlineValue is bool && (bool)offlineValue;
-                    if (offline && !String.IsNullOrEmpty(requestedManifest)) return;
+                    object downloadFilesValue;
+                    bool downloadFiles = message.TryGetValue("downloadFiles", out downloadFilesValue)
+                        && downloadFilesValue is bool && (bool)downloadFilesValue;
+                    if (offline && (downloadFiles || !String.IsNullOrEmpty(requestedManifest))) return;
                     BeginInvoke((MethodInvoker)(async delegate {
-                        if (offline) await SelectOfflineUpdateAsync(requestedScope);
+                        if (downloadFiles) await PrepareOfflineUpdateFilesAsync(requestedScope, requestedManifest);
+                        else if (offline) await SelectOfflineUpdateAsync(requestedScope);
                         else await CheckForDesktopUpdateAsync(true, requestedScope, requestedManifest);
                     }));
                     return;

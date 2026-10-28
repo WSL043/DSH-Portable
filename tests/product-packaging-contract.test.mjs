@@ -353,6 +353,11 @@ test('prepare-only signs acceptance metadata without enabling publication', asyn
   for (const step of steps.filter(step => /uses: actions\/attest@/.test(step))) {
     assert.match(step, /^        if: \$\{\{ !inputs\.prepare_only \}\}$/m)
   }
+  for (const step of steps.filter(step => /name: (?:Sign the update metadata|Verify signed metadata)/.test(step))) {
+    assert.doesNotMatch(step, /^        if:/m, 'signatures must also ship when the update feed is held')
+  }
+  const curated = steps.find(step => step.includes('name: Publish curated user downloads'))
+  assert.ok(curated.includes('upload-release-assets.mjs "$RELEASE_TAG" --mutable release-staging/update-assets/portable-manifest.json.sig'))
   const metadata = steps.find(step => step.includes('name: Retain signed metadata for final acceptance without publication'))
   assert.ok(metadata)
   assert.match(metadata, /^        if: \$\{\{ inputs\.prepare_only \}\}$/m)

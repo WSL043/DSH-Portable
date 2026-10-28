@@ -291,6 +291,18 @@ namespace DshPortable
             return match.Success ? Regex.Unescape(match.Groups["value"].Value) : String.Empty;
         }
 
+        private static bool JsonBoolean(string json, string name)
+        {
+            try
+            {
+                Dictionary<string, object> values = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json ?? String.Empty);
+                object value;
+                return values != null && values.TryGetValue(name, out value) && value is bool && (bool)value;
+            }
+            catch (ArgumentException) { return false; }
+            catch (InvalidOperationException) { return false; }
+        }
+
         private static long JsonLong(string json, string name)
         {
             Match match = Regex.Match(json ?? String.Empty, "\\\"" + Regex.Escape(name) + "\\\"\\s*:\\s*(?<value>-?\\d+)");

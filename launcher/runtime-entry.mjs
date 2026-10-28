@@ -43,7 +43,7 @@ if (cliOptions?.command === 'stop' || cliOptions?.command === 'status') {
   process.env.DSH_PORTABLE_RUNTIME_ROOT = alive ? await resolveControlRuntimeRoot(root, state) : root
   process.argv = [process.execPath, path.join(root, 'launcher', entryName), ...forwarded]
   await import(pathToFileURL(process.argv[1]).href)
-} else if (['check-update', 'list-updates', 'defer-update', 'ignore-update'].includes(cliOptions?.command)) {
+} else if (['check-update', 'list-updates', 'defer-update', 'ignore-update', 'prepare-update-files'].includes(cliOptions?.command)) {
   // Feed metadata and notification choices use shipped launcher modules only.
   // Keep the installed compatibility metadata, without preparing or leasing the app.
   const { readInstalledUpdateState } = await import('./update-core.mjs')

@@ -53,6 +53,15 @@ namespace DshPortable
         private async void BeginDesktopShutdown()
         {
             if (shutdownRunning) return;
+            if (cancelOfflineUpdateFiles != null)
+            {
+                if (!exitAfterOfflineUpdateFiles)
+                {
+                    exitAfterOfflineUpdateFiles = true;
+                    cancelOfflineUpdateFiles();
+                }
+                return;
+            }
             shutdownRunning = true;
             WriteLauncherLog("shutdown", "begin hostPid="
                 + Process.GetCurrentProcess().Id.ToString(CultureInfo.InvariantCulture)

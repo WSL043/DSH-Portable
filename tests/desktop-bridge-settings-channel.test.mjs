@@ -141,7 +141,7 @@ async function settle() {
   for (let index = 0; index < 5; index += 1) await new Promise(resolve => setImmediate(resolve))
 }
 
-async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeFileUpdates = true, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
+async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeFileUpdates = true, nativeFileDownloads = false, page = 'portable-updates', productFetch = null, webCacheHost = null, modernIcons = false, lang = 'en' } = {}) {
   const source = await readFile(sourceUrl, 'utf8')
   const harness = createReactHarness()
   const registered = []
@@ -164,7 +164,7 @@ async function loadSettingsComponent(fetchImpl, { nativeMessages = null, nativeF
     createElement() { return {} },
   }
   const native = nativeMessages && {
-    capabilities: { preferences: true, openUpdate: true, openUpdateFromFile: nativeFileUpdates },
+    capabilities: { preferences: true, openUpdate: true, openUpdateFromFile: nativeFileUpdates, prepareOfflineUpdateFiles: nativeFileDownloads },
     postMessage(message) { nativeMessages.push(message) },
     addEventListener() {},
     removeEventListener() {},
@@ -278,6 +278,75 @@ test('update from file opens the native review for the selected scope without ch
       assert.equal(requests, before)
     } finally { mounted.unmount() }
   }
+})
+
+test('Get files opts into a native folder picker while old hosts retain the guide', async () => {
+  for (const [nativeMessages, nativeFileDownloads] of [[[], true], [[], false], [null, false]]) {
+    let requests = 0
+    const client = await loadSettingsComponent(async url => {
+      requests++
+      return jsonResponse(url === '/dsh-portable/settings'
+        ? { settings: settings(), versions: { portable: '0.9.7', engine: '0.2.1-rc.3' } }
+        : { schemaVersion: 1, releaseChannel: 'stable', current: '0.2.1-rc.3', versions: [], unavailable: [] })
+    }, { nativeMessages, nativeFileDownloads })
+    const mounted = client.mount()
+    try {
+      await settle()
+      const before = requests
+      for (const [scope, title] of [['product', 'DSH-Portable'], ['engine', 'DeepSeek Harness']]) {
+        const row = findNode(mounted.tree, node => node.type === 'section' && node.props['aria-label'] === title)
+        const control = findNode(row, node => textContent(node) === 'Get files' && (node.type === 'a' || typeof node.props?.onClick === 'function'))
+        assert.ok(control)
+        if (nativeFileDownloads) {
+          assert.notEqual(control.type, 'a')
+          control.props.onClick()
+          assert.deepEqual(JSON.parse(JSON.stringify(nativeMessages.at(-1))), {
+            type: 'dsh-portable/open-update', schemaVersion: 1, scope, downloadFiles: true,
+          }, 'only the native host chooses an output path; this message cannot install an update')
+        } else {
+          assert.equal(control.type, 'a')
+          assert.equal(control.props.href, 'https://github.com/WSL043/DSH-Portable/blob/main/docs/offline-updates.md')
+          assert.equal(control.props.onClick, undefined)
+        }
+      }
+      assert.equal(requests, before, 'obtaining files never calls a remote path or installation RPC')
+      if (!nativeFileDownloads && nativeMessages) assert.equal(nativeMessages.length, 0)
+    } finally { mounted.unmount() }
+  }
+})
+
+test('Get files preserves the explicitly selected product and engine manifests', async () => {
+  const messages = [], requests = []
+  const productManifest = 'https://github.com/WSL043/DSH-Portable/releases/download/update-channel-stable/portable-update-windows-x64-0.9.8.json'
+  const engineManifest = 'https://github.com/WSL043/DSH-Portable-Updates/releases/download/update-channel-core-0.2.1-rc.3/dsh-core-update-windows-x64-0.2.1-rc.3.json'
+  const client = await loadSettingsComponent(async url => {
+    requests.push(url)
+    return jsonResponse(url === '/dsh-portable/settings'
+      ? { settings: settings(), versions: { portable: '0.9.7', engine: '0.2.1-rc.2' } }
+      : { schemaVersion: 1, releaseChannel: 'stable', current: '0.2.1-rc.2', versions: [{ version: '0.2.1-rc.3', manifestUrl: engineManifest }], unavailable: [] })
+  }, {
+    nativeMessages: messages, nativeFileDownloads: true,
+    productFetch: async () => jsonResponse({ schemaVersion: 1, releaseChannel: 'stable', current: '0.9.7', versions: [{ version: '0.9.8', manifestUrl: productManifest }] }),
+  })
+  const mounted = client.mount()
+  try {
+    await settle()
+    const before = requests.length
+    for (const [scope, title, label, version, manifestUrl] of [
+      ['product', 'DSH-Portable', 'Portable version', '0.9.8', productManifest],
+      ['engine', 'DeepSeek Harness', 'Engine version', '0.2.1-rc.3', engineManifest],
+    ]) {
+      findNode(mounted.tree, node => node.props?.label === label).props.onSelect(version)
+      await settle()
+      const row = findNode(mounted.tree, node => node.type === 'section' && node.props['aria-label'] === title)
+      findNode(row, node => textContent(node) === 'Get files' && typeof node.props?.onClick === 'function').props.onClick()
+      assert.deepEqual(JSON.parse(JSON.stringify(messages.at(-1))), {
+        type: 'dsh-portable/open-update', schemaVersion: 1, scope, downloadFiles: true, manifestUrl,
+      })
+    }
+    assert.equal(requests.length, before)
+    assert.equal(messages.length, 2)
+  } finally { mounted.unmount() }
 })
 
 test('delayed product catalogs never insert empty-state text into the selector row', async () => {
