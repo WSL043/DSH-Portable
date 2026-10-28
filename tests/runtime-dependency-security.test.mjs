@@ -11,7 +11,9 @@ const appRequire = createRequire(new URL('../app/package.json', import.meta.url)
 const { z } = createRequire(appRequire.resolve('@deepseek-ai/dsh-session'))('zod')
 
 test('every installed app lock location passes the runtime dependency security floors', async () => {
-  const checked = await verifyInstalledRuntimeDependencies(fileURLToPath(new URL('../app/', import.meta.url)))
+  const checked = await verifyInstalledRuntimeDependencies(fileURLToPath(new URL('../app/', import.meta.url)), {
+    sourceWorkspaceRoots: [fileURLToPath(new URL('../desktop-bridge/', import.meta.url))],
+  })
   for (const name of ['zod', 'undici', 'fast-uri']) assert.ok(checked.some(entry => entry.name === name))
 })
 

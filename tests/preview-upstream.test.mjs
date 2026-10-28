@@ -367,7 +367,7 @@ test('source-pack staging checks actual root, nested and vendor MCP manifests ag
   assert.ok((await verifyInstalledRuntimeDependencies(fixture)).some(entry => entry.path === bundled && entry.manifestSha256))
 })
 
-test('source-pack staging rejects external dependency links and terminates on internal directory cycles', async (t) => {
+test('source-pack staging rejects external links unless a development source workspace matches its installed lock link', async (t) => {
   const fixture = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-links-'))
   const external = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-external-'))
   t.after(() => rm(fixture, { recursive: true, force: true }))
@@ -376,6 +376,41 @@ test('source-pack staging rejects external dependency links and terminates on in
   const cycle = path.join(fixture, 'cycle')
   await symlink(fixture, cycle, process.platform === 'win32' ? 'junction' : 'dir')
   assert.deepEqual(await verifyInstalledRuntimeDependencies(fixture), [])
-  await symlink(external, path.join(fixture, 'external'), process.platform === 'win32' ? 'junction' : 'dir')
+  await mkdir(path.join(fixture, 'node_modules'), { recursive: true })
+  await symlink(external, path.join(fixture, 'node_modules', 'bridge'), process.platform === 'win32' ? 'junction' : 'dir')
   await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency path escapes runtime/)
+  const options = { sourceWorkspaceRoots: [external] }
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /must match a generated lock file-link target/)
+  const sourceLocation = path.relative(fixture, external).split(path.sep).join('/')
+  const packages = {
+    'node_modules/bridge': { resolved: sourceLocation, link: true },
+    [sourceLocation]: { name: 'bridge', version: '1.0.0' },
+  }
+  await writeFile(path.join(external, 'package.json'), JSON.stringify({ name: 'bridge', version: '1.0.0' }))
+  const writeLock = () => writeFile(path.join(fixture, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages }))
+  await writeLock()
+  assert.deepEqual(await verifyInstalledRuntimeDependencies(fixture, options), [])
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture), /dependency path escapes runtime/,
+    'the same lock file link remains forbidden for production staging without explicit development roots')
+  const mcp = 'node_modules/@modelcontextprotocol/client'
+  await mkdir(path.join(external, mcp), { recursive: true })
+  const writeClient = version => writeFile(path.join(external, mcp, 'package.json'), JSON.stringify({ name: '@modelcontextprotocol/client', version }))
+  await writeClient('2.2.0')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /installed MCP copy is missing from the generated lock/)
+  packages[`${sourceLocation}/${mcp}`] = { version: '2.2.0' }
+  await writeLock()
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /GHSA-6prh-2h8m-c8cw: affected or unknown MCP client/)
+  packages[`${sourceLocation}/${mcp}`].version = '2.3.0'
+  await writeClient('2.3.0')
+  await writeLock()
+  const [checked] = await verifyInstalledRuntimeDependencies(fixture, options)
+  assert.equal(checked.path, `${sourceLocation}/${mcp}`)
+  assert.equal(checked.version, '2.3.0')
+  assert.equal(checked.manifestSha256, createHash('sha256').update(await readFile(path.join(external, mcp, 'package.json'))).digest('hex'))
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, { sourceWorkspaceRoots: [path.dirname(fixture)] }),
+    /not its repository ancestor/)
+  const third = await mkdtemp(path.join(os.tmpdir(), 'dsh-preview-mcp-third-'))
+  t.after(() => rm(third, { recursive: true, force: true }))
+  await symlink(third, path.join(external, 'third'), process.platform === 'win32' ? 'junction' : 'dir')
+  await assert.rejects(verifyInstalledRuntimeDependencies(fixture, options), /dependency path escapes runtime/)
 })

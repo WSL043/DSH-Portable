@@ -128,7 +128,7 @@ export function productionPackageClosure(packages, entryName) {
   return [...selected.values()].sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
+export async function verifyInstalledRuntimeDependencies(runtimeRoot, { sourceWorkspaceRoots = [] } = {}) {
   // Source-pack staging resolves a fresh graph, then discards its generated lock.
   // Check every matching lock location against installed manifests first, including
   // nested packages and local vendor packages; root-only resolution misses exact pins.
@@ -137,20 +137,52 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
   assert.ok(lock.packages && typeof lock.packages === 'object', 'staged npm lock must inventory installed packages')
   const checked = []
   const checkedLocations = new Set()
+  const checkedManifests = new Set()
   const mcpName = /^@modelcontextprotocol\/(?:client|core)$/
   const lockedName = /(?:^|\/)node_modules\/(zod|undici|fast-uri|@modelcontextprotocol\/(?:client|core))$/
   const canonicalRoot = await realpath(runtimeRoot)
+  const sourceWorkspaces = []
+  function within(directory, filename) {
+    const relative = path.relative(directory, filename)
+    return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
+  }
+  // Development npm installs retain source file links. This opt-in is only for
+  // explicitly reviewed link targets; production staging passes no extra roots.
+  for (const sourceRoot of sourceWorkspaceRoots) {
+    assert.ok(path.isAbsolute(sourceRoot), 'source workspace root must be explicit and absolute')
+    const canonical = await realpath(sourceRoot)
+    assert.ok(!within(canonical, canonicalRoot) && !within(canonicalRoot, canonical),
+      'source workspace must be separate from the runtime, not its repository ancestor')
+    let sourceLocation
+    for (const [linkLocation, entry] of Object.entries(lock.packages)) {
+      if (entry.link !== true || typeof entry.resolved !== 'string') continue
+      if (await realpath(path.resolve(runtimeRoot, entry.resolved)) === canonical) {
+        assert.ok(!path.isAbsolute(linkLocation) && !path.win32.isAbsolute(linkLocation)
+          && !linkLocation.split(/[\\/]/).includes('..'), 'source workspace link must be inside the runtime')
+        assert.equal(await realpath(path.resolve(runtimeRoot, linkLocation)), canonical,
+          'installed source workspace file link must match its generated lock target')
+        sourceLocation = entry.resolved.replaceAll('\\', '/')
+        break
+      }
+    }
+    assert.ok(sourceLocation && Object.hasOwn(lock.packages, sourceLocation),
+      `source workspace must match a generated lock file-link target: ${sourceRoot}`)
+    sourceWorkspaces.push({ canonical, sourceLocation })
+  }
   function assertContained(filename) {
-    const relative = path.relative(canonicalRoot, filename)
-    assert.ok(relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+    assert.ok([canonicalRoot, ...sourceWorkspaces.map(source => source.canonical)].some(directory => within(directory, filename)),
       `dependency path escapes runtime: ${filename}`)
   }
   async function checkInstalled(location, name, entry, bytes) {
     const manifestPath = path.resolve(runtimeRoot, location, 'package.json')
     const relative = path.relative(path.resolve(runtimeRoot), manifestPath)
-    assert.ok(!path.isAbsolute(location) && !path.win32.isAbsolute(location) && !location.split(/[\\/]/).includes('..')
-      && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative), `dependency location escapes runtime: ${location}`)
-    assertContained(await realpath(manifestPath))
+    const sourceLocation = sourceWorkspaces.some(source => location.startsWith(`${source.sourceLocation}/`)
+      && !location.slice(source.sourceLocation.length + 1).split(/[\\/]/).includes('..'))
+    assert.ok(!path.isAbsolute(location) && !path.win32.isAbsolute(location) && (sourceLocation
+      || !location.split(/[\\/]/).includes('..') && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)),
+      `dependency location escapes runtime: ${location}`)
+    const canonicalManifest = await realpath(manifestPath)
+    assertContained(canonicalManifest)
     bytes ??= await readFile(manifestPath)
     const installed = JSON.parse(bytes.toString('utf8'))
     assert.equal(installed.name, name, `installed package at ${location}`)
@@ -174,6 +206,7 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
       ...(mcpName.test(name) ? { manifestSha256: createHash('sha256').update(bytes).digest('hex') } : {}),
     })
     checkedLocations.add(location)
+    checkedManifests.add(canonicalManifest)
   }
   for (const [location, entry] of Object.entries(lock.packages)) {
     const name = lockedName.exec(location)?.[1]
@@ -206,8 +239,15 @@ export async function verifyInstalledRuntimeDependencies(runtimeRoot) {
         catch (error) { if (mcpName.test(lockedName.exec(location)?.[1] ?? '')) throw error; continue }
         const expected = lockedName.exec(location)?.[1]
         if (!mcpName.test(installed?.name ?? '') && !mcpName.test(expected ?? '')) continue
-        assert.ok(Object.hasOwn(lock.packages, location), `installed MCP copy is missing from the generated lock: ${location}`)
-        if (!checkedLocations.has(location)) await checkInstalled(location, expected ?? installed.name, lock.packages[location], bytes)
+        let lockLocation = location
+        if (!Object.hasOwn(lock.packages, lockLocation) && sourceWorkspaces.length) {
+          const canonicalManifest = await realpath(filename)
+          if (checkedManifests.has(canonicalManifest)) continue
+          const source = sourceWorkspaces.find(source => within(source.canonical, canonicalManifest))
+          if (source) lockLocation = `${source.sourceLocation}/${path.relative(source.canonical, path.dirname(canonicalManifest)).split(path.sep).join('/')}`
+        }
+        assert.ok(Object.hasOwn(lock.packages, lockLocation), `installed MCP copy is missing from the generated lock: ${location}`)
+        if (!checkedLocations.has(lockLocation)) await checkInstalled(lockLocation, expected ?? installed.name, lock.packages[lockLocation], bytes)
       }
     }
   }
