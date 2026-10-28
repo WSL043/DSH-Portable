@@ -17,8 +17,16 @@ if (!rootArg || !driverPackage || !evidenceArg || disposable !== '--disposable')
 }
 
 async function disposablePackage(argument) {
-  const directory = await realpath(argument)
+  const lexicalDirectory = path.resolve(argument)
   const temporaryRoots = [...new Set([process.env.RUNNER_TEMP, os.tmpdir()].filter(Boolean))]
+  let directory
+  for (const temporaryRoot of temporaryRoots) {
+    const relative = path.relative(path.resolve(temporaryRoot), lexicalDirectory)
+    if (!relative || relative === '..' || relative.startsWith('..' + path.sep) || path.isAbsolute(relative)) continue
+    directory = await realpath(lexicalDirectory)
+    break
+  }
+  if (!directory) throw new Error('Disposable product must be below an actual temporary directory')
   let insideTemporaryRoot = false
   for (const temporaryRoot of temporaryRoots) {
     let base
@@ -48,7 +56,8 @@ async function disposablePackage(argument) {
 const product = await disposablePackage(rootArg)
 const { root, components, node: nodeExecutable, entry: runtimeEntry, host: hostExecutable } = product
 const evidenceRelative = 'acceptance/official-plugin-cycle'
-assert.equal(path.resolve(evidenceArg), path.resolve(root, evidenceRelative), 'Evidence directory must be the disposable product acceptance/official-plugin-cycle directory')
+// Compare the caller's lexical layout (TEMP may be /var -> /private/var); all writes use canonical root below.
+assert.equal(path.resolve(evidenceArg), path.resolve(rootArg, evidenceRelative), 'Evidence directory must be the disposable product acceptance/official-plugin-cycle directory')
 const resultFile = await safeDataTarget(root, `${evidenceRelative}/result.json`)
 const evidence = path.dirname(resultFile)
 assert.deepEqual(await readdir(evidence), [], 'Evidence directory must be new or empty')

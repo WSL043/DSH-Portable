@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { verifiedPackageFile } from '../scripts/verified-package-file.mjs'
 import { safeDataTarget } from '../launcher/data-paths.mjs'
+import { marketEvidenceLocation, prepareMarketEvidenceOutput } from '../scripts/smoke-windows-market-categories.mjs'
 
 test('package file lookup rejects traversal and symlinks outside the package', async () => {
   const parent = await mkdtemp(path.join(os.tmpdir(), 'dsh-package-path-'))
@@ -23,6 +25,36 @@ test('package file lookup rejects traversal and symlinks outside the package', a
     }
   } finally {
     await rm(parent, { recursive: true, force: true })
+  }
+})
+
+test('market evidence permits its real temporary fixture and fixed repository storage branch only', async () => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-market-evidence-'))
+  try {
+    const output = path.join(temporary, 'new', 'evidence')
+    assert.equal(await prepareMarketEvidenceOutput(output), await realpath(output))
+    const repository = fileURLToPath(new URL('../', import.meta.url))
+    const storage = path.join(repository, 'complete-evidence', 'storage')
+    assert.ok(marketEvidenceLocation(storage))
+    assert.ok(marketEvidenceLocation(path.join(storage, 'nested')))
+    const outside = path.join(path.parse(os.tmpdir()).root, path.basename(temporary))
+    await assert.rejects(prepareMarketEvidenceOutput(outside), /must be below an actual temporary root/)
+    await assert.rejects(access(outside), { code: 'ENOENT' })
+    assert.throws(() => marketEvidenceLocation(os.tmpdir()), /must be below an actual temporary root/)
+    for (const relative of ['docs', 'complete-evidence-other/storage', 'complete-evidence/storage-other']) {
+      assert.throws(() => marketEvidenceLocation(path.join(repository, relative)), /must be below an actual temporary root/)
+    }
+    const linked = path.join(temporary, 'redirect')
+    await symlink(repository, linked, process.platform === 'win32' ? 'junction' : 'dir')
+    const escapeLeaf = `${path.basename(temporary)}-not-created`
+    await assert.rejects(prepareMarketEvidenceOutput(path.join(linked, escapeLeaf)), /Unsafe/)
+    await assert.rejects(access(path.join(repository, escapeLeaf)), { code: 'ENOENT' })
+    const dangling = path.join(temporary, 'dangling')
+    await symlink(path.join(temporary, 'missing-target'), dangling, process.platform === 'win32' ? 'junction' : 'dir')
+    await assert.rejects(prepareMarketEvidenceOutput(path.join(dangling, 'must-not-create')), /Unsafe/)
+    await assert.rejects(access(path.join(temporary, 'missing-target')), { code: 'ENOENT' })
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
   }
 })
 

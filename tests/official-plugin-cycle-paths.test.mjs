@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
@@ -51,6 +51,8 @@ test('plugin-cycle admission rejects a canonical package outside both actual tem
   const f = await fixture(t)
   const outside = path.join(f.parent, 'outside-package')
   await packageAt(outside)
+  await f.invoke(/below an actual temporary directory/, { productRoot: path.join(f.parent, 'nonexistent-outside-package') })
+  await f.invoke(/below an actual temporary directory/, { productRoot: f.temporary })
   await f.invoke(/below an actual temporary directory/, { productRoot: outside, evidence: path.join(outside, 'acceptance/official-plugin-cycle') })
   assert.deepEqual((await readdir(outside)).sort(), ['DeepSeek-Herness.exe', 'data', 'launcher', 'licenses', 'runtime', 'workspace'].sort())
 })
@@ -110,4 +112,32 @@ test('plugin-cycle admission rejects runtime and output junctions escaping the p
     await f.invoke(/escapes its root|Unsafe restore path/)
     assert.deepEqual(await readdir(outside), ['node.exe'])
   }
+})
+
+test('plugin-cycle admission accepts var/private-style TEMP aliases and reaches the fake driver rejection', async t => {
+  const f = await fixture(t)
+  const privateDirectory = path.join(f.temporary, 'private-var')
+  const lexicalAlias = path.join(f.temporary, 'var')
+  await mkdir(privateDirectory)
+  const canonicalPackage = path.join(privateDirectory, 'DSH-Portable')
+  await rename(f.root, canonicalPackage)
+  await symlink(privateDirectory, lexicalAlias, process.platform === 'win32' ? 'junction' : 'dir')
+  const productRoot = path.join(lexicalAlias, 'DSH-Portable')
+  await f.invoke(/Driver must not load before fixture admission/, {
+    productRoot, evidence: path.join(productRoot, 'acceptance/official-plugin-cycle'),
+  })
+  assert.deepEqual(await readdir(path.join(canonicalPackage, 'acceptance/official-plugin-cycle')), [])
+  assert.deepEqual(await readdir(path.join(canonicalPackage, 'data')), ['README.txt'])
+})
+
+test('plugin-cycle admission still rejects a lexical TEMP alias whose canonical package escapes TEMP', async t => {
+  const f = await fixture(t)
+  const outside = path.join(f.parent, 'outside-aliased-package')
+  await packageAt(outside)
+  const productRoot = path.join(f.temporary, 'escaping-package-alias')
+  await symlink(outside, productRoot, process.platform === 'win32' ? 'junction' : 'dir')
+  await f.invoke(/below an actual temporary directory/, {
+    productRoot, evidence: path.join(productRoot, 'acceptance/official-plugin-cycle'),
+  })
+  assert.deepEqual(await readdir(path.join(outside, 'data')), ['README.txt'])
 })

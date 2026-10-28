@@ -2,19 +2,54 @@ import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { createServer } from 'node:net'
-import { mkdir, realpath, writeFile } from 'node:fs/promises'
+import { realpath, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { safeDataTarget } from '../launcher/data-paths.mjs'
 import { verifiedPackageFile } from './verified-package-file.mjs'
 
+const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
+
+export function marketEvidenceLocation(value) {
+  assert.ok(typeof value === 'string' && value.length > 0, 'market evidence directory is required')
+  const requested = path.resolve(value)
+  const temporaryRoots = [tmpdir(), process.env.GITHUB_ACTIONS === 'true' ? process.env.RUNNER_TEMP : undefined]
+  for (const base of new Set(temporaryRoots.filter(value => typeof value === 'string' && path.isAbsolute(value)).map(value => path.resolve(value)))) {
+    if (path.dirname(base) === base) continue
+    const relative = path.relative(base, requested)
+    if (relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) {
+      return { base, relative }
+    }
+  }
+  const relative = path.relative(repositoryRoot, requested)
+  const storage = path.join('complete-evidence', 'storage')
+  if (relative === storage || relative.startsWith(`${storage}${path.sep}`)) {
+    return { base: repositoryRoot, relative }
+  }
+  throw new Error('Market evidence must be below an actual temporary root or the fixed complete-evidence/storage directory')
+}
+
+export async function prepareMarketEvidenceOutput(value) {
+  // Reject unapproved lexical paths before touching the requested directory.
+  const selected = marketEvidenceLocation(value)
+  const base = await realpath(selected.base)
+  // The report is a fixed leaf; safeDataTarget checks every output-directory
+  // ancestor, including dangling links, before creating missing directories.
+  const report = await safeDataTarget(base, `${selected.relative.split(path.sep).join('/')}/category-geometry.json`)
+  const output = await realpath(path.dirname(report))
+  const relative = path.relative(base, output)
+  assert.ok(relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative),
+    'Market evidence directory escapes its approved root')
+  return output
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const root = process.argv[2] && path.resolve(process.argv[2])
-const requestedOutput = process.argv[3] && path.resolve(process.argv[3])
 assert.ok(process.argv.includes('--disposable'), 'use an isolated test installation with --disposable')
-assert.ok(root && requestedOutput)
-await mkdir(requestedOutput, { recursive: true })
-const output = await realpath(requestedOutput)
+assert.ok(root && process.argv[3])
+const output = await prepareMarketEvidenceOutput(process.argv[3])
 const exec = promisify(execFile)
 // Never inherit the developer's selected profile/data environment into a
 // disposable test that can now explicitly reclaim managed logs and caches.
@@ -476,3 +511,4 @@ try {
   }
 }
 console.log(JSON.stringify({ passed, output }))
+}
