@@ -4,17 +4,32 @@
 
 0.x 胶囊安装前校验复用本地附件的有界流式 SHA-256，不再整体读入压缩包；字节数、摘要和安装前拒绝顺序保留。删除未调用的 ResetOperationUi。1.x 每轮进程等待复用一次 CIM 快照，激活锁后与解包写入者检查仍重新查询；打包复用既有安装包身份匹配，歧义候选继续拒绝。自动健康回退保留失败程序及附加文件，后续仍由完整树收据门槛决定清理。
 
-128 MiB 合成文件两轮摘要完全一致，旧读取持有约 128 MiB Buffer；新实现不保留整包 Buffer。独立进程观测内存增量约 130 MiB 对比约 17 MiB；这不是整体启动或更新速度结论。本批定向实执行覆盖损坏拒绝、旧/新官方默认清单、真实 Windows 进程快照与编译后回退。完整依赖和成品矩阵结果以本批精确提交的 CI 为准；本机缺依赖及测试工具环境失败保留日志，不算通过。
+128 MiB 合成文件两轮摘要完全一致，旧读取持有约 128 MiB Buffer；新实现不保留整包 Buffer。独立进程观测内存增量约 130 MiB 对比约 17–18 MiB；这不是整体启动或更新速度结论。本批定向实执行覆盖损坏拒绝、旧/新官方默认清单、真实 Windows 进程快照与编译后回退。完整依赖和成品矩阵结果以本批精确提交的 CI 为准；本机缺依赖及测试工具环境失败保留日志，不算通过。
 
 The bounded streaming digest avoids retaining a complete capsule in memory without skipping integrity checks. Process snapshots are shared only within one polling round; activation still rechecks. Failed health targets are preserved for receipt-based cleanup. The synthetic memory comparison does not establish faster startup, and alpha compatibility preparation is not full candidate acceptance.
 
+
+本批效率修正 [PR #221](https://github.com/WSL043/DSH-Portable/pull/221) 已合入 main a7043ba；[完整成品矩阵](https://github.com/WSL043/DSH-Portable/actions/runs/40624721443) 39/39、[真实签名 rc.3 E2E](https://github.com/WSL043/DSH-Portable/actions/runs/40624721662) 14/14，均绑定 c9276e3。合并树与已验收源完全相同，后续 main CI 仍独立核对；E2E 的回退失败树前后摘要一致，最终 unexpected 为空，物理断网未测。
+
 ## 2026-10-28 上游 alpha 接口核对
 
-官方已发布 [0.2.2-alpha.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-alpha.2)（源码 f3803c96974ad4a94195fb97e5c637e9c2a3afe3）和 [0.2.1-rc.4](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.4)。alpha 将默认组合包清单从 app-boot 移至 [dsh-official-bundles](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-alpha.2/packages/util/official-bundles/src/index.ts)；Portable 的插件事务和旧会话导入预检共用按导出能力选择的解析器，旧内核仍复用原导出，不猜版本、不吞加载错误。最低 Node.js 24.9，当前固定 24.22.1 满足。此项是兼容准备，尚不表示整套 alpha 已通过产品验收；不改公开候选或现有内核锁。
+官方已发布 [0.2.2-alpha.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.2-alpha.2)（源码 f3803c96974ad4a94195fb97e5c637e9c2a3afe3）和 [0.2.1-rc.4](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.4)。alpha 将默认组合包清单从 app-boot 移至 [dsh-official-bundles](https://github.com/deepseek-ai/deepseek-harness/blob/dsh-v0.2.2-alpha.2/packages/util/official-bundles/src/index.ts)；Portable 的插件事务和旧会话导入预检共用按导出能力选择的解析器，旧内核仍复用原导出，不猜版本、不吞加载错误。最低 Node.js 24.9，当前固定 24.22.1 满足。本次在 [PR #222](https://github.com/WSL043/DSH-Portable/pull/222) 的隔离候选分支更新 preview 锁；稳定锁和公开通道不改。源码与真实 npm 字节核验不等于整套 alpha 产品验收，成品资格单独绑定候选提交。
 
 本次只读核对时，[Windows 官方 nightly feed](https://download.deepseek.com/dsh-desk/feeds/win-x64/nightly.yml) 仍是 0.2.1-rc.3；GitHub/npm alpha 不等于已交付的新桌面成品。alpha 与 rc.4 的官方 MCP 清单仍固定 client 2.2.0，处于 [GHSA-6prh-2h8m-c8cw](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories/GHSA-6prh-2h8m-c8cw) 影响范围，不能据发布名称解除 1.x 安全阻断，也不覆盖官方 SDK。
 
 Alpha compatibility preparation follows the official export owner by capability and retains legacy app-boot support. It does not promote the alpha runtime, qualify a new desktop payload, or remove the upstream MCP security hold. Full candidate qualification must bind the immutable source and built artifact on an isolated review branch.
+
+候选同时复用官方公开插件槽位与版本更新能力，完整能力存在时原样保留官方管理器，不再注入旧更新按钮/额外刷新；部分公开契约缺失时明确拒绝。官方实验市场属于可选组合包；Portable 既有首次引导策略可启用它并保留后续关闭选择，此次不新增强开。按当前 profile 的既有启用检测切换高级/市场入口，未知、关闭或失败保留原发现与确认安装，避免把槽位声明误当市场已可用；正常已装插件更新由官方负责，Portable 保留分组总开关、诊断和显式修复保全。
+
+新版历史读取仅登记精确 0.2.2-alpha.2 的源码与生成 lib 身份，不扩大到相邻 alpha；真实原库拒绝 v2，经既有补丁后接受合法 one-shot/continuable v2，仍拒绝未知版本、字段和不成对模型路由，输入不变。完整 writer/继续仍由候选成品流水线验证。候选核验修正摘要别名误差和 review 锁与 main 冻结 SHA 的测试耦合，main 固定来源保护不变。
+
+市场默认 client.js 以现有锁和工具实际重建；既有规范化步骤记录 LF 一致的源输入摘要，测试只读检查漏重建，压缩参数名和重复执行保持幂等。不新增打包流程或策略文件。
+
+Public plugin slots preserve the official manager and regular update UI. The existing profile activation check controls the Advanced/Discover fallback; unknown or inactive optional-market state keeps discovery and the existing confirmation/install path. Exact migration identities and the existing full historical-writer qualification remain separate gates. The rebuilt client is checked against its normalized source inputs without changing release channels.
+
+**完整 alpha 交付仍阻断：** preview 锁内 image 0.1.3-beta.2、chat 1.5.2-beta.4 的已发布 peer 仅覆盖旧基线；当前稳定发布 image 0.1.16、chat 1.5.18 也未声明 0.2.2-alpha.2。不能豁免默认插件门槛、改写发布包或把管理链夹具当成默认插件兼容。候选 UI 仅做源码/真实 bundle factory 回归及最小 harness 准备，尚不宣称完整 alpha 界面、历史 writer 继续或成品升级已通过；不发布、不改稳定内核。
+
+Full alpha delivery remains on hold because neither pinned nor latest published default plugins declare alpha.2 compatibility. No peer exemption or republished package is used to bypass it; factory/schema checks do not qualify the complete UI or default-plugin lifecycle.
 
 ## 2026-10-28 续：离线维护与恢复
 

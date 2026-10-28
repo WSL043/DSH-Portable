@@ -50,6 +50,7 @@ const child = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], { cwd: root, en
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 let socket, evaluate, passed = false
 const exceptions = []
+let publicMarket = false
 try {
   let page
   const deadline = Date.now() + 90000
@@ -85,6 +86,15 @@ try {
     throw new Error(`${label}: ${JSON.stringify(result)}`)
   }
   const click = (names, scope = 'body') => `(() => {const names=${JSON.stringify(names)};const root=document.querySelector(${JSON.stringify(scope)});const button=[...(root?.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')||[])].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
+  const advancedTab = '[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-advanced"]'
+  const discoverTab = '[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-market"]'
+  const clickElement = selector => `(() => { const item=document.querySelector(${JSON.stringify(selector)}); if(!item || item.getBoundingClientRect().width===0 || item.disabled) return false; item.scrollIntoView({block:'center'}); item.click(); return true })()`
+  const openMarket = async () => {
+    await until(`Boolean(document.querySelector(${JSON.stringify(advancedTab)})) || [...document.querySelectorAll('button')].some(item => ['Plugin Market','插件市场'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)`, Boolean, 'Portable market entry is ready')
+    publicMarket = await evaluate(`Boolean(document.querySelector(${JSON.stringify(advancedTab)}))`)
+    if (publicMarket) await until(clickElement(discoverTab), Boolean, 'public Discover tab')
+    else await until(click(['Plugin Market','插件市场']), Boolean, 'legacy market action')
+  }
   const nativeStateExpression = key => `new Promise(resolve => {
     const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
       chrome.webview.removeEventListener('message', listener); resolve(event.data); };
@@ -213,7 +223,8 @@ try {
       labels.has((item.getAttribute('aria-label') || item.textContent || '').trim()) &&
       item.getBoundingClientRect().width > 0 && !item.disabled)
   })()`)
-  if (hasBuiltInPluginsNavigation) {
+  const sidebarPlugins = await evaluate(`Boolean([...document.querySelectorAll('button')].find(item => !item.closest('dialog,[role="dialog"]') && ['Plugins','插件'].includes((item.textContent || '').trim())))`)
+  if (hasBuiltInPluginsNavigation || sidebarPlugins) {
     await until(`(() => {
       const dialog = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
         .filter(item => item.getBoundingClientRect().width > 0)
@@ -224,7 +235,7 @@ try {
       return Boolean(button)
     })()`, Boolean, 'close settings dialog');
     await until(click(['Plugins', '插件']), Boolean, 'sidebar plugins');
-    await until(click(['Plugin Market', '插件市场']), Boolean, 'market');
+    await openMarket();
   } else {
     await until(click(['Plugins','插件']), Boolean, 'plugins');
     await until(click(['Plugin configuration','插件配置']), Boolean, 'plugin configuration');
@@ -233,7 +244,7 @@ try {
     await until(click(['Plugin list','插件列表']), Boolean, 'official plugin list');
     await delay(500);
     await writeFile(path.join(output, 'plugin-list.txt'), await evaluate('document.body.innerText'));
-    await until(click(['Plugin Market','插件市场']), Boolean, 'market');
+    await openMarket();
   }
   await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
   if (verifyTotal) {
@@ -307,27 +318,28 @@ try {
     await until(`Boolean(document.querySelector('[class*="lightboxImg"]'))`, Boolean, 'preview opens lightbox')
     await send('Input.dispatchKeyEvent', {type:'keyDown', key:'Escape', code:'Escape', windowsVirtualKeyCode:27})
     await until(`!document.querySelector('[class*="lightboxImg"]') && Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Escape closes only preview')
+    const dialogsBeforeDetails = await evaluate(`document.querySelectorAll('[role="dialog"]').length`)
     await evaluate(`document.querySelector('[class*="nameButton"]')?.click()`)
-    await until(`document.querySelectorAll('[role="dialog"]').length > 1`, Boolean, 'plugin details open from name')
+    await until(`document.querySelectorAll('[role="dialog"]').length === ${dialogsBeforeDetails + 1}`, Boolean, 'plugin details open from name')
     const closeDialog = `(() => {const dialog=[...document.querySelectorAll('[role="dialog"]')].at(-1);const button=[...dialog.querySelectorAll('button')].find(b=>['Close','关闭','Cancel','取消'].includes(b.getAttribute('aria-label')||b.textContent.trim()));button?.click();return Boolean(button)})()`
     await until(closeDialog, Boolean, 'close plugin details')
-    await until(closeDialog, Boolean, 'close plugin market')
+    if (!publicMarket) await until(closeDialog, Boolean, 'close plugin market')
     await nativeState(131260)
     await until(click(['General', 'General settings', '通用设置']), Boolean, 'general appearance')
     await until(click(['Dark', '深色']), Boolean, 'official dark appearance')
     await until(closeDialog, Boolean, 'close appearance settings')
     await until(click(['Plugins', '插件']), Boolean, 'plugins in dark theme')
-    await until(click(['Plugin Market', '插件市场']), Boolean, 'market in dark theme')
+    await openMarket()
     await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'dark market ready')
     await captureLayout('dark')
-    await until(closeDialog, Boolean, 'close dark market')
+    if (!publicMarket) await until(closeDialog, Boolean, 'close dark market')
     await nativeState(131260)
     await until(click(['General', 'General settings', '通用设置']), Boolean, 'general language')
     await until(click(['English']), Boolean, 'language selector')
     await until(click(['简体中文', '中文', '中文（简体）', 'Chinese', 'Simplified Chinese']), Boolean, 'choose Chinese')
     await until(closeDialog, Boolean, 'close Chinese settings')
     await until(click(['插件']), Boolean, 'Chinese plugins')
-    await until(click(['插件市场']), Boolean, 'Chinese market entry')
+    await openMarket()
     await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Chinese market ready')
     assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label^="预览 "]'))`), true, 'localized preview label')
     await until(click(['筛选']), Boolean, 'Chinese filter trigger')
@@ -352,7 +364,7 @@ try {
     await captureLayout('zh-compact')
     await until(click(['图文']), Boolean, 'restore gallery view')
     // Leave the disposable fixture in English for subsequent independent probes.
-    await until(closeDialog, Boolean, 'close Chinese market')
+    if (!publicMarket) await until(closeDialog, Boolean, 'close Chinese market')
     await nativeState(131260)
     await until(click(['通用设置']), Boolean, 'restore language settings')
     await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
@@ -392,7 +404,7 @@ try {
           assert.equal(samples.at(-1).processes.length, 0, 'isolated Portable processes remain after exit')
         }
       } catch (error) { passed = false; throw error }
-      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
+      finally { await writeFile(path.join(output, 'result.json'), JSON.stringify({ passed, exceptions, sourceOverlay, maintenanceOnly, publicMarket, verifiedLiveTotal: verifyTotal && !maintenanceOnly && passed }, null, 2)) }
     }
   }
 }

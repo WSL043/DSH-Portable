@@ -4,8 +4,8 @@ import { gunzipSync } from 'node:zlib'
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { descriptorV2PatchIdentity, readHistoricalDescriptorVersions } from './patch-historical-descriptor.mjs'
-import { patchPluginManagerActions } from './patch-native-settings-command.mjs'
+import { descriptorV2PatchIdentity, descriptorV2ReviewedInputsFor, readHistoricalDescriptorVersions } from './patch-historical-descriptor.mjs'
+import { hasOfficialPluginManagement, patchPluginManagerActions } from './patch-native-settings-command.mjs'
 import { readOfficialSourceMetadata } from './upstream-source-metadata.mjs'
 import { upstreamRequestHeaders } from './upstream-request-headers.mjs'
 
@@ -22,10 +22,7 @@ const LOCK_FIELDS = Object.freeze([
 
 // These are the reviewed Git blob identities recorded by the 0.2.0-rc.1 intake.
 // A change is an explicit human-review boundary, never an invitation to widen a patch.
-export const HISTORICAL_VALIDATION_BLOBS = Object.freeze({
-  'packages/session/session-format-v0-to-v1/src/validation.ts': '762ed963f73c7159f5309176cc69b11db25ac634',
-  'packages/session/session-format-v0-to-v1/src/payload-validation.ts': '5b19f7cc6668d8e9bfc1c75806d3898132eb94ee',
-})
+export const HISTORICAL_VALIDATION_BLOBS = descriptorV2ReviewedInputsFor(descriptorV2PatchIdentity.dshVersion).validationBlobs
 
 const isCommit = value => /^[0-9a-f]{40}$/.test(value ?? '')
 const isIntegrity = value => /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(value ?? '')
@@ -256,14 +253,20 @@ export function createIntakeReport(input) {
   }
   const haveLockInputs = sourceIdentityValid && packageIdentityValid
     && isSha256(noticesSha256) && validPackedFamilies(packedFamilies)
+  const integrityConflict = lock?.dsh?.integrity !== undefined && lock?.dsh?.npmIntegrity !== undefined
+    && lock.dsh.integrity !== lock.dsh.npmIntegrity
+  const lockedField = field => field === 'integrity'
+    ? lock.dsh.integrity ?? lock.dsh.npmIntegrity : lock.dsh[field]
   const lockDifferences = haveLockInputs && lock?.dsh
-    ? LOCK_FIELDS.filter(field => !jsonSame(lock.dsh[field], candidateFields[field]))
-      .map(field => ({ field, current: lock.dsh[field], candidate: candidateFields[field] }))
+    ? LOCK_FIELDS.filter(field => !jsonSame(lockedField(field), candidateFields[field]))
+      .map(field => ({ field, current: lockedField(field), candidate: candidateFields[field] }))
     : null
   add('2', `Differences from ${lockName}`,
-    !failures.lock && haveLockInputs && lockDifferences !== null,
+    !failures.lock && !integrityConflict && haveLockInputs && lockDifferences !== null,
     failures.lock
       ? errorEvidence(failures.lock)
+      : integrityConflict
+        ? 'lock integrity and npmIntegrity conflict; neither alias was trusted'
       : lockDifferences === null
         ? 'insufficient candidate or lock data; comparison was not guessed'
         : lockDifferences.length
@@ -273,14 +276,15 @@ export function createIntakeReport(input) {
   let historyEvidence = failures.history ? errorEvidence(failures.history) : ''
   let historyMatches = false
   if (!failures.history && history) {
-    const blobLines = Object.entries(HISTORICAL_VALIDATION_BLOBS).map(([filename, expected]) =>
+    const { identity, validationBlobs } = descriptorV2ReviewedInputsFor(version)
+    const blobLines = Object.entries(validationBlobs).map(([filename, expected]) =>
       `${filename}=${history.validationBlobs?.[filename] ?? 'missing'} (expected ${expected})`)
-    const indexMatch = history.inputSha256 === descriptorV2PatchIdentity.sourceSha256
-    const blobsMatch = Object.entries(HISTORICAL_VALIDATION_BLOBS)
+    const indexMatch = history.inputSha256 === identity.sourceSha256
+    const blobsMatch = Object.entries(validationBlobs)
       .every(([filename, expected]) => history.validationBlobs?.[filename] === expected)
     const exactVersion = isExactVersion(version)
     historyMatches = blobsMatch && indexMatch && exactVersion
-    historyEvidence = `${blobLines.join('; ')}; lib/index.js sha256=${history.inputSha256 ?? 'missing'} (expected ${descriptorV2PatchIdentity.sourceSha256}); candidate version=${version} (${exactVersion ? 'exact version string' : 'not an exact version string'}); migration inputs=${historyMatches ? 'same-shape' : 'different or incomplete'}`
+    historyEvidence = `${blobLines.join('; ')}; lib/index.js sha256=${history.inputSha256 ?? 'missing'} (expected ${identity.sourceSha256}); candidate version=${version} (${exactVersion ? 'exact version string' : 'not an exact version string'}); migration inputs=${historyMatches ? 'same-shape' : 'different or incomplete'}`
     if (!historyMatches) historyEvidence += '; needs human patch review; automatic identity relaxation is forbidden'
   } else if (!historyEvidence) {
     historyEvidence = 'historical migration identities were not collected; no patch relaxation was attempted'
@@ -305,14 +309,14 @@ export function createIntakeReport(input) {
       }
       patchPluginManagerActions(pluginManagerBundle.source)
       anchorPassed = true
-      anchorEvidence = `patchPluginManagerActions accepted the official bundle; package version=${pluginManagerBundle.packageVersion ?? 'unknown'}; bundle sha256=${pluginManagerBundle.sha256 ?? sha256(pluginManagerBundle.source)}`
+      anchorEvidence = `${hasOfficialPluginManagement(pluginManagerBundle.source) ? 'official public slots and update operations verified; Portable overlay omitted' : 'patchPluginManagerActions accepted the official bundle'}; package version=${pluginManagerBundle.packageVersion ?? 'unknown'}; bundle sha256=${pluginManagerBundle.sha256 ?? sha256(pluginManagerBundle.source)}`
     } catch (error) {
       anchorEvidence = errorEvidence(error)
     }
   } else if (!anchorEvidence) {
     anchorEvidence = 'official Plugin Manager bundle was not collected; anchor count was not guessed'
   }
-  add('5', 'patch-native-settings-command.mjs Plugin Manager anchors', anchorPassed, anchorEvidence)
+  add('5', 'Official Plugin Manager capabilities or legacy adapter anchors', anchorPassed, anchorEvidence)
 
   const shapeChecks = checks.filter(check => ['3', '4', '5'].includes(check.id))
   const firstShapeFailure = shapeChecks.find(check => check.status !== 'PASS')

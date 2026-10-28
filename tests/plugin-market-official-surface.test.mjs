@@ -74,3 +74,47 @@ test('the shipped server bundle carries the update support for index-installed p
   assert.ok(all.includes('releases'), 'release tarballs are recognised')
   assert.ok(all.includes("kind:`pinned`") || all.includes('kind: "pinned"') || all.includes("kind:'pinned'") || all.includes('pinned'), 'the pinned rollback source exists')
 })
+
+test('Advanced skips Portable update lookups while the legacy installed view still refreshes them', async () => {
+  const { stripTypeScriptTypes } = await import('node:module')
+  const { runInNewContext } = await import('node:vm')
+  const section = (await readFile(vendor('src/client/MarketSection.tsx'), 'utf8')).replaceAll('\r\n', '\n')
+  const start = section.indexOf('  const refreshInstalled = useCallback(')
+  const end = section.indexOf('\n  /** Lookup set', start)
+  assert.ok(start >= 0 && end > start)
+  const executable = stripTypeScriptTypes(section.slice(start, end)) + '\nrefreshInstalled'
+  for (const officialUpdates of [true, false]) {
+    const requests = []
+    const context = {
+      officialUpdates, useCallback: callback => callback,
+      fetch: async url => { requests.push(url); return { json: async () => ({ installed: {} }) } },
+      installedRepoIdentities: () => ({}), installedRepoHints: () => ({}),
+    }
+    for (const setter of ['setInstalled', 'setRepoIdentities', 'setRepoHints', 'setSkins', 'setDisabledNames',
+      'setPatchDisabledNames', 'setGroups', 'setGroupOrder', 'setActivations', 'setHostDependencyFindings', 'setUpdates']) context[setter] = () => {}
+    runInNewContext(executable, context)(true)
+    await new Promise(setImmediate)
+    assert.deepEqual(requests, officialUpdates
+      ? ['/dsh-market/installed'] : ['/dsh-market/installed', '/dsh-market/updates?force=1'])
+  }
+  const totalsAt = section.indexOf("fetch('/dsh-market/download-totals'")
+  const totalsStart = section.lastIndexOf('  useEffect(() => {', totalsAt)
+  const totalsEnd = section.indexOf('\n  // Pending-restart', totalsAt)
+  assert.ok(totalsStart >= 0 && totalsEnd > totalsStart)
+  const totalsEffect = stripTypeScriptTypes(section.slice(totalsStart, totalsEnd))
+  for (const [officialUpdates, view, expected] of [[true, 'installed', []], [false, 'installed', []], [true, 'discover', ['/dsh-market/download-totals']], [false, 'discover', ['/dsh-market/download-totals']]]) {
+    const requests = []
+    runInNewContext(totalsEffect, {
+      officialUpdates, props: { view }, AbortController, useEffect: callback => callback(),
+      fetch: async url => { requests.push(url); return { ok: false, json: async () => ({}) } },
+      setDownloadTotalsState: () => {},
+    })
+    await new Promise(setImmediate)
+    assert.deepEqual(requests, expected)
+  }
+  const membersAt = section.indexOf('{members.map(member => (')
+  const memberRow = section.slice(membersAt, section.indexOf("{t('groupRemove')}", membersAt))
+  assert.match(memberRow, /!officialUpdates && \(/)
+  assert.match(memberRow, /officialUpdates && props\.onOfficialManage/)
+  assert.ok(memberRow.includes('props.onOfficialManage!(member)'))
+})

@@ -15,6 +15,7 @@ import {
 } from '../scripts/intake-upstream-core.mjs'
 import {
   descriptorV2PatchIdentity,
+  descriptorV2ReviewedInputsFor,
   readHistoricalDescriptorVersions,
 } from '../scripts/patch-historical-descriptor.mjs'
 
@@ -198,4 +199,56 @@ test('Plugin Manager zero and multiple refresh anchors fail through the existing
       assert.match(report.checks[4].evidence, expected)
     })
   }
+})
+
+test('alpha 2 intake requires its reviewed source validators and exact generated bundle together', () => {
+  const version = '0.2.2-alpha.2'
+  const { identity, validationBlobs } = descriptorV2ReviewedInputsFor(version)
+  const history = { validationBlobs: { ...validationBlobs }, inputSha256: identity.sourceSha256 }
+  const report = createIntakeReport(goodFixture({ version, history }))
+  assert.equal(report.checks[2].status, 'PASS')
+  for (const overrides of [
+    { history: { ...history, inputSha256: descriptorV2PatchIdentity.sourceSha256 } },
+    { history: { ...history, validationBlobs: HISTORICAL_VALIDATION_BLOBS } },
+    { history: { ...history, validationBlobs: { ...validationBlobs, 'packages/session/session-format-v0-to-v1/src/validation.ts': '0'.repeat(40) } } },
+    { version: '0.2.2-alpha.3' },
+  ]) {
+    const rejected = createIntakeReport(goodFixture({ version, history, ...overrides }))
+    assert.equal(rejected.checks[2].status, 'FAIL')
+    assert.equal(rejected.verdict, 'needs-review:3')
+  }
+})
+
+test('intake accepts complete official plugin ownership and rejects a partial replacement', () => {
+  const source = [
+    '"plugins.add.actions": { kind: "list", scope: "root" }',
+    '"plugins.tab": { kind: "list", scope: "root" }',
+    'renderSlot("plugins.add.actions", { onDismiss })',
+    'renderSlot("plugins.tab", {',
+    'this.ctx.remote.pluginManager.listVersions(packageName, {})',
+    'this.ctx.remote.pluginManager.updateBundle(update.packageName, update.to, {',
+  ].join('\n')
+  const report = createIntakeReport(goodFixture({ pluginManagerBundle: { source } }))
+  assert.equal(report.checks[4].status, 'PASS')
+  assert.match(report.checks[4].evidence, /official public slots and update operations verified; Portable overlay omitted/)
+  const partial = createIntakeReport(goodFixture({ pluginManagerBundle: { source: source.replace('listVersions', 'unknownVersions') } }))
+  assert.equal(partial.checks[4].status, 'FAIL')
+})
+
+test('preview integrity aliases compare equally without hiding changes or conflicts', () => {
+  const input = goodFixture()
+  const preview = { ...input.lock, dsh: { ...input.lock.dsh, npmIntegrity: INTEGRITY } }
+  delete preview.dsh.integrity
+  const same = createIntakeReport({ ...input, lock: preview })
+  assert.equal(same.checks[1].status, 'PASS')
+  assert.match(same.checks[1].evidence, /zero differences/)
+  const changed = createIntakeReport({ ...input, npmIntegrity: 'sha512-' + 'A'.repeat(86) + '==', lock: preview })
+  assert.equal(changed.checks[1].status, 'PASS')
+  assert.deepEqual(changed.lockDifferences.map(item => item.field), ['integrity'])
+  const both = { ...preview, dsh: { ...preview.dsh, integrity: INTEGRITY } }
+  assert.match(createIntakeReport({ ...input, lock: both }).checks[1].evidence, /zero differences/)
+  const conflict = createIntakeReport({ ...input, lock: { ...preview, dsh: { ...preview.dsh, integrity: 'sha512-' + 'B'.repeat(86) + '==' } } })
+  assert.equal(conflict.checks[1].status, 'FAIL')
+  assert.equal(conflict.passed, false)
+  assert.match(conflict.checks[1].evidence, /integrity and npmIntegrity conflict/)
 })

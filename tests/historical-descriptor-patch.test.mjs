@@ -6,6 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import test from 'node:test'
 import {
   descriptorV2PatchIdentityFor,
+  descriptorV2ReviewedInputsFor,
   patchDescriptorV2ReadMigration,
   prepareHistoricalDescriptor,
   readHistoricalDescriptorVersions,
@@ -16,6 +17,11 @@ const EXPECTED_IDENTITY = {
   id: 'released-v0-descriptor-v2-read-v1',
   sourceSha256: '1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1',
   patchedSha256: '18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6',
+}
+const ALPHA2_IDENTITY = {
+  ...EXPECTED_IDENTITY,
+  sourceSha256: '8a78721683388aef35c70c274b27c7700f9cc8deb42cb3d7a1f562a6aa6b7607',
+  patchedSha256: '97880785fab8cadf1c0344b4dcd4426040a443be9253c590ce0dc3886d49b1f2',
 }
 
 test('historical patch refuses unknown bytes instead of trusting a marker or version string', () => {
@@ -62,7 +68,9 @@ test('historical descriptor versions come from a unique exact-string allowlist',
   assert.equal(new Set(listed).size, listed.length, 'entries are unique')
   for (const version of listed) {
     assert.match(version, /^[0-9]+[.][0-9]+[.][0-9]+(?:-[a-z]+[.][0-9]+)?$/, 'entries are exact versions')
-    if (version !== '0.2.0-rc.1') assert.deepEqual(descriptorV2PatchIdentityFor(version), { ...EXPECTED_IDENTITY, dshVersion: version })
+    if (version !== '0.2.0-rc.1') assert.deepEqual(descriptorV2PatchIdentityFor(version), {
+      ...(version === '0.2.2-alpha.2' ? ALPHA2_IDENTITY : EXPECTED_IDENTITY), dshVersion: version,
+    })
   }
   for (const version of ['0.1.7-rc.20', '0.2.0-rc.10', '^0.2.0-rc.1', '0.2.0-*']) {
     assert.equal(descriptorV2PatchIdentityFor(version), null)
@@ -94,5 +102,13 @@ test('historical descriptor identity fails closed when its allowlist is missing 
         assert.match(result.stderr, expected)
       } finally { await rm(root, { recursive: true, force: true }) }
     })
+  }
+})
+
+test('the reviewed alpha migration shape is bound to its exact version and complete byte identities', () => {
+  assert.deepEqual(descriptorV2ReviewedInputsFor('0.2.2-alpha.2').identity, { ...ALPHA2_IDENTITY, dshVersion: '0.2.2-alpha.2' })
+  for (const version of ['0.2.2-alpha.1', '0.2.2-alpha.3', '^0.2.2-alpha.2']) {
+    assert.equal(descriptorV2ReviewedInputsFor(version).identity.sourceSha256, EXPECTED_IDENTITY.sourceSha256)
+    assert.equal(descriptorV2PatchIdentityFor(version), null)
   }
 })

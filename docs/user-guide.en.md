@@ -198,6 +198,8 @@ Copying the complete folder is supported only between the same operating system 
 
 ## Plugins
 
+On newer cores with public Plugins slots, the official page owns routine updates and management of installed plugins. When the optional official market is enabled, Portable shows Advanced. Otherwise, including a failed check, it retains Plugin Market and Advanced tabs, using its existing discovery and confirmed installation flow without enabling that optional bundle. Advanced keeps groups, themes, diagnostics and explicit recovery. A group switch applies the Portable group; a member’s Manage action opens the official page. Older cores retain their existing entries.
+
 Open **Settings → Plugins → Plugin Market** to search, filter, visit a project, and install, update, disable, or remove community plugins. The market follows the DSH language and theme and never interrupts an active task silently.
 
 **Routine installation requires no terminal or code.** Search for a plugin, open its details, and click Install; follow the page prompt if a refresh or restart is needed. Starting with Portable 0.7.3, stable is the default; a separate Install or Try Beta button appears only when npm's Beta tag points to a newer prerelease. An installed Beta can explicitly return to the current stable release; ordinary updates never silently downgrade it. The market draws on [dsh-market](https://github.com/dsh-market/dsh-market) and hands installation to the official DSH plugin manager.

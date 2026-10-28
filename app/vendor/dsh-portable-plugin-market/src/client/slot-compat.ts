@@ -1,6 +1,7 @@
 /**
- * Keep the market reachable across the two Plugins hosts:
+ * Keep the market reachable across Plugins hosts:
  *
+ * - public Plugins slots contribute one Advanced tab and keep updates official;
  * - the Portable adapter exposes `plugins.portable.actions` on the modern
  *   manager toolbar;
  * - older hosts only expose `settings.plugins.tab`.
@@ -12,6 +13,8 @@
 
 export const PORTABLE_ACTIONS_SLOT = 'plugins.portable.actions'
 export const LEGACY_PLUGIN_TAB_SLOT = 'settings.plugins.tab'
+export const OFFICIAL_PLUGIN_TAB_SLOT = 'plugins.tab'
+export const OFFICIAL_PLUGIN_ACTIONS_SLOT = 'plugins.add.actions'
 
 type Disposer = () => void
 type SlotRegistration = () => unknown
@@ -24,6 +27,8 @@ export interface CompatibleSlots {
 
 export interface MarketSurfaceFactories {
   modern: SlotRegistration
+  official?: SlotRegistration
+  updates?: SlotRegistration
   legacy: readonly SlotRegistration[]
 }
 
@@ -62,7 +67,7 @@ function hasPortableActions(slots: CompatibleSlots): boolean {
  * active injection and makes queued declaration callbacks harmless after
  * unload, including a declaration that appears after cleanup.
  */
-export function coordinateMarketSurfaces(
+function coordinateLegacyMarketSurfaces(
   slots: CompatibleSlots,
   factories: MarketSurfaceFactories,
 ): Disposer {
@@ -108,7 +113,9 @@ export function coordinateMarketSurfaces(
 
   let unsubscribe = noop
   let modernHandle = noop
+  let updateHandle = noop
   try {
+    updateHandle = disposer(factories.updates?.())
     if (modernObservable) {
       unsubscribe = disposer(slots.subscribe!(PORTABLE_ACTIONS_SLOT, onModernDeclarationChanged))
       modernHandle = disposer(slots.inject(PORTABLE_ACTIONS_SLOT, () => {
@@ -123,6 +130,7 @@ export function coordinateMarketSurfaces(
     stopped = true
     unsubscribe()
     modernHandle()
+    updateHandle()
     disposeLegacy()
     throw error
   }
@@ -132,6 +140,52 @@ export function coordinateMarketSurfaces(
     stopped = true
     unsubscribe()
     modernHandle()
+    updateHandle()
     disposeLegacy()
   }
+}
+
+/** Public Plugins slots own normal management; keep one Portable Advanced tab. */
+export function coordinateMarketSurfaces(slots: CompatibleSlots, factories: MarketSurfaceFactories): Disposer {
+  if (!factories.official || !supportsPortableActions(slots)) return coordinateLegacyMarketSurfaces(slots, factories)
+  let stopped = false, initialized = false, official = false, generation = 0
+  let current = noop
+  const subscriptions: Disposer[] = []
+  const publicSlots = [OFFICIAL_PLUGIN_TAB_SLOT, OFFICIAL_PLUGIN_ACTIONS_SLOT]
+  const declared = () => {
+    try {
+      return publicSlots.every(slot => {
+        const spec = slots.spec!(slot) as { kind?: unknown; scope?: unknown } | undefined
+        return spec?.kind === 'list' && spec.scope === 'root'
+      })
+    } catch { return false }
+  }
+  const sync = () => {
+    if (stopped) return
+    const next = declared()
+    if (initialized && next === official) return
+    initialized = true; official = next
+    const epoch = ++generation, previous = current; current = noop
+    previous()
+    if (stopped || epoch !== generation) return
+    const handle = next
+      ? disposer(slots.inject(OFFICIAL_PLUGIN_TAB_SLOT, () => {
+        if (stopped || epoch !== generation || !declared()) return undefined
+        return factories.official!()
+      }))
+      : coordinateLegacyMarketSurfaces(slots, factories)
+    if (stopped || epoch !== generation) handle()
+    else current = handle
+  }
+  const dispose = () => {
+    if (stopped) return
+    stopped = true; generation += 1
+    for (const unsubscribe of subscriptions) unsubscribe()
+    current()
+  }
+  try {
+    for (const slot of publicSlots) subscriptions.push(disposer(slots.subscribe!(slot, sync)))
+    sync()
+  } catch (error) { dispose(); throw error }
+  return dispose
 }
