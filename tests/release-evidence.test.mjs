@@ -142,3 +142,29 @@ test('release evidence refuses incomplete, failed, or mismatched qualification r
     }
   }
 })
+
+
+test('release evidence preserves both legacy split and consolidated macOS qualification identities', async () => {
+  const commonNames = ['Product qualification', ...Array.from({ length: 30 }, (_, i) => 'Non-macOS product gate ' + i)]
+  const legacyMacNames = ['Build macOS', 'macOS portable', 'macOS native desktop identity and lifecycle', 'macOS plugin portability']
+    .flatMap(name => ['arm64', 'x64'].map(arch => name + ' (' + arch + ')'))
+  const combinedMacNames = ['arm64', 'x64'].map(arch => 'Build and qualify macOS (' + arch + ')')
+  for (const macNames of [legacyMacNames, combinedMacNames]) {
+    const names = [...commonNames, ...macNames]
+    const jobs = names.map(name => ({ name, conclusion: 'success' }))
+    const value = await fixture({ jobs: { total_count: jobs.length, jobs } })
+    try {
+      const { stdout } = await generate(value)
+      const evidence = JSON.parse(await readFile(value.evidenceFile, 'utf8'))
+      assert.equal(JSON.parse(stdout).jobs, names.length)
+      assert.deepEqual(evidence.passedTests, names.sort((a, b) => a.localeCompare(b, 'en')))
+      assert.equal(evidence.configuration[0].digest.gitCommit, commit)
+      // A skipped combined gate cannot become a passing release record.
+      jobs.at(-1).conclusion = 'skipped'
+      await writeFile(value.jobsFile, JSON.stringify({ total_count: jobs.length, jobs }))
+      await assert.rejects(generate(value), /qualification job did not succeed/)
+    } finally {
+      await rm(value.root, { recursive: true, force: true })
+    }
+  }
+})
