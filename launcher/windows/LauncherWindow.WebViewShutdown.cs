@@ -438,7 +438,7 @@ namespace DshPortable
                             { "handleCount", current.HandleCount }
                         };
                         string line = new JavaScriptSerializer().Serialize(entry);
-                        File.AppendAllText(filename, line + Environment.NewLine, new UTF8Encoding(false));
+                        AppendStartupTraceLine(Path.GetDirectoryName(filename), filename, line);
                         AppendHistoryLog("desktop-health.jsonl", line);
                         desktopHealthWasDelayed = delayed;
                         desktopHealthLastWrite = now;

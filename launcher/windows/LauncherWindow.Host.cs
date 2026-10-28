@@ -38,10 +38,9 @@ namespace DshPortable
                     try { File.Delete(filename + ".previous"); } catch { }
                     File.Move(filename, filename + ".previous");
                 }
-                File.AppendAllText(filename,
+                AppendStartupTraceLine(directory, filename,
                     DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture) + " [" + category + "] " + message
-                    + " startupId=" + startupId + Environment.NewLine,
-                    new UTF8Encoding(false));
+                    + " startupId=" + startupId);
             }
             catch { }
         }
