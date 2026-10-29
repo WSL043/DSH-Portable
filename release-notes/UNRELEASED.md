@@ -4,6 +4,10 @@
 
 - 修复原生更新完成提示读取 CLI 多行输出时漏掉插件暂停警告；保留原有预检、插件数据和恢复行为。本项进入 main 后不另行发布版本，也不改写已公开的 0.9.8 成品。
 
+- 待发布 main 将默认内核从 DSH 0.2.1-rc.3 校正为已独立验收的 0.2.1-rc.4；Image Viewer 0.1.17、Chat Manager 1.5.19 及现有 Node/MCP/Zod/pnpm 安全策略不变。[RC4 记录](../docs/core-rc4-historical-result-2026-10-29.json)仅证明既有可选内核的迁移和五平台资格；新默认组合的最终 33 项成品 CI、General 页和实际 RC4 运行时本机验收仍待完成。本项不改写已发布 0.9.8 的 RC3 默认组合，不另行发布或修改版本号。
+
+The unreleased main default moves from DSH 0.2.1-rc.3 to the separately qualified 0.2.1-rc.4. Image Viewer 0.1.17, Chat Manager 1.5.19 and the existing Node/MCP/Zod/pnpm security policy stay unchanged. The RC4 core record is background migration evidence; the final 33-job product CI and local General-page/actual-runtime checks remain pending. Published 0.9.8 still defaults to RC3; this maintenance does not publish or bump a version.
+
 ## 最近交付：0.9.8 / Published 0.9.8
 
 [0.9.8](https://github.com/WSL043/DSH-Portable/releases/tag/v0.9.8) 的成品固定为 main `f5db6400ff27257df8831d7e2d6110f2cef697d1`；[最终完整 CI 39/39](https://github.com/WSL043/DSH-Portable/actions/runs/40732334843)、Security 和 CodeQL 均成功。原生产签名整包已完成真实 0.9.7 → 0.9.8 升级，以及待验证修复、启动失败回退和正常恢复提交验收。公开 Windows ZIP 的大小及 SHA256 与实测成品一致。

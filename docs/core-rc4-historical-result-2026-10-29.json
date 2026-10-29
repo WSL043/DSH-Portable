@@ -1,0 +1,212 @@
+{
+  "schemaVersion": 1,
+  "status": "passed",
+  "recordedOn": "2026-10-29",
+  "scope": "Exact RC4 core migration and optional-core qualification background only; not qualification of the new unreleased default product.",
+  "coreProvenance": {
+    "version": "0.2.1-rc.4",
+    "reviewedCommit": "504a01a9578abc2c6f1fb896b1dc322c9fe24f66",
+    "npmIntegrity": "sha512-8gxl6zOi6vx1sDolH+vjh9txrpbXD+t74Z2YfWkEBtR3xP2YEtk0bbLkgLZRnYQgDxCoXitXyXDKn5k0+6iXrg==",
+    "lockSha256": "3a851042d783d42d419a15dd01acb1b436e3fcf81548c5b53c62e4513bcff3d6"
+  },
+  "compatibilityPatch": {
+    "id": "released-v0-descriptor-v2-read-v1",
+    "dshVersion": "0.2.1-rc.4",
+    "sourceSha256": "1b3bff6aaf28ca62a864cf97b9aa9aa45ab76de5e459f7881ba4bc8de73490b1",
+    "patchedSha256": "18a9dbd15694de23a89a9db8787f336e9da1ddf70a32f2ecd9c2918011c833d6"
+  },
+  "sourcePortableCommit": "f5db6400ff27257df8831d7e2d6110f2cef697d1",
+  "pipelineCommit": "b2ff6226c06b88ad3e4759186aead1a0e74dfa17",
+  "qualification": {
+    "repository": "WSL043/DSH-Portable-Updates",
+    "runId": 40752733579,
+    "url": "https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579",
+    "attempt": 1,
+    "status": "completed",
+    "conclusion": "success",
+    "jobs": 11,
+    "successfulJobs": 8,
+    "expectedSkippedJobs": 3,
+    "expectedSkips": [
+      "core / reuse-prepared",
+      "core / publish",
+      "core / qualification-state"
+    ]
+  },
+  "historicalScope": {
+    "writer": "0.1.1-rc.2",
+    "checks": [
+      "exact-writer-versions",
+      "parent-child-catalog",
+      "inherited-message-identity-and-content",
+      "descriptor-composition",
+      "both-tool-results",
+      "source-file-hashes"
+    ],
+    "originalRuntimeRefusalRechecked": false,
+    "realModelCalls": 0,
+    "physicalPowerLossTested": false,
+    "physicalSecondMachineTested": false,
+    "experimental": true,
+    "qualifiesRelease": false
+  },
+  "platforms": [
+    {
+      "platform": "macos-arm64",
+      "jobId": 123046054108,
+      "url": "https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579/job/123046054108",
+      "historicalStatus": "passed",
+      "continuation": true,
+      "persistedReopen": true,
+      "interruptedJournalRecovery": true,
+      "originalHistoricalFilesUnchanged": true,
+      "binding": "exact",
+      "smoke": {
+        "status": "verified",
+        "portableVersion": "0.9.8",
+        "dshVersion": "0.2.1-rc.4",
+        "preserved": 3,
+        "rollbackVerified": true
+      }
+    },
+    {
+      "platform": "linux-x64",
+      "jobId": 123046054116,
+      "url": "https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579/job/123046054116",
+      "historicalStatus": "passed",
+      "continuation": true,
+      "persistedReopen": true,
+      "interruptedJournalRecovery": true,
+      "originalHistoricalFilesUnchanged": true,
+      "binding": "exact",
+      "smoke": {
+        "status": "verified",
+        "portableVersion": "0.9.8",
+        "dshVersion": "0.2.1-rc.4",
+        "preserved": 3,
+        "rollbackVerified": true
+      }
+    },
+    {
+      "platform": "windows-x64",
+      "jobId": 123046054181,
+      "url": "https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579/job/123046054181",
+      "historicalStatus": "passed",
+      "continuation": true,
+      "persistedReopen": true,
+      "interruptedJournalRecovery": true,
+      "originalHistoricalFilesUnchanged": true,
+      "binding": "exact",
+      "smoke": {
+        "status": "verified",
+        "portableVersion": "0.9.8",
+        "dshVersion": "0.2.1-rc.4",
+        "preserved": 3,
+        "rollbackVerified": true
+      }
+    },
+    {
+      "platform": "linux-arm64",
+      "jobId": 123046054209,
+      "url": "https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579/job/123046054209",
+      "historicalStatus": "passed",
+      "continuation": true,
+      "persistedReopen": true,
+      "interruptedJournalRecovery": true,
+      "originalHistoricalFilesUnchanged": true,
+      "binding": "exact",
+      "smoke": {
+        "status": "verified",
+        "portableVersion": "0.9.8",
+        "dshVersion": "0.2.1-rc.4",
+        "preserved": 3,
+        "rollbackVerified": true
+      }
+    },
+    {
+      "platform": "macos-x64",
+      "jobId": 123046054336,
+      "url": "https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579/job/123046054336",
+      "historicalStatus": "passed",
+      "continuation": true,
+      "persistedReopen": true,
+      "interruptedJournalRecovery": true,
+      "originalHistoricalFilesUnchanged": true,
+      "binding": "exact",
+      "smoke": {
+        "status": "verified",
+        "portableVersion": "0.9.8",
+        "dshVersion": "0.2.1-rc.4",
+        "preserved": 3,
+        "rollbackVerified": true
+      }
+    }
+  ],
+  "nativeWindowsDefaultPlugins": {
+    "jobId": 123046054181,
+    "ok": true,
+    "portableVersion": "0.9.8",
+    "dshVersion": "0.2.1-rc.4",
+    "installedPlugins": [
+      {
+        "package": "dsh-chat-manager",
+        "version": "1.5.19"
+      },
+      {
+        "package": "dsh-image-viewer",
+        "version": "0.1.17"
+      }
+    ],
+    "results": [
+      {
+        "theme": "dark",
+        "ok": true,
+        "imageAnnotation": true,
+        "draftPreserved": true,
+        "sessionDeleteCancel": true,
+        "archiveRestore": true,
+        "confirmedDelete": false,
+        "pluginEnableDisable": true,
+        "errors": []
+      },
+      {
+        "theme": "light",
+        "ok": true,
+        "imageAnnotation": true,
+        "draftPreserved": true,
+        "sessionDeleteCancel": true,
+        "archiveRestore": true,
+        "confirmedDelete": true,
+        "pluginEnableDisable": true,
+        "errors": []
+      }
+    ]
+  },
+  "unreleasedDefaultProductAcceptance": {
+    "status": "pending",
+    "finalCommit": null,
+    "fullProductCi": {
+      "status": "pending",
+      "expectedJobCount": 33,
+      "runId": null
+    },
+    "localNativeGeneralAndRuntimeVersion": {
+      "status": "pending"
+    },
+    "releaseAuthorizedByThisEvidence": false
+  },
+  "retainedHistoricalEvidence": {
+    "path": "docs/core-rc3-historical-result-2026-10-24.json",
+    "scope": "The separate RC3 writer, unpatched refusal, Windows archive-transfer and controlled-recovery results remain historical RC3 evidence; they were not relabeled or rerun as RC4 results."
+  },
+  "officialDesktop1x": {
+    "status": "held",
+    "scope": "Official signed desktop bytes only; no EXE/ASAR edits or plugin injection. Separate upstream MCP and clean-install qualification remain required."
+  },
+  "limitations": [
+    "This optional-core run used Portable f5db640 with RC4 installed as an engine update; it does not establish that the new unreleased default bundle passes its final product gates.",
+    "The writer subprobe and its separate actual continuation/persistence subprobe have different scopes; the original unpatched-runtime refusal was not rechecked here.",
+    "Controlled process-kill/journal recovery is not physical power-loss testing; no physical second machine or cross-OS user-data transfer is established.",
+    "The 33-job final-product CI and local General page/actual RC4 runtime checks for the new default remain pending."
+  ]
+}

@@ -1009,6 +1009,23 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(windowsUiJob, /needs:\s*windows-build/)
   assert.match(windowsUiJob, /runner:\s*windows-2022[\s\S]+runner:\s*windows-2025/)
   assert.match(windowsUiJob, /smoke-windows-startup-theme\.mjs[\s\S]+smoke-windows-market-categories\.mjs[\s\S]+verify-default-plugin-ui\.mjs/)
+  assert.match(windowsUiJob, /\$DshVersion = node -e "[^\n]+v\.includes\('-'\)\?'\.\/upstream\.preview\.lock\.json':'\.\/upstream\.lock\.json'/)
+  const versionCheck = windowsUiJob.match(/node -e "(const fs = require\('node:fs'\);[^\n]+)" \(Join-Path \$PluginRoot 'DSH-Portable\/acceptance\/default-plugin-ui\/result\.json'\) \$DshVersion\n\s+if \(\$LASTEXITCODE -ne 0\) \{ throw 'Default plugin native DSH version did not match the selected upstream lock\.'/)?.[1]
+  assert.ok(versionCheck, 'native UI evidence must be compared with the selected lock and fail the CI step on mismatch')
+  const checkVersion = new Function('require', 'process', versionCheck)
+  const selected = '0.2.2-rc.4'
+  const check = dshVersion => checkVersion(name => {
+    if (name === 'node:assert/strict') return assert
+    assert.equal(name, 'node:fs')
+    return { readFileSync: (filename, encoding) => {
+      assert.equal(filename, 'result.json'); assert.equal(encoding, 'utf8')
+      return JSON.stringify({ dshVersion })
+    } }
+  }, { argv: ['node', 'result.json', selected] })
+  assert.doesNotThrow(() => check(selected))
+  for (const staleOrMissing of ['0.2.1-rc.3', undefined, null, 4]) {
+    assert.throws(() => check(staleOrMissing), /Packaged native DSH version must match the selected upstream lock/)
+  }
   assert.match(qualificationJob, /- windows-native-ui/)
   const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
@@ -1156,4 +1173,31 @@ test('macOS qualification reuses one runner per architecture without omitting pr
   for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
     assert.throws(() => run(result), /qualification exit 1/)
   }
+})
+
+
+test('main CI pins reviewed stable and preview source independently of mutable lock data', async () => {
+  const workflow = await read('.github/workflows/ci.yml')
+  const stable = '504a01a9578abc2c6f1fb896b1dc322c9fe24f66'
+  const preview = 'f3803c96974ad4a94195fb97e5c637e9c2a3afe3'
+  const pnpm = '8e1e4c0aaece387dfda16377b2ba31f7a1a2602c'
+  assert.equal(workflow.split(stable).length - 1, 2, 'both immutable guard and default-branch checkout pin RC4')
+  assert.equal(workflow.split(preview).length - 1, 2, 'preview pin remains independent')
+  assert.doesNotMatch(workflow, /1f81c047fc48fa190a683e469daa699857e9afe8/)
+  assert.ok(workflow.includes("github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '" + preview + "' || '" + stable + "') || steps.preview.outputs.commit"))
+  const guard = workflow.match(/node -e "(if\(process\.env\.GITHUB_REF==='refs\/heads\/main'\)[^\n]+)"/)?.[1]
+  assert.ok(guard, 'main must retain its immutable source admission guard')
+  const evaluate = new Function('require', 'process', guard)
+  const run = (isPreview, commit, pnpmCommit = pnpm) => evaluate(name => {
+    if (name === 'fs') return {}
+    if (name === './package.json') return { version: isPreview ? '1.0.0-alpha.2' : '0.9.8' }
+    assert.ok(['./upstream.lock.json', './upstream.preview.lock.json'].includes(name))
+    return { dsh: { reviewedCommit: commit }, pnpm: { sourceBuild: { reviewedCommit: pnpmCommit } } }
+  }, { env: { GITHUB_REF: 'refs/heads/main' } })
+  assert.doesNotThrow(() => run(false, stable))
+  assert.doesNotThrow(() => run(true, preview))
+  for (const [isPreview, commit] of [[false, preview], [true, stable], [false, '1f81c047fc48fa190a683e469daa699857e9afe8']]) {
+    assert.throws(() => run(isPreview, commit), /Default-branch source changed and requires explicit review/)
+  }
+  assert.throws(() => run(false, stable, '0'.repeat(40)), /Default-branch source changed and requires explicit review/)
 })
