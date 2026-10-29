@@ -104,7 +104,7 @@ and did not reproduce or resolve the historical long import.
 
 待发布 main 的默认内核校正为 DSH 0.2.1-rc.4；已公开的 0.9.8 `f5db640` 默认 RC3 的历史事实保持不变，不修改原发布说明、成品或版本号。默认插件继续固定 Image Viewer 0.1.17、Chat Manager 1.5.19，既有 Node 24.22.1、MCP 2.3、Zod 和 pnpm 安全策略不变。
 
-[独立 RC4 证据](core-rc4-historical-result-2026-10-29.json)来自 Updates prepare [40752733579](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579)：精确官方 commit/SRI、五平台历史 writer、实际继续与重开、中断恢复，以及 Windows Native 默认插件和主题操作。它是此前可选内核的资格和迁移背景，不是新默认成品的发布许可。新默认组合仍须通过同一最终提交的 33 项成品 CI，并在本机 General 页与真实运行时核对 RC4；当前均待验收。
+[独立 RC4 证据](core-rc4-historical-result-2026-10-29.json)来自 Updates prepare [40752733579](https://github.com/WSL043/DSH-Portable-Updates/actions/runs/40752733579)：精确官方 commit/SRI、五平台历史 writer、实际继续与重开、中断恢复，以及 Windows Native 默认插件和主题操作。它是此前可选内核的资格和迁移背景，不是新默认成品的发布许可。新默认组合仍须通过同一最终提交的 33 项成品 CI，并在本机 General 页与真实运行时核对 RC4；验收以对应 PR 的最终提交、成品和记录为准。
 
 The unreleased main default changes to DSH 0.2.1-rc.4 while published 0.9.8 remains the historical RC3 product. The linked exact RC4 qualification covers the five-platform core migration/continuation/recovery probes and Windows Native plugin/theme operations. It does not replace the final 33-job product CI or local General-page and actual-runtime acceptance of the new default. Existing plugin pins and dependency-security policy remain unchanged. Portable 1.x retains the official-byte-only boundary and its separate upstream MCP/clean-install hold.
 

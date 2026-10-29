@@ -101,6 +101,7 @@ const reviewedNodeOnlyBuilds = [
   },
 ]
 const removed = { bytes: 0, files: 0, directories: 0 }
+const retainedNodeBuilds = []
 
 async function removeTree(filename) {
   const totals = await treeStats(filename)
@@ -161,7 +162,9 @@ async function pruneReviewedNodeOnlyBuilds() {
     if (!rule) continue
     const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
     if (!rule.main.test(String(manifest.main ?? '')) || !rule.module.test(String(manifest.module ?? ''))) {
-      throw new Error(`refusing to prune an unreviewed alternate build layout for ${name}`)
+      // Alternate builds are an optional size saving; unknown layouts stay intact.
+      retainedNodeBuilds.push({ name, version: manifest.version, main: manifest.main ?? null, module: manifest.module ?? null })
+      continue
     }
     const activeTargets = nodeExportTargets(manifest.exports)
     for (const relative of rule.remove) {
@@ -334,4 +337,5 @@ console.log(JSON.stringify({
   saved: removed.bytes,
   removedFiles: removed.files,
   removedDirectories: removed.directories,
+  retainedNodeBuilds,
 }))
