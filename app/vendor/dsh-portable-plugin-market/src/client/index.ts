@@ -13,8 +13,8 @@ import { InstallToast } from './InstallToast.tsx'
 import { MarketErrorBoundary } from './MarketErrorBoundary.tsx'
 import { MarketSection } from './MarketSection.tsx'
 import { MarketAction } from './MarketAction.tsx'
+import { createMaintenanceController, MaintenanceMenuAction, MaintenanceOverlay } from './Maintenance.tsx'
 import { PluginUpdateRow } from './PluginUpdates.tsx'
-import { forgetOfficialMarket, readOfficialMarket } from './official-market.ts'
 import { coordinateMarketSurfaces, LEGACY_PLUGIN_TAB_SLOT, PORTABLE_ACTIONS_SLOT, OFFICIAL_PLUGIN_TAB_SLOT } from './slot-compat.ts'
 import type { Translate } from './market-data.ts'
 
@@ -58,43 +58,6 @@ interface MarketClientContext {
   slots: SlotsService
 }
 
-function registerPublicMarket(ctx: MarketClientContext, t: Translate): () => void {
-  let stopped = false, checking = false, recheck = false
-  const register = (id: string, view: 'discover' | 'installed', label: string, order: number) => ctx.slots.register({
-    name: OFFICIAL_PLUGIN_TAB_SLOT, id, order, label: () => t(label), locale: NS,
-  }, owner => {
-    const manager = owner as { openPackage: (name: string) => void }
-    return h(MarketErrorBoundary, { view }, h(MarketSection, {
-      t, locale: ctx.locale, view, officialUpdates: true, onOfficialManage: manager.openPackage,
-    }))
-  }) as () => void
-  const advanced = register('dsh-portable-plugin-advanced', 'installed', 'navAdvanced', 50)
-  let discover: (() => void) | undefined = register('dsh-portable-plugin-market', 'discover', 'nav', 40)
-  const refresh = async () => {
-    if (stopped) return
-    if (checking) { recheck = true; return }
-    checking = true
-    try {
-      do {
-        recheck = false
-        forgetOfficialMarket()
-        const state = await readOfficialMarket()
-        if (stopped) return
-        if (state === 'active') { const previous = discover; discover = undefined; previous?.() }
-        else if (!discover) discover = register('dsh-portable-plugin-market', 'discover', 'nav', 40)
-      } while (recheck && !stopped)
-    } finally { checking = false }
-  }
-  // An optional official Discover contribution can appear or disappear while
-  // Plugins stays open; recheck enablement without replacing Advanced.
-  const unsubscribe = ctx.slots.subscribe?.(OFFICIAL_PLUGIN_TAB_SLOT, () => { void refresh() })
-  void refresh()
-  return () => {
-    stopped = true
-    if (typeof unsubscribe === 'function') unsubscribe()
-    discover?.(); advanced()
-  }
-}
 export const name = 'dsh-portable-plugin-market'
 export const inject = ['slots', 'locale']
 export function apply(ctx: MarketClientContext): void {
@@ -119,7 +82,7 @@ export function apply(ctx: MarketClientContext): void {
         ...item, zh: ctx.locale.getSnapshot().active.toLowerCase().startsWith('zh'),
       }))
     })),
-    official: () => registerPublicMarket(ctx, t),
+    official: () => () => {},
     modern: () => ctx.slots.register({
       name: PORTABLE_ACTIONS_SLOT,
       id: 'dsh-portable-plugin-market',
@@ -157,6 +120,42 @@ export function apply(ctx: MarketClientContext): void {
       }))),
     ],
   }), 'dsh-portable-plugin-market: manager surfaces')
+
+
+  ctx.effect(() => {
+    // No substitute top-level entry on hosts without the public More-menu row.
+    if (typeof primitives.MenuItemButton !== 'function' || typeof primitives.Modal !== 'function'
+      || typeof ctx.slots.spec !== 'function') return
+    const controller = createMaintenanceController()
+    const handle = ctx.slots.inject('shell.overlay', () => ctx.slots.inject('sidebar.panellist.actions', () => {
+      let spec: { kind?: unknown; scope?: unknown } | undefined
+      try { spec = ctx.slots.spec!('sidebar.panellist.actions') as typeof spec }
+      catch { return }
+      if (spec?.kind !== 'list' || spec.scope !== 'root') return
+      const overlay = ctx.slots.register({
+        name: 'shell.overlay', id: 'dsh-portable-plugin-maintenance-overlay',
+      }, () => h(MarketErrorBoundary, { view: 'installed' }, h(MaintenanceOverlay, {
+        t, locale: ctx.locale, controller,
+      })))
+      const more = ctx.slots.register({
+        name: 'sidebar.panellist.actions', id: 'dsh-portable-plugin-maintenance', order: 90,
+        label: () => t('maintenanceTitle'), locale: NS,
+      }, owner => {
+        const menu = owner as { onDismiss?: () => void } | undefined
+        if (typeof menu?.onDismiss !== 'function') return null
+        return h(MaintenanceMenuAction, { t, locale: ctx.locale, controller, onDismiss: menu.onDismiss })
+      })
+      return () => {
+        if (typeof more === 'function') more()
+        if (typeof overlay === 'function') overlay()
+        controller.hide()
+      }
+    }))
+    return () => {
+      if (typeof handle === 'function') handle()
+      controller.hide()
+    }
+  }, 'dsh-portable-plugin-market: diagnostics and recovery')
 
   const Toast = () => h(InstallToast, { t })
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({

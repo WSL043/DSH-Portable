@@ -45,7 +45,7 @@
 | Installation and platforms | Installer; Windows and macOS | Portable; Windows, macOS, and Linux, with no installation or PATH changes |
 | Update cadence | Follows the official release schedule | Portable and core update separately; choose a core version |
 | Moving and maintenance | Standard desktop installation | After fully exiting, copy the whole folder to a USB drive or another computer with the same OS and architecture; data-preserving rollback and recovery tools are included |
-| Plugins | Official plugin management | The same plugin management, plus a Plugin Market entry and two default plugins |
+| Plugins | Official plugin management | The same official plugin management; More provides diagnostics and recovery, with two removable default plugins |
 | A good fit if… | You want an installed app on one computer | You want to carry it between devices or control updates |
 
 ## Downloads

@@ -189,8 +189,8 @@ function orphanKindLabel(reason: string): string {
  * switching tabs away and back re-runs the (cheap, read-only) analysis; the
  * ordering panel calls `refresh()` after applying an order.
  */
-export function Diagnostics(props: { t: Translate }) {
-  const { t } = props
+export function Diagnostics(props: { t: Translate; readOnly?: boolean }) {
+  const { t, readOnly = false } = props
   const [report, setReport] = useState<CheckReport | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [orderOpen, setOrderOpen] = useState(false)
@@ -299,7 +299,7 @@ export function Diagnostics(props: { t: Translate }) {
   /** POST the current community order; the host statically validates the
    * candidate composition (dry-run replay) before writing. */
   const applyOrder = (target?: string[]) => {
-    if (orderBusy) return
+    if (readOnly || orderBusy) return
     setOrderBusy(true)
     setOrderMsg(null)
     setOrderErr(null)
@@ -388,9 +388,10 @@ export function Diagnostics(props: { t: Translate }) {
   // informational and stay out of the conflict count (review #109).
   const catConflict = report.duplicates.length
   const catRisk = peerRisk.length
-  const catDeps = report.peerMismatches.length + report.multiVersion.length
+  const catDeps = peerConfirmed.length + report.multiVersion.length
   const catOrder = report.orderConflicts?.length ?? 0
-  const anyIssue = catConflict + catDeps + catOrder > 0
+  const anyIssue = !summary.ok || summary.errors.length > 0 || summary.warnings.length > 0
+    || catConflict + catDeps + catOrder > 0
   // AI-fix only shows for HARD issues — things that actually break the
   // profile (boot errors, duplicate entries, confirmed peer mismatches).
   // Purely informational/warning states stay quiet so the agent is not
@@ -409,6 +410,7 @@ export function Diagnostics(props: { t: Translate }) {
    * across host versions, so plain copy + toast is the contract.)
    */
   const startAgentFix = () => {
+    if (readOnly) return
     const prompt = buildAiFixPrompt(report, t)
 
     // Clipboard-first; on any failure (missing API or a rejected promise) show
@@ -429,21 +431,21 @@ export function Diagnostics(props: { t: Translate }) {
   return (
     <div className={css.diagPage}>
       <div className={css.diagSummary}>
-        <span className={summary.ok ? css.okState : css.err}>
-          <StateDot state={summary.ok ? 'done' : 'error'} size={8} />
-          {summary.ok ? (anyIssue ? t('checkIssues') : t('diagOkAll')) : t('checkIssues')}
+        <span className={anyIssue ? (hasHardIssues ? css.err : css.warnLine) : css.okState}>
+          <StateDot state={anyIssue ? (hasHardIssues ? 'error' : 'warning') : 'done'} size={8} />
+          {anyIssue ? t('checkIssues') : t('diagOkAll')}
         </span>
         <span className={css.diagSummaryItem} title={t('checkDuplicates')}>
-          <StateDot state="error" size={8} />{t('catConflict')}: {catConflict}
+          <StateDot state={catConflict > 0 ? 'error' : 'done'} size={8} />{t('catConflict')}: {catConflict}
         </span>
         <span className={css.diagSummaryItem} title={t('checkPeerMismatches')}>
-          <StateDot state="warning" size={8} />{t('catDeps')}: {catDeps}
+          <StateDot state={catDeps > 0 ? (catRisk > 0 ? 'error' : 'warning') : 'done'} size={8} />{t('catDeps')}: {catDeps}
         </span>
         <span className={css.diagSummaryItem} title={t('checkOrderTip')}>
-          <StateDot state="warning" size={8} />{t('catOrder')}: {catOrder}
+          <StateDot state={catOrder > 0 ? 'warning' : 'done'} size={8} />{t('catOrder')}: {catOrder}
         </span>
         <span className={css.grow} />
-        {hasHardIssues && (
+        {!readOnly && hasHardIssues && (
           <Button variant="outline" size="sm" onClick={startAgentFix} title={t('aiFixHint')}>
             {t('aiFix')}
           </Button>
@@ -454,8 +456,8 @@ export function Diagnostics(props: { t: Translate }) {
         <span className={css.diagSummaryMeta} title={report.profile}>{t('checkProfile')}: {report.profile}</span>
         <span className={css.diagSummaryMeta}>{new Date(report.scannedAt).toLocaleString()}</span>
       </div>
-      {fixMsg !== null && <div className={css.okState}>{fixMsg}</div>}
-      {fixFallback !== null && (
+      {!readOnly && fixMsg !== null && <div className={css.okState}>{fixMsg}</div>}
+      {!readOnly && fixFallback !== null && (
         <div className={css.fixFallback}>
           <p className={css.panelNote}>{t('aiFixFail')}</p>
           <textarea
@@ -647,6 +649,7 @@ export function Diagnostics(props: { t: Translate }) {
 
       <Section
         title={t('checkOverrides')}
+        problem={false}
         count={report.overrides.length}
         empty={t('checkOverridesEmpty')}
         overview={report.overrides.length > 0 ? `${report.overrides[0]?.id} ← ${report.overrides[0]?.layer}` : undefined}
@@ -683,6 +686,7 @@ export function Diagnostics(props: { t: Translate }) {
       </Section>
 
       {/* issue #98 phase 2 (step 1): community-bundle ordering */}
+      {!readOnly && (
       <CollapsibleSection title={t('orderSection')} count={order.length} open={orderOpen} onToggle={() => setOrderOpen(o => !o)}>
         <p className={css.panelNote}>{t('orderDragHint')}</p>
         {report.orderConflicts !== undefined && report.orderConflicts.length > 0 && (
@@ -775,6 +779,7 @@ export function Diagnostics(props: { t: Translate }) {
               </div>
             )}
       </CollapsibleSection>
+      )}
     </div>
   )
 }

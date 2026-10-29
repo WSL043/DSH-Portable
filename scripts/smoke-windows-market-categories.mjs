@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawn, execFile } from 'node:child_process'
-import { promisify } from 'node:util'
+import { isDeepStrictEqual, promisify } from 'node:util'
 import { createServer } from 'node:net'
-import { realpath, writeFile } from 'node:fs/promises'
+import { readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -44,11 +45,29 @@ export async function prepareMarketEvidenceOutput(value) {
   return output
 }
 
+export function assertMaintenanceReadOnly(requests, backupDownload) {
+  assert.deepEqual(requests.filter(item => !['GET', 'HEAD', 'OPTIONS'].includes(item.method)), [], 'opening diagnostics and cancelling restore must not mutate the profile')
+  assert.ok(requests.some(item => item.path === '/dsh-market/check' && item.method === 'GET' && item.status === 200), 'the real diagnostic GET must complete')
+  assert.ok(backupDownload?.controlClicked === true && backupDownload.originMatched === true
+    && backupDownload.path === '/dsh-market/backup' && typeof backupDownload.guid === 'string' && backupDownload.guid.length > 0
+    && backupDownload.completed === true && Number.isSafeInteger(backupDownload.bytes)
+    && backupDownload.bytes > 0 && backupDownload.bytes <= 2 * 1024 * 1024
+    && backupDownload.receivedBytes === backupDownload.bytes
+    && (backupDownload.totalBytes === 0 || backupDownload.totalBytes === backupDownload.bytes)
+    && /^[a-f0-9]{64}$/.test(backupDownload.sha256)
+    && backupDownload.format === 'dsh-profile-backup' && backupDownload.version === 0.2
+    && backupDownload.packageJson === true && backupDownload.manifestMatches === true,
+    'the backup control must complete a valid owned profile backup matching the actual manifest')
+  return { diagnosticGet: true, backupDownloaded: true, restorePosts: 0, mutationRequests: 0 }
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
 const root = process.argv[2] && path.resolve(process.argv[2])
 assert.ok(process.argv.includes('--disposable'), 'use an isolated test installation with --disposable')
 assert.ok(root && process.argv[3])
 const output = await prepareMarketEvidenceOutput(process.argv[3])
+// The native WebView download handler uses this existing directory before opening any Save dialog.
+const downloadDirectory = path.dirname(await safeDataTarget(output, `maintenance-downloads-${Date.now()}-${process.pid}/receipt.json`))
 const exec = promisify(execFile)
 // Never inherit the developer's selected profile/data environment into a
 // disposable test that can now explicitly reclaim managed logs and caches.
@@ -56,9 +75,10 @@ const env = { ...process.env, DSH_PORTABLE_ROOT: root, DSH_PORTABLE_STATE_ROOT: 
   DSH_PORTABLE_BASE_STATE_ROOT: root, DSH_PORTABLE_ENVIRONMENT: 'default',
   DSH_PORTABLE_RUNTIME_CACHE: path.join(root, 'acceptance-runtime-cache'),
   DSH_PORTABLE_WEBVIEW_CACHE: path.join(root, 'acceptance-webview-cache'),
+  DSH_PORTABLE_DOWNLOAD_DIRECTORY: downloadDirectory,
   DSH_PORTABLE_TEST_HIDDEN: '1', DSH_PORTABLE_TEST_AUTOMATION: '1', DSH_PORTABLE_SKIP_UPDATE_CHECK: '1',
-  // This suite needs a fresh profile: this flag skips setup, but does not disable an already enabled Discover bundle.
-  DSH_PORTABLE_OFFICIAL_MARKET: '0' }
+  // Exercise the product's actual official Installed and Discover surfaces.
+  DSH_PORTABLE_OFFICIAL_MARKET: '1' }
 // A source-overlay probe must not load immutable server sources from the old
 // release capsule while serving new client files off disk.
 const sourceOverlay = process.argv.includes('--source-overlay')
@@ -87,6 +107,9 @@ const child = spawn(path.join(root, 'DeepSeek-Herness.exe'), [], { cwd: root, en
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 let socket, evaluate, passed = false
 const exceptions = []
+const networkRequests = [], requestById = new Map()
+const downloadEvents = [], downloadGuids = new Map()
+let downloadEventsTruncated = false, downloadMode = 'native-owned-directory', backupGesture = null, backupDownload = null
 let publicMarket = false
 try {
   let page
@@ -100,7 +123,47 @@ try {
   await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject })
   let next = 0
   const pending = new Map()
-  socket.onmessage = ({ data }) => { const message = JSON.parse(data); if (message.method === 'Runtime.exceptionThrown') exceptions.push(message.params?.exceptionDetails?.exception?.description || message.params?.exceptionDetails?.text); const entry = pending.get(message.id); if (!entry) return; pending.delete(message.id); clearTimeout(entry.timer); message.error ? entry.reject(new Error(JSON.stringify(message.error))) : entry.resolve(message.result) }
+  const ownedOrigin = new URL(page.url).origin
+  const attachment = headers => Object.entries(headers || {}).some(([name, value]) =>
+    name.toLowerCase() === 'content-disposition' && /^attachment\b/i.test(String(value)))
+  const recordDownload = event => {
+    if (downloadEvents.length < 64) downloadEvents.push(event)
+    else downloadEventsTruncated = true
+  }
+  socket.onmessage = ({ data }) => {
+    const message = JSON.parse(data), params = message.params
+    if (message.method === 'Network.requestWillBeSent') {
+      const request = params.request, url = new URL(request.url)
+      if (url.origin === ownedOrigin && url.pathname.startsWith('/dsh-market/')) {
+        const item = { method: request.method, path: url.pathname }
+        networkRequests.push(item); requestById.set(params.requestId, item)
+      }
+    }
+    if (message.method === 'Network.responseReceived') {
+      const item = requestById.get(params.requestId)
+      if (item) { item.status = params.response.status; item.attachment ||= attachment(params.response.headers); item.responseReceived = true }
+    }
+    if (message.method === 'Network.loadingFailed') {
+      const item = requestById.get(params.requestId)
+      if (item) { item.loadingError = /^net::ERR_[A-Z0-9_]+$/.test(params.errorText) ? params.errorText : 'other'; item.canceled = params.canceled === true }
+    }
+    if (['Browser.downloadWillBegin', 'Page.downloadWillBegin'].includes(message.method)) {
+      const url = new URL(params.url)
+      if (url.origin === ownedOrigin && url.pathname === '/dsh-market/backup') {
+        if (!downloadGuids.has(params.guid)) downloadGuids.set(params.guid, { guid: params.guid, path: url.pathname, name: path.basename(params.suggestedFilename) })
+        recordDownload({ event: message.method, guid: params.guid, path: url.pathname, name: path.basename(params.suggestedFilename) })
+      }
+    }
+    if (['Browser.downloadProgress', 'Page.downloadProgress'].includes(message.method) && downloadGuids.has(params.guid)) {
+      Object.assign(downloadGuids.get(params.guid), { state: params.state, receivedBytes: params.receivedBytes, totalBytes: params.totalBytes })
+      recordDownload({ event: message.method, guid: params.guid, state: params.state, receivedBytes: params.receivedBytes, totalBytes: params.totalBytes })
+    }
+    if (message.method === 'Runtime.exceptionThrown') exceptions.push(params?.exceptionDetails?.exception?.description || params?.exceptionDetails?.text)
+    const entry = pending.get(message.id)
+    if (!entry) return
+    pending.delete(message.id); clearTimeout(entry.timer)
+    message.error ? entry.reject(new Error(JSON.stringify(message.error))) : entry.resolve(message.result)
+  }
   const send = (method, params = {}) => new Promise((resolve, reject) => { const id = ++next; const timer = setTimeout(() => { pending.delete(id); reject(new Error(`CDP timeout ${method}`)) }, 15000); pending.set(id, { resolve, reject, timer }); socket.send(JSON.stringify({ id, method, params })) })
   evaluate = async expression => { const result = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }); if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text); return result.result?.value }
   let completedCredentialOnboarding = false
@@ -123,13 +186,12 @@ try {
     throw new Error(`${label}: ${JSON.stringify(result)}`)
   }
   const click = (names, scope = 'body') => `(() => {const names=${JSON.stringify(names)};const root=document.querySelector(${JSON.stringify(scope)});const button=[...(root?.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')||[])].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
-  const advancedTab = '[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-advanced"]'
-  const clickDiscoverTab = `(() => { const item=document.querySelector('[data-plugin-panel] [role="tab"][id$="-dsh-portable-plugin-market"]'); if(!item || item.getBoundingClientRect().width===0 || item.disabled) return false; item.scrollIntoView({block:'center'}); item.click(); return true })()`
+  const clickDiscoverTab = click(['Discover', '发现'], '[data-plugin-panel] [role="tablist"]')
   const openMarket = async () => {
-    await until(`Boolean(document.querySelector(${JSON.stringify(advancedTab)})) || [...document.querySelectorAll('button')].some(item => ['Plugin Market','插件市场'].includes((item.textContent || '').trim()) && item.getBoundingClientRect().width > 0)`, Boolean, 'Portable market entry is ready')
-    publicMarket = await evaluate(`Boolean(document.querySelector(${JSON.stringify(advancedTab)}))`)
-    if (publicMarket) await until(clickDiscoverTab, Boolean, 'public Discover tab')
-    else await until(click(['Plugin Market','插件市场']), Boolean, 'legacy market action')
+    await until(clickDiscoverTab, Boolean, 'official Discover tab')
+    await until('Boolean(document.querySelector(\'[data-plugin-tab="discover"]\'))', Boolean, 'official Discover content')
+    assert.equal(await evaluate('Boolean(document.querySelector(\'[role="tab"][id$="-dsh-portable-plugin-advanced"]\'))'), false, 'no top-level Advanced tab')
+    publicMarket = true
   }
   const nativeStateExpression = key => `new Promise(resolve => {
     const listener = event => { if (event.data?.type !== 'dsh-portable/test-desktop-result') return;
@@ -140,6 +202,7 @@ try {
   const nativeState = key => evaluate(nativeStateExpression(key))
   await send('Runtime.enable')
   await send('Page.enable')
+  await send('Network.enable')
   await evaluate(`(() => {
     const events = window.__portableAcceptanceDialogs = [];
     let previous = '';
@@ -252,234 +315,261 @@ try {
   const { verifyMaintenance } = await import('./lib/native-maintenance-checks.mjs')
   await verifyMaintenance({ root, evaluate, until, click, send, output, sample, soak, nativePid: child.pid, verifyWebView, verifyPluginCache: process.argv.includes('--verify-plugin-cache') })
   if (!maintenanceOnly) {
-  const hasBuiltInPluginsNavigation = await evaluate(`(() => {
-    const labels = new Set(['内置插件', 'Built-in plugins'])
-    // The topmost dialog may be a late provider notice, not settings.
-    return [...document.querySelectorAll('[role="dialog"] button,dialog button,[role="dialog"] [role="tab"]')].some(item =>
-      labels.has((item.getAttribute('aria-label') || item.textContent || '').trim()) &&
-      item.getBoundingClientRect().width > 0 && !item.disabled)
-  })()`)
-  const sidebarPlugins = await evaluate(`Boolean([...document.querySelectorAll('button')].find(item => !item.closest('dialog,[role="dialog"]') && ['Plugins','插件'].includes((item.textContent || '').trim())))`)
-  if (hasBuiltInPluginsNavigation || sidebarPlugins) {
-    await until(`(() => {
-      const dialog = [...document.querySelectorAll('dialog,[role="dialog"],[role="alertdialog"]')]
-        .filter(item => item.getBoundingClientRect().width > 0)
-        .at(-1)
-      const button = dialog && [...dialog.querySelectorAll('button')]
-        .find(item => ['关闭', 'Close'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()) && item.getBoundingClientRect().width > 0 && !item.disabled)
-      button?.click()
-      return Boolean(button)
-    })()`, Boolean, 'close settings dialog');
-    await until(click(['Plugins', '插件']), Boolean, 'sidebar plugins');
-    await openMarket();
-  } else {
-    await until(click(['Plugins','插件']), Boolean, 'plugins');
-    await until(click(['Plugin configuration','插件配置']), Boolean, 'plugin configuration');
-    await delay(500);
-    await writeFile(path.join(output, 'plugin-configuration.txt'), await evaluate('document.body.innerText'));
-    await until(click(['Plugin list','插件列表']), Boolean, 'official plugin list');
-    await delay(500);
-    await writeFile(path.join(output, 'plugin-list.txt'), await evaluate('document.body.innerText'));
-    await openMarket();
-  }
-  await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'category controls');
-  if (verifyTotal) {
-    const total = await evaluate(`fetch('/dsh-market/download-total?name=dsh-codex-subscription').then(async r => ({status:r.status,body:await r.json()}))`)
-    await writeFile(path.join(output, 'download-total.json'), JSON.stringify(total, null, 2))
-    assert.equal(total.status, 200, 'packaged market total route')
-    assert.ok(Number.isSafeInteger(total.body.downloads) && total.body.downloads > 0)
-    assert.equal(total.body.complete, true)
-  }
-  await sample('market-ready')
-  const checks=[];
-  const categoryGeometry = []
-  const categoryState = `(() => {
-    const wrap=document.querySelector('[class*="catsWrap"]');
-    const button=wrap?.querySelector('[class*="catsToggle"]');
-    if(!wrap || !button || button.getBoundingClientRect().width===0) return null;
-    let scroller=wrap.parentElement;
-    while(scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) scroller=scroller.parentElement;
-    if(!scroller) return null;
-    // Normal collapsed rows and sticky rows intentionally have different
-    // budgets. Compare the toggle in the same real, unpinned scroll context.
-    scroller.scrollTop=0;
-    const rect=wrap.getBoundingClientRect();
-    const scrollerRect=scroller.getBoundingClientRect();
-    const sentinel=wrap.closest('[class*="stickyHead"]')?.previousElementSibling?.getBoundingClientRect();
-    const chips=[...wrap.querySelectorAll('[data-chip="1"]')];
-    const rounded=value=>Math.round(value*100)/100;
-    return { label:button.getAttribute('aria-label'), count:chips.length,
-      measuring:wrap.className.includes('catsCollapsed'),
-      wrapWidth:rounded(rect.width), wrapHeight:rounded(rect.height),
-      scrollerWidth:scroller.clientWidth, scrollerHeight:scroller.clientHeight,
-      scrollTop:scroller.scrollTop, scrollHeight:scroller.scrollHeight,
-      sentinelOffset:sentinel ? rounded(sentinel.top-scrollerRect.top) : null,
-      sentinelVisible:Boolean(sentinel && sentinel.top>=scrollerRect.top-1 && sentinel.bottom<=scrollerRect.bottom+1),
-      rows:[...new Set(chips.map(chip=>rounded(chip.getBoundingClientRect().top-rect.top)))] };
-  })()`
-  const toggleCategories = labels => `(() => {
-    const button=document.querySelector('[class*="catsWrap"] [class*="catsToggle"]');
-    if(!button || button.disabled || button.getBoundingClientRect().width===0
-      || !${JSON.stringify(labels)}.includes(button.getAttribute('aria-label'))) return false;
-    button.click(); return true;
-  })()`
-  const moreLabels=['More','更多分类'], lessLabels=['Less','收起']
-  for(const width of (soak ? Array.from({length: 30}, (_, i) => i % 2 ? 1200 : 580) : [580,1200,580])){
-    await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-    await evaluate(`document.fonts.ready.then(() => true)`)
-    const settled = async (phase, labels) => {
-      let previous, consecutive=0, last, complete=false
-      try {
-        const result=await until(categoryState, state => {
-          last=state
-          if(!state || state.measuring || state.scrollTop!==0 || !state.sentinelVisible || !labels.includes(state.label)) {
-            consecutive=0; previous=undefined; return false
-          }
-          const signature=JSON.stringify(state)
-          consecutive=signature===previous ? consecutive+1 : 1
-          previous=signature
-          return consecutive>=3
-        }, `stable category ${phase} at ${width}`)
-        complete=true
-        return result
-      } finally {
-        categoryGeometry.push({width,phase,settled:complete,state:last})
-        const report=JSON.stringify(categoryGeometry,null,2)
-        const target=await safeDataTarget(output,'category-geometry.json')
-        try { await writeFile(target,report,{flag:'wx'}) }
-        catch (error) {
-          if(error.code!=='EEXIST') throw error
-          await writeFile(await verifiedPackageFile(output,'category-geometry.json'),report)
-        }
+    const expression = (fn, value = null) => '(' + fn.toString() + ')(' + JSON.stringify(value) + ')'
+    const pageValue = (fn, value) => evaluate(expression(fn, value))
+    const closeDialog = click(['Close', '关闭', 'Cancel', '取消'], '[role="dialog"]')
+    await until(closeDialog, Boolean, 'close settings before official plugin management')
+    await until(click(['Plugins', '插件']), Boolean, 'official Plugins')
+    await until('Boolean(document.querySelector(\'[data-plugin-package="dsh-chat-manager"]\'))', Boolean, 'official Installed list')
+    assert.equal(await pageValue(() => Boolean(document.querySelector('[role="tab"][id$="-dsh-portable-plugin-advanced"]'))), false, 'no Advanced tab')
+    await until(expression(() => {
+      const card = document.querySelector('[data-plugin-package="dsh-chat-manager"]')
+      const button = card && [...card.querySelectorAll('button')].find(item => item.getAttribute('role') !== 'switch')
+      button?.click(); return Boolean(button)
+    }), Boolean, 'official installed plugin details')
+    await until(expression(() => [...document.querySelectorAll('[data-plugin-panel] button')].some(item =>
+      /^(?:Uninstall|卸载)(?:\s+.+)?$/.test((item.getAttribute('aria-label') || item.textContent || '').trim())
+      && !item.disabled && item.getBoundingClientRect().width > 0)), Boolean, 'official plugin management controls remain available')
+    await until(expression(() => {
+      const button = document.querySelector('[data-plugin-panel] button[aria-label="Back to plugins"],[data-plugin-panel] button[aria-label="返回插件"],[data-plugin-panel] button[aria-label="返回插件列表"]')
+      if (!button || button.disabled || button.getBoundingClientRect().width === 0) return false
+      button.click(); return true
+    }), Boolean, 'return to official Installed')
+
+    // This is a disposable package root, never a connection to a developer service.
+    // Opening the maintenance overlay and cancelling restore must be read-only.
+    const markerRelative = 'workspace/maintenance-cancel-' + Date.now() + '.txt'
+    await writeFile(await safeDataTarget(root, markerRelative), 'owned maintenance cancellation sentinel\n', { flag: 'wx' })
+    const protectedNames = ['data/dsh-home/profiles/web/package.json', 'data/dsh-home/profiles/web/cordis.patch.yml',
+      'data/dsh-home/profiles/web/pnpm-lock.yaml', 'data/dsh-home/settings.yaml', markerRelative]
+    const snapshot = async () => {
+      const result = {}
+      for (const name of protectedNames) {
+        try { result[name] = createHash('sha256').update(await readFile(await verifiedPackageFile(root, name))).digest('hex') }
+        catch (error) { if (error.code !== 'ENOENT') throw error; result[name] = null }
       }
+      return result
     }
-    let baseline=await settled('initial',[...moreLabels,...lessLabels])
-    if(lessLabels.includes(baseline.label)) {
-      await until(toggleCategories(lessLabels),Boolean,'initial category collapse')
-      baseline=await settled('collapsed',moreLabels)
+    const beforeMaintenance = await snapshot()
+    const requestStart = networkRequests.length
+    const maintenanceSelector = '[role="dialog"]'
+    const maintenanceReady = () => [...document.querySelectorAll('[role="dialog"]')].some(dialog => {
+      const label = dialog.getAttribute('aria-label') || document.getElementById(dialog.getAttribute('aria-labelledby'))?.textContent
+      return ['Diagnostics and recovery', '诊断与恢复'].includes((label || '').trim())
+    })
+    await until(expression(() => {
+      const button = [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(item =>
+        ['More', '更多'].includes(item.getAttribute('aria-label')) && !item.closest('[role="dialog"]') && item.getBoundingClientRect().width > 0)
+      button?.click(); return Boolean(button)
+    }), Boolean, 'official sidebar More menu')
+    await until(click(['Diagnostics and recovery', '诊断与恢复'], '[role="menu"]'), Boolean, 'public diagnostics and recovery action')
+    await until(expression(maintenanceReady), Boolean, 'persistent maintenance overlay after menu dismissal')
+    assert.equal(await pageValue(() => Boolean(document.querySelector('[role="menu"]'))), false, 'More menu closes before maintenance is used')
+    const waitNetwork = async (predicate, label) => {
+      const deadline = Date.now() + 30000
+      while (Date.now() < deadline) { if (predicate(networkRequests.slice(requestStart))) return; await delay(100) }
+      throw new Error(label)
     }
-    const collapsed=baseline.count;
-    await until(toggleCategories(moreLabels),Boolean,'expand category button')
-    const opened=await settled('expanded',lessLabels)
-    const expanded=opened.count;assert.ok(expanded>collapsed, 'expand must show more categories');
-    await until(toggleCategories(lessLabels),Boolean,'collapse category button')
-    const restored=await settled('restored',moreLabels)
-    assert.equal(restored.wrapWidth,baseline.wrapWidth,'collapse comparison must keep the same measured width');
-    assert.equal(restored.count,collapsed,'collapse must restore measured budget');
-    checks.push({width,collapsed,expanded});
-    if (checks.length % 5 === 0) await sample(`cycle-${checks.length}`)
-  }
-  if (soak) {
-    await delay(10000)
-    await sample('settled')
-    await writeFile(path.join(output, 'market-current.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
-  }
-  if (process.argv.includes('--layout')) {
-    const captureLayout = async label => {
-      for (const width of [1200, 580]) {
-        await send('Emulation.setDeviceMetricsOverride', { width, height:900, deviceScaleFactor:1, mobile:false })
-        await delay(600)
-        const bounds = await evaluate(`(() => {
-          const cards=[...document.querySelectorAll('[data-market-card]')];
-          const gaps=cards.slice(1).map((card,i)=>card.getBoundingClientRect().top-cards[i].getBoundingClientRect().bottom);
-          const toolbar=document.querySelector('[class*="discoveryToolbar"]');
-          const toolsFit=[...toolbar.children].every(node=>node.getBoundingClientRect().right<=toolbar.getBoundingClientRect().right+1);
-          return {toolsFit,maxGap:Math.max(0,...gaps), noImageWidths:cards.filter(card=>!card.querySelector('[class*="cardPreviews"]')).every(card=>card.querySelector('[class*="cardContent"]').getBoundingClientRect().width > card.clientWidth-100), count:cards.length, overflow:cards.some(x=>x.scrollWidth>x.clientWidth+1), inlineImages:cards.some(x=>x.querySelector('img:not([class*="av"])'))};
-        })()`)
-        assert.ok(bounds.count > 0)
-        assert.equal(bounds.toolsFit, true, 'toolbar controls remain inside available width')
-        assert.ok(bounds.maxGap <= 18, 'mixed screenshot rows must not reserve blank grid space')
-        assert.equal(bounds.noImageWidths, true, 'no-image content owns the available row width')
-        assert.equal(bounds.overflow, false, 'plugin card overflow')
-        assert.equal(bounds.inlineImages, true, 'catalog screenshots appear in discovery cards')
-        await writeFile(path.join(output, `market-${label}-${width}.png`), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
+    await waitNetwork(requests => requests.some(item => item.path === '/dsh-market/check' && item.method === 'GET' && item.status === 200), 'real read-only diagnostic GET did not finish')
+    await writeFile(path.join(output, 'maintenance-read-only.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+    const backupInput = await safeDataTarget(output, 'maintenance-cancel-input.json')
+    try { await send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadDirectory, eventsEnabled: true }); downloadMode += '+Browser' }
+    catch { /* The existing native download-directory handler remains responsible for saving. */ }
+    let backupMetadata, downloadMetadata = []
+    try {
+      const beforeBackup = networkRequests.length, previousDownloads = new Set(downloadGuids.keys())
+      const backupControl = await until(expression(() => {
+        const link = [...document.querySelectorAll('[role="dialog"] a[download][href="/dsh-market/backup"]')]
+          .find(item => ['Export configuration backup', '导出配置备份'].includes(item.textContent.trim()))
+        if (!link) return null
+        link.scrollIntoView({ block: 'center' })
+        const rect = link.getBoundingClientRect(), x = rect.x + rect.width / 2, y = rect.y + rect.height / 2
+        return { x, y, visible: rect.width > 0 && rect.height > 0, hit: link.contains(document.elementFromPoint(x, y)) }
+      }), value => value?.visible && value.hit, 'actual configuration backup download control')
+      backupGesture = { method: 'Input.dispatchMouseEvent', visible: backupControl.visible, hit: backupControl.hit }
+      for (const type of ['mousePressed', 'mouseReleased']) {
+        await send('Input.dispatchMouseEvent', { type, x: backupControl.x, y: backupControl.y, button: 'left', clickCount: 1 })
       }
-    }
-    await until(click(['Filter']), Boolean, 'open discovery filters')
-    await until(click(['Date added']), Boolean, 'choose catalog date sorting')
-    if (!await evaluate(`Boolean(document.querySelector('[role="menu"]'))`)) await until(click(['Filter · 1']), Boolean, 'reopen filters')
-    await until(click(['Last 7 days']), Boolean, 'choose recent catalog range')
-    await until(`document.querySelector('[class*="discoverySummary"]')?.textContent.includes('Last 7 days')`, Boolean, 'active filter summary')
-    if (!await evaluate(`document.querySelector('[data-market-filter]')?.getAttribute('aria-expanded') === 'true'`)) await until(click(['Filter · 2']), Boolean, 'reopen active filter menu')
-    await until(`document.querySelector('[data-market-filter]')?.getAttribute('aria-expanded') === 'true'`, Boolean, 'filter menu is actually open')
-    await delay(100)
-    await writeFile(path.join(output, 'filter-menu-en.png'), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
-    await send('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27})
-    await until(`Boolean(document.querySelector('[class*="discoverySummary"]')) && !document.querySelector('[role="menu"]')`, Boolean, 'Escape dismisses only filter menu')
-    await until(click(['Reset conditions']), Boolean, 'reset discovery conditions')
-    await until(`!document.querySelector('[class*="resetConditions"]')`, Boolean, 'filter reset clears state')
-    await evaluate(`document.querySelector('input[aria-label]')?.focus()`)
-    await send('Input.insertText', {text:'portable-no-match-acceptance-847291'})
-    await until(`document.querySelector('[class*="discoverySummary"]')?.textContent.includes('0 plugins')`, Boolean, 'search empty result count')
-    await until(click(['Reset conditions']), Boolean, 'reset empty search')
-    await until(`document.querySelectorAll('[data-market-card]').length > 0`, Boolean, 'reset restores catalog')
-    await captureLayout('light')
-    const preview = await until(`(() => {const image=document.querySelector('button[class*="cardPreview"] img'); image?.scrollIntoView({block:'center'});return Boolean(image?.complete && image.naturalWidth > 0)})()`, Boolean, 'actual catalog preview loaded')
-    await evaluate(`document.querySelector('button[class*="cardPreview"]')?.click()`)
-    await until(`Boolean(document.querySelector('[class*="lightboxImg"]'))`, Boolean, 'preview opens lightbox')
-    await send('Input.dispatchKeyEvent', {type:'keyDown', key:'Escape', code:'Escape', windowsVirtualKeyCode:27})
-    await until(`!document.querySelector('[class*="lightboxImg"]') && Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Escape closes only preview')
-    const dialogsBeforeDetails = await evaluate(`document.querySelectorAll('[role="dialog"]').length`)
-    await evaluate(`document.querySelector('[class*="nameButton"]')?.click()`)
-    await until(`document.querySelectorAll('[role="dialog"]').length === ${dialogsBeforeDetails + 1}`, Boolean, 'plugin details open from name')
-    const closeDialog = `(() => {const dialog=[...document.querySelectorAll('[role="dialog"]')].at(-1);const button=[...dialog.querySelectorAll('button')].find(b=>['Close','关闭','Cancel','取消'].includes(b.getAttribute('aria-label')||b.textContent.trim()));button?.click();return Boolean(button)})()`
-    await until(closeDialog, Boolean, 'close plugin details')
-    if (!publicMarket) await until(closeDialog, Boolean, 'close plugin market')
-    await nativeState(131260)
-    await until(click(['General', 'General settings', '通用设置']), Boolean, 'general appearance')
-    await until(click(['Dark', '深色']), Boolean, 'official dark appearance')
-    await until(closeDialog, Boolean, 'close appearance settings')
-    await until(click(['Plugins', '插件']), Boolean, 'plugins in dark theme')
-    await openMarket()
-    await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'dark market ready')
-    await captureLayout('dark')
-    if (!publicMarket) await until(closeDialog, Boolean, 'close dark market')
-    await nativeState(131260)
-    await until(click(['General', 'General settings', '通用设置']), Boolean, 'general language')
-    await until(click(['English']), Boolean, 'language selector')
-    await until(click(['简体中文', '中文', '中文（简体）', 'Chinese', 'Simplified Chinese']), Boolean, 'choose Chinese')
-    await until(closeDialog, Boolean, 'close Chinese settings')
-    await until(click(['插件']), Boolean, 'Chinese plugins')
-    await openMarket()
-    await until(`Boolean(document.querySelector('[class*="catsToggle"]'))`, Boolean, 'Chinese market ready')
-    assert.equal(await evaluate(`Boolean(document.querySelector('button[aria-label^="预览 "]'))`), true, 'localized preview label')
-    await until(click(['筛选']), Boolean, 'Chinese filter trigger')
-    await until(`document.body.innerText.includes('收录时间范围') && document.body.innerText.includes('排序字段')`, Boolean, 'filter options follow Chinese locale')
-    await writeFile(path.join(output, 'filter-menu-zh.png'), Buffer.from((await send('Page.captureScreenshot', {format:'png',fromSurface:true})).data,'base64'))
-    await send('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27})
-    await until(`Boolean(document.querySelector('[class*="discoverySummary"]')) && !document.querySelector('[role="menu"]')`, Boolean, 'Chinese menu Escape preserves market')
-    await captureLayout('zh-dark')
-    await writeFile(path.join(output, 'chinese-market.txt'), await evaluate('document.body.innerText'))
-    for (const [name, label] of [['themes','主题与外观'], ['models','模型与账号接入']]) {
-      if (!await evaluate(click([label]))) {
-        await evaluate(`document.querySelector('[class*="catsToggle"]')?.click()`)
-        await until(click([label]), Boolean, 'category '+label)
+      backupGesture.activation = await evaluate('({ isActive: navigator.userActivation?.isActive === true, hasBeenActive: navigator.userActivation?.hasBeenActive === true })')
+      const deadline = Date.now() + 30000
+      let completed
+      while (Date.now() < deadline) {
+        const current = [...downloadGuids.values()].filter(item => !previousDownloads.has(item.guid))
+        assert.ok(!current.some(item => item.state === 'canceled'), 'the owned backup download was canceled')
+        completed = current.find(item => item.state === 'completed' && item.receivedBytes > 0)
+        if (completed) break
+        await delay(100)
       }
-      await evaluate(`document.querySelector('[class*="catsToggle"][aria-label="收起"]')?.click()`)
-      await delay(1200)
-      await captureLayout('zh-'+name)
-      await writeFile(path.join(output, name+'-content.txt'), await evaluate('document.body.innerText'))
+      assert.ok(completed, 'the actual backup control must produce an owned completed download with positive bytes')
+      const file = await verifiedPackageFile(downloadDirectory, completed.name)
+      const info = await stat(file)
+      assert.ok(info.size > 0 && info.size <= 2 * 1024 * 1024, 'disposable backup must remain a small valid restore input')
+      const backupBytes = await readFile(file)
+      let backup
+      try { backup = JSON.parse(backupBytes.toString('utf8')) } catch { throw new Error('downloaded backup is not valid JSON') }
+      const manifest = JSON.parse(await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/package.json'), 'utf8'))
+      const packageFile = Array.isArray(backup?.files) ? backup.files.find(item => item?.path === 'package.json') : undefined
+      const response = networkRequests.slice(beforeBackup).find(item => item.path === '/dsh-market/backup' && item.method === 'GET' && item.status != null)
+      backupDownload = { controlClicked: true, originMatched: true, path: completed.path, guid: completed.guid,
+        completed: true, file: completed.name, bytes: backupBytes.length, receivedBytes: completed.receivedBytes, totalBytes: completed.totalBytes,
+        sha256: createHash('sha256').update(backupBytes).digest('hex'), format: backup?.format, version: backup?.version,
+        packageJson: packageFile?.json !== null && typeof packageFile?.json === 'object' && !Array.isArray(packageFile.json),
+        manifestMatches: isDeepStrictEqual(packageFile?.json, manifest), httpStatus: response?.status ?? null, httpAttachment: response?.attachment ?? null }
+      assertMaintenanceReadOnly(networkRequests.slice(requestStart), backupDownload)
+      downloadMetadata.push({ name: completed.name, bytes: backupDownload.bytes, sha256: backupDownload.sha256 })
+      backupMetadata = { bytes: backupDownload.bytes, sha256: backupDownload.sha256 }
+      // Select exactly the validated bytes saved by the real control, never a substitute fetch response.
+      await writeFile(backupInput, backupBytes, { flag: 'wx' })
+      const input = await send('Runtime.evaluate', { expression: expression(() => {
+        const labels = [...document.querySelectorAll('[role="dialog"] label')]
+        const label = labels.find(item => ['Choose backup file', '选择备份文件'].includes(item.querySelector('span')?.textContent.trim()))
+        return label?.querySelector('input[type="file"]')
+      }), returnByValue: false })
+      assert.ok(input.result?.objectId, 'the labelled file input must belong to the current maintenance dialog')
+      await send('DOM.setFileInputFiles', { objectId: input.result.objectId, files: [backupInput] })
+      await until(click(['Restore backup…', '恢复备份…'], maintenanceSelector), Boolean, 'prepare explicit restore confirmation')
+      await until(expression(() => Boolean(document.querySelector('[role="group"][aria-label="Confirm configuration restore"],[role="group"][aria-label="确认恢复配置"]'))), Boolean, 'restore requires an explicit confirmation group')
+      assert.equal(networkRequests.slice(requestStart).filter(item => item.path === '/dsh-market/restore' && item.method === 'POST').length, 0, 'selecting a backup must not restore it')
+      await until(click(['Cancel', '取消'], '[role="group"][aria-label="Confirm configuration restore"],[role="group"][aria-label="确认恢复配置"]'), Boolean, 'cancel restore through its confirmation controls')
+      await until(expression(() => !document.querySelector('[role="group"][aria-label="Confirm configuration restore"],[role="group"][aria-label="确认恢复配置"]')), Boolean, 'confirmation closes without applying the backup')
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'diagnostics and cancelling restore must preserve the actual profile, theme and marker bytes')
+      await until(click(['Close', '关闭'], maintenanceSelector), Boolean, 'close maintenance and return to the official Plugins page')
+      await until(expression(() => Boolean(document.querySelector('[data-plugin-panel]')) && !document.querySelector('[role="dialog"]')), Boolean, 'official management survives maintenance close')
+      await delay(250)
+      assert.deepEqual(await snapshot(), beforeMaintenance, 'closing maintenance must not write profile or theme state')
+      const audit = assertMaintenanceReadOnly(networkRequests.slice(requestStart), backupDownload)
+      await writeFile(path.join(output, 'maintenance-navigation.json'), JSON.stringify({ passed: true, ...audit, profileBytesUnchanged: true,
+        backupMetadata, backupDownload, downloadMode, downloads: downloadMetadata, actualRestoreNotRun: true, noAdvanced: true }, null, 2))
+    } finally {
+      await rm(backupInput, { force: true })
+      for (const name of await readdir(downloadDirectory)) {
+        if (name.endsWith('.json')) await rm(await verifiedPackageFile(downloadDirectory, name))
+      }
     }
 
-    await until(click(['紧凑']), Boolean, 'compact discovery view')
-    await captureLayout('zh-compact')
-    await until(click(['图文']), Boolean, 'restore gallery view')
-    // Leave the disposable fixture in English for subsequent independent probes.
-    if (!publicMarket) await until(closeDialog, Boolean, 'close Chinese market')
-    await nativeState(131260)
-    await until(click(['通用设置']), Boolean, 'restore language settings')
-    await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
-    await until(click(['English']), Boolean, 'restore English')
-
-  }
-  assert.deepEqual(exceptions,[]);
-  await writeFile(path.join(output,'checks.json'),JSON.stringify(checks,null,2));
-  console.log(JSON.stringify(checks));
+    await openMarket()
+    await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'real official Discover catalog')
+    if (verifyTotal) {
+      const total = await evaluate("fetch('/dsh-market/download-total?name=dsh-codex-subscription').then(async r => ({status:r.status,body:await r.json()}))")
+      assert.equal(total.status, 200)
+      assert.ok(Number.isSafeInteger(total.body.downloads) && total.body.downloads > 0)
+      assert.equal(total.body.complete, true)
+      await writeFile(path.join(output, 'download-total.json'), JSON.stringify(total, null, 2))
+    }
+    const checks = []
+    for (const width of (soak ? Array.from({ length: 30 }, (_, i) => i % 2 ? 1200 : 580) : [580, 1200, 580])) {
+      await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: false })
+      await evaluate('document.fonts.ready.then(() => true)')
+      const geometry = await until(expression(() => {
+        const pane = document.querySelector('[data-plugin-tab="discover"]')
+        const cards = [...(pane?.querySelectorAll('[data-market-entry]') || [])]
+        const categories = pane?.querySelector('[role="group"][aria-label="Categories"],[role="group"][aria-label="分类"]')
+        if (!cards.length || !categories || pane.querySelector('[aria-busy="true"]')) return null
+        return { count: cards.length, categories: categories.querySelectorAll('button').length,
+          overflow: cards.some(card => card.scrollWidth > card.clientWidth + 1),
+          controls: cards.every(card => card.querySelector('button[aria-label]')) }
+      }), Boolean, 'official discovery layout at ' + width)
+      assert.ok(geometry.count > 0 && geometry.categories > 1)
+      assert.equal(geometry.overflow, false, 'official cards must fit the settings-column width')
+      assert.equal(geometry.controls, true, 'official details/install or manage controls remain reachable')
+      await until(expression(() => {
+        const group = document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="Categories"],[data-plugin-tab="discover"] [role="group"][aria-label="分类"]')
+        const button = group?.querySelectorAll('button')[1]
+        button?.click(); return Boolean(button)
+      }), Boolean, 'select a real official category')
+      await until(expression(() => {
+        const group = document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="Categories"],[data-plugin-tab="discover"] [role="group"][aria-label="分类"]')
+        return group?.querySelectorAll('button')[1]?.getAttribute('aria-pressed') === 'true'
+      }), Boolean, 'official category selection applied')
+      await until(expression(() => {
+        const group = document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="Categories"],[data-plugin-tab="discover"] [role="group"][aria-label="分类"]')
+        group?.querySelector('button')?.click(); return Boolean(group)
+      }), Boolean, 'restore all official categories')
+      await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'official catalog returns after clearing category')
+      checks.push({ width, ...geometry })
+      await writeFile(path.join(output, 'official-discover-' + width + '.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+      if (checks.length % 5 === 0) await sample('official-discover-' + checks.length)
+    }
+    await writeFile(path.join(output, 'category-geometry.json'), JSON.stringify(checks, null, 2))
+    await until(expression(() => {
+      const field = document.querySelector('[data-plugin-tab="discover"] input[type="search"]')
+      field?.focus(); return Boolean(field)
+    }), Boolean, 'official discovery search')
+    await send('Input.insertText', { text: 'portable-no-match-acceptance-847291' })
+    await until(expression(() => /No plugins match|没有符合条件的插件/.test(document.querySelector('[data-plugin-tab="discover"]')?.textContent || '')), Boolean, 'official search reports an empty result')
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, modifiers: 2 })
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8 })
+    await until(expression(() => document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'official catalog returns after clearing search')
+    const detailPackage = await until(expression(() => {
+      const button = document.querySelector('[data-plugin-tab="discover"] [data-market-entry] button[aria-label^="View "],[data-plugin-tab="discover"] [data-market-entry] button[aria-label^="查看 "]')
+      const name = button?.closest('[data-market-entry]')?.getAttribute('data-market-entry')
+      if (!name || button.disabled || button.getBoundingClientRect().width === 0
+        || !['View ' + name, '查看 ' + name].includes(button.getAttribute('aria-label'))) return null
+      button.click(); return name
+    }), value => typeof value === 'string' && value.length > 0, 'open real official plugin details')
+    await until(expression(name => {
+      const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
+      return detail?.getAttribute('data-market-detail') === name && detail.getBoundingClientRect().width > 0
+        && detail.querySelector('h3')?.textContent.trim() === name
+        && [...detail.querySelectorAll('button[aria-label]')].some(button =>
+          ['Install ' + name, '安装 ' + name].includes(button.getAttribute('aria-label'))
+          && !button.disabled && button.getBoundingClientRect().width > 0)
+    }, detailPackage), Boolean, 'official inline detail shows the selected package and its Install control')
+    await writeFile(path.join(output, 'official-plugin-details.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+    await until(expression(name => {
+      const detail = document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
+      if (detail?.getAttribute('data-market-detail') !== name) return false
+      // The observed official breadcrumb has no aria-label; its public text is Discover / 发现.
+      const button = [...detail.querySelectorAll(':scope > button')].find(item =>
+        ['Discover', '发现'].includes((item.getAttribute('aria-label') || item.textContent || '').trim()))
+      if (!button || button.disabled || button.getBoundingClientRect().width === 0) return false
+      button.click(); return true
+    }, detailPackage), Boolean, 'return through the actual official Discover breadcrumb')
+    await until(expression(() => !document.querySelector('[data-plugin-tab="discover"] [data-market-detail]')
+      && document.querySelectorAll('[data-plugin-tab="discover"] [data-market-entry]').length > 0), Boolean, 'official Discover list returns after leaving inline details')
+    if (process.argv.includes('--layout')) {
+      // Keep the actual preview and appearance/localization checks on official Discover.
+      await until(expression(() => {
+        const image = document.querySelector('[data-plugin-tab="discover"] [data-portable-shot]')
+        image?.scrollIntoView({ block: 'center' }); return Boolean(image?.complete && image.naturalWidth > 0)
+      }), Boolean, 'real official catalog preview image')
+      await pageValue(() => document.querySelector('[data-plugin-tab="discover"] [data-portable-shot]').click())
+      await until(expression(() => Boolean(document.querySelector('[data-portable-viewer]'))), Boolean, 'official card preview opens the real viewer')
+      await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 })
+      await until(expression(() => !document.querySelector('[data-portable-viewer]') && Boolean(document.querySelector('[data-plugin-tab="discover"]'))), Boolean, 'Escape closes only the image preview')
+      await nativeState(131260)
+      await until(click(['General', 'General settings', '通用设置']), Boolean, 'official appearance settings')
+      await until(click(['Dark', '深色']), Boolean, 'official dark appearance')
+      await until(closeDialog, Boolean, 'close appearance settings')
+      await until(click(['Plugins', '插件']), Boolean, 'official Plugins in dark theme')
+      await openMarket()
+      await writeFile(path.join(output, 'official-discover-dark.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+      await nativeState(131260)
+      await until(click(['General', 'General settings', '通用设置']), Boolean, 'official language settings')
+      await until(click(['English']), Boolean, 'official language selector')
+      await until(click(['简体中文', '中文', '中文（简体）', 'Chinese', 'Simplified Chinese']), Boolean, 'official Chinese locale')
+      await until(closeDialog, Boolean, 'close Chinese settings')
+      await until(click(['插件']), Boolean, 'official Chinese Plugins')
+      await openMarket()
+      await until(expression(() => Boolean(document.querySelector('[data-plugin-tab="discover"] [role="group"][aria-label="分类"]'))), Boolean, 'official categories follow Chinese locale')
+      await writeFile(path.join(output, 'official-discover-zh-dark.png'), Buffer.from((await send('Page.captureScreenshot', { format: 'png', fromSurface: true })).data, 'base64'))
+      await nativeState(131260)
+      await until(click(['通用设置']), Boolean, 'restore official language settings')
+      await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
+      await until(click(['English']), Boolean, 'restore English for later independent checks')
+    }
+    assert.deepEqual(exceptions, [])
+    await writeFile(path.join(output, 'checks.json'), JSON.stringify(checks, null, 2))
   }
   assert.deepEqual(exceptions, [])
   passed=true;
 } finally {
   try {
+    const requests = networkRequests.filter(item => item.path === '/dsh-market/backup')
+    await writeFile(path.join(output, 'backup-transport.json'), JSON.stringify({ downloadMode, directory: path.basename(downloadDirectory), backupGesture, backupDownload,
+      requests: requests.slice(0, 32), requestsTruncated: requests.length > 32, downloadEvents, downloadEventsTruncated }, null, 2))
     if (evaluate) {
       await writeFile(path.join(output, 'dialog-events.json'), JSON.stringify(await evaluate('window.__portableAcceptanceDialogs').catch(String) ?? [], null, 2))
       await writeFile(path.join(output, 'page.txt'), await evaluate('document.body.innerText').catch(String))

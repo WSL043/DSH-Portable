@@ -474,3 +474,7 @@
  .discoveryToolbar .tabSearch{flex-basis:100%}
  .discoveryToolbar .viewBar{margin-left:auto}
 }
+
+.maintenanceModal{width:min(720px,calc(100vw - 48px));max-width:calc(100vw - 48px)}
+.maintenanceBody{display:flex;flex-direction:column;gap:16px;min-height:0}
+.maintenanceBody .diagPage{height:auto;overflow:visible}

@@ -9,13 +9,15 @@ import {
   supportsPortableActions,
 } from '../app/vendor/dsh-portable-plugin-market/src/client/slot-compat.ts'
 
-function fakeSlots({ modern = false, official = false, updates = true } = {}) {
+function fakeSlots({ modern = false, official = false, updates = true, maintenance = false } = {}) {
   const declared = new Map([
     [PORTABLE_ACTIONS_SLOT, modern],
     [LEGACY_PLUGIN_TAB_SLOT, true],
     ['plugins.portable.update', updates],
     [OFFICIAL_PLUGIN_TAB_SLOT, official],
     [OFFICIAL_PLUGIN_ACTIONS_SLOT, official],
+    ['sidebar.panellist.actions', maintenance],
+    ['shell.overlay', maintenance],
   ])
   const injections = new Set()
   const listeners = new Set()
@@ -167,15 +169,15 @@ test('queued declaration changes after unload cannot register a surface', async 
   assert.equal(slots.activeEntries().length, 0)
 })
 
-test('native public Plugins without the Portable renderer keep Advanced and no legacy updates', async () => {
+test('native public Plugins without the Portable renderer need no private management tab or legacy updates', async () => {
   const slots = fakeSlots({ official: true, updates: false })
   let updateRegistrations = 0
   const dispose = coordinateMarketSurfaces(slots, {
     ...factories(slots),
-    official: () => slots.register({ surface: 'advanced' }, () => null),
+    official: () => () => {},
     updates: () => { updateRegistrations += 1; return slots.register({ surface: 'updates' }, () => null) },
   })
-  assert.deepEqual(slots.activeEntries().map(entry => entry.meta.surface), ['advanced'])
+  assert.deepEqual(slots.activeEntries().map(entry => entry.meta.surface), [])
   assert.equal(updateRegistrations, 0)
   dispose()
   slots.setSlot(OFFICIAL_PLUGIN_TAB_SLOT, false)
@@ -187,7 +189,7 @@ test('RC3 public slots retain Portable updates until the actual native renderer 
   const slots = fakeSlots({ modern: true })
   const dispose = coordinateMarketSurfaces(slots, {
     ...factories(slots),
-    official: () => slots.register({ surface: 'advanced' }, () => null),
+    official: () => () => {},
     updates: () => slots.register({ surface: 'updates' }, () => null),
   })
   const surfaces = () => slots.activeEntries().map(entry => entry.meta.surface).sort()
@@ -201,7 +203,7 @@ test('RC3 public slots retain Portable updates until the actual native renderer 
   slots.setModern(false)
   slots.setSlot('plugins.portable.update', false)
   await slots.flush()
-  assert.deepEqual(surfaces(), ['advanced'])
+  assert.deepEqual(surfaces(), [])
   slots.setModern(true)
   slots.setSlot('plugins.portable.update', true)
   await slots.flush()
@@ -213,21 +215,22 @@ test('RC3 public slots retain Portable updates until the actual native renderer 
   assert.deepEqual(surfaces(), [], 'queued public declarations cannot revive an unloaded plugin')
 })
 
-test('shipped default client follows actual official-market state and keeps public fallback reachable', async () => {
+test('shipped client keeps official management primary and diagnostics in the public More menu', async () => {
   const { readFile } = await import('node:fs/promises')
   const { createRequire } = await import('node:module')
   const { runInNewContext } = await import('node:vm')
   const require = createRequire(new URL('../app/package.json', import.meta.url))
   const React = require('react')
-  let hookEffects = []
+  let hookEffects = [], seededStates = []
   const hookReact = { ...React,
-    useState: initial => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useState: initial => [seededStates.length ? seededStates.shift() : typeof initial === 'function' ? initial() : initial, () => {}],
+    useMemo: read => read(), useRef: initial => ({ current: initial }),
     useSyncExternalStore: (_subscribe, get) => get(), useCallback: callback => callback,
     useEffect: callback => hookEffects.push(callback),
   }
   const externals = {
     react: hookReact, 'react/jsx-runtime': require('react/jsx-runtime'), 'react-dom': require('react-dom'),
-    '@deepseek-ai/dsh-client-ui-primitives': Object.fromEntries(['Menu', 'DisclosureRow', 'Tooltip', 'Toast'].map(name => [name, () => null])),
+    '@deepseek-ai/dsh-client-ui-primitives': Object.fromEntries(['Menu', 'DisclosureRow', 'Tooltip', 'Toast', 'MenuItemButton', 'Modal'].map(name => [name, () => null])),
   }
   const bundle = await readFile(new URL('../app/vendor/dsh-portable-plugin-market/client/client.js', import.meta.url), 'utf8')
   for (const state of ['active', 'inactive', 'failed']) {
@@ -250,14 +253,63 @@ test('shipped default client follows actual official-market state and keeps publ
     }
     runInNewContext(bundle, { window, console, fetch, AbortSignal })
     assert.equal(typeof client?.apply, 'function')
-    const slots = fakeSlots({ modern: true }), effects = [], managed = []
+    const slots = fakeSlots({ modern: true, maintenance: state !== 'failed' }), effects = []
     const own = stop => { if (typeof stop === 'function') effects.push(stop); return stop }
     client.apply({
       effect: callback => own(callback()),
       locale: { register: () => () => {}, bind: () => key => key, subscribe: () => () => {}, getSnapshot: () => ({ active: 'en' }) },
       slots: { ...slots, inject: (name, callback) => own(slots.inject(name, callback)) },
     })
-    const names = () => slots.activeEntries().map(entry => entry.meta.name).sort()
+    const managerEntries = () => slots.activeEntries().filter(entry => !['shell.overlay', 'sidebar.panellist.actions'].includes(entry.meta.name))
+    const names = () => managerEntries().map(entry => entry.meta.name).sort()
+    const maintenance = slots.activeEntries().filter(entry => entry.meta.name === 'sidebar.panellist.actions')
+    assert.equal(maintenance.length, state !== 'failed' ? 1 : 0, 'More diagnostics remain available with an inactive market, but not without the public More slot')
+    if (maintenance.length) {
+      const more = maintenance[0]
+      assert.equal(more.meta.id, 'dsh-portable-plugin-maintenance')
+      assert.equal(more.meta.label(), 'maintenanceTitle')
+      assert.equal(more.component({}), null, 'a public onDismiss owner is required')
+      let dismissed = 0
+      const menu = more.component({ onDismiss: () => dismissed++ })
+      const action = menu.type(menu.props)
+      assert.equal(action.type, externals['@deepseek-ai/dsh-client-ui-primitives'].MenuItemButton)
+      action.props.onSelect()
+      assert.equal(dismissed, 1)
+      const overlayEntry = slots.activeEntries().find(entry => entry.meta.id === 'dsh-portable-plugin-maintenance-overlay')
+      const boundary = overlayEntry.component()
+      const overlay = boundary.props.children
+      const dialog = overlay.type(overlay.props)
+      assert.ok(React.isValidElement(dialog), 'the dialog survives after the More menu has closed')
+      if (state === 'active') {
+        const nodes = children => React.Children.toArray(children).flatMap(child =>
+          React.isValidElement(child) ? [child, ...nodes(child.props.children)] : [child])
+        const maintenanceDialog = dialog.type(dialog.props)
+        const diagnostics = nodes(maintenanceDialog).find(child => child?.props?.readOnly === true && typeof child.props.t === 'function')
+        assert.ok(diagnostics, 'the actual maintenance dialog renders read-only diagnostics')
+        for (const warnings of [[], ['real contract warning']]) {
+          seededStates = [{ profile: 'synthetic', scannedAt: '2026-01-01T00:00:00Z', bundles: [], duplicates: [], multiVersion: [], orphans: [], orderConflicts: [],
+            summary: { ok: true, errors: [], warnings },
+            peerMismatches: Array.from({ length: 15 }, (_, i) => ({ name: 'peer-' + i, plugin: 'test', range: '*', resolved: '1.0.0', satisfied: i % 2 ? null : true })),
+            overrides: Array.from({ length: 29 }, (_, i) => ({ id: 'normal-' + i, layer: 'test', overriddenLayers: ['base'] })),
+          }]
+          const rendered = nodes(diagnostics.type(diagnostics.props))
+          assert.equal(seededStates.length, 0, 'the fixture is the actual Diagnostics report state')
+          assert.equal(rendered.includes('checkIssues'), warnings.length > 0, 'informational peers/normal overrides are not issues, while a real summary warning stays visible')
+          assert.equal(rendered.includes('diagOkAll'), warnings.length === 0)
+          const summary = rendered.find(child => child?.type === 'span' && React.Children.toArray(child.props.children).includes(warnings.length ? 'checkIssues' : 'diagOkAll'))
+          assert.ok(nodes(summary).some(child => child?.props?.state === (warnings.length ? 'warning' : 'done')), 'summary label and severity remain consistent')
+          const dependencies = rendered.find(child => child?.type === 'span' && child.props.title === 'checkPeerMismatches')
+          assert.equal(React.Children.toArray(dependencies.props.children).at(-1), 0, '15 satisfied/unknown peers do not inflate Dependencies')
+          assert.ok(nodes(dependencies).some(child => child?.props?.state === 'done'), 'zero dependencies stay in the normal state')
+          const overrides = rendered.find(child => child?.props?.title === 'checkOverrides')
+          assert.equal(overrides.props.count, 29)
+          assert.equal(overrides.props.problem, false, 'normal layered overrides remain informational')
+          assert.ok(rendered.some(child => typeof child?.props?.title === 'string' && child.props.title.startsWith('checkPeerInfo') && child.props.open === false), 'informational peer detail remains available and collapsed')
+        }
+      }
+      dialog.props.onClose()
+      assert.equal(overlay.type(overlay.props), null)
+    }
     assert.deepEqual(names(), ['plugins.portable.actions', 'plugins.portable.update'])
     slots.setSlot(OFFICIAL_PLUGIN_TAB_SLOT, true)
     slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, true)
@@ -267,7 +319,8 @@ test('shipped default client follows actual official-market state and keeps publ
     const toolbarEntry = slots.activeEntries().find(entry => entry.meta.name === PORTABLE_ACTIONS_SLOT)
     const toolbarElement = toolbarEntry.component({ refresh() {}, openInstall() {}, editInstallSpec() {} })
     const toolbar = toolbarElement.type(toolbarElement.props)
-    const statusBoundary = React.Children.toArray(toolbar.props.children).find(child => React.isValidElement(child?.props?.children) && typeof child.props.children.props.zh === 'boolean')
+    const statusBoundary = React.isValidElement(toolbar.props.children) && typeof toolbar.props.children.props.zh === 'boolean'
+      ? toolbar : React.Children.toArray(toolbar.props.children).find(child => React.isValidElement(child?.props?.children) && typeof child.props.children.props.zh === 'boolean')
     assert.ok(statusBoundary, 'the real legacy toolbar mounts its update status component')
     hookEffects = []
     const status = statusBoundary.props.children
@@ -281,36 +334,18 @@ test('shipped default client follows actual official-market state and keeps publ
     slots.setModern(false)
     slots.setSlot('plugins.portable.update', false)
     await slots.flush()
-    assert.ok(slots.activeEntries().every(entry => entry.meta.name === 'plugins.tab'))
+    assert.ok(managerEntries().every(entry => entry.meta.name === 'plugins.tab'))
     await new Promise(setImmediate)
-    assert.deepEqual(requests, ['/dsh-market/official-market'])
-    const entries = slots.activeEntries()
-    assert.equal(entries.length, state === 'active' ? 1 : 2, 'at most Advanced and fallback Discover are contributed')
-    const advanced = entries.find(entry => entry.meta.id === 'dsh-portable-plugin-advanced')
-    const discover = entries.find(entry => entry.meta.id === 'dsh-portable-plugin-market')
-    assert.equal(advanced.meta.label(), 'navAdvanced')
-    assert.equal(Boolean(discover), state !== 'active')
-    if (discover) assert.equal(discover.meta.label(), 'nav')
-    for (const [entry, view] of [[advanced, 'installed'], ...(discover ? [[discover, 'discover']] : [])]) {
-      const boundary = entry.component({ openPackage: name => managed.push(name), install: () => assert.fail('fallback must not invent an exact official install target') })
-      assert.ok(React.isValidElement(boundary))
-      const page = boundary.props.children
-      assert.ok(React.isValidElement(page))
-      assert.equal(page.props.view, view)
-      assert.equal(page.props.officialUpdates, true)
-      assert.equal(page.props.onOfficialInstall, undefined)
-      page.props.onOfficialManage('example-plugin')
-    }
-    assert.equal(managed.length, entries.length)
-    assert.ok(managed.every(name => name === 'example-plugin'))
+    assert.deepEqual(requests, [], 'public manager ownership never depends on active/inactive/error status of the optional market')
+    assert.equal(managerEntries().length, 0, 'a current public manager never gets a second Discover or Advanced tab')
     failing = false
     for (const active of [true, false]) {
       respondingActive = active
       slots.notify(OFFICIAL_PLUGIN_TAB_SLOT)
       await new Promise(setImmediate)
-      assert.equal(slots.activeEntries().length, active ? 1 : 2, 'external official market changes must refresh the delivered client')
+      assert.equal(managerEntries().length, 0, 'stopping the official market must not create a second manager')
     }
-    assert.equal(requests.length, 3)
+    assert.equal(requests.length, 0, 'activation changes do not trigger a renderer-availability lookup')
     slots.setModern(true)
     slots.setSlot('plugins.portable.update', true)
     slots.setSlot(OFFICIAL_PLUGIN_ACTIONS_SLOT, false)
@@ -322,5 +357,6 @@ test('shipped default client follows actual official-market state and keeps publ
     for (const stop of effects.reverse()) stop()
     await slots.flush()
     assert.deepEqual(names(), [], 'queued declarations and fetch results must not revive an unloaded bundle')
+    assert.equal(slots.activeEntries().length, 0, 'More action and persistent overlay must unload together')
   }
 })

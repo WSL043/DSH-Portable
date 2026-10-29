@@ -162,7 +162,7 @@ test('the packaged market ships runtime artifacts only', async () => {
   assert.ok((await stat(path.join(root, 'app/vendor/dsh-portable-plugin-market/client/client.js'))).size < 220_000)
 })
 
-test('the Portable market reaches the modern manager and retains an old-host fallback', async () => {
+test('official management stays primary and only a missing manager slot retains the legacy fallback', async () => {
   const [app, market, registration, compat, action, section, styles, clientBundle] = await Promise.all([
     read('app/package.json').then(JSON.parse),
     read('app/vendor/dsh-portable-plugin-market/package.json').then(JSON.parse),
@@ -183,10 +183,9 @@ test('the Portable market reaches the modern manager and retains an old-host fal
   assert.match(compat, /settings\.plugins\.tab/)
   assert.match(compat, /spec\?/)
   assert.match(compat, /subscribe\?/)
-  assert.match(action, /<Modal/)
-  assert.match(action, /closeLabel=\{props\.t\('cancel'\)\}/)
-  assert.match(action, /className=\{css\.managerModal\}/)
-  assert.match(action, /view="discover"/)
+  assert.match(action, /return\s*(?:\(\s*)?<MarketErrorBoundary\s+view=(['"])installed\1\s*>\s*<PluginUpdateStatus\b/)
+  assert.doesNotMatch(action, /useOfficialMarket|readOfficialMarket|MarketSection|<Modal|<Button/)
+  assert.doesNotMatch(registration, /dsh-portable-plugin-advanced|navAdvanced/)
   assert.doesNotMatch(registration, /plugins\.item/)
   assert.doesNotMatch(registration, /ctx\.slots\.inject\('settings\.section'/)
   // Row-major grid: cards read left, right, left, right. A column-count gallery filled the left column first.
@@ -215,7 +214,7 @@ test('the Portable market reaches the modern manager and retains an old-host fal
   assert.match(clientBundle, /^window\.__ModuleLoader__\.load\(\{\s*id:\s*"@wsl043\/dsh-portable-plugin-market"/)
 })
 
-test('the market keeps one navigation layer inside the native Plugins page', async () => {
+test('the legacy fallback has one navigation layer and public maintenance adds no manager tab', async () => {
   const [entry, section, styles] = await Promise.all([
     read('app/vendor/dsh-portable-plugin-market/src/client/index.ts'),
     read('app/vendor/dsh-portable-plugin-market/src/client/MarketSection.tsx'),
@@ -223,6 +222,9 @@ test('the market keeps one navigation layer inside the native Plugins page', asy
   ])
 
   assert.match(entry, /id:\s*'market'[\s\S]*id:\s*'installed'/)
+  assert.match(entry, /official:\s*\(\) => \(\) => \{\}/)
+  assert.doesNotMatch(entry, /registerPublicMarket|readOfficialMarket|forgetOfficialMarket/)
+  assert.match(entry, /name: 'sidebar\.panellist\.actions', id: 'dsh-portable-plugin-maintenance'/)
   assert.doesNotMatch(section, /tabDiscover|marketViewSwitch/)
   assert.doesNotMatch(section, /className=\{css\.subTabs\}/)
   assert.doesNotMatch(styles, /^\.subTabs\b/m)

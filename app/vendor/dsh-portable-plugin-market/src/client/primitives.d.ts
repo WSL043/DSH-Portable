@@ -63,6 +63,14 @@ declare module '@deepseek-ai/dsh-client-ui-primitives' {
   export interface MenuLabel { type: 'label'; id: string; text: string }
   export type MenuEntry = MenuItem | MenuSeparator | MenuLabel
 
+  export function MenuItemButton(props: {
+    children: ReactNode
+    icon?: ReactNode
+    disabled?: boolean
+    separatorBefore?: boolean
+    onSelect: () => void
+  }): ReactElement
+
   export function Menu(props: {
     open: boolean
     anchor: ReactNode

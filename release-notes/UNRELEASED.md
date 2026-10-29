@@ -16,6 +16,10 @@ The unreleased main default moves from DSH 0.2.1-rc.3 to the separately qualifie
 
 - Optional alternate-build pruning retains runtime files and records unfamiliar dependency layouts instead of blocking packaging. Known layouts still refuse to remove active Node exports.
 
+- 插件常规安装、启停和配置复用官方管理；侧栏“更多”仅保留“诊断与恢复”，不再常驻第二套高级管理。诊断区分无独立入口的能力组件与未在当前 Profile 启用的真实插件，不自动启用或卸载。
+
+- Routine plugin installation, enablement and configuration use the official manager. Sidebar More keeps only Diagnostics and recovery. Activation diagnostics distinguish capability dependencies from real bundles not selected in the current profile, without enabling or removing packages automatically.
+
 ## 最近交付：0.9.8 / Published 0.9.8
 
 [0.9.8](https://github.com/WSL043/DSH-Portable/releases/tag/v0.9.8) 的成品固定为 main `f5db6400ff27257df8831d7e2d6110f2cef697d1`；[最终完整 CI 39/39](https://github.com/WSL043/DSH-Portable/actions/runs/40732334843)、Security 和 CodeQL 均成功。原生产签名整包已完成真实 0.9.7 → 0.9.8 升级，以及待验证修复、启动失败回退和正常恢复提交验收。公开 Windows ZIP 的大小及 SHA256 与实测成品一致。

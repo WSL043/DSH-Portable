@@ -17,8 +17,8 @@
  * State taxonomy (IMPROVEMENT-PLAN P0-2):
  *   live    – running in the current composition (hot mount or loader entry)
  *   restart – installed and will activate on the next boot, but not live now
- *   inert   – installed but not a profile-layer plugin (plain dependency, or
- *             client-only — the market shim-mounts those at boot)
+ *   inert   – installed but not selected as a profile layer (an unselected
+ *             bundle, dependency/capability component, or client-only package)
  *   broken  – would fail to load: listed as a bundle without a dsh surface,
  *             or a declared entry artifact that is missing
  *   missing – not present in node_modules
@@ -184,7 +184,7 @@ export function verifyActivation(
         }
       : {
           state: 'inert',
-          reasons: ['普通依赖(未声明 dsh 元数据),不是 profile 层插件;若它由某个 bundle patch 按名加载,启动后会显示为已加载 / a plain dependency with no dsh metadata — not a profile-layer plugin; if some bundle patch loads it by name it will read as live once running'],
+          reasons: ['依赖/能力组件，无独立插件入口，由需要它的插件或会话加载；当前未由 Loader 加载 / dependency/capability component with no standalone plugin entry; loaded by a plugin or Session that needs it, not currently loaded by the Loader'],
           bundle: false,
           hot: false,
         }
@@ -228,6 +228,17 @@ export function verifyActivation(
           : '已进入 profile bundle 层但本次未能热挂载;重启后生效 / in the bundle layer but not hot-mounted this session — it activates on restart',
       ],
       bundle: true,
+      hot: false,
+    }
+  }
+
+  if (dsh.bundle !== undefined) {
+    return {
+      state: 'inert',
+      reasons: [
+        '已声明插件 bundle，但未在当前 Profile 启用、未加入加载层；重启不会自动启用 / declares a plugin bundle, but it is not enabled in the current Profile or selected as a loading layer; restarting does not enable it',
+      ],
+      bundle: false,
       hot: false,
     }
   }
