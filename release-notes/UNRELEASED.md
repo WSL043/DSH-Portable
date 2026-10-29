@@ -8,6 +8,10 @@
 
 The unreleased main default moves from DSH 0.2.1-rc.3 to the separately qualified 0.2.1-rc.4. Image Viewer 0.1.17, Chat Manager 1.5.19 and the existing Node/MCP/Zod/pnpm security policy stay unchanged. The RC4 core record is background migration evidence; the final 33-job product CI and local General-page/actual-runtime checks remain pending. Published 0.9.8 still defaults to RC3; this maintenance does not publish or bump a version.
 
+- 更新边界：内核可单独更新；Portable 整包更新可能切换到随包内核。启动时仅会尝试恢复此前选择、较随包版本更新且已通过新外壳验收的内核，仍需联网并可能恢复失败。严格“只升级 Portable 并保留当前内核”尚未实现。
+
+- Core updates are independent; a full Portable update may switch to its bundled core. Startup only attempts to restore a previously selected newer core qualified for the new shell; it needs network access and may fail. Updating only Portable while guaranteeing the current core is retained is not implemented.
+
 ## 最近交付：0.9.8 / Published 0.9.8
 
 [0.9.8](https://github.com/WSL043/DSH-Portable/releases/tag/v0.9.8) 的成品固定为 main `f5db6400ff27257df8831d7e2d6110f2cef697d1`；[最终完整 CI 39/39](https://github.com/WSL043/DSH-Portable/actions/runs/40732334843)、Security 和 CodeQL 均成功。原生产签名整包已完成真实 0.9.7 → 0.9.8 升级，以及待验证修复、启动失败回退和正常恢复提交验收。公开 Windows ZIP 的大小及 SHA256 与实测成品一致。
