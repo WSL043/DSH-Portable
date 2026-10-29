@@ -701,11 +701,22 @@ export function mountMarketRoutes(
         if (current.dependencies !== undefined) delete current.dependencies[name]
         writeFileSync(manifestFile, `${JSON.stringify(current, null, 2)}\n`)
       }
-      if (installed === 0 && dependencies.length > 0) {
-        restored.rollback()
+      const rolledBack = installed === 0 && dependencies.length > 0
+      if (rolledBack) restored.rollback()
+      const settled = JSON.parse(readFileSync(manifestFile, 'utf8')) as typeof manifest
+      const enabled = settled.dsh?.profile?.bundles
+      if (!rolledBack && Array.isArray(enabled)) {
+        // Adding packages may append their bundles; retain the requested layer order.
+        const selected = new Set(enabled)
+        const requested = new Set(desiredBundles)
+        const ordered = [...desiredBundles.filter(name => selected.has(name)), ...enabled.filter(name => !requested.has(name))]
+        if (ordered.length !== enabled.length || ordered.some((name, index) => name !== enabled[index])) {
+          settled.dsh!.profile!.bundles = ordered
+          writeFileSync(manifestFile, `${JSON.stringify(settled, null, 2)}\n`)
+        }
       }
       invalidateUpdates()
-      return { files: restored.files, errors, unportable: unportableDeps(manifest.dependencies) }
+      return { files: rolledBack ? 0 : restored.files, errors, unportable: unportableDeps(settled.dependencies) }
     } catch (error) {
       restored.rollback()
       throw error

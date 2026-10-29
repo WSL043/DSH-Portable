@@ -16,9 +16,9 @@ The unreleased main default moves from DSH 0.2.1-rc.3 to the separately qualifie
 
 - Optional alternate-build pruning retains runtime files and records unfamiliar dependency layouts instead of blocking packaging. Known layouts still refuse to remove active Node exports.
 
-- 插件常规安装、启停和配置复用官方管理；侧栏“更多”仅保留“诊断与恢复”，不再常驻第二套高级管理。诊断区分无独立入口的能力组件与未在当前 Profile 启用的真实插件，不自动启用或卸载。
+- 插件常规安装、启停和配置复用官方管理；侧栏“更多”仅保留“诊断与恢复”，不再常驻第二套高级管理。诊断区分无独立入口的能力组件与未在当前 Profile 启用的真实插件，不自动启用或卸载。配置恢复的逐包重试保留原有加载顺序，全部失败回退后明确提示未完成。
 
-- Routine plugin installation, enablement and configuration use the official manager. Sidebar More keeps only Diagnostics and recovery. Activation diagnostics distinguish capability dependencies from real bundles not selected in the current profile, without enabling or removing packages automatically.
+- Routine plugin installation, enablement and configuration use the official manager. Sidebar More keeps only Diagnostics and recovery. Activation diagnostics distinguish capability dependencies from real bundles not selected in the current profile, without enabling or removing packages automatically. Per-package recovery preserves the selected layer order, and a fully rolled-back restore is reported as incomplete.
 
 ## 最近交付：0.9.8 / Published 0.9.8
 

@@ -126,6 +126,7 @@ function MaintenanceDialog({ t, onClose }: { t: Translate; onClose: () => void }
       })
       const result = await response.json().catch(() => null) as {
         ok?: boolean
+        files?: number
         error?: string
         errors?: Array<{ name: string; error: string }>
         unportable?: unknown[]
@@ -133,6 +134,11 @@ function MaintenanceDialog({ t, onClose }: { t: Translate; onClose: () => void }
       if (!response.ok || result?.ok !== true) throw new Error(result?.error || 'HTTP ' + response.status)
       const failures = Array.isArray(result.errors) ? result.errors : []
       setRestoreErrors(failures)
+      setRevision(value => value + 1)
+      if (result.files === 0 && failures.length > 0) {
+        setError(t('maintenanceRestoreRolledBack'))
+        return
+      }
       setMessage(failures.length > 0
         ? t('maintenanceRestorePartial').replace('{0}', String(failures.length))
         : t('maintenanceRestored'))
@@ -140,7 +146,6 @@ function MaintenanceDialog({ t, onClose }: { t: Translate; onClose: () => void }
         setError(t('maintenanceLocalSources').replace('{0}', String(result.unportable.length)))
       }
       setFile(null)
-      setRevision(value => value + 1)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     } finally {

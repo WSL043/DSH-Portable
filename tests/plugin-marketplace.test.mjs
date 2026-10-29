@@ -243,8 +243,10 @@ test('diagnostic override labels remain readable in both DSH themes', async () =
   assert.match(overrideStyle, /border:\s*1px solid var\(--dsw-alias-border-l3/)
   assert.match(overrideStyle, /color:\s*var\(--dsw-alias-label-primary/)
   assert.doesNotMatch(overrideStyle, /background:\s*var\(--dsw-alias-brand-primary/)
-  assert.match(browserSmoke, /verifyDiagnosticContrast\('light'\)/)
-  assert.match(browserSmoke, /verifyDiagnosticContrast\('dark'\)/)
+  assert.match(browserSmoke, /for\s*\(const theme of \[['"]light['"],\s*['"]dark['"]\]\)/)
+  assert.match(browserSmoke, /await\s+verifyDiagnosticContrast\(theme\)/)
+  assert.match(browserSmoke, /openMaintenance\(themeLabel\)/)
+  assert.match(browserSmoke, /public maintenance diagnostics must remain read-only/)
   assert.match(browserSmoke, /contrastRatio >= 4\.5/)
 })
 
@@ -993,7 +995,7 @@ test('plugin profile transfer no longer duplicates Portable data migration in ma
 })
 
 test('finished products verify and smoke the visual market through the real DSH host', async () => {
-  const [runtime, smoke, browserSmoke, workflow, windows, mac, linux] = await Promise.all([
+  const [runtime, smoke, browserSmoke, workflow, windows, mac, linux, officialCycle, defaultPluginUi] = await Promise.all([
     read('scripts/verify-runtime.mjs'),
     read('scripts/smoke-plugin-marketplace.mjs'),
     read('scripts/smoke-windows-tray-bridge.mjs'),
@@ -1001,6 +1003,8 @@ test('finished products verify and smoke the visual market through the real DSH 
     read('scripts/build-windows.ps1'),
     read('scripts/build-macos.sh'),
     read('scripts/build-linux.sh'),
+    read('scripts/smoke-windows-official-plugin-cycle.mjs'),
+    read('scripts/verify-default-plugin-ui.mjs'),
   ])
 
   assert.match(runtime, /@wsl043\/dsh-portable-plugin-market\/package\.json/)
@@ -1019,15 +1023,24 @@ test('finished products verify and smoke the visual market through the real DSH 
   assert.match(smoke, /plugins\.length\s*>=\s*1_000/)
   assert.match(smoke, /canonicalPluginIdentity/)
   assert.match(smoke, /plugin\.screenshots/)
-  assert.match(browserSmoke, /Plugin Market/)
-  assert.match(browserSmoke, /Search plugins/)
+  assert.match(browserSmoke, /DSH_PORTABLE_OFFICIAL_MARKET:\s*['"]1['"]/)
+  assert.match(browserSmoke, /data-plugin-panel/)
+  assert.match(browserSmoke, /data-market-entry/)
+  assert.match(browserSmoke, /input\[type="search"\]/)
   assert.match(browserSmoke, /installButtons/)
-  assert.match(browserSmoke, /screenshots/)
+  assert.match(browserSmoke, /data-portable-shot/)
+  assert.match(browserSmoke, /data-portable-viewer/)
   assert.match(browserSmoke, /projectHref/)
-  assert.match(browserSmoke, /projectHref:\s*plugin\.url/)
-  assert.match(browserSmoke, /cardShot/)
-  assert.match(browserSmoke, /persisted compact market view/)
-  assert.match(browserSmoke, /localStorage\.getItem\('dshm-market-view'\)/)
+  assert.match(browserSmoke, /Source code/)
+  assert.match(browserSmoke, /retiredPluginOptions/)
+  assert.doesNotMatch(browserSmoke, /Plugin Market settings section|persisted compact market view|localStorage\.getItem\('dshm-market-view'\)/)
+  assert.match(workflow, /node scripts\/smoke-windows-official-plugin-cycle\.mjs/)
+  assert.match(workflow, /node scripts\/verify-default-plugin-ui\.mjs/)
+  assert.match(officialCycle, /cycle\.cancelUninstall = true/)
+  assert.match(officialCycle, /cycle\.reinstalledAndEnabled = true/)
+  assert.match(officialCycle, /probeConcurrentWriters/)
+  assert.match(officialCycle, /update must preserve enablement/)
+  assert.match(defaultPluginUi, /draftPreserved:\s*true/)
   assert.equal((workflow.match(/smoke-plugin-marketplace\.mjs/g) || []).length, 3)
 
   for (const build of [windows, mac, linux]) {
