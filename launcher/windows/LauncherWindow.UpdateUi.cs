@@ -39,19 +39,27 @@ namespace DshPortable
             string product = "DSH-Portable" + (String.IsNullOrEmpty(current) ? "" : " " + current)
                 + (String.IsNullOrEmpty(latest) ? "" : "  →  " + latest);
             string engine;
-            if (!String.IsNullOrEmpty(engineCurrent) && !String.IsNullOrEmpty(engineLatest)
-                && !String.Equals(engineCurrent, engineLatest, StringComparison.Ordinal))
-                engine = L("内置官方 DSH ", "Bundled official DSH ") + engineCurrent + "  →  " + engineLatest;
+            if (!String.IsNullOrEmpty(engineCurrent) && !String.IsNullOrEmpty(engineLatest))
+            {
+                engine = L("内置官方 DSH ", "Bundled official DSH ") + engineCurrent
+                    + (String.Equals(engineCurrent, engineLatest, StringComparison.Ordinal)
+                        ? L("（本次不变）", " (unchanged)")
+                        : "  →  " + engineLatest);
+            }
+            else if (!String.IsNullOrEmpty(engineLatest))
+                engine = L("内置官方 DSH ", "Bundled official DSH ") + engineLatest;
             else
-                engine = L("内置官方 DSH ", "Bundled official DSH ")
-                    + (!String.IsNullOrEmpty(engineLatest) ? engineLatest : engineCurrent)
-                    + L("（本次不变）", " (unchanged)");
+                engine = L("当前 DSH ", "Current DSH ")
+                    + (String.IsNullOrEmpty(engineCurrent) ? L("待确认", "unconfirmed") : engineCurrent)
+                    + (fullPackage
+                        ? L("（目标以整包为准，可能改变）", " (package core unconfirmed; may change)")
+                        : L("（目标内核待确认）", " (target core unconfirmed)"));
             string delivery = fullPackage
-                ? L("交付方式：完整更新", "Delivery: complete package")
+                ? L("交付方式：完整更新（使用随包内核）", "Delivery: complete package (uses bundled core)")
                 : L("交付方式：轻量更新（仅下载已变更的 DSH 应用组件）", "Delivery: component update (only the changed DSH application component)");
             string chosenEngine = fullPackage
-                ? "\r\n" + L("你选过的内核会在更新后自动恢复（需已通过新版本的验收）。",
-                    "An engine you chose is restored after the update once it has passed testing for the new version.")
+                ? "\r\n" + L("联网且通过新外壳验收时，仅尝试恢复较新的已选内核。",
+                    "Online: tries restoring a newer chosen core qualified for this shell.")
                 : "";
             return product + "\r\n" + engine + "\r\n" + delivery + chosenEngine;
         }

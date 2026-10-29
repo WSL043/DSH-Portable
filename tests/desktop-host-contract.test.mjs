@@ -795,3 +795,28 @@ test('macOS and Linux offer Restart from their menus, refusing while a task runs
   assert.match(rust, /&terminal,\s*&restart,\s*&quit/)
   assert.match(rust, /"restart" => \{[\s\S]*?HAS_RUNNING_SESSION[\s\S]*?restart_linux_host\(app\.clone\(\)\)/)
 })
+
+
+test('Windows update description distinguishes unknown package cores from an unchanged known core', async () => {
+  const source = await read('launcher/windows/LauncherWindow.UpdateUi.cs')
+  const description = source.slice(source.indexOf('private static string UpdateDescription('),
+    source.indexOf('private async Task<int> ShowUpdateChoiceOverlayAsync'))
+  const known = description.slice(description.indexOf('if (!String.IsNullOrEmpty(engineCurrent)'),
+    description.indexOf('else if (!String.IsNullOrEmpty(engineLatest))'))
+  assert.match(known, /!String\.IsNullOrEmpty\(engineCurrent\) && !String\.IsNullOrEmpty\(engineLatest\)/)
+  assert.match(known, /String\.Equals\(engineCurrent, engineLatest, StringComparison\.Ordinal\)\s*\? L\("（本次不变）", " \(unchanged\)"\)\s*:\s*"  →  " \+ engineLatest/)
+  assert.equal((description.match(/本次不变/g) || []).length, 1)
+  const unknown = description.slice(description.indexOf('else if (!String.IsNullOrEmpty(engineLatest))'),
+    description.indexOf('string delivery'))
+  assert.match(unknown, /L\("当前 DSH ", "Current DSH "\)/)
+  assert.match(unknown, /目标以整包为准，可能改变/)
+  assert.match(unknown, /package core unconfirmed; may change/)
+  assert.doesNotMatch(unknown, /本次不变|\(unchanged\)/)
+  assert.doesNotMatch(description, /!String\.IsNullOrEmpty\(engineLatest\) \? engineLatest : engineCurrent/)
+  assert.match(description, /完整更新（使用随包内核）/)
+  assert.match(description, /联网且通过新外壳验收时，仅尝试恢复较新的已选内核/)
+  assert.match(description, /tries restoring a newer chosen core qualified for this shell/)
+  assert.doesNotMatch(description, /你选过的内核会在更新后自动恢复|is restored after the update/)
+  assert.match(description, /Delivery: lightweight engine update/)
+  assert.match(description, /return product \+ "\\r\\n" \+ engine \+ "\\r\\n" \+ delivery \+ chosenEngine/)
+})

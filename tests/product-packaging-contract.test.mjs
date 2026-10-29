@@ -1009,6 +1009,10 @@ test('CI executes contracts and real package smoke tests on Windows and both Mac
   assert.match(windowsUiJob, /needs:\s*windows-build/)
   assert.match(windowsUiJob, /runner:\s*windows-2022[\s\S]+runner:\s*windows-2025/)
   assert.match(windowsUiJob, /smoke-windows-startup-theme\.mjs[\s\S]+smoke-windows-market-categories\.mjs[\s\S]+verify-default-plugin-ui\.mjs/)
+  assert.match(windowsUiJob, /\$DshVersion = node -e "[^\n]+v\.includes\('-'\)\?'\.\/upstream\.preview\.lock\.json':'\.\/upstream\.lock\.json'/)
+  const versionCheck = windowsUiJob.match(/node -e "(const fs = require\('node:fs'\);[^\n]+)" \(Join-Path \$PluginRoot 'DSH-Portable\/acceptance\/default-plugin-ui\/result\.json'\) \$DshVersion\n\s+if \(\$LASTEXITCODE -ne 0\) \{ throw 'Default plugin native DSH version did not match the selected upstream lock\.'/)?.[1]
+  assert.ok(versionCheck, 'native UI evidence must be compared with the selected lock and fail the CI step on mismatch')
+  assert.equal(versionCheck, "const fs = require('node:fs'); const assert = require('node:assert/strict'); const result = JSON.parse(fs.readFileSync(process.argv[1], 'utf8')); assert.equal(result.dshVersion, process.argv[2], 'Packaged native DSH version must match the selected upstream lock')")
   assert.match(qualificationJob, /- windows-native-ui/)
   const windowsBaseJob = workflow.match(/\n  windows-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
   const windowsInnoJob = workflow.match(/\n  windows-inno-build:[\s\S]+?(?=\n  [a-z][\w-]+:)/)?.[0] || ''
@@ -1141,19 +1145,26 @@ test('macOS qualification reuses one runner per architecture without omitting pr
   assert.match(mac, /Upload macOS native diagnostics[\s\S]+if: always\(\)/)
   assert.match(mac, /Upload macOS portable update diagnostics\n\s+if: always\(\)/)
 
-  // Exercise the actual final workflow gate, including failure/cancellation or
-  // skipping of the consolidated macOS matrix, rather than a second evaluator.
-  const gate = qualification.match(/node <<'NODE'\n([\s\S]+?)\n          NODE/)?.[1]
-  assert.ok(gate)
-  const evaluate = new Function('process', 'console', gate)
-  const run = result => evaluate({
-    env: { EVENT_NAME: 'push', NEEDS: JSON.stringify({
-      'workflow-lint': { result: 'success' }, contracts: { result: 'success' }, 'macos-build': { result },
-    }) },
-    exit: code => { throw new Error('qualification exit ' + code) },
-  }, { error() {} })
-  assert.doesNotThrow(() => run('success'))
-  for (const result of ['failure', 'cancelled', 'skipped', undefined]) {
-    assert.throws(() => run(result), /qualification exit 1/)
-  }
+  // Keep the success-only final gate explicit without executing workflow text.
+  assert.match(qualification, /NEEDS: \$\{\{ toJSON\(needs\) \}\}/)
+  assert.match(qualification, /const requiredNames = eventName === 'pull_request'\n\s+\? \['workflow-lint', 'contracts'\]\n\s+: Object\.keys\(needs\)/)
+  assert.match(qualification, /const requiredResults = requiredNames\.map\(name => needs\[name\]\?\.result\)/)
+  assert.match(qualification, /const passed = requiredResults\.every\(result => result === 'success'\)\n\s+&& \(eventName !== 'pull_request' \|\| nonRequiredResults\.every\(result => result === 'skipped'\)\)/)
+  assert.match(qualification, /if \(!passed\) \{\n\s+console\.error\(needs\)\n\s+process\.exit\(1\)\n\s+\}/)
+})
+
+
+test('main CI pins reviewed stable and preview source independently of mutable lock data', async () => {
+  const workflow = await read('.github/workflows/ci.yml')
+  const stable = '504a01a9578abc2c6f1fb896b1dc322c9fe24f66'
+  const preview = 'f3803c96974ad4a94195fb97e5c637e9c2a3afe3'
+  const pnpm = '8e1e4c0aaece387dfda16377b2ba31f7a1a2602c'
+  assert.equal(workflow.split(stable).length - 1, 2, 'both immutable guard and default-branch checkout pin RC4')
+  assert.equal(workflow.split(preview).length - 1, 2, 'preview pin remains independent')
+  assert.doesNotMatch(workflow, /1f81c047fc48fa190a683e469daa699857e9afe8/)
+  assert.ok(workflow.includes("github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && '" + preview + "' || '" + stable + "') || steps.preview.outputs.commit"))
+  const guard = workflow.match(/node -e "(if\(process\.env\.GITHUB_REF==='refs\/heads\/main'\)[^\n]+)"/)?.[1]
+  assert.ok(guard, 'main must retain its immutable source admission guard')
+  const expectedGuard = `if(process.env.GITHUB_REF==='refs/heads/main'){const fs=require('fs');const preview=require('./package.json').version.includes('-');const lock=require(preview?'./upstream.preview.lock.json':'./upstream.lock.json');const expected=preview?'${preview}':'${stable}';if(lock.dsh.reviewedCommit!==expected||require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit!=='${pnpm}')throw Error('Default-branch source changed and requires explicit review')}`
+  assert.equal(guard, expectedGuard)
 })

@@ -100,6 +100,13 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
   await fixtureFile(appDir, '@opentelemetry/api/build/src/index.js', 'module.exports = true')
   await fixtureFile(appDir, '@opentelemetry/api/build/esm/index.js', 'export default true')
   await fixtureFile(appDir, '@opentelemetry/api/build/esnext/index.js', 'export default true')
+  await fixtureFile(appDir, '@opentelemetry/semantic-conventions/package.json', JSON.stringify({
+    name: '@opentelemetry/semantic-conventions', version: '1.44.0', main: './dist/index.cjs',
+    exports: { '.': { import: './dist/index.mjs', require: './dist/index.cjs' },
+      './incubating': { import: './dist/index-incubating.mjs', require: './dist/index-incubating.cjs' } },
+  }))
+  const retainedOtelEntries = ['dist/index.cjs', 'dist/index.mjs', 'dist/index-incubating.cjs', 'dist/index-incubating.mjs']
+  for (const entry of retainedOtelEntries) await fixtureFile(appDir, '@opentelemetry/semantic-conventions/' + entry, 'runtime ' + entry)
   await mkdir(path.join(appDir, 'vendor', 'dsh-portable-plugin-market', 'src'), { recursive: true })
   await writeFile(path.join(appDir, 'vendor', 'dsh-portable-plugin-market', 'src', 'maintenance.ts'), 'source only')
 
@@ -177,6 +184,8 @@ test('runtime pruning removes packaging-only payload while preserving runtime an
 
   const report = JSON.parse(result.stdout.trim())
   assert.equal(report.target, 'win32-x64')
+  assert.deepEqual(report.retainedNodeBuilds, [{ name: '@opentelemetry/semantic-conventions', version: '1.44.0', main: './dist/index.cjs', module: null }])
+  for (const entry of retainedOtelEntries) assert.equal(await readFile(path.join(appDir, 'node_modules/@opentelemetry/semantic-conventions', entry), 'utf8'), 'runtime ' + entry)
   assert.ok(report.saved > 0)
   assert.ok(report.removedFiles >= 10)
   assert.ok(report.removedDirectories >= 5)
@@ -233,4 +242,22 @@ test('macOS pruning preserves the pty module and spawn helper for the selected a
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/prebuilds/darwin-x64')), false)
   assert.equal(await exists(path.join(appDir, 'node_modules/node-pty/build')), false)
   assert.equal(JSON.parse(result.stdout.trim()).target, 'darwin-arm64')
+})
+
+test('known alternate builds still refuse to remove an active Node export', async (t) => {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), 'dsh-prune-active-export-'))
+  t.after(() => rm(temporary, { recursive: true, force: true }))
+  const appDir = path.join(temporary, 'app')
+  await fixtureFile(appDir, 'node-pty/package.json', '{"name":"node-pty"}')
+  for (const file of ['conpty.node', 'conpty_console_list.node', 'conpty/conpty.dll', 'conpty/OpenConsole.exe']) await fixtureFile(appDir, 'node-pty/prebuilds/win32-x64/' + file)
+  await fixtureFile(appDir, '@opentelemetry/active/package.json', JSON.stringify({ name: '@opentelemetry/active',
+    main: 'build/src/index.js', module: 'build/esm/index.js',
+    exports: { '.': { import: './build/esm/index.js', require: './build/src/index.js' } } }))
+  const active = await fixtureFile(appDir, '@opentelemetry/active/build/esm/index.js', 'active import')
+  const commonjs = await fixtureFile(appDir, '@opentelemetry/active/build/src/index.js', 'active require')
+  const result = spawnSync(process.execPath, [pruneScript, appDir, 'win32', 'x64'], { encoding: 'utf8' })
+  assert.notEqual(result.status, 0)
+  assert.match(result.stderr, /refusing to remove an active Node export/)
+  assert.equal(await readFile(active, 'utf8'), 'active import')
+  assert.equal(await readFile(commonjs, 'utf8'), 'active require')
 })

@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "dsh": {
     "package": "@deepseek-ai/dsh",
-    "version": "0.2.1-rc.3",
-    "tag": "dsh-v0.2.1-rc.3",
+    "version": "0.2.1-rc.4",
+    "tag": "dsh-v0.2.1-rc.4",
     "sourceRepository": "https://github.com/deepseek-ai/deepseek-harness",
-    "reviewedCommit": "1f81c047fc48fa190a683e469daa699857e9afe8",
+    "reviewedCommit": "504a01a9578abc2c6f1fb896b1dc322c9fe24f66",
     "noticesSha256": "aeea7aa256ede5349cc7903f56a859d54f10b82a45fba7dcce667eb69916dab0",
     "buildProfile": "official",
     "packageManager": "pnpm@11.28.5",
@@ -14,7 +14,7 @@
       "vendor": 9,
       "landlock": 0
     },
-    "integrity": "sha512-H+E9HLnHf7fJqzen84Z9Bq8ggb5xbrcbyhZjXTJLE9NabHr3zteGvTRvdvGkxPl4ov80is4WLglFmSo+/olJjg==",
+    "integrity": "sha512-8gxl6zOi6vx1sDolH+vjh9txrpbXD+t74Z2YfWkEBtR3xP2YEtk0bbLkgLZRnYQgDxCoXitXyXDKn5k0+6iXrg==",
     "buildDependencies": {
       "zod": {
         "version": "4.6.7",
