@@ -313,7 +313,8 @@ test('configuration recovery retains layer order on fallback and reports an all-
       { path: 'config.toml', lines: ['recovered configuration'] },
     ] }
     const { response, body } = await bed.restore(backup)
-    assert.equal(response.status, 200)
+    assert.equal(response.status, 200, JSON.stringify(body))
+    assert.equal(bed.pnpmProbes, 1)
     assert.equal(body.ok, true)
     assert.deepEqual(body.errors.map(item => item.name), allFailed ? ['fixture-plugin', 'broken-restore-plugin'] : ['broken-restore-plugin'])
     assert.equal(body.files, allFailed ? 0 : 2)
@@ -384,6 +385,7 @@ async function updateTestbed(t, {
   if (installed) await writeInstalledPlugin(profile, installedVersion)
 
   const calls = []
+  let pnpmProbes = 0
   const commandRuntime = {
     async runPlugin(_profile, args) {
       calls.push(args)
@@ -392,7 +394,7 @@ async function updateTestbed(t, {
       if (args.at(-1) === 'install' && onInstall) return await onInstall({ args, manifestFile, profile })
       throw new Error(`unexpected plugin command: ${args.join(' ')}`)
     },
-    probePnpm: async () => true,
+    probePnpm: async () => { pnpmProbes++; return true },
     provisionPnpm: async () => ({ ok: true }),
     cancelActive: () => false,
   }
@@ -507,6 +509,7 @@ async function updateTestbed(t, {
       })
       return { response, body: await response.json() }
     },
+    get pnpmProbes() { return pnpmProbes },
     async restore(backup) {
       const response = await originalFetch(origin + '/dsh-market/restore', {
         method: 'POST',

@@ -633,7 +633,7 @@ export function mountMarketRoutes(
   }
 
   async function restoreBackup(value: unknown): Promise<{ files: number; errors: { name: string; error: string }[]; unportable?: Array<{ name: string; spec: string }> }> {
-    if (!await probePnpm()) throw new Error('pnpm is required to restore plugins')
+    if (!await commands.probePnpm()) throw new Error('pnpm is required to restore plugins')
     // Snapshot the target's manifest BEFORE the backup files overwrite it, so
     // the restore can merge rather than replace: plugins the target already
     // has that are NOT in the backup stay installed instead of silently
