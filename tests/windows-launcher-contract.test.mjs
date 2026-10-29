@@ -162,7 +162,7 @@ test('the native updater explains core qualification and the core restore instea
   const ui = await readFile(new URL('../launcher/windows/LauncherWindow.UpdateUi.cs', import.meta.url), 'utf8')
   const cli = await readFile(new URL('../launcher/portable-cli.mjs', import.meta.url), 'utf8')
   assert.match(update, /updateStatus == "core-awaiting-qualification"/)
-  assert.match(ui, /你选过的内核会在更新后自动恢复/)
+  assert.match(ui, /联网且通过新外壳验收时，仅尝试恢复较新的已选内核/)
   assert.match(ui, /phase == "core-restoring"/)
   assert.match(cli, /phase: 'core-restoring'/)
 })
