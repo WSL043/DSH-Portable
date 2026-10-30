@@ -16,6 +16,10 @@ on:
         required: false
         default: true
         type: boolean
+      final_acceptance:
+        description: Final-artifact acceptance JSON bound to this commit, CI run and artifact hashes. Required for publication, not prepare_only.
+        required: false
+        type: string
       prepare_only:
         description: Sign metadata for final acceptance and upload it only to Actions; never create a tag, Release, or update feed.
         required: false
@@ -38,6 +42,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      - name: Require final-artifact acceptance before publication
+        if: ${{ !inputs.prepare_only }}
+        env:
+          FINAL_ACCEPTANCE_JSON: ${{ inputs.final_acceptance }}
+        run: test -n "$FINAL_ACCEPTANCE_JSON"
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
@@ -74,9 +83,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
           RUN_ID: ${{ inputs.run_id }}
+          PREPARE_ONLY: ${{ inputs.prepare_only }}
+          FINAL_ACCEPTANCE_JSON: ${{ inputs.final_acceptance }}
         run: |
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}" > release-run.json
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > release-jobs.json
+          ACCEPTANCE_FLAGS=()
+          if [ "$PREPARE_ONLY" != true ]; then ACCEPTANCE_FLAGS=(--require-final-acceptance); fi
           node scripts/create-release-evidence.mjs \
             release-staging/user-assets \
             release-run.json \
@@ -84,7 +97,7 @@ jobs:
             release-qualification.json \
             "$GITHUB_REPOSITORY" \
             "$GITHUB_SHA" \
-            "$RELEASE_TAG"
+            "$RELEASE_TAG" "${ACCEPTANCE_FLAGS[@]}"
       - name: Sign the user download provenance with GitHub attestations
         if: ${{ !inputs.prepare_only }}
         uses: actions/attest@v4

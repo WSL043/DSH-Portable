@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto'
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { assertFinalArtifactAcceptance } from './lib/final-artifact-acceptance.mjs'
 
-const [assetsArg, runArg, jobsArg, outputArg, repository, expectedCommit, tag] = process.argv.slice(2)
+const [assetsArg, runArg, jobsArg, outputArg, repository, expectedCommit, tag, acceptanceMode] = process.argv.slice(2)
 if (!assetsArg || !runArg || !jobsArg || !outputArg || !repository || !expectedCommit || !tag) {
   throw new Error('usage: node create-release-evidence.mjs <user-assets> <run.json> <jobs.json> <output.json> <owner/repository> <commit> <tag>')
 }
@@ -11,6 +12,8 @@ if (!/^[a-f0-9]{40}$/.test(expectedCommit)) throw new Error('expected commit mus
 if (!/^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)\.[1-9]\d*)?$/.test(tag)) {
   throw new Error('tag must be a stable or conventional alpha, beta, or release-candidate version')
 }
+
+if (acceptanceMode && acceptanceMode !== '--require-final-acceptance') throw new Error('unknown release acceptance mode')
 
 const assets = path.resolve(assetsArg)
 const run = JSON.parse(await readFile(path.resolve(runArg), 'utf8'))
@@ -81,6 +84,11 @@ const evidence = {
   passedTests: jobs.map(job => job.name),
   warnedTests: [],
   failedTests: [],
+}
+if (acceptanceMode === '--require-final-acceptance') {
+  evidence.localAcceptance = assertFinalArtifactAcceptance(process.env.FINAL_ACCEPTANCE_JSON, {
+    tag, commit: expectedCommit, runId: run.id, subjects,
+  })
 }
 const evidenceBytes = Buffer.from(`${JSON.stringify(evidence, null, 2)}\n`)
 await writeFile(path.resolve(outputArg), evidenceBytes)

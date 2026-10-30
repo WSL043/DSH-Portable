@@ -14,6 +14,7 @@
 # and only then flip the update feed. If any core fails, the feed stays on the previous shell and the script
 # exits non-zero; fix the cause, then rerun with --resume.
 #
+# Set FINAL_ACCEPTANCE_FILE to the completed final-artifact JSON; it is required in every mode.
 # Run it from a clean checkout of main after the release commit (version bump + release-notes/v<version>.json)
 # is pushed. GitHub's workflow-dispatch API sometimes answers HTTP 500 for a while, so every dispatch is retried
 # once a minute. Requires an authenticated gh CLI with access to both repositories.
@@ -26,6 +27,9 @@ TAG="v${VERSION}"
 REPOSITORY="WSL043/DSH-Portable"
 UPDATES="WSL043/DSH-Portable-Updates"
 GATE_TIMEOUT_MINUTES="${GATE_TIMEOUT_MINUTES:-120}"
+ACCEPTANCE_FILE="${FINAL_ACCEPTANCE_FILE:?Set FINAL_ACCEPTANCE_FILE to the final-artifact acceptance JSON file}"
+[ -f "$ACCEPTANCE_FILE" ] || { echo "final-artifact acceptance file is missing" >&2; exit 2; }
+FINAL_ACCEPTANCE_JSON="$(cat "$ACCEPTANCE_FILE")"
 
 ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
@@ -46,6 +50,12 @@ if [ "$MODE" = --resume ]; then
 else
   [ "$HEAD_SHA" = "$(git rev-parse origin/main)" ] || { echo "HEAD is not origin/main; push the release commit first" >&2; exit 2; }
   gh release view "$TAG" -R "$REPOSITORY" >/dev/null 2>&1 && { echo "$TAG is already published (use --resume if its feed is still held)" >&2; exit 2; }
+fi
+
+PUBLISH_WORKFLOW="$(git show "$HEAD_SHA:.github/workflows/publish.yml")"
+if ! grep -q "^      final_acceptance:" <<< "$PUBLISH_WORKFLOW"; then
+  echo "This historical publisher predates the final-artifact acceptance gate; automatic publication/resume is refused. Do not rewrite its tag." >&2
+  exit 2
 fi
 
 dispatch() {
@@ -71,7 +81,7 @@ publish() { # $1 = true|false: whether the in-app update feed is flipped by this
   # belong to the commit CI tested, which is the tag's commit.
   local ref="$PUBLISH_REF"
   if [ "$1" = true ] && [ "$MODE" != --skip-gate ]; then ref="$TAG"; fi
-  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref "$ref" -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" \
+  dispatch gh workflow run publish.yml -R "$REPOSITORY" --ref "$ref" -f run_id="$RUN" -f tag="$TAG" -f publish_feed="$1" -f final_acceptance="$FINAL_ACCEPTANCE_JSON" \
     || { echo "could not dispatch the publish workflow" >&2; exit 1; }
   sleep 20
   local publish_run
