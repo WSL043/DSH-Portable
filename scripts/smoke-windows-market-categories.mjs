@@ -4,12 +4,14 @@ import { isDeepStrictEqual, promisify } from 'node:util'
 import { createServer } from 'node:net'
 import { readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { dismissOfficialOnboardingExpression } from './lib/official-onboarding.mjs'
 import { safeDataTarget } from '../launcher/data-paths.mjs'
 import { verifiedPackageFile } from './verified-package-file.mjs'
+import { ensureRuntimeCapsule } from '../launcher/runtime-capsule.mjs'
 
 const repositoryRoot = fileURLToPath(new URL('../', import.meta.url))
 
@@ -447,6 +449,20 @@ try {
       await until(click(['通用设置']), Boolean, 'restore official language settings')
       await until(click(['简体中文', '中文', '中文（简体）']), Boolean, 'Chinese language selector')
       await until(click(['English']), Boolean, 'restore English for later independent checks')
+      // Locale UI state precedes its asynchronous settings write; settle that write before the read-only baseline.
+      const { runtimeRoot } = await ensureRuntimeCapsule(root, { env })
+      const parseYaml = createRequire(path.join(runtimeRoot, 'app/package.json'))('yaml').parse
+      const localeStarted = Date.now(), localeDeadline = localeStarted + 30000
+      let preference, localePatch
+      do {
+        localePatch = await readFile(await verifiedPackageFile(root, 'data/dsh-home/profiles/web/cordis.patch.yml'))
+        const patch = parseYaml(localePatch.toString('utf8'))
+        preference = Array.isArray(patch) ? patch.find(entry => entry?.id === 'locale')?.config?.preference : undefined
+        if (preference === 'en') break
+        await delay(100)
+      } while (Date.now() < localeDeadline)
+      assert.equal(preference, 'en', 'English locale is persisted before the legacy read-only baseline')
+      await writeFile(path.join(output, 'locale-persisted-before-legacy.json'), JSON.stringify({ preference, elapsedMs: Date.now() - localeStarted, patchSha256: createHash('sha256').update(localePatch).digest('hex') }, null, 2))
     }
     assert.deepEqual(exceptions, [])
     await writeFile(path.join(output, 'checks.json'), JSON.stringify(checks, null, 2))
