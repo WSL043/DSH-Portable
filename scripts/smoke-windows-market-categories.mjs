@@ -186,7 +186,7 @@ try {
     throw new Error(`${label}: ${JSON.stringify(result)}`)
   }
   const click = (names, scope = 'body') => `(() => {const names=${JSON.stringify(names)};const root=document.querySelector(${JSON.stringify(scope)});const button=[...(root?.querySelectorAll('button,[role="button"],[role="tab"],[role="menuitem"]')||[])].find(item=>names.includes((item.getAttribute('aria-label')||item.textContent||'').trim())&&item.getBoundingClientRect().width>0);button?.click();return Boolean(button)})()`
-  const clickDiscoverTab = click(['Discover', '发现'], '[data-plugin-panel] [role="tablist"]')
+  const clickDiscoverTab = click(['Discover', '发现'], '[role="tablist"]')
   const openMarket = async () => {
     await until(clickDiscoverTab, Boolean, 'official Discover tab')
     await until('Boolean(document.querySelector(\'[data-plugin-tab="discover"]\'))', Boolean, 'official Discover content')
