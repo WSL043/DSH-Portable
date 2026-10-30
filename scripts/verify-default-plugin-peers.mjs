@@ -7,7 +7,6 @@ import { fileURLToPath } from 'node:url'
 
 import { incompatibleProfilePeers, satisfiesHostPeer } from '../launcher/profile-compatibility.mjs'
 
-const REQUIRED = ['dsh-chat-manager', 'dsh-image-viewer']
 const PACKAGE_NAME = /^(?:@[a-z0-9-~][a-z0-9._~-]*\/)?[a-z0-9-~][a-z0-9._~-]*$/i
 
 export function peerManifestPath(appDir, peer) {
@@ -18,13 +17,16 @@ export function peerManifestPath(appDir, peer) {
 }
 
 /** Fail before packaging when a default bundle would be paused on first boot. */
-export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage, 'app') } = {}) {
+export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage, 'app'), defaultPlugins } = {}) {
+  defaultPlugins ??= Object.values(JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8')).defaultPlugins ?? {})
+  const required = defaultPlugins.map(plugin => plugin.package)
   const archives = path.join(stage, 'default-plugins')
-  const semver = createRequire(path.join(appDir, 'package.json'))('semver')
   const found = (await readdir(archives)).filter(name => name.endsWith('.tgz')).sort()
-  assert.deepEqual(found, REQUIRED.map(name => `${name}.tgz`).sort(), 'packaged default plugin archives')
+  assert.deepEqual(found, required.map(name => `${name}.tgz`).sort(), 'packaged default plugin archives')
+  if (required.length === 0) return []
+  const semver = createRequire(path.join(appDir, 'package.json'))('semver')
   const result = []
-  for (const name of REQUIRED) {
+  for (const name of required) {
     const archive = path.join(archives, `${name}.tgz`)
     const content = execFileSync(process.platform === 'win32' ? 'tar.exe' : 'tar',
       ['-xOf', archive, 'package/package.json'], { maxBuffer: 256 * 1024, windowsHide: true })
@@ -46,5 +48,6 @@ export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (!process.argv[2]) throw new Error('usage: node verify-default-plugin-peers.mjs <staged-product-directory>')
-  console.log(JSON.stringify(await verifyDefaultPluginPeers(path.resolve(process.argv[2]))))
+  const lock = JSON.parse(await readFile(process.argv[3] || new URL('../upstream.lock.json', import.meta.url), 'utf8'))
+  console.log(JSON.stringify(await verifyDefaultPluginPeers(path.resolve(process.argv[2]), { defaultPlugins: Object.values(lock.defaultPlugins ?? {}) })))
 }

@@ -1,4 +1,5 @@
 // Resolve default-plugin dependencies during the build, never on first launch.
+import assert from 'node:assert/strict';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
@@ -10,9 +11,14 @@ if (!process.argv[2]) throw Error('Provide the staged Portable root.');
 const archiveRoot = path.join(stage, 'default-plugins');
 const runtimeRoot = path.resolve(process.argv[3] || stage);
 const pnpmRoot = path.join(runtimeRoot, 'app/node_modules/pnpm');
-const pnpmManifest = JSON.parse(await readFile(path.join(pnpmRoot, 'package.json'), 'utf8'));
 const archives = (await readdir(archiveRoot)).filter(name => name.endsWith('.tgz'));
-if (!archives.length) throw Error('No reviewed default-plugin archives.');
+const componentLock = JSON.parse(await readFile(process.argv[4] || new URL('../upstream.lock.json', import.meta.url), 'utf8'));
+assert.deepEqual([...archives].sort(), Object.values(componentLock.defaultPlugins ?? {}).map(plugin => plugin.filename).sort(), 'declared default-plugin archives');
+if (!archives.length) {
+  console.log('No default plugins declared; no dependency store is required.');
+  process.exit(0);
+}
+const pnpmManifest = JSON.parse(await readFile(path.join(pnpmRoot, 'package.json'), 'utf8'));
 const archiveIntegrities = await Promise.all(archives.map(async name =>
   `sha512-${createHash('sha512').update(await readFile(path.join(archiveRoot, name))).digest('base64')}`));
 const reviewedLocks = await Promise.all(['pnpm-lock.yaml', 'pnpm-lock.preview.yaml'].map(async name => {

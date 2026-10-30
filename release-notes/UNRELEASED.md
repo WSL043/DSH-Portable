@@ -2,11 +2,15 @@
 
 ## 未发布维护 / Unreleased maintenance
 
+- 新版本不再默认安装 Image Viewer 和 Chat Manager；已有安装、配置与启停状态保持不变，可按需通过官方插件管理安装。
+
+- New packages no longer install Image Viewer or Chat Manager by default. Existing installations, configuration and enablement states are preserved; both remain available through the official plugin manager.
+
 - 修复原生更新完成提示读取 CLI 多行输出时漏掉插件暂停警告；保留原有预检、插件数据和恢复行为。本项进入 main 后不另行发布版本，也不改写已公开的 0.9.8 成品。
 
-- 待发布 main 将默认内核从 DSH 0.2.1-rc.3 校正为已独立验收的 0.2.1-rc.4；Image Viewer 0.1.17、Chat Manager 1.5.19 及现有 Node/MCP/Zod/pnpm 安全策略不变。[RC4 记录](../docs/core-rc4-historical-result-2026-10-29.json)仅证明既有可选内核的迁移和五平台资格；新默认组合须以对应提交的最终 33 项成品 CI、General 页和实际 RC4 运行时本机验收为准，历史记录不能替代。本项不改写已发布 0.9.8 的 RC3 默认组合，不另行发布或修改版本号。
+- 待发布 main 将默认内核从 DSH 0.2.1-rc.3 校正为已独立验收的 0.2.1-rc.4；现有 Node/MCP/Zod/pnpm 安全策略不变；默认插件调整见上文。[RC4 记录](../docs/core-rc4-historical-result-2026-10-29.json)仅证明既有可选内核的迁移和五平台资格；新默认组合须以对应提交的最终 33 项成品 CI、General 页和实际 RC4 运行时本机验收为准，历史记录不能替代。本项不改写已发布 0.9.8 的 RC3 默认组合，不另行发布或修改版本号。
 
-The unreleased main default moves from DSH 0.2.1-rc.3 to the separately qualified 0.2.1-rc.4. Image Viewer 0.1.17, Chat Manager 1.5.19 and the existing Node/MCP/Zod/pnpm security policy stay unchanged. The RC4 core record is background migration evidence; the default combination requires its own final 33-job product CI and local General-page/actual-runtime checks. Published 0.9.8 still defaults to RC3; this maintenance does not publish or bump a version.
+The unreleased main default moves from DSH 0.2.1-rc.3 to the separately qualified 0.2.1-rc.4. The existing Node/MCP/Zod/pnpm security policy stays unchanged; the default-plugin change is described above. The RC4 core record is background migration evidence; the default combination requires its own final 33-job product CI and local General-page/actual-runtime checks. Published 0.9.8 still defaults to RC3; this maintenance does not publish or bump a version.
 
 - 更新边界：内核可单独更新；Portable 整包更新可能切换到随包内核。启动时仅会尝试恢复此前选择、较随包版本更新且已通过新外壳验收的内核，仍需联网并可能恢复失败。严格“只升级 Portable 并保留当前内核”尚未实现。
 

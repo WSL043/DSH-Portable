@@ -47,7 +47,16 @@ test('stable Portable never publishes a beta default plugin', () => {
   assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock: {
     defaultPlugins: { ...stableLock.defaultPlugins, imageViewer: { package: 'dsh-image-viewer', version: '0.1.3-beta.3', releaseChannel: 'prerelease' } },
   } }), /reviewed stable versions/)
-  assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock: { defaultPlugins: {} } }), /reviewed stable versions/)
+  assert.doesNotThrow(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock: { ...stableLock, defaultPlugins: {} }, readiness: passed }))
+})
+
+test('an empty default set must be explicit and retains migration and security gates', () => {
+  for (const defaultPlugins of [undefined, null, [], ['dsh-image-viewer'], 'invalid', 42]) {
+    assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock: { ...stableLock, defaultPlugins }, readiness: passed }), /explicit defaultPlugins object/)
+  }
+  const empty = { ...stableLock, defaultPlugins: {} }
+  assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock: empty, readiness: null }), /historical-session migration/)
+  assert.throws(() => assertPublishReadiness({ productVersion: '0.7.5', stableLock: empty, readiness: { ...passed, dependencySecurity: undefined } }), /bundled-dependency security/)
 })
 
 test('stable migration evidence cannot hide a missing or altered compatibility patch', () => {

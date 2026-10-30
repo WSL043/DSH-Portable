@@ -6,9 +6,13 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { layoutForRoot } from '../launcher/portable-core.mjs'
-import { DEFAULT_PLUGINS, PREVIEW_DEFAULT_PLUGINS, defaultsForProduct, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
+import { DEFAULT_PLUGINS as CURRENT_DEFAULT_PLUGINS, PREVIEW_DEFAULT_PLUGINS as CURRENT_PREVIEW_DEFAULT_PLUGINS, defaultsForProduct, seedDefaultPlugins } from '../launcher/default-plugins.mjs'
 
 const lock = JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8'))
+// Retain historical declared-default scenarios independently of today's empty list.
+const historicalPins = JSON.parse(await readFile(new URL('./fixtures/previous-default-plugins.json', import.meta.url), 'utf8'))
+const DEFAULT_PLUGINS = defaultsForProduct({ root: '/fixture' }, { existsSync: () => true, readFileSync: () => JSON.stringify({ defaultPlugins: historicalPins }) })
+const PREVIEW_DEFAULT_PLUGINS = DEFAULT_PLUGINS
 const imageVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-image-viewer').version
 const chatVersion = DEFAULT_PLUGINS.find(plugin => plugin.name === 'dsh-chat-manager').version
 
@@ -27,6 +31,8 @@ test('product metadata must identify an exact reviewed artifact without duplicat
 async function fixture(t) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-default-plugin-'))
   t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(path.join(root, 'licenses'), { recursive: true })
+  await writeFile(path.join(root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ defaultPlugins: historicalPins }))
   return layoutForRoot(root, process.platform)
 }
 
@@ -37,12 +43,26 @@ async function writeReviewedArchives(layout) {
   }
 }
 
-test('fresh products declare only the reviewed image viewer and existing chat manager defaults', () => {
-  assert.deepEqual(Object.keys(lock.defaultPlugins).sort(), ['chatManager', 'imageViewer'])
-  assert.deepEqual(DEFAULT_PLUGINS.map(plugin => plugin.name), ['dsh-image-viewer', 'dsh-chat-manager'])
-  assert.equal(lock.defaultPlugins.imageViewer.version, imageVersion)
-  assert.equal(lock.defaultPlugins.chatManager.version, chatVersion)
+test('fresh products declare no default community plugins', () => {
+  assert.deepEqual(lock.defaultPlugins, {})
+  assert.deepEqual(CURRENT_DEFAULT_PLUGINS, [])
+  assert.deepEqual(CURRENT_PREVIEW_DEFAULT_PLUGINS, [])
 })
+
+for (const existing of [false, true]) {
+  test(`an empty default list leaves ${existing ? 'installed plugins and enablement' : 'a fresh profile'} untouched`, async t => {
+    const layout = await fixture(t)
+    await writeFile(path.join(layout.root, 'licenses', 'COMPONENTS.json'), JSON.stringify({ defaultPlugins: [] }))
+    const profileRoot = path.join(layout.dshHome, 'profiles', 'web')
+    const filename = path.join(profileRoot, 'package.json')
+    const original = JSON.stringify({ dependencies: { 'dsh-image-viewer': '0.1.17', 'dsh-chat-manager': '1.5.19' }, dsh: { profile: { bundles: ['dsh-image-viewer'], disabled: ['dsh-chat-manager'] } } })
+    if (existing) { await mkdir(profileRoot, { recursive: true }); await writeFile(filename, original) }
+    const result = await seedDefaultPlugins(layout, { spawnSync() { assert.fail('empty defaults must not run plugin operations') } })
+    assert.deepEqual(result, { status: 'skipped', profile: 'web', reason: 'no-compatible-defaults' })
+    if (existing) assert.equal(await readFile(filename, 'utf8'), original)
+    else await assert.rejects(readFile(filename), { code: 'ENOENT' })
+  })
+}
 
 test('a fresh product seeds both reviewed archives and promotes their update specs', async (t) => {
   const layout = await fixture(t)
