@@ -57,11 +57,11 @@ jobs:
           node -e "const lock=require(require('./package.json').version.includes('-') ? './upstream.preview.lock.json' : './upstream.lock.json'); console.log('commit='+lock.dsh.reviewedCommit); console.log('version='+lock.dsh.version); console.log('packageManager='+lock.dsh.packageManager); console.log('lockFile='+(require('./package.json').version.includes('-') ? 'upstream.preview.lock.json' : 'upstream.lock.json')); console.log('pnpmCommit='+require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit); for (const [family,count] of Object.entries(lock.dsh.packedFamilies)) console.log(family+'Count='+count)" >> "$GITHUB_OUTPUT"
       - name: Bind default-branch execution to reviewed immutable source
         run: |
-          node -e "if(process.env.GITHUB_REF==='refs/heads/main'){const fs=require('fs');const preview=require('./package.json').version.includes('-');const lock=require(preview?'./upstream.preview.lock.json':'./upstream.lock.json');const expected=preview?'f3803c96974ad4a94195fb97e5c637e9c2a3afe3':'504a01a9578abc2c6f1fb896b1dc322c9fe24f66';if(lock.dsh.reviewedCommit!==expected||require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit!=='8e1e4c0aaece387dfda16377b2ba31f7a1a2602c')throw Error('Default-branch source changed and requires explicit review')}"
+          node -e "if(process.env.GITHUB_REF==='refs/heads/main'){const fs=require('fs');const preview=require('./package.json').version.includes('-');const lock=require(preview?'./upstream.preview.lock.json':'./upstream.lock.json');const expected=preview?'f3803c96974ad4a94195fb97e5c637e9c2a3afe3':'b830ec950faba0a46dda564be3e2d854afed94f1';if(lock.dsh.reviewedCommit!==expected||require('./upstream.lock.json').pnpm.sourceBuild.reviewedCommit!=='8e1e4c0aaece387dfda16377b2ba31f7a1a2602c')throw Error('Default-branch source changed and requires explicit review')}"
       - uses: actions/checkout@v7
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: ${{ github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && 'f3803c96974ad4a94195fb97e5c637e9c2a3afe3' || '504a01a9578abc2c6f1fb896b1dc322c9fe24f66') || steps.preview.outputs.commit }}
+          ref: ${{ github.ref == 'refs/heads/main' && (steps.preview.outputs.lockFile == 'upstream.preview.lock.json' && 'f3803c96974ad4a94195fb97e5c637e9c2a3afe3' || 'b830ec950faba0a46dda564be3e2d854afed94f1') || steps.preview.outputs.commit }}
           path: upstream
           persist-credentials: false
       - name: Apply reviewed source dependency locks
