@@ -18,6 +18,34 @@ node scripts/set-product-version.mjs x.y.z           # 同步所有版本号
 # 编写 release-notes/vx.y.z.json（中英文及致谢），本地 npm test 通过后推送 main
 ```
 
+### 最终实机验收记录（公开 Release 前必需）
+
+先冻结本批验收清单，覆盖用户要求及相关 issue/PR 的每个实际操作，再逐项记录结果。菜单显示、普通下载、系统另存为和取消是不同路径；必须完成各自操作，核对保存内容及取消无写入。failed、pending、blocked、skipped 都不能按通过汇总；验收工具失败先归因并保留原记录，补齐最终成品的证据后才可发布。
+
+正式 publisher 的 `final_acceptance` 输入接收小型 JSON，由现有资格记录脚本核对确切 tag、完整提交、CI run ID 和真实发布成品（压缩包或安装器）SHA-256；缺少记录、空清单、任何未通过项、错成品或缺证据摘要均在创建公开 Release 前失败。通过的声明随现有 qualification attestation 保存，不另建报告服务。`prepare_only=true` 只准备签名元数据，故不要求实机记录，也不能据此宣称实机通过。
+
+记录格式如下；占位值必须替换为本次真实值，每项实际操作单独列出，文件保存在工作区外的验收证据目录：
+
+```json
+{
+  "schemaVersion": 1,
+  "tag": "vX.Y.Z",
+  "commit": "<完整 main 提交>",
+  "runId": 0,
+  "checks": [{
+    "name": "图片另存为：原生对话框保存并核对内容",
+    "status": "passed",
+    "artifact": "DSH-Portable-windows-x64-offline.zip",
+    "sha256": "<该压缩包的 64 位 SHA-256>",
+    "evidenceSha256": "<该项实机报告的 64 位 SHA-256>"
+  }]
+}
+```
+
+该声明不能自动证明人工没漏测：主代理必须对照冻结清单核对每项及原始报告，不能用 CI 结果生成一份“全部通过”声明；JSON 内不放私有路径、日志或凭据。最多 64 项、32 KiB，只覆盖本批实际操作，未受影响的同摘要证据复用。
+
+正式流程及 `--resume` 均通过 `FINAL_ACCEPTANCE_FILE` 指定同一记录。新门禁不改写历史 tag、Release 或资产；缺少该输入的历史 publisher 会在自动派发前明确拒绝，不能盲目重试、伪造记录或重写 tag。
+
 最终 main CI 成功后、公开 Release 前，先用同一个发布工作流准备生产签名清单，供最终成品实机验收：
 
 ```bash
@@ -30,7 +58,7 @@ gh workflow run publish.yml --ref main -f run_id=<最终mainCI运行ID> -f tag="
 上述最终验收通过后再执行下面的正式流程；`prepare_only` 不代替成品验收，也不改变先公开下载、验内核、最后翻更新源的顺序。正式发布的两份 attestation 保持必需。
 
 ```bash
-scripts/ship-stable.sh x.y.z
+FINAL_ACCEPTANCE_FILE=/path/to/final-acceptance.json scripts/ship-stable.sh x.y.z
 ```
 
 `ship-stable.sh` 的顺序是**先验内核、后让用户看到新版**：
@@ -60,6 +88,9 @@ gh workflow run sync-core.yml --repo WSL043/DSH-Portable-Updates --ref main -f r
 背景：Portable 的整包更新会整体替换程序；用户在目标外壳还没有兼容内核时升级，可能丢掉自己选的内核（issue #163）。现在内核以 `requiredShellContract` 匹配外壳，接口号相同可沿用已验收内核，不必每发一次外壳就重验；没有接口号的旧版本仍按确切版本与指纹匹配，详见 [shell contract](shell-contract.md)。GitHub 的触发接口偶尔连续返回 HTTP 500，脚本每分钟重试一次。
 
 ## 3. 注意
+
+- issue 的完成顺序是修复/明确边界 → 对应最终成品逐项验收 → 在授权范围内回复实际版本、覆盖范围和限制 → 回读回复成功 → 关闭。只合入 main 时明确尚未发布；部分解决或仍有验收缺口时保持开放。关闭不是回复，已派发不是已发布，公开下载不是客户端已生效。
+- 发版后的下载、签名、内核目录和更新源回读完成，才报告线上交付完成；临时副本按精确清单回收，保留必要小型证据。完整工作约定见根目录 [AGENTS.md](../AGENTS.md)。
 
 - 验收脚本放在更新仓库（`scripts/verify-default-plugin-ui.mjs`）。界面新增弹窗、改按钮位置的改动，要在同一次发版前同步改它；否则内核验收会失败。
 - 内核包包含 Portable 的页面桥接资源。跨内核验收还要确认通用窗口入口、插件管理和离线更新入口不会恢复旧实现；必要时在同一最终外壳源码上重新准备受影响内核，接口号相同不代替这项检查。
