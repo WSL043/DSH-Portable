@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { safeDataTarget, writeDataFileAtomic } from './data-paths.mjs'
+import { safeDataTarget } from './data-paths.mjs'
 
 const PACKAGE_NAME = /^(?:@[A-Za-z0-9][A-Za-z0-9._-]*\/)?[A-Za-z0-9][A-Za-z0-9._-]*$/
 
@@ -49,22 +49,22 @@ export async function incompatibleProfilePeers(plugin, hostVersion, { satisfies,
   return incompatible
 }
 
-export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}) {
+export async function checkProfileCompatibility(layout, { satisfies } = {}) {
   const manifestFile = await safeDataTarget(layout.stateRoot, 'data/dsh-home/profiles/web/package.json', { createParents: false })
-  if (!manifestFile) return { status: 'skipped', paused: [] }
+  if (!manifestFile) return { status: 'skipped', incompatible: [] }
   const profileRoot = path.dirname(manifestFile)
   const manifest = JSON.parse(await readFile(manifestFile, 'utf8'))
   const bundles = manifest.dsh?.profile?.bundles
-  if (!Array.isArray(bundles)) return { status: 'skipped', paused: [] }
+  if (!Array.isArray(bundles)) return { status: 'skipped', incompatible: [] }
   const active = bundles.filter(isCommunityBundle)
-  if (active.length === 0) return { status: 'skipped', paused: [] }
+  if (active.length === 0) return { status: 'skipped', incompatible: [] }
 
   // Use the exact semver implementation shipped with this DSH runtime. A
   // plugin's own peer range is the compatibility contract; no package-name
   // specific workaround is needed when the next DSH alpha changes its API.
   const semver = satisfies ? null : createRequire(layout.dshBin)('semver')
   const semverSatisfies = satisfies ?? ((version, range) => satisfiesHostPeer(semver, version, range))
-  const paused = []
+  const incompatible = []
   for (const name of active) {
     const filename = packageManifest(profileRoot, name)
     if (!filename || !existsSync(filename)) continue // DSH reports an unresolved bundle separately.
@@ -75,11 +75,10 @@ export async function pauseIncompatibleProfileBundles(layout, { satisfies } = {}
       const host = JSON.parse(await readFile(hostFilename, 'utf8'))
       return host.version
     }, { satisfies: semverSatisfies, validRange: semver?.validRange })
-    if (incompatiblePeers.length) paused.push({ name, version: plugin.version || 'unknown', incompatiblePeers })
+    if (incompatiblePeers.length) incompatible.push({ name, version: plugin.version || 'unknown', incompatiblePeers })
   }
-  if (paused.length === 0) return { status: 'passed', paused }
-  const names = new Set(paused.map(item => item.name))
-  manifest.dsh.profile.bundles = bundles.filter(name => !names.has(name))
-  await writeDataFileAtomic(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`)
-  return { status: 'paused', paused }
+  if (incompatible.length === 0) return { status: 'passed', incompatible }
+  // The official loader diagnoses and skips incompatible layers at runtime. Keep
+  // the user's ordered selection so an upgrade does not silently turn it off.
+  return { status: 'warning', incompatible }
 }

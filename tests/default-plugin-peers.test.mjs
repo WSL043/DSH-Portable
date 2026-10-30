@@ -46,7 +46,7 @@ test('packaged default plugins use real semver to accept compatible prerelease h
   for (const range of ['0.2.1-alpha.5', '^0.3.0']) {
     await pack('dsh-chat-manager', range)
     await assert.rejects(verifyDefaultPluginPeers(stage, { defaultPlugins }), error => {
-      assert.match(error.message, /dsh-chat-manager would be paused/)
+      assert.match(error.message, /dsh-chat-manager has incompatible Portable host peers/)
       assert.ok(error.message.includes(range))
       return true
     })

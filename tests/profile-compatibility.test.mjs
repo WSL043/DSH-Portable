@@ -7,12 +7,12 @@ import path from 'node:path'
 import test from 'node:test'
 
 import { layoutForRoot } from '../launcher/portable-core.mjs'
-import { incompatibleProfilePeers, pauseIncompatibleProfileBundles, satisfiesHostPeer } from '../launcher/profile-compatibility.mjs'
+import { incompatibleProfilePeers, checkProfileCompatibility, satisfiesHostPeer } from '../launcher/profile-compatibility.mjs'
 
 const appRequire = createRequire(new URL('../app/package.json', import.meta.url))
 const semver = appRequire('semver')
 
-test('packaging and startup agree on the Cordis peer that would pause a default plugin', async () => {
+test('packaging and startup agree on incompatible Cordis host peers', async () => {
   const hostVersion = async name => name === '@deepseek-ai/cordis' ? '4.0.4' : null
   const satisfies = (version, range) => range.split(' || ').includes(version)
   const old = await incompatibleProfilePeers({ peerDependencies: { '@deepseek-ai/cordis': '4.0.3' } }, hostVersion, { satisfies })
@@ -25,12 +25,12 @@ test('compatibility scan leaves a missing profile untouched', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-compat-empty-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root)
-  const result = await pauseIncompatibleProfileBundles(layout)
-  assert.deepEqual(result, { status: 'skipped', paused: [] })
+  const result = await checkProfileCompatibility(layout)
+  assert.deepEqual(result, { status: 'skipped', incompatible: [] })
   assert.equal(existsSync(path.join(layout.dshHome, 'profiles')), false)
 })
 
-test('startup pauses only active third-party bundles whose declared host peers exclude the current runtime', async t => {
+test('startup reports incompatible active third-party bundles without rewriting user choices', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-compat-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root)
@@ -53,15 +53,15 @@ test('startup pauses only active third-party bundles whose declared host peers e
   await writeFile(path.join(hostRoot, 'package.json'), JSON.stringify({ version: '0.1.7-alpha.1' }))
   await writeFile(path.join(outsideRoot, 'package.json'), JSON.stringify({ version: '0.1.7-alpha.1' }))
 
-  const result = await pauseIncompatibleProfileBundles(layout, { satisfies: (version, range) => version === range })
-  assert.equal(result.status, 'paused')
-  assert.deepEqual(result.paused.map(item => item.name), ['old-plugin'])
-  assert.deepEqual(result.paused[0].incompatiblePeers, [{ peer, required: '0.1.6-alpha.1', installed: '0.1.7-alpha.1' }])
+  const result = await checkProfileCompatibility(layout, { satisfies: (version, range) => version === range })
+  assert.equal(result.status, 'warning')
+  assert.deepEqual(result.incompatible.map(item => item.name), ['old-plugin'])
+  assert.deepEqual(result.incompatible[0].incompatiblePeers, [{ peer, required: '0.1.6-alpha.1', installed: '0.1.7-alpha.1' }])
   const updated = JSON.parse(await readFile(manifestFile, 'utf8'))
-  assert.deepEqual(updated.dsh.profile.bundles, ['@deepseek-ai/dsh-web-app', 'current-plugin', 'malformed-plugin'])
+  assert.deepEqual(updated.dsh.profile.bundles, ['@deepseek-ai/dsh-web-app', 'old-plugin', 'current-plugin', 'malformed-plugin'])
   assert.equal(updated.dependencies['old-plugin'], '1.0.0')
   assert.equal(existsSync(path.join(pluginRoot, 'package.json')), true)
-  assert.deepEqual((await pauseIncompatibleProfileBundles(layout, { satisfies: (version, range) => version === range })).paused, [])
+  assert.deepEqual(await checkProfileCompatibility(layout, { satisfies: (version, range) => version === range }), result)
 })
 
 test('host peer checks include prerelease host versions', () => {
@@ -85,7 +85,7 @@ test('real semver accepts broad host ranges without accepting incompatible prere
   }
 })
 
-test('repeated startup preserves compatible prerelease plugins and dependencies while pausing incompatible plugins', async t => {
+test('repeated startup preserves enabled and disabled plugin choices, package versions and dependencies', async t => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'dsh-profile-compat-semver-'))
   t.after(() => rm(root, { recursive: true, force: true }))
   const layout = layoutForRoot(root)
@@ -96,6 +96,7 @@ test('repeated startup preserves compatible prerelease plugins and dependencies 
     'caret-plugin': '^0.2.0',
     'exact-alpha-plugin': '0.2.1-alpha.5',
     'next-release-plugin': '^0.3.0',
+    'disabled-plugin': '^0.4.0',
   }
   const dependencies = Object.fromEntries(Object.keys(ranges).map(name => [name, '1.0.0']))
   for (const [name, range] of Object.entries(ranges)) {
@@ -108,17 +109,23 @@ test('repeated startup preserves compatible prerelease plugins and dependencies 
   await writeFile(path.join(hostRoot, 'package.json'), JSON.stringify({ version: '0.2.1-rc.2' }))
   await cp(path.dirname(appRequire.resolve('semver/package.json')), path.join(layout.appDir, 'node_modules', 'semver'), { recursive: true })
   const manifestFile = path.join(profile, 'package.json')
-  await writeFile(manifestFile, JSON.stringify({ dependencies, dsh: { profile: { bundles: ['@deepseek-ai/dsh-web-app', ...Object.keys(ranges)] } } }))
+  const bundles = ['@deepseek-ai/dsh-web-app', ...Object.keys(ranges).filter(name => name !== 'disabled-plugin')]
+  const original = JSON.stringify({ dependencies, dsh: { profile: { bundles } } })
+  await writeFile(manifestFile, original)
 
-  const first = await pauseIncompatibleProfileBundles(layout)
-  assert.equal(first.status, 'paused')
-  assert.deepEqual(first.paused.map(item => item.name), ['exact-alpha-plugin', 'next-release-plugin'])
+  const first = await checkProfileCompatibility(layout)
+  assert.equal(first.status, 'warning')
+  assert.deepEqual(first.incompatible.map(item => item.name), ['exact-alpha-plugin', 'next-release-plugin'])
   const updatedText = await readFile(manifestFile, 'utf8')
   const updated = JSON.parse(updatedText)
-  assert.deepEqual(updated.dsh.profile.bundles, ['@deepseek-ai/dsh-web-app', 'broad-plugin', 'caret-plugin'])
+  assert.deepEqual(updated.dsh.profile.bundles, bundles)
+  assert.equal(updatedText, original, 'compatibility diagnostics preserve the original manifest bytes')
   assert.deepEqual(updated.dependencies, dependencies)
-  for (const name of Object.keys(ranges)) assert.equal(existsSync(path.join(profile, 'node_modules', name, 'package.json')), true)
+  for (const name of Object.keys(ranges)) {
+    const installed = JSON.parse(await readFile(path.join(profile, 'node_modules', name, 'package.json'), 'utf8'))
+    assert.equal(installed.version, '1.0.0')
+  }
 
-  assert.deepEqual(await pauseIncompatibleProfileBundles(layout), { status: 'passed', paused: [] })
+  assert.deepEqual(await checkProfileCompatibility(layout), first)
   assert.equal(await readFile(manifestFile, 'utf8'), updatedText)
 })

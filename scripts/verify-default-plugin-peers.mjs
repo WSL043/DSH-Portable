@@ -16,7 +16,7 @@ export function peerManifestPath(appDir, peer) {
   return path.join(appDir, 'node_modules', ...peer.split('/'), 'package.json')
 }
 
-/** Fail before packaging when a default bundle would be paused on first boot. */
+/** Fail before packaging when a default bundle has incompatible host peers on first boot. */
 export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage, 'app'), defaultPlugins } = {}) {
   defaultPlugins ??= Object.values(JSON.parse(await readFile(new URL('../upstream.lock.json', import.meta.url), 'utf8')).defaultPlugins ?? {})
   const required = defaultPlugins.map(plugin => plugin.package)
@@ -40,7 +40,7 @@ export async function verifyDefaultPluginPeers(stage, { appDir = path.join(stage
       })
       return host?.version
     }, { satisfies: (version, range) => satisfiesHostPeer(semver, version, range), validRange: semver.validRange })
-    assert.deepEqual(incompatible, [], `${name} would be paused by Portable profile compatibility check: ${JSON.stringify(incompatible)}`)
+    assert.deepEqual(incompatible, [], `${name} has incompatible Portable host peers: ${JSON.stringify(incompatible)}`)
     result.push({ name, version: plugin.version })
   }
   return result
