@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rm, statfs, unlink, writeFile } from 'node:fs/promises'
-import { inspectStoreReferences } from './store-reference-inventory.mjs'
+import { inspectStoreReferences, isEmptyStoreLock } from './store-reference-inventory.mjs'
 import { acquireProductMutationLock, layoutForRoot } from './portable-core.mjs'
 import { recordPortableDiagnostic } from './diagnostic-policy.mjs'
 
@@ -121,11 +121,12 @@ async function inspectStoreTree(environment, retained, signal) {
   } catch (error) { if (error.code !== 'ENOENT') throw error }
 }
 
-async function prepareReferences(environment, scratch, api, signal) {
+async function prepareReferences(environment, prepareScratch, api, signal) {
   const locks = new Map(), manifests = []
   for (const reference of environment.references) {
     const source = await checkedRead(reference)
     if (reference.kind === 'manifest') { manifests.push(JSON.parse(source)); continue }
+    if (reference.kind === 'empty-installation-state') continue
     if (reference.kind === 'modules-state') {
       const metadata = api.parse(source)
       if (canonical(metadata?.storeDir || '.') !== canonical(path.join(environment.store, 'v11')))
@@ -144,6 +145,7 @@ async function prepareReferences(environment, scratch, api, signal) {
         return [name, item.specifier]
       }))
     }
+    if (isEmptyStoreLock(lock)) continue
     if (lock.overrides) manifest.pnpm = { overrides: lock.overrides }
     const installed = environment.installations.find(item => item.lock === reference.path)
     const origin = installed ? path.dirname(installed.modules) : path.dirname(reference.path)
@@ -171,6 +173,8 @@ async function prepareReferences(environment, scratch, api, signal) {
           && Object.entries(expected).every(([name, value]) => actual[name] === value || actual[name] === item.registryManifest[field][name])
       }))) fail('STORE_UNRESOLVED_MANIFEST')
   }
+  if (locks.size === 0) return 0
+  const scratch = await prepareScratch()
   let index = 0
   for (const { source, lock, manifest, archives } of locks.values()) {
     signal?.throwIfAborted()
@@ -257,12 +261,12 @@ export async function cleanPluginStores({ root, stateRoot = root, runtimeRoot = 
   const result = { schemaVersion: 1, complete: false, environments: 0, references: 0 }
   try {
     const api = await loadRuntime(runtimeRoot)
-    const initial = await inspectStoreReferences(baseStateRoot, { budgetMs: 15000, signal })
+    const initial = await inspectStoreReferences(baseStateRoot, { budgetMs: 15000, signal, parseYaml: api.parse })
     if (!initial.complete) fail('STORE_REFERENCES_INCOMPLETE')
     const profiles = initial.environments.flatMap(item => item.profiles).sort()
     const locked = async index => {
       if (index < profiles.length) return api.withFileLock(path.join(profiles[index], 'package.json'), () => locked(index + 1), { waitMs: 0 })
-      const inventory = await inspectStoreReferences(baseStateRoot, { budgetMs: 15000, signal })
+      const inventory = await inspectStoreReferences(baseStateRoot, { budgetMs: 15000, signal, parseYaml: api.parse })
       if (stable(inventory) !== stable(initial)) fail('STORE_REFERENCE_CHANGED')
       await assertNoPendingTransactions(inventory.environments)
       const prepared = []
@@ -271,20 +275,27 @@ export async function cleanPluginStores({ root, stateRoot = root, runtimeRoot = 
         try { await lstat(environment.store) } catch (error) { if (error.code === 'ENOENT') continue; throw error }
         const retained = await previousScratch(environment)
         await inspectStoreTree(environment, retained, signal)
+        let scratch
+        const references = await prepareReferences(environment, async () => {
+          const data = path.dirname(environment.store)
+          const space = await statfs(data)
+          if (space.bavail * space.bsize < 64 * 1024 * 1024) fail('STORE_LOW_DISK_SPACE')
+          scratch = await mkdtemp(path.join(data, '.store-maintenance-'))
+          temporary.push({ scratch, store: environment.store })
+          await writeFile(path.join(scratch, 'owner.json'), JSON.stringify({ schemaVersion: 1, pid: process.pid }))
+          await mkdir(path.join(scratch, 'metadata'))
+          return scratch
+        }, api, signal)
+        result.references += references
+        // An independently verified empty graph has nothing to pin or prune.
+        // Leave any interrupted pins intact; they are not empty-profile caches.
+        if (references === 0) continue
         previous.push(...retained)
-        const data = path.dirname(environment.store)
-        const space = await statfs(data)
-        if (space.bavail * space.bsize < 64 * 1024 * 1024) fail('STORE_LOW_DISK_SPACE')
-        const scratch = await mkdtemp(path.join(data, '.store-maintenance-'))
-        temporary.push({ scratch, store: environment.store })
-        await writeFile(path.join(scratch, 'owner.json'), JSON.stringify({ schemaVersion: 1, pid: process.pid }))
-        await mkdir(path.join(scratch, 'metadata'))
-        result.references += await prepareReferences(environment, scratch, api, signal)
         prepared.push({ environment, scratch })
       }
       // No store is pruned until every environment and rollback reference has
       // materialized successfully. A partial scan/failed install leaves all intact.
-      const beforePrune = await inspectStoreReferences(baseStateRoot, { budgetMs: 15000, signal })
+      const beforePrune = await inspectStoreReferences(baseStateRoot, { budgetMs: 15000, signal, parseYaml: api.parse })
       if (stable(beforePrune) !== stable(inventory)) fail('STORE_REFERENCE_CHANGED')
       for (const { environment, scratch } of prepared) {
         signal?.throwIfAborted()

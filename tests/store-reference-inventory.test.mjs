@@ -97,3 +97,57 @@ test('bounded and cancelled scans cannot authorize partial-reference cleanup', a
   assert.equal(cancelled.complete, false)
   assert.ok(cancelled.blockers.some(x => x.code === 'cancelled'))
 })
+
+async function emptyHoistedFixture(t) {
+  const fixtureData = await fixture(t)
+  const { root, file } = fixtureData
+  const profile = 'data/dsh-home/profiles/web'
+  const modules = path.join(root, profile, 'node_modules')
+  const manifest = { name: 'dsh-profile-web', dependencies: {} }
+  const lock = { lockfileVersion: '9.0', settings: { autoInstallPeers: false }, importers: { '.': {} } }
+  const metadata = { nodeLinker: 'hoisted', packageManager: 'pnpm@11.11.0', hoistedLocations: {}, injectedDeps: {},
+    pendingBuilds: [], skipped: [], storeDir: path.join(root, 'data/pnpm-store/v11'), virtualStoreDir: path.join(modules, '.pnpm') }
+  await file(profile + '/package.json', JSON.stringify(manifest))
+  await file(profile + '/pnpm-lock.yaml', JSON.stringify(lock))
+  await file(profile + '/node_modules/.modules.yaml', JSON.stringify(metadata))
+  await file(profile + '/node_modules/.package-map.json', JSON.stringify({ packages: { '.': { url: '..', dependencies: { 'dsh-profile-web': '.' } } } }))
+  await file(profile + '/node_modules/.pnpm-workspace-state-v1.json', JSON.stringify({ projects: { [path.join(root, profile)]: { name: 'dsh-profile-web' } },
+    settings: { nodeLinker: 'hoisted', enableGlobalVirtualStore: false }, pnpmfiles: [] }))
+  return { ...fixtureData, profile, modules, manifest, lock, metadata }
+}
+
+test('only an independently verified current empty hoisted installation may omit the installed lock', async t => {
+  const { root, modules } = await emptyHoistedFixture(t)
+  const conservative = await inspectStoreReferences(root)
+  assert.equal(conservative.complete, false, 'callers without the locked runtime parser stay fail closed')
+  assert.ok(conservative.blockers.some(x => x.code === 'missing-installed-lock'))
+  const result = await inspectStoreReferences(root, { parseYaml: JSON.parse })
+  assert.equal(result.complete, true, JSON.stringify(result.blockers))
+  assert.equal(result.environments[0].installations.length, 1)
+  assert.equal(result.environments[0].installations[0].empty, true)
+  assert.equal(result.environments[0].installations[0].lock, null)
+  assert.equal(result.environments[0].references.filter(x => x.kind === 'empty-installation-state').length, 2)
+  await mkdir(path.join(modules, '.pnpm'))
+  assert.equal((await inspectStoreReferences(root, { parseYaml: JSON.parse })).complete, true, 'an empty virtual-store directory has no hidden graph')
+})
+
+test('nonempty, unknown and recovery hoisted installations still require their own installed lock', async t => {
+  const cases = [
+    ['nonempty manifest', async f => { f.manifest.dependencies.plugin = '1.0.0'; await f.file(f.profile + '/package.json', JSON.stringify(f.manifest)) }],
+    ['nonempty lock graph', async f => { f.lock.snapshots = { 'plugin@1.0.0': {} }; await f.file(f.profile + '/pnpm-lock.yaml', JSON.stringify(f.lock)) }],
+    ['unrecognized lock data', async f => { f.lock.catalogs = {}; await f.file(f.profile + '/pnpm-lock.yaml', JSON.stringify(f.lock)) }],
+    ['unknown installed entry', async f => { await f.file(f.profile + '/node_modules/plugin/index.js', '') }],
+    ['foreign workspace project', async f => { await f.file(f.profile + '/node_modules/.pnpm-workspace-state-v1.json', JSON.stringify({ projects: { '/foreign': {} }, settings: { nodeLinker: 'hoisted', enableGlobalVirtualStore: false }, pnpmfiles: [] })) }],
+    ['ambiguous metadata', async f => { f.metadata.nodeLinker = 'isolated'; await f.file(f.profile + '/node_modules/.modules.yaml', JSON.stringify(f.metadata)) }],
+    ['lost virtual-store lock', async f => { await f.file(f.profile + '/node_modules/.pnpm/plugin/package.json') }],
+    ['backup has no installed lock', async f => { await f.file(f.profile + '/node_modules.dsh-portable-recovery-example/.modules.yaml', JSON.stringify(f.metadata)) }],
+    ['unreadable lock syntax', async f => { await f.file(f.profile + '/pnpm-lock.yaml', 'not-json') }],
+  ]
+  for (const [name, mutate] of cases) await t.test(name, async t => {
+    const f = await emptyHoistedFixture(t)
+    await mutate(f)
+    const result = await inspectStoreReferences(f.root, { parseYaml: JSON.parse })
+    assert.equal(result.complete, false)
+    assert.ok(result.blockers.some(x => x.code === 'missing-installed-lock'), JSON.stringify(result.blockers))
+  })
+})

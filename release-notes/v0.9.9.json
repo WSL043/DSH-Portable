@@ -7,7 +7,8 @@
       "内核：新包默认采用官方 DeepSeek Harness 0.2.1-rc.5；内核资格不再由可选插件的版本名单决定。",
       "插件：新包不再默认安装 Image Viewer 和 Chat Manager；保留已有安装、版本和启用选择，常规管理使用官方插件页面。",
       "插件入口：移除现代界面的重复高级管理；「更多」仅兼容恢复旧版插件 JSON 配置，日常备份恢复统一使用设置中的「桌面与数据」。",
-      "配置恢复：部分依赖失败时保持有效 bundle 顺序，完全失败时还原原配置并准确提示；收紧 profile 和恢复目标的路径与链接检查。"
+      "配置恢复：部分依赖失败时保持有效 bundle 顺序，完全失败时还原原配置并准确提示；收紧 profile 和恢复目标的路径与链接检查。",
+      "缓存整理：识别官方空插件安装状态，避免误报引用缺失；空配置不执行依赖清理，保留已有恢复材料。"
     ],
     "upgradeNotes": [
       "正常退出后更新；已有会话、设置、凭据、插件和工作区保留。",
@@ -24,7 +25,8 @@
       "Core: new packages bundle official DeepSeek Harness 0.2.1-rc.5. Optional plugin version lists no longer govern core qualification.",
       "Plugins: new packages no longer install Image Viewer or Chat Manager by default. Existing installations, versions and enabled choices are preserved; ordinary management uses the official page.",
       "Plugin entry points: removes duplicate modern management. More only imports legacy plugin JSON configurations; routine backup and recovery use Desktop & data in Settings.",
-      "Recovery: preserves selected bundle order during partial fallback, restores the previous configuration on complete failure, and validates profile paths and filesystem links."
+      "Recovery: preserves selected bundle order during partial fallback, restores the previous configuration on complete failure, and validates profile paths and filesystem links.",
+      "Cache maintenance: recognizes official empty plugin installations without a false missing-reference error. Empty graphs skip dependency pruning and preserve existing recovery material."
     ],
     "upgradeNotes": [
       "Exit normally before updating. Existing sessions, settings, credentials, plugins and workspaces are preserved.",

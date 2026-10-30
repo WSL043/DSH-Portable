@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import { once } from 'node:events'
 import { createServer } from 'node:http'
-import { mkdir, mkdtemp, writeFile, readFile, rename, readdir, lstat, rm, symlink, unlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile, readFile, rename, readdir, lstat, rm, rmdir, symlink, unlink } from 'node:fs/promises'
 import path from 'node:path'
 import { cleanPluginStores } from '../launcher/store-maintenance.mjs'
 import { acquireProductMutationLock, layoutForRoot } from '../launcher/portable-core.mjs'
@@ -19,8 +19,9 @@ const cycles = Number(process.argv[3] || 10)
 assert.ok(Number.isSafeInteger(cycles) && cycles > 0 && cycles <= 10)
 const repository = process.cwd()
 const pnpm = path.resolve('app/node_modules/pnpm/bin/pnpm.cjs')
-await mkdir('build', { recursive: true })
-const root = await mkdtemp(path.resolve(`build/production-store-${mode}-`))
+const outputRoot = path.resolve(process.argv[4] || 'build')
+await mkdir(outputRoot, { recursive: true })
+const root = await mkdtemp(path.join(outputRoot, `production-store-${mode}-`))
 const product = path.join(root, 'product')
 const tarballs = {}
 const evidence = { schemaVersion: 1, mode, product, cycles: [], checks: [], passed: false }
@@ -49,9 +50,10 @@ const manifest = version => JSON.stringify({ name: 'retention-probe', private: t
 const environments = [product, path.join(product, 'environments/work')].map(base => ({
   base, profile: path.join(base, 'data/dsh-home/profiles/web'), store: path.join(base, 'data/pnpm-store'),
 }))
-async function install(cwd, store, offline, method = mode) {
+async function install(cwd, store, offline, method = mode, linker) {
   await exec(process.execPath, [pnpm, 'install', '--ignore-scripts', '--no-frozen-lockfile', ...(offline ? ['--offline'] : []),
     '--store-dir', store, `--config.cache-dir=${path.join(root, 'metadata')}`, '--registry', registry,
+    ...(linker ? [`--config.node-linker=${linker}`] : []),
     '--fetch-retries=0', `--package-import-method=${method}`], { cwd, windowsHide: true, timeout: 30000,
     env: { ...process.env, CI: 'true' } })
 }
@@ -83,6 +85,29 @@ try {
       }
     }
   }
+  // Reproduce the official empty hoisted restore result using real pinned pnpm,
+  // rather than manufacturing its .modules.yaml or deleting an installed lock.
+  const emptyBase = path.join(product, 'environments/empty')
+  const emptyProfile = path.join(emptyBase, 'data/dsh-home/profiles/web')
+  const emptyStore = path.join(emptyBase, 'data/pnpm-store')
+  await mkdir(emptyProfile, { recursive: true })
+  await writeFile(path.join(emptyProfile, 'package.json'), manifest('2.0.0'))
+  await install(emptyProfile, emptyStore, false, mode, 'hoisted')
+  await writeFile(path.join(emptyProfile, 'package.json'), JSON.stringify({ name: 'dsh-profile-web', private: true, dependencies: {} }))
+  await install(emptyProfile, emptyStore, true, mode, 'hoisted')
+  const emptyVirtualEntries = await readdir(path.join(emptyProfile, 'node_modules/.pnpm')).catch(error => {
+    if (error.code === 'ENOENT') return []
+    throw error
+  })
+  assert.deepEqual(emptyVirtualEntries, [], 'real hoisted uninstall leaves no virtual-store contents')
+  const emptyProtectedFiles = ['package.json', 'pnpm-lock.yaml', 'node_modules/.modules.yaml',
+    'node_modules/.package-map.json', 'node_modules/.pnpm-workspace-state-v1.json']
+  const emptySnapshot = async () => ({
+    profile: await Promise.all(emptyProtectedFiles.map(async file => createHash('sha256').update(await readFile(path.join(emptyProfile, file))).digest('hex'))),
+    store: await Promise.all((await content(emptyStore)).map(async file => ({ ...file,
+      sha256: createHash('sha256').update(await readFile(path.join(emptyStore, file.name))).digest('hex') }))),
+  })
+  const emptyBefore = await emptySnapshot()
   await new Promise(resolve => server.close(resolve))
   evidence.registryClosed = true
   evidence.registryRequests = requests
@@ -115,12 +140,15 @@ try {
   await writeFile(path.join(modules, 'pnpm/package.json'), JSON.stringify({ name: 'pnpm', version: '11.11.0' }))
   const failureFlag = path.join(faultRuntime, 'fail-verification')
   const registrationFlag = path.join(faultRuntime, 'register-foreign-project')
+  const emptyGuardFlag = path.join(faultRuntime, 'reject-any-pnpm')
+  const emptyCommandLog = path.join(faultRuntime, 'unexpected-empty-pnpm.log')
   const foreign = path.join(root, 'foreign-project')
   await mkdir(foreign)
   await writeFile(registrationFlag, 'register after initial inspection')
   await writeFile(failureFlag, 'owned failure injection')
   await writeFile(path.join(modules, 'pnpm/bin/pnpm.cjs'), `
     const fs = require('node:fs'); const path = require('node:path'); const {spawnSync} = require('node:child_process');
+    if (fs.existsSync(${JSON.stringify(emptyGuardFlag)})) { fs.appendFileSync(${JSON.stringify(emptyCommandLog)}, JSON.stringify(process.argv.slice(2)) + '\\n'); process.exit(43); }
     if (process.argv.includes('--package-import-method=copy') && fs.existsSync(${JSON.stringify(failureFlag)})) process.exit(42);
     const result = spawnSync(process.execPath, [${JSON.stringify(pnpm)}, ...process.argv.slice(2)], {stdio:'inherit', windowsHide:true});
     if (result.status === 0 && process.argv.includes('--package-import-method=hardlink') && fs.existsSync(${JSON.stringify(registrationFlag)})) {
@@ -173,6 +201,31 @@ try {
     evidence.cycles.push({ cycle, ...cleaned, files: after.map(files => files.length) })
     console.log(JSON.stringify({ mode, cycle, passed: true }))
   }
+  assert.deepEqual(await emptySnapshot(), emptyBefore, 'mixed-environment cleanup must not prune the empty hoisted store')
+  evidence.checks.push('real empty hoisted profile coexists with nonempty environment and recovery graph cleanup')
+  await writeFile(emptyGuardFlag, 'no pnpm command is permitted for an empty graph')
+  const retainedEmptyPin = path.join(emptyBase, 'data/.store-maintenance-retained-empty')
+  await mkdir(retainedEmptyPin)
+  const retainedMarker = JSON.stringify({ schemaVersion: 1, pid: process.pid, retained: true })
+  await writeFile(path.join(retainedEmptyPin, 'owner.json'), retainedMarker)
+  await writeFile(path.join(retainedEmptyPin, 'keep'), 'interrupted recovery material')
+  const emptyCleaned = await cleanPluginStores({ root: emptyBase, runtimeRoot: faultRuntime })
+  assert.equal(emptyCleaned.complete, true)
+  assert.equal(emptyCleaned.references, 0)
+  assert.equal(emptyCleaned.environments, 0)
+  // The official restore path can omit this directory altogether. Remove only
+  // the real pnpm-generated directory proven empty above, never a lock or graph.
+  await rmdir(path.join(emptyProfile, 'node_modules/.pnpm')).catch(error => { if (error.code !== 'ENOENT') throw error })
+  const absentVirtualStore = await cleanPluginStores({ root: emptyBase, runtimeRoot: faultRuntime })
+  assert.equal(absentVirtualStore.complete, true)
+  assert.equal(absentVirtualStore.references, 0)
+  await assert.rejects(lstat(emptyCommandLog), { code: 'ENOENT' })
+  assert.deepEqual(await emptySnapshot(), emptyBefore, 'empty graph cleanup preserves profile and store bytes')
+  assert.deepEqual((await readdir(path.join(emptyBase, 'data'))).filter(name => name.startsWith('.store-maintenance-')), [path.basename(retainedEmptyPin)])
+  assert.equal(await readFile(path.join(retainedEmptyPin, 'owner.json'), 'utf8'), retainedMarker)
+  assert.equal(await readFile(path.join(retainedEmptyPin, 'keep'), 'utf8'), 'interrupted recovery material')
+  evidence.emptyHoisted = { ...emptyCleaned, noPnpmCommands: true, profileAndStoreBytesUnchanged: true, priorPinsUnchanged: true }
+  evidence.checks.push('real empty hoisted graph succeeds without pnpm install or prune and preserves all profile/store bytes')
   evidence.passed = true
 } catch (error) {
   evidence.error = { code: error.code, message: error.message, stderr: error.stderr }

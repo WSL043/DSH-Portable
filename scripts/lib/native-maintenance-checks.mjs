@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict'
 import { access, mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import { createRequire } from 'node:module'
 import { createHash, randomBytes } from 'node:crypto'
 import { acquireRuntimeLease } from '../../launcher/runtime-capsule.mjs'
 import { cleanWebViewCaches } from '../../launcher/webview-cache.mjs'
+import { isEmptyStoreLock } from '../../launcher/store-reference-inventory.mjs'
 const digest = value => createHash('sha256').update(value).digest('hex')
 
 export async function verifyRetiredWebViewCleanup({ root, output }) {
@@ -177,7 +179,12 @@ export async function verifyMaintenance({ root, evaluate, until, click, send, ou
     assert.equal(response.status, 200, JSON.stringify(response))
     assert.equal(response.body.complete, true)
     assert.ok(Number.isInteger(response.body.references) && response.body.references >= 0)
-    if (before[protectedFiles.indexOf('pnpm-lock.yaml')] !== null) assert.ok(response.body.references > 0)
+    const manifest = JSON.parse(await readFile(path.join(profile, 'package.json'), 'utf8'))
+    const parseYaml = createRequire(new URL('../../app/package.json', import.meta.url))('yaml').parse
+    const lock = before[protectedFiles.indexOf('pnpm-lock.yaml')] === null ? null
+      : parseYaml(await readFile(path.join(profile, 'pnpm-lock.yaml'), 'utf8'))
+    if (['dependencies', 'devDependencies', 'optionalDependencies'].some(field => Object.keys(manifest[field] || {}).length)
+      || (lock && !isEmptyStoreLock(lock))) assert.ok(response.body.references > 0)
     assert.deepEqual(await snapshot(), before)
     await until(`document.body.innerText.includes('离线重建检查') || document.body.innerText.includes('offline rebuild checks')`, Boolean, 'dependency completion feedback')
     await writeFile(path.join(output, 'dependency-cleanup.json'), JSON.stringify({ passed: true, ...response, scope: response.body.references > 0 ? 'retained-reference-offline-rebuild' : 'no-dependency-references-safe-noop', unchanged: protectedFiles }))
