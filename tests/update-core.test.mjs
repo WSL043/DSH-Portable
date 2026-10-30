@@ -122,6 +122,53 @@ test('offline updates require the original signature and local attachment withou
   await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
 })
 
+test('a signed contract-2 core cannot roll back the current Portable restore security boundary', async t => {
+  const fixture = await makeCapsuleUpdateFixture()
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  const currentContract = JSON.parse(await readFile(path.join(projectRoot, 'config', 'shell-contract.json'), 'utf8')).contract
+  assert.ok(currentContract >= 3, 'the shipped contract must exclude historical contract-2 application wrappers')
+  const installedFile = path.join(fixture.root, 'licenses', 'COMPONENTS.json')
+  const original = JSON.parse(await readFile(installedFile, 'utf8'))
+  const installed = { ...original, portableVersion: '0.9.9', dshVersion: '0.2.1-rc.5', releaseChannel: 'stable',
+    shellContract: currentContract, shellFingerprint: 'a'.repeat(64) }
+  await writeFile(installedFile, JSON.stringify(installed))
+  const before = await readFile(installedFile)
+  const input = path.join(fixture.root, 'historical-core.json')
+  const payload = Buffer.from('signed historical application wrapper')
+  const manifest = updateManifest({ portableVersion: '0.9.8', updateKind: 'engine', releaseChannel: 'stable', platform: platformUpdateKey(),
+    requiredShellSchema: installed.shellSchema, requiredShellFingerprint: 'b'.repeat(64), requiredShellContract: 2,
+    targetRuntimeLayout: 'capsule-v1', component: { kind: 'dsh-runtime-capsule', dshVersion: '0.2.1-rc.2',
+      dshCommit: '687f282e8625c6b8d11ff58211a90524be2e4317', requiredNodeVersion: installed.nodeVersion,
+      runtimeLayout: 'capsule-v1', bytes: payload.length, sha256: createHash('sha256').update(payload).digest('hex'),
+      urls: ['https://example.invalid/historical-core.zip'] } })
+  await writeFile(path.join(fixture.root, 'historical-core.zip'), payload)
+  await writeOfflineManifest(input, manifest)
+  assert.equal(offlineVerification.verifySignature(await readFile(input), await readFile(input + '.sig', 'utf8')), true)
+  const evaluate = () => evaluateUpdate(manifest, installed, platformUpdateKey(), { allowEngineVersionChange: true })
+  assert.equal(evaluate().status, 'core-awaiting-qualification', 'an explicit engine downgrade still checks the application contract')
+  const plan = await readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification)
+  assert.equal(plan.status, 'core-awaiting-qualification')
+  assert.equal(plan.delivery, 'none')
+  let downloadStarted = false
+  await assert.rejects(installAvailableAppUpdate({ layout: fixture.layout, update: plan,
+    download: async () => { downloadStarted = true }, healthCheck: async () => true }), /No compatible application update/)
+  assert.equal(downloadStarted, false, 'a refused local plan cannot start downloading or applying')
+  assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+  assert.deepEqual(await readFile(installedFile), before)
+  assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+  await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
+
+  const legacy = { ...installed, portableVersion: '0.9.8', shellContract: 2 }
+  await writeFile(installedFile, JSON.stringify(legacy))
+  assert.equal(evaluateUpdate(manifest, legacy, platformUpdateKey(), { allowEngineVersionChange: true }).status, 'available')
+  assert.equal((await readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification)).status, 'available',
+    'the existing contract-2 shell remains compatible with its own historical package')
+  await writeFile(installedFile, before)
+  await writeOfflineManifest(input, { ...manifest, requiredShellContract: currentContract })
+  assert.equal((await readLocalUpdate({ layout: fixture.layout, input, scope: 'engine' }, offlineVerification)).status, 'available',
+    'the same old DSH version remains selectable after its Portable wrapper is rebuilt and qualified')
+})
+
 test('offline complete manifests preflight the signed Windows ZIP and delegate only to the existing full updater', async t => {
   const fixture = await makeUpdateFixture()
   t.after(() => rm(fixture.root, { recursive: true, force: true }))
@@ -1810,6 +1857,25 @@ test('a package whose own contract disagrees with its manifest is refused before
     assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
     assert.equal(JSON.parse(await readFile(path.join(fixture.root, 'licenses', 'COMPONENTS.json'), 'utf8')).dshVersion, '0.1.1-rc.2')
   } finally { await rm(fixture.root, { recursive: true, force: true }) }
+})
+
+test('a stale contract-2 apply plan is refused after the installed shell security bump', async t => {
+  const { fixture, update, install } = await contractUpdateFixture({ stagedContract: 2 })
+  t.after(() => rm(fixture.root, { recursive: true, force: true }))
+  const currentContract = JSON.parse(await readFile(path.join(projectRoot, 'config', 'shell-contract.json'), 'utf8')).contract
+  const installedFile = path.join(fixture.root, 'licenses', 'COMPONENTS.json')
+  const installed = JSON.parse(await readFile(installedFile, 'utf8'))
+  await writeFile(installedFile, JSON.stringify({ ...installed, portableVersion: '0.9.9', shellContract: currentContract }))
+  const before = await readFile(installedFile)
+  update.requiredShellContract = 2 // Available when the old contract-2 shell made this plan.
+  let applying = false, healthy = false
+  await assert.rejects(install({ beforeApply: async () => { applying = true }, healthCheck: async () => { healthy = true; return true } }), /shell contract/iu)
+  assert.equal(applying, false, 'the final installed/staged/manifest equality check precedes apply')
+  assert.equal(healthy, false)
+  assert.deepEqual(await readFile(path.join(fixture.root, 'runtime', 'DSH-App.dshpack')), fixture.oldCapsule)
+  assert.deepEqual(await readFile(installedFile), before)
+  assert.equal(await readFile(path.join(fixture.layout.dataDir, 'private-session.txt'), 'utf8'), 'keep me')
+  await assert.rejects(readFile(fixture.layout.updateJournal), { code: 'ENOENT' })
 })
 
 test('a broken check cache is refreshed and cannot defeat selected-version validation', async t => {

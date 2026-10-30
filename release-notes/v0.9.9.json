@@ -12,7 +12,8 @@
     ],
     "upgradeNotes": [
       "正常退出后更新；已有会话、设置、凭据、插件和工作区保留。",
-      "新包内置 rc.5；升级若选择保留当前内核，运行版本仍以保留结果为准，可在内核更新中另行选择。"
+      "新包内置 rc.5；升级若选择保留当前内核，运行版本仍以保留结果为准，可在内核更新中另行选择。",
+      "旧内核更新包若提示尚未适配，请重新下载对应版本的适配包，避免旧应用层覆盖本版修复。"
     ],
     "acknowledgements": [
       "感谢 [@ASg-art-max](https://github.com/ASg-art-max) 在 [#236](https://github.com/WSL043/DSH-Portable/issues/236) 报告 Windows 右键菜单问题。"
@@ -30,7 +31,8 @@
     ],
     "upgradeNotes": [
       "Exit normally before updating. Existing sessions, settings, credentials, plugins and workspaces are preserved.",
-      "The package bundles rc.5. If an upgrade preserves the current core, the running version follows that result; choose another core separately in core updates."
+      "The package bundles rc.5. If an upgrade preserves the current core, the running version follows that result; choose another core separately in core updates.",
+      "If an older core update file is reported as unqualified, download its refreshed package to preserve this release’s Portable fixes."
     ],
     "acknowledgements": [
       "Thanks to [@ASg-art-max](https://github.com/ASg-art-max) for reporting the Windows context-menu issue in [#236](https://github.com/WSL043/DSH-Portable/issues/236)."
